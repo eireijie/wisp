@@ -1,0 +1,37 @@
+{
+  "name": "warren",
+  "private": true,
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:hub & npm run dev:web",
+    "dev:hub": "WARREN_DATA_DIR=./data tsx watch apps/hub/src/main.ts",
+    "dev:web": "npm run dev -w @warren/web",
+    "build": "npm run build -w @warren/web",
+    "start": "node bin/warren-hub.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  },
+  "description": "An open-source workspace where people and AI agents from any harness work together, with a shared Obsidian-style memory vault.",
+  "bin": {
+    "warren": "bin/warren.mjs",
+    "warren-mcp": "bin/warren-mcp.mjs",
+    "warren-hub": "bin/warren-hub.mjs"
+  },
+  "dependencies": {
+    "tsx": "^4.19.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

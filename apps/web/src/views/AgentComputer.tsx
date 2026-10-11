@@ -1,0 +1,369 @@
+import { useEffect, useState } from "react";
+import { CalendarClock, Cloud, FileText, Laptop, Loader2, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
+import { describeCron, harnessInfo, nextRun, type Agent, type Routine } from "@warren/core";
+import { api } from "../api.ts";
+import { useStore, type ComputerInfo } from "../store.ts";
+import { go, href } from "../router.ts";
+import { computerKindLabel, type DeviceInfo } from "../devices.ts";
+import { AddComputer, ComputerMini } from "./ComputersView.tsx";
+import { Intro } from "./SettingsParts.tsx";
+import { Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+
+/** Harnesses Warren starts on a device (natively or over ACP), as opposed to ones that join through MCP. */
+export function runsOnDevice(harness: string) {
+  return harness.startsWith("acp:") || (harnessInfo(harness)?.protocol ?? "mcp") !== "mcp";
+}
+
+// --- Computer -------------------------------------------------------------------------------------
+
+/**
+ * Which computer the agent sees and uses. Agents aren't headless unless someone picks that here.
+ */
+export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInfo[] }) {
+  const computers = useStore((s) => s.computers);
+  const agents = useStore((s) => s.agents);
+  const refreshAgents = useStore((s) => s.refreshAgents);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const current = computers.find((c) => c.id === agent.computerId);
+  const device = nodes.find((n) => n.id === agent.nodeId);
+  const headless = !current && !!agent.settings.headless;
+
+  const use = async (key: string, fn: () => Promise<unknown>) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await fn();
+      await Promise.all([refreshAgents(), useStore.getState().refreshComputers()]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const assign = (c: { id: string }) => api("PATCH", `/api/agents/${agent.id}`, { computerId: c.id });
+  const quickVm = () => use("vm", async () => assign(await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: agent.nodeId, name: `${agent.name}'s desk`, cpus: 2, memoryGb: 4 })));
+  const quickScreen = () => use("screen", async () => assign(await api<ComputerInfo>("POST", "/api/computers", { kind: "device", nodeId: agent.nodeId })));
+  const goHeadless = () => {
+    if (!confirm(`Run @${agent.handle} headless? It won't be able to see or use a screen: no websites, no apps, only its harness's own tools.`)) return;
+    use("headless", () => api("PATCH", `/api/agents/${agent.id}`, { computerId: null, settings: { headless: true } }));
+  };
+
+  const others = computers.filter((c) => c.id !== agent.computerId);
+  return (
+    <div className="space-y-8 max-w-3xl">
+      <section>
+        <Intro title="Computer">
+          <p>
+            The computer @{agent.handle} works on: it opens apps and websites, signs in once and stays signed in, and keeps its files there. You can watch it live and take control anytime. Agents that share a computer share its files, browser and sign-ins, so they can hand work to each other.
+          </p>
+        </Intro>
+        {current ? (
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="w-full sm:w-96">
+              <ComputerMini computer={current} />
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="font-medium">{current.name}</div>
+              <div className="text-muted">{computerKindLabel(current, nodes)}</div>
+              {current.agents.length > 1 && (
+                <div className="text-muted">
+                  Shared with{" "}
+                  {agents
+                    .filter((a) => current.agents.includes(a.id) && a.id !== agent.id)
+                    .map((a) => `@${a.handle}`)
+                    .join(", ")}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button onClick={() => go({ view: "computers", computerId: current.id, teach: agent.id })}>
+                  <Video size={15} /> Teach a task
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={cx("rounded-xl border px-4 py-3 text-sm", headless ? "border-line bg-bg text-muted" : "border-warn/40 bg-warn/10")}>
+            {headless ? `@${agent.handle} runs headless: it can't see or use a screen. Give it a computer below to change that.` : `@${agent.handle} doesn't have a computer yet, so it can't use apps or websites. Pick one below.`}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="font-semibold text-sm">{current ? "Switch to" : "Give it"}</h3>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {device && device.capabilities?.vm.ok && (
+            <Option icon={<Monitor size={17} />} title={`A new VM on ${device.name}`} body="Its own Linux desktop with Chromium. Doesn't touch your screen." busy={busy === "vm"} onClick={quickVm} />
+          )}
+          {device && (
+            <Option
+              icon={<Laptop size={17} />}
+              title={`${device.name}'s own screen`}
+              body={device.capabilities?.screen.ok === false ? device.capabilities.screen.detail : "It uses the device itself, with your apps. Best on a spare computer."}
+              disabled={device.capabilities?.screen.ok === false || others.some((c) => c.kind === "device" && c.nodeId === device.id) || current?.kind === "device"}
+              busy={busy === "screen"}
+              onClick={quickScreen}
+            />
+          )}
+          {others.map((c) => (
+            <Option key={c.id} icon={c.kind === "orgo" ? <Cloud size={17} /> : c.kind === "vm" ? <Monitor size={17} /> : <Laptop size={17} />} title={c.name} body={`${computerKindLabel(c, nodes)}${c.agents.length ? ` · used by ${agents.filter((a) => c.agents.includes(a.id)).map((a) => `@${a.handle}`).join(", ")}` : ""}`} busy={busy === c.id} onClick={() => use(c.id, () => assign(c))} />
+          ))}
+          <Option icon={<Plus size={17} />} title="Another computer…" body="A VM on a different device, a device's screen, or an Orgo cloud computer." onClick={() => setAdding(true)} />
+        </div>
+        {!headless && (
+          <button onClick={goHeadless} disabled={!!busy} className="mt-2 text-xs text-muted hover:text-bad underline-offset-2 hover:underline">
+            Run it headless instead (no computer)
+          </button>
+        )}
+        {error && <p className="text-sm text-bad">{error}</p>}
+      </section>
+
+      {adding && (
+        <AddComputer
+          devices={nodes}
+          nodeId={agent.nodeId}
+          defaultName={`${agent.name}'s desk`}
+          onClose={() => setAdding(false)}
+          onCreated={(c) => {
+            setAdding(false);
+            use(c.id, () => assign(c));
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Option({ icon, title, body, onClick, busy, disabled }: { icon: React.ReactNode; title: string; body: string; onClick: () => void; busy?: boolean; disabled?: boolean }) {
+  return (
+    <button type="button" disabled={disabled || busy} onClick={onClick} className="text-left rounded-xl border border-line p-3 flex gap-3 hover:bg-hover disabled:opacity-50 disabled:pointer-events-none">
+      <span className="size-8 shrink-0 rounded-lg bg-chip grid place-items-center text-muted">{busy ? <Loader2 size={16} className="animate-spin" /> : icon}</span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium truncate">{title}</span>
+        <span className="block text-xs text-muted">{body}</span>
+      </span>
+    </button>
+  );
+}
+
+// --- Routines ---------------------------------------------------------------------------------------
+
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+/** Tasks the agent knows how to do again, learned by watching or written down, some on a schedule. */
+export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean }) {
+  const version = useStore((s) => s.routinesVersion);
+  const [routines, setRoutines] = useState<Routine[] | null>(null);
+  const [writing, setWriting] = useState(false);
+  const [scheduling, setScheduling] = useState<Routine | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (active) api<Routine[]>("GET", `/api/routines?agent=${agent.id}`).then(setRoutines, () => setRoutines([]));
+  }, [active, agent.id, version]);
+
+  const teach = () => (agent.computerId ? go({ view: "computers", computerId: agent.computerId, teach: agent.id }) : go({ view: "agents", agentId: agent.id, tab: "computer" }));
+  const run = async (r: Routine) => {
+    setError(null);
+    try {
+      const res = await api<{ channelId: string }>("POST", `/api/routines/${r.id}/run`);
+      await useStore.getState().refreshChannels();
+      go({ view: "chat", channelId: res.channelId, threadId: null });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      <Intro title="Routines">
+        <p>Things @{agent.handle} knows how to do again on its own. Teach one by doing the task once while it watches, or write the steps yourself. Routines can run on a schedule.</p>
+      </Intro>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" onClick={teach} title={agent.computerId ? undefined : "Give it a computer first"}>
+          <Video size={15} /> Teach a task
+        </Button>
+        <Button onClick={() => setWriting(true)}>
+          <FileText size={15} /> Write a routine
+        </Button>
+      </div>
+      {!agent.computerId && <p className="text-xs text-muted">Teaching needs a computer: pick one on the Computer tab.</p>}
+      {error && <p className="text-sm text-bad">{error}</p>}
+      {routines === null ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : routines.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No routines yet.</p>
+      ) : (
+        <div className="rounded-xl border border-line divide-y divide-line">
+          {routines.map((r) => {
+            const next = r.schedule && r.enabled && r.status === "ready" ? nextRun(r.schedule, r.timezone) : null;
+            return (
+              <div key={r.id} className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="min-w-56 flex-1">
+                  <div className="font-medium flex items-center gap-2">
+                    {r.name}
+                    {r.status === "learning" && <Pill tone="info">learning</Pill>}
+                    {!r.enabled && <Pill>paused</Pill>}
+                  </div>
+                  <div className="text-xs text-muted">
+                    {r.schedule ? `${describeCron(r.schedule)}${r.timezone !== TZ ? ` (${r.timezone})` : ""}` : "When someone runs it"}
+                    {next && ` · next ${next.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`}
+                    {r.lastRunAt && ` · last ran ${timeAgo(r.lastRunAt)}`}
+                  </div>
+                </div>
+                <a className="text-sm text-accent hover:underline" href={href({ view: "vault", path: r.notePath })}>
+                  Steps
+                </a>
+                <Button variant="ghost" onClick={() => setScheduling(r)}>
+                  <CalendarClock size={15} /> Schedule
+                </Button>
+                <Button disabled={r.status !== "ready"} onClick={() => run(r)}>
+                  <Play size={15} /> Run now
+                </Button>
+                <button
+                  className="p-2 rounded-md text-muted hover:text-bad hover:bg-hover"
+                  title="Delete routine"
+                  onClick={async () => {
+                    if (!confirm(`Delete the routine "${r.name}"? Its steps stay in memory.`)) return;
+                    await api("DELETE", `/api/routines/${r.id}`);
+                  }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {writing && <WriteRoutine agent={agent} onClose={() => setWriting(false)} />}
+      {scheduling && <ScheduleDialog routine={scheduling} onClose={() => setScheduling(null)} />}
+    </div>
+  );
+}
+
+function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [steps, setSteps] = useState("1. \n2. \n3. ");
+  const [schedule, setSchedule] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal title={`New routine for ${agent.name}`} onClose={onClose} wide>
+      <form
+        className="space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            await api("POST", "/api/routines", { agentId: agent.id, name, steps, schedule, timezone: TZ });
+            onClose();
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      >
+        <Field label="Name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Inbox zero" required />
+        </Field>
+        <Field label="Steps" hint="Name buttons and fields by their labels, say what changes each time, and what done looks like.">
+          <Textarea rows={8} value={steps} onChange={(e) => setSteps(e.target.value)} />
+        </Field>
+        <ScheduleEditor value={schedule} onChange={setSchedule} />
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary">Save routine</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ScheduleDialog({ routine, onClose }: { routine: Routine; onClose: () => void }) {
+  const [schedule, setSchedule] = useState(routine.schedule);
+  const [enabled, setEnabled] = useState(routine.enabled);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal title={`When does "${routine.name}" run?`} onClose={onClose}>
+      <div className="space-y-4">
+        <ScheduleEditor value={schedule} onChange={setSchedule} />
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> On
+        </label>
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              try {
+                await api("PATCH", `/api/routines/${routine.id}`, { schedule, enabled, timezone: TZ });
+                onClose();
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+type Preset = "none" | "daily" | "weekdays" | "weekly" | "hourly" | "custom";
+
+function presetOf(cron: string | null): { preset: Preset; time: string; day: number } {
+  const m = cron?.match(/^(\d+) (\d+) \* \* (\*|1-5|\d)$/);
+  if (!cron) return { preset: "none", time: "09:00", day: 1 };
+  if (cron === "0 * * * *") return { preset: "hourly", time: "09:00", day: 1 };
+  if (!m) return { preset: "custom", time: "09:00", day: 1 };
+  const time = `${m[2].padStart(2, "0")}:${m[1].padStart(2, "0")}`;
+  return m[3] === "*" ? { preset: "daily", time, day: 1 } : m[3] === "1-5" ? { preset: "weekdays", time, day: 1 } : { preset: "weekly", time, day: Number(m[3]) };
+}
+
+/** Plain choices ("every weekday at 9:00") that write a cron schedule; custom cron for the rest. */
+function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const init = presetOf(value);
+  const [preset, setPreset] = useState<Preset>(init.preset);
+  const [time, setTime] = useState(init.time);
+  const [day, setDay] = useState(init.day);
+  const [custom, setCustom] = useState(value ?? "0 9 * * 1-5");
+  const [h, m] = time.split(":").map(Number);
+  const at = `${m || 0} ${h || 0}`;
+  const cron = preset === "none" ? null : preset === "hourly" ? "0 * * * *" : preset === "daily" ? `${at} * * *` : preset === "weekdays" ? `${at} * * 1-5` : preset === "weekly" ? `${at} * * ${day}` : custom.trim();
+  useEffect(() => {
+    onChange(cron);
+  }, [cron]);
+  return (
+    <div className="space-y-2">
+      <span className="text-sm font-medium">Schedule</span>
+      <div className="flex flex-wrap gap-2 items-center">
+        <select value={preset} onChange={(e) => setPreset(e.target.value as Preset)} className="h-9 rounded-lg border border-line bg-panel px-2 text-sm">
+          <option value="none">Only when someone runs it</option>
+          <option value="daily">Every day</option>
+          <option value="weekdays">Every weekday</option>
+          <option value="weekly">Every week</option>
+          <option value="hourly">Every hour</option>
+          <option value="custom">Custom (cron)</option>
+        </select>
+        {preset === "weekly" && (
+          <select value={day} onChange={(e) => setDay(Number(e.target.value))} className="h-9 rounded-lg border border-line bg-panel px-2 text-sm">
+            {DAYS.map((d, i) => (
+              <option key={d} value={i}>
+                on {d}
+              </option>
+            ))}
+          </select>
+        )}
+        {["daily", "weekdays", "weekly"].includes(preset) && <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-9 rounded-lg border border-line bg-panel px-2 text-sm" />}
+        {preset === "custom" && <Input className="w-48 font-mono" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="0 9 * * 1-5" />}
+      </div>
+      <p className="text-xs text-muted">{cron ? `${describeCron(cron)}, in ${TZ}.` : "Run it from here, or ask the agent in chat."}</p>
+    </div>
+  );
+}

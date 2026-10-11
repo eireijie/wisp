@@ -1,0 +1,9 @@
+services:
+  warren:
+    build: .
+    image: warren-hub
+    restart: unless-stopped
+    ports:
+      - "4747:4747"
+    volumes:
+      - ./data:/data

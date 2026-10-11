@@ -1,0 +1,104 @@
+import { useEffect, useState } from "react";
+
+/**
+ * Hash routes:
+ *   #/c/<channelId>[/t/<threadId>]   chat
+ *   #/vault[/<path>]                 memory vault
+ *   #/agents[/<agentId>[/<tab>]]     agents and their settings
+ *   #/teams[/<teamId>[/<tab>]]       teams, the org chart, and each team's chart
+ *   #/about                          what agents remember about you
+ *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
+ *   #/nodes                          devices
+ *   #/settings                       members & access
+ *   #/welcome                        first-run onboarding
+ *   #/chats                          channel list (phones; desktops jump to a channel)
+ *   #/you                            account menu (phones)
+ */
+export type Route =
+  | { view: "chat"; channelId: string | null; threadId: string | null }
+  | { view: "vault"; path: string | null }
+  | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
+  | { view: "teams"; teamId: string | null; tab?: TeamTab | null }
+  | { view: "about" }
+  | { view: "computers"; computerId: string | null; teach?: string | null }
+  | { view: "nodes" }
+  | { view: "settings" }
+  | { view: "welcome" }
+  | { view: "chats" }
+  | { view: "you" };
+
+export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "routines", "permissions", "connect", "runs"] as const;
+export type AgentTab = (typeof AGENT_TABS)[number];
+export const TEAM_TABS = ["chart", "work", "settings"] as const;
+export type TeamTab = (typeof TEAM_TABS)[number];
+
+export function parseRoute(hash: string): Route {
+  const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  switch (parts[0]) {
+    case "vault":
+      return { view: "vault", path: parts.slice(1).join("/") || null };
+    case "agents":
+      return { view: "agents", agentId: parts[1] ?? null, tab: AGENT_TABS.find((t) => t === parts[2]) ?? null };
+    case "teams":
+      return { view: "teams", teamId: parts[1] ?? null, tab: TEAM_TABS.find((t) => t === parts[2]) ?? null };
+    case "about":
+      return { view: "about" };
+    case "computers":
+      return { view: "computers", computerId: parts[1] ?? null, teach: parts[2] === "teach" ? (parts[3] ?? null) : null };
+    case "nodes":
+      return { view: "nodes" };
+    case "settings":
+      return { view: "settings" };
+    case "welcome":
+      return { view: "welcome" };
+    case "chats":
+      return { view: "chats" };
+    case "you":
+      return { view: "you" };
+    case "c":
+      return { view: "chat", channelId: parts[1] ?? null, threadId: parts[2] === "t" ? (parts[3] ?? null) : null };
+    default:
+      return { view: "chat", channelId: null, threadId: null };
+  }
+}
+
+export function href(r: Route): string {
+  switch (r.view) {
+    case "vault":
+      return "#/vault" + (r.path ? "/" + r.path.split("/").map(encodeURIComponent).join("/") : "");
+    case "agents":
+      return "#/agents" + (r.agentId ? `/${r.agentId}${r.tab ? `/${r.tab}` : ""}` : "");
+    case "teams":
+      return "#/teams" + (r.teamId ? `/${r.teamId}${r.tab && r.tab !== "chart" ? `/${r.tab}` : ""}` : "");
+    case "about":
+      return "#/about";
+    case "computers":
+      return "#/computers" + (r.computerId ? `/${r.computerId}${r.teach ? `/teach/${r.teach}` : ""}` : "");
+    case "nodes":
+      return "#/nodes";
+    case "settings":
+      return "#/settings";
+    case "welcome":
+      return "#/welcome";
+    case "chats":
+      return "#/chats";
+    case "you":
+      return "#/you";
+    case "chat":
+      return r.channelId ? `#/c/${r.channelId}${r.threadId ? `/t/${r.threadId}` : ""}` : "#/";
+  }
+}
+
+export function go(r: Route) {
+  location.hash = href(r);
+}
+
+export function useRoute(): Route {
+  const [route, setRoute] = useState(() => parseRoute(location.hash));
+  useEffect(() => {
+    const on = () => setRoute(parseRoute(location.hash));
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return route;
+}

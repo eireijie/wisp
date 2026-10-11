@@ -1,0 +1,2 @@
+{ "name": "@warren/node", "version": "0.0.1", "type": "module", "license": "Apache-2.0", "bin": { "warren": "src/cli.ts" },
+  "dependencies": { "@warren/core": "*", "@warren/adapters": "*", "@warren/mcp": "*", "@warren/sdk": "*", "ws": "^8.18.0", "tsx": "^4.19.0" } }

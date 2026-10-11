@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "strict": true, "esModuleInterop": true, "skipLibCheck": true, "noEmit": true,
+    "allowImportingTsExtensions": true, "resolveJsonModule": true
+  },
+  "include": ["apps/hub/src", "apps/node/src", "packages/*/src", "packages/*/test", "apps/hub/test", "apps/node/test"]
+}

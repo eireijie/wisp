@@ -1,0 +1,454 @@
+import crypto from "node:crypto";
+import type { WebSocket } from "ws";
+import { ComputerAction, tunnelFrame, type Actor, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
+import { id, now } from "./auth.ts";
+import { OrgoClient, parseResolution } from "./orgo.ts";
+import type { Hub } from "./hub.ts";
+
+/** How long a person keeps control without touching the computer before agents get it back. */
+const CONTROL_IDLE_MS = 10 * 60_000;
+/** Viewer links are single-use and short-lived, since they travel in a URL. */
+const TICKET_MS = 60_000;
+
+export class ComputerError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400,
+  ) {
+    super(message);
+  }
+}
+
+/** What browsers get: the stored computer plus who's on it and how to watch it. */
+export type ComputerView = Computer & {
+  online: boolean;
+  transport: "vnc" | "frames";
+  agents: string[];
+  /** the last thing an agent did on it, for "Working" badges */
+  activity: { agentId: string; text: string; at: string } | null;
+};
+
+interface PendingRequest {
+  nodeId: string;
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+interface Frame {
+  image: string;
+  width: number;
+  height: number;
+  at: number;
+}
+
+interface Ticket {
+  computerId: string;
+  userId: string;
+  workspaceId: string;
+  kind: "vnc" | "frames";
+  expires: number;
+}
+
+/**
+ * The hub's side of computers: routes actions to the device that runs a computer (or to Orgo),
+ * keeps who's in control, relays live views to browsers, and remembers each screen's last frame.
+ */
+export class Computers {
+  private pending = new Map<string, PendingRequest>();
+  private control = new Map<string, ComputerController & { touched: number }>();
+  private frames = new Map<string, Frame>();
+  private shooting = new Map<string, Promise<Frame>>();
+  private viewers = new Map<string, Set<{ socket: WebSocket; userId: string }>>();
+  /** browser VNC sockets by tunnel id, for tunnels through a device */
+  private tunnels = new Map<string, { socket: WebSocket; nodeId: string; computerId: string; ready: boolean; queue: Uint8Array[] }>();
+  private tickets = new Map<string, Ticket>();
+  private activity = new Map<string, { agentId: string; text: string; at: string }>();
+  private lastBroadcast = new Map<string, number>();
+  private sweeper: ReturnType<typeof setInterval>;
+
+  constructor(private hub: Hub) {
+    this.sweeper = setInterval(() => this.sweep(), 30_000);
+    this.sweeper.unref();
+  }
+
+  shutdown() {
+    clearInterval(this.sweeper);
+    for (const p of this.pending.values()) clearTimeout(p.timer);
+    this.pending.clear();
+  }
+
+  // --- views ------------------------------------------------------------------------------------
+
+  transport(c: Computer): "vnc" | "frames" {
+    return c.kind === "device" && !c.config.vncPort ? "frames" : "vnc";
+  }
+
+  online(c: Computer): boolean {
+    return c.kind === "orgo" ? !!this.hub.store.setting(c.workspaceId, "orgo.apiKey") : this.hub.isNodeOnline(c.nodeId);
+  }
+
+  view(c: Computer): ComputerView {
+    const ctl = this.control.get(c.id);
+    return {
+      ...c,
+      controller: ctl ? { kind: "user", id: ctl.id, since: ctl.since } : null,
+      online: this.online(c),
+      transport: this.transport(c),
+      agents: this.hub.store.agentsOnComputer(c.id).map((a) => a.id),
+      activity: this.activity.get(c.id) ?? null,
+    };
+  }
+
+  /** Tell browsers a computer changed. `throttle` limits chatty updates (agent activity) to one every 2s. */
+  changed(computerId: string, throttle = false) {
+    const c = this.hub.store.computer(computerId);
+    if (!c) return;
+    if (throttle && Date.now() - (this.lastBroadcast.get(computerId) ?? 0) < 2000) return;
+    this.lastBroadcast.set(computerId, Date.now());
+    this.hub.broadcast(c.workspaceId, { type: "computer", computer: this.view(c) });
+    for (const v of this.viewers.get(computerId) ?? []) send(v.socket, { type: "computer", computer: this.view(c) });
+  }
+
+  spec(c: Computer): ComputerSpec {
+    if (c.kind === "orgo") throw new ComputerError("cloud computers don't run on a device");
+    return { id: c.id, name: c.name, kind: c.kind, config: c.config as Record<string, unknown> };
+  }
+
+  orgo(workspaceId: string): OrgoClient | null {
+    const key = this.hub.store.setting(workspaceId, "orgo.apiKey");
+    return key ? new OrgoClient(key, this.hub.fetchImpl) : null;
+  }
+
+  // --- requests to devices ------------------------------------------------------------------------
+
+  /** Send a request to a device and wait for its `result`. */
+  nodeRequest(nodeId: string, build: (requestId: string) => Parameters<Hub["sendToNode"]>[1], timeoutMs: number): Promise<unknown> {
+    const requestId = id("req");
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId);
+        reject(new ComputerError("the device didn't answer in time", 504));
+      }, timeoutMs);
+      this.pending.set(requestId, { nodeId, resolve, reject, timer });
+      if (!this.hub.sendToNode(nodeId, build(requestId))) {
+        clearTimeout(timer);
+        this.pending.delete(requestId);
+        reject(new ComputerError("the device is offline", 503));
+      }
+    });
+  }
+
+  onResult(nodeId: string, msg: Extract<NodeToHub, { type: "result" }>) {
+    const p = this.pending.get(msg.requestId);
+    if (!p || p.nodeId !== nodeId) return;
+    clearTimeout(p.timer);
+    this.pending.delete(msg.requestId);
+    if (msg.ok) p.resolve(msg.result);
+    else p.reject(new ComputerError(msg.error ?? "failed", 422));
+  }
+
+  // --- actions ------------------------------------------------------------------------------------
+
+  /**
+   * Do something on a computer. Agents are held back while a person has control; people act
+   * only once they've taken control.
+   */
+  async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number } = {}): Promise<unknown> {
+    const ctl = this.control.get(c.id);
+    const input = !["screenshot", "status", "start", "stop", "destroy"].includes(action.action);
+    if (by.kind === "agent" && ctl && input) {
+      const who = this.hub.store.user(ctl.id)?.name ?? "Someone";
+      throw new ComputerError(`${who} has taken control of ${c.name}. Wait until they hand it back (you'll hear from them), or ask them in chat.`, 409);
+    }
+    if (by.kind === "user" && input) {
+      if (!ctl || ctl.id !== by.id) throw new ComputerError("take control of the computer first", 409);
+      ctl.touched = Date.now();
+    }
+    const timeoutMs = opts.timeoutMs ?? (action.action === "start" ? 60 * 60_000 : action.action === "run" ? ((action.timeout ?? 120) + 30) * 1000 : 120_000);
+    let result: unknown;
+    if (c.kind === "orgo") {
+      const client = this.orgo(c.workspaceId);
+      if (!client) throw new ComputerError("add an Orgo API key in Settings → Computers first", 412);
+      const cfg = c.config as OrgoConfig & { resolution?: string };
+      result = await client.act(cfg, action);
+    } else {
+      if (!c.nodeId || !this.hub.isNodeOnline(c.nodeId)) throw new ComputerError(`${c.name} is offline: its device isn't connected`, 503);
+      result = await this.nodeRequest(c.nodeId, (requestId) => ({ type: "computer", requestId, computer: this.spec(c), action }), timeoutMs);
+    }
+    if (action.action === "screenshot") {
+      const s = result as Screenshot;
+      this.frames.set(c.id, { image: s.image, width: s.width, height: s.height, at: Date.now() });
+    }
+    if (by.kind === "agent") {
+      this.activity.set(c.id, { agentId: by.id, text: describe(action), at: now() });
+      this.changed(c.id, true);
+    }
+    return result;
+  }
+
+  /** The screen as it looks now (or within `maxAgeMs`), for thumbnails. */
+  async latest(c: Computer, maxAgeMs = 5000): Promise<Frame> {
+    const f = this.frames.get(c.id);
+    if (f && Date.now() - f.at < maxAgeMs) return f;
+    let p = this.shooting.get(c.id);
+    if (!p) {
+      p = this.act(c, { action: "screenshot" }, { kind: "user", id: "system" }).then(() => this.frames.get(c.id)!);
+      this.shooting.set(c.id, p);
+      p.finally(() => this.shooting.delete(c.id)).catch(() => {});
+    }
+    return p.catch((err) => {
+      if (f) return f; // an old frame beats none
+      throw err;
+    });
+  }
+
+  // --- control --------------------------------------------------------------------------------------
+
+  controller(computerId: string) {
+    return this.control.get(computerId) ?? null;
+  }
+
+  take(c: Computer, userId: string) {
+    const cur = this.control.get(c.id);
+    if (cur && cur.id !== userId && Date.now() - cur.touched < CONTROL_IDLE_MS) {
+      throw new ComputerError(`${this.hub.store.user(cur.id)?.name ?? "Someone"} is using it right now`, 409);
+    }
+    this.control.set(c.id, { kind: "user", id: userId, since: now(), touched: Date.now() });
+    this.changed(c.id);
+  }
+
+  /** Give the computer back to the agents. An agent that asked for help hears about it. */
+  release(c: Computer, userId: string, note?: string) {
+    const cur = this.control.get(c.id);
+    if (cur && cur.id !== userId) throw new ComputerError("someone else has control", 409);
+    this.control.delete(c.id);
+    const help = c.help;
+    if (help) {
+      this.hub.store.updateComputer(c.id, { help: null });
+      const agent = this.hub.store.agent(help.agentId);
+      if (agent && this.hub.store.channel(help.channelId)) {
+        const body = `@${agent.handle} ${note?.trim() || "Done, the computer is yours again."}`;
+        this.hub.postMessage({ channelId: help.channelId, threadId: help.threadId, author: { kind: "user", id: userId }, body });
+      }
+    }
+    this.changed(c.id);
+  }
+
+  /** An agent asks a person to do something on its computer, e.g. sign in somewhere. */
+  requestHelp(c: Computer, agentId: string, request: string, where: { channelId: string; threadId: string | null }) {
+    const help = { agentId, request, channelId: where.channelId, threadId: where.threadId, at: now() };
+    this.hub.store.updateComputer(c.id, { help });
+    const msg = this.hub.postMessage({
+      channelId: where.channelId,
+      threadId: where.threadId,
+      author: { kind: "agent", id: agentId },
+      body: request,
+      parts: [{ type: "computer", computerId: c.id, request }],
+      route: false,
+    });
+    this.changed(c.id);
+    return msg;
+  }
+
+  private sweep() {
+    for (const [computerId, ctl] of this.control) {
+      if (Date.now() - ctl.touched < CONTROL_IDLE_MS) continue;
+      // nobody is watching or touching it: give it back quietly
+      const watching = [...(this.viewers.get(computerId) ?? [])].some((v) => v.userId === ctl.id);
+      if (watching && Date.now() - ctl.touched < 3 * CONTROL_IDLE_MS) continue;
+      this.control.delete(computerId);
+      this.changed(computerId);
+    }
+    for (const [t, ticket] of this.tickets) if (ticket.expires < Date.now()) this.tickets.delete(t);
+  }
+
+  // --- live view --------------------------------------------------------------------------------------
+
+  ticket(c: Computer, userId: string): string {
+    const t = crypto.randomBytes(24).toString("base64url");
+    this.tickets.set(t, { computerId: c.id, userId, workspaceId: c.workspaceId, kind: this.transport(c), expires: Date.now() + TICKET_MS });
+    return t;
+  }
+
+  redeem(ticket: string | undefined, computerId: string): Ticket | null {
+    const t = ticket ? this.tickets.get(ticket) : undefined;
+    if (!t) return null;
+    this.tickets.delete(ticket!);
+    if (t.expires < Date.now() || t.computerId !== computerId) return null;
+    return t;
+  }
+
+  /** A browser watching a screen through frames; it can send input once it has control. */
+  addFrameViewer(c: Computer, socket: WebSocket, userId: string) {
+    const viewer = { socket, userId };
+    let set = this.viewers.get(c.id);
+    if (!set) this.viewers.set(c.id, (set = new Set()));
+    set.add(viewer);
+    send(socket, { type: "computer", computer: this.view(c) });
+    const f = this.frames.get(c.id);
+    if (f) send(socket, { type: "frame", ...f });
+    if (set.size === 1 && c.nodeId) this.hub.sendToNode(c.nodeId, { type: "screen_watch", computer: this.spec(c), on: true, fps: 2 });
+
+    socket.on("message", (raw) => {
+      let msg: any;
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (msg?.type !== "input") return;
+      const parsed = ComputerAction.safeParse(msg.action);
+      const fresh = this.hub.store.computer(c.id);
+      if (!parsed.success || !fresh) return;
+      if (!["click", "move", "mouse", "drag", "scroll", "type", "key"].includes(parsed.data.action)) return;
+      this.act(fresh, parsed.data, { kind: "user", id: userId }).catch((err) => send(socket, { type: "error", message: (err as Error).message }));
+    });
+    socket.on("close", () => {
+      set!.delete(viewer);
+      if (set!.size === 0) {
+        this.viewers.delete(c.id);
+        const cur = this.hub.store.computer(c.id);
+        if (cur?.nodeId) this.hub.sendToNode(cur.nodeId, { type: "screen_watch", computer: this.spec(cur), on: false });
+      }
+    });
+  }
+
+  onFrame(nodeId: string, msg: Extract<NodeToHub, { type: "screen_frame" }>) {
+    const c = this.hub.store.computer(msg.computerId);
+    if (!c || c.nodeId !== nodeId) return;
+    const frame = { image: msg.image, width: msg.width, height: msg.height, at: Date.now() };
+    this.frames.set(c.id, frame);
+    for (const v of this.viewers.get(c.id) ?? []) send(v.socket, { type: "frame", ...frame });
+  }
+
+  /** Relay a browser's VNC connection to a computer on a device. */
+  openTunnel(c: Computer, socket: WebSocket) {
+    if (!c.nodeId) return socket.close(4400, "no device");
+    const tunnelId = id("tun");
+    const t = { socket, nodeId: c.nodeId, computerId: c.id, ready: false, queue: [] as Uint8Array[] };
+    this.tunnels.set(tunnelId, t);
+    socket.on("message", (raw: Buffer) => {
+      const data = new Uint8Array(raw);
+      if (t.ready) this.hub.sendBinaryToNode(t.nodeId, tunnelFrame(tunnelId, data));
+      else t.queue.push(data);
+    });
+    socket.on("close", () => {
+      if (this.tunnels.delete(tunnelId)) this.hub.sendToNode(t.nodeId, { type: "tunnel_close", tunnelId });
+    });
+    if (!this.hub.sendToNode(c.nodeId, { type: "tunnel_open", tunnelId, computer: this.spec(c) })) {
+      this.tunnels.delete(tunnelId);
+      socket.close(4503, "device offline");
+    }
+  }
+
+  onTunnelReady(nodeId: string, tunnelId: string) {
+    const t = this.tunnels.get(tunnelId);
+    if (!t || t.nodeId !== nodeId) return;
+    t.ready = true;
+    for (const data of t.queue.splice(0)) this.hub.sendBinaryToNode(nodeId, tunnelFrame(tunnelId, data));
+  }
+
+  onTunnelData(nodeId: string, tunnelId: string, payload: Uint8Array) {
+    const t = this.tunnels.get(tunnelId);
+    if (t && t.nodeId === nodeId && t.socket.readyState === 1) t.socket.send(payload, { binary: true });
+  }
+
+  onTunnelClosed(nodeId: string, tunnelId: string, error?: string) {
+    const t = this.tunnels.get(tunnelId);
+    if (!t || t.nodeId !== nodeId) return;
+    this.tunnels.delete(tunnelId);
+    t.socket.close(error ? 4502 : 1000, (error ?? "closed").slice(0, 120));
+  }
+
+  /** A device went away: its live views end and pending requests fail. */
+  nodeGone(nodeId: string) {
+    for (const [tid, t] of this.tunnels) {
+      if (t.nodeId !== nodeId) continue;
+      this.tunnels.delete(tid);
+      t.socket.close(4503, "device offline");
+    }
+    for (const [rid, p] of this.pending) {
+      if (p.nodeId !== nodeId) continue;
+      clearTimeout(p.timer);
+      this.pending.delete(rid);
+      p.reject(new ComputerError("the device disconnected", 503));
+    }
+    for (const c of this.hub.store.computersOnNode(nodeId)) this.changed(c.id);
+  }
+
+  /** A device came back: resume streaming to anyone still watching. */
+  nodeBack(nodeId: string) {
+    for (const c of this.hub.store.computersOnNode(nodeId)) {
+      if (this.viewers.get(c.id)?.size) this.hub.sendToNode(nodeId, { type: "screen_watch", computer: this.spec(c), on: true, fps: 2 });
+      this.changed(c.id);
+    }
+  }
+
+  /** The Orgo VNC address, for the browser to connect to directly. Contains the computer's password. */
+  async orgoVnc(c: Computer): Promise<string> {
+    const client = this.orgo(c.workspaceId);
+    if (!client) throw new ComputerError("add an Orgo API key in Settings → Computers first", 412);
+    return client.vncUrl(c.config as OrgoConfig);
+  }
+
+  /** Make an Orgo computer for this workspace. */
+  async createOrgo(workspaceId: string, name: string, size: { ram?: number; cpu?: number }): Promise<Computer> {
+    const client = this.orgo(workspaceId);
+    if (!client) throw new ComputerError("add an Orgo API key in Settings → Computers first", 412);
+    const resolution = "1280x800";
+    const created = await client.create({ name: `${name}-${crypto.randomBytes(3).toString("hex")}`, ram: size.ram, cpu: size.cpu, resolution: `${resolution}x24` });
+    return this.hub.store.createComputer({
+      workspaceId,
+      name,
+      kind: "orgo",
+      nodeId: null,
+      config: { computerId: created.id, instanceId: created.instanceId ?? undefined, ram: size.ram, cpu: size.cpu, resolution },
+      status: created.status === "running" ? "ready" : "starting",
+    });
+  }
+
+  /** Remove a computer everywhere: its VM or cloud computer is deleted too. */
+  async remove(c: Computer) {
+    if (c.kind !== "device") await this.act(c, { action: "destroy" }, { kind: "user", id: "system" }).catch(() => {});
+    this.control.delete(c.id);
+    this.frames.delete(c.id);
+    for (const v of this.viewers.get(c.id) ?? []) v.socket.close(4404, "removed");
+    this.viewers.delete(c.id);
+    this.hub.store.deleteComputer(c.id);
+    this.hub.broadcast(c.workspaceId, { type: "computer_removed", computerId: c.id });
+  }
+
+  /** Screen size used for coordinates on cloud computers. */
+  static orgoScreen(c: Computer) {
+    return parseResolution((c.config as { resolution?: string }).resolution);
+  }
+}
+
+/** A few words for what an agent did, shown on the computer's card. */
+export function describe(a: ComputerAction): string {
+  switch (a.action) {
+    case "screenshot":
+      return "Looking at the screen";
+    case "click":
+      return a.double ? "Double-clicking" : a.button === "right" ? "Right-clicking" : "Clicking";
+    case "type":
+      return "Typing";
+    case "key":
+      return `Pressing ${a.keys}`;
+    case "scroll":
+      return `Scrolling ${a.direction}`;
+    case "drag":
+      return "Dragging";
+    case "run":
+      return `Running ${a.command.split(/\s+/)[0]}`;
+    case "open":
+      return `Opening ${a.target.slice(0, 60)}`;
+    default:
+      return "Working";
+  }
+}
+
+function send(socket: WebSocket, msg: unknown) {
+  if (socket.readyState === 1) socket.send(JSON.stringify(msg));
+}

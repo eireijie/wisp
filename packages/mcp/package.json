@@ -1,0 +1,2 @@
+{ "name": "@warren/mcp", "version": "0.0.1", "type": "module", "license": "Apache-2.0", "main": "src/server.ts", "bin": { "warren-mcp": "src/main.ts" },
+  "dependencies": { "@warren/sdk": "*", "@modelcontextprotocol/sdk": "^1.20.0", "zod": "^3.23.0" } }

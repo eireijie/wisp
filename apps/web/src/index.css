@@ -1,0 +1,179 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Design tokens: a blend of Buzz (warm, roomy chat) and Paperclip (calm, neutral control surfaces).
+ * The window is a warm tinted "app" color; content sits on a floating panel. Burnt orange is
+ * reserved for accents. Dark mode follows the OS.
+ */
+:root {
+  --app: #efe9df; /* window + sidebar tint */
+  --panel: #ffffff; /* floating content panel */
+  --bg: #f7f4ef; /* quiet surfaces inside the panel */
+  --sidebar: #efe9df;
+  --side-hover: rgb(60 40 20 / 0.06);
+  --side-active: rgb(60 40 20 / 0.1);
+  --ink: #1d1b18;
+  --muted: #6e6960;
+  --faint: #a29c92;
+  --line: #e9e4dc;
+  --hover: #f5f1eb;
+  --accent: #c2410c;
+  --accent-ink: #ffffff;
+  --accent-soft: #fdeee4;
+  --chip: #efeae2;
+  --ok: #15803d;
+  --warn: #b45309;
+  --bad: #b91c1c;
+  --info: #1d4ed8;
+  --code: #f4f0ea;
+  --shadow: 0 1px 2px rgb(60 40 20 / 0.06), 0 4px 16px rgb(60 40 20 / 0.05);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app: #121110;
+    --panel: #1a1917;
+    --bg: #211f1d;
+    --sidebar: #121110;
+    --side-hover: rgb(255 255 255 / 0.05);
+    --side-active: rgb(255 255 255 / 0.09);
+    --ink: #ecebe7;
+    --muted: #a29e97;
+    --faint: #6d6964;
+    --line: rgb(255 255 255 / 0.08);
+    --hover: rgb(255 255 255 / 0.04);
+    --accent: #f97316;
+    --accent-ink: #1c0f05;
+    --accent-soft: rgb(249 115 22 / 0.14);
+    --chip: rgb(255 255 255 / 0.08);
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --info: #60a5fa;
+    --code: #24221f;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-app: var(--app);
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-sidebar: var(--sidebar);
+  --color-side-hover: var(--side-hover);
+  --color-side-active: var(--side-active);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-hover: var(--hover);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-chip: var(--chip);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-info: var(--info);
+  --color-code: var(--code);
+  --shadow-panel: var(--shadow);
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--app);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-feature-settings: "cv11", "ss01"; /* Inter: single-storey a, open digits */
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Rendered markdown in messages and the vault preview */
+.prose-w {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.prose-w > * + * {
+  margin-top: 0.5em;
+}
+.prose-w h1 { font-size: 1.5em; font-weight: 700; margin-top: 0.6em; }
+.prose-w h2 { font-size: 1.25em; font-weight: 650; margin-top: 0.8em; }
+.prose-w h3 { font-size: 1.05em; font-weight: 650; margin-top: 0.8em; }
+.prose-w ul { list-style: disc; padding-left: 1.4em; }
+.prose-w ol { list-style: decimal; padding-left: 1.4em; }
+.prose-w li + li { margin-top: 0.15em; }
+.prose-w a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.prose-w code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code); padding: 0.1em 0.35em; border-radius: 4px; }
+.prose-w pre { background: var(--code); padding: 0.75em 0.9em; border-radius: 8px; overflow-x: auto; }
+.prose-w pre code { background: none; padding: 0; }
+.prose-w blockquote { border-left: 3px solid var(--line); padding-left: 0.8em; color: var(--muted); }
+.prose-w table { border-collapse: collapse; }
+.prose-w th, .prose-w td { border: 1px solid var(--line); padding: 0.25em 0.6em; }
+.prose-w hr { border-color: var(--line); }
+.prose-w .wikilink { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 0.25em; text-decoration: none; cursor: pointer; }
+.prose-w .wikilink.missing { color: var(--muted); background: none; border-bottom: 1px dashed var(--faint); }
+/* @agent mentions render as chips with a small bot icon, like Buzz */
+.prose-w .mention {
+  display: inline-flex; align-items: center; gap: 0.25em; vertical-align: baseline;
+  padding: 0 0.4em; border-radius: 6px; background: var(--chip); color: var(--ink); font-weight: 550; font-size: 0.95em;
+}
+.prose-w .mention svg { width: 0.9em; height: 0.9em; opacity: 0.7; }
+.prose-w .mention.user { background: var(--accent-soft); color: var(--accent); }
+.prose-w .tag { color: var(--muted); }
+
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top { padding-top: env(safe-area-inset-top); }
+
+::selection { background: var(--accent-soft); }
+
+/* --- ghosts --------------------------------------------------------------------------------- */
+.ghost svg g,
+.ghost svg circle,
+.ghost svg ellipse,
+.ghost svg text {
+  transform-box: fill-box;
+}
+.ghost-float { animation: ghost-float 3.2s ease-in-out infinite; transform-origin: center bottom; }
+.ghost-bounce { animation: ghost-bounce 1.7s ease-in-out infinite; transform-origin: center bottom; }
+.ghost-sway { animation: ghost-sway 3s ease-in-out infinite; transform-origin: center bottom; }
+.ghost-fast { animation-duration: 1.4s; }
+.ghost-blink { animation: ghost-blink 4.6s infinite; transform-origin: center; }
+.ghost-z { animation: ghost-z 2.6s ease-in infinite; opacity: 0; }
+.ghost-z2 { animation-delay: 1.3s; }
+.ghost-think { animation: ghost-think 1.2s ease-in-out infinite; }
+.ghost-halo { animation: ghost-halo 2.4s ease-in-out infinite; transform-origin: center; }
+.ghost-spin { animation: ghost-spin 0.9s linear infinite; transform-origin: center; }
+.ghost-glow { filter: drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 7px var(--glow)); animation: ghost-glow 2.8s ease-in-out infinite; }
+
+@keyframes ghost-float { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-4px); } }
+@keyframes ghost-bounce {
+  0%, 100% { transform: translateY(0) scale(1.04, 0.96); }
+  45% { transform: translateY(-7px) scale(0.97, 1.03); }
+  60% { transform: translateY(-7px) scale(1, 1); }
+}
+@keyframes ghost-sway { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+@keyframes ghost-blink { 0%, 90%, 100% { transform: scaleY(1); } 93% { transform: scaleY(0.12); } }
+@keyframes ghost-z { 0% { opacity: 0; transform: translate(0, 4px) scale(0.7); } 25% { opacity: 0.85; } 100% { opacity: 0; transform: translate(6px, -12px) scale(1.1); } }
+@keyframes ghost-think { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-1.5px); } }
+@keyframes ghost-halo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+@keyframes ghost-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes ghost-glow { 0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 5px var(--glow)); } 50% { filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 10px var(--glow)); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ghost *, .ghost { animation: none !important; }
+}
+.ghost-shadow { animation: ghost-shadow 3.2s ease-in-out infinite; }
+@keyframes ghost-shadow { 0%, 100% { transform: translateX(-50%) scaleX(1); opacity: 0.9; } 50% { transform: translateX(-50%) scaleX(0.82); opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .ghost-shadow { animation: none; } }
