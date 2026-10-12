@@ -27,7 +27,7 @@ Settings in the device's `~/.warren/node.json`: `"vmEngine": "podman"` to use Po
 
 ### A device's own screen
 
-- **macOS**: the app that runs `warren node` (Terminal, iTerm…) needs **Screen Recording** and **Accessibility** permission in System Settings → Privacy & Security. Nothing else to install.
+- **macOS**: whatever starts `warren node` needs **Screen Recording** and **Accessibility** permission in System Settings → Privacy & Security: your terminal app (Terminal, iTerm…) if you run it there, or the Node binary if it runs in the background as a LaunchAgent. `warren doctor` prints which, and [Deploying](deploy.md#macos-launchagent) shows how to add the Node binary. Nothing else to install.
 - **Windows**: works out of the box (a PowerShell helper drives the mouse and keyboard).
 - **Linux**: an X11 session with `xdotool` and ImageMagick (`import`). Wayland isn't supported yet; use a VM instead.
 

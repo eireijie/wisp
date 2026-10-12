@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import net from "node:net";
 import type { Duplex } from "node:stream";
 import os from "node:os";
@@ -175,6 +176,18 @@ function desktopDriver(allowShell?: boolean): Driver {
   return d;
 }
 
+/**
+ * macOS grants screen and input access to the app that started `warren node`: the terminal when
+ * it runs in one, or the Node binary itself when launchd starts it. Node's real path changes when
+ * Node is upgraded, and the permission has to be given again then.
+ */
+function macPermissionTarget(): string {
+  const node = fs.realpathSync(process.execPath);
+  const term = process.env.TERM_PROGRAM;
+  const app = term === "Apple_Terminal" ? "Terminal" : term === "iTerm.app" ? "iTerm" : term === "vscode" ? "your editor (VS Code, Cursor…)" : term ?? "your terminal app";
+  return `${app} if you run \`warren node\` there, or to ${node} (add it with + and ⌘⇧G) if it runs in the background as a LaunchAgent`;
+}
+
 /** Can agents use this device's own screen, and if not, why. */
 async function screenSupport(): Promise<{ ok: boolean; detail: string }> {
   if (process.platform === "darwin") {
@@ -182,7 +195,7 @@ async function screenSupport(): Promise<{ ok: boolean; detail: string }> {
     const ok = trusted?.stdout.toString().trim() === "true";
     return ok
       ? { ok: true, detail: "macOS desktop (needs Screen Recording permission too)" }
-      : { ok: true, detail: "macOS desktop. Give the app that runs `warren node` Accessibility and Screen Recording permission in System Settings → Privacy & Security." };
+      : { ok: true, detail: `macOS desktop. In System Settings → Privacy & Security, give Accessibility and Screen Recording permission to ${macPermissionTarget()}.` };
   }
   if (process.platform === "win32") return { ok: true, detail: "Windows desktop" };
   if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return { ok: false, detail: "No display here (a server without a desktop). Use a VM on this device instead." };

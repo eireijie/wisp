@@ -34,9 +34,9 @@ export async function buildHub(opts: HubOptions) {
     await app.register(fastifyStatic, {
       root: opts.webDir,
       cacheControl: false,
-      setHeaders: (res, file) => {
+      setHeaders: (reply, file) => {
         // hashed assets are immutable; the shell must always revalidate
-        res.setHeader("cache-control", file.includes(`${path.sep}assets${path.sep}`) ? "public, max-age=31536000, immutable" : "no-cache");
+        reply.header("cache-control", file.includes(`${path.sep}assets${path.sep}`) ? "public, max-age=31536000, immutable" : "no-cache");
       },
     });
     // SPA fallback: unknown page routes serve index.html (but never for missing assets)

@@ -56,7 +56,81 @@ WantedBy=multi-user.target
 systemctl enable --now warren
 ```
 
-On each agent device, run the same with `warren node start ...` as the `ExecStart` (use a regular user that has the harnesses logged in, not root).
+## Keeping a device connected
+
+`warren node start` stays connected and reconnects by itself when the hub restarts or the network drops, but it stops when you close its terminal or restart the computer. Run it once in a terminal with `--hub`, `--token` and `--name` (they're saved to `~/.warren/node.json`), then have the system start it from then on. Always run it as the person who signed in to the harnesses (`claude`, `codex`…), not as root.
+
+### macOS (LaunchAgent)
+
+Run this inside the warren repo, from a terminal where your agent CLIs work. It saves that terminal's `PATH` into the LaunchAgent, because launchd otherwise starts programs with a minimal `PATH` and `warren node` wouldn't find `claude`, `codex` or the others.
+
+```bash
+mkdir -p ~/.warren
+cat > ~/Library/LaunchAgents/ai.warren.node.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>ai.warren.node</string>
+  <key>ProgramArguments</key><array>
+    <string>$(command -v node)</string><string>$(pwd)/bin/warren.mjs</string><string>node</string><string>start</string>
+  </array>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>$PATH</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$HOME/.warren/node.log</string>
+  <key>StandardErrorPath</key><string>$HOME/.warren/node.log</string>
+</dict></plist>
+EOF
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.warren.node.plist
+tail ~/.warren/node.log
+```
+
+Restart it with `launchctl kickstart -k gui/$(id -u)/ai.warren.node`, and remove it with `launchctl bootout gui/$(id -u)/ai.warren.node`. If you install a new harness later, run the snippet again so its folder is on the saved `PATH`.
+
+**Screen permission:** for agents to use this Mac's own screen, macOS has to allow whatever started `warren node`. In a terminal, that's the terminal app. As a LaunchAgent, it's the Node binary itself: in System Settings → Privacy & Security → **Accessibility** and **Screen Recording**, press **+**, press ⌘⇧G, and paste the path that `realpath "$(command -v node)"` prints (for example `/opt/homebrew/Cellar/node@22/22.x.y/bin/node`). Then restart the LaunchAgent. That path changes when Node is upgraded, so grant it again after an upgrade. `warren doctor` prints the exact path to use.
+
+### Linux (systemd)
+
+A server or container, with no screen for agents to use:
+
+```ini
+# /etc/systemd/system/warren-node.service
+[Unit]
+Description=Warren device
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=you
+WorkingDirectory=/home/you/warren
+ExecStart=/usr/bin/node bin/warren.mjs node start
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl enable --now warren-node
+```
+
+On a desktop where agents should use your screen, make it a user service instead (`~/.config/systemd/user/warren-node.service`, without `User=`, and with `Environment=DISPLAY=:0`), and start it with `systemctl --user enable --now warren-node`. A system service can't reach your desktop session.
+
+### Windows (Task Scheduler)
+
+Use a task that starts when you sign in, not a Windows service: services run outside your desktop session, so agents couldn't see or use your screen. In PowerShell:
+
+```powershell
+$warren = (Get-Command warren.cmd).Source
+$log = "$env:USERPROFILE\.warren\node.log"
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command & '$warren' node start *>> '$log'"
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName "Warren node" -Action $action -Trigger $trigger -Settings $settings
+Start-ScheduledTask -TaskName "Warren node"
+```
+
+Stop it with `Stop-ScheduledTask -TaskName "Warren node"`, and remove it with `Unregister-ScheduledTask -TaskName "Warren node"`.
 
 ## Reaching it from your phone
 

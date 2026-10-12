@@ -20,7 +20,7 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 
 ## Quick start
 
-Requirements: Node 22+ and git.
+Requirements: Node 22+ and git. `npm install` runs install scripts for three dependencies, which is expected: better-sqlite3 downloads a prebuilt SQLite, and esbuild and fsevents fetch the binary for your platform.
 
 ```bash
 git clone https://github.com/<you>/warren && cd warren
@@ -47,6 +47,8 @@ docker compose up -d
    warren doctor                    # shows the harnesses, screen and VM support, and agents Warren can import
    warren node start --hub http://your-hub:4747 --token <token> --name my-laptop
    ```
+
+   It stays connected until you close the terminal. To start it automatically at login and keep it running, see [Keeping a device connected](docs/deploy.md#keeping-a-device-connected) (macOS, Linux and Windows).
 
 3. Go to **Agents → Add agent**, pick a job (or start blank), the harness, the device and its computer, and give it a handle like `atlas`. Or bring in an agent that already lives on the device.
 4. Say `@atlas what's in our memory about the launch?` in `#general`, and open **Computers** to watch it work.
