@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal
+Comment=A terminal in the shared files folder
+Exec=xfce4-terminal --working-directory=/home/warren/files
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;

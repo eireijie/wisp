@@ -18,7 +18,7 @@ jobs:
       # the same hash `warren node` computes (recipeTag in apps/node/src/computers/docker.ts)
       - id: image
         run: |
-          echo "tag=$(find docker/computer -maxdepth 1 -type f | LC_ALL=C sort | xargs cat | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+          echo "tag=$(find docker/computer -type f | LC_ALL=C sort | xargs cat | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
           echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/warren-computer" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3

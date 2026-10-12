@@ -227,7 +227,7 @@ function DeviceStep({ state, onCreated }: { state: OnboardingState | null; onCre
 // --- step 2: the agents' computer --------------------------------------------------
 
 /**
- * A VM on one of your devices: a Linux desktop with Chromium that agents work on, separate from
+ * A VM on one of your devices: a Debian desktop with Google Chrome that agents work on, separate from
  * everything else on the device. The device gets ready with `warren setup`.
  */
 function ComputerStep({ state, onCreated, onPin }: { state: OnboardingState | null; onCreated: () => void; onPin: () => void }) {
@@ -274,7 +274,7 @@ function ComputerStep({ state, onCreated, onPin }: { state: OnboardingState | nu
 
   return (
     <div className="space-y-4 text-sm">
-      <p className="text-muted">Each agent gets a desktop of its own: Linux with Chromium, a terminal and a file manager, in a VM on your device. It signs in to websites once and keeps its files there, and you can watch it work.</p>
+      <p className="text-muted">Each agent gets a desktop of its own: Debian with Google Chrome, a terminal and files on a dock, in a VM on your device. It signs in to websites once and keeps its files there, and you can watch it work.</p>
       {usable.length > 1 && (
         <Field label="Device">
           <select value={device?.id ?? ""} onChange={(e) => setNodeId(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">

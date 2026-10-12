@@ -335,7 +335,7 @@ export class NodeDaemon {
     let mcp: McpServerSpec, browser: McpServerSpec | undefined;
     try {
       mcp = inside ? await this.vmMcpSpec(agent.id, vm!) : await this.mcpSpec(agent.id);
-      // the VM's Chromium as page-element tools, run inside the VM either way
+      // the VM's Chrome as page-element tools, run inside the VM either way
       if (vm) browser = inside ? { command: "warren-browser-mcp", args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", "warren", vm.name, "warren-browser-mcp"], env: {} };
     } catch (err) {
       this.aborts.delete(run.runId);

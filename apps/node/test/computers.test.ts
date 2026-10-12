@@ -27,10 +27,12 @@ describe("VM containers", () => {
 
   it("name their image after a hash of its recipe, the same one CI publishes", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-recipe-"));
-    fs.writeFileSync(path.join(dir, "start.sh"), "b");
+    fs.writeFileSync(path.join(dir, "start.sh"), "c");
     fs.writeFileSync(path.join(dir, "Dockerfile"), "a");
-    // sha256 of the files' contents in name order ("Dockerfile" before "start.sh"): sha256("ab")
-    expect(recipeTag(dir)).toBe("fb8e20fc2e4c");
+    fs.mkdirSync(path.join(dir, "desktop"));
+    fs.writeFileSync(path.join(dir, "desktop", "dock.xml"), "b");
+    // sha256 of every file's contents in path order (Dockerfile, desktop/dock.xml, start.sh): sha256("abc")
+    expect(recipeTag(dir)).toBe("ba7816bf8f01");
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

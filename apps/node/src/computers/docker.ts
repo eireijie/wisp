@@ -22,7 +22,7 @@ const SIGNED_IN: Record<string, string> = {
 };
 
 /**
- * Runs in the VM's Node: asks each page of the visible Chromium (over its debugging port) what
+ * Runs in the VM's Node: asks each page of the visible Chrome (over its debugging port) what
  * element is under a screen point. The page part maps screen to page coordinates from the window's
  * position and its frame, then names the element the way a person would point at it.
  */
@@ -122,11 +122,10 @@ export async function detectEngine(prefer?: string): Promise<{ engine: Engine | 
  * same recipe.
  */
 export function recipeTag(dir = IMAGE_DIR): string {
+  // every file under the recipe, in path order (the same as `find … | LC_ALL=C sort` in CI)
+  const files = (fs.readdirSync(dir, { recursive: true }) as string[]).map((f) => f.split(path.sep).join("/")).filter((f) => fs.statSync(path.join(dir, f)).isFile());
   const h = crypto.createHash("sha256");
-  for (const name of fs.readdirSync(dir).sort()) {
-    const file = path.join(dir, name);
-    if (fs.statSync(file).isFile()) h.update(fs.readFileSync(file));
-  }
+  for (const f of files.sort()) h.update(fs.readFileSync(path.join(dir, f)));
   return h.digest("hex").slice(0, 12);
 }
 
@@ -423,7 +422,7 @@ export class DockerVm implements Driver {
     return (await exec(this.bin, ["exec", "-u", "warren", "-e", `HOME=${VM_HOME}`, this.name, "sh", "-c", test], { timeoutMs: 15_000 })).code === 0;
   }
 
-  /** The web page element under a screen point, in the Chromium people see. */
+  /** The web page element under a screen point, in the Chrome people see. */
   async inspectAt(x: number, y: number): Promise<PageElement | null> {
     await this.ready();
     const r = await exec(this.bin, ["exec", "-u", "warren", this.name, "node", "--input-type=module", "-e", INSPECT_SCRIPT, String(Math.round(x)), String(Math.round(y))], { timeoutMs: 15_000 });

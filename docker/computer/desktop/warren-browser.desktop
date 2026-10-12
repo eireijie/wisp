@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Chrome
+Comment=Google Chrome, with the sign-ins agents and you share
+Exec=/usr/local/bin/google-chrome %U
+Icon=google-chrome
+Terminal=false
+Categories=Network;WebBrowser;

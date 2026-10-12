@@ -107,7 +107,7 @@ That session can now chat in channels, delegate tasks, and read and write memory
 | `packages/vault` | Git-backed markdown vault with links, backlinks and search |
 | `packages/adapters` | Harness adapters: Claude Code, Codex, and any ACP agent |
 | `packages/mcp` | `warren-mcp` MCP server (chat, reactions, tasks, memory, files, computer use, approvals, routines) |
-| `docker/computer` | The Linux desktop image VMs run (Xfce, Chromium, xdotool, VNC) |
+| `docker/computer` | The desktop image VMs run (Debian 13, Xfce with a dock, Google Chrome, Claude Code, Codex, Playwright MCP, VNC) |
 | `packages/sdk` | TypeScript client for building your own agents |
 
 ### Memory permissions

@@ -8,7 +8,7 @@ There are three kinds of computer:
 
 | Kind | What it is | Needs |
 | --- | --- | --- |
-| **VM on a device** | A Linux desktop (Xfce, Chromium, a terminal) on one of your devices. Its own screen, files and sign-ins, so agents never touch yours. | Apple's `container` (Macs with Apple silicon), Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman. `warren setup` installs one. |
+| **VM on a device** | A Debian 13 desktop with a dock (Google Chrome, Terminal, Files) on one of your devices. Its own screen, files and sign-ins, so agents never touch yours. | Apple's `container` (Macs with Apple silicon), Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman. `warren setup` installs one. |
 | **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, and agents use it only while you lend it. | macOS, Windows, or Linux with X11 (see below) |
 | **Orgo cloud computer** | A Linux desktop from [orgo.ai](https://orgo.ai) that keeps running when your devices are off. | An Orgo API key in **Settings → Computers** |
 
@@ -25,7 +25,9 @@ On the device, run `warren setup` once. It checks what's installed, offers to in
 
 The image comes from `docker/computer`. Its tag is a hash of that recipe, so devices download the image CI published for exactly that recipe (`ghcr.io/<owner>/warren-computer:<hash>`, from `.github/workflows/vm-image.yml`; make the package public so devices can pull it) and build it themselves when there isn't one (a few minutes, once).
 
-A VM's home folder lives in a volume, so browser profiles and sign-ins survive restarts. Its `~/files` folder is shared with the device, and Chromium saves downloads there. The VM publishes no ports: its VNC server and browser debugging port only listen inside it, and the device reaches them with the engine's `exec`.
+Each VM is a Debian 13 ("trixie") desktop with a dock of three apps: Google Chrome (from Google's own repository, on Intel and ARM), a terminal and a file manager, both opening in `~/files`. Chrome opens maximized above the dock, and links open in it. The desktop is set up the same way at every start. The kernel comes from the VM engine, not Debian: Apple's container gives each VM its own (6.18 at the time of writing), and Docker uses the host's or Docker Desktop's.
+
+A VM's home folder lives in a volume, so browser profiles and sign-ins survive restarts. Its `~/files` folder is shared with the device, and Chrome saves downloads there. The VM publishes no ports: its VNC server and browser debugging port only listen inside it, and the device reaches them with the engine's `exec`.
 
 Settings in the device's `~/.warren/node.json`: `"vmEngine": "container"`, `"docker"` or `"podman"` to pick the engine (by default: Apple's container on a Mac, then Docker, then Podman).
 
@@ -92,4 +94,4 @@ Routines run when someone presses **Run now**, when you ask the agent, or on a s
 
 With a computer, an agent's `warren-mcp` tools include `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run` (VMs and cloud computers) and `computer_ask_human`. Coordinates are pixels in the latest screenshot (scaled to fit 1280×800), and every action returns a fresh screenshot. Every agent also has `approval_request`, `routine_save`, `routine_list` and `file_view`.
 
-**Browser tools.** With a VM, an agent also gets [Playwright MCP](https://github.com/microsoft/playwright-mcp) on the VM's own Chromium, the one you watch, with its sign-ins: `browser_navigate`, `browser_snapshot` (the page as text, with a ref for each element), `browser_click`, `browser_type`, `browser_fill_form`, `browser_select_option`, `browser_tabs`, `browser_wait_for` and more. Working with page elements instead of pixels is faster, cheaper and much more reliable on websites; agents use the screenshot tools for everything else. The browser tools run inside the VM whichever way the agent runs.
+**Browser tools.** With a VM, an agent also gets [Playwright MCP](https://github.com/microsoft/playwright-mcp) on the VM's own Chrome, the one you watch, with its sign-ins: `browser_navigate`, `browser_snapshot` (the page as text, with a ref for each element), `browser_click`, `browser_type`, `browser_fill_form`, `browser_select_option`, `browser_tabs`, `browser_wait_for` and more. Working with page elements instead of pixels is faster, cheaper and much more reliable on websites; agents use the screenshot tools for everything else. The browser tools run inside the VM whichever way the agent runs.

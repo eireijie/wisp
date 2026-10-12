@@ -487,7 +487,7 @@ export class Hub {
     const caps = c.nodeId ? this.store.nodeCapabilities(c.nodeId) : null;
     const os = caps?.platform === "darwin" ? "macOS" : caps?.platform === "win32" ? "Windows" : "Linux";
     const what =
-      c.kind === "vm" ? `a Linux desktop (a VM on ${node?.name ?? "a device"}) with Chromium, a terminal and a file manager` : c.kind === "orgo" ? "a Linux cloud computer (Orgo) with a browser and terminal" : `the screen of ${node?.name ?? "a device"} (${os})`;
+      c.kind === "vm" ? `a Debian 13 desktop (a VM on ${node?.name ?? "a device"}) with Google Chrome, a terminal and a file manager on its dock` : c.kind === "orgo" ? "a Linux cloud computer (Orgo) with a browser and terminal" : `the screen of ${node?.name ?? "a device"} (${os})`;
     const sharing = this.store
       .agentsOnComputer(c.id)
       .filter((a) => a.id !== agentId)
@@ -501,12 +501,12 @@ export class Hub {
     if (this.runsInComputer(agent)) {
       lines.push(
         `You run inside this computer: your shell, files and tools are all on it, and your working folder is ~/files (downloads land there too). You can install what you need with sudo. Nothing you do here touches anyone's own computer.`,
-        `For websites, use the browser tools (browser_navigate, browser_snapshot, then browser_click / browser_type / browser_fill_form with the ref from the snapshot): they drive the Chromium people watch, with its sign-ins, and work on the page's elements, so they're faster and surer than clicking pixels. Use computer_screenshot and the other computer tools for everything that isn't a web page.`,
+        `For websites, use the browser tools (browser_navigate, browser_snapshot, then browser_click / browser_type / browser_fill_form with the ref from the snapshot): they drive the Chrome people watch, with its sign-ins, and work on the page's elements, so they're faster and surer than clicking pixels. Use computer_screenshot and the other computer tools for everything that isn't a web page.`,
       );
     } else if (c.kind === "vm" && c.nodeId === agent.nodeId) {
       lines.push(
         `Your working folder is shared with the computer: it's ~/files there, and downloads land in it.`,
-        `For websites, use the browser tools (browser_navigate, browser_snapshot, then browser_click / browser_type / browser_fill_form with the ref from the snapshot): they drive the computer's Chromium, the one people watch, with its sign-ins. Use the computer tools for everything else.`,
+        `For websites, use the browser tools (browser_navigate, browser_snapshot, then browser_click / browser_type / browser_fill_form with the ref from the snapshot): they drive the computer's Chrome, the one people watch, with its sign-ins. Use the computer tools for everything else.`,
       );
     }
     if (c.kind === "device") {

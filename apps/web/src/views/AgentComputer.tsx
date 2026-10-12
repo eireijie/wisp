@@ -105,7 +105,7 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
         <h3 className="font-semibold text-sm">{current ? "Switch to" : "Give it"}</h3>
         <div className="grid sm:grid-cols-2 gap-2">
           {device && device.capabilities?.vm.ok && (
-            <Option icon={<Monitor size={17} />} title={`A new VM on ${device.name}`} body="Its own Linux desktop with Chromium. Doesn't touch your screen." busy={busy === "vm"} onClick={quickVm} />
+            <Option icon={<Monitor size={17} />} title={`A new VM on ${device.name}`} body="Its own desktop with Google Chrome. Doesn't touch your screen." busy={busy === "vm"} onClick={quickVm} />
           )}
           {device?.mine && (
             <Option
