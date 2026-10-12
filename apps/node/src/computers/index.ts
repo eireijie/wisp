@@ -3,8 +3,9 @@ import fs from "node:fs";
 import net from "node:net";
 import type { Duplex } from "node:stream";
 import os from "node:os";
+import path from "node:path";
 import type { ComputerAction, ComputerSpec, DeviceCapabilities, DeviceConfig } from "@warren/core";
-import { exec, has, perform, type Driver } from "./driver.ts";
+import { ActionError, exec, has, perform, type Driver } from "./driver.ts";
 import { DockerVm, ENGINE_LABEL, detectEngine, ensureImage, imageExists, recipeTag, LOCAL_IMAGE, type Engine } from "./docker.ts";
 import { MacDesktop } from "./macos.ts";
 import { WindowsDesktop } from "./windows.ts";
@@ -108,8 +109,8 @@ export class ComputerHost {
     if (known) return known;
     let d: Driver;
     if (spec.kind === "vm") {
-      const engine = await this.vmEngine();
-      if (!engine) throw new Error("this device can't run VMs: install Docker or Podman, then restart `warren node`");
+      const engine = await this.engineFor(spec);
+      if (!engine) throw new Error("this device can't run VMs yet: run `warren setup`, then restart `warren node`");
       d = new DockerVm(spec, this.opts.dir, engine, onStatus);
     } else {
       d = desktopDriver(this.opts.allowDeviceShell);
@@ -118,6 +119,28 @@ export class ComputerHost {
     }
     this.drivers.set(spec.id, d);
     return d;
+  }
+
+  /**
+   * The engine a VM lives in: the one it was made with (so a device with both Docker and Apple's
+   * container keeps each VM where it is), else the one this device uses now, remembered from then on.
+   */
+  private async engineFor(spec: ComputerSpec): Promise<Engine | null> {
+    const file = path.join(this.opts.dir, "computers", spec.id.replace(/[^a-zA-Z0-9_.-]/g, "-"), "engine.json");
+    let saved: Engine | null = null;
+    try {
+      saved = JSON.parse(fs.readFileSync(file, "utf8")) as Engine;
+    } catch {}
+    if (saved?.bin) {
+      if ((await detectEngine(saved.bin)).engine?.bin === saved.bin) return saved;
+      throw new ActionError(`${spec.name} lives in ${ENGINE_LABEL[saved.kind] ?? saved.bin}, which isn't running on this device right now. Start it, then try again.`);
+    }
+    const engine = await this.vmEngine();
+    if (engine) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(engine));
+    }
+    return engine;
   }
 
   /** The VM behind a spec, when this device runs it in a container. */

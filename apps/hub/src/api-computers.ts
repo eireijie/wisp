@@ -324,7 +324,8 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const possible = !!comp && comp.kind === "vm" && comp.nodeId === agent.nodeId && runsInVm(agent.harness);
     const inComputer = hub.runsInComputer(agent);
     let signedIn: boolean | null = null;
-    if (inComputer && comp && computers.online(comp)) {
+    // only ask a VM that's running; looking at the page shouldn't start one
+    if (inComputer && comp && computers.online(comp) && comp.status === "ready") {
       try {
         signedIn = ((await computers.act(comp, { action: "harness_status", harness: agent.harness }, { kind: "user", id: "system" }, { timeoutMs: 120_000 })) as { signedIn: boolean | null }).signedIn;
       } catch {}
