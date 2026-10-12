@@ -7,6 +7,7 @@ import { Routines } from "./routines.ts";
 import { Updates } from "./updates.ts";
 import type { Vault } from "@warren/vault";
 import { MemoryAccess } from "./access.ts";
+import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import type { Store } from "./store.ts";
 
@@ -356,7 +357,8 @@ export class Hub {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${notAllowed}.`);
         continue;
       }
-      const verdict = this.guard.allow(msg.channelId, msg.hop);
+      const policy = agentPolicy(this, workspaceId);
+      const verdict = this.guard.allow(msg.channelId, msg.hop, Date.now(), { maxHops: policy.maxHops, maxRunsPerWindow: policy.maxRunsPerMinute });
       if (!verdict.ok) {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${verdict.reason}.`);
         continue;
@@ -525,7 +527,8 @@ export class Hub {
   displayName(actor: Actor): string {
     if (actor.kind === "agent") return this.handleOf(actor.id);
     if (actor.id === "system") return "system";
-    return this.store.user(actor.id)?.name ?? "someone";
+    const u = this.store.user(actor.id);
+    return u ? u.preferredName || u.name : "someone";
   }
 
   /** The agent's SOUL.md from its private vault folder, or "" if it doesn't have one. */
@@ -556,6 +559,13 @@ export class Hub {
       .map((a) => `@${a.handle} (${a.name}, ${a.harness})`);
     const where = channel.kind === "dm" ? "a direct message" : `#${channel.name}${threadId ? " (in a thread)" : ""}`;
     const person = this.memory.personFor(agent.workspaceId, channelId, threadId, triggerId);
+    // the person's own clock, so "tomorrow morning" means theirs
+    const user = person ? store.user(person.id) : undefined;
+    const tz = user?.timezone ?? null;
+    const localTime = user
+      ? `It's ${new Date().toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", ...(tz ? { timeZone: tz } : { timeZone: "UTC", timeZoneName: "short" }) })} for ${user.preferredName || user.name}${tz ? ` (${tz})` : ""}.`
+      : "";
+    const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
     const soulNote = agent.settings.soulLocked
       ? "Your soul is locked by your owner; don't try to edit it."
@@ -572,7 +582,10 @@ export class Hub {
       `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available.`,
       `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
-      `Before anything sensitive or hard to undo that nobody asked for in so many words (sending email or messages outside Warren, buying something, deleting things, posting publicly), ask first with approval_request and end your turn; you'll be woken with the answer.`,
+      asks.length
+        ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
+        : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
+      localTime,
       this.computerSection(agent.id),
       routines ? `\n${routines}` : "",
       discussion ? `\n${discussion}` : "",

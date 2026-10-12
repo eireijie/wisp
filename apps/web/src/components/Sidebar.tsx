@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, ChevronDown, FolderPlus, Hand, Hash, ListTodo, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BookOpen, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -277,9 +277,14 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
                 </button>
               )}
               items={[
-                { label: "Settings", icon: <Settings size={14} />, onSelect: () => go({ view: "settings" }) },
-                { label: "Appearance", icon: <Palette size={14} />, onSelect: () => go({ view: "settings" }) },
+                { label: "Profile", icon: <CircleUser size={14} />, onSelect: () => go({ view: "settings", page: "profile" }) },
+                { label: "Preferences", icon: <SlidersHorizontal size={14} />, onSelect: () => go({ view: "settings", page: "preferences" }) },
+                { label: "Notifications", icon: <Bell size={14} />, onSelect: () => go({ view: "settings", page: "notifications" }) },
+                { label: "Appearance", icon: <Palette size={14} />, onSelect: () => go({ view: "settings", page: "appearance" }) },
                 ...(mode !== "system" ? [{ label: "Match system light or dark", icon: <SunMoon size={14} />, onSelect: () => setMode("system") }] : []),
+                "divider",
+                { label: `${me.workspace.name} settings`, icon: <Settings size={14} />, onSelect: () => go({ view: "settings", page: "general" }) },
+                ...(me.role === "owner" ? [{ label: "Invite people", icon: <UserPlus size={14} />, onSelect: () => go({ view: "settings", page: "people" }) }] : []),
                 "divider",
                 { label: "Sign out", icon: <LogOut size={14} />, onSelect: logout },
               ]}

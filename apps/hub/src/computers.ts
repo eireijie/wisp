@@ -5,8 +5,7 @@ import { id, now } from "./auth.ts";
 import { OrgoClient, parseResolution } from "./orgo.ts";
 import type { Hub } from "./hub.ts";
 
-/** How long a person keeps control without touching the computer before agents get it back. */
-const CONTROL_IDLE_MS = 10 * 60_000;
+import { computerDefaults } from "./policy.ts";
 /** Viewer links are single-use and short-lived, since they travel in a URL. */
 const TICKET_MS = 60_000;
 /** The same thing done again within this long is one line in a computer's activity. */
@@ -272,7 +271,7 @@ export class Computers {
   take(c: Computer, userId: string) {
     if (!this.canSee(c, userId)) throw new ComputerError("only its owner can use this screen", 403);
     const cur = this.control.get(c.id);
-    if (cur && cur.id !== userId && Date.now() - cur.touched < CONTROL_IDLE_MS) {
+    if (cur && cur.id !== userId && Date.now() - cur.touched < this.idleMs(c.workspaceId)) {
       throw new ComputerError(`${this.hub.store.user(cur.id)?.name ?? "Someone"} is using it right now`, 409);
     }
     this.control.set(c.id, { kind: "user", id: userId, since: now(), touched: Date.now() });
@@ -314,12 +313,19 @@ export class Computers {
     return msg;
   }
 
+  /** How long a person keeps control without touching a computer before agents get it back (Settings → Computers). */
+  private idleMs(workspaceId: string) {
+    return computerDefaults(this.hub, workspaceId).controlIdleMinutes * 60_000;
+  }
+
   private sweep() {
     for (const [computerId, ctl] of this.control) {
-      if (Date.now() - ctl.touched < CONTROL_IDLE_MS) continue;
+      const ws = this.hub.store.computer(computerId)?.workspaceId;
+      const idle = ws ? this.idleMs(ws) : 10 * 60_000;
+      if (Date.now() - ctl.touched < idle) continue;
       // nobody is watching or touching it: give it back quietly
       const watching = [...(this.viewers.get(computerId) ?? [])].some((v) => v.userId === ctl.id);
-      if (watching && Date.now() - ctl.touched < 3 * CONTROL_IDLE_MS) continue;
+      if (watching && Date.now() - ctl.touched < 3 * idle) continue;
       this.control.delete(computerId);
       this.changed(computerId);
     }

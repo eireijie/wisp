@@ -126,7 +126,8 @@ export class Routines {
       name: o.name,
       notePath: `${base}.md`,
       schedule: null,
-      timezone: "UTC",
+      // a schedule set later runs on the teacher's clock
+      timezone: user?.timezone ?? "UTC",
       channelId: null,
       status: "learning",
       createdBy: { kind: "user", id: o.userId },

@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { Agent, AgentEvent, Approval, Channel, ClientEvent, Computer, Discussion, Message, Reaction, Section, Team } from "@warren/core";
+import type { Agent, AgentEvent, Approval, Channel, ClientEvent, Computer, Discussion, Message, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
 import { api } from "./api.ts";
+import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
 
 export interface Me {
   kind: "user";
-  user: { id: string; email: string; name: string };
+  user: User;
+  /** how Warren behaves for this person, on every device (Settings → Preferences) */
+  prefs: UserPrefs;
   role: "owner" | "member" | "guest";
   workspace: { id: string; name: string };
 }
@@ -96,11 +99,19 @@ interface State {
   markRead(channelId: string): void;
   toggleReaction(messageId: string, emoji: string): Promise<void>;
   setPalette(open: boolean): void;
+  /** change some of your preferences; saved on the hub */
+  setPrefs(patch: Partial<UserPrefs>): Promise<void>;
   handle(e: ClientEvent): void;
   setConnected(c: boolean): void;
 }
 
 const readTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Your preferences (Settings → Preferences), with defaults. */
+export function usePrefs(): Required<UserPrefs> {
+  const p = useStore((s) => s.me?.prefs);
+  return { sendWith: p?.sendWith ?? "enter", clock: p?.clock ?? "auto", toolCalls: p?.toolCalls ?? "collapsed" };
+}
 
 export const useStore = create<State>((set, get) => ({
   me: null,
@@ -219,6 +230,14 @@ export const useStore = create<State>((set, get) => ({
     set({ paletteOpen: open });
   },
 
+  async setPrefs(patch) {
+    const me = get().me;
+    if (!me) return;
+    set({ me: { ...me, prefs: { ...me.prefs, ...patch } } });
+    const prefs = await api<UserPrefs>("PUT", "/api/me/prefs", patch);
+    set((s) => (s.me ? { me: { ...s.me, prefs } } : {}));
+  },
+
   setConnected(connected) {
     set({ connected });
     // after a reconnect, catch up on anything missed
@@ -232,6 +251,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   handle(e) {
+    const before = get();
     if (e.type === "message") {
       const m = e.message;
       // the agent's reply replaces its live preview
@@ -289,6 +309,7 @@ export const useStore = create<State>((set, get) => ({
         return { live: { ...s.live, [e.runId]: applyEvent(cur, e.event) } };
       });
     }
+    notifyOn(e, before, get());
   },
 }));
 

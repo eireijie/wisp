@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import type { GhostAppearance, GhostShape } from "@warren/core";
 import { GHOST_ASLEEP } from "@warren/core/src/appearance.ts";
+import { motionReduced } from "../theme.ts";
 
 /** How the ghost feels right now; follows the agent's status where it matters. */
 export type GhostMood = "awake" | "thinking" | "asleep";
@@ -189,7 +190,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
 function prefersReducedMotion() {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  return typeof window !== "undefined" && motionReduced();
 }
 
 function Eyes({ style, x, y, ink, blink, thinking }: { style: GhostAppearance["eyes"] | "closed"; x: [number, number]; y: number; ink: string; blink: boolean; thinking: boolean }) {

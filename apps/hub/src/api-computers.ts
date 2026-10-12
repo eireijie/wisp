@@ -6,6 +6,7 @@ import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
 import { routineSlug } from "./routines.ts";
 import type { Hub } from "./hub.ts";
+import { VM_SIZES, computerDefaults } from "./policy.ts";
 
 export const HARNESS = z.union([z.enum(HARNESS_IDS as [string, ...string[]]), z.string().regex(DEVICE_HARNESS, 'a known harness, or "acp:<name>" declared on a device')]);
 
@@ -174,7 +175,9 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       if (caps && !caps.vm.ok) return reply.code(400).send({ error: `${node.name} can't run VMs yet: ${caps.vm.detail}` });
       // a custom image runs whatever it contains on someone's device
       if (body.image && c.viewer.role !== "owner") return reply.code(403).send({ error: "only owners can choose a custom VM image" });
-      const comp = store.createComputer({ workspaceId: c.workspaceId, name: body.name, kind: "vm", nodeId: node.id, config: { resolution: body.resolution, cpus: body.cpus, memoryGb: body.memoryGb, image: body.image }, status: "starting" });
+      // a size nobody picked is the workspace's default (Settings → Computers)
+      const size = VM_SIZES[computerDefaults(hub, c.workspaceId).vmSize];
+      const comp = store.createComputer({ workspaceId: c.workspaceId, name: body.name, kind: "vm", nodeId: node.id, config: { resolution: body.resolution, cpus: body.cpus ?? size.cpus, memoryGb: body.memoryGb ?? size.memoryGb, image: body.image }, status: "starting" });
       startInBackground(comp);
       return computers.view(store.computer(comp.id)!);
     } catch (err) {
@@ -558,14 +561,24 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { user: true });
     if (!c) return;
     const key = store.setting(c.workspaceId, "orgo.apiKey");
-    return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null } };
+    return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };
   });
 
   app.put("/api/settings/computers", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
-    const body = parse(z.object({ orgoApiKey: z.string().trim().max(300).nullable() }), req.body, reply);
+    const body = parse(
+      z.object({ orgoApiKey: z.string().trim().max(300).nullable(), vmSize: z.enum(["small", "medium", "large"]), controlIdleMinutes: z.number().int().min(1).max(240) }).partial(),
+      req.body,
+      reply,
+    );
     if (!body) return;
+    if (body.vmSize) store.setSetting(c.workspaceId, "computers.vmSize", body.vmSize);
+    if (body.controlIdleMinutes) store.setSetting(c.workspaceId, "computers.controlIdleMinutes", String(body.controlIdleMinutes));
+    if (body.orgoApiKey === undefined) {
+      const key = store.setting(c.workspaceId, "orgo.apiKey");
+      return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };
+    }
     if (body.orgoApiKey) {
       // check the key before saving it
       try {
@@ -576,7 +589,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
     store.setSetting(c.workspaceId, "orgo.apiKey", body.orgoApiKey || null);
     for (const comp of store.computers(c.workspaceId).filter((x) => x.kind === "orgo")) computers.changed(comp.id);
-    return { orgo: { configured: !!body.orgoApiKey, hint: body.orgoApiKey ? `…${body.orgoApiKey.slice(-4)}` : null } };
+    return { orgo: { configured: !!body.orgoApiKey, hint: body.orgoApiKey ? `…${body.orgoApiKey.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };
   });
 
   // --- bringing in existing agents ---------------------------------------------------------------

@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
-import { useHandleColors, useHandleNames, useNames, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
+import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, type Route } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { SectionSelect } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard, StartDiscussion } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
-import { AgentAvatar, Button, agentVar, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
 
@@ -533,6 +533,7 @@ function isGrouped(prev: Message | undefined, m: Message) {
 // --- one message --------------------------------------------------------------------------------
 
 function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message; grouped?: boolean; replies?: number; onReplies?: () => void; inThread?: boolean }) {
+  const { clock } = usePrefs();
   const names = useNames();
   const handles = useHandleNames();
   const colors = useHandleColors();
@@ -552,7 +553,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
 
   const agent = m.author.kind === "agent" ? names.agent(m.author.id) : undefined;
   const name = agent ? agent.name : (names.member(m.author.id)?.name ?? "Someone");
-  const time = new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const time = clockTime(m.createdAt, clock);
 
   return (
     <div className={cx("group relative px-3 md:px-5 flex gap-3 hover:bg-hover/70", grouped ? "py-0.5" : "pt-2.5 pb-0.5")}>
@@ -685,7 +686,8 @@ function Parts({ parts }: { parts: MessagePart[] }) {
   const tools = parts.filter((p) => p.type === "tool_call");
   const files = parts.filter((p) => p.type === "file");
   const status = parts.filter((p) => p.type === "status");
-  const [open, setOpen] = useState(false);
+  const { toolCalls } = usePrefs();
+  const [open, setOpen] = useState(toolCalls === "expanded");
   return (
     <>
       {parts.map((p) => p.type === "discussion" && <DiscussionCard key={p.discussionId} id={p.discussionId} />)}
@@ -700,7 +702,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
       )}
       {status.map((s, i) => s.type === "status" && <div key={i} className="mt-1 text-sm text-bad">{s.text}</div>)}
       <Remembered tools={tools} />
-      {tools.length > 0 && (
+      {tools.length > 0 && toolCalls !== "hidden" && (
         <div className="mt-1">
           <button onClick={() => setOpen(!open)} className="h-6 px-1.5 -ml-1.5 rounded-md text-xs text-muted hover:text-ink hover:bg-hover inline-flex items-center gap-1">
             <ChevronRight size={13} className={cx("transition-transform", open && "rotate-90")} />
@@ -856,6 +858,7 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
 // --- composer -----------------------------------------------------------------------------------
 
 function Composer({ channelId, threadId, agentId, placeholder }: { channelId: string; threadId?: string; agentId?: string; placeholder: string }) {
+  const { sendWith } = usePrefs();
   const agents = useStore((s) => s.agents);
   const canEdit = useStore((s) => s.me?.role !== "guest");
   const { agent: dmAgent, ctx, catalog } = useAgentContext(agentId, channelId, threadId);
@@ -987,8 +990,11 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
             }
             if (suggestions.length && e.key === "ArrowDown") return (e.preventDefault(), setPick(pick + 1));
             if (suggestions.length && e.key === "ArrowUp") return (e.preventDefault(), setPick(Math.max(0, pick - 1)));
-            // phones: Enter is a newline and the send button sends
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) {
+            // phones: Enter is a newline and the send button sends. Otherwise Enter sends, or
+            // ⌘/Ctrl+Enter does when the person picked that (Settings → Preferences)
+            const fine = window.matchMedia("(pointer: fine)").matches;
+            const mod = e.metaKey || e.ctrlKey;
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && fine && (sendWith === "mod-enter" ? mod : true)) {
               e.preventDefault();
               send();
             }

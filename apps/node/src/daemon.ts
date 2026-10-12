@@ -1,8 +1,9 @@
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { HubToNode, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
+import { HubToNode, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
 import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
 import { runUpdate, version } from "@warren/update";
@@ -66,6 +67,8 @@ export class NodeDaemon {
   private tunnels = new Map<string, Tunnel>();
   /** per-agent tokens for harnesses, so a harness never holds this device's own token */
   private agentTokens: Record<string, string>;
+  /** harnesses given by the caller (tests), not read from node.json */
+  private fixedRegistry: boolean;
   /** which version of Warren's tools each VM has (by container name) */
   private vmTools = new Map<string, string>();
   /** shareScreen and paused, as last read from node.json (people change them there with the CLI) */
@@ -83,6 +86,7 @@ export class NodeDaemon {
     this.local = this.readLocal();
     this.api = new WarrenClient({ url: cfg.hub, token: cfg.token });
     this.registry = registry ?? deviceAdapters(cfg.harnesses);
+    this.fixedRegistry = !!registry;
     this.computers = computers ?? new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log });
   }
 
@@ -254,6 +258,17 @@ export class NodeDaemon {
       this.tunnels.delete(msg.tunnelId);
     } else if (msg.type === "discover") {
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
+    } else if (msg.type === "refresh") {
+      await this.refresh();
+    } else if (msg.type === "install_harness") {
+      if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused` });
+      this.installHarness(msg.harness).then(
+        async (output) => {
+          await this.refresh();
+          this.send({ type: "result", requestId: msg.requestId, ok: true, result: { output } });
+        },
+        (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
+      );
     } else if (msg.type === "read_agent") {
       const agent = readDiscovered(msg.key, this.cfg.discoverHome);
       this.send(agent ? { type: "result", requestId: msg.requestId, ok: true, result: agent } : { type: "result", requestId: msg.requestId, ok: false, error: "that agent isn't on this device anymore" });
@@ -391,6 +406,45 @@ export class NodeDaemon {
     } finally {
       this.aborts.delete(run.runId);
     }
+  }
+
+  /** Look again at what this device has (someone installed a harness, added one to node.json, started Docker…). */
+  private async refresh() {
+    if (!this.fixedRegistry) this.registry = deviceAdapters(readJson<Partial<NodeConfig>>(this.configFile, {}).harnesses ?? this.cfg.harnesses);
+    this.catalog = null;
+    await this.sendCapabilities();
+    this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
+    this.send({ type: "catalog", catalog: await this.harnessCatalog() });
+  }
+
+  /**
+   * Install a harness with this device's own recipe: only npm packages Warren knows (see
+   * HARNESSES[].install), so the hub can name a harness but never choose what runs here.
+   */
+  private async installHarness(id: string): Promise<string> {
+    const pkg = harnessInfo(id)?.install?.npm;
+    if (!pkg) throw new Error(`${harnessLabel(id)} isn't installed with npm; install it on ${this.cfg.name} with its own installer`);
+    const npm = process.platform === "win32" ? "npm.cmd" : path.join(path.dirname(process.execPath), "npm");
+    this.log(`installing ${harnessLabel(id)} (${pkg})`);
+    const out = await new Promise<{ code: number | null; text: string }>((resolve) => {
+      const child = spawn(fs.existsSync(npm) || process.platform === "win32" ? npm : "npm", ["install", "-g", "--no-audit", "--no-fund", pkg], { stdio: ["ignore", "pipe", "pipe"], shell: process.platform === "win32" });
+      let text = "";
+      child.stdout.on("data", (d) => (text = (text + d).slice(-8000)));
+      child.stderr.on("data", (d) => (text = (text + d).slice(-8000)));
+      const timer = setTimeout(() => child.kill("SIGKILL"), 15 * 60_000);
+      child.on("error", (e) => (clearTimeout(timer), resolve({ code: -1, text: e.message })));
+      child.on("close", (code) => (clearTimeout(timer), resolve({ code, text })));
+    });
+    if (out.code !== 0) {
+      const last = out.text.trim().split("\n").slice(-6).join("\n");
+      throw new Error(/EACCES|permission denied/i.test(out.text) ? `npm can't write its global folder on ${this.cfg.name} (permission denied). Install it there yourself: npm install -g ${pkg}` : `npm install -g ${pkg} failed:\n${last}`);
+    }
+    // npm's global bin may not be on this process's PATH (a background service starts with a short one)
+    const prefix = await new Promise<string>((resolve) => execFile(npm, ["prefix", "-g"], (err, stdout) => resolve(err ? "" : stdout.trim())));
+    const bin = prefix && (process.platform === "win32" ? prefix : path.join(prefix, "bin"));
+    if (bin && !(process.env.PATH ?? "").split(path.delimiter).includes(bin)) process.env.PATH = `${bin}${path.delimiter}${process.env.PATH ?? ""}`;
+    this.log(`installed ${harnessLabel(id)}`);
+    return out.text.trim().split("\n").slice(-3).join("\n");
   }
 
   /** Models each installed harness offers here; computed once per process. */

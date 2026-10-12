@@ -139,6 +139,12 @@ CREATE TABLE IF NOT EXISTS workspace_settings (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (workspace_id, key)
 );
+CREATE TABLE IF NOT EXISTS invites (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL CHECK (role IN ('owner','member','guest')),
+  created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+  used_by TEXT, used_at TEXT, revoked INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS computer_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, computer_id TEXT NOT NULL REFERENCES computers(id) ON DELETE CASCADE,
   actor_kind TEXT NOT NULL, actor_id TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL
@@ -174,6 +180,9 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["nodes", "shared", "INTEGER NOT NULL DEFAULT 0"],
   ["runs", "requested_by", "TEXT"],
   ["tokens", "created_by", "TEXT"],
+  ["users", "preferred_name", "TEXT"],
+  ["users", "timezone", "TEXT"],
+  ["users", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["discussions", "requested_by", "TEXT"],
 ];
 

@@ -167,7 +167,7 @@ v0.1 covers the hub, chat, agents on devices, delegation, files and the memory v
 - Linking existing folders from disk into the vault
 - Honcho and Hindsight memory backends next to the vault
 - Windows and macOS VMs on a device
-- Invites, passkeys and OIDC sign-in; web push notifications
+- Passkeys and OIDC sign-in; web push notifications (desktop notifications work today, while Warren is open)
 
 ## License
 

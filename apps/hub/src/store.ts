@@ -1,4 +1,4 @@
-import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject } from "@warren/core";
+import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -24,11 +24,95 @@ export class Store {
       | undefined;
   }
 
-  user(userId: string) {
-    const r = this.db.prepare("SELECT id, email, name, created_at FROM users WHERE id = ?").get(userId) as
-      | { id: string; email: string; name: string; created_at: string }
+  user(userId: string): User | undefined {
+    const r = this.db.prepare("SELECT id, email, name, preferred_name, timezone, created_at FROM users WHERE id = ?").get(userId) as
+      | { id: string; email: string; name: string; preferred_name: string | null; timezone: string | null; created_at: string }
       | undefined;
-    return r && { id: r.id, email: r.email, name: r.name, createdAt: r.created_at };
+    return r && { id: r.id, email: r.email, name: r.name, preferredName: r.preferred_name, timezone: r.timezone, createdAt: r.created_at };
+  }
+
+  updateUser(userId: string, patch: Partial<{ name: string; email: string; preferredName: string | null; timezone: string | null; passwordHash: string }>) {
+    const cols: [string, unknown][] = [];
+    if (patch.name !== undefined) cols.push(["name", patch.name]);
+    if (patch.email !== undefined) cols.push(["email", patch.email.toLowerCase()]);
+    if (patch.preferredName !== undefined) cols.push(["preferred_name", patch.preferredName]);
+    if (patch.timezone !== undefined) cols.push(["timezone", patch.timezone]);
+    if (patch.passwordHash !== undefined) cols.push(["password_hash", patch.passwordHash]);
+    if (cols.length) this.db.prepare(`UPDATE users SET ${cols.map(([c]) => `${c} = ?`).join(", ")} WHERE id = ?`).run(...cols.map(([, v]) => v), userId);
+    return this.user(userId);
+  }
+
+  passwordHash(userId: string): string | null {
+    return (this.db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as { password_hash: string } | undefined)?.password_hash ?? null;
+  }
+
+  prefs(userId: string): UserPrefs {
+    const r = this.db.prepare("SELECT prefs_json FROM users WHERE id = ?").get(userId) as { prefs_json: string } | undefined;
+    return r ? JSON.parse(r.prefs_json) : {};
+  }
+
+  setPrefs(userId: string, prefs: UserPrefs) {
+    this.db.prepare("UPDATE users SET prefs_json = ? WHERE id = ?").run(JSON.stringify(prefs), userId);
+    return prefs;
+  }
+
+  /** A person's sign-ins: one per browser or app they signed in from. `id` is a short, stable handle on the token. */
+  sessions(userId: string) {
+    return (
+      this.db.prepare("SELECT hash, label, created_at, last_used FROM tokens WHERE kind = 'session' AND subject_id = ? ORDER BY COALESCE(last_used, created_at) DESC").all(userId) as {
+        hash: string;
+        label: string;
+        created_at: string;
+        last_used: string | null;
+      }[]
+    ).map((r) => ({ id: r.hash.slice(0, 16), hash: r.hash, label: r.label, createdAt: r.created_at, lastUsed: r.last_used }));
+  }
+
+  /** Remove tokens of `kind` whose hash starts with `idPrefix` (16 hex chars); only when exactly one matches. */
+  revokeTokenById(kind: string, idPrefix: string, where: { subjectId?: string } = {}): boolean {
+    if (!/^[0-9a-f]{16}$/.test(idPrefix)) return false;
+    const rows = this.db.prepare("SELECT hash, subject_id FROM tokens WHERE kind = ? AND hash LIKE ?").all(kind, `${idPrefix}%`) as { hash: string; subject_id: string }[];
+    if (rows.length !== 1 || (where.subjectId && rows[0].subject_id !== where.subjectId)) return false;
+    this.db.prepare("DELETE FROM tokens WHERE hash = ?").run(rows[0].hash);
+    return true;
+  }
+
+  // --- invites ----------------------------------------------------------------
+
+  createInvite(i: { workspaceId: string; codeHash: string; role: Role; createdBy: string; expiresAt: string }) {
+    const inviteId = id("inv");
+    this.db
+      .prepare("INSERT INTO invites (id, workspace_id, code_hash, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(inviteId, i.workspaceId, i.codeHash, i.role, i.createdBy, now(), i.expiresAt);
+    return this.invite(inviteId)!;
+  }
+
+  invite(inviteId: string) {
+    return this.db
+      .prepare("SELECT id, workspace_id AS workspaceId, role, created_by AS createdBy, created_at AS createdAt, expires_at AS expiresAt, used_by AS usedBy, used_at AS usedAt, revoked FROM invites WHERE id = ?")
+      .get(inviteId) as Invite | undefined;
+  }
+
+  inviteByCode(codeHash: string) {
+    const r = this.db.prepare("SELECT id FROM invites WHERE code_hash = ?").get(codeHash) as { id: string } | undefined;
+    return r ? this.invite(r.id) : undefined;
+  }
+
+  /** Invites nobody used yet that haven't expired or been revoked. */
+  openInvites(workspaceId: string) {
+    return this.db
+      .prepare(
+        "SELECT id, workspace_id AS workspaceId, role, created_by AS createdBy, created_at AS createdAt, expires_at AS expiresAt, used_by AS usedBy, used_at AS usedAt, revoked FROM invites WHERE workspace_id = ? AND used_by IS NULL AND revoked = 0 AND expires_at > ? ORDER BY created_at DESC",
+      )
+      .all(workspaceId, now()) as Invite[];
+  }
+
+  useInvite(inviteId: string, userId: string) {
+    return this.db.prepare("UPDATE invites SET used_by = ?, used_at = ? WHERE id = ? AND used_by IS NULL AND revoked = 0").run(userId, now(), inviteId).changes === 1;
+  }
+
+  revokeInvite(inviteId: string) {
+    this.db.prepare("UPDATE invites SET revoked = 1 WHERE id = ?").run(inviteId);
   }
 
   createWorkspace(name: string) {
@@ -51,6 +135,16 @@ export class Store {
     this.db.prepare("INSERT OR REPLACE INTO memberships (workspace_id, user_id, role) VALUES (?, ?, ?)").run(workspaceId, userId, role);
   }
 
+  /** Take someone out of a workspace: their sign-ins end, and an account in no other workspace is deleted. */
+  removeMember(workspaceId: string, userId: string) {
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM memberships WHERE workspace_id = ? AND user_id = ?").run(workspaceId, userId);
+      this.db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND workspace_id = ?").run(userId, workspaceId);
+      const elsewhere = this.db.prepare("SELECT 1 FROM memberships WHERE user_id = ? LIMIT 1").get(userId);
+      if (!elsewhere) this.db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    })();
+  }
+
   role(workspaceId: string, userId: string): Role | null {
     const r = this.db.prepare("SELECT role FROM memberships WHERE workspace_id = ? AND user_id = ?").get(workspaceId, userId) as { role: Role } | undefined;
     return r?.role ?? null;
@@ -58,8 +152,12 @@ export class Store {
 
   members(workspaceId: string) {
     return this.db
-      .prepare("SELECT u.id, u.email, u.name, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? ORDER BY u.name")
-      .all(workspaceId) as { id: string; email: string; name: string; role: Role }[];
+      .prepare("SELECT u.id, u.email, u.name, u.preferred_name AS preferredName, u.timezone, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? ORDER BY u.name")
+      .all(workspaceId) as { id: string; email: string; name: string; preferredName: string | null; timezone: string | null; role: Role }[];
+  }
+
+  renameWorkspace(workspaceId: string, name: string) {
+    this.db.prepare("UPDATE workspaces SET name = ? WHERE id = ?").run(name, workspaceId);
   }
 
   // --- nodes ----------------------------------------------------------------
@@ -1197,4 +1295,16 @@ function toRule(r: RuleRow): AccessRule[] {
   if (!subject) return [];
   const createdBy: Actor | undefined = r.created_by_kind === "user" || r.created_by_kind === "agent" ? { kind: r.created_by_kind, id: r.created_by_id ?? "" } : undefined;
   return [{ id: r.id, path: r.path, subject, level: r.level, startup: !!r.startup, ...(createdBy ? { createdBy } : {}) }];
+}
+
+export interface Invite {
+  id: string;
+  workspaceId: string;
+  role: Role;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  usedBy: string | null;
+  usedAt: string | null;
+  revoked: number;
 }

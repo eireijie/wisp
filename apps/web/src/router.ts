@@ -10,7 +10,8 @@ import { useEffect, useState } from "react";
  *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
  *   #/nodes                          devices
- *   #/settings                       members & access
+ *   #/settings[/<page>]              your settings and the workspace's (see SETTINGS_PAGES)
+ *   #/join/<code>                    accept an invite (signed out)
  *   #/welcome                        first-run onboarding
  *   #/chats                          channel list (phones; desktops jump to a channel)
  *   #/you                            account menu (phones)
@@ -24,13 +25,15 @@ export type Route =
   | { view: "tasks" }
   | { view: "computers"; computerId: string | null; teach?: string | null }
   | { view: "nodes" }
-  | { view: "settings" }
+  | { view: "settings"; page?: SettingsPage | null }
   | { view: "welcome" }
   | { view: "chats" }
   | { view: "you" };
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
+export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["chart", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
 
@@ -52,7 +55,7 @@ export function parseRoute(hash: string): Route {
     case "nodes":
       return { view: "nodes" };
     case "settings":
-      return { view: "settings" };
+      return { view: "settings", page: SETTINGS_PAGES.find((p) => p === parts[1]) ?? null };
     case "welcome":
       return { view: "welcome" };
     case "chats":
@@ -83,7 +86,7 @@ export function href(r: Route): string {
     case "nodes":
       return "#/nodes";
     case "settings":
-      return "#/settings";
+      return "#/settings" + (r.page ? `/${r.page}` : "");
     case "welcome":
       return "#/welcome";
     case "chats":

@@ -27,7 +27,7 @@ export async function buildHub(opts: HubOptions) {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
   await app.register(websocket);
   app.get("/healthz", async () => ({ ok: true }));
-  registerApi(app, hub, { filesDir: path.join(opts.dataDir, "files") });
+  registerApi(app, hub, { filesDir: path.join(opts.dataDir, "files"), dataDir: path.resolve(opts.dataDir) });
 
   if (opts.webDir && fs.existsSync(opts.webDir)) {
     // wildcard serving picks up rebuilt assets without a restart

@@ -210,6 +210,11 @@ export function Empty({ icon, title, children }: { icon: ReactNode; title: strin
   );
 }
 
+/** "3:42 PM" or "15:42": the locale's way, unless the person picked a 12- or 24-hour clock. */
+export function clockTime(d: Date | string, clock?: "auto" | "12h" | "24h", opts: Intl.DateTimeFormatOptions = {}): string {
+  return new Date(d).toLocaleString([], { hour: "numeric", minute: "2-digit", ...(clock && clock !== "auto" ? { hourCycle: clock === "24h" ? "h23" : "h12" } : {}), ...opts });
+}
+
 export function timeAgo(iso: string): string {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
   if (s < 60) return "just now";

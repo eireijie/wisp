@@ -24,6 +24,11 @@
         var root = document.documentElement;
         root.dataset.mode = m;
         root.dataset.theme = t || "mono";
+        try {
+          var s = localStorage.getItem("warren.textSize");
+          root.dataset.text = s === "small" || s === "large" ? s : "default";
+          if (localStorage.getItem("warren.motion") === "reduce") root.dataset.motion = "reduce";
+        } catch (e) {}
         if (m === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0d0d0d");
       })();
     </script>

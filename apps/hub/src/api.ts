@@ -37,6 +37,8 @@ import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, re
 import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
 import { registerUpdateApi } from "./updates.ts";
+import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
+import { agentPolicy } from "./policy.ts";
 
 export interface Caller {
   principal: Principal;
@@ -93,7 +95,7 @@ const SUBJECT = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all_agents") }),
 ]);
 
-export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: string }) {
+export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: string; dataDir: string }) {
   const { store, vault } = hub;
   const db = store.db;
 
@@ -282,7 +284,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       { name: user.name, email: user.email },
       "Create welcome note",
     );
-    return { token: issueToken(db, "session", user.id, ws.id, "setup"), user, workspace: ws };
+    return { token: issueToken(db, "session", user.id, ws.id, deviceLabel(req.headers["user-agent"])), user, workspace: ws };
   });
 
   // Slow down password guessing: at most 10 failed logins per IP+email per 15 minutes.
@@ -301,7 +303,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     failures.delete(key);
     const ws = db.prepare("SELECT workspace_id FROM memberships WHERE user_id = ? LIMIT 1").get(u.id) as { workspace_id: string } | undefined;
     if (!ws) return reply.code(403).send({ error: "not a member of any workspace" });
-    return { token: issueToken(db, "session", u.id, ws.workspace_id, "login") };
+    return { token: issueToken(db, "session", u.id, ws.workspace_id, deviceLabel(req.headers["user-agent"])) };
   });
 
   app.post("/api/auth/logout", async (req) => {
@@ -342,7 +344,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const c = need(req, reply);
     if (!c) return;
     const ws = store.workspace(c.workspaceId);
-    if (c.actor.kind === "user") return { kind: "user", user: store.user(c.actor.id), role: c.viewer.role, workspace: ws };
+    if (c.actor.kind === "user") return { kind: "user", user: store.user(c.actor.id), prefs: store.prefs(c.actor.id), role: c.viewer.role, workspace: ws };
     return { kind: "agent", agent: agentView(store.agent(c.actor.id)!), workspace: ws };
   });
 
@@ -599,6 +601,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
     if (body.settings?.anyoneCanAsk && (!body.nodeId || store.node(body.nodeId)?.ownerId !== c.actor.id)) delete body.settings.anyoneCanAsk;
+    // new agents start at the workspace's default access unless someone picked one
+    if (!body.settings?.access) body.settings = { ...body.settings, access: agentPolicy(hub, c.workspaceId).defaultAccess };
     const created = store.createAgent({ ...body, workspaceId: c.workspaceId });
     const agent = body.settings ? store.updateAgent(created.id, { settings: body.settings })! : created;
     const general = store.channelByName(c.workspaceId, "general");
@@ -1567,6 +1571,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   });
 
   registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf });
+  registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
   registerUpdateApi(app, hub, { need });
 
   // --- websockets -------------------------------------------------------------

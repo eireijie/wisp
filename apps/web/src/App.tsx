@@ -17,6 +17,7 @@ import { TeamsView } from "./views/TeamsView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
 import { NewTask, TasksView } from "./views/TasksView.tsx";
+import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
 
@@ -61,6 +62,11 @@ function Workspace() {
     load().catch((e) => setError(e.message));
     return connectEvents(handle, setConnected);
   }, [load, handle, setConnected]);
+  // so a task finishing later can be told apart from one that was already done (notifications)
+  const userId = me?.user.id;
+  useEffect(() => {
+    if (userId) primeTasks();
+  }, [userId]);
 
   // the phone-only pages have desktop equivalents, and the bare root is the chats list on phones
   useEffect(() => {
@@ -107,7 +113,7 @@ function Workspace() {
       case "nodes":
         return <NodesView onBack={phone ? toYou : undefined} />;
       case "settings":
-        return <SettingsView onBack={phone ? toYou : undefined} />;
+        return <SettingsView page={route.page ?? null} onBack={phone ? toYou : undefined} />;
       case "welcome":
         return <WelcomeView onBack={phone ? toYou : undefined} />;
     }
@@ -214,7 +220,7 @@ function YouPage() {
           </div>
         </div>
         <div className="rounded-2xl border border-line overflow-hidden">
-          {progress < 4 ? row(<Sparkles size={19} />, "Get started", href({ view: "welcome" }), `${progress}/4`) : null}
+          {progress < Object.keys(done).length ? row(<Sparkles size={19} />, "Get started", href({ view: "welcome" }), `${progress}/${Object.keys(done).length}`) : null}
           {row(<Brain size={19} />, "About you", href({ view: "about" }))}
           {row(<Users size={19} />, "Teams", href({ view: "teams", teamId: null }))}
           {row(<Monitor size={19} />, "Computers", href({ view: "computers", computerId: null }))}

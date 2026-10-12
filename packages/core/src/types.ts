@@ -9,7 +9,21 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  /** what agents call them ("Yug"); null = their name */
+  preferredName: string | null;
+  /** IANA time zone, e.g. "America/New_York"; agents see their local time, routines run in it */
+  timezone: string | null;
   createdAt: string;
+}
+
+/** How Warren behaves for one person, on every device they use. */
+export interface UserPrefs {
+  /** Enter sends (Shift+Enter for a new line), or ⌘/Ctrl+Enter sends */
+  sendWith?: "enter" | "mod-enter";
+  /** "auto" follows the language's usual clock */
+  clock?: "auto" | "12h" | "24h";
+  /** the tools an agent used for a reply: a collapsed line, open, or not shown */
+  toolCalls?: "collapsed" | "expanded" | "hidden";
 }
 
 /** How much an agent may do on its device. "full" also needs `allowFullAccess` in that device's config. */

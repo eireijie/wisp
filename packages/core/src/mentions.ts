@@ -22,10 +22,12 @@ export class LoopGuard {
   private runs = new Map<string, number[]>();
   constructor(private opts: LoopGuardOptions = DEFAULT_LOOP_GUARD) {}
 
-  allow(channelId: string, hop: number, now = Date.now()): { ok: true } | { ok: false; reason: string } {
-    if (hop >= this.opts.maxHops) return { ok: false, reason: `hop limit ${this.opts.maxHops} reached` };
-    const recent = (this.runs.get(channelId) ?? []).filter((t) => now - t < this.opts.windowMs);
-    if (recent.length >= this.opts.maxRunsPerWindow) {
+  /** `limits` overrides the guard's own for this check (a workspace's settings). */
+  allow(channelId: string, hop: number, now = Date.now(), limits: Partial<LoopGuardOptions> = {}): { ok: true } | { ok: false; reason: string } {
+    const o = { ...this.opts, ...limits };
+    if (hop >= o.maxHops) return { ok: false, reason: `hop limit ${o.maxHops} reached` };
+    const recent = (this.runs.get(channelId) ?? []).filter((t) => now - t < o.windowMs);
+    if (recent.length >= o.maxRunsPerWindow) {
       this.runs.set(channelId, recent);
       return { ok: false, reason: "channel rate limit reached" };
     }

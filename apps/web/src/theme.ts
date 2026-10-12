@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Appearance has two parts, both remembered on this device:
+ * Appearance, all remembered on this device:
  * - mode: light or dark, following the OS unless the person picks one
  * - theme: the color theme; Mono (black and white) unless the person picks another
- * index.html sets data-mode and data-theme before first paint; this keeps them in sync.
+ * - text size: small, default or large (scales everything sized in rem)
+ * - motion: "reduce" stills animations (ghosts, spinners stay), on top of the OS setting
+ * index.html sets these before first paint; this keeps them in sync.
  */
+export type TextSize = "small" | "default" | "large";
 export type ModeChoice = "system" | "light" | "dark";
 export type ThemeId = (typeof THEMES)[number]["id"];
 
@@ -20,6 +23,8 @@ export const THEMES = [
 
 const MODE_KEY = "warren.mode";
 const THEME_KEY = "warren.theme";
+const TEXT_KEY = "warren.textSize";
+const MOTION_KEY = "warren.motion";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 
@@ -54,12 +59,17 @@ function storedTheme(): ThemeId {
 
 let mode = storedMode();
 let theme = storedTheme();
+let textSize: TextSize = ((v) => (v === "small" || v === "large" ? v : "default"))(read(TEXT_KEY));
+let reduceMotion = read(MOTION_KEY) === "reduce";
 const resolved = (): "light" | "dark" => (mode === "system" ? (media.matches ? "dark" : "light") : mode);
 
 function apply() {
   const root = document.documentElement;
   root.dataset.mode = resolved();
   root.dataset.theme = theme;
+  root.dataset.text = textSize;
+  if (reduceMotion) root.dataset.motion = "reduce";
+  else delete root.dataset.motion;
   // the browser bar matches the content surface
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved() === "dark" ? "#0d0d0d" : "#ffffff");
   listeners.forEach((l) => l());
@@ -86,9 +96,37 @@ const subscribe = (l: () => void) => {
   listeners.add(l);
   return () => listeners.delete(l);
 };
-const snapshot = () => `${mode}:${resolved()}:${theme}`;
+export function setTextSize(next: TextSize) {
+  textSize = next;
+  write(TEXT_KEY, next === "default" ? null : next);
+  apply();
+}
+
+export function setReduceMotion(on: boolean) {
+  reduceMotion = on;
+  write(MOTION_KEY, on ? "reduce" : null);
+  apply();
+}
+
+/** Animations should stay still: the person asked here, or their OS asks for less motion. */
+export function motionReduced(): boolean {
+  return reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+const snapshot = () => `${mode}:${resolved()}:${theme}:${textSize}:${reduceMotion ? 1 : 0}`;
 
 export function useAppearance() {
-  const [m, resolvedMode, t] = useSyncExternalStore(subscribe, snapshot).split(":") as [ModeChoice, "light" | "dark", ThemeId];
-  return { mode: m, resolvedMode, theme: t, setMode, setTheme, toggleMode: () => setMode(resolvedMode === "dark" ? "light" : "dark") };
+  const [m, resolvedMode, t, size, motion] = useSyncExternalStore(subscribe, snapshot).split(":") as [ModeChoice, "light" | "dark", ThemeId, TextSize, string];
+  return {
+    mode: m,
+    resolvedMode,
+    theme: t,
+    textSize: size,
+    reduceMotion: motion === "1",
+    setMode,
+    setTheme,
+    setTextSize,
+    setReduceMotion,
+    toggleMode: () => setMode(resolvedMode === "dark" ? "light" : "dark"),
+  };
 }

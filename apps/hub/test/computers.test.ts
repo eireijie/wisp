@@ -428,7 +428,7 @@ describe("Orgo", () => {
   it("checks the key, makes a cloud computer, and drives it with the hub's key", async () => {
     await expect(owner.request("POST", "/api/computers", { kind: "orgo", name: "Cloud" })).rejects.toThrow(/Orgo API key/);
     await expect(owner.request("PUT", "/api/settings/computers", { orgoApiKey: "sk_bad" })).rejects.toThrow(/didn't accept/);
-    expect(await owner.request("PUT", "/api/settings/computers", { orgoApiKey: "sk_good" })).toEqual({ orgo: { configured: true, hint: "…good" } });
+    expect(await owner.request("PUT", "/api/settings/computers", { orgoApiKey: "sk_good" })).toMatchObject({ orgo: { configured: true, hint: "…good" }, defaults: { vmSize: "medium", controlIdleMinutes: 10 } });
 
     const cloud = await owner.request("POST", "/api/computers", { kind: "orgo", name: "Cloud" });
     expect(cloud).toMatchObject({ kind: "orgo", online: true, transport: "vnc", config: { computerId: "11111111-1111-4111-8111-111111111111", instanceId: "inst-1" } });

@@ -184,11 +184,24 @@ body,
   height: 100%;
 }
 
+/* text size (Settings → Appearance): everything sized in rem follows */
+:root[data-text="small"] { font-size: 15px; }
+:root[data-text="large"] { font-size: 17.5px; }
+/* reduce motion (Settings → Appearance), on top of the OS setting */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 body {
   background: var(--app);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-feature-settings: "cv11", "ss01"; /* Inter: single-storey a, open digits */
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
