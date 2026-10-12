@@ -20,6 +20,8 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 
 ## Quick start
 
+Having an AI agent install it? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents.
+
 Requirements: Node 22+ and git. `npm install` runs install scripts for three dependencies, which is expected: better-sqlite3 downloads a prebuilt SQLite, and esbuild and fsevents fetch the binary for your platform.
 
 ```bash
