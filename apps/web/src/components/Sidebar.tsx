@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, ChevronDown, FolderPlus, Hand, Hash, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { BookOpen, Bot, Brain, ChevronDown, FolderPlus, Hand, Hash, ListTodo, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -39,7 +39,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const { done } = useOnboarding();
   const { resolvedMode, mode, toggleMode, setMode } = useAppearance();
   const progress = Object.values(done).filter(Boolean).length;
-  const showGetStarted = route.view === "welcome" || (progress < 4 && !isDismissed());
+  const steps = Object.keys(done).length;
+  const showGetStarted = route.view === "welcome" || (progress < steps && !isDismissed());
   const page = variant === "page";
   const isGuest = me.role === "guest";
 
@@ -95,6 +96,11 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       <div className={cx("flex-1 overflow-y-auto pb-4 space-y-3", page ? "pt-3" : "pt-1")}>
         {!page && (
           <div className="space-y-px">
+            {!isGuest && (
+              <Item onClick={() => useStore.setState({ newTaskOpen: true })}>
+                <SquarePen size={16} className="shrink-0" /> New task
+              </Item>
+            )}
             <Item onClick={() => setPalette(true)}>
               <Search size={16} className="shrink-0" /> Search
               <kbd className="ml-auto text-[11px] text-faint font-sans">⌘K</kbd>
@@ -102,7 +108,9 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
             {showGetStarted && (
               <Item href={href({ view: "welcome" })} active={route.view === "welcome"}>
                 <Sparkles size={16} className="shrink-0" /> Get started
-                <span className="ml-auto text-[11px] text-muted tabular-nums">{progress}/4</span>
+                <span className="ml-auto text-[11px] text-muted tabular-nums">
+                  {progress}/{steps}
+                </span>
               </Item>
             )}
           </div>
@@ -110,6 +118,9 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
 
         {!page && (
           <Group title="Work" collapsed={!!collapsed.work} onToggle={() => toggleGroup("work")}>
+            <Item href={href({ view: "tasks" })} active={route.view === "tasks"}>
+              <ListTodo size={16} className="shrink-0" /> Tasks
+            </Item>
             <Item href={href({ view: "vault", path: null })} active={route.view === "vault"}>
               <BookOpen size={16} className="shrink-0" /> Memory
             </Item>

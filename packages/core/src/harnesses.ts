@@ -37,6 +37,13 @@ export const HARNESSES: HarnessInfo[] = [
 
 export const HARNESS_IDS = HARNESSES.map((h) => h.id);
 
+/** Harnesses that come with Warren's VM image, so an agent can run entirely inside its VM. */
+export const VM_HARNESSES = ["claude-code", "codex"];
+
+export function runsInVm(harness: string): boolean {
+  return VM_HARNESSES.includes(harness);
+}
+
 /** A harness a device declared itself (`acp:<name>` in its node.json). */
 export const DEVICE_HARNESS = /^acp:[a-z0-9][a-z0-9-]{0,39}$/;
 

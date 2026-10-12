@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { runArgs } from "../src/computers/docker.ts";
+import { recipeTag, runArgs } from "../src/computers/docker.ts";
 import { jpegSize } from "../src/computers/driver.ts";
 import { xdo } from "../src/computers/x11.ts";
 import { textPieces } from "../src/computers/macos.ts";
@@ -11,12 +11,27 @@ import { discoverAgents, frontmatter, hermesModel, readDiscovered } from "../src
 describe("VM containers", () => {
   it("keep their home in a volume, share files with the device, and expose no ports", () => {
     const args = runArgs({ id: "cmp_x", name: "Nova's Desk!", kind: "vm", config: { resolution: "1440x900", cpus: 2, memoryGb: 4 } }, { name: "warren-cmp_x", volume: "warren-cmp_x-home", files: "/n/files", image: "warren-computer:1" });
-    expect(args.slice(0, 5)).toEqual(["run", "-d", "--name", "warren-cmp_x", "--hostname"]);
-    expect(args).toContain("nova-s-desk");
+    expect(args.slice(0, 4)).toEqual(["run", "-d", "--name", "warren-cmp_x"]);
+    expect(args).toEqual(expect.arrayContaining(["--hostname", "nova-s-desk", "--restart", "unless-stopped"]));
     expect(args).toEqual(expect.arrayContaining(["-e", "RESOLUTION=1440x900", "-v", "warren-cmp_x-home:/home/warren", "-v", "/n/files:/home/warren/files", "--cpus", "2", "--memory", "4g"]));
     expect(args.join(" ")).not.toMatch(/ -p /);
     expect(args.at(-1)).toBe("warren-computer:1");
     expect(runArgs({ id: "c", name: "x", kind: "vm", config: { resolution: "bad; rm -rf" } }, { name: "n", volume: "v", files: "f", image: "i" })).toContain("RESOLUTION=1280x800");
+    // Apple's container has no hostname, restart policy or host alias options
+    const apple = runArgs({ id: "c", name: "x", kind: "vm", config: { cpus: 1.5 } }, { name: "n", volume: "v", files: "f", image: "i", kind: "apple" });
+    expect(apple).not.toContain("--hostname");
+    expect(apple).not.toContain("--restart");
+    expect(apple).not.toContain("--add-host");
+    expect(apple).toEqual(expect.arrayContaining(["--cpus", "2"]));
+  });
+
+  it("name their image after a hash of its recipe, the same one CI publishes", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-recipe-"));
+    fs.writeFileSync(path.join(dir, "start.sh"), "b");
+    fs.writeFileSync(path.join(dir, "Dockerfile"), "a");
+    // sha256 of the files' contents in name order ("Dockerfile" before "start.sh"): sha256("ab")
+    expect(recipeTag(dir)).toBe("fb8e20fc2e4c");
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -64,6 +79,21 @@ describe("discovering existing agents", () => {
     expect(claw.instructions).toBe("Check email every morning.");
     expect(claw.memories).toEqual([{ name: "2026-10-10.md", content: "Met Dana." }]);
     expect(readDiscovered("nope", home)).toBeNull();
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it("finds the harness you already use, with its instructions and saved memories", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-setup-"));
+    const w = (p: string, t: string) => (fs.mkdirSync(path.dirname(path.join(home, p)), { recursive: true }), fs.writeFileSync(path.join(home, p), t));
+    w(".claude/CLAUDE.md", "Always answer in British English.");
+    w(".claude/settings.json", JSON.stringify({ model: "opus" }));
+    w(".claude/projects/-Users-me-shop/memory/user-likes.md", "Likes short answers.");
+    w(".codex/AGENTS.md", "Run the tests before saying it's done.");
+    w(".codex/config.toml", 'model = "gpt-5.6"\n');
+    const found = discoverAgents(home);
+    expect(found.find((a) => a.key === "claude-code:main")).toMatchObject({ name: "Claude Code (your setup)", model: "opus", memoryCount: 1, description: "your CLAUDE.md and 1 saved memory" });
+    expect(found.find((a) => a.key === "codex:main")).toMatchObject({ name: "Codex (your setup)", model: "gpt-5.6" });
+    expect(readDiscovered("claude-code:main", home)).toMatchObject({ instructions: "Always answer in British English.", memories: [{ name: "Users-me-shop-user-likes.md", content: "Likes short answers." }] });
     fs.rmSync(home, { recursive: true, force: true });
   });
 

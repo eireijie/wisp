@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bot, Cloud, Download, Laptop, Loader2, Lock, MessageSquare, Monitor, Plus, Shuffle } from "lucide-react";
 import { defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { Ghost } from "../components/Ghost.tsx";
-import { HARNESSES, soulTemplate, type Agent, type DiscoveredAgent } from "@warren/core";
+import { HARNESSES, runsInVm, soulTemplate, type Agent, type DiscoveredAgent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
@@ -207,6 +207,8 @@ function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
     try {
       const finalHandle = handle || slug(name);
       const computerId = await resolveComputer(computer, nodeId, name);
+      // with a VM on its own device, a harness that comes with the VM runs inside it
+      const vmHere = computer.kind === "vm" || (computer.kind === "existing" && computers.find((c) => c.id === computer.id && c.kind === "vm" && c.nodeId === nodeId));
       // a job's voice replaces the default voice lines
       const soul = template ? soulTemplate(name, finalHandle).replace(/## Voice\n(?:- .*\n?)*/, `## Voice\n- ${template.voice}\n`) : undefined;
       const a = await api<Agent>("POST", "/api/agents", {
@@ -217,7 +219,7 @@ function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
         computerId,
         instructions,
         soul,
-        settings: { ...(shuffled ? { appearance: shuffled } : {}), ...(computer.kind === "headless" ? { headless: true } : {}) },
+        settings: { ...(shuffled ? { appearance: shuffled } : {}), ...(computer.kind === "headless" ? { headless: true } : {}), ...(vmHere && runsInVm(harness) ? { runIn: "computer" as const } : {}) },
       });
       await Promise.all([refreshAgents(), useStore.getState().refreshComputers()]);
       onClose();
@@ -351,6 +353,23 @@ function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
 }
 
 /** Agents that already live on a device (Hermes, OpenClaw, Claude Code subagents): bring them in with their soul and notes. */
+/** A free handle from a name: "Claude Code (your setup)" → "claude", or "claude-2" when that's taken. */
+export function freeHandle(name: string, taken: string[]): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^[^a-z]+/, "").split("-")[0].slice(0, 28) || "agent";
+  let h = base;
+  for (let i = 2; taken.includes(h); i++) h = `${base}-${i}`;
+  return h;
+}
+
+/**
+ * Bring in an agent found on a device. Claude Code and Codex move into a VM on that device when
+ * it has one (their instructions and memories come along); others keep running on the device.
+ */
+export async function importFound(x: { node: NodeInfo; d: DiscoveredAgent }, o: { handle: string; computerId: string | null; headless?: boolean; computers: ComputerInfo[] }): Promise<Agent> {
+  const vmHere = o.computers.some((c) => c.id === o.computerId && c.kind === "vm" && c.nodeId === x.node.id);
+  return api<Agent>("POST", "/api/agents/import", { nodeId: x.node.id, key: x.d.key, handle: o.handle, computerId: o.computerId, headless: !!o.headless, ...(vmHere && runsInVm(x.d.harness) ? { runIn: "computer" } : {}) });
+}
+
 function ImportAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => void }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
@@ -365,14 +384,17 @@ function ImportAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
 
   const choose = (x: { node: NodeInfo; d: DiscoveredAgent }) => {
     setPick(x);
-    setHandle(slug(x.d.name.split(/[\s']/)[0]) || "agent");
+    setHandle(freeHandle(x.d.name, agents.map((a) => a.handle)));
     setComputer(defaultComputer(x.node, computers));
   };
 
   if (!found.length)
     return (
       <div className="space-y-3 text-sm text-muted">
-        <p>No existing agents found on your devices. Warren looks for Hermes profiles, OpenClaw workspaces, Claude Code subagents (~/.claude/agents) and OpenCode agents when a device connects.</p>
+        <p>
+          No existing agents found on your devices. When a device connects, Warren looks for your Claude Code setup (CLAUDE.md and its saved memories), Codex's AGENTS.md, Gemini CLI's GEMINI.md, Goose hints, Hermes profiles, OpenClaw workspaces, Claude Code subagents
+          and OpenCode agents.
+        </p>
         <p>
           Already running an agent somewhere else? Add it as a new agent and connect it with <b>Create connection token</b> on its Connect tab.
         </p>
@@ -392,8 +414,39 @@ function ImportAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
       </div>
     );
 
+  const fresh = found.filter((x) => !agents.some((a) => a.nodeId === x.node.id && a.harness === x.d.harness && a.name === x.d.name));
+  const bringAll = async () => {
+    setBusy(true);
+    setError(null);
+    const taken = agents.map((a) => a.handle);
+    try {
+      for (const x of fresh) {
+        const handle = freeHandle(x.d.name, taken);
+        taken.push(handle);
+        const c = defaultComputer(x.node, computers);
+        await importFound(x, { handle, computerId: c.kind === "existing" ? c.id : null, computers });
+      }
+      await Promise.all([refreshAgents(), useStore.getState().refreshComputers()]);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {fresh.length > 1 && !pick && (
+        <div className="flex items-center gap-3 rounded-xl bg-hover px-3 py-2.5 text-sm">
+          <span className="flex-1">
+            {fresh.length} agents found. Bring them all in with their instructions and notes, each on {computers.some((c) => c.kind !== "device") ? "a computer you already have" : "its device"}.
+          </span>
+          <Button variant="primary" disabled={busy} onClick={bringAll}>
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Bring in all
+          </Button>
+        </div>
+      )}
       <div className="rounded-xl border border-line divide-y divide-line">
         {found.map((x) => {
           const taken = agents.some((a) => a.nodeId === x.node.id && a.harness === x.d.harness && a.name === x.d.name);
@@ -422,7 +475,8 @@ function ImportAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
             setError(null);
             try {
               const computerId = await resolveComputer(computer, pick.node.id, pick.d.name);
-              const a = await api<Agent>("POST", "/api/agents/import", { nodeId: pick.node.id, key: pick.d.key, handle, computerId, headless: computer.kind === "headless" });
+              const all = computer.kind === "vm" ? await api<ComputerInfo[]>("GET", "/api/computers") : computers;
+              const a = await importFound(pick, { handle, computerId, headless: computer.kind === "headless", computers: all });
               await Promise.all([refreshAgents(), useStore.getState().refreshComputers()]);
               onClose();
               go({ view: "agents", agentId: a.id, tab: "overview" });

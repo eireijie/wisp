@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, harnessLabel, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
+import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -120,15 +120,25 @@ export class Hub {
   }
 
   /**
+   * Does this agent's harness run inside its computer: a VM on the same device, with a harness
+   * that comes in the VM image? Then its shell, files and browser all stay in the VM.
+   */
+  runsInComputer(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): boolean {
+    if (agent.settings.runIn !== "computer" || !runsInVm(agent.harness) || !agent.computerId) return false;
+    const c = this.store.computer(agent.computerId);
+    return c?.kind === "vm" && !!c.nodeId && c.nodeId === agent.nodeId;
+  }
+
+  /**
    * Does this agent's harness run directly on a person's device (not inside a VM)? Then it can
    * reach that device's files, so only the device's owner can ask it for things unless they open it up.
    */
-  harnessOnDevice(agent: { nodeId: string | null }): boolean {
-    return !!agent.nodeId;
+  harnessOnDevice(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">): boolean {
+    return !!agent.nodeId && !this.runsInComputer(agent);
   }
 
   /** Why `requestedBy` can't ask this agent for something, or null when they can. */
-  whyNotAllowed(agent: { handle: string; nodeId: string | null; settings: { anyoneCanAsk?: boolean } }, requestedBy: string | null): string | null {
+  whyNotAllowed(agent: Pick<Agent, "handle" | "nodeId" | "computerId" | "harness" | "settings">, requestedBy: string | null): string | null {
     if (!this.harnessOnDevice(agent) || agent.settings.anyoneCanAsk) return null;
     const node = this.store.node(agent.nodeId!);
     // a device its owner shared with the workspace takes requests from everyone
@@ -383,10 +393,20 @@ export class Hub {
       (prompt) => {
         // looked up after the prompt so a task handed out in this same tick is linked to its thread by now
         const workspace = this.workspaceFor(run);
+        // a task the agent starts on is being worked on
+        const task = run.threadId ? this.store.taskByThread(run.threadId) : undefined;
+        if (task && task.toAgentId === agent.id && task.status === "open") {
+          this.store.updateTask(task.id, "in_progress");
+          this.broadcast(conn.workspaceId, { type: "tasks_changed" });
+        }
         // a VM on the agent's own device shares its folder with the agent's harness
         const c = agent.computerId ? this.store.computer(agent.computerId) : undefined;
         const computer: ComputerSpec | undefined = c?.kind === "vm" && c.nodeId === agent.nodeId ? this.computers.spec(c) : undefined;
-        this.send(conn, { type: "run", run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}) } });
+        const inComputer = this.runsInComputer(agent);
+        this.send(conn, {
+          type: "run",
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}) },
+        });
       },
       (err) => this.store.setRunStatus(run.id, "failed", (err as Error).message),
     );
@@ -478,7 +498,17 @@ export class Hub {
       `It keeps its files, browser and sign-ins between runs${sharing.length ? `, and you share it with ${sharing.join(", ")}` : ""}. People can watch it live and take control.`,
       `When you need a person (to sign in, enter a code, solve a captcha, or confirm something on screen), call computer_ask_human with exactly what you need and end your turn; you'll be woken when they hand the computer back. Never ask for passwords in chat.`,
     ];
-    if (c.kind === "vm" && c.nodeId === agent.nodeId) lines.push(`Your working folder is shared with the computer: it's ~/files there, and downloads land in it.`);
+    if (this.runsInComputer(agent)) {
+      lines.push(
+        `You run inside this computer: your shell, files and tools are all on it, and your working folder is ~/files (downloads land there too). You can install what you need with sudo. Nothing you do here touches anyone's own computer.`,
+        `For websites, use the browser tools (browser_navigate, browser_snapshot, then browser_click / browser_type / browser_fill_form with the ref from the snapshot): they drive the Chromium people watch, with its sign-ins, and work on the page's elements, so they're faster and surer than clicking pixels. Use computer_screenshot and the other computer tools for everything that isn't a web page.`,
+      );
+    } else if (c.kind === "vm" && c.nodeId === agent.nodeId) {
+      lines.push(
+        `Your working folder is shared with the computer: it's ~/files there, and downloads land in it.`,
+        `For websites, use the browser tools (browser_navigate, browser_snapshot, then browser_click / browser_type / browser_fill_form with the ref from the snapshot): they drive the computer's Chromium, the one people watch, with its sign-ins. Use the computer tools for everything else.`,
+      );
+    }
     if (c.kind === "device") {
       const owner = node?.ownerId ? (this.store.user(node.ownerId)?.name ?? "its owner") : "its owner";
       lines.push(

@@ -16,6 +16,7 @@ import { WelcomeView } from "./views/WelcomeView.tsx";
 import { TeamsView } from "./views/TeamsView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
+import { NewTask, TasksView } from "./views/TasksView.tsx";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
 
@@ -51,6 +52,7 @@ function Workspace() {
   const load = useStore((s) => s.load);
   const handle = useStore((s) => s.handle);
   const setConnected = useStore((s) => s.setConnected);
+  const newTaskOpen = useStore((s) => s.newTaskOpen);
   const route = useRoute();
   const phone = useIsPhone();
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +100,8 @@ function Workspace() {
         return <TeamsView teamId={route.teamId} tab={route.tab ?? null} onBack={phone ? toYou : undefined} />;
       case "about":
         return <AboutView onBack={phone ? toYou : undefined} />;
+      case "tasks":
+        return <TasksView onBack={phone ? toYou : undefined} />;
       case "computers":
         return <ComputersView computerId={route.computerId} teach={route.teach ?? null} onBack={phone ? toYou : undefined} />;
       case "nodes":
@@ -123,6 +127,7 @@ function Workspace() {
         {showTabs && <TabBar route={route} />}
       </div>
       <CommandPalette />
+      {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
     </div>
   );
 }

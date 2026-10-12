@@ -158,8 +158,60 @@ function definitions(dir: string, harness: string, label: string): Source[] {
   });
 }
 
+/**
+ * The harness you already use, as it's set up for you: its instructions file (CLAUDE.md,
+ * AGENTS.md, GEMINI.md, .goosehints) and, for Claude Code, the memories it saved per project.
+ */
+function yourSetup(home: string): Source[] {
+  const out: Source[] = [];
+  const add = (harness: string, label: string, file: string, memFiles: { name: string; file: string }[], model?: string) => {
+    const instructions = readText(file)?.trim();
+    if (!instructions && !memFiles.length) return;
+    const agent: DiscoveredAgent = {
+      key: `${harness}:main`,
+      harness,
+      name: `${label} (your setup)`,
+      description: [instructions ? `your ${path.basename(file)}` : "", memFiles.length ? `${memFiles.length} saved ${memFiles.length === 1 ? "memory" : "memories"}` : ""].filter(Boolean).join(" and "),
+      model,
+      path: path.dirname(file),
+      hasSoul: false,
+      memoryCount: memFiles.length,
+    };
+    out.push({
+      agent,
+      read: () => ({
+        ...agent,
+        instructions,
+        memories: memFiles
+          .map((m) => ({ name: m.name, content: readText(m.file) ?? "" }))
+          .filter((m) => m.content.trim())
+          .slice(0, 50),
+      }),
+    });
+  };
+  // Claude Code keeps memories per project: ~/.claude/projects/<project>/memory/*.md
+  const claudeMem = dirs(path.join(home, ".claude", "projects")).flatMap((p) =>
+    files(path.join(p, "memory")).map((f) => ({ name: `${path.basename(p).replace(/^-+/, "").slice(-40)}-${path.basename(f)}`, file: f })),
+  );
+  const claudeModel = (() => {
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(home, ".claude", "settings.json"), "utf8")).model;
+      return typeof m === "string" ? m : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  add("claude-code", "Claude Code", path.join(home, ".claude", "CLAUDE.md"), claudeMem, claudeModel);
+  const codexModel = readText(path.join(home, ".codex", "config.toml"))?.match(/^model\s*=\s*"([^"]+)"/m)?.[1];
+  add("codex", "Codex", path.join(home, ".codex", "AGENTS.md"), [], codexModel);
+  add("gemini", "Gemini CLI", path.join(home, ".gemini", "GEMINI.md"), []);
+  add("goose", "Goose", path.join(home, ".config", "goose", ".goosehints"), []);
+  return out;
+}
+
 function sources(home = os.homedir()): Source[] {
   return [
+    ...yourSetup(home),
     ...hermes(home),
     ...openclaw(home),
     ...definitions(path.join(home, ".claude", "agents"), "claude-code", "Claude Code"),

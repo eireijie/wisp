@@ -7,6 +7,14 @@ export interface McpServerSpec {
   env: Record<string, string>;
 }
 
+/** How a harness process starts: what to run, where, with which environment. */
+export interface Launch {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+}
+
 export interface RunInput {
   prompt: string;
   cwd: string;
@@ -14,6 +22,13 @@ export interface RunInput {
   /** Harness session to continue, if this conversation ran before. */
   sessionId?: string | null;
   mcp?: McpServerSpec;
+  /** the agent's computer's browser, as MCP tools that work on page elements (Playwright MCP) */
+  browser?: McpServerSpec;
+  /**
+   * Start the harness somewhere else, e.g. inside the agent's VM: gets the command as the adapter
+   * would run it here and returns what to actually run.
+   */
+  launch?: (l: Launch) => Launch;
   env?: Record<string, string>;
   signal?: AbortSignal;
   /** reasoning effort; null/undefined = harness default */

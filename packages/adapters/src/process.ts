@@ -1,4 +1,11 @@
 import { execFile, spawn } from "node:child_process";
+import type { Launch, RunInput } from "./types.ts";
+
+/** The command an adapter runs, after the run's launcher (if any) has had its say. */
+export function launched(input: Pick<RunInput, "launch" | "cwd">, command: string, args: string[], env: Record<string, string> = {}): Launch {
+  const l = { command, args, cwd: input.cwd, env };
+  return input.launch ? input.launch(l) : l;
+}
 
 export interface JsonlProcess {
   exitCode: number | null;

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
-import { commandVersion } from "./process.ts";
+import { commandVersion, launched } from "./process.ts";
 
 /**
  * Agent Client Protocol (https://agentclientprotocol.com): JSON-RPC 2.0 over stdio, one JSON
@@ -134,9 +134,12 @@ export class AcpError extends Error {
 }
 
 /** ACP wants MCP server env as a list of {name, value}. Exported for tests. */
-export function acpMcpServers(mcp: McpServerSpec | undefined): Json[] {
-  if (!mcp) return [];
-  return [{ name: "warren", command: mcp.command, args: mcp.args, env: Object.entries(mcp.env).map(([name, value]) => ({ name, value })) }];
+export function acpMcpServers(mcp: McpServerSpec | undefined, browser?: McpServerSpec): Json[] {
+  const out: Json[] = [];
+  for (const [name, s] of [["warren", mcp], ["browser", browser]] as [string, McpServerSpec | undefined][]) {
+    if (s) out.push({ name, command: s.command, args: s.args, env: Object.entries(s.env).map(([n, value]) => ({ name: n, value })) });
+  }
+  return out;
 }
 
 /**
@@ -260,7 +263,8 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
 
     async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {
       const cmd = command(input);
-      const child = spawn(cmd.command, cmd.args, { cwd: input.cwd, env: { ...process.env, ...input.env }, stdio: ["pipe", "pipe", "pipe"] });
+      const l = launched(input, cmd.command, cmd.args, input.env);
+      const child = spawn(l.command, l.args, { cwd: l.cwd, env: { ...process.env, ...l.env }, stdio: ["pipe", "pipe", "pipe"] });
       const tools = new Map<string, string>();
       let text = "";
       let prompting = false;
@@ -289,7 +293,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
 
       try {
         const init = await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "warren", version: "0.1.0" } }, 60_000);
-        const mcpServers = acpMcpServers(input.mcp);
+        const mcpServers = acpMcpServers(input.mcp, input.browser);
         let session: Json = null;
         if (input.sessionId && init?.agentCapabilities?.loadSession) {
           try {

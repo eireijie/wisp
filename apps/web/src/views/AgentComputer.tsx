@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Cloud, FileText, Laptop, Loader2, Lock, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
-import { describeCron, harnessInfo, nextRun, type Agent, type Routine } from "@warren/core";
+import { CalendarClock, Check, Cloud, FileText, KeyRound, Laptop, Loader2, Lock, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
+import { describeCron, harnessInfo, harnessLabel, nextRun, runsInVm, type Agent, type Routine } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -43,7 +43,12 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
     }
   };
   const assign = (c: { id: string }) => api("PATCH", `/api/agents/${agent.id}`, { computerId: c.id });
-  const quickVm = () => use("vm", async () => assign(await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: agent.nodeId, name: `${agent.name}'s desk`, cpus: 2, memoryGb: 4 })));
+  const quickVm = () =>
+    use("vm", async () => {
+      const c = await api<ComputerInfo>("POST", "/api/computers", { kind: "vm", nodeId: agent.nodeId, name: `${agent.name}'s desk`, cpus: 2, memoryGb: 4 });
+      // a harness that comes with the VM moves in with it, unless someone already chose where it runs
+      await api("PATCH", `/api/agents/${agent.id}`, { computerId: c.id, ...(runsInVm(agent.harness) && !agent.settings.runIn ? { settings: { runIn: "computer" } } : {}) });
+    });
   const quickScreen = () => use("screen", async () => assign(await api<ComputerInfo>("POST", "/api/computers", { kind: "device", nodeId: agent.nodeId })));
   const goHeadless = () => {
     if (!confirm(`Run @${agent.handle} headless? It won't be able to see or use a screen: no websites, no apps, only its harness's own tools.`)) return;
@@ -94,6 +99,8 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
         )}
       </section>
 
+      <RunsWhere agent={agent} device={device} />
+
       <section className="space-y-2">
         <h3 className="font-semibold text-sm">{current ? "Switch to" : "Give it"}</h3>
         <div className="grid sm:grid-cols-2 gap-2">
@@ -142,6 +149,90 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
         />
       )}
     </div>
+  );
+}
+
+interface HarnessPlace {
+  possible: boolean;
+  inComputer: boolean;
+  signedIn: boolean | null;
+  computerId: string | null;
+}
+
+/**
+ * Where the agent's harness runs: inside its VM (its shell, files and browser all stay in there,
+ * and anyone can ask it for things) or directly on the device (it can reach the device's files).
+ */
+function RunsWhere({ agent, device }: { agent: Agent; device: DeviceInfo | undefined }) {
+  const refreshAgents = useStore((s) => s.refreshAgents);
+  const [info, setInfo] = useState<HarnessPlace | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label = harnessLabel(agent.harness);
+  const load = () => api<HarnessPlace>("GET", `/api/agents/${agent.id}/harness`).then(setInfo, () => setInfo(null));
+  useEffect(() => {
+    load();
+  }, [agent.id, agent.computerId, agent.settings.runIn, agent.harness]);
+  if (!info || !runsOnDevice(agent.harness) || !device) return null;
+
+  const set = async (runIn: "computer" | "device") => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { runIn } });
+      await refreshAgents();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const signIn = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ computerId: string }>("POST", `/api/agents/${agent.id}/signin`);
+      go({ view: "computers", computerId: r.computerId });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="space-y-2">
+      <h3 className="font-semibold text-sm">Where {label} runs</h3>
+      {!info.possible ? (
+        <p className="text-sm text-muted">
+          Directly on {device.name}, where it can reach that device's files.{" "}
+          {runsInVm(agent.harness) ? `Give it a VM on ${device.name} to run it inside that instead.` : `${label} doesn't come with Warren's VM yet, so it runs on the device.`}
+        </p>
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <Option icon={<Monitor size={17} />} title={`Inside its computer${info.inComputer ? " ✓" : ""}`} body="Recommended. Its shell, files and browser all stay in the VM, so it can't touch the device, and anyone can ask it for things." busy={busy && !info.inComputer} disabled={info.inComputer} onClick={() => set("computer")} />
+            <Option icon={<Laptop size={17} />} title={`On ${device.name}${!info.inComputer ? " ✓" : ""}`} body={`It can reach ${device.name}'s files and its own sign-in there. Only ${device.mine ? "you" : (device.ownerName ?? "the device's owner")} can ask it for things.`} busy={busy && info.inComputer} disabled={!info.inComputer} onClick={() => set("device")} />
+          </div>
+          {info.inComputer && info.signedIn === false && (
+            <div className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm flex flex-wrap items-center gap-3">
+              <span className="flex-1 min-w-48">
+                {label} isn't signed in on its computer yet. Sign in once: a terminal opens on its screen, and you finish there (the browser opens in the VM too).
+              </span>
+              <Button variant="primary" disabled={busy} onClick={signIn}>
+                {busy ? <Loader2 size={15} className="animate-spin" /> : <KeyRound size={15} />} Sign in to {label}
+              </Button>
+            </div>
+          )}
+          {info.inComputer && info.signedIn === true && (
+            <p className="text-sm text-ok flex items-center gap-1.5">
+              <Check size={14} /> {label} is signed in on its computer.
+            </p>
+          )}
+        </>
+      )}
+      {error && <p className="text-sm text-bad">{error}</p>}
+    </section>
   );
 }
 

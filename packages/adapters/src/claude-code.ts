@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, AgentEvent, HarnessCatalog } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
-import { commandVersion, runJsonl } from "./process.ts";
+import { commandVersion, launched, runJsonl } from "./process.ts";
 
 const PERMISSION_MODE: Record<AccessLevel, string> = { "read-only": "plan", edit: "acceptEdits", full: "bypassPermissions" };
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -21,9 +21,12 @@ export function claudeArgs(input: RunInput): string[] {
   args.push("--permission-mode", PERMISSION_MODE[input.access ?? "edit"]);
   // Claude Code's fast mode is a setting (what /fast toggles); --settings layers it on for this run
   if (input.fast) args.push("--settings", JSON.stringify({ fastMode: true }));
-  if (input.mcp) {
-    args.push("--mcp-config", JSON.stringify({ mcpServers: { warren: { type: "stdio", ...input.mcp } } }));
-    args.push("--allowedTools", "mcp__warren");
+  const servers: Record<string, unknown> = {};
+  if (input.mcp) servers.warren = { type: "stdio", ...input.mcp };
+  if (input.browser) servers.browser = { type: "stdio", ...input.browser };
+  if (Object.keys(servers).length) {
+    args.push("--mcp-config", JSON.stringify({ mcpServers: servers }));
+    args.push("--allowedTools", Object.keys(servers).map((n) => `mcp__${n}`).join(","));
   }
   return args;
 }
@@ -73,7 +76,8 @@ export const claudeCode: HarnessAdapter = {
     let lastAssistant: any = null;
     let result: any = null;
 
-    const proc = await runJsonl(this.binary, args, { cwd: input.cwd, env: claudeEnv(input), stdin: input.prompt, signal: input.signal }, (m) => {
+    const l = launched(input, this.binary, args, claudeEnv(input));
+    const proc = await runJsonl(l.command, l.args, { cwd: l.cwd, env: l.env, stdin: input.prompt, signal: input.signal }, (m) => {
       for (const e of parseClaudeLine(m, toolNames)) {
         if (e.type === "session") sessionId = e.id;
         onEvent(e);

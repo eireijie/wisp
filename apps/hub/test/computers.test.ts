@@ -388,7 +388,7 @@ describe("routines", () => {
       durationMs: 52_000,
       narration: "Receipts are in the shared inbox.",
       steps: [
-        { at: 1200, kind: "click", x: 40, y: 80 },
+        { at: 1200, kind: "click", x: 40, y: 80, element: { url: "https://expenses.example.com/", role: "button", name: "New expense", selector: "#new" } },
         { at: 4000, kind: "type", text: "receipts" },
         { at: 5000, kind: "key", keys: "Enter" },
       ],
@@ -396,6 +396,8 @@ describe("routines", () => {
     expect(r).toMatchObject({ status: "learning", notePath: `agents/${agentId}/routines/file-expenses.md` });
     const rec = await owner.readNote(`agents/${agentId}/routines/file-expenses.recording.md`);
     expect(rec.content).toContain('2. [0:04] typed "receipts"');
+    // what was clicked on a web page, not only where
+    expect(rec.content).toContain('1. [0:01] clicked at (40, 80) on the button "New expense" (#new) at https://expenses.example.com/');
     expect(rec.content).toContain("Receipts are in the shared inbox.");
     await waitFor(() => calls.length > before);
     expect(calls.at(-1)!.prompt).toContain("## Learning a routine: File expenses");

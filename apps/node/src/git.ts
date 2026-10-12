@@ -88,6 +88,58 @@ export async function prepareCheckout(dir: string, handle: string, w: RunWorkspa
 }
 
 /**
+ * A checkout for an agent that works inside its VM: a clone of its own in the folder the VM
+ * shares (a worktree wouldn't do: it points at the device's paths, which the VM doesn't have).
+ * Its commits come back to the device's copy with `bringBack`, so reviews and merges see them.
+ */
+export async function prepareClone(dir: string, into: string, w: RunWorkspace): Promise<string> {
+  const { root, remote } = await repoRoot(dir, w.repo);
+  if (remote) await git(root, ["fetch", "--quiet", "--prune", "origin"]).catch(() => undefined);
+  const wt = path.join(into, "repos", w.mode === "work" ? "work" : "review", safeName(w.branch));
+  if (!fs.existsSync(path.join(wt, ".git"))) {
+    fs.rmSync(wt, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(wt), { recursive: true });
+    await git(path.dirname(wt), ["clone", "--quiet", "--no-checkout", root, wt]);
+    // inside the VM the device's path means nothing: point origin at the real remote, if any
+    if (remote) await git(wt, ["remote", "set-url", "origin", w.repo]);
+    else await git(wt, ["remote", "remove", "origin"]);
+    await git(wt, ["remote", "add", "device", root]);
+  }
+  await git(wt, ["fetch", "--quiet", "device", "+refs/heads/*:refs/remotes/device/*", "+refs/remotes/origin/*:refs/remotes/device-origin/*"]);
+  if (w.mode === "work") {
+    if (await hasRef(wt, `refs/heads/${w.branch}`)) {
+      // keep the agent's uncommitted work between runs
+      if (!(await git(wt, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "")).includes(w.branch)) await git(wt, ["checkout", "--quiet", w.branch]);
+      return wt;
+    }
+    const start = (await hasRef(wt, `refs/remotes/device/${w.branch}`))
+      ? `device/${w.branch}`
+      : (await hasRef(wt, `refs/remotes/device/${w.base}`))
+        ? `device/${w.base}`
+        : (await hasRef(wt, `refs/remotes/device-origin/${w.base}`))
+          ? `device-origin/${w.base}`
+          : null;
+    if (!start) throw new Error(`base branch ${w.base} not found in ${w.repo}`);
+    await git(wt, ["checkout", "--quiet", "-b", w.branch, start]);
+    return wt;
+  }
+  const ref = await bestRef(root, remote, w.branch);
+  if (!ref) throw new Error(`branch ${w.branch} isn't in ${w.repo} yet${remote ? " (has it been pushed?)" : ""}`);
+  await git(wt, ["checkout", "--quiet", "--detach", ref.startsWith("origin/") ? `device-origin/${ref.slice(7)}` : `device/${ref}`]);
+  return wt;
+}
+
+/** After a run in a VM: the branch's commits go to the device's copy of the repo. */
+export async function bringBack(dir: string, clone: string, w: RunWorkspace): Promise<void> {
+  if (w.mode !== "work" || !(await hasRef(clone, `refs/heads/${w.branch}`))) return;
+  const { root } = await repoRoot(dir, w.repo);
+  // never move a branch someone has checked out on the device
+  const list = await git(root, ["worktree", "list", "--porcelain"]);
+  if (list.includes(`branch refs/heads/${w.branch}\n`) || list.endsWith(`branch refs/heads/${w.branch}`)) return;
+  await git(root, ["fetch", "--quiet", clone, `+refs/heads/${w.branch}:refs/heads/${w.branch}`]);
+}
+
+/**
  * Merge `branch` into `base` without touching anyone's working copy: the merge happens in a
  * temporary worktree, then goes to the remote, or (for a local repo) moves the base branch,
  * fast-forwarding the checkout that has it when that checkout is clean.

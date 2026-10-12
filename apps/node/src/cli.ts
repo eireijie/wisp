@@ -3,10 +3,12 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { HARNESSES } from "@warren/core";
 import { deviceAdapters } from "@warren/adapters";
-import { ComputerHost } from "./computers/index.ts";
+import { ComputerHost, detectEngine } from "./computers/index.ts";
+import { ensureImage } from "./computers/docker.ts";
 import { discoverAgents } from "./discover.ts";
 import { NodeDaemon, type NodeConfig } from "./daemon.ts";
 import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
@@ -14,6 +16,10 @@ import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchFor
 const HELP = `warren — connect this device to a Warren hub
 
 Usage:
+  warren setup [--yes]
+      Get this device ready to give agents their own computers (VMs): checks the harnesses,
+      offers to install a VM engine (Apple's container on a Mac with Apple silicon), and gets
+      the VM image so the first VM starts in seconds. Asks before installing anything.
   warren node start [--hub URL --token TOKEN] [--name NAME] [--dir DIR] [--allow-full-access]
       Connect this device as a node. Hub URL and token are saved to DIR/node.json,
       so later runs only need \`warren node start\`. Create the token in Warren → Devices.
@@ -50,6 +56,7 @@ const { values, positionals } = parseArgs({
     dir: { type: "string" },
     "allow-full-access": { type: "boolean" },
     check: { type: "boolean" },
+    yes: { type: "boolean", short: "y" },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -80,6 +87,8 @@ if (values.help || !cmd) {
   console.log("\nExisting agents Warren can import");
   if (!found.length) console.log("  none found");
   for (const a of found) console.log(`  ${a.name} (${a.harness}) ${a.path}`);
+} else if (cmd === "setup") {
+  await setup(values.yes ?? false);
 } else if (cmd === "node" && sub === "start") {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   const cfg: NodeConfig = {
@@ -150,4 +159,77 @@ if (values.help || !cmd) {
 } else {
   console.log(HELP);
   process.exit(1);
+}
+
+/** `warren setup`: harnesses, a VM engine, and the VM image, so agents get their own computers here. */
+async function setup(yes: boolean) {
+  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
+  const ask = async (q: string) => {
+    if (yes) return true;
+    if (!process.stdin.isTTY) return false;
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const a = (await rl.question(`${q} [Y/n] `)).trim().toLowerCase();
+    rl.close();
+    return a === "" || a === "y" || a === "yes";
+  };
+  const run = (cmd: string, args: string[]) => {
+    console.log(`  $ ${[cmd, ...args].join(" ")}`);
+    try {
+      execFileSync(cmd, args, { stdio: "inherit" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const which = (bin: string) => {
+    try {
+      execFileSync(process.platform === "win32" ? "where" : "which", [bin], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  console.log("1. Harnesses");
+  const found = Object.values(deviceAdapters(saved.harnesses)).filter((a) => which(a.binary));
+  console.log(found.length ? `   ${found.map((a) => a.label).join(", ")}` : "   none yet. Agents can still run inside their VMs (Claude Code and Codex come with it).");
+
+  console.log("\n2. Something to run VMs");
+  let { engine, detail } = await detectEngine(saved.vmEngine);
+  if (!engine && process.platform === "darwin") {
+    if (which("container")) {
+      if (await ask("   Apple's container is installed but not running. Start it now?")) run("container", ["system", "start", "--enable-kernel-install"]);
+    } else if (process.arch === "arm64" && which("brew")) {
+      console.log("   Apple's container runs each VM in its own small virtual machine. It's free and open source, from Apple.");
+      if (await ask("   Install it with Homebrew now?")) {
+        if (run("brew", ["install", "container"])) run("container", ["system", "start", "--enable-kernel-install"]);
+      }
+    } else if (process.arch === "arm64") {
+      console.log("   Install Apple's container from https://github.com/apple/container/releases (the .pkg), then run `warren setup` again.");
+    } else {
+      console.log("   On an Intel Mac, install OrbStack (https://orbstack.dev) or Docker Desktop, then run `warren setup` again.");
+    }
+    ({ engine, detail } = await detectEngine(saved.vmEngine));
+  } else if (!engine && process.platform === "linux") {
+    console.log("   Install Docker Engine or Podman, for example:");
+    console.log("     curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER   # then log out and in");
+    console.log("     sudo apt-get install -y podman                                             # or this");
+  } else if (!engine && process.platform === "win32") {
+    console.log("   Install Docker Desktop (https://www.docker.com/products/docker-desktop/), start it, then run `warren setup` again.");
+  }
+  console.log(`   ${detail}`);
+  if (!engine) {
+    console.log("\nAgents can still use an Orgo cloud computer (Settings → Computers in Warren) until this device can run VMs.");
+    process.exit(1);
+  }
+
+  console.log("\n3. The VM image");
+  let last = "";
+  const image = await ensureImage(engine, (text) => {
+    if (text !== last) console.log(`   ${(last = text)}`);
+  });
+  console.log(`   ready: ${image}`);
+
+  console.log("\nThis device is ready to give agents their own computers.");
+  console.log(saved.hub ? "If `warren node start` is running, Warren sees it within a few seconds." : "Next: connect it to your hub with the command from Warren → Devices → Add device.");
 }

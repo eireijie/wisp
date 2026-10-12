@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Cloud, Hand, HandMetal, Laptop, Loader2, Lock, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
-import { lentNow, type Actor, type Agent } from "@warren/core";
+import { lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -541,12 +541,20 @@ function TeachBar({ agent, computer, screen }: { agent: Agent; computer: Compute
       const wantShot = ["click", "double_click", "right_click", "drag"].includes(i.kind) || (i.kind === "key" && i.keys === "Enter");
       const snapshot = wantShot && shots.current < MAX_SNAPSHOTS ? (screen.current?.snapshot() ?? undefined) : undefined;
       if (snapshot) shots.current++;
-      setSteps((s) => [...s, { ...i, at: Date.now() - start, snapshot }]);
+      const at = Date.now() - start;
+      setSteps((s) => [...s, { ...i, at, snapshot }]);
+      // on a VM, also note which page element it was, so the routine survives layout changes
+      if (computer.kind === "vm" && i.x !== undefined && i.y !== undefined && ["click", "double_click", "right_click"].includes(i.kind)) {
+        api<{ element: PageElement | null }>("POST", `/api/computers/${computer.id}/act`, { action: { action: "inspect", x: i.x, y: i.y } }).then(
+          (r) => r.element && setSteps((s) => s.map((x) => (x.at === at ? { ...x, element: r.element! } : x))),
+          () => {},
+        );
+      }
     };
     return () => {
       teachSink.current = null;
     };
-  }, [start, screen]);
+  }, [start, screen, computer.id, computer.kind]);
 
   const elapsed = Math.floor((now - start) / 1000);
   const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;

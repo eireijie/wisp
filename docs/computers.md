@@ -1,12 +1,14 @@
 # Computers
 
-Agents in Warren work on computers, the way people do. An agent opens apps and websites, signs in once and stays signed in, and keeps its files there. You can watch any computer live, take control whenever you like, and hand it back. Agents are only headless (no computer) when someone chooses that on the agent's **Computer** tab.
+Agents in Warren work on computers of their own, the way people do. An agent opens apps and websites, signs in once and stays signed in, and keeps its files there. You can watch any computer live, take control whenever you like, and hand it back. Agents are only headless (no computer) when someone chooses that on the agent's **Computer** tab.
+
+The usual computer is a **VM on one of your devices**: its own Linux desktop, separate from everything else on the device. Setting one up is step 2 of **Get started**, right after connecting a device.
 
 There are three kinds of computer:
 
 | Kind | What it is | Needs |
 | --- | --- | --- |
-| **VM on a device** | A Linux desktop (Xfce, Chromium, a terminal) in a Docker container on one of your devices. Its own screen, so agents never touch yours. | Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman on that device |
+| **VM on a device** | A Linux desktop (Xfce, Chromium, a terminal) on one of your devices. Its own screen, files and sign-ins, so agents never touch yours. | Apple's `container` (Macs with Apple silicon), Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman. `warren setup` installs one. |
 | **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, and agents use it only while you lend it. | macOS, Windows, or Linux with X11 (see below) |
 | **Orgo cloud computer** | A Linux desktop from [orgo.ai](https://orgo.ai) that keeps running when your devices are off. | An Orgo API key in **Settings → Computers** |
 
@@ -14,16 +16,28 @@ Several agents can share one computer. They share its files, browser and sign-in
 
 ## Setting one up
 
-- **Computers → Add computer**, or on an agent's **Computer** tab, or when you add an agent.
-- `warren doctor` on a device says whether it can offer its screen and run VMs.
+- **Get started → Give your agents a computer**, **Computers → Add computer**, an agent's **Computer** tab, or when you add an agent.
+- `warren doctor` on a device says whether it can run VMs and offer its screen.
 
 ### VMs
 
-The first VM on a device builds the `warren-computer` image from `docker/computer` (a few minutes). After that a VM starts in seconds. Its home folder lives in a Docker volume, so browser profiles and sign-ins survive restarts. Its `~/files` folder is shared with the device: when the agent's harness runs on the same device, that folder is its working folder, and Chromium saves downloads there.
+On the device, run `warren setup` once. It checks what's installed, offers to install a VM engine (asking first: Apple's `container` with Homebrew on a Mac with Apple silicon; on Linux it shows the commands for Docker or Podman), and gets the VM image. A device also starts getting the image as soon as `warren node start` connects, so the first VM starts in seconds.
 
-The VM publishes no ports. Its VNC server only listens inside the container; the device reaches it with `docker exec … socat` and relays it to the hub.
+The image comes from `docker/computer`. Its tag is a hash of that recipe, so devices download the image CI published for exactly that recipe (`ghcr.io/<owner>/warren-computer:<hash>`, from `.github/workflows/vm-image.yml`; make the package public so devices can pull it) and build it themselves when there isn't one (a few minutes, once).
 
-Settings in the device's `~/.warren/node.json`: `"vmEngine": "podman"` to use Podman.
+A VM's home folder lives in a volume, so browser profiles and sign-ins survive restarts. Its `~/files` folder is shared with the device, and Chromium saves downloads there. The VM publishes no ports: its VNC server and browser debugging port only listen inside it, and the device reaches them with the engine's `exec`.
+
+Settings in the device's `~/.warren/node.json`: `"vmEngine": "container"`, `"docker"` or `"podman"` to pick the engine (by default: Apple's container on a Mac, then Docker, then Podman).
+
+### Agents that run inside their VM
+
+Claude Code and Codex come with the VM, so an agent using them can run entirely inside its VM: its shell, files and browser all stay there, and it can't touch the device. That's the default for a new agent with a VM on its own device, and you can switch on its **Computer** tab (**Where it runs**). Inside its VM an agent has full access (the VM is its sandbox) unless it's set to read-only, so it can install what it needs and finish the job.
+
+Sign the harness in once per VM: on the agent's **Computer** tab press **Sign in to Claude Code** (or Codex). A terminal opens on the VM's screen and you get control to finish signing in; the browser for it opens in the VM too. Agents that share a VM share that sign-in.
+
+Coding tasks work the same: the agent gets its own clone of the team's repo in the VM's shared folder, and its commits come back to the device's copy for reviews and merges.
+
+Harnesses that don't come with the VM (Hermes, Gemini CLI, OpenCode…) run directly on the device, where only the device's owner can ask them for things.
 
 ### Your own screen
 
@@ -70,10 +84,12 @@ Agents call `computer_ask_human` when they need a person: to sign in, type a 2FA
 
 ## Teaching a task
 
-**Teach a task** (on a computer, or an agent's **Routines** tab): do the task once while the agent watches. Warren records your clicks, typing and key presses with a screenshot before each click, and you can add notes as you go. When you're done, name it. The agent studies the recording (it can look at the screenshots), writes the steps up as a routine in its memory folder, and tells you what it learned.
+**Teach a task** (on a computer, or an agent's **Routines** tab): do the task once while the agent watches. Warren records your clicks, typing and key presses with a screenshot before each click, and on a VM also which web page element you clicked ("the New expense button on expenses.example.com"), so the routine still works when the page's layout changes. You can add notes as you go. When you're done, name it. The agent studies the recording (it can look at the screenshots), writes the steps up as a routine in its memory folder, and tells you what it learned.
 
 Routines run when someone presses **Run now**, when you ask the agent, or on a schedule (every day, weekdays, a weekly day, hourly, or any cron expression), in your time zone. The steps are an ordinary note you can edit.
 
 ## The tools agents get
 
 With a computer, an agent's `warren-mcp` tools include `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run` (VMs and cloud computers) and `computer_ask_human`. Coordinates are pixels in the latest screenshot (scaled to fit 1280×800), and every action returns a fresh screenshot. Every agent also has `approval_request`, `routine_save`, `routine_list` and `file_view`.
+
+**Browser tools.** With a VM, an agent also gets [Playwright MCP](https://github.com/microsoft/playwright-mcp) on the VM's own Chromium, the one you watch, with its sign-ins: `browser_navigate`, `browser_snapshot` (the page as text, with a ref for each element), `browser_click`, `browser_type`, `browser_fill_form`, `browser_select_option`, `browser_tabs`, `browser_wait_for` and more. Working with page elements instead of pixels is faster, cheaper and much more reliable on websites; agents use the screenshot tools for everything else. The browser tools run inside the VM whichever way the agent runs.

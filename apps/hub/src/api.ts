@@ -78,6 +78,7 @@ const SETTINGS = z
     appearance: APPEARANCE,
     headless: z.boolean(),
     anyoneCanAsk: z.boolean(),
+    runIn: z.enum(["computer", "device"]),
   })
   .partial()
   .strict();
@@ -235,7 +236,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     return !!n && n.workspaceId === c.workspaceId && (n.ownerId === c.actor.id || n.shared);
   };
   /** The person whose device an agent's harness runs on directly; only they change or connect to it (unless they shared the device). */
-  const deviceOwnerOf = (a: { nodeId: string | null }) => {
+  const deviceOwnerOf = (a: Parameters<typeof hub.harnessOnDevice>[0]) => {
     const node = a.nodeId && hub.harnessOnDevice(a) ? store.node(a.nodeId) : undefined;
     return node && !node.shared ? node.ownerId : null;
   };
@@ -326,6 +327,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const sharedNotes = vault.list((p) => canRead(p) && p.startsWith("shared/")).filter((n) => n.path !== "shared/Welcome.md");
     return {
       devices: nodes.map((n) => ({ id: n.id, name: n.name, online: hub.isNodeOnline(n.id) })),
+      // computers agents can share: VMs and cloud computers (never someone's own screen)
+      computers: store
+        .computers(c.workspaceId)
+        .filter((x) => x.kind !== "device")
+        .map((x) => ({ id: x.id, name: x.name, kind: x.kind, nodeId: x.nodeId, status: x.status })),
       agents: agents.map(agentView),
       firstReply: firstReply ?? null,
       memoryNotes: [...agentNotes, ...sharedNotes].slice(0, 5).map((n) => ({ path: n.path, title: n.title })),
@@ -614,10 +620,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       reply,
     );
     if (!body) return;
-    const deviceOwner = deviceOwnerOf(agent);
-    if (deviceOwner && deviceOwner !== c.actor.id) {
-      const name = store.user(deviceOwner)?.name ?? "its owner";
-      return reply.code(403).send({ error: `@${agent.handle} runs directly on ${name}'s device, so only ${name} can change it` });
+    // whoever's device the agent runs directly on (now, or after this change) decides about it
+    const after = { ...agent, ...body, settings: { ...agent.settings, ...body.settings } };
+    for (const owner of [deviceOwnerOf(agent), deviceOwnerOf(after)]) {
+      if (!owner || owner === c.actor.id) continue;
+      const name = store.user(owner)?.name ?? "its owner";
+      return reply.code(403).send({ error: `@${agent.handle} ${owner === deviceOwnerOf(agent) ? "runs" : "would run"} directly on ${name}'s device, so only ${name} can ${owner === deviceOwnerOf(agent) ? "change it" : "make that change"}` });
     }
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
@@ -983,6 +991,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       onBehalfOf: o.onBehalfOf,
     });
     db.prepare("UPDATE tasks SET thread_id = ? WHERE id = ?").run(msg.id, task.id);
+    hub.broadcast(o.workspaceId, { type: "tasks_changed" });
     return store.task(task.id)!;
   }
 
@@ -992,19 +1001,43 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const body = parse(z.object({ to: z.string(), title: z.string().min(1).max(200), brief: z.string().max(20_000), channelId: z.string().optional(), fileIds: z.array(z.string()).default([]) }), req.body, reply);
     if (!body) return;
-    const target = store.agentByHandle(c.workspaceId, body.to.replace(/^@/, "")) ?? store.agent(body.to);
-    if (!target || target.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    // "auto": whoever should hand work out (a boss, else a team lead); "team:<name>": that team's lead
+    const teamTo = body.to.startsWith("team:") ? store.teams(c.workspaceId).find((t) => t.name === body.to.slice(5).toLowerCase()) : undefined;
+    if (body.to.startsWith("team:") && !teamTo?.leadId) return reply.code(404).send({ error: teamTo ? `team ${teamTo.name} has no lead yet` : "team not found" });
+    const target = body.to === "auto" ? dispatcher(c.workspaceId) : teamTo ? store.agent(teamTo.leadId!) : (store.agentByHandle(c.workspaceId, body.to.replace(/^@/, "")) ?? store.agent(body.to));
+    if (!target || target.workspaceId !== c.workspaceId) return reply.code(404).send({ error: body.to === "auto" ? "add an agent first" : "agent not found" });
+    if (body.to === "auto") body.brief = `${body.brief}\n\n(You were picked to route this: do it yourself if it's yours, or hand it to the agent who should with task_delegate and say who.)`;
+    const forTeam = teamTo;
     // an agent handing work to its own team (as lead, teammate or boss) does it in the team's channel
     const teams = store.teams(c.workspaceId);
     const shared =
       c.actor.kind === "agent"
         ? teams.find((t) => t.channelId && t.members.some((m) => m.agentId === target.id) && (t.members.some((m) => m.agentId === c.actor.id) || teamChain(t, teams).includes(c.actor.id)))
         : undefined;
-    const ch = body.channelId ? channelVisible(c, body.channelId) : shared ? store.channel(shared.channelId!) : store.channelByName(c.workspaceId, "general");
+    // a person's task for a team goes to its channel; for one agent, to their DM with it
+    const ch = body.channelId
+      ? channelVisible(c, body.channelId)
+      : shared
+        ? store.channel(shared.channelId!)
+        : forTeam?.channelId
+          ? store.channel(forTeam.channelId)
+          : c.actor.kind === "user"
+            ? store.dmChannel(c.workspaceId, c.actor.id, target.id)
+            : store.channelByName(c.workspaceId, "general");
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     const running = c.actor.kind === "agent" ? hub.currentRun(c.actor.id) : undefined;
     return delegate({ workspaceId: c.workspaceId, author: c.actor, from: c.actor, target, title: body.title, brief: body.brief, channelId: ch.id, fileIds: body.fileIds, hop: running ? running.hop + 1 : 0, onBehalfOf: requesterOf(c) });
   });
+
+  /** Who gets a task nobody assigned: the agent teams report to, else a team lead, else an agent that sounds like a chief, else the first. */
+  function dispatcher(workspaceId: string) {
+    const teams = store.teams(workspaceId);
+    const agents = store.agents(workspaceId);
+    const boss = teams.map((t) => t.reportsTo).find((id) => id && !teams.some((x) => x.members.some((m) => m.agentId === id) && x.reportsTo));
+    const lead = teams.find((t) => t.leadId)?.leadId;
+    const chief = agents.find((a) => /chief|boss|lead|manager/i.test(`${a.handle} ${a.name}`));
+    return store.agent(boss ?? lead ?? chief?.id ?? agents[0]?.id ?? "");
+  }
 
   /** When coding work is done, the team's reviewer (or else its lead) gets a review task for the branch. */
   function requestReview(task: NonNullable<ReturnType<typeof store.task>>, onBehalfOf: string | null) {
@@ -1041,6 +1074,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const body = parse(z.object({ status: z.enum(["open", "in_progress", "done", "failed"]), result: z.string().max(40_000).optional() }), req.body, reply);
     if (!body) return;
     const updated = store.updateTask(task.id, body.status, body.result)!;
+    hub.broadcast(c.workspaceId, { type: "tasks_changed" });
     if ((body.status === "done" || body.status === "failed") && task.channelId) {
       const requester = task.from.kind === "agent" ? `@${store.agent(task.from.id)?.handle} ` : "";
       // Mentioning the requesting agent hands the result back to it.

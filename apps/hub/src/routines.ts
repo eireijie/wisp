@@ -30,7 +30,8 @@ export function stepLine(s: RecordedStep, i: number): string {
             : s.kind === "note"
               ? `said: "${s.text ?? ""}"`
               : `${{ click: "clicked", double_click: "double-clicked", right_click: "right-clicked" }[s.kind]}${where}`;
-  return `${i + 1}. [${clock(s.at)}] ${what}${s.imageFileId ? ` (screen before: file ${s.imageFileId})` : ""}`;
+  const on = s.element ? ` on the ${s.element.role}${s.element.name ? ` "${s.element.name}"` : ""}${s.element.selector ? ` (${s.element.selector})` : ""} at ${s.element.url}` : "";
+  return `${i + 1}. [${clock(s.at)}] ${what}${on}${s.imageFileId ? ` (screen before: file ${s.imageFileId})` : ""}`;
 }
 
 /**

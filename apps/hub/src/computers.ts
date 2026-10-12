@@ -176,7 +176,7 @@ export class Computers {
   /** `requester`: the person an agent is working for (see the API's requesterOf); by default, whoever asked for its current run. */
   async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number; requester?: string | null } = {}): Promise<unknown> {
     const ctl = this.control.get(c.id);
-    const input = !["screenshot", "status", "start", "stop", "destroy"].includes(action.action);
+    const input = !["screenshot", "status", "start", "stop", "destroy", "harness_status", "signin", "inspect"].includes(action.action);
     if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null);
     if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`warren node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
@@ -509,6 +509,8 @@ export function describe(a: ComputerAction): string {
       return `Running ${a.command.split(/\s+/)[0]}`;
     case "open":
       return `Opening ${a.target.slice(0, 60)}`;
+    case "signin":
+      return `Opening a sign-in for ${a.harness}`;
     default:
       return "Working";
   }

@@ -104,7 +104,7 @@ You need the hub's URL and a device token from **Devices → Add device**.
 
 ```bash
 npm link                      # optional: puts `warren` on PATH; otherwise use `node bin/warren.mjs`
-warren doctor                 # harnesses found, whether agents can use this screen, whether VMs work
+warren setup                  # harnesses, a VM engine, and the VM image (asks before installing anything)
 warren node start --hub <hub URL> --token <token> --name "<device name>"
 ```
 
@@ -115,13 +115,13 @@ Keep it running with the system's service manager. The exact steps for macOS (La
 - **macOS:** launchd starts programs with a minimal `PATH`, so write the person's `PATH` into the LaunchAgent, or `warren node` won't find `claude`, `codex` and the rest.
 - **Screen access:** a device's own screen is off by default. Only if the person wants to use it from Warren (and lend it to agents) do they run `warren node screen on`, and macOS then needs **Screen Recording** and **Accessibility** for whatever runs `warren node`. `warren doctor` prints exactly what to add. Tell the person; don't run it or change it yourself.
 
-**VMs:** if the device has Docker, build the desktop image now so the first VM starts quickly. Run `docker build -t warren-computer:<N> docker/computer`, where `<N>` is the number in `IMAGE` in `apps/node/src/computers/docker.ts`. Agents get VMs from **Computers → Add computer → VM** in the app.
+**VMs:** agents work on VMs on the device, so `warren setup` matters. It asks before installing a VM engine: ask the person and pass their answer on (or run `warren setup --yes` once they've agreed). On a Mac with Apple silicon it installs Apple's `container` with Homebrew; on Linux it prints the commands for Docker or Podman, which need `sudo`, so leave those to the person. It then gets the VM image (a download, or a build of a few minutes). In the app, **Get started → Give your agents a computer** creates the first VM.
 
 ## 5. Check and report
 
 - **Hub:** the service is active, `/healthz` answers, and the URL loads in a browser.
 - **Device:** the device shows **online** in **Devices**, with its version, and `warren doctor` lists the harnesses you expect.
-- **Report:** tell the person what's left for them, such as creating the workspace, granting screen permissions, signing in to harnesses, or adding agents in **Agents → Add agent**.
+- **Report:** tell the person what's left for them, such as creating the workspace, creating their agents' computer and first agent in **Get started**, and signing the harness in inside the VM (the agent's **Computer** tab → **Sign in**).
 
 ## Starting over
 

@@ -5,12 +5,12 @@ import type { Duplex } from "node:stream";
 import os from "node:os";
 import type { ComputerAction, ComputerSpec, DeviceCapabilities, DeviceConfig } from "@warren/core";
 import { exec, has, perform, type Driver } from "./driver.ts";
-import { DockerVm, containerEngine } from "./docker.ts";
+import { DockerVm, ENGINE_LABEL, detectEngine, ensureImage, imageExists, recipeTag, LOCAL_IMAGE, type Engine } from "./docker.ts";
 import { MacDesktop } from "./macos.ts";
 import { WindowsDesktop } from "./windows.ts";
 import { X11Driver } from "./x11.ts";
 
-export { DockerVm } from "./docker.ts";
+export { DockerVm, detectEngine } from "./docker.ts";
 export { perform, jpegSize, type Driver } from "./driver.ts";
 
 /** A box for live view: sharper than what agents get, still light enough to stream. */
@@ -19,7 +19,7 @@ const LIVE_BOX = { width: 1600, height: 1000 };
 export interface HostOptions {
   /** the node's state folder (VM shared folders live under it) */
   dir: string;
-  /** "docker" or "podman"; default: whichever is installed */
+  /** "container" (Apple), "docker" or "podman"; default: whichever is installed and running */
   vmEngine?: string;
   /** let shell commands from Warren run on this device's own screen computer */
   allowDeviceShell?: boolean;
@@ -37,25 +37,70 @@ export interface Tunnel {
  */
 export class ComputerHost {
   private drivers = new Map<string, Driver>();
-  private engine: Promise<string | null> | null = null;
+  private engine: Promise<{ engine: Engine | null; detail: string }> | null = null;
   private watches = new Map<string, { stop: () => void }>();
+  /** getting the VM image ready ahead of the first VM, so it starts in seconds */
+  private preparing: Promise<void> | null = null;
+  private imageState: { state: "ready" | "preparing" | "missing" | "failed"; detail: string } | null = null;
 
   constructor(private opts: HostOptions) {}
 
-  private vmEngine() {
-    this.engine ??= containerEngine(this.opts.vmEngine);
+  private detect() {
+    this.engine ??= detectEngine(this.opts.vmEngine).then((r) => {
+      // look again next time if nothing was ready (someone may be installing one right now)
+      if (!r.engine) this.engine = null;
+      return r;
+    });
     return this.engine;
+  }
+
+  private async vmEngine(): Promise<Engine | null> {
+    return (await this.detect()).engine;
   }
 
   /** What this device can offer. Cheap enough to run at every connect. */
   async capabilities(): Promise<DeviceCapabilities> {
-    const engine = await this.vmEngine();
-    return {
-      platform: process.platform,
-      arch: process.arch,
-      screen: await screenSupport(),
-      vm: engine ? { ok: true, detail: `${engine} is running` } : { ok: false, detail: "Install Docker (Docker Desktop, OrbStack, Colima or Docker Engine) or Podman to run VMs on this device." },
-    };
+    const { engine, detail } = await this.detect();
+    let vm: DeviceCapabilities["vm"] = { ok: false, detail };
+    if (engine) {
+      if (!this.imageState || this.imageState.state === "missing") this.imageState = (await imageExists(engine, `${LOCAL_IMAGE}:${recipeTag()}`)) ? { state: "ready", detail: "" } : { state: "missing", detail: "" };
+      const image = this.imageState;
+      vm = {
+        ok: true,
+        engine: ENGINE_LABEL[engine.kind],
+        image: image.state,
+        detail: image.state === "ready" ? `${ENGINE_LABEL[engine.kind]} is running and the VM image is ready` : image.state === "preparing" ? image.detail || "Getting the VM image ready…" : image.state === "failed" ? `Couldn't get the VM image ready: ${image.detail}` : `${ENGINE_LABEL[engine.kind]} is running; the first VM gets its image (a few minutes)`,
+      };
+    }
+    return { platform: process.platform, arch: process.arch, screen: await screenSupport(), vm };
+  }
+
+  /**
+   * Get the VM image onto this device now, so the first VM doesn't wait for it. `onChange` hears
+   * each step (to tell the hub). Does nothing without an engine or once the image is here.
+   */
+  prepareImage(onChange: () => void = () => {}): Promise<void> {
+    this.preparing ??= (async () => {
+      const engine = await this.vmEngine();
+      if (!engine) return;
+      if (await imageExists(engine, `${LOCAL_IMAGE}:${recipeTag()}`)) {
+        this.imageState = { state: "ready", detail: "" };
+        return;
+      }
+      this.imageState = { state: "preparing", detail: "" };
+      onChange();
+      try {
+        await ensureImage(engine, (text) => {
+          this.imageState = { state: "preparing", detail: text };
+          onChange();
+        });
+        this.imageState = { state: "ready", detail: "" };
+      } catch (err) {
+        this.imageState = { state: "failed", detail: (err as Error).message.slice(0, 300) };
+      }
+      onChange();
+    })().finally(() => (this.preparing = null));
+    return this.preparing;
   }
 
   async driver(spec: ComputerSpec, onStatus?: (text: string) => void): Promise<Driver> {
@@ -75,12 +120,19 @@ export class ComputerHost {
     return d;
   }
 
+  /** The VM behind a spec, when this device runs it in a container. */
+  async vm(spec: ComputerSpec): Promise<DockerVm | null> {
+    if (spec.kind !== "vm") return null;
+    const d = await this.driver(spec);
+    return d instanceof DockerVm ? d : null;
+  }
+
   /** The shared folder of a VM this device hosts (the agents' working folder), creating it if needed. */
   vmFiles(spec: ComputerSpec): string | null {
     if (spec.kind !== "vm") return null;
     const d = this.drivers.get(spec.id);
     if (d instanceof DockerVm) return d.filesDir;
-    return new DockerVm(spec, this.opts.dir, "docker").filesDir;
+    return new DockerVm(spec, this.opts.dir, { bin: "docker", kind: "docker" }).filesDir;
   }
 
   async act(spec: ComputerSpec, action: ComputerAction, onStatus?: (text: string) => void): Promise<unknown> {

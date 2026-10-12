@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import type { Duplex } from "node:stream";
-import { AGENT_SCREEN, parseKeys, toScreen, type ComputerAction, type KeyCombo, type RunOutput, type Screenshot } from "@warren/core";
+import { AGENT_SCREEN, parseKeys, toScreen, type ComputerAction, type KeyCombo, type PageElement, type RunOutput, type Screenshot } from "@warren/core";
 
 export interface Size {
   width: number;
@@ -41,6 +41,12 @@ export interface Driver {
   status?(): Promise<{ status: "ready" | "stopped" | "starting" | "error"; detail: string }>;
   /** a connection to its VNC server, for smooth live view; absent = live view uses screenshots */
   vnc?(): Promise<Duplex>;
+  /** VMs: whether a harness that comes with the VM is signed in there (null: it doesn't come with it) */
+  signedIn?(harness: string): Promise<boolean | null>;
+  /** VMs: open a terminal on the screen that signs a harness in */
+  openSignIn?(harness: string): Promise<void>;
+  /** VMs: the web page element under a screen point, in the browser people see */
+  inspectAt?(x: number, y: number): Promise<PageElement | null>;
 }
 
 export class ActionError extends Error {}
@@ -109,6 +115,17 @@ export async function perform(driver: Driver, a: ComputerAction): Promise<unknow
       return { ok: true };
     case "status":
       return driver.status ? driver.status() : { status: "ready", detail: "" };
+    case "harness_status":
+      return { signedIn: driver.signedIn ? await driver.signedIn(a.harness) : null };
+    case "signin":
+      if (!driver.openSignIn) throw new ActionError(`${driver.label} can't sign harnesses in`);
+      await driver.openSignIn(a.harness);
+      return { ok: true };
+    case "inspect": {
+      if (!driver.inspectAt) return { element: null };
+      const p = await at(a.x, a.y, a.space);
+      return { element: await driver.inspectAt(p.x, p.y).catch(() => null) };
+    }
   }
 }
 

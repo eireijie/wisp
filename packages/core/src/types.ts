@@ -33,6 +33,11 @@ export interface AgentSettings {
    * ask it for things. The device owner can open it up to everyone in the workspace.
    */
   anyoneCanAsk?: boolean;
+  /**
+   * Where its harness runs: inside its computer (a VM on its device; its shell, files and browser
+   * all stay in there) or directly on the device. Unset means the device, as agents did before.
+   */
+  runIn?: "computer" | "device";
 }
 
 /** A model a device's harness can run, as reported by that device. */
@@ -217,6 +222,18 @@ export interface Routine {
   createdAt: string;
 }
 
+/** A web page element, as a person would point at it: "the Export button on reports.example.com". */
+export interface PageElement {
+  url: string;
+  title?: string;
+  /** button, link, textbox, checkbox… */
+  role: string;
+  /** its visible text or label */
+  name: string;
+  /** a CSS selector when it has a stable one (id, name, data-testid) */
+  selector?: string;
+}
+
 /** One thing a person did while teaching an agent a task. Coordinates are in the screenshot's pixels. */
 export interface RecordedStep {
   /** ms since the recording started */
@@ -231,6 +248,8 @@ export interface RecordedStep {
   direction?: "up" | "down" | "left" | "right";
   /** a screenshot right before this step (an uploaded file) */
   imageFileId?: string;
+  /** what was clicked, when it was in a web page on a VM */
+  element?: PageElement;
 }
 
 /**

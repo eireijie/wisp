@@ -2,13 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { HubToNode, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
+import { HubToNode, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
 import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
 import { runUpdate, version } from "@warren/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
+import { VM_HOME, type DockerVm } from "./computers/docker.ts";
+import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
-import { mergeBranch, prepareCheckout } from "./git.ts";
+import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
 
 const MCP_BIN = fileURLToPath(new URL("../../../bin/warren-mcp.mjs", import.meta.url));
 
@@ -40,6 +42,8 @@ export interface NodeConfig {
   paused?: boolean;
   /** where to look for existing agents (default: the home folder); for tests */
   discoverHome?: string;
+  /** don't get the VM image ready when connecting (it's fetched when the first VM starts instead) */
+  noPrepare?: boolean;
 }
 
 type Log = (msg: string) => void;
@@ -62,6 +66,8 @@ export class NodeDaemon {
   private tunnels = new Map<string, Tunnel>();
   /** per-agent tokens for harnesses, so a harness never holds this device's own token */
   private agentTokens: Record<string, string>;
+  /** which version of Warren's tools each VM has (by container name) */
+  private vmTools = new Map<string, string>();
   /** shareScreen and paused, as last read from node.json (people change them there with the CLI) */
   private local: { shareScreen: boolean; paused: boolean };
 
@@ -195,6 +201,8 @@ export class NodeDaemon {
       this.log(`connected to ${this.cfg.hub} as "${this.cfg.name}" hosting ${agents.map((a) => "@" + a.handle).join(", ") || "no agents yet"}`);
       this.send({ type: "hello", nodeName: this.cfg.name, agents: agents.map((a) => a.id), version: await version() });
       await this.sendCapabilities();
+      // agents work on VMs: have the image here before the first one is needed
+      if (!this.local.paused && !this.cfg.noPrepare) void this.computers.prepareImage(() => void this.sendCapabilities());
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
       this.send({ type: "catalog", catalog: await this.harnessCatalog() });
     } else if (msg.type === "computer") {
@@ -279,9 +287,31 @@ export class NodeDaemon {
     const adapter = this.registry[agent.harness];
     if (!adapter) return this.send({ type: "run_failed", runId: run.runId, error: `no headless adapter for ${agent.harness} yet; connect it with warren-mcp instead` });
 
-    // the device owner decides whether "full" access is allowed, not the hub
+    // its VM, when it has one here: it runs inside it, or at least gets its browser
+    let vm: DockerVm | null = null;
+    if (run.computer?.kind === "vm") {
+      try {
+        vm = await this.computers.vm(run.computer);
+        await vm?.ready();
+      } catch (err) {
+        if (run.inComputer) return this.send({ type: "run_failed", runId: run.runId, error: `couldn't start ${run.computer.name}: ${(err as Error).message}` });
+        vm = null;
+      }
+    }
+    const inside = !!run.inComputer && !!vm;
+    if (run.inComputer && !vm) return this.send({ type: "run_failed", runId: run.runId, error: "its computer isn't a VM on this device" });
+    if (inside) {
+      const signed = await vm!.signedIn(agent.harness).catch(() => null);
+      if (signed === false) {
+        const label = harnessLabel(agent.harness);
+        return this.send({ type: "run_failed", runId: run.runId, error: `${label} isn't signed in on ${run.computer!.name} yet. Open @${agent.handle}'s page → Computer and press "Sign in to ${label}" (you only do this once).` });
+      }
+    }
+
+    // the device owner decides whether "full" access is allowed here, not the hub; inside its own VM the VM is the sandbox
     let access: AccessLevel = agent.settings?.access ?? "edit";
-    if (access === "full" && !this.cfg.allowFullAccess) {
+    if (inside) access = access === "read-only" ? "read-only" : "full";
+    else if (access === "full" && !this.cfg.allowFullAccess) {
       access = "edit";
       this.send({ type: "run_event", runId: run.runId, event: { type: "status", text: `Full access is off on ${this.cfg.name}; running with edit access.` } });
     }
@@ -292,7 +322,7 @@ export class NodeDaemon {
     // coding tasks run in their own checkout of the team repo, on the task's branch
     if (run.workspace) {
       try {
-        cwd = await prepareCheckout(this.cfg.dir, agent.handle, run.workspace);
+        cwd = inside ? await prepareClone(this.cfg.dir, vm!.filesDir, run.workspace) : await prepareCheckout(this.cfg.dir, agent.handle, run.workspace);
         this.send({ type: "run_event", runId: run.runId, event: { type: "status", text: `Working in ${run.workspace.mode === "work" ? "" : "a read-only checkout of "}branch ${run.workspace.branch}` } });
       } catch (err) {
         return this.send({ type: "run_failed", runId: run.runId, error: `couldn't set up the repo: ${(err as Error).message}` });
@@ -301,7 +331,18 @@ export class NodeDaemon {
     const sessionKey = `${agent.id}:${run.channelId}:${run.threadId ?? "main"}`;
     const abort = new AbortController();
     this.aborts.set(run.runId, abort);
-    this.log(`@${agent.handle} (${adapter.label}) working on ${run.runId}`);
+    this.log(`@${agent.handle} (${adapter.label}) working on ${run.runId}${inside ? ` inside ${run.computer!.name}` : ""}`);
+    let mcp: McpServerSpec, browser: McpServerSpec | undefined;
+    try {
+      mcp = inside ? await this.vmMcpSpec(agent.id, vm!) : await this.mcpSpec(agent.id);
+      // the VM's Chromium as page-element tools, run inside the VM either way
+      if (vm) browser = inside ? { command: "warren-browser-mcp", args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", "warren", vm.name, "warren-browser-mcp"], env: {} };
+    } catch (err) {
+      this.aborts.delete(run.runId);
+      return this.send({ type: "run_failed", runId: run.runId, error: `couldn't set up its tools: ${(err as Error).message}` });
+    }
+    // stopping the engine's `exec` doesn't stop what it started in the VM
+    if (inside) abort.signal.addEventListener("abort", () => void vm!.stopRun(run.runId), { once: true });
 
     const attempt = async (sessionId: string | null) =>
       adapter.run(
@@ -313,7 +354,9 @@ export class NodeDaemon {
           fast: agent.settings?.fast ?? false,
           access,
           sessionId,
-          mcp: await this.mcpSpec(agent.id),
+          mcp,
+          browser,
+          launch: inside ? vm!.launcher(run.runId) : undefined,
           signal: abort.signal,
           options: this.cfg.harnessOptions?.[agent.harness],
         },
@@ -337,6 +380,8 @@ export class NodeDaemon {
         delete this.sessions[sessionKey];
         result = await attempt(null);
       }
+      // commits made inside the VM go to the device's copy of the repo, for reviews and merges
+      if (inside && run.workspace) await bringBack(this.cfg.dir, cwd, run.workspace).catch((err) => this.log(`couldn't bring ${run.workspace!.branch} back from ${run.computer!.name}: ${(err as Error).message}`));
       this.send({ type: "run_done", runId: run.runId, finalText: result.finalText });
       this.log(`@${agent.handle} finished ${run.runId}`);
     } catch (err) {
@@ -373,6 +418,19 @@ export class NodeDaemon {
       args: [MCP_BIN],
       env: token ? { WARREN_URL: this.cfg.hub, WARREN_TOKEN: token } : { WARREN_URL: this.cfg.hub, WARREN_TOKEN: this.cfg.token, WARREN_AGENT: agentId },
     };
+  }
+
+  /** warren-mcp for a harness inside a VM: Warren's tools copied into the VM, talking to the hub from in there. */
+  private async vmMcpSpec(agentId: string, vm: DockerVm): Promise<McpServerSpec> {
+    const token = await this.harnessToken(agentId);
+    if (!token) throw new Error("the hub didn't give this agent a token of its own; update the hub");
+    const bundle = await mcpBundle();
+    const file = `${VM_HOME}/.warren/warren-mcp.mjs`;
+    if (this.vmTools.get(vm.name) !== bundle.hash) {
+      await vm.writeFile(file, bundle.code);
+      this.vmTools.set(vm.name, bundle.hash);
+    }
+    return { command: "node", args: [file], env: { WARREN_URL: await vm.hubUrl(this.cfg.hub), WARREN_TOKEN: token } };
   }
 
   private async harnessToken(agentId: string): Promise<string | null> {

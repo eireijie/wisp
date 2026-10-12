@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
  *   #/teams[/<teamId>[/<tab>]]       teams, the org chart, and each team's chart
  *   #/about                          what agents remember about you
+ *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
  *   #/nodes                          devices
  *   #/settings                       members & access
@@ -20,6 +21,7 @@ export type Route =
   | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
   | { view: "teams"; teamId: string | null; tab?: TeamTab | null }
   | { view: "about" }
+  | { view: "tasks" }
   | { view: "computers"; computerId: string | null; teach?: string | null }
   | { view: "nodes" }
   | { view: "settings" }
@@ -43,6 +45,8 @@ export function parseRoute(hash: string): Route {
       return { view: "teams", teamId: parts[1] ?? null, tab: TEAM_TABS.find((t) => t === parts[2]) ?? null };
     case "about":
       return { view: "about" };
+    case "tasks":
+      return { view: "tasks" };
     case "computers":
       return { view: "computers", computerId: parts[1] ?? null, teach: parts[2] === "teach" ? (parts[3] ?? null) : null };
     case "nodes":
@@ -72,6 +76,8 @@ export function href(r: Route): string {
       return "#/teams" + (r.teamId ? `/${r.teamId}${r.tab && r.tab !== "chart" ? `/${r.tab}` : ""}` : "");
     case "about":
       return "#/about";
+    case "tasks":
+      return "#/tasks";
     case "computers":
       return "#/computers" + (r.computerId ? `/${r.computerId}${r.teach ? `/teach/${r.teach}` : ""}` : "");
     case "nodes":

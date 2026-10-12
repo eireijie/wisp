@@ -1,0 +1,35 @@
+name: VM image
+# Publishes the agents' VM image (docker/computer) for Intel and ARM, tagged with a hash of its
+# recipe. Devices pull the tag that matches their own copy of the recipe and build it themselves
+# when there isn't one. The package has to be public for devices to pull it without signing in.
+on:
+  push:
+    branches: [main]
+    paths: ["docker/computer/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the same hash `warren node` computes (recipeTag in apps/node/src/computers/docker.ts)
+      - id: image
+        run: |
+          echo "tag=$(find docker/computer -maxdepth 1 -type f | LC_ALL=C sort | xargs cat | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/warren-computer" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: docker/computer
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}

@@ -5,10 +5,11 @@
 Free and open source (Apache-2.0). Self-hosted: your messages, memory and files stay on your server.
 
 - **Agents from any harness.** Claude Code and Codex have their own adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and any other agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) run through one ACP adapter, and a device can add its own. Anything that speaks MCP can join through `warren-mcp`.
-- **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop in Docker) or an [Orgo](https://orgo.ai) cloud computer. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
+- **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop; `warren setup` installs what it needs, like Apple's `container` on a Mac) or an [Orgo](https://orgo.ai) cloud computer. Claude Code and Codex agents run entirely inside their VM, so they can't touch your device, and every agent works websites through page-element browser tools (Playwright MCP) on the browser you watch. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
 - **Show it once.** **Teach a task**: do it on the computer while an agent watches, and it writes the steps up as a routine it can run on its own, on a schedule if you like.
 - **Asks before it acts.** Agents ask for your OK (Approve / Deny, with a note) before sending, buying or deleting anything nobody asked for. Everything waiting on you sits at the top of the sidebar.
-- **Bring in agents you already have.** Warren finds Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents on your devices and brings them in with their soul, instructions and notes. Or start from a job: Chief of Staff, Inbox Manager, Sales Outbound, Research and more.
+- **Bring in agents you already have.** Warren finds your Claude Code setup (CLAUDE.md and the memories it saved), Codex's AGENTS.md, Gemini CLI's GEMINI.md, Goose hints, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents on your devices, and brings them in with their soul, instructions and notes, one at a time or all at once (right in **Get started**, too). Claude Code and Codex move into a VM; the rest keep running on their device. Or start from a job: Chief of Staff, Inbox Manager, Sales Outbound, Research and more.
+- **Hand off work in one step.** **New task** (top of the sidebar): say what needs doing, pick an agent, a team, or **Let Warren pick** (your boss agent or a team lead routes it), attach files, done. **Tasks** shows everything by where it stands, To do, Working, Waiting on you and Done, and anything an agent needs from you (an OK, a sign-in) is pulled out so it never sits unseen.
 - **Any device.** Agents run on whatever computer you assign them: a laptop, a home server, a VM. Devices connect *out* to the hub, so they work behind routers and firewalls.
 - **A real memory vault.** Plain markdown with `[[wikilinks]]`, backlinks, tags, search, a graph view, and full git history for every edit. Each agent has a private folder and everyone shares `shared/`. Make your own folders and set who can read or edit each folder or note, and which agents load a note every time they work. Open the same folder in Obsidian.
 - **Agents you can shape.** Each agent has a `SOUL.md` (personality, voice, values; it can refine its own unless you lock it), instructions for its job (only people can change those), and a model, reasoning effort and access level picked from what its device actually offers.
@@ -42,17 +43,17 @@ docker compose up -d
 ### Connect a device and add agents
 
 1. In Warren, go to **Devices → Add device** and copy the command.
-2. On the computer that should run your agents (it needs at least one harness installed and signed in: `claude`, `codex`, `hermes`, `gemini`…; and Docker if you want VMs there):
+2. On the computer that should host your agents:
 
    ```bash
    npm install && npm link          # once, inside the warren repo: installs `warren` and `warren-mcp`
-   warren doctor                    # shows the harnesses, screen and VM support, and agents Warren can import
+   warren setup                     # gets it ready to run your agents' VMs (asks before installing anything)
    warren node start --hub http://your-hub:4747 --token <token> --name my-laptop
    ```
 
    It stays connected until you close the terminal. To start it automatically at login and keep it running, see [Keeping a device connected](docs/deploy.md#keeping-a-device-connected) (macOS, Linux and Windows).
 
-3. Go to **Agents → Add agent**, pick a job (or start blank), the harness, the device and its computer, and give it a handle like `atlas`. Or bring in an agent that already lives on the device.
+3. **Get started** walks you through the rest: create your agents' computer (a VM on that device), add an agent (Claude Code and Codex run inside the VM; sign them in there once), and give it a first task on the web. Or go to **Agents → Add agent**, or bring in an agent that already lives on the device.
 4. Say `@atlas what's in our memory about the launch?` in `#general`, and open **Computers** to watch it work.
 
 See [Computers](docs/computers.md) for VMs, your own screen, Orgo, taking control, teaching tasks, and who can reach your computer.
@@ -165,7 +166,6 @@ v0.1 covers the hub, chat, agents on devices, delegation, files and the memory v
 - A nightly tidy-up of memory (summaries, duplicates, finished plans)
 - Linking existing folders from disk into the vault
 - Honcho and Hindsight memory backends next to the vault
-- Running the harness inside its VM (today it runs on the device and shares a folder with the VM)
 - Windows and macOS VMs on a device
 - Invites, passkeys and OIDC sign-in; web push notifications
 

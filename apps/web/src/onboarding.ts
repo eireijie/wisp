@@ -6,16 +6,18 @@ import { useStore } from "./store.ts";
 
 export interface OnboardingState {
   devices: { id: string; name: string; online: boolean }[];
+  computers: { id: string; name: string; kind: "vm" | "orgo"; nodeId: string | null; status: string }[];
   agents: Agent[];
   firstReply: { id: string; channelId: string; agentId: string } | null;
   memoryNotes: { path: string; title: string }[];
 }
 
-export type StepId = "device" | "agent" | "hello" | "memory";
+export type StepId = "device" | "computer" | "agent" | "hello" | "memory";
 
 export function stepsDone(s: OnboardingState | null): Record<StepId, boolean> {
   return {
     device: !!s?.devices.some((d) => d.online),
+    computer: !!s?.computers?.length,
     agent: !!s?.agents.length,
     hello: !!s?.firstReply,
     memory: !!s?.memoryNotes.length,

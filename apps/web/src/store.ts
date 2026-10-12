@@ -74,6 +74,10 @@ interface State {
   approvals: Record<string, Approval>;
   /** bumps when routines change, so open lists refetch */
   routinesVersion: number;
+  /** bumps when tasks change, so the Tasks page refetches */
+  tasksVersion: number;
+  /** the New task dialog is open */
+  newTaskOpen: boolean;
   activeChannel: string | null;
   paletteOpen: boolean;
 
@@ -114,6 +118,8 @@ export const useStore = create<State>((set, get) => ({
   computers: [],
   approvals: {},
   routinesVersion: 0,
+  tasksVersion: 0,
+  newTaskOpen: false,
   activeChannel: null,
   paletteOpen: false,
 
@@ -275,6 +281,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ approvals: { ...s.approvals, [e.approval.id]: e.approval } }));
     } else if (e.type === "routines_changed") {
       set((s) => ({ routinesVersion: s.routinesVersion + 1 }));
+    } else if (e.type === "tasks_changed") {
+      set((s) => ({ tasksVersion: s.tasksVersion + 1 }));
     } else if (e.type === "run_event") {
       set((s) => {
         const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, text: "", tools: [], last: null, usedComputer: false };

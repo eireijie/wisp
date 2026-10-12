@@ -71,8 +71,13 @@ export const DeviceCapabilities = z.object({
   arch: z.string(),
   /** can agents see and use this device's own screen? `off`: it could, but it's turned off at the device (the default) */
   screen: z.object({ ok: z.boolean(), detail: z.string().max(500), off: z.boolean().optional() }),
-  /** can this device run VMs for its agents? */
-  vm: z.object({ ok: z.boolean(), detail: z.string().max(500) }),
+  /** can this device run VMs for its agents? `engine`: what runs them; `image`: whether the VM image is here yet */
+  vm: z.object({
+    ok: z.boolean(),
+    detail: z.string().max(500),
+    engine: z.string().max(60).optional(),
+    image: z.enum(["ready", "preparing", "missing", "failed"]).optional(),
+  }),
   /** someone ran `warren node pause` on the device: no agent runs and no computer use until they resume */
   paused: z.boolean().optional(),
 });
@@ -104,6 +109,12 @@ export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status") }),
   /** remove a VM and its disk for good */
   z.object({ action: z.literal("destroy") }),
+  /** is this harness signed in inside the VM? → { signedIn: boolean | null } */
+  z.object({ action: z.literal("harness_status"), harness: z.string().max(60) }),
+  /** open a terminal on the VM's screen that signs this harness in; a person finishes it there */
+  z.object({ action: z.literal("signin"), harness: z.string().max(60) }),
+  /** the web page element at a point on the screen (VMs' browser), for recordings → { element: PageElement | null } */
+  z.object({ action: z.literal("inspect"), x: coord, y: coord, space: Space.optional() }),
 ]);
 export type ComputerAction = z.infer<typeof ComputerAction>;
 

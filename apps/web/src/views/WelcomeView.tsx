@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowRight, BookOpen, Check, Loader2, ChevronLeft, MessageSquare, Monitor, Plug, Server, Smartphone, Sparkles, Users, Bot } from "lucide-react";
-import type { Agent, MessagePart } from "@warren/core";
+import { runsInVm, type Agent, type MessagePart } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { go } from "../router.ts";
+import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
-import { useDevices } from "../devices.ts";
+import { usableDevices, useDevices } from "../devices.ts";
+import { ComputerMini } from "./ComputersView.tsx";
+import { freeHandle, importFound } from "./AgentsView.tsx";
 import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Textarea, cx } from "../components/ui.tsx";
 
 const STEPS: { id: StepId; title: string; blurb: string }[] = [
-  { id: "device", title: "Connect a device", blurb: "A computer that runs your agents." },
-  { id: "agent", title: "Add your first agent", blurb: "Claude Code, Codex, or anything that speaks MCP." },
-  { id: "hello", title: "Say hello", blurb: "@mention it in #general and watch it work." },
+  { id: "device", title: "Connect a device", blurb: "A computer that hosts your agents." },
+  { id: "computer", title: "Give your agents a computer", blurb: "Their own desktop and browser, separate from yours." },
+  { id: "agent", title: "Add your first agent", blurb: "Claude Code, Codex, Hermes, or one you already have." },
+  { id: "hello", title: "Give it a first task", blurb: "Ask for something on the web and watch it work." },
   { id: "memory", title: "Explore shared memory", blurb: "See what your agent remembered." },
 ];
 
@@ -67,7 +70,7 @@ export function WelcomeView({ onBack }: { onBack?: () => void }) {
             <p className="text-muted">
               {allDone
                 ? "Your agents can talk to you and to each other, hand work across devices, and build up memory you can read and edit."
-                : "Four short steps to get an agent talking in your workspace. Each one checks itself off when it actually happens."}
+                : "A few short steps to get an agent working on its own computer. Each one checks itself off when it actually happens."}
             </p>
             <div className="h-1.5 rounded-full bg-hover overflow-hidden" role="progressbar" aria-valuenow={count} aria-valuemin={0} aria-valuemax={STEPS.length}>
               <div className="h-full bg-accent transition-all duration-500" style={{ width: `${(count / STEPS.length) * 100}%` }} />
@@ -84,6 +87,7 @@ export function WelcomeView({ onBack }: { onBack?: () => void }) {
             {STEPS.map((s, i) => (
               <Step key={s.id} n={i + 1} title={s.title} blurb={s.blurb} done={done[s.id]} open={current === s.id} summary={summary(s.id, state)} onToggle={() => toggle(s.id)}>
                 {s.id === "device" && <DeviceStep state={state} onCreated={refresh} />}
+                {s.id === "computer" && <ComputerStep state={state} onCreated={refresh} onPin={() => setPinned("computer")} />}
                 {s.id === "agent" && <AgentStep state={state} onCreated={refresh} onPin={() => setPinned("agent")} />}
                 {s.id === "hello" && <HelloStep state={state} onPin={() => setPinned("hello")} />}
                 {s.id === "memory" && <MemoryStep state={state} />}
@@ -116,6 +120,7 @@ function summary(id: StepId, s: OnboardingState | null): string | null {
     const on = s.devices.filter((d) => d.online);
     return on.length ? `${on.map((d) => d.name).join(", ")} ${on.length === 1 ? "is" : "are"} connected` : null;
   }
+  if (id === "computer") return s.computers?.length ? s.computers.map((c) => c.name).join(", ") : null;
   if (id === "agent") return s.agents.length ? s.agents.map((a) => `@${a.handle}`).join(", ") : null;
   if (id === "hello") return s.firstReply ? `@${s.agents.find((a) => a.id === s.firstReply!.agentId)?.handle ?? "your agent"} replied` : null;
   if (id === "memory") return s.memoryNotes.length ? `${s.memoryNotes.length} note${s.memoryNotes.length === 1 ? "" : "s"} written by agents` : null;
@@ -152,14 +157,19 @@ function DeviceStep({ state, onCreated }: { state: OnboardingState | null; onCre
     return (
       <div className="space-y-4 text-sm">
         <p>
-          On <b>{created.name}</b>, run these in a terminal. It needs Node 22+, git, and <code className="bg-code px-1 rounded">claude</code> or <code className="bg-code px-1 rounded">codex</code> installed and signed in.
+          On <b>{created.name}</b>, run these in a terminal, inside the Warren folder. It needs Node 22+ and git.
         </p>
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">1 · Install Warren's CLI (once, inside the Warren repo)</div>
-          <CopyBlock text={"npm install && npm link\nwarren doctor"} />
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">1 · Install Warren's CLI (once)</div>
+          <CopyBlock text={"npm install && npm link"} />
         </div>
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted">2 · Connect</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">2 · Get it ready to run your agents' computers</div>
+          <CopyBlock text={"warren setup"} />
+          <p className="text-xs text-muted">It checks what's installed, offers to install a VM engine (asking first), and downloads the agents' desktop.</p>
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">3 · Connect</div>
           <CopyBlock text={`warren node start --hub ${location.origin} --token ${created.token} --name "${created.name}"`} />
           <p className="text-xs text-muted">The token is shown once and saved on the device, so next time it's just <code>warren node start</code>.</p>
         </div>
@@ -173,7 +183,7 @@ function DeviceStep({ state, onCreated }: { state: OnboardingState | null; onCre
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        Agents run on real computers: your laptop, a home server, a VM. The device connects <i>out</i> to Warren, so it works behind routers and firewalls.
+        A device hosts your agents: your laptop, a home server, a desktop. Each agent works on its own computer there (a VM), never on your screen. The device connects <i>out</i> to Warren, so it works behind routers and firewalls.
       </p>
       {offline.length > 0 && (
         <div className="text-sm rounded-lg bg-hover px-3 py-2">
@@ -214,7 +224,121 @@ function DeviceStep({ state, onCreated }: { state: OnboardingState | null; onCre
   );
 }
 
-// --- step 2: agent ------------------------------------------------------------
+// --- step 2: the agents' computer --------------------------------------------------
+
+/**
+ * A VM on one of your devices: a Linux desktop with Chromium that agents work on, separate from
+ * everything else on the device. The device gets ready with `warren setup`.
+ */
+function ComputerStep({ state, onCreated, onPin }: { state: OnboardingState | null; onCreated: () => void; onPin: () => void }) {
+  const devices = useDevices(3000);
+  const computers = useStore((s) => s.computers);
+  const usable = usableDevices(devices ?? []).filter((d) => d.online);
+  const [nodeId, setNodeId] = useState("");
+  const [name, setName] = useState("Agents' desk");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const made = computers.find((c) => state?.computers?.some((x) => x.id === c.id));
+  const device = usable.find((d) => d.id === nodeId) ?? usable.find((d) => d.capabilities?.vm.ok) ?? usable[0];
+  const vm = device?.capabilities?.vm;
+
+  useEffect(() => {
+    useStore.getState().refreshComputers();
+  }, [state?.computers?.length]);
+
+  if (made)
+    return (
+      <div className="space-y-3 text-sm">
+        <div className="max-w-md">
+          <ComputerMini computer={made} />
+        </div>
+        <p className="text-muted">
+          {made.status === "ready" ? `${made.name} is ready.` : "It's starting up; the first time takes a minute."} Agents work here with their own browser, files and sign-ins, and never touch your screen. Watch it or take control anytime.
+        </p>
+      </div>
+    );
+  if (!devices) return <p className="text-sm text-muted">Checking your devices…</p>;
+  if (!usable.length)
+    return (
+      <div className="space-y-2 text-sm text-muted">
+        <p>Connect a device in step 1 first. Its VMs run on it, so it should stay on while agents work.</p>
+        <p>
+          No device that can stay on? Use an{" "}
+          <a className="text-accent-text hover:underline" href={href({ view: "settings" })}>
+            Orgo cloud computer
+          </a>{" "}
+          (Settings → Computers).
+        </p>
+      </div>
+    );
+
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-muted">Each agent gets a desktop of its own: Linux with Chromium, a terminal and a file manager, in a VM on your device. It signs in to websites once and keeps its files there, and you can watch it work.</p>
+      {usable.length > 1 && (
+        <Field label="Device">
+          <select value={device?.id ?? ""} onChange={(e) => setNodeId(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
+            {usable.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} {d.capabilities?.vm.ok ? "" : "(can't run VMs yet)"}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {!vm?.ok ? (
+        <div className="space-y-2 rounded-xl border border-line p-3">
+          <p>{vm?.detail ?? `Waiting to hear from ${device?.name}…`}</p>
+          <p className="text-muted">On {device?.name}, run this. It installs what's needed (asking first) and gets the agents' desktop ready. This page updates by itself.</p>
+          <CopyBlock text="warren setup" />
+          <p className="text-xs text-muted">
+            Or use an{" "}
+            <a className="text-accent-text hover:underline" href={href({ view: "settings" })}>
+              Orgo cloud computer
+            </a>{" "}
+            instead.
+          </p>
+        </div>
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            try {
+              await api("POST", "/api/computers", { kind: "vm", nodeId: device!.id, name, cpus: 2, memoryGb: 4 });
+              await useStore.getState().refreshComputers();
+              onPin(); // stay to watch it start
+              onCreated();
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <p className={cx("flex items-center gap-2", vm.image === "ready" ? "text-ok" : "text-muted")}>
+            {vm.image === "ready" ? <Check size={15} /> : vm.image === "preparing" ? <Loader2 size={15} className="animate-spin" /> : <Monitor size={15} />} {vm.detail}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+            <div className="flex-1">
+              <Field label="Name it">
+                <Input value={name} onChange={(e) => setName(e.target.value)} required />
+              </Field>
+            </div>
+            <Button variant="primary" disabled={busy}>
+              {busy ? <Loader2 size={16} className="animate-spin" /> : <Monitor size={16} />} Create it
+            </Button>
+          </div>
+        </form>
+      )}
+      {error && <p className="text-sm text-bad">{error}</p>}
+    </div>
+  );
+}
+
+// --- step 3: agent ------------------------------------------------------------
 
 /** `headless` here means Warren starts it on a device (as opposed to a session joining through MCP). */
 const PRESETS: { harness: Agent["harness"]; name: string; note: string; headless: boolean }[] = [
@@ -235,10 +359,32 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Agent | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const caps = useDevices(5000)?.find((d) => d.id === nodeId)?.capabilities;
-  const [computer, setComputer] = useState<"vm" | "screen" | "later" | null>(null);
-  // never someone's own screen unless they pick it
-  const computerChoice = computer ?? (caps?.vm.ok ? "vm" : "later");
+  const allDevices = useDevices(5000);
+  const caps = allDevices?.find((d) => d.id === nodeId)?.capabilities;
+  const computers = useStore((s) => s.computers);
+  const agents = useStore((s) => s.agents);
+  // agents that already live on your devices, ready to bring in
+  const found = usableDevices(allDevices ?? []).flatMap((n) => (n.discovered ?? []).map((d) => ({ node: n, d }))).filter((x) => !agents.some((a) => a.nodeId === x.node.id && a.harness === x.d.harness && a.name === x.d.name));
+  const [bringing, setBringing] = useState<string | null>(null);
+  const bringIn = async (x: (typeof found)[number]) => {
+    setBringing(x.d.key);
+    setError(null);
+    try {
+      const computerId = state?.computers?.find((c) => c.nodeId === x.node.id)?.id ?? state?.computers?.[0]?.id ?? null;
+      const a = await importFound(x, { handle: freeHandle(x.d.name, agents.map((g) => g.handle)), computerId, computers });
+      await refreshAgents();
+      setCreated(a);
+      onCreated();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBringing(null);
+    }
+  };
+  const shared = state?.computers ?? [];
+  // "existing:<id>", "vm" (a new one) or "later"; by default the computer from the step before
+  const [computer, setComputer] = useState<string | null>(null);
+  const computerChoice = computer ?? (shared[0] ? `existing:${shared[0].id}` : caps?.vm.ok ? "vm" : "later");
 
   // default to a connected device
   useEffect(() => {
@@ -280,11 +426,21 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
         setError(null);
         try {
           // every agent gets a computer it can use, unless there's nowhere to put one yet
-          const computerId =
-            nodeId && computerChoice !== "later"
-              ? (await api<{ id: string }>("POST", "/api/computers", computerChoice === "vm" ? { kind: "vm", nodeId, name: `${name}'s desk`, cpus: 2, memoryGb: 4 } : { kind: "device", nodeId })).id
+          const computerId = computerChoice.startsWith("existing:")
+            ? computerChoice.slice("existing:".length)
+            : nodeId && computerChoice === "vm"
+              ? (await api<{ id: string }>("POST", "/api/computers", { kind: "vm", nodeId, name: `${name}'s desk`, cpus: 2, memoryGb: 4 })).id
               : null;
-          const a = await api<Agent>("POST", "/api/agents", { harness: preset.harness, name, handle: slug(name), nodeId: preset.headless ? nodeId || null : null, computerId });
+          // with a VM on its own device, Claude Code and Codex run inside it: they can't touch the device
+          const vmHere = computerChoice === "vm" || shared.some((c) => `existing:${c.id}` === computerChoice && c.kind === "vm" && c.nodeId === nodeId);
+          const a = await api<Agent>("POST", "/api/agents", {
+            harness: preset.harness,
+            name,
+            handle: slug(name),
+            nodeId: preset.headless ? nodeId || null : null,
+            computerId,
+            settings: vmHere && runsInVm(preset.harness) ? { runIn: "computer" } : {},
+          });
           useStore.getState().refreshComputers();
           // MCP harnesses still need their connection config, so keep this step open
           if (!preset.headless) onPin();
@@ -296,6 +452,30 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
         }
       }}
     >
+      {found.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Bring in an agent you already have</div>
+          <div className="rounded-xl border border-line divide-y divide-line">
+            {found.slice(0, 6).map((x) => (
+              <div key={`${x.node.id}:${x.d.key}`} className="flex items-center gap-3 px-3 py-2.5">
+                <AgentAvatar agent={{ harness: x.d.harness, name: x.d.name }} size={28} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium truncate">{x.d.name}</span>
+                  <span className="block text-xs text-muted truncate">
+                    {HARNESS_LABELS[x.d.harness] ?? x.d.harness} on {x.node.name}
+                    {x.d.description ? ` · ${x.d.description}` : ""}
+                  </span>
+                </span>
+                <Button type="button" disabled={!!bringing} onClick={() => bringIn(x)}>
+                  {bringing === x.d.key ? <Loader2 size={15} className="animate-spin" /> : null} Bring in
+                </Button>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted">Its instructions, soul and notes are copied into Warren. Claude Code and Codex move into your agents' computer; others keep running on their device.</p>
+          <div className="text-sm font-medium pt-2">Or start a new one</div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-2">
         {PRESETS.map((p) => (
           <button
@@ -333,15 +513,19 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
           </Field>
         )}
       </div>
-      {preset.headless && !!nodeId && (
+      {preset.headless && (!!nodeId || shared.length > 0) && (
         <Field label="Its computer" hint="Where it opens apps and websites. You can watch it and take over anytime.">
-          <select value={computerChoice} onChange={(e) => setComputer(e.target.value as "vm" | "screen" | "later")} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
-            <option value="vm" disabled={!caps?.vm.ok}>
-              A new VM on this device{caps && !caps.vm.ok ? " (needs Docker)" : ""}
-            </option>
-            <option value="screen" disabled={caps?.screen.ok !== true}>
-              Your own screen (only while you lend it){caps?.screen.off ? " (off at the device)" : ""}
-            </option>
+          <select value={computerChoice} onChange={(e) => setComputer(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
+            {shared.map((c) => (
+              <option key={c.id} value={`existing:${c.id}`}>
+                {c.name} {c.kind === "orgo" ? "(cloud)" : "(VM)"}
+              </option>
+            ))}
+            {!!nodeId && (
+              <option value="vm" disabled={!caps?.vm.ok}>
+                A new VM of its own{caps && !caps.vm.ok ? " (run warren setup on the device first)" : ""}
+              </option>
+            )}
             <option value="later">Choose later</option>
           </select>
         </Field>
@@ -355,7 +539,7 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
   );
 }
 
-// --- step 3: hello ------------------------------------------------------------
+// --- step 4: a first task ------------------------------------------------------
 
 function HelloStep({ state, onPin }: { state: OnboardingState | null; onPin: () => void }) {
   const channels = useStore((s) => s.channels);
@@ -368,8 +552,14 @@ function HelloStep({ state, onPin }: { state: OnboardingState | null; onPin: () 
   const [error, setError] = useState<string | null>(null);
   const messages = useStore((s) => (general ? s.messages[general.id] : undefined));
 
+  const computer = useStore((s) => s.computers.find((c) => c.id === agent?.computerId));
   useEffect(() => {
-    if (agent && !text) setText(`@${agent.handle} Hi! Introduce yourself in two sentences, then save a short note about what you're good at to your memory as me/strengths.md.`);
+    if (!agent || text) return;
+    setText(
+      agent.computerId
+        ? `@${agent.handle} Open news.ycombinator.com in your browser and tell me the top 3 stories, one line each. Then save a short note about what you're good at to your memory as me/strengths.md.`
+        : `@${agent.handle} Hi! Introduce yourself in two sentences, then save a short note about what you're good at to your memory as me/strengths.md.`,
+    );
   }, [agent, text]);
   useEffect(() => {
     if (general) loadChannel(general.id);
@@ -384,7 +574,7 @@ function HelloStep({ state, onPin }: { state: OnboardingState | null; onPin: () 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        Agents wake up when they're @mentioned. They read the recent conversation, can use their memory, and can bring in other agents the same way.
+        Agents wake up when they're @mentioned. They read the recent conversation, use their memory and their computer, and can bring in other agents the same way.
       </p>
       {agent.status === "offline" && <p className="text-sm text-warn">@{agent.handle} is offline right now, so it'll answer once its device connects.</p>}
       {!sentAt ? (
@@ -426,6 +616,11 @@ function HelloStep({ state, onPin }: { state: OnboardingState | null; onPin: () 
           </div>
         </div>
       )}
+      {sentAt && computer && (
+        <div className="max-w-md">
+          <ComputerMini computer={computer} />
+        </div>
+      )}
       {sentAt && general && (
         <Button variant="ghost" onClick={() => go({ view: "chat", channelId: general.id, threadId: null })}>
           Open #general <ArrowRight size={15} />
@@ -440,7 +635,7 @@ function failureText(parts: MessagePart[]): string {
   return status?.type === "status" ? status.text : "Something went wrong.";
 }
 
-// --- step 4: memory -----------------------------------------------------------
+// --- step 5: memory -----------------------------------------------------------
 
 function MemoryStep({ state }: { state: OnboardingState | null }) {
   const notes = state?.memoryNotes ?? [];

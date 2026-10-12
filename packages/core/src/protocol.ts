@@ -96,6 +96,8 @@ export const RunRequest = z.object({
   workspace: RunWorkspace.optional(),
   /** the agent's computer when this device runs it (a VM shares a folder with the agent) */
   computer: ComputerSpec.optional(),
+  /** run the harness inside `computer` (a VM) rather than on the device */
+  inComputer: z.boolean().optional(),
 });
 export type RunRequest = z.infer<typeof RunRequest>;
 
@@ -165,7 +167,8 @@ export type ClientEvent =
   | { type: "computer"; computer: import("./computers.ts").Computer }
   | { type: "computer_removed"; computerId: string }
   | { type: "approval"; approval: import("./types.ts").Approval }
-  | { type: "routines_changed" };
+  | { type: "routines_changed" }
+  | { type: "tasks_changed" };
 
 /**
  * Tunnel bytes travel as binary WebSocket frames: one byte with the tunnel id's length, the id,

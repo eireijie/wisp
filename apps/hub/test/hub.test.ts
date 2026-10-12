@@ -116,6 +116,7 @@ describe("hub", () => {
     const o = (await api("GET", "/api/onboarding")).data;
     expect(o.devices).toEqual([{ id: expect.any(String), name: "test-node", online: true }]);
     expect(o.agents.map((a: any) => a.handle)).toEqual(["atlas", "nova"]);
+    expect(o.computers).toEqual([]);
     expect(o.firstReply).toBeNull();
     expect(o.memoryNotes).toEqual([]);
     expect((await api("GET", "/api/onboarding", undefined, nodeToken, { "x-warren-agent": atlas.id })).status).toBe(403);
@@ -796,5 +797,38 @@ describe("agent context", () => {
     const ctx = (await api("GET", `/api/agents/${atlas.id}/context?channel=${dm.id}`)).data;
     expect(ctx).toMatchObject({ model: "opus", modelIsDefault: false, effort: "high", effortIsDefault: false, access: "read-only", contextUsed: null });
     await api("PATCH", `/api/agents/${atlas.id}`, { model: null, settings: { effort: null, access: "edit" } });
+  });
+});
+
+describe("agents inside their computers", () => {
+  it("runs a harness that comes with the VM inside it, and then takes requests from anyone", async () => {
+    const sam = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
+    // running directly on Yug's device, Atlas only works for Yug
+    await api("POST", `/api/channels/${general}/messages`, { body: "@atlas hi from sam" }, sam);
+    await waitFor(async () => (await channelMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("only Yug can ask it"))));
+
+    const vm = (await api("POST", "/api/computers", { kind: "vm", nodeId: atlas.nodeId, name: "Atlas desk" })).data;
+    await api("PATCH", `/api/agents/${atlas.id}`, { computerId: vm.id, settings: { runIn: "computer" } });
+    const before = node.runs.length;
+    await api("POST", `/api/channels/${general}/messages`, { body: "@atlas hi again from sam" }, sam);
+    const run = await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id));
+    expect(run.type === "run" && run.run).toMatchObject({ inComputer: true, computer: { id: vm.id, kind: "vm" } });
+    expect(run.type === "run" && run.run.prompt).toContain("You run inside this computer");
+
+    // a member can't put it back onto Yug's device
+    expect((await api("PATCH", `/api/agents/${atlas.id}`, { settings: { runIn: "device" } }, sam)).status).toBe(403);
+    expect((await api("PATCH", `/api/agents/${atlas.id}`, { settings: { runIn: "device" } })).status).toBe(200);
+  });
+
+  it("hands a person's task to whoever should route it, and shows it being worked on", async () => {
+    const t = (await api<any>("POST", "/api/tasks", { to: "auto", title: "Plan the offsite", brief: "Three venues under $5k." })).data;
+    expect([atlas.id, nova.id]).toContain(t.toAgentId);
+    const thread = await waitFor(async () => (await channelMessagesIn(t.channelId)).find((m) => m.id === t.threadId));
+    expect(thread.body).toContain("You were picked to route this");
+    // the agent picking it up moves it to in progress
+    const working = await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((x) => x.id === t.id && x.status === "in_progress"));
+    expect(working).toBeTruthy();
+    // a person can close it
+    expect((await api<any>("PATCH", `/api/tasks/${t.id}`, { status: "done", result: "Booked." })).data.status).toBe("done");
   });
 });

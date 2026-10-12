@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { ComputerAction, DEVICE_HARNESS, HARNESS_IDS, parseCron, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type RecordedStep } from "@warren/core";
+import { ComputerAction, DEVICE_HARNESS, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type RecordedStep } from "@warren/core";
 import type { Caller } from "./api.ts";
 import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
@@ -49,6 +49,9 @@ const STEP = z.object({
   keys: z.string().max(100).optional(),
   direction: z.enum(["up", "down", "left", "right"]).optional(),
   imageFileId: z.string().max(100).optional(),
+  element: z
+    .object({ url: z.string().max(2000), title: z.string().max(300).optional(), role: z.string().max(40), name: z.string().max(200), selector: z.string().max(300).optional() })
+    .optional(),
 });
 
 const WARREN = { name: "Warren", email: "warren@localhost" };
@@ -309,6 +312,43 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
   });
 
+  // --- where an agent's harness runs ----------------------------------------------------------------
+
+  /** Whether the agent runs inside its computer, and if so whether its harness is signed in there. */
+  app.get("/api/agents/:id/harness", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    const comp = agent.computerId ? store.computer(agent.computerId) : undefined;
+    const possible = !!comp && comp.kind === "vm" && comp.nodeId === agent.nodeId && runsInVm(agent.harness);
+    const inComputer = hub.runsInComputer(agent);
+    let signedIn: boolean | null = null;
+    if (inComputer && comp && computers.online(comp)) {
+      try {
+        signedIn = ((await computers.act(comp, { action: "harness_status", harness: agent.harness }, { kind: "user", id: "system" }, { timeoutMs: 120_000 })) as { signedIn: boolean | null }).signedIn;
+      } catch {}
+    }
+    return { possible, inComputer, signedIn, computerId: comp?.id ?? null };
+  });
+
+  /** Open a sign-in for the agent's harness on its VM's screen, and give the caller control to finish it. */
+  app.post("/api/agents/:id/signin", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    const comp = agent.computerId ? own(c, agent.computerId) : null;
+    if (!comp || comp.kind !== "vm") return reply.code(400).send({ error: "it needs a VM to sign in on" });
+    try {
+      await computers.act(comp, { action: "signin", harness: agent.harness }, { kind: "user", id: "system" }, { timeoutMs: 10 * 60_000 });
+      computers.take(comp, c.actor.id);
+      return { computerId: comp.id };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
   // --- an agent's own computer ---------------------------------------------------------------------
 
   const myComputer = (c: Caller, reply: FastifyReply): Computer | null => {
@@ -337,7 +377,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!comp) return;
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
-    if (["destroy", "stop"].includes(action.action)) return reply.code(403).send({ error: "only people can stop or remove a computer" });
+    if (["destroy", "stop", "signin"].includes(action.action)) return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : "only people can stop or remove a computer" });
     try {
       return await computers.act(comp, action, c.actor, { requester: h.requesterOf(c) });
     } catch (err) {
@@ -555,7 +595,16 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { member: true });
     if (!c) return;
     const body = parse(
-      z.object({ nodeId: z.string(), key: z.string().max(200), handle: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), name: NAME.optional(), harness: HARNESS.optional(), computerId: z.string().nullable().default(null), headless: z.boolean().default(false) }),
+      z.object({
+        nodeId: z.string(),
+        key: z.string().max(200),
+        handle: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
+        name: NAME.optional(),
+        harness: HARNESS.optional(),
+        computerId: z.string().nullable().default(null),
+        headless: z.boolean().default(false),
+        runIn: z.enum(["computer", "device"]).optional(),
+      }),
       req.body,
       reply,
     );
@@ -573,7 +622,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
     const harness = body.harness ?? found.harness;
     const agent = store.createAgent({ workspaceId: c.workspaceId, handle: body.handle, name: body.name ?? found.name.slice(0, 80), harness, model: found.model ?? null, nodeId: node.id, computerId: body.computerId, instructions: (found.instructions ?? "").slice(0, 20_000) });
-    if (body.headless) store.updateAgent(agent.id, { settings: { headless: true } });
+    if (body.headless || body.runIn) store.updateAgent(agent.id, { settings: { ...(body.headless ? { headless: true } : {}), ...(body.runIn ? { runIn: body.runIn } : {}) } });
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
     const author = h.commitAuthor(c);
