@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, Plus, Server, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, Plus, Server, Trash2 } from "lucide-react";
 import { api } from "../api.ts";
-import { Button, CopyBlock, Empty, Field, Input, Modal, cx, timeAgo } from "../components/ui.tsx";
+import { useStore } from "../store.ts";
+import { Button, CopyBlock, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 interface NodeInfo {
   id: string;
@@ -9,14 +10,20 @@ interface NodeInfo {
   online: boolean;
   lastSeen: string | null;
   agents: string[];
+  /** the Warren version it runs; null for devices from before updates */
+  version: { commit: string | null; date: string | null } | null;
+  update: { state: "idle" | "updating" | "restarting" | "failed"; message: string } | null;
 }
 
 export function NodesView({ onBack }: { onBack?: () => void }) {
   const [nodes, setNodes] = useState<NodeInfo[] | null>(null);
   const [creating, setCreating] = useState(false);
+  const [hubCommit, setHubCommit] = useState<string | null>(null);
+  const isOwner = useStore((s) => s.me)?.role === "owner";
   const refresh = () => api<NodeInfo[]>("GET", "/api/nodes").then(setNodes);
   useEffect(() => {
     refresh();
+    api<{ version: { commit: string | null } }>("GET", "/api/updates").then((u) => setHubCommit(u.version.commit), () => {});
     const t = setInterval(refresh, 5000);
     return () => clearInterval(t);
   }, []);
@@ -45,31 +52,66 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
         ) : (
           <div className="max-w-3xl p-4 md:p-8 space-y-3">
             {nodes?.map((n) => (
-              <div key={n.id} className="rounded-xl border border-line p-4 flex items-center gap-4">
-                <div className={cx("size-10 rounded-xl grid place-items-center", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
-                  <Server size={18} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium flex items-center gap-2">
-                    {n.name}
-                    <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "online" : "offline"}</span>
+              <div key={n.id} className="rounded-xl border border-line p-4">
+                <div className="flex items-center gap-4">
+                  <div className={cx("size-10 rounded-xl grid place-items-center", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
+                    <Server size={18} />
                   </div>
-                  <div className="text-xs text-muted truncate">
-                    {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No agents assigned"}
-                    {n.lastSeen && ` · last seen ${timeAgo(n.lastSeen)}`}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium flex items-center gap-2">
+                      {n.name}
+                      <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "online" : "offline"}</span>
+                    </div>
+                    <div className="text-xs text-muted truncate">
+                      {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No agents assigned"}
+                      {n.lastSeen && ` · last seen ${timeAgo(n.lastSeen)}`}
+                      {n.version?.commit && (
+                        <>
+                          {" · "}Warren <code>{n.version.commit}</code>
+                          {hubCommit && n.version.commit !== hubCommit && <span title={`The hub runs ${hubCommit}`}> (hub: {hubCommit})</span>}
+                        </>
+                      )}
+                    </div>
                   </div>
+                  {isOwner && n.online && (
+                    <Button
+                      title="Get the latest Warren on this device and restart it"
+                      aria-label="Update"
+                      disabled={n.update?.state === "updating" || n.update?.state === "restarting"}
+                      onClick={async () => {
+                        try {
+                          await api("POST", `/api/nodes/${n.id}/update`);
+                        } catch (e) {
+                          alert((e as Error).message);
+                        }
+                        refresh();
+                      }}
+                    >
+                      <Download size={15} /> <span className="hidden sm:inline">Update</span>
+                    </Button>
+                  )}
+                  <button
+                    className="p-2 rounded-md hover:bg-hover text-muted hover:text-bad"
+                    title="Remove device"
+                    onClick={async () => {
+                      if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
+                      await api("DELETE", `/api/nodes/${n.id}`);
+                      refresh();
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <button
-                  className="p-2 rounded-md hover:bg-hover text-muted hover:text-bad"
-                  title="Remove device"
-                  onClick={async () => {
-                    if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
-                    await api("DELETE", `/api/nodes/${n.id}`);
-                    refresh();
-                  }}
-                >
-                  <Trash2 size={16} />
-                </button>
+                {n.update?.message && (
+                  <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
+                    {n.update.state !== "idle" && (
+                      <span className="mr-2 align-middle">
+                        <Pill tone={n.update.state === "failed" ? "bad" : "info"}>{n.update.state === "failed" ? "Update failed" : n.update.state === "restarting" ? "Restarting" : "Updating"}</Pill>
+                      </span>
+                    )}
+                    {n.update.message}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -119,7 +161,7 @@ function CreateNode({ onClose }: { onClose: () => void }) {
           }}
         >
           <Field label="Device name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="prox-agents-1" required />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-laptop" required />
           </Field>
           {error && <p className="text-sm text-bad">{error}</p>}
           <div className="flex justify-end">

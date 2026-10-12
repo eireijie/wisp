@@ -11,6 +11,7 @@ COPY packages/vault/package.json packages/vault/
 COPY packages/adapters/package.json packages/adapters/
 COPY packages/mcp/package.json packages/mcp/
 COPY packages/sdk/package.json packages/sdk/
+COPY packages/update/package.json packages/update/
 RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev

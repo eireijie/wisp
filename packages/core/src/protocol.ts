@@ -105,6 +105,8 @@ export const NodeToHub = z.discriminatedUnion("type", [
     type: z.literal("hello"),
     nodeName: z.string(),
     agents: z.array(z.string()),
+    /** the Warren version this device runs (missing from devices older than updates) */
+    version: z.object({ commit: z.string().nullable(), date: z.string().nullable() }).optional(),
   }),
   /** models each installed harness offers on this device; sent after hello because it can take a few seconds */
   z.object({ type: z.literal("catalog"), catalog: z.array(HarnessCatalogSchema).max(50) }),
@@ -145,6 +147,8 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("discover") }),
   /** send everything about one discovered agent (its soul, instructions and notes), to import it */
   z.object({ type: z.literal("read_agent"), requestId: z.string(), key: z.string() }),
+  /** update this device's copy of Warren from GitHub and restart; answered with a result (UpdateResult) */
+  z.object({ type: z.literal("update"), requestId: z.string() }),
 ]);
 export type HubToNode = z.infer<typeof HubToNode>;
 

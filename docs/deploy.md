@@ -132,6 +132,14 @@ Start-ScheduledTask -TaskName "Warren node"
 
 Stop it with `Stop-ScheduledTask -TaskName "Warren node"`, and remove it with `Unregister-ScheduledTask -TaskName "Warren node"`.
 
+## Updating
+
+Every hub and device runs from a git checkout of Warren, so updating means getting the latest commits. Use **Settings → Updates** and the **Update** button on each device in **Devices**, or run `warren update` (or `node bin/warren.mjs update`) inside the checkout. It fast-forwards to what's on GitHub, runs `npm install` only if dependencies changed, rebuilds the web app if the checkout serves one, and then the hub and devices running from that folder restart themselves. Devices wait until no agent is running.
+
+The restart works the same under systemd, launchd, Task Scheduler or a plain terminal: `warren-hub` and `warren node start` run the real process as a child and start it again after an update, so the services above need no changes. The user that runs Warren needs to be able to write to the checkout and to `git pull` from where it was cloned (for a private repository, a read-only deploy key works).
+
+A hub in Docker can't update itself: run `git pull && docker compose up -d --build` where you cloned Warren.
+
 ## Reaching it from your phone
 
 The PWA needs HTTPS to install on iPhone and to use notifications. Pick one:

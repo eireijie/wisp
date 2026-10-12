@@ -4,6 +4,7 @@ import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
 import { Routines } from "./routines.ts";
+import { Updates } from "./updates.ts";
 import type { Vault } from "@warren/vault";
 import { MemoryAccess } from "./access.ts";
 import { AgentMemory } from "./memory.ts";
@@ -43,6 +44,7 @@ export class Hub {
   readonly discussions: Discussions;
   readonly computers: Computers;
   readonly routines: Routines;
+  readonly updates: Updates;
   /** how the hub reaches outside services (Orgo); tests swap it */
   fetchImpl: typeof fetch = (...args) => fetch(...args);
   /** git operations waiting for a device to answer */
@@ -57,6 +59,7 @@ export class Hub {
     this.discussions = new Discussions(this);
     this.computers = new Computers(this);
     this.routines = new Routines(this);
+    this.updates = new Updates(this);
   }
 
   /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
@@ -160,6 +163,7 @@ export class Hub {
     switch (msg.type) {
       case "hello": {
         store.touchNode(conn.nodeId, msg.nodeName);
+        this.updates.deviceConnected(conn.nodeId, msg.version);
         for (const a of store.agentsOnNode(conn.nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: this.agentStatus(a) });
         for (const r of store.queuedRunsForNode(conn.nodeId)) this.dispatchRun(r.id);
         this.computers.nodeBack(conn.nodeId);

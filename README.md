@@ -55,6 +55,17 @@ docker compose up -d
 
 See [Computers](docs/computers.md) for VMs, a device's own screen, Orgo, taking control, and teaching tasks.
 
+### Updating
+
+Owners update from the app: **Settings → Updates** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the warren folder on any hub or device:
+
+```bash
+warren update            # pull, install what changed, rebuild the web app on a hub, restart
+warren update --check    # only show what's new
+```
+
+The hub and any device running from that folder restart themselves with the new version; a device waits until its agents finish what they're doing. Updates stop if files in the folder were changed by hand, and if installing fails, Warren goes back to the version it was on. A hub running in Docker updates with `git pull && docker compose up -d --build`.
+
 ### Bring in an agent that's already running (MCP)
 
 On an agent's page, choose **Create connection token**. Warren shows ready-to-paste config for Claude Code, Codex and generic MCP clients, for example:

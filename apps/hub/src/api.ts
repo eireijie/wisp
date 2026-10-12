@@ -36,6 +36,7 @@ import { teamSlug } from "./store.ts";
 import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, revokeToken, verifyPassword, type Principal } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
+import { registerUpdateApi } from "./updates.ts";
 
 export interface Caller {
   principal: Principal;
@@ -670,6 +671,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       capabilities: store.nodeCapabilities(n.id),
       discovered: store.nodeDiscovered(n.id),
       harnesses: store.nodeCatalog(n.id).map((h) => ({ id: h.harness, version: h.version })),
+      version: hub.updates.deviceVersion(n.id),
+      update: hub.updates.deviceUpdate(n.id),
     }));
   });
 
@@ -1446,6 +1449,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   });
 
   registerComputerApi(app, hub, { need, parse, commitAuthor, agentView });
+  registerUpdateApi(app, hub, { need });
 
   // --- websockets -------------------------------------------------------------
 

@@ -5,6 +5,7 @@ import WebSocket from "ws";
 import { HubToNode, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
 import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
+import { runUpdate, version } from "@warren/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
 import { mergeBranch, prepareCheckout } from "./git.ts";
@@ -84,6 +85,11 @@ export class NodeDaemon {
     this.ws?.close();
   }
 
+  /** Resolves once no agent is running on this device, so a restart doesn't cut one off. */
+  async idle(): Promise<void> {
+    while (this.aborts.size) await new Promise((r) => setTimeout(r, 2000));
+  }
+
   private connect() {
     const url = this.cfg.hub.replace(/^http/, "ws").replace(/\/+$/, "") + "/ws/node";
     const ws = new WebSocket(url, { headers: { authorization: `Bearer ${this.cfg.token}` } });
@@ -131,7 +137,7 @@ export class NodeDaemon {
     if (msg.type === "welcome") {
       const agents = await this.api.request<Agent[]>("GET", "/api/node/agents").catch(() => [] as Agent[]);
       this.log(`connected to ${this.cfg.hub} as "${this.cfg.name}" hosting ${agents.map((a) => "@" + a.handle).join(", ") || "no agents yet"}`);
-      this.send({ type: "hello", nodeName: this.cfg.name, agents: agents.map((a) => a.id) });
+      this.send({ type: "hello", nodeName: this.cfg.name, agents: agents.map((a) => a.id), version: await version() });
       const caps = await this.computers.capabilities();
       if (this.cfg.noScreen) caps.screen = { ok: false, detail: "Turned off in this device's node.json" };
       this.send({ type: "capabilities", capabilities: caps });
@@ -187,6 +193,12 @@ export class NodeDaemon {
     } else if (msg.type === "read_agent") {
       const agent = readDiscovered(msg.key, this.cfg.discoverHome);
       this.send(agent ? { type: "result", requestId: msg.requestId, ok: true, result: agent } : { type: "result", requestId: msg.requestId, ok: false, error: "that agent isn't on this device anymore" });
+    } else if (msg.type === "update") {
+      // finishing writes the update marker, and `warren node start` restarts once agents are done
+      runUpdate(undefined, { log: this.log }).then(
+        (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
+        (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
+      );
     } else if (msg.type === "run") {
       // one run at a time per agent so its harness session stays consistent
       const prev = this.queues.get(msg.run.agentId) ?? Promise.resolve();

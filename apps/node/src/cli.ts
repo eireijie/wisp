@@ -9,6 +9,7 @@ import { deviceAdapters } from "@warren/adapters";
 import { ComputerHost } from "./computers/index.ts";
 import { discoverAgents } from "./discover.ts";
 import { NodeDaemon, type NodeConfig } from "./daemon.ts";
+import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
 const HELP = `warren — connect this device to a Warren hub
 
@@ -20,6 +21,10 @@ Usage:
   warren doctor
       Check which agent harnesses are installed here, whether agents can use this
       device's screen or run VMs on it, and which existing agents Warren can import.
+  warren update [--check]
+      Get the latest Warren from GitHub: pull, install what changed, rebuild the web app
+      on a hub, then restart the hub and device running from this folder (a device waits
+      for its agents to finish). --check only shows what's new.
 
 Settings in DIR/node.json (all optional):
   "harnesses": { "qwen": { "args": ["--experimental-acp"] },
@@ -37,6 +42,7 @@ const { values, positionals } = parseArgs({
     name: { type: "string" },
     dir: { type: "string" },
     "allow-full-access": { type: "boolean" },
+    check: { type: "boolean" },
     help: { type: "boolean", short: "h" },
   },
 });
@@ -83,13 +89,36 @@ if (values.help || !cmd) {
   fs.mkdirSync(dir, { recursive: true });
   const { dir: _dir, ...keep } = cfg;
   fs.writeFileSync(configFile, JSON.stringify(keep, null, 2), { mode: 0o600 });
+  const kept = underKeeper();
   const daemon = new NodeDaemon(cfg);
   daemon.start();
+  watchForUpdates(async () => {
+    if (!kept) return console.log("[warren] Warren was updated; restart `warren node start` to use the new version");
+    console.log("[warren] Warren was updated; restarting once no agent is running");
+    await daemon.idle();
+    daemon.stop();
+    process.exit(RESTART_CODE);
+  });
   for (const sig of ["SIGINT", "SIGTERM"] as const)
     process.on(sig, () => {
       daemon.stop();
       process.exit(0);
     });
+} else if (cmd === "update") {
+  const v = await version();
+  console.log(`Warren ${v.commit ?? "(not a git checkout)"}${v.date ? ` from ${v.date.slice(0, 10)}` : ""}`);
+  const check = await checkForUpdate();
+  for (const c of check.changes.slice(0, 20)) console.log(`  ${c}`);
+  if (check.changes.length > 20) console.log(`  …and ${check.changes.length - 20} more`);
+  console.log(check.reason);
+  if (values.check || !check.canUpdate) process.exit(check.canUpdate || check.behind === 0 ? 0 : 1);
+  try {
+    const r = await runUpdate(undefined, { log: (line) => console.log(line) });
+    console.log(`Warren ${r.from} → ${r.to}. A hub or device running from this folder restarts in a few seconds (a device waits for running agents).`);
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
 } else {
   console.log(HELP);
   process.exit(1);

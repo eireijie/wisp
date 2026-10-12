@@ -169,6 +169,8 @@ export function SettingsView({ onBack }: { onBack?: () => void }) {
 
           <ComputerSettings isOwner={isOwner} />
 
+          <UpdateSettings isOwner={isOwner} />
+
           <section className="space-y-2 text-sm text-muted">
             <h2 className="font-semibold text-ink">About</h2>
             <p>Warren is free and open source (Apache-2.0). Your data lives on this hub: the database, the memory vault (a git repo you can open in Obsidian), and uploaded files.</p>
@@ -402,6 +404,124 @@ function ComputerSettings({ isOwner }: { isOwner: boolean }) {
           <p className="text-xs text-muted">Only owners can change this.</p>
         )}
         {error && <p className="text-sm text-bad">{error}</p>}
+      </div>
+    </section>
+  );
+}
+
+interface UpdateInfo {
+  version: { commit: string | null; date: string | null };
+  check: { behind: number | null; changes: string[]; canUpdate: boolean; reason: string } | null;
+  update: { state: "idle" | "updating" | "restarting" | "failed"; message: string; log: string[] };
+}
+
+/** The hub's version, what's new on GitHub, and a button to update. The page reloads once the hub is back. */
+function UpdateSettings({ isOwner }: { isOwner: boolean }) {
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [restarting, setRestarting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const check = async () => {
+    setChecking(true);
+    try {
+      setInfo(await api<UpdateInfo>("POST", "/api/updates/check"));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
+  useEffect(() => {
+    api<UpdateInfo>("GET", "/api/updates").then(setInfo, () => {});
+    check();
+  }, []);
+
+  // while the hub updates, follow along; it goes away while restarting, then comes back on the new version
+  const busy = !!restarting || info?.update.state === "updating" || info?.update.state === "restarting";
+  useEffect(() => {
+    if (!busy) return;
+    const from = restarting ?? info?.version.commit ?? null;
+    const t = setInterval(async () => {
+      const next = await api<UpdateInfo>("GET", "/api/updates").catch(() => null);
+      if (!next) return setRestarting(from ?? "");
+      if (next.update.state === "restarting") setRestarting(from ?? "");
+      if (restarting !== null && next.version.commit !== restarting) return location.reload();
+      setInfo(next);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [busy, restarting]);
+
+  const update = async () => {
+    setError(null);
+    try {
+      const r = await api<{ update: UpdateInfo["update"] }>("POST", "/api/updates/hub");
+      setInfo((i) => i && { ...i, update: r.update });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const v = info?.version;
+  const c = info?.check;
+  const u = info?.update;
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Updates</h2>
+          <p className="text-sm text-muted">
+            {v?.commit ? (
+              <>
+                This hub runs Warren <code>{v.commit}</code>
+                {v.date && <> from {new Date(v.date).toLocaleDateString()}</>}. Update devices from{" "}
+                <a className="text-accent-text hover:underline" href="#/nodes">
+                  Devices
+                </a>
+                .
+              </>
+            ) : (
+              "Which version of Warren this hub runs, and what's new."
+            )}
+          </p>
+        </div>
+        <Button onClick={check} disabled={checking || busy} className="shrink-0">
+          {checking ? "Checking…" : "Check now"}
+        </Button>
+      </div>
+      <div className="rounded-xl border border-line p-4 space-y-3 text-sm">
+        {busy ? (
+          <p className="flex items-center gap-2">
+            <Pill tone="info">{restarting !== null || u?.state === "restarting" ? "Restarting" : "Updating"}</Pill>
+            <span className="text-muted">{restarting !== null || u?.state === "restarting" ? "The hub is restarting with the update. This page reloads when it's back." : (u?.log.at(-1) ?? "Updating…")}</span>
+          </p>
+        ) : !c ? (
+          <p className="text-muted">{checking ? "Asking GitHub what's new…" : "Not checked yet."}</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              {c.canUpdate ? <Pill tone="accent">Update available</Pill> : c.behind === 0 ? <Pill tone="ok">Up to date</Pill> : <Pill tone="warn">Can't update here</Pill>}
+              <span className="text-muted flex-1">{c.reason}</span>
+              {c.canUpdate && isOwner && (
+                <Button variant="primary" onClick={update}>
+                  Update hub
+                </Button>
+              )}
+            </div>
+            {c.changes.length > 0 && (
+              <ul className="space-y-1 text-muted">
+                {c.changes.slice(0, 8).map((line) => (
+                  <li key={line} className="truncate">
+                    <code className="text-faint">{line.slice(0, line.indexOf(" "))}</code> {line.slice(line.indexOf(" ") + 1)}
+                  </li>
+                ))}
+                {c.changes.length > 8 && <li className="text-faint">…and {c.changes.length - 8} more</li>}
+              </ul>
+            )}
+            {c.canUpdate && !isOwner && <p className="text-xs text-muted">Only owners can update.</p>}
+          </>
+        )}
+        {u?.state === "failed" && <p className="text-bad whitespace-pre-wrap">{u.message}</p>}
+        {u?.state === "idle" && u.message && <p className="text-muted">{u.message}</p>}
+        {error && <p className="text-bad">{error}</p>}
       </div>
     </section>
   );
