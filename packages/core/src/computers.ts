@@ -31,6 +31,11 @@ export interface OrgoConfig {
 export interface DeviceConfig {
   /** a VNC server already running on the device (e.g. macOS Screen Sharing), for smoother live view */
   vncPort?: number;
+  /**
+   * A device's own screen is its owner's. Agents may use it only while the owner lends it to them
+   * (until `until`, or until they stop when `until` is null), and only for things the owner asked for.
+   */
+  lend?: { until: string | null };
 }
 
 export type ComputerConfig = VmConfig & Partial<OrgoConfig> & DeviceConfig;
@@ -64,10 +69,12 @@ export interface Computer {
 export const DeviceCapabilities = z.object({
   platform: z.string(),
   arch: z.string(),
-  /** can agents see and use this device's own screen? */
-  screen: z.object({ ok: z.boolean(), detail: z.string().max(500) }),
+  /** can agents see and use this device's own screen? `off`: it could, but it's turned off at the device (the default) */
+  screen: z.object({ ok: z.boolean(), detail: z.string().max(500), off: z.boolean().optional() }),
   /** can this device run VMs for its agents? */
   vm: z.object({ ok: z.boolean(), detail: z.string().max(500) }),
+  /** someone ran `warren node pause` on the device: no agent runs and no computer use until they resume */
+  paused: z.boolean().optional(),
 });
 export type DeviceCapabilities = z.infer<typeof DeviceCapabilities>;
 
@@ -112,6 +119,14 @@ export interface Screenshot {
 export interface RunOutput {
   exitCode: number;
   output: string;
+}
+
+/** Is a device's screen lent to agents right now? */
+export function lentNow(c: Pick<Computer, "kind" | "config">, at = Date.now()): boolean {
+  if (c.kind !== "device") return true;
+  const lend = (c.config as DeviceConfig).lend;
+  if (!lend) return false;
+  return lend.until === null || new Date(lend.until).getTime() > at;
 }
 
 /** Screenshots for agents are scaled to fit this box: big enough to read, small enough to be cheap. */

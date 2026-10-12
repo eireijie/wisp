@@ -237,7 +237,8 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
   const [token, setToken] = useState<string | null>(null);
   const caps = useDevices(5000)?.find((d) => d.id === nodeId)?.capabilities;
   const [computer, setComputer] = useState<"vm" | "screen" | "later" | null>(null);
-  const computerChoice = computer ?? (caps?.vm.ok ? "vm" : caps?.screen.ok ? "screen" : "later");
+  // never someone's own screen unless they pick it
+  const computerChoice = computer ?? (caps?.vm.ok ? "vm" : "later");
 
   // default to a connected device
   useEffect(() => {
@@ -338,8 +339,8 @@ function AgentStep({ state, onCreated, onPin }: { state: OnboardingState | null;
             <option value="vm" disabled={!caps?.vm.ok}>
               A new VM on this device{caps && !caps.vm.ok ? " (needs Docker)" : ""}
             </option>
-            <option value="screen" disabled={caps?.screen.ok === false}>
-              This device's own screen
+            <option value="screen" disabled={caps?.screen.ok !== true}>
+              Your own screen (only while you lend it){caps?.screen.off ? " (off at the device)" : ""}
             </option>
             <option value="later">Choose later</option>
           </select>

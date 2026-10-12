@@ -18,6 +18,12 @@ Usage:
       Connect this device as a node. Hub URL and token are saved to DIR/node.json,
       so later runs only need \`warren node start\`. Create the token in Warren → Devices.
       --allow-full-access lets agents set to "Full access" run without a sandbox here (saved).
+  warren node screen on|off
+      Let the person who connected this device see and use its own screen from Warren, and
+      lend it to agents for a while. Off by default; it can only be turned on here.
+  warren node pause | warren node resume
+      Stop everything Warren does on this device right away (agent runs, computer use, live
+      views) until you resume. Works while \`warren node start\` is running.
   warren doctor
       Check which agent harnesses are installed here, whether agents can use this
       device's screen or run VMs on it, and which existing agents Warren can import.
@@ -31,7 +37,8 @@ Settings in DIR/node.json (all optional):
                  "acp:my-bot": { "label": "My bot", "command": "my-bot", "args": ["acp"] } }
       Change how an ACP harness starts here, or add your own ACP agent.
   "vmEngine": "podman"     use Podman instead of Docker for VMs
-  "noScreen": true         never let agents use this device's own screen
+  "shareScreen": true      what \`warren node screen on\` sets
+  "noScreen": true         never offer this device's own screen, even if shareScreen is on
 `;
 
 const { values, positionals } = parseArgs({
@@ -66,7 +73,8 @@ if (values.help || !cmd) {
   }
   const caps = await new ComputerHost({ dir, vmEngine: saved.vmEngine }).capabilities();
   console.log("\nComputers");
-  console.log(`  This screen  ${saved.noScreen ? "off (noScreen)" : caps.screen.ok ? "yes" : "no"}: ${caps.screen.detail}`);
+  const shared = saved.shareScreen && !saved.noScreen;
+  console.log(`  This screen  ${!caps.screen.ok ? "no" : shared ? "on (only you can use it, and lend it to agents)" : "off (turn on with `warren node screen on`)"}: ${caps.screen.detail}`);
   console.log(`  VMs          ${caps.vm.ok ? "yes" : "no"}: ${caps.vm.detail}`);
   const found = discoverAgents();
   console.log("\nExisting agents Warren can import");
@@ -104,6 +112,26 @@ if (values.help || !cmd) {
       daemon.stop();
       process.exit(0);
     });
+} else if (cmd === "node" && (sub === "screen" || sub === "pause" || sub === "resume")) {
+  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
+  if (sub === "screen") {
+    const want = positionals[2];
+    if (want !== "on" && want !== "off") {
+      console.log(`This screen is ${saved.shareScreen && !saved.noScreen ? "on" : "off"}. Use \`warren node screen on\` or \`warren node screen off\`.`);
+      process.exit(want ? 1 : 0);
+    }
+    saved.shareScreen = want === "on";
+    if (want === "on") delete saved.noScreen;
+  } else saved.paused = sub === "pause";
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
+  if (sub === "screen")
+    console.log(
+      saved.shareScreen
+        ? "This screen is on. In Warren, only the person who connected this device can see or use it, and agents only while they lend it (Computers)."
+        : "This screen is off. Nobody in Warren can see or use it.",
+    );
+  else console.log(saved.paused ? "Paused. Warren stops agents and computers on this device within a second or two. `warren node resume` to continue." : "Resumed.");
 } else if (cmd === "update") {
   const v = await version();
   console.log(`Warren ${v.commit ?? "(not a git checkout)"}${v.date ? ` from ${v.date.slice(0, 10)}` : ""}`);

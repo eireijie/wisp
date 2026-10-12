@@ -48,6 +48,10 @@ export interface LiveRun {
 /** A computer as the API returns it: who's on it, whether its device is online, how to watch it. */
 export type ComputerInfo = Computer & {
   online: boolean;
+  /** a device's own screen: whose it is (nobody else sees it) */
+  ownerId: string | null;
+  /** its device was paused there */
+  paused: boolean;
   transport: "vnc" | "frames";
   agents: string[];
   activity: { agentId: string; text: string; at: string } | null;

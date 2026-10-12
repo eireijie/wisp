@@ -38,6 +38,8 @@ export class Hub {
   private clients = new Set<ClientConn>();
   private nodes = new Map<string, NodeConn>();
   private live = new Map<string, LiveRun>();
+  /** devices whose owner ran `warren node pause` there */
+  private pausedNodes = new Set<string>();
   readonly guard = new LoopGuard();
   readonly access: MemoryAccess;
   readonly memory: AgentMemory;
@@ -100,15 +102,39 @@ export class Hub {
     socket.on("close", () => this.clients.delete(c));
   }
 
-  broadcast(workspaceId: string, event: ClientEvent) {
+  /** Send an event to everyone in a workspace, or only to the people `only` picks. */
+  broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
     const data = JSON.stringify(event);
-    for (const c of this.clients) if (c.workspaceId === workspaceId && c.socket.readyState === 1) c.socket.send(data);
+    for (const c of this.clients) if (c.workspaceId === workspaceId && c.socket.readyState === 1 && (!only || only(c.userId))) c.socket.send(data);
   }
 
   // --- nodes ----------------------------------------------------------------
 
   isNodeOnline(nodeId: string | null): boolean {
     return !!nodeId && this.nodes.has(nodeId);
+  }
+
+  /** Paused at the device itself (`warren node pause`): it takes no work until it's resumed there. */
+  isNodePaused(nodeId: string | null): boolean {
+    return !!nodeId && this.pausedNodes.has(nodeId);
+  }
+
+  /**
+   * Does this agent's harness run directly on a person's device (not inside a VM)? Then it can
+   * reach that device's files, so only the device's owner can ask it for things unless they open it up.
+   */
+  harnessOnDevice(agent: { nodeId: string | null }): boolean {
+    return !!agent.nodeId;
+  }
+
+  /** Why `requestedBy` can't ask this agent for something, or null when they can. */
+  whyNotAllowed(agent: { handle: string; nodeId: string | null; settings: { anyoneCanAsk?: boolean } }, requestedBy: string | null): string | null {
+    if (!this.harnessOnDevice(agent) || agent.settings.anyoneCanAsk) return null;
+    const node = this.store.node(agent.nodeId!);
+    // a device its owner shared with the workspace takes requests from everyone
+    if (!node?.ownerId || node.shared || node.ownerId === requestedBy) return null;
+    const owner = this.store.user(node.ownerId)?.name ?? "its owner";
+    return `@${agent.handle} runs directly on ${owner}'s device "${node.name}", so only ${owner} can ask it for things. ${owner} can open it up to everyone on its page`;
   }
 
   agentStatus(agent: { id: string; nodeId: string | null }): "online" | "busy" | "offline" {
@@ -153,6 +179,7 @@ export class Hub {
     socket.on("close", () => {
       if (this.closed || this.nodes.get(nodeId) !== conn) return;
       this.nodes.delete(nodeId);
+      this.pausedNodes.delete(nodeId);
       for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
       this.computers.nodeGone(nodeId);
     });
@@ -171,6 +198,11 @@ export class Hub {
       }
       case "capabilities": {
         store.setNodeCapabilities(conn.nodeId, msg.capabilities);
+        const was = this.pausedNodes.has(conn.nodeId);
+        if (msg.capabilities.paused) this.pausedNodes.add(conn.nodeId);
+        else this.pausedNodes.delete(conn.nodeId);
+        if (was && !msg.capabilities.paused) for (const r of store.queuedRunsForNode(conn.nodeId)) this.dispatchRun(r.id);
+        for (const c of store.computersOnNode(conn.nodeId)) this.computers.changed(c.id);
         return;
       }
       case "discovered": {
@@ -230,7 +262,7 @@ export class Hub {
         if (msg.type === "run_done") {
           store.setRunStatus(run.id, "done");
           body = msg.finalText.trim() || live.text.trim();
-          if (body) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route });
+          if (body) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
         } else {
           store.setRunStatus(run.id, "failed", msg.error);
           this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${msg.error}` }], hop: run.hop + 1, route: false });
@@ -264,14 +296,24 @@ export class Hub {
 
   // --- messages & routing ---------------------------------------------------
 
-  /** Persist a message, broadcast it, and start runs for any agents it addresses. */
-  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; route?: boolean; replyInThread?: boolean }): Message {
+  /**
+   * Persist a message, broadcast it, and start runs for any agents it addresses. `onBehalfOf` is
+   * the person the message ultimately serves; by default the person who wrote it, or for an
+   * agent, whoever asked it for the work it's doing now.
+   */
+  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null }): Message {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
     const msg = this.store.insertMessage(m);
     this.broadcast(channel.workspaceId, { type: "message", message: msg });
-    if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false);
+    if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     return msg;
+  }
+
+  /** The person a message from `author` is for, when nobody says otherwise. */
+  requester(author: Actor): string | null {
+    if (author.kind === "user") return author.id === "system" ? null : author.id;
+    return this.currentRun(author.id)?.requestedBy ?? null;
   }
 
   /** Decide which agents should respond to a message. */
@@ -295,18 +337,24 @@ export class Hub {
     return [...out];
   }
 
-  private route(msg: Message, workspaceId: string, replyInThread: boolean) {
+  private route(msg: Message, workspaceId: string, replyInThread: boolean, requestedBy: string | null) {
     const threadId = msg.threadId ?? (replyInThread ? msg.id : null);
     for (const agentId of this.targets(msg, workspaceId)) {
+      const agent = this.store.agent(agentId)!;
+      const notAllowed = this.whyNotAllowed(agent, requestedBy);
+      if (notAllowed) {
+        this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${notAllowed}.`);
+        continue;
+      }
       const verdict = this.guard.allow(msg.channelId, msg.hop);
       if (!verdict.ok) {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${verdict.reason}.`);
         continue;
       }
-      const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop });
-      const agent = this.store.agent(agentId)!;
+      const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop, requestedBy });
       if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a node yet. The request is queued.`);
       else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its node reconnects.`);
+      else if (this.isNodePaused(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)}'s device is paused. The request is queued until it's resumed there.`);
       this.dispatchRun(runId);
     }
   }
@@ -323,7 +371,7 @@ export class Hub {
     if (!run || run.status !== "queued") return;
     const agent = this.store.agent(run.agentId);
     const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
-    if (!agent || !conn) return;
+    if (!agent || !conn || this.pausedNodes.has(conn.nodeId)) return;
     // mark it running before the (async) prompt build so it can't be dispatched twice
     this.store.setRunStatus(run.id, "running");
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
@@ -431,7 +479,12 @@ export class Hub {
       `When you need a person (to sign in, enter a code, solve a captcha, or confirm something on screen), call computer_ask_human with exactly what you need and end your turn; you'll be woken when they hand the computer back. Never ask for passwords in chat.`,
     ];
     if (c.kind === "vm" && c.nodeId === agent.nodeId) lines.push(`Your working folder is shared with the computer: it's ~/files there, and downloads land in it.`);
-    if (c.kind === "device") lines.push(`This is a person's own computer: don't close their windows, change settings or read private things unless the task needs it.`);
+    if (c.kind === "device") {
+      const owner = node?.ownerId ? (this.store.user(node.ownerId)?.name ?? "its owner") : "its owner";
+      lines.push(
+        `This is ${owner}'s own computer. You can use it only while ${owner} lends it to you, and only for things ${owner} asked for. Don't close their windows, change settings or read private things unless the task needs it.`,
+      );
+    }
     return lines.join("\n");
   }
 

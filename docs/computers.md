@@ -7,7 +7,7 @@ There are three kinds of computer:
 | Kind | What it is | Needs |
 | --- | --- | --- |
 | **VM on a device** | A Linux desktop (Xfce, Chromium, a terminal) in a Docker container on one of your devices. Its own screen, so agents never touch yours. | Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman on that device |
-| **A device's own screen** | The device that runs `warren node`, apps and all. Best on a spare computer. | macOS, Windows, or Linux with X11 (see below) |
+| **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, and agents use it only while you lend it. | macOS, Windows, or Linux with X11 (see below) |
 | **Orgo cloud computer** | A Linux desktop from [orgo.ai](https://orgo.ai) that keeps running when your devices are off. | An Orgo API key in **Settings → Computers** |
 
 Several agents can share one computer. They share its files, browser and sign-ins, so they can hand work to each other.
@@ -25,7 +25,17 @@ The VM publishes no ports. Its VNC server only listens inside the container; the
 
 Settings in the device's `~/.warren/node.json`: `"vmEngine": "podman"` to use Podman.
 
-### A device's own screen
+### Your own screen
+
+A device's own screen is its owner's: the person who connected the device. It's off until someone at the device turns it on, and nobody else in the workspace can see it, watch it, take control of it, or give it to an agent:
+
+```bash
+warren node screen on     # on that device; `warren node screen off` turns it off again
+```
+
+Then **Computers → Add computer → Your own screen**. Agents can't use it until you **Lend it to agents** (for an hour, four hours, the rest of the day, or until you stop), and even then only for things you asked for, directly or through other agents. An agent working on someone else's request is turned away. Everything done on it shows under **Activity** on its page.
+
+Use it when a task needs an app or file that only lives on your computer. For everything else, agents have their own VMs.
 
 - **macOS**: whatever starts `warren node` needs **Screen Recording** and **Accessibility** permission in System Settings → Privacy & Security: your terminal app (Terminal, iTerm…) if you run it there, or the Node binary if it runs in the background as a LaunchAgent. `warren doctor` prints which, and [Deploying](deploy.md#macos-launchagent) shows how to add the Node binary. Nothing else to install.
 - **Windows**: works out of the box (a PowerShell helper drives the mouse and keyboard).
@@ -33,7 +43,7 @@ Settings in the device's `~/.warren/node.json`: `"vmEngine": "podman"` to use Po
 
 Live view streams screenshots (about two a second). If the device already runs a VNC server, set its port on the computer and Warren relays that instead.
 
-`"noScreen": true` in `node.json` stops a device from ever offering its screen. Shell commands from Warren (`computer_run`) only run on a device's screen computer when the device opted in with `--allow-full-access`.
+`"noScreen": true` in `node.json` stops a device from ever offering its screen, whatever `warren node screen on` says. Shell commands from Warren (`computer_run`) only run on a device's own screen when the device opted in with `--allow-full-access`.
 
 ### Orgo
 
@@ -45,7 +55,14 @@ Open **Computers** to see every screen, which agents use it, and whether one is 
 
 **Take control** sends your mouse and keyboard to the computer. While you have it, agents' clicks and typing are refused (they're told who has it and to wait or ask); they can still take screenshots. **Hand back** gives it back. If you go idle for 10 minutes, control returns to the agents.
 
-Take control is for coordinating with agents, not a security boundary: anyone in the workspace who can open a computer can control it.
+Take control is for coordinating with agents on shared computers: anyone in the workspace can watch and control a VM or cloud computer. Your own screen is only ever yours.
+
+## Who can reach your computer
+
+- **Devices belong to whoever connected them.** Only you put agents and VMs on your device, bring in agents from it, or change agents that run on it. Under **Devices** you can let others add agents and VMs there (for a shared server, say).
+- **Agents that run directly on your device only work for you.** Their harness can reach that device's files, so requests from anyone else (or from agents working for someone else) are turned away. You can open one up to everyone on its **Permissions** tab; it still can't use your own screen for them.
+- **Harnesses don't get the device's token.** Each agent's harness gets a token for that agent only.
+- **Pause everything at the device:** `warren node pause` stops running agents, computer use and live views within a second or two, and the hub holds new requests until `warren node resume`.
 
 ## When an agent needs you
 

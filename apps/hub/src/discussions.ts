@@ -22,7 +22,7 @@ const slug = (t: string) =>
 export class Discussions {
   constructor(private hub: Hub) {}
 
-  start(o: { workspaceId: string; channelId: string; teamId: string | null; topic: string; goal: string; participants: string[]; moderatorId: string; rounds: number; startedBy: Actor }): Discussion {
+  start(o: { workspaceId: string; channelId: string; teamId: string | null; topic: string; goal: string; participants: string[]; moderatorId: string; rounds: number; startedBy: Actor; requestedBy: string | null }): Discussion {
     const { store } = this.hub;
     const did = id("disc");
     const names = o.participants.map((a) => this.hub.handleOf(a)).join(", ");
@@ -33,7 +33,7 @@ export class Discussions {
       parts: [{ type: "discussion", discussionId: did }],
       route: false,
     });
-    const d = store.createDiscussion({ id: did, workspaceId: o.workspaceId, channelId: o.channelId, threadId: root.id, teamId: o.teamId, topic: o.topic, goal: o.goal, participants: o.participants, moderatorId: o.moderatorId, rounds: o.rounds, startedBy: o.startedBy });
+    const d = store.createDiscussion({ id: did, workspaceId: o.workspaceId, channelId: o.channelId, threadId: root.id, teamId: o.teamId, topic: o.topic, goal: o.goal, participants: o.participants, moderatorId: o.moderatorId, rounds: o.rounds, startedBy: o.startedBy, requestedBy: o.requestedBy });
     this.next(d, 1);
     return store.discussion(d.id)!;
   }
@@ -46,7 +46,7 @@ export class Discussions {
     const updated = store.updateDiscussion(d.id, { round: n, status: summary ? "summarizing" : "running" })!;
     this.notice(updated, summary ? `${this.hub.handleOf(d.moderatorId)} is writing up the decision` : `Round ${n} of ${d.rounds}`);
     for (const agentId of summary ? [d.moderatorId] : d.participants) {
-      const runId = store.createRun({ agentId, channelId: d.channelId, threadId: d.threadId, triggerMessageId: d.threadId, hop: 0, discussionId: d.id, phase });
+      const runId = store.createRun({ agentId, channelId: d.channelId, threadId: d.threadId, triggerMessageId: d.threadId, hop: 0, discussionId: d.id, phase, requestedBy: d.requestedBy ?? null });
       this.hub.dispatchRun(runId);
     }
     this.broadcast(updated.id);

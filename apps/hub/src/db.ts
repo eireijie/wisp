@@ -139,6 +139,11 @@ CREATE TABLE IF NOT EXISTS workspace_settings (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (workspace_id, key)
 );
+CREATE TABLE IF NOT EXISTS computer_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, computer_id TEXT NOT NULL REFERENCES computers(id) ON DELETE CASCADE,
+  actor_kind TEXT NOT NULL, actor_id TEXT NOT NULL, text TEXT NOT NULL, at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS computer_log_by_computer ON computer_log(computer_id, id);
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   sha256 TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
@@ -165,6 +170,11 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["agents", "computer_id", "TEXT"],
   ["nodes", "capabilities_json", "TEXT"],
   ["nodes", "discovered_json", "TEXT NOT NULL DEFAULT '[]'"],
+  ["nodes", "owner_id", "TEXT"],
+  ["nodes", "shared", "INTEGER NOT NULL DEFAULT 0"],
+  ["runs", "requested_by", "TEXT"],
+  ["tokens", "created_by", "TEXT"],
+  ["discussions", "requested_by", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {
@@ -176,7 +186,17 @@ export function openDb(file: string): Database.Database {
   }
   migrateGrants(db);
   migrateGroups(db);
+  migrateNodeOwners(db);
   return db;
+}
+
+/** Devices from before they had owners belong to the workspace's first owner. */
+function migrateNodeOwners(db: Database.Database) {
+  db.prepare(
+    `UPDATE nodes SET owner_id = (SELECT m.user_id FROM memberships m JOIN users u ON u.id = m.user_id
+       WHERE m.workspace_id = nodes.workspace_id AND m.role = 'owner' ORDER BY u.created_at LIMIT 1)
+     WHERE owner_id IS NULL`,
+  ).run();
 }
 
 /**

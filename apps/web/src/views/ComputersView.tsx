@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Cloud, Hand, HandMetal, Laptop, Loader2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
-import type { Agent } from "@warren/core";
+import { ChevronLeft, ChevronRight, Cloud, Hand, HandMetal, Laptop, Loader2, Lock, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
+import { lentNow, type Actor, type Agent } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
-import { computerKindLabel, osName, useDevices, type DeviceInfo } from "../devices.ts";
+import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
 import { AgentAvatar, Button, Empty, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 /** How a computer is doing, in a word or two, for cards and headers. */
 export function computerState(c: ComputerInfo, meId: string | undefined, agents: Agent[], memberName: (id: string) => string): { label: string; tone: "neutral" | "ok" | "warn" | "bad" | "info" | "accent"; working: boolean } {
   if (!c.online) return { label: "Offline", tone: "neutral", working: false };
+  if (c.paused) return { label: "Paused at the device", tone: "warn", working: false };
   if (c.status === "starting") return { label: c.statusText || "Starting…", tone: "info", working: false };
   if (c.status === "error") return { label: "Problem", tone: "bad", working: false };
   if (c.controller) return { label: c.controller.id === meId ? "You're in control" : `${memberName(c.controller.id)} is in control`, tone: "accent", working: false };
@@ -71,7 +72,7 @@ export function ComputersView({ computerId, teach, onBack }: { computerId: strin
         {computers.length === 0 ? (
           <Empty icon={<Monitor />} title="Give your agents a computer">
             <p>Agents work on computers the way you do: they open apps and websites, sign in once, and keep their files. You can watch them work and take control anytime.</p>
-            <p>Use a device's own screen, run a VM on one of your devices, or connect an Orgo cloud computer.</p>
+            <p>Each agent gets its own screen: a VM on one of your devices, or an Orgo cloud computer. Your own screen stays yours.</p>
             {canEdit && (
               <Button variant="primary" onClick={() => setAdding(true)}>
                 <Plus size={16} /> Add computer
@@ -131,7 +132,8 @@ type Kind = "vm" | "device" | "orgo";
 /** Pick where a new computer lives. Used on the Computers page and an agent's Computer tab. */
 export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, defaultName }: { devices: DeviceInfo[]; onClose: () => void; onCreated: (c: ComputerInfo) => void; nodeId?: string | null; defaultName?: string }) {
   const [kind, setKind] = useState<Kind | null>(null);
-  const [nodeId, setNodeId] = useState(preferNode ?? devices.find((d) => d.online)?.id ?? devices[0]?.id ?? "");
+  const usable = usableDevices(devices);
+  const [nodeId, setNodeId] = useState(preferNode && usable.some((d) => d.id === preferNode) ? preferNode : (usable.find((d) => d.online)?.id ?? usable[0]?.id ?? ""));
   const [name, setName] = useState(defaultName ?? "");
   const [size, setSize] = useState<"small" | "medium" | "large">("medium");
   const [orgo, setOrgo] = useState<{ configured: boolean } | null>(null);
@@ -141,7 +143,13 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
   useEffect(() => {
     api<{ orgo: { configured: boolean } }>("GET", "/api/settings/computers").then((s) => setOrgo(s.orgo), () => setOrgo({ configured: false }));
   }, []);
-  const device = devices.find((d) => d.id === nodeId);
+  const mineOnly = devices.filter((d) => d.mine);
+  const choices = kind === "device" ? mineOnly : usable;
+  const device = choices.find((d) => d.id === nodeId);
+  // picking "your own screen" moves the choice to one of your devices
+  useEffect(() => {
+    if (kind && !choices.some((d) => d.id === nodeId)) setNodeId(choices.find((d) => d.online)?.id ?? choices[0]?.id ?? "");
+  }, [kind]);
   const SIZES = { small: { cpus: 1, memoryGb: 2, ram: 4, cpu: 1 }, medium: { cpus: 2, memoryGb: 4, ram: 8, cpu: 2 }, large: { cpus: 4, memoryGb: 8, ram: 16, cpu: 4 } };
 
   const create = async () => {
@@ -180,15 +188,15 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
     <Modal title="Add a computer" onClose={onClose} wide>
       <div className="space-y-4">
         <div className="space-y-2">
-          {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Linux desktop with Chromium that runs in Docker. Agents get their own screen, and your devices stay yours.", devices.some((d) => d.capabilities?.vm.ok) ? undefined : "None of your devices can run VMs yet: install Docker on one.")}
-          {option("device", <Laptop size={18} />, "A device's own screen", "Agents use the device itself, apps and all, and you can watch or take over from here. Best for a spare computer.")}
+          {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Linux desktop with Chromium, separate from everything on the device. Agents get their own screen, and your computer stays yours.", usable.some((d) => d.capabilities?.vm.ok) ? undefined : "None of your devices can run VMs yet: install Docker on one.")}
+          {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask.")}
           {option("orgo", <Cloud size={18} />, "An Orgo cloud computer", "A Linux desktop in the cloud from orgo.ai that keeps running when your devices are off.", orgo && !orgo.configured ? "Add your Orgo API key in Settings → Computers first." : undefined)}
         </div>
 
         {kind && kind !== "orgo" && (
-          <Field label="Device" hint={devices.length ? undefined : "Connect a device first under Devices."}>
+          <Field label="Device" hint={choices.length ? undefined : "Connect a device first under Devices."}>
             <select value={nodeId} onChange={(e) => setNodeId(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
-              {devices.map((d) => (
+              {choices.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name} ({osName(d.capabilities?.platform)}, {d.online ? "online" : "offline"})
                 </option>
@@ -197,7 +205,17 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
           </Field>
         )}
         {kind && kind !== "orgo" && device?.capabilities && (
-          <p className={cx("text-xs", (kind === "vm" ? device.capabilities.vm.ok : device.capabilities.screen.ok) ? "text-muted" : "text-bad")}>{kind === "vm" ? device.capabilities.vm.detail : device.capabilities.screen.detail}</p>
+          <p className={cx("text-xs", (kind === "vm" ? device.capabilities.vm.ok : device.capabilities.screen.ok) ? "text-muted" : "text-bad")}>
+            {kind === "device" && device.capabilities.screen.off ? (
+              <>
+                {device.name}'s screen is off. Only you can turn it on, at that computer: <code>warren node screen on</code>
+              </>
+            ) : kind === "vm" ? (
+              device.capabilities.vm.detail
+            ) : (
+              device.capabilities.screen.detail
+            )}
+          </p>
         )}
         {kind && (
           <div className="grid sm:grid-cols-2 gap-3">
@@ -248,6 +266,8 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   const screen = useRef<LiveScreenHandle>(null);
   const mine = c.controller?.id === me.user.id;
   const canEdit = me.role !== "guest";
+  const device = devices?.find((d) => d.id === c.nodeId);
+  const canRemove = c.kind === "device" ? c.ownerId === me.user.id : c.kind === "vm" ? me.role === "owner" || !!device?.mine : true;
   const on = agents.filter((a) => c.agents.includes(a.id));
   const teacher = teach ? agents.find((a) => a.id === teach) : undefined;
   const Icon = KIND_ICON[c.kind];
@@ -281,7 +301,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
           <span className="font-semibold truncate">{c.name}</span>
           {state.working ? <WorkingBadge text={c.activity?.text ?? "Working"} /> : <Pill tone={state.tone}>{state.label}</Pill>}
         </span>
-        {canEdit && c.online && !teacher && (
+        {canEdit && c.online && !c.paused && !teacher && (
           <>
             {mine ? (
               <Button variant="primary" disabled={busy} onClick={() => control(false)}>
@@ -308,8 +328,8 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             items={[
               { label: "Rename", onSelect: () => setRenaming(true) },
               ...(c.kind !== "device" ? [{ label: c.status === "stopped" ? "Start" : "Stop", icon: c.status === "stopped" ? <Play size={14} /> : <Power size={14} />, onSelect: () => api("POST", `/api/computers/${c.id}/${c.status === "stopped" ? "start" : "stop"}`).catch((e) => setError(e.message)) }] : []),
-              "divider" as const,
-              {
+              ...(canRemove ? ["divider" as const] : []),
+              ...(canRemove ? [{
                 label: c.kind === "device" ? "Stop sharing this screen" : "Delete computer",
                 icon: <Trash2 size={14} />,
                 danger: true,
@@ -319,7 +339,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
                   await api("DELETE", `/api/computers/${c.id}`);
                   go({ view: "computers", computerId: null });
                 },
-              },
+              }] : []),
             ]}
           />
         )}
@@ -351,10 +371,17 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
           <LiveScreen ref={screen} computer={c} control={mine} onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined} />
         </div>
         <aside className="lg:w-72 shrink-0 space-y-4 text-sm">
+          {c.kind === "device" && <LendPanel computer={c} />}
           <section className="rounded-xl border border-line p-3 space-y-1.5">
             <div className="text-xs text-muted">{computerKindLabel(c, devices)}</div>
             <p className="text-muted text-xs">
-              {mine ? "You're in control: your mouse and keyboard go to this computer, and agents wait until you hand it back." : c.controller ? "Someone has control; agents are waiting." : "Agents use it on their own. Take control to use it yourself; they pause until you hand it back."}
+              {mine
+                ? "You're in control: your mouse and keyboard go to this computer, and agents wait until you hand it back."
+                : c.controller
+                  ? "Someone has control; agents are waiting."
+                  : c.kind === "device"
+                    ? "Take control to use it from here. Agents use it only while you lend it."
+                    : "Agents use it on their own. Take control to use it yourself; they pause until you hand it back."}
             </p>
           </section>
           <section className="space-y-2">
@@ -373,11 +400,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
               <p className="text-xs text-muted">None yet. Give an agent this computer on its page (Agents → Computer). Agents that share a computer share its files, browser and sign-ins.</p>
             )}
           </section>
-          {c.activity && (
-            <section className="text-xs text-muted">
-              Last: {agents.find((a) => a.id === c.activity!.agentId)?.name ?? "an agent"} · {c.activity.text} · {timeAgo(c.activity.at)}
-            </section>
-          )}
+          <ActivityLog computer={c} />
         </aside>
       </div>
 
@@ -401,6 +424,90 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
       )}
       {renaming && <RenameComputer computer={c} onClose={() => setRenaming(false)} />}
     </div>
+  );
+}
+
+const LEND_FOR = [
+  { label: "1 hour", minutes: 60 },
+  { label: "4 hours", minutes: 240 },
+  { label: "Today", minutes: null as number | null, today: true },
+  { label: "Until I stop it", minutes: null as number | null },
+];
+
+/** Your own screen: lend it to agents for a while. They use it only for things you ask them. */
+function LendPanel({ computer: c }: { computer: ComputerInfo }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lent = lentNow(c);
+  const lend = async (body: object) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/computers/${c.id}/lend`, body);
+      await useStore.getState().refreshComputers();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const untilTonight = () => {
+    const end = new Date();
+    end.setHours(23, 59, 0, 0);
+    return Math.max(1, Math.round((end.getTime() - Date.now()) / 60_000));
+  };
+  return (
+    <section className="rounded-xl border border-line p-3 space-y-2">
+      <h3 className="font-semibold text-sm flex items-center gap-1.5">
+        <Lock size={13} /> Your own screen
+      </h3>
+      <p className="text-xs text-muted">Only you can see it. {lent ? `Agents can use it ${lendLabel(c.config.lend?.until ?? null)}, and only for things you ask them.` : "Agents can't use it right now; they work on their own VMs."}</p>
+      {lent ? (
+        <Button disabled={busy} onClick={() => lend({ off: true })}>
+          Stop lending it
+        </Button>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium">Lend it to agents for</div>
+          <div className="flex flex-wrap gap-1.5">
+            {LEND_FOR.map((o) => (
+              <Button key={o.label} disabled={busy} onClick={() => lend({ minutes: o.today ? untilTonight() : o.minutes })}>
+                {o.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+      {error && <p className="text-xs text-bad">{error}</p>}
+    </section>
+  );
+}
+
+/** Who did what on this computer, newest first. */
+function ActivityLog({ computer: c }: { computer: ComputerInfo }) {
+  const agents = useStore((s) => s.agents);
+  const members = useStore((s) => s.members);
+  const [log, setLog] = useState<{ actor: Actor; text: string; at: string }[] | null>(null);
+  const activityAt = c.activity?.at;
+  useEffect(() => {
+    api<{ actor: Actor; text: string; at: string }[]>("GET", `/api/computers/${c.id}/log`).then(setLog, () => setLog([]));
+  }, [c.id, activityAt, c.controller?.id, c.config.lend?.until]);
+  const who = (a: Actor) => (a.kind === "agent" ? (agents.find((x) => x.id === a.id)?.name ?? "An agent") : (members.find((m) => m.id === a.id)?.name ?? "Someone"));
+  if (!log?.length) return null;
+  return (
+    <section className="space-y-1.5">
+      <h3 className="font-semibold text-sm">Activity</h3>
+      <ol className="space-y-1 text-xs max-h-64 overflow-y-auto">
+        {log.slice(0, 50).map((l, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="text-faint shrink-0 tabular-nums w-14">{timeAgo(l.at)}</span>
+            <span className="min-w-0">
+              <span className="font-medium">{who(l.actor)}</span> <span className="text-muted">{l.text.charAt(0).toLowerCase() + l.text.slice(1)}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

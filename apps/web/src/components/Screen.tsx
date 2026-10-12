@@ -44,13 +44,17 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
 
   return (
     <div ref={box} className={cx("relative aspect-[16/10] overflow-hidden rounded-xl bg-[#1f1d1b] grid place-items-center", className)}>
-      {url && computer.online ? (
+      {url && computer.online && !computer.paused ? (
         <img src={url} alt={`${computer.name}'s screen`} className="absolute inset-0 size-full object-cover object-top" />
       ) : (
         <span className="text-xs text-white/50 flex items-center gap-1.5">
           {!computer.online ? (
             <>
               <MonitorOff size={14} /> Offline
+            </>
+          ) : computer.paused ? (
+            <>
+              <MonitorOff size={14} /> Paused at the device
             </>
           ) : failed ? (
             "Screen unavailable"
@@ -116,7 +120,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 
   // connect
   useEffect(() => {
-    if (!computer.online) {
+    if (!computer.online || computer.paused) {
       setState("closed");
       return;
     }
@@ -184,7 +188,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
       ws.current?.close();
       ws.current = null;
     };
-  }, [computer.id, computer.online, transport, attempt]);
+  }, [computer.id, computer.online, computer.paused, transport, attempt]);
 
   // control toggles input
   useEffect(() => {
@@ -303,7 +307,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
         <div ref={holder} className="absolute inset-0" />
       ) : (
         <div tabIndex={0} className={cx("absolute inset-0 grid place-items-center outline-none", control ? "cursor-default" : "cursor-not-allowed")}>
-          <img ref={img} alt={`${computer.name}'s screen`} className="max-w-full max-h-full select-none" draggable={false} />
+          <img ref={img} alt={`${computer.name}'s screen`} className={cx("max-w-full max-h-full select-none", state !== "live" && "invisible")} draggable={false} />
         </div>
       )}
       {state !== "live" && (
@@ -315,8 +319,8 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
           ) : (
             <div className="space-y-3">
               <MonitorOff size={22} className="mx-auto opacity-70" />
-              <p>{!computer.online ? `${computer.name} is offline.` : (error ?? "Disconnected.")}</p>
-              {computer.online && (
+              <p>{!computer.online ? `${computer.name} is offline.` : computer.paused ? `${computer.name} is paused at its device. Someone there can run warren node resume.` : (error ?? "Disconnected.")}</p>
+              {computer.online && !computer.paused && (
                 <button onClick={() => setAttempt((n) => n + 1)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 h-8 hover:bg-white/10">
                   <RefreshCw size={14} /> Reconnect
                 </button>

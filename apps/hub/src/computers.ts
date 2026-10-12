@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { WebSocket } from "ws";
-import { ComputerAction, tunnelFrame, type Actor, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
+import { ComputerAction, lentNow, tunnelFrame, type Actor, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
 import { id, now } from "./auth.ts";
 import { OrgoClient, parseResolution } from "./orgo.ts";
 import type { Hub } from "./hub.ts";
@@ -9,6 +9,8 @@ import type { Hub } from "./hub.ts";
 const CONTROL_IDLE_MS = 10 * 60_000;
 /** Viewer links are single-use and short-lived, since they travel in a URL. */
 const TICKET_MS = 60_000;
+/** The same thing done again within this long is one line in a computer's activity. */
+const LOG_COALESCE_MS = 60_000;
 
 export class ComputerError extends Error {
   constructor(
@@ -22,6 +24,10 @@ export class ComputerError extends Error {
 /** What browsers get: the stored computer plus who's on it and how to watch it. */
 export type ComputerView = Computer & {
   online: boolean;
+  /** a device's own screen: whose it is (only they see it) */
+  ownerId: string | null;
+  /** its device was paused there (`warren node pause`) */
+  paused: boolean;
   transport: "vnc" | "frames";
   agents: string[];
   /** the last thing an agent did on it, for "Working" badges */
@@ -65,6 +71,7 @@ export class Computers {
   private tickets = new Map<string, Ticket>();
   private activity = new Map<string, { agentId: string; text: string; at: string }>();
   private lastBroadcast = new Map<string, number>();
+  private lastLog = new Map<string, { who: string; text: string; at: number }>();
   private sweeper: ReturnType<typeof setInterval>;
 
   constructor(private hub: Hub) {
@@ -88,11 +95,23 @@ export class Computers {
     return c.kind === "orgo" ? !!this.hub.store.setting(c.workspaceId, "orgo.apiKey") : this.hub.isNodeOnline(c.nodeId);
   }
 
+  /** A device's own screen belongs to the person who connected the device. Other computers are the workspace's. */
+  ownerOf(c: Computer): string | null {
+    return c.kind === "device" && c.nodeId ? (this.hub.store.node(c.nodeId)?.ownerId ?? null) : null;
+  }
+
+  /** Can this person see and use it? Everyone in the workspace, except for someone else's own screen. */
+  canSee(c: Computer, userId: string): boolean {
+    return c.kind !== "device" || this.ownerOf(c) === userId;
+  }
+
   view(c: Computer): ComputerView {
     const ctl = this.control.get(c.id);
     return {
       ...c,
       controller: ctl ? { kind: "user", id: ctl.id, since: ctl.since } : null,
+      ownerId: this.ownerOf(c),
+      paused: this.hub.isNodePaused(c.nodeId),
       online: this.online(c),
       transport: this.transport(c),
       agents: this.hub.store.agentsOnComputer(c.id).map((a) => a.id),
@@ -106,7 +125,7 @@ export class Computers {
     if (!c) return;
     if (throttle && Date.now() - (this.lastBroadcast.get(computerId) ?? 0) < 2000) return;
     this.lastBroadcast.set(computerId, Date.now());
-    this.hub.broadcast(c.workspaceId, { type: "computer", computer: this.view(c) });
+    this.hub.broadcast(c.workspaceId, { type: "computer", computer: this.view(c) }, (userId) => this.canSee(c, userId));
     for (const v of this.viewers.get(computerId) ?? []) send(v.socket, { type: "computer", computer: this.view(c) });
   }
 
@@ -154,9 +173,12 @@ export class Computers {
    * Do something on a computer. Agents are held back while a person has control; people act
    * only once they've taken control.
    */
-  async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number } = {}): Promise<unknown> {
+  /** `requester`: the person an agent is working for (see the API's requesterOf); by default, whoever asked for its current run. */
+  async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number; requester?: string | null } = {}): Promise<unknown> {
     const ctl = this.control.get(c.id);
     const input = !["screenshot", "status", "start", "stop", "destroy"].includes(action.action);
+    if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null);
+    if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`warren node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
       const who = this.hub.store.user(ctl.id)?.name ?? "Someone";
       throw new ComputerError(`${who} has taken control of ${c.name}. Wait until they hand it back (you'll hear from them), or ask them in chat.`, 409);
@@ -183,8 +205,46 @@ export class Computers {
     if (by.kind === "agent") {
       this.activity.set(c.id, { agentId: by.id, text: describe(action), at: now() });
       this.changed(c.id, true);
+      // on a person's own screen even looking is worth recording
+      if (action.action !== "status" && (action.action !== "screenshot" || c.kind === "device")) this.log(c, by, describe(action));
     }
     return result;
+  }
+
+  /**
+   * A device's own screen: its owner can use it, and agents only while the owner lends it to them
+   * and only in work the owner asked for (directly, or through other agents).
+   */
+  private checkScreenUse(c: Computer, by: Actor, requester: string | null) {
+    const owner = this.ownerOf(c);
+    const name = owner ? (this.hub.store.user(owner)?.name ?? "its owner") : "its owner";
+    if (by.kind === "user") {
+      if (by.id !== "system" && by.id !== owner) throw new ComputerError(`${c.name} is ${name}'s own screen; only ${name} can use it`, 403);
+      return;
+    }
+    if (!lentNow(c)) throw new ComputerError(`${c.name} is ${name}'s own screen and it isn't lent to agents right now. Ask ${name} to lend it to you (Computers → ${c.name} → Lend to agents), or use a VM.`, 403);
+    if (!owner || requester !== owner) throw new ComputerError(`${c.name} is ${name}'s own screen, so you can only use it for things ${name} asked for. Use a VM for this instead.`, 403);
+  }
+
+  /** Lend a device's screen to agents for `minutes`, until the owner stops it (null), or stop lending (false). */
+  lend(c: Computer, userId: string, minutes: number | null | false) {
+    const config = { ...c.config };
+    if (minutes === false) delete config.lend;
+    else config.lend = { until: minutes === null ? null : new Date(Date.now() + minutes * 60_000).toISOString() };
+    this.hub.store.updateComputer(c.id, { config });
+    const span = (m: number) => (m % 60 ? `${m} minute${m === 1 ? "" : "s"}` : `${m / 60} hour${m === 60 ? "" : "s"}`);
+    const what = minutes === false ? "Stopped lending it to agents" : minutes === null ? "Lent it to agents until they stop it" : `Lent it to agents for ${span(minutes)}`;
+    this.log(c, { kind: "user", id: userId }, what);
+    this.changed(c.id);
+  }
+
+  /** Add a line to the computer's activity, folding repeats of the same thing into one. */
+  log(c: Computer, by: Actor, text: string) {
+    const who = `${by.kind}:${by.id}`;
+    const last = this.lastLog.get(c.id);
+    if (last && last.who === who && last.text === text && Date.now() - last.at < LOG_COALESCE_MS) return;
+    this.lastLog.set(c.id, { who, text, at: Date.now() });
+    this.hub.store.logComputer(c.id, by, text);
   }
 
   /** The screen as it looks now (or within `maxAgeMs`), for thumbnails. */
@@ -210,11 +270,13 @@ export class Computers {
   }
 
   take(c: Computer, userId: string) {
+    if (!this.canSee(c, userId)) throw new ComputerError("only its owner can use this screen", 403);
     const cur = this.control.get(c.id);
     if (cur && cur.id !== userId && Date.now() - cur.touched < CONTROL_IDLE_MS) {
       throw new ComputerError(`${this.hub.store.user(cur.id)?.name ?? "Someone"} is using it right now`, 409);
     }
     this.control.set(c.id, { kind: "user", id: userId, since: now(), touched: Date.now() });
+    this.log(c, { kind: "user", id: userId }, "Took control");
     this.changed(c.id);
   }
 
@@ -223,6 +285,7 @@ export class Computers {
     const cur = this.control.get(c.id);
     if (cur && cur.id !== userId) throw new ComputerError("someone else has control", 409);
     this.control.delete(c.id);
+    if (cur) this.log(c, { kind: "user", id: userId }, "Handed it back");
     const help = c.help;
     if (help) {
       this.hub.store.updateComputer(c.id, { help: null });
@@ -266,6 +329,8 @@ export class Computers {
   // --- live view --------------------------------------------------------------------------------------
 
   ticket(c: Computer, userId: string): string {
+    if (!this.canSee(c, userId)) throw new ComputerError("only its owner can watch this screen", 403);
+    this.log(c, { kind: "user", id: userId }, "Opened the live view");
     const t = crypto.randomBytes(24).toString("base64url");
     this.tickets.set(t, { computerId: c.id, userId, workspaceId: c.workspaceId, kind: this.transport(c), expires: Date.now() + TICKET_MS });
     return t;

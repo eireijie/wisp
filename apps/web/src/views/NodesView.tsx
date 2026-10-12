@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, Download, Plus, Server, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2, Users } from "lucide-react";
+import type { DeviceCapabilities } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Button, CopyBlock, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
@@ -7,6 +8,11 @@ import { Button, CopyBlock, Empty, Field, Input, Modal, Pill, cx, timeAgo } from
 interface NodeInfo {
   id: string;
   name: string;
+  ownerName: string | null;
+  mine: boolean;
+  shared: boolean;
+  paused: boolean;
+  capabilities: DeviceCapabilities | null;
   online: boolean;
   lastSeen: string | null;
   agents: string[];
@@ -58,9 +64,15 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     <Server size={18} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium flex items-center gap-2">
+                    <div className="font-medium flex flex-wrap items-center gap-2">
                       {n.name}
                       <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "online" : "offline"}</span>
+                      {n.paused && (
+                        <Pill tone="warn">
+                          <Pause size={11} /> Paused at the device
+                        </Pill>
+                      )}
+                      <span className="text-xs font-normal text-muted">{n.mine ? "Yours" : n.ownerName ? `${n.ownerName}'s` : ""}</span>
                     </div>
                     <div className="text-xs text-muted truncate">
                       {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No agents assigned"}
@@ -90,7 +102,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                       <Download size={15} /> <span className="hidden sm:inline">Update</span>
                     </Button>
                   )}
-                  <button
+                  {(n.mine || isOwner) && <button
                     className="p-2 rounded-md hover:bg-hover text-muted hover:text-bad"
                     title="Remove device"
                     onClick={async () => {
@@ -100,8 +112,9 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     }}
                   >
                     <Trash2 size={16} />
-                  </button>
+                  </button>}
                 </div>
+                <DeviceAccess node={n} onChange={refresh} />
                 {n.update?.message && (
                   <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
                     {n.update.state !== "idle" && (
@@ -124,6 +137,54 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
             refresh();
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** Who can use the device: its own screen (only its owner, and only once it's on at the device) and whether others can add agents. */
+function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+  const screen = n.capabilities?.screen;
+  return (
+    <div className="mt-3 pl-14 space-y-1.5 text-xs text-muted">
+      <div className="flex items-start gap-2">
+        <Monitor size={13} className="mt-0.5 shrink-0" />
+        <span>
+          {!screen
+            ? "Its screen: unknown until it connects."
+            : screen.ok
+              ? n.mine
+                ? "Its own screen is on: only you can see it, and agents only while you lend it to them (Computers)."
+                : `Its own screen is ${n.ownerName ?? "its owner"}'s alone.`
+              : screen.off
+                ? n.mine
+                  ? <>Its own screen is off. Agents use VMs instead. To use it yourself from Warren, run <code>warren node screen on</code> on {n.name}.</>
+                  : "Its own screen is off."
+                : `Its own screen can't be used: ${screen.detail}`}
+        </span>
+      </div>
+      {n.mine ? (
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={n.shared}
+            onChange={async (e) => {
+              await api("PATCH", `/api/nodes/${n.id}`, { shared: e.target.checked }).catch((err) => alert((err as Error).message));
+              onChange();
+            }}
+          />
+          <span>
+            <span className="text-ink">Let others in the workspace add agents and VMs here</span>
+            <br />
+            Leave this off for a personal computer. Agents that run directly on it then only take requests from you.
+          </span>
+        </label>
+      ) : (
+        <div className="flex items-start gap-2">
+          {n.shared ? <Users size={13} className="mt-0.5 shrink-0" /> : <Lock size={13} className="mt-0.5 shrink-0" />}
+          <span>{n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}</span>
+        </div>
       )}
     </div>
   );

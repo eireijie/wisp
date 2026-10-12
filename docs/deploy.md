@@ -159,7 +159,7 @@ On iPhone: open the URL in Safari → Share → **Add to Home Screen**.
 | `WARREN_DATA_DIR` | `./data` | Database, vault and files |
 | `WARREN_WEB_DIR` | `apps/web/dist` | Built web app to serve |
 
-Device daemon (`warren node start`): `--hub`, `--token`, `--name`, `--dir` (default `~/.warren`), `--allow-full-access`. Settings are saved to `~/.warren/node.json`.
+Device daemon (`warren node start`): `--hub`, `--token`, `--name`, `--dir` (default `~/.warren`), `--allow-full-access`. Settings are saved to `~/.warren/node.json`. At the device: `warren node screen on|off` offers its own screen to you (off by default), and `warren node pause` / `warren node resume` stop and restart everything Warren does there.
 
 Each agent's model, reasoning effort and access level are set in Warren (agent → **Model**). The device reports which models its harnesses offer, so the list always matches what's installed. Access levels map to each harness's own controls:
 

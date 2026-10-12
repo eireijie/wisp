@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Cloud, FileText, Laptop, Loader2, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
+import { CalendarClock, Cloud, FileText, Laptop, Loader2, Lock, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
 import { describeCron, harnessInfo, nextRun, type Agent, type Routine } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
@@ -84,8 +84,12 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
             </div>
           </div>
         ) : (
-          <div className={cx("rounded-xl border px-4 py-3 text-sm", headless ? "border-line bg-bg text-muted" : "border-warn/40 bg-warn/10")}>
-            {headless ? `@${agent.handle} runs headless: it can't see or use a screen. Give it a computer below to change that.` : `@${agent.handle} doesn't have a computer yet, so it can't use apps or websites. Pick one below.`}
+          <div className={cx("rounded-xl border px-4 py-3 text-sm", headless || agent.computerId ? "border-line bg-bg text-muted" : "border-warn/40 bg-warn/10")}>
+            {agent.computerId
+              ? `@${agent.handle} uses ${device?.ownerName ?? "someone"}'s own screen, which only they can see.`
+              : headless
+                ? `@${agent.handle} runs headless: it can't see or use a screen. Give it a computer below to change that.`
+                : `@${agent.handle} doesn't have a computer yet, so it can't use apps or websites. Pick one below.`}
           </div>
         )}
       </section>
@@ -96,11 +100,17 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
           {device && device.capabilities?.vm.ok && (
             <Option icon={<Monitor size={17} />} title={`A new VM on ${device.name}`} body="Its own Linux desktop with Chromium. Doesn't touch your screen." busy={busy === "vm"} onClick={quickVm} />
           )}
-          {device && (
+          {device?.mine && (
             <Option
-              icon={<Laptop size={17} />}
-              title={`${device.name}'s own screen`}
-              body={device.capabilities?.screen.ok === false ? device.capabilities.screen.detail : "It uses the device itself, with your apps. Best on a spare computer."}
+              icon={<Lock size={17} />}
+              title="Your own screen"
+              body={
+                device.capabilities?.screen.off
+                  ? `Off. Turn it on at ${device.name} with: warren node screen on`
+                  : device.capabilities?.screen.ok === false
+                    ? device.capabilities.screen.detail
+                    : "Only while you lend it, and only for things you ask. For apps that only live on your computer."
+              }
               disabled={device.capabilities?.screen.ok === false || others.some((c) => c.kind === "device" && c.nodeId === device.id) || current?.kind === "device"}
               busy={busy === "screen"}
               onClick={quickScreen}
@@ -109,7 +119,7 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
           {others.map((c) => (
             <Option key={c.id} icon={c.kind === "orgo" ? <Cloud size={17} /> : c.kind === "vm" ? <Monitor size={17} /> : <Laptop size={17} />} title={c.name} body={`${computerKindLabel(c, nodes)}${c.agents.length ? ` · used by ${agents.filter((a) => c.agents.includes(a.id)).map((a) => `@${a.handle}`).join(", ")}` : ""}`} busy={busy === c.id} onClick={() => use(c.id, () => assign(c))} />
           ))}
-          <Option icon={<Plus size={17} />} title="Another computer…" body="A VM on a different device, a device's screen, or an Orgo cloud computer." onClick={() => setAdding(true)} />
+          <Option icon={<Plus size={17} />} title="Another computer…" body="A VM on a different device, or an Orgo cloud computer." onClick={() => setAdding(true)} />
         </div>
         {!headless && (
           <button onClick={goHeadless} disabled={!!busy} className="mt-2 text-xs text-muted hover:text-bad underline-offset-2 hover:underline">

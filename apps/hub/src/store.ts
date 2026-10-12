@@ -64,23 +64,35 @@ export class Store {
 
   // --- nodes ----------------------------------------------------------------
 
-  createNode(workspaceId: string, name: string) {
-    const n = { id: id("node"), workspaceId, name, createdAt: now() };
-    this.db.prepare("INSERT INTO nodes (id, workspace_id, name, created_at) VALUES (?, ?, ?, ?)").run(n.id, workspaceId, name, n.createdAt);
+  createNode(workspaceId: string, name: string, ownerId: string) {
+    const n = { id: id("node"), workspaceId, name, ownerId, shared: false, createdAt: now() };
+    this.db.prepare("INSERT INTO nodes (id, workspace_id, name, owner_id, created_at) VALUES (?, ?, ?, ?, ?)").run(n.id, workspaceId, name, ownerId, n.createdAt);
     return n;
   }
 
   nodes(workspaceId: string) {
-    return this.db.prepare("SELECT id, name, last_seen AS lastSeen, created_at AS createdAt FROM nodes WHERE workspace_id = ? ORDER BY name").all(workspaceId) as {
-      id: string;
-      name: string;
-      lastSeen: string | null;
-      createdAt: string;
-    }[];
+    return (
+      this.db.prepare("SELECT id, name, owner_id AS ownerId, shared, last_seen AS lastSeen, created_at AS createdAt FROM nodes WHERE workspace_id = ? ORDER BY name").all(workspaceId) as {
+        id: string;
+        name: string;
+        ownerId: string | null;
+        shared: number;
+        lastSeen: string | null;
+        createdAt: string;
+      }[]
+    ).map((n) => ({ ...n, shared: !!n.shared }));
   }
 
+  /** A device: `ownerId` is the person who connected it; `shared` lets others in the workspace put agents and VMs on it. */
   node(nodeId: string) {
-    return this.db.prepare("SELECT id, workspace_id AS workspaceId, name FROM nodes WHERE id = ?").get(nodeId) as { id: string; workspaceId: string; name: string } | undefined;
+    const r = this.db.prepare("SELECT id, workspace_id AS workspaceId, name, owner_id AS ownerId, shared FROM nodes WHERE id = ?").get(nodeId) as
+      | { id: string; workspaceId: string; name: string; ownerId: string | null; shared: number }
+      | undefined;
+    return r && { ...r, shared: !!r.shared };
+  }
+
+  setNodeShared(nodeId: string, shared: boolean) {
+    this.db.prepare("UPDATE nodes SET shared = ? WHERE id = ?").run(shared ? 1 : 0, nodeId);
   }
 
   setNodeCatalog(nodeId: string, catalog: HarnessCatalog[]) {
@@ -215,6 +227,20 @@ export class Store {
         computerId,
       );
     return this.computer(computerId);
+  }
+
+  /** Remember something done on a computer (who, what), keeping the last 500. */
+  logComputer(computerId: string, actor: Actor, text: string) {
+    this.db.prepare("INSERT INTO computer_log (computer_id, actor_kind, actor_id, text, at) VALUES (?, ?, ?, ?, ?)").run(computerId, actor.kind, actor.id, text.slice(0, 300), now());
+    this.db.prepare("DELETE FROM computer_log WHERE computer_id = ? AND id <= (SELECT id FROM computer_log WHERE computer_id = ? ORDER BY id DESC LIMIT 1 OFFSET 500)").run(computerId, computerId);
+  }
+
+  computerLog(computerId: string, limit = 100): { actor: Actor; text: string; at: string }[] {
+    return (this.db.prepare("SELECT actor_kind, actor_id, text, at FROM computer_log WHERE computer_id = ? ORDER BY id DESC LIMIT ?").all(computerId, limit) as { actor_kind: Actor["kind"]; actor_id: string; text: string; at: string }[]).map((r) => ({
+      actor: { kind: r.actor_kind, id: r.actor_id } as Actor,
+      text: r.text,
+      at: r.at,
+    }));
   }
 
   deleteComputer(computerId: string) {
@@ -648,21 +674,22 @@ export class Store {
 
   // --- runs -----------------------------------------------------------------
 
-  createRun(r: { agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; hop: number; discussionId?: string; phase?: string }) {
+  /** `requestedBy`: the person this run is ultimately for (who asked, or who asked the agent that asked); null when nobody did. */
+  createRun(r: { agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; hop: number; discussionId?: string; phase?: string; requestedBy?: string | null }) {
     const runId = id("run");
     this.db
-      .prepare("INSERT INTO runs (id, agent_id, channel_id, thread_id, trigger_message_id, status, hop, discussion_id, phase, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)")
-      .run(runId, r.agentId, r.channelId, r.threadId, r.triggerMessageId, r.hop, r.discussionId ?? null, r.phase ?? null, now());
+      .prepare("INSERT INTO runs (id, agent_id, channel_id, thread_id, trigger_message_id, status, hop, discussion_id, phase, requested_by, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)")
+      .run(runId, r.agentId, r.channelId, r.threadId, r.triggerMessageId, r.hop, r.discussionId ?? null, r.phase ?? null, r.requestedBy ?? null, now());
     return runId;
   }
 
   run(runId: string) {
     return this.db
       .prepare(
-        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase FROM runs WHERE id = ?",
+        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy FROM runs WHERE id = ?",
       )
       .get(runId) as
-      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null }
+      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null }
       | undefined;
   }
 
@@ -678,10 +705,10 @@ export class Store {
     const ts = now();
     this.db
       .prepare(
-        `INSERT INTO discussions (id, workspace_id, channel_id, thread_id, team_id, topic, goal, participants_json, moderator_id, rounds, round, status, started_by_kind, started_by_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?)`,
+        `INSERT INTO discussions (id, workspace_id, channel_id, thread_id, team_id, topic, goal, participants_json, moderator_id, rounds, round, status, started_by_kind, started_by_id, requested_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?)`,
       )
-      .run(did, d.workspaceId, d.channelId, d.threadId, d.teamId, d.topic, d.goal, JSON.stringify(d.participants), d.moderatorId, d.rounds, d.startedBy.kind, d.startedBy.id, ts, ts);
+      .run(did, d.workspaceId, d.channelId, d.threadId, d.teamId, d.topic, d.goal, JSON.stringify(d.participants), d.moderatorId, d.rounds, d.startedBy.kind, d.startedBy.id, d.requestedBy ?? null, ts, ts);
     return this.discussion(did)!;
   }
 
@@ -1105,6 +1132,7 @@ type DiscussionRow = {
   decision_path: string | null;
   started_by_kind: "user" | "agent";
   started_by_id: string;
+  requested_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1125,6 +1153,7 @@ function toDiscussion(r: DiscussionRow): Discussion {
     status: r.status,
     decisionPath: r.decision_path,
     startedBy: { kind: r.started_by_kind, id: r.started_by_id } as Actor,
+    requestedBy: r.requested_by,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

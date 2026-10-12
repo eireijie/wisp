@@ -67,7 +67,9 @@ describe("node daemon", () => {
 
     expect(calls[0].sessionId).toBeNull();
     expect(calls[1].sessionId).toBe("sess-1");
-    expect(calls[0].mcp?.env.WARREN_AGENT).toBeTruthy();
+    // the harness acts as its agent only, never with the device's own token
+    expect(calls[0].mcp?.env.WARREN_TOKEN).toMatch(/^wr_agent_/);
+    expect(calls[0].mcp?.env.WARREN_AGENT).toBeUndefined();
     expect(calls[0].cwd).toContain(path.join("agents", "bolt"));
   });
 

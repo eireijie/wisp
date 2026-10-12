@@ -14,6 +14,8 @@ interface Helpers {
   parse<S extends z.ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | null;
   commitAuthor(c: Caller): { name: string; email: string };
   agentView(a: NonNullable<ReturnType<Hub["store"]["agent"]>>): unknown;
+  /** the person a caller works for */
+  requesterOf(c: Caller): string | null;
 }
 
 const NAME = z.string().trim().min(1).max(80);
@@ -65,9 +67,19 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     throw err;
   };
 
+  /** The computer, if the caller may see it: someone else's own screen is as good as missing. */
   const own = (c: Caller, computerId: string): Computer | null => {
     const comp = store.computer(computerId);
-    return comp && comp.workspaceId === c.workspaceId ? comp : null;
+    if (!comp || comp.workspaceId !== c.workspaceId) return null;
+    if (c.actor.kind === "user" && !computers.canSee(comp, c.actor.id)) return null;
+    return comp;
+  };
+
+  /** Removing a computer: a screen by its owner, a VM by its device's owner or a workspace owner. */
+  const canRemove = (c: Caller, comp: Computer) => {
+    if (comp.kind === "device") return computers.ownerOf(comp) === c.actor.id;
+    if (comp.kind === "vm") return c.viewer.role === "owner" || (!!comp.nodeId && store.node(comp.nodeId)?.ownerId === c.actor.id);
+    return true;
   };
 
   const startInBackground = (comp: Computer) => {
@@ -91,7 +103,10 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.get("/api/computers", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return store.computers(c.workspaceId).map((x) => computers.view(x));
+    return store
+      .computers(c.workspaceId)
+      .filter((x) => computers.canSee(x, c.actor.id))
+      .map((x) => computers.view(x));
   });
 
   app.get("/api/computers/:id", async (req, reply) => {
@@ -141,7 +156,10 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       const node = store.node(body.nodeId);
       if (!node || node.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown device" });
       const caps = store.nodeCapabilities(node.id);
+      const owner = node.ownerId ? (store.user(node.ownerId)?.name ?? "its owner") : "its owner";
       if (body.kind === "device") {
+        if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: `${node.name} is ${owner}'s device; only ${owner} can use its screen` });
+        if (caps?.screen.off) return reply.code(400).send({ error: `${node.name}'s screen is off. Turn it on at the device itself: \`warren node screen on\`` });
         // one computer per device screen; asking again returns it
         const existing = store.computersOnNode(node.id).find((x) => x.kind === "device");
         if (existing) return computers.view(existing);
@@ -149,6 +167,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
         computers.changed(comp.id);
         return computers.view(comp);
       }
+      if (node.ownerId !== c.actor.id && !node.shared) return reply.code(403).send({ error: `${node.name} is ${owner}'s device; ask ${owner} to let others add VMs there (Devices)` });
       if (caps && !caps.vm.ok) return reply.code(400).send({ error: `${node.name} can't run VMs yet: ${caps.vm.detail}` });
       // a custom image runs whatever it contains on someone's device
       if (body.image && c.viewer.role !== "owner") return reply.code(403).send({ error: "only owners can choose a custom VM image" });
@@ -178,8 +197,31 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
+    if (!canRemove(c, comp)) return reply.code(403).send({ error: "only its device's owner or a workspace owner can delete this VM" });
     await computers.remove(comp);
     return { ok: true };
+  });
+
+  /** Lend your own screen to agents (for `minutes`, or until you stop with null), or stop lending it. */
+  app.post("/api/computers/:id/lend", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const comp = own(c, (req.params as { id: string }).id);
+    if (!comp) return reply.code(404).send({ error: "computer not found" });
+    if (comp.kind !== "device") return reply.code(400).send({ error: "only a device's own screen is lent; agents can always use VMs and cloud computers" });
+    const body = parse(z.union([z.object({ off: z.literal(true) }), z.object({ minutes: z.number().int().min(1).max(7 * 24 * 60).nullable() })]), req.body, reply);
+    if (!body) return;
+    computers.lend(comp, c.actor.id, "off" in body ? false : body.minutes);
+    return computers.view(store.computer(comp.id)!);
+  });
+
+  /** What people and agents did on a computer, newest first. */
+  app.get("/api/computers/:id/log", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const comp = own(c, (req.params as { id: string }).id);
+    if (!comp) return reply.code(404).send({ error: "computer not found" });
+    return store.computerLog(comp.id);
   });
 
   for (const op of ["start", "stop"] as const) {
@@ -297,7 +339,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!action) return;
     if (["destroy", "stop"].includes(action.action)) return reply.code(403).send({ error: "only people can stop or remove a computer" });
     try {
-      return await computers.act(comp, action, c.actor);
+      return await computers.act(comp, action, c.actor, { requester: h.requesterOf(c) });
     } catch (err) {
       return fail(reply, err);
     }
@@ -503,6 +545,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const node = store.node((req.params as { id: string }).id);
     if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "device not found" });
+    if (node.ownerId !== c.actor.id && !node.shared) return reply.code(403).send({ error: `only the person who connected ${node.name} can look for agents on it` });
     if (!hub.sendToNode(node.id, { type: "discover" })) return reply.code(503).send({ error: "the device is offline" });
     return { ok: true };
   });
@@ -519,6 +562,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     const node = store.node(body.nodeId);
     if (!node || node.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown device" });
+    if (node.ownerId !== c.actor.id && !node.shared) return reply.code(403).send({ error: `only the person who connected ${node.name} can bring in agents from it` });
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
     if (body.computerId && !own(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
     let found: DiscoveredAgent;

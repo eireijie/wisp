@@ -29,8 +29,15 @@ export interface NodeConfig {
   harnesses?: Record<string, DeviceHarness>;
   /** "docker" or "podman" for VMs; default: whichever is installed */
   vmEngine?: string;
-  /** don't offer this device's own screen to agents */
+  /**
+   * Offer this device's own screen to its owner, who can lend it to agents. Off by default, and
+   * only someone at the device can turn it on (`warren node screen on`), not the hub.
+   */
+  shareScreen?: boolean;
+  /** never offer this device's own screen, whatever shareScreen says (older setting) */
   noScreen?: boolean;
+  /** `warren node pause`: take no work from the hub (no agent runs, no computer use) until resumed */
+  paused?: boolean;
   /** where to look for existing agents (default: the home folder); for tests */
   discoverHome?: string;
 }
@@ -53,6 +60,10 @@ export class NodeDaemon {
   private registry: Record<string, HarnessAdapter>;
   readonly computers: ComputerHost;
   private tunnels = new Map<string, Tunnel>();
+  /** per-agent tokens for harnesses, so a harness never holds this device's own token */
+  private agentTokens: Record<string, string>;
+  /** shareScreen and paused, as last read from node.json (people change them there with the CLI) */
+  private local: { shareScreen: boolean; paused: boolean };
 
   constructor(
     private cfg: NodeConfig,
@@ -62,6 +73,8 @@ export class NodeDaemon {
   ) {
     fs.mkdirSync(cfg.dir, { recursive: true });
     this.sessions = readJson(this.sessionsFile, {});
+    this.agentTokens = readJson(this.tokensFile, {});
+    this.local = this.readLocal();
     this.api = new WarrenClient({ url: cfg.hub, token: cfg.token });
     this.registry = registry ?? deviceAdapters(cfg.harnesses);
     this.computers = computers ?? new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log });
@@ -71,13 +84,56 @@ export class NodeDaemon {
     return path.join(this.cfg.dir, "sessions.json");
   }
 
+  private get tokensFile() {
+    return path.join(this.cfg.dir, "agent-tokens.json");
+  }
+
+  private get configFile() {
+    return path.join(this.cfg.dir, "node.json");
+  }
+
+  /** The switches people flip at the device: node.json wins over what this process started with. */
+  private readLocal() {
+    const file = readJson<Partial<NodeConfig>>(this.configFile, {});
+    return { shareScreen: !!(file.shareScreen ?? this.cfg.shareScreen) && !(file.noScreen ?? this.cfg.noScreen), paused: !!(file.paused ?? this.cfg.paused) };
+  }
+
+  /** Someone ran `warren node screen …` or `warren node pause/resume`: apply it now. */
+  private onLocalChange = () => {
+    const before = this.local;
+    this.local = this.readLocal();
+    if (before.shareScreen === this.local.shareScreen && before.paused === this.local.paused) return;
+    if (this.local.paused && !before.paused) {
+      this.log("paused: stopping agents and computers until `warren node resume`");
+      for (const a of this.aborts.values()) a.abort("paused");
+    }
+    if (this.local.paused || !this.local.shareScreen) {
+      this.computers.stopAll();
+      for (const t of this.tunnels.values()) t.close();
+      this.tunnels.clear();
+    }
+    if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Warren (agents only when you lend it)" : "off"}`);
+    if (before.paused && !this.local.paused) this.log("resumed");
+    void this.sendCapabilities();
+  };
+
+  private async sendCapabilities() {
+    const caps = await this.computers.capabilities();
+    if (!this.local.shareScreen && caps.screen.ok) caps.screen = { ok: false, off: true, detail: "Off. Only someone at this device can turn it on: `warren node screen on`" };
+    caps.paused = this.local.paused;
+    this.send({ type: "capabilities", capabilities: caps });
+  }
+
   start() {
     this.stopped = false;
+    fs.watchFile(this.configFile, { interval: 1000 }, this.onLocalChange);
+    if (this.local.paused) this.log("paused: no agent runs or computer use until `warren node resume`");
     this.connect();
   }
 
   stop() {
     this.stopped = true;
+    fs.unwatchFile(this.configFile, this.onLocalChange);
     for (const a of this.aborts.values()) a.abort();
     this.computers.stopAll();
     for (const t of this.tunnels.values()) t.close();
@@ -138,13 +194,12 @@ export class NodeDaemon {
       const agents = await this.api.request<Agent[]>("GET", "/api/node/agents").catch(() => [] as Agent[]);
       this.log(`connected to ${this.cfg.hub} as "${this.cfg.name}" hosting ${agents.map((a) => "@" + a.handle).join(", ") || "no agents yet"}`);
       this.send({ type: "hello", nodeName: this.cfg.name, agents: agents.map((a) => a.id), version: await version() });
-      const caps = await this.computers.capabilities();
-      if (this.cfg.noScreen) caps.screen = { ok: false, detail: "Turned off in this device's node.json" };
-      this.send({ type: "capabilities", capabilities: caps });
+      await this.sendCapabilities();
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
       this.send({ type: "catalog", catalog: await this.harnessCatalog() });
     } else if (msg.type === "computer") {
-      if (msg.computer.kind === "device" && this.cfg.noScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: "this device doesn't offer its screen to agents" });
+      if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`warren node resume\`` });
+      if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`warren node screen on\`)` });
       const status = (text: string) => this.send({ type: "computer_status", computerId: msg.computer.id, status: "starting", text });
       this.computers.act(msg.computer, msg.action, status).then(
         (result) => {
@@ -158,7 +213,7 @@ export class NodeDaemon {
       );
     } else if (msg.type === "screen_watch") {
       if (!msg.on) return this.computers.unwatch(msg.computer.id);
-      if (msg.computer.kind === "device" && this.cfg.noScreen) return;
+      if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return;
       this.computers.watch(
         msg.computer,
         msg.fps ?? 2,
@@ -167,6 +222,7 @@ export class NodeDaemon {
       );
     } else if (msg.type === "tunnel_open") {
       const { tunnelId } = msg;
+      if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return this.send({ type: "tunnel_closed", tunnelId, error: this.local.paused ? "the device is paused" : "the screen is off" });
       this.computers
         .tunnel(
           msg.computer,
@@ -200,6 +256,7 @@ export class NodeDaemon {
         (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
       );
     } else if (msg.type === "run") {
+      if (this.local.paused) return this.send({ type: "run_failed", runId: msg.run.runId, error: `${this.cfg.name} is paused; ask again once someone resumes it there` });
       // one run at a time per agent so its harness session stays consistent
       const prev = this.queues.get(msg.run.agentId) ?? Promise.resolve();
       const next = prev.then(() => this.execute(msg.run));
@@ -246,7 +303,7 @@ export class NodeDaemon {
     this.aborts.set(run.runId, abort);
     this.log(`@${agent.handle} (${adapter.label}) working on ${run.runId}`);
 
-    const attempt = (sessionId: string | null) =>
+    const attempt = async (sessionId: string | null) =>
       adapter.run(
         {
           prompt: run.prompt,
@@ -256,7 +313,7 @@ export class NodeDaemon {
           fast: agent.settings?.fast ?? false,
           access,
           sessionId,
-          mcp: this.mcpSpec(agent.id),
+          mcp: await this.mcpSpec(agent.id),
           signal: abort.signal,
           options: this.cfg.harnessOptions?.[agent.harness],
         },
@@ -283,7 +340,7 @@ export class NodeDaemon {
       this.send({ type: "run_done", runId: run.runId, finalText: result.finalText });
       this.log(`@${agent.handle} finished ${run.runId}`);
     } catch (err) {
-      const message = abort.signal.aborted ? "cancelled" : (err as Error).message;
+      const message = abort.signal.aborted ? (abort.signal.reason === "paused" ? `stopped: ${this.cfg.name} was paused` : "cancelled") : (err as Error).message;
       this.send({ type: "run_failed", runId: run.runId, error: message });
       this.log(`@${agent.handle} failed ${run.runId}: ${message}`);
     } finally {
@@ -305,13 +362,33 @@ export class NodeDaemon {
     return this.catalog;
   }
 
-  /** The harness gets warren-mcp with this node's token, acting as the agent. */
-  private mcpSpec(agentId: string): McpServerSpec {
+  /**
+   * The harness gets warren-mcp with a token for its agent alone, so whatever the agent runs can't
+   * act as this device or its other agents. Hubs from before agent tokens get the device's token.
+   */
+  private async mcpSpec(agentId: string): Promise<McpServerSpec> {
+    const token = await this.harnessToken(agentId);
     return {
       command: process.execPath,
       args: [MCP_BIN],
-      env: { WARREN_URL: this.cfg.hub, WARREN_TOKEN: this.cfg.token, WARREN_AGENT: agentId },
+      env: token ? { WARREN_URL: this.cfg.hub, WARREN_TOKEN: token } : { WARREN_URL: this.cfg.hub, WARREN_TOKEN: this.cfg.token, WARREN_AGENT: agentId },
     };
+  }
+
+  private async harnessToken(agentId: string): Promise<string | null> {
+    const known = this.agentTokens[agentId];
+    if (known && (await this.tokenWorks(known))) return known;
+    const r = await this.api.request<{ token: string }>("POST", `/api/node/agents/${agentId}/token`).catch(() => null);
+    if (!r?.token) return null;
+    this.agentTokens[agentId] = r.token;
+    writeJson(this.tokensFile, this.agentTokens, 0o600);
+    return r.token;
+  }
+
+  /** Still valid (the agent wasn't moved, deleted or its tokens revoked)? */
+  private async tokenWorks(token: string): Promise<boolean> {
+    const res = await fetch(`${this.cfg.hub.replace(/\/+$/, "")}/api/computers/mine`, { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
+    return !!res && res.status !== 401;
   }
 }
 
@@ -323,6 +400,6 @@ function readJson<T>(file: string, fallback: T): T {
   }
 }
 
-function writeJson(file: string, value: unknown) {
-  fs.writeFileSync(file, JSON.stringify(value, null, 2));
+function writeJson(file: string, value: unknown, mode?: number) {
+  fs.writeFileSync(file, JSON.stringify(value, null, 2), mode ? { mode } : undefined);
 }

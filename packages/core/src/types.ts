@@ -28,6 +28,11 @@ export interface AgentSettings {
   appearance?: import("./appearance.ts").GhostAppearance;
   /** an owner chose to run it without a computer (it can't see or use a screen) */
   headless?: boolean;
+  /**
+   * Its harness runs directly on a person's device, so by default only that device's owner can
+   * ask it for things. The device owner can open it up to everyone in the workspace.
+   */
+  anyoneCanAsk?: boolean;
 }
 
 /** A model a device's harness can run, as reported by that device. */
@@ -249,6 +254,8 @@ export interface Discussion {
   status: "running" | "summarizing" | "done" | "cancelled";
   decisionPath: string | null;
   startedBy: Actor;
+  /** the person it's for (who started it, or who asked the agent that did) */
+  requestedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }

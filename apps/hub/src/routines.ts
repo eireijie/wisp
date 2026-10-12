@@ -84,6 +84,8 @@ export class Routines {
       author: by ?? { kind: "user", id: "system" },
       body: `@${agent.handle} Run the routine **${r.name}**${why}.`,
       parts: [{ type: "routine", routineId: r.id }],
+      // on a schedule, the routine works for whoever set it up
+      onBehalfOf: by ? undefined : r.createdBy.kind === "user" ? r.createdBy.id : null,
     });
     this.hub.broadcast(r.workspaceId, { type: "routines_changed" });
     return msg;

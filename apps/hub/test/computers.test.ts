@@ -55,13 +55,16 @@ class FakeHost extends ComputerHost {
 }
 
 const calls: RunInput[] = [];
+/** what the fake harness does during a run, besides answering */
+let duringRun: ((input: RunInput) => Promise<string | void>) | null = null;
 const fake: HarnessAdapter = {
   id: "custom",
   label: "Fake",
   binary: "true",
   async run(input) {
     calls.push(input);
-    return { finalText: `ok ${calls.length}`, sessionId: "s" };
+    const said = duringRun ? await duringRun(input) : undefined;
+    return { finalText: said || `ok ${calls.length}`, sessionId: "s" };
   },
 };
 
@@ -76,6 +79,8 @@ let agentApi: WarrenClient;
 let nodeId: string;
 let agentId: string;
 let rfb: net.Server;
+let nodeDir: string;
+let member: WarrenClient;
 const orgoCalls: { method: string; url: string; body: any }[] = [];
 
 const waitFor = async <T>(fn: () => Promise<T | undefined> | T | undefined, ms = 5000): Promise<T> => {
@@ -139,7 +144,7 @@ beforeAll(async () => {
   const agent = await owner.request("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom", nodeId });
   agentId = agent.id;
   agentApi = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${agentId}/token`)).token });
-  const nodeDir = path.join(dir, "node");
+  nodeDir = path.join(dir, "node");
   daemon = new NodeDaemon({ hub: url, token: created.token, name: "box", dir: nodeDir, discoverHome: home }, () => {}, { custom: fake }, new FakeHost({ dir: nodeDir }));
   daemon.start();
   await waitFor(async () => (await owner.agents()).find((a) => a.status === "online"));
@@ -155,7 +160,8 @@ afterAll(async () => {
 describe("computers", () => {
   it("knows what each device offers and which agents already live there", async () => {
     const node = await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes")).find((n) => n.capabilities && n.discovered.length));
-    expect(node.capabilities).toMatchObject({ screen: { ok: true }, vm: { ok: true } });
+    // a device's own screen is off until someone at the device turns it on
+    expect(node.capabilities).toMatchObject({ screen: { ok: false, off: true }, vm: { ok: true } });
     expect(node.discovered.map((d: any) => d.key).sort()).toEqual(["claude-code:reviewer", "hermes:default"]);
     // contents stay on the device until someone imports one
     expect(node.discovered[0].soul).toBeUndefined();
@@ -163,10 +169,14 @@ describe("computers", () => {
 
   it("gives an agent a VM it can see and use, with coordinates from its screenshots", async () => {
     const vm = await owner.request("POST", "/api/computers", { kind: "vm", nodeId, name: "Nova's desk" });
-    // members can't pick what image runs on a device
     await owner.request("POST", "/api/members", { email: "m@example.com", name: "Mem", password: "password123", role: "member" });
     const memberToken = (await (await fetch(url + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "m@example.com", password: "password123" }) })).json()).token;
-    await expect(new WarrenClient({ url, token: memberToken }).request("POST", "/api/computers", { kind: "vm", nodeId, name: "x", image: "evil/miner" })).rejects.toThrow(/only owners/);
+    member = new WarrenClient({ url, token: memberToken });
+    // someone else's device takes VMs only once its owner shares it, and never a custom image from a member
+    await expect(member.request("POST", "/api/computers", { kind: "vm", nodeId, name: "x" })).rejects.toThrow(/Me's device/);
+    await owner.request("PATCH", `/api/nodes/${nodeId}`, { shared: true });
+    await expect(member.request("POST", "/api/computers", { kind: "vm", nodeId, name: "x", image: "evil/miner" })).rejects.toThrow(/only owners/);
+    await owner.request("PATCH", `/api/nodes/${nodeId}`, { shared: false });
     expect(vm).toMatchObject({ kind: "vm", transport: "vnc", online: true });
     await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).status === "ready");
     expect(did.some((d) => d.computer === vm.id && d.op === "start")).toBe(true);
@@ -240,6 +250,76 @@ describe("computers", () => {
     const again = new WebSocket(url.replace("http", "ws") + view.url);
     const code = await new Promise((r) => again.once("close", (c) => r(c)));
     expect(code).toBe(4401);
+  });
+
+  it("keeps a device's own screen to its owner, and lends it to agents only for the owner's work", async () => {
+    await expect(owner.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/warren node screen on/);
+    // `warren node screen on`, at the device
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
+    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.ok);
+    await expect(member.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/only Me can use its screen/);
+    const screen = await owner.request("POST", "/api/computers", { kind: "device", nodeId });
+    expect(screen).toMatchObject({ ownerId: expect.any(String), kind: "device" });
+
+    // to anyone else it isn't there
+    expect((await member.request<any[]>("GET", "/api/computers")).map((c) => c.id)).not.toContain(screen.id);
+    await expect(member.request("GET", `/api/computers/${screen.id}`)).rejects.toThrow(/not found/);
+    await expect(member.request("POST", `/api/computers/${screen.id}/view`)).rejects.toThrow(/not found/);
+    await expect(member.request("POST", `/api/computers/${screen.id}/control`, { take: true })).rejects.toThrow(/not found/);
+    // and they can't hand it to an agent, or change an agent that runs on someone's device
+    await expect(member.request("PATCH", `/api/agents/${agentId}`, { computerId: screen.id })).rejects.toThrow(/only Me can change it/);
+
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: screen.id });
+    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/isn't lent/);
+    await owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 60 });
+    // an agent connected with the owner's token works for the owner
+    await agentApi.computer({ action: "screenshot" });
+
+    // a member can't ask an agent that runs on someone else's device…
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    await member.send(general.id, "@nova take a look at my screen");
+    await waitFor(async () => (await allMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("only Me can ask it"))));
+    // …and once the owner opens it up, it still can't use the owner's screen for them
+    await owner.request("PATCH", `/api/agents/${agentId}`, { settings: { anyoneCanAsk: true } });
+    let refused = "";
+    duringRun = async (input) => {
+      const harness = new WarrenClient({ url, token: input.mcp!.env.WARREN_TOKEN });
+      refused = await harness.computer({ action: "screenshot" }).then(() => "", (e: Error) => e.message);
+    };
+    const before = calls.length;
+    await member.send(general.id, "@nova take a look at the screen");
+    await waitFor(() => calls.length > before && refused);
+    expect(refused).toMatch(/only use it for things Me asked for/);
+    // for the owner it works
+    refused = "";
+    await owner.send(general.id, "@nova take a look at the screen");
+    await waitFor(() => calls.length > before + 1);
+    await waitFor(async () => !(await owner.agents()).find((a) => a.id === agentId && a.status === "busy"));
+    expect(refused).toBe("");
+    duringRun = null;
+
+    const log = await owner.request<any[]>("GET", `/api/computers/${screen.id}/log`);
+    expect(log.map((l) => l.text)).toEqual(expect.arrayContaining(["Looking at the screen", "Lent it to agents for 1 hour"]));
+    await owner.request("POST", `/api/computers/${screen.id}/lend`, { off: true });
+    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/isn't lent/);
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: vm.id, settings: { anyoneCanAsk: false } });
+  });
+
+  it("stops everything when someone pauses the device there", async () => {
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true, paused: true }));
+    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].paused);
+    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/paused/);
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    const before = calls.length;
+    await owner.send(general.id, "@nova are you there?");
+    await waitFor(async () => (await allMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("is paused"))));
+    expect(calls.length).toBe(before);
+    // resuming picks the waiting request up
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
+    await waitFor(() => calls.length > before);
+    expect((await owner.request("GET", `/api/computers/${vm.id}`)).paused).toBe(false);
   });
 
   it("streams a device's own screen as frames and takes input from whoever has control", async () => {

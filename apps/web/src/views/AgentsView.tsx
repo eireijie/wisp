@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Cloud, Download, Laptop, Loader2, MessageSquare, Monitor, Plus, Shuffle } from "lucide-react";
+import { Bot, Cloud, Download, Laptop, Loader2, Lock, MessageSquare, Monitor, Plus, Shuffle } from "lucide-react";
 import { defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { Ghost } from "../components/Ghost.tsx";
 import { HARNESSES, soulTemplate, type Agent, type DiscoveredAgent } from "@warren/core";
@@ -7,7 +7,7 @@ import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
-import { computerKindLabel } from "../devices.ts";
+import { computerKindLabel, usableDevices } from "../devices.ts";
 import { TEMPLATES, type AgentTemplate } from "../templates.ts";
 import { AgentAvatar, Button, Empty, Field, HARNESS_LABELS, Input, Modal, Pill, StatusChip, Textarea, cx } from "../components/ui.tsx";
 
@@ -115,12 +115,11 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
 /** The computer a new agent gets: a new VM or screen on its device, one that exists, or none. */
 type ComputerChoice = { kind: "vm" } | { kind: "screen" } | { kind: "existing"; id: string } | { kind: "later" } | { kind: "headless" };
 
+/** A new agent gets its own VM when its device can run one; never someone's own screen by default. */
 function defaultComputer(node: NodeInfo | undefined, computers: ComputerInfo[]): ComputerChoice {
   if (node?.capabilities?.vm.ok) return { kind: "vm" };
-  const screen = computers.find((c) => c.kind === "device" && c.nodeId === node?.id);
-  if (screen) return { kind: "existing", id: screen.id };
-  if (node?.capabilities?.screen.ok) return { kind: "screen" };
-  if (computers[0]) return { kind: "existing", id: computers[0].id };
+  const shared = computers.find((c) => c.kind !== "device");
+  if (shared) return { kind: "existing", id: shared.id };
   return { kind: "later" };
 }
 
@@ -154,7 +153,7 @@ function ComputerPicker({ value, onChange, node, nodes }: { value: ComputerChoic
       <p className="text-xs text-muted mb-2">Where it works: it opens apps and websites there, and you can watch and take over.</p>
       <div className="grid sm:grid-cols-2 gap-2">
         {node && opt({ kind: "vm" }, <Monitor size={15} />, `New VM on ${node.name}`, node.capabilities?.vm.ok ? "Its own Linux desktop. Doesn't touch your screen." : (node.capabilities?.vm.detail ?? "Connect the device to check"), !node.capabilities?.vm.ok)}
-        {node && !screenExists && opt({ kind: "screen" }, <Laptop size={15} />, `${node.name}'s own screen`, node.capabilities?.screen.ok === false ? node.capabilities.screen.detail : "It uses the device itself.", node.capabilities?.screen.ok === false)}
+        {node?.mine && !screenExists && opt({ kind: "screen" }, <Lock size={15} />, "Your own screen", node.capabilities?.screen.off ? `Off. Turn it on at ${node.name}: warren node screen on` : node.capabilities?.screen.ok === false ? node.capabilities.screen.detail : "Only while you lend it, and only for things you ask.", node.capabilities?.screen.ok !== true)}
         {computers.map((c) =>
           opt({ kind: "existing", id: c.id }, c.kind === "orgo" ? <Cloud size={15} /> : c.kind === "vm" ? <Monitor size={15} /> : <Laptop size={15} />, c.name, `${computerKindLabel(c, nodes)}${c.agents.length ? `, shared with ${agents.filter((a) => c.agents.includes(a.id)).map((a) => "@" + a.handle).join(", ")}` : ""}`),
         )}
@@ -177,7 +176,8 @@ function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [handleEdited, setHandleEdited] = useState(false);
-  const [nodeId, setNodeId] = useState(nodes.find((n) => n.online)?.id ?? nodes[0]?.id ?? "");
+  const usable = usableDevices(nodes);
+  const [nodeId, setNodeId] = useState(usable.find((n) => n.online)?.id ?? usable[0]?.id ?? "");
   const [instructions, setInstructions] = useState("");
   const [computer, setComputer] = useState<ComputerChoice>(() => defaultComputer(nodes.find((n) => n.id === nodeId), computers));
   const [busy, setBusy] = useState(false);
@@ -314,7 +314,7 @@ function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
               />
             </Field>
           </div>
-          <Field label="Device" hint={nodes.length ? "Where its harness runs." : "No devices yet. You can add one later under Devices."}>
+          <Field label="Device" hint={usable.length ? "Where its harness runs." : nodes.length ? "None of the devices here are yours or shared with you. Connect one under Devices." : "No devices yet. You can add one later under Devices."}>
             <select
               value={nodeId}
               onChange={(e) => {
@@ -324,7 +324,7 @@ function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => voi
               className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm"
             >
               <option value="">Decide later</option>
-              {nodes.map((n) => (
+              {usable.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.name} {n.online ? "(online)" : "(offline)"}
                 </option>

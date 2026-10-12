@@ -77,6 +77,7 @@ const SETTINGS = z
     fast: z.boolean(),
     appearance: APPEARANCE,
     headless: z.boolean(),
+    anyoneCanAsk: z.boolean(),
   })
   .partial()
   .strict();
@@ -227,6 +228,32 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   }
 
   const agentView = (a: NonNullable<ReturnType<typeof store.agent>>) => ({ ...a, status: hub.agentStatus(a) });
+
+  /** Can this person put agents and VMs on the device? Its owner can; others once the owner shares it. */
+  const canUseDevice = (c: Caller, nodeId: string) => {
+    const n = store.node(nodeId);
+    return !!n && n.workspaceId === c.workspaceId && (n.ownerId === c.actor.id || n.shared);
+  };
+  /** The person whose device an agent's harness runs on directly; only they change or connect to it (unless they shared the device). */
+  const deviceOwnerOf = (a: { nodeId: string | null }) => {
+    const node = a.nodeId && hub.harnessOnDevice(a) ? store.node(a.nodeId) : undefined;
+    return node && !node.shared ? node.ownerId : null;
+  };
+  /**
+   * The person a caller works for: a person themselves; an agent, whoever asked it for what it's
+   * doing now, or else whoever made the token it connected with (a device's own token: its owner).
+   */
+  const requesterOf = (c: Caller): string | null => {
+    if (c.actor.kind === "user") return c.actor.id;
+    const running = hub.currentRun(c.actor.id);
+    if (running) return running.requestedBy;
+    return c.principal.kind === "node" ? (store.node(c.principal.subjectId)?.ownerId ?? null) : c.principal.createdBy;
+  };
+  /** A computer this person may give an agent: someone else's own screen isn't one. */
+  const canAssignComputer = (c: Caller, computerId: string) => {
+    const comp = store.computer(computerId);
+    return !!comp && comp.workspaceId === c.workspaceId && hub.computers.canSee(comp, c.actor.id);
+  };
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     if (err instanceof VaultError) return reply.code(err.status).send({ error: err.message });
@@ -524,7 +551,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       hop = (running?.hop ?? 0) + 1;
     }
     store.addChannelMember(ch.id, c.actor);
-    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, parts: files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), hop });
+    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, parts: files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), hop, onBehalfOf: requesterOf(c) });
   });
 
   app.post("/api/runs/:id/cancel", async (req, reply) => {
@@ -563,7 +590,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!body) return;
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
-    if (body.computerId && store.computer(body.computerId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown computer" });
+    if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
+    if (body.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
+    if (body.settings?.anyoneCanAsk && (!body.nodeId || store.node(body.nodeId)?.ownerId !== c.actor.id)) delete body.settings.anyoneCanAsk;
     const created = store.createAgent({ ...body, workspaceId: c.workspaceId });
     const agent = body.settings ? store.updateAgent(created.id, { settings: body.settings })! : created;
     const general = store.channelByName(c.workspaceId, "general");
@@ -585,8 +614,20 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       reply,
     );
     if (!body) return;
+    const deviceOwner = deviceOwnerOf(agent);
+    if (deviceOwner && deviceOwner !== c.actor.id) {
+      const name = store.user(deviceOwner)?.name ?? "its owner";
+      return reply.code(403).send({ error: `@${agent.handle} runs directly on ${name}'s device, so only ${name} can change it` });
+    }
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
-    if (body.computerId && store.computer(body.computerId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown computer" });
+    if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
+    if (body.computerId && body.computerId !== agent.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
+    if (body.settings?.anyoneCanAsk !== undefined) {
+      const target = store.node(body.nodeId ?? agent.nodeId ?? "");
+      if (target?.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the device's owner decides who can ask an agent that runs on it" });
+    }
+    // a harness token belongs to the device the agent ran on
+    if (body.nodeId !== undefined && body.nodeId !== agent.nodeId) db.prepare("DELETE FROM tokens WHERE kind = 'agent' AND subject_id = ? AND label LIKE 'harness:%'").run(agent.id);
     // giving an agent a computer means it isn't headless anymore
     if (body.computerId) body.settings = { ...body.settings, headless: false };
     return agentView(store.updateAgent(agent.id, body)!);
@@ -609,7 +650,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
-    return { token: issueToken(db, "agent", agent.id, c.workspaceId, "mcp") };
+    const deviceOwner = deviceOwnerOf(agent);
+    if (deviceOwner && deviceOwner !== c.actor.id) return reply.code(403).send({ error: `@${agent.handle} runs directly on someone's device; only they can connect to it` });
+    return { token: issueToken(db, "agent", agent.id, c.workspaceId, "mcp", c.actor.id) };
   });
 
   /** Models the agent's device offers for its harness, as reported by that device. */
@@ -666,10 +709,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     return store.nodes(c.workspaceId).map((n) => ({
       ...n,
+      ownerName: n.ownerId ? (store.user(n.ownerId)?.name ?? null) : null,
+      mine: n.ownerId === c.actor.id,
       online: hub.isNodeOnline(n.id),
+      paused: hub.isNodePaused(n.id),
       agents: store.agentsOnNode(n.id).map((a) => a.handle),
       capabilities: store.nodeCapabilities(n.id),
-      discovered: store.nodeDiscovered(n.id),
+      // what else lives on someone's device is theirs to see
+      discovered: n.ownerId === c.actor.id || n.shared ? store.nodeDiscovered(n.id) : [],
       harnesses: store.nodeCatalog(n.id).map((h) => ({ id: h.harness, version: h.version })),
       version: hub.updates.deviceVersion(n.id),
       update: hub.updates.deviceUpdate(n.id),
@@ -681,8 +728,21 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const body = parse(z.object({ name: z.string().min(1).max(80) }), req.body, reply);
     if (!body) return;
-    const node = store.createNode(c.workspaceId, body.name);
+    const node = store.createNode(c.workspaceId, body.name, c.actor.id);
     return { node, token: issueToken(db, "node", node.id, c.workspaceId, body.name) };
+  });
+
+  /** The device's owner shares it (others can add agents and VMs there) or renames it. */
+  app.patch("/api/nodes/:id", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const node = store.node((req.params as { id: string }).id);
+    if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
+    if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the person who connected this device can change it" });
+    const body = parse(z.object({ shared: z.boolean() }).partial(), req.body, reply);
+    if (!body) return;
+    if (body.shared !== undefined) store.setNodeShared(node.id, body.shared);
+    return { ...store.node(node.id), ok: true };
   });
 
   app.delete("/api/nodes/:id", async (req, reply) => {
@@ -690,10 +750,24 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const node = store.node((req.params as { id: string }).id);
     if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
+    if (node.ownerId !== c.actor.id && c.viewer.role !== "owner") return reply.code(403).send({ error: "only the person who connected this device, or a workspace owner, can remove it" });
     revokeSubjectTokens(db, "node", node.id);
+    db.prepare("DELETE FROM tokens WHERE kind = 'agent' AND label = ?").run(`harness:${node.id}`);
     for (const comp of store.computersOnNode(node.id)) await hub.computers.remove(comp);
     store.deleteNode(node.id);
     return { ok: true };
+  });
+
+  /**
+   * A token for an agent's harness on this device, so the harness acts as that agent only (it never
+   * gets the device's own token, which could act as every agent here).
+   */
+  app.post("/api/node/agents/:id/token", async (req, reply) => {
+    const p = resolveToken(db, bearer(req.headers.authorization));
+    if (!p || p.kind !== "node") return reply.code(401).send({ error: "node token required" });
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.nodeId !== p.subjectId) return reply.code(404).send({ error: "that agent isn't on this device" });
+    return { token: issueToken(db, "agent", agent.id, agent.workspaceId, `harness:${p.subjectId}`) };
   });
 
   /** Node bootstrap: which agents does this node host? */
@@ -885,6 +959,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     team?: NonNullable<ReturnType<typeof store.team>> | null;
     branch?: string | null;
     reviewOf?: string | null;
+    /** the person this work is for */
+    onBehalfOf: string | null;
   }) {
     // team work is work handed out in the team's channel
     const team = o.team !== undefined ? o.team : (store.teams(o.workspaceId).find((t) => t.channelId === o.channelId && t.members.some((m) => m.agentId === o.target.id)) ?? null);
@@ -904,6 +980,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       parts: files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })),
       hop: o.hop,
       replyInThread: true,
+      onBehalfOf: o.onBehalfOf,
     });
     db.prepare("UPDATE tasks SET thread_id = ? WHERE id = ?").run(msg.id, task.id);
     return store.task(task.id)!;
@@ -926,11 +1003,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const ch = body.channelId ? channelVisible(c, body.channelId) : shared ? store.channel(shared.channelId!) : store.channelByName(c.workspaceId, "general");
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     const running = c.actor.kind === "agent" ? hub.currentRun(c.actor.id) : undefined;
-    return delegate({ workspaceId: c.workspaceId, author: c.actor, from: c.actor, target, title: body.title, brief: body.brief, channelId: ch.id, fileIds: body.fileIds, hop: running ? running.hop + 1 : 0 });
+    return delegate({ workspaceId: c.workspaceId, author: c.actor, from: c.actor, target, title: body.title, brief: body.brief, channelId: ch.id, fileIds: body.fileIds, hop: running ? running.hop + 1 : 0, onBehalfOf: requesterOf(c) });
   });
 
   /** When coding work is done, the team's reviewer (or else its lead) gets a review task for the branch. */
-  function requestReview(task: NonNullable<ReturnType<typeof store.task>>) {
+  function requestReview(task: NonNullable<ReturnType<typeof store.task>>, onBehalfOf: string | null) {
     if (!task.branch || task.reviewOf || !task.teamId || !task.channelId || task.mergedAt) return;
     const team = store.team(task.teamId);
     if (!team?.repo) return;
@@ -951,6 +1028,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       team,
       branch: task.branch,
       reviewOf: task.id,
+      onBehalfOf,
     });
   }
 
@@ -973,9 +1051,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
         body: `${requester}Task **${task.title}** ${body.status === "done" ? "is done" : "failed"}.${body.result ? `\n\n${body.result}` : ""}`,
         hop: 1,
         route: task.from.kind === "agent",
+        onBehalfOf: requesterOf(c),
       });
     }
-    if (body.status === "done") requestReview(updated);
+    if (body.status === "done") requestReview(updated, requesterOf(c));
     return updated;
   });
 
@@ -1041,8 +1120,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!moderator) return reply.code(404).send({ error: "moderator not found" });
     const channel = body.channelId ? channelVisible(c, body.channelId) : team?.channelId ? store.channel(team.channelId) : store.channelByName(c.workspaceId, "general");
     if (!channel) return reply.code(404).send({ error: "channel not found" });
+    const requester = requesterOf(c);
+    for (const a of [...participants, moderator.id]) {
+      const why = hub.whyNotAllowed(store.agent(a)!, requester);
+      if (why) return reply.code(403).send({ error: why });
+    }
     for (const a of [...participants, moderator.id]) store.addChannelMember(channel.id, { kind: "agent", id: a });
-    const d = hub.discussions.start({ workspaceId: c.workspaceId, channelId: channel.id, teamId: team?.id ?? null, topic: body.topic, goal: body.goal, participants, moderatorId: moderator.id, rounds: body.rounds, startedBy: c.actor });
+    const d = hub.discussions.start({ workspaceId: c.workspaceId, channelId: channel.id, teamId: team?.id ?? null, topic: body.topic, goal: body.goal, participants, moderatorId: moderator.id, rounds: body.rounds, startedBy: c.actor, requestedBy: requester });
     return discussionView(d);
   });
 
@@ -1448,7 +1532,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     return reply.send(fs.createReadStream(path.join(opts.filesDir, f.sha256.slice(0, 2), f.sha256)));
   });
 
-  registerComputerApi(app, hub, { need, parse, commitAuthor, agentView });
+  registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf });
   registerUpdateApi(app, hub, { need });
 
   // --- websockets -------------------------------------------------------------

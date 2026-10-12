@@ -5,7 +5,7 @@ This guide is written for an AI agent installing Warren for someone, though peop
 Warren has two parts:
 
 - **The hub:** one always-on server. It holds the workspace (chats, agents, memory, files) and serves the web app. A workspace has exactly one hub.
-- **Devices:** computers that run agents and offer computers to them (their own screen, or VMs in Docker). Each device connects out to the hub, so it works behind routers. The hub's machine can be a device too.
+- **Devices:** computers that run agents and give them computers (VMs in Docker; a device's own screen only if its owner turns it on there with `warren node screen on`). Each device connects out to the hub, so it works behind routers. The hub's machine can be a device too.
 
 Every machine gets its own git checkout of Warren and runs it from there. Updates later are `warren update` or a button in the app.
 
@@ -113,7 +113,7 @@ Wait for `connected to … as "<name>"`, then stop it. The hub, token and name a
 Keep it running with the system's service manager. The exact steps for macOS (LaunchAgent), Linux (systemd) and Windows (a scheduled task at sign-in, not a service) are in [docs/deploy.md → Keeping a device connected](docs/deploy.md#keeping-a-device-connected). Two things go wrong most often:
 
 - **macOS:** launchd starts programs with a minimal `PATH`, so write the person's `PATH` into the LaunchAgent, or `warren node` won't find `claude`, `codex` and the rest.
-- **Screen access:** for agents to use the device's own screen, macOS needs **Screen Recording** and **Accessibility** for whatever runs `warren node`. `warren doctor` prints exactly what to add. Tell the person; don't change it yourself.
+- **Screen access:** a device's own screen is off by default. Only if the person wants to use it from Warren (and lend it to agents) do they run `warren node screen on`, and macOS then needs **Screen Recording** and **Accessibility** for whatever runs `warren node`. `warren doctor` prints exactly what to add. Tell the person; don't run it or change it yourself.
 
 **VMs:** if the device has Docker, build the desktop image now so the first VM starts quickly. Run `docker build -t warren-computer:<N> docker/computer`, where `<N>` is the number in `IMAGE` in `apps/node/src/computers/docker.ts`. Agents get VMs from **Computers → Add computer → VM** in the app.
 

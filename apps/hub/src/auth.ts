@@ -7,6 +7,8 @@ export interface Principal {
   kind: TokenKind;
   subjectId: string; // user id, agent id, or node id
   workspaceId: string;
+  /** the person who made an agent's connection token: an agent connected that way works for them */
+  createdBy: string | null;
 }
 
 export function id(prefix: string): string {
@@ -34,20 +36,20 @@ export function verifyPassword(password: string, stored: string): boolean {
 const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex");
 
 /** Issue a bearer token. Only the hash is stored; the plaintext is shown once. */
-export function issueToken(db: Db, kind: TokenKind, subjectId: string, workspaceId: string, label = ""): string {
+export function issueToken(db: Db, kind: TokenKind, subjectId: string, workspaceId: string, label = "", createdBy: string | null = null): string {
   const token = `wr_${kind}_${crypto.randomBytes(24).toString("base64url")}`;
-  db.prepare("INSERT INTO tokens (hash, kind, subject_id, workspace_id, label, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(sha(token), kind, subjectId, workspaceId, label, now());
+  db.prepare("INSERT INTO tokens (hash, kind, subject_id, workspace_id, label, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(sha(token), kind, subjectId, workspaceId, label, createdBy, now());
   return token;
 }
 
 export function resolveToken(db: Db, token: string | undefined): Principal | null {
   if (!token) return null;
-  const row = db.prepare("SELECT kind, subject_id, workspace_id FROM tokens WHERE hash = ?").get(sha(token)) as
-    | { kind: TokenKind; subject_id: string; workspace_id: string }
+  const row = db.prepare("SELECT kind, subject_id, workspace_id, created_by FROM tokens WHERE hash = ?").get(sha(token)) as
+    | { kind: TokenKind; subject_id: string; workspace_id: string; created_by: string | null }
     | undefined;
   if (!row) return null;
   db.prepare("UPDATE tokens SET last_used = ? WHERE hash = ?").run(now(), sha(token));
-  return { kind: row.kind, subjectId: row.subject_id, workspaceId: row.workspace_id };
+  return { kind: row.kind, subjectId: row.subject_id, workspaceId: row.workspace_id, createdBy: row.created_by };
 }
 
 export function revokeToken(db: Db, token: string) {

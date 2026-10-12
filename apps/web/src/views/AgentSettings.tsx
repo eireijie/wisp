@@ -141,7 +141,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
             <RoutinesPanel agent={agent} active={active === "routines"} />
           </Panel>
           <Panel show={active === "permissions"}>
-            <PermissionsPanel agent={agent} onDirty={markDirty("permissions")} active={active === "permissions"} />
+            <PermissionsPanel agent={agent} nodes={nodes} onDirty={markDirty("permissions")} active={active === "permissions"} />
           </Panel>
           <Panel show={active === "connect"}>
             <ConnectPanel agent={agent} nodes={nodes} />
@@ -644,9 +644,11 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
       </Intro>
       <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
         <Choice selected={!nodeId} onClick={() => setNodeId("")} title="No device" body="It can't answer @mentions until it has one." />
-        {nodes.map((n) => (
-          <Choice key={n.id} selected={nodeId === n.id} onClick={() => setNodeId(n.id)} title={n.name} body={`${n.online ? "Online" : "Offline"}${n.agents.length ? ` · runs ${n.agents.map((h) => "@" + h).join(", ")}` : ""}`} />
-        ))}
+        {nodes
+          .filter((n) => n.mine || n.shared || n.id === saved)
+          .map((n) => (
+            <Choice key={n.id} selected={nodeId === n.id} onClick={() => setNodeId(n.id)} title={n.name} body={`${n.mine ? "Yours" : `${n.ownerName ?? "Someone"}'s`} · ${n.online ? "online" : "offline"}${n.agents.length ? ` · runs ${n.agents.map((h) => "@" + h).join(", ")}` : ""}`} />
+          ))}
       </div>
       <p className="mt-3 text-sm text-muted">
         Need another computer?{" "}
@@ -662,7 +664,47 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
 
 // --- Permissions --------------------------------------------------------------
 
-function PermissionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: boolean) => void; active: boolean }) {
+/**
+ * An agent whose harness runs directly on someone's device can reach that device's files, so by
+ * default only the device's owner can ask it for things. The owner can open it up.
+ */
+function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | undefined }) {
+  const refreshAgents = useStore((s) => s.refreshAgents);
+  const [error, setError] = useState<string | null>(null);
+  if (!device || !runsOnDevice(agent.harness)) return null;
+  const open = !!agent.settings.anyoneCanAsk || !!device.shared;
+  const owner = device.mine ? "you" : (device.ownerName ?? "its owner");
+  const set = async (anyone: boolean) => {
+    setError(null);
+    try {
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { anyoneCanAsk: anyone } });
+      await refreshAgents();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section>
+      <Intro title="Who can ask it">
+        <p>
+          @{agent.handle} runs directly on {device.mine ? "your" : `${device.ownerName ?? "someone"}'s`} device "{device.name}", where it can reach files.{" "}
+          {device.shared ? "That device is shared with the workspace, so everyone can ask it." : `So only ${owner} can ask it for things, including through other agents.`}
+        </p>
+      </Intro>
+      {device.mine && !device.shared ? (
+        <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
+          <Choice selected={!open} onClick={() => set(false)} title="Only me" body="Requests from anyone else, or from agents working for them, are turned away." />
+          <Choice selected={open} onClick={() => set(true)} title="Anyone in the workspace" body="People and their agents can ask it. It still can't use your own screen for them." />
+        </div>
+      ) : (
+        <p className="text-sm text-muted">{open ? "Anyone in the workspace can ask it." : `Only ${owner} can ask it.`}</p>
+      )}
+      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+    </section>
+  );
+}
+
+function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
@@ -713,6 +755,8 @@ function PermissionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDirt
           </p>
         )}
       </section>
+
+      <WhoCanAsk agent={agent} device={nodes.find((n) => n.id === agent.nodeId)} />
 
       <section>
         <Intro title="In memory">
