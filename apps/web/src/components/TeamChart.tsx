@@ -251,7 +251,7 @@ export function TeamChart({ team, canEdit }: { team: TeamInfo; canEdit: boolean 
                 const c = curve(pos[m.managerId!], pos[m.agentId]);
                 const on = selectedEdge?.agentId === m.agentId;
                 return (
-                  <g key={m.agentId} className={on ? "text-accent" : "text-muted"}>
+                  <g key={m.agentId} className={on ? "text-accent-text" : "text-muted"}>
                     <path d={c.d} fill="none" stroke="currentColor" strokeWidth={on ? 2.5 : 2} strokeLinecap="round" />
                     <path d={c.head} fill="none" stroke="currentColor" strokeWidth={on ? 2.5 : 2} strokeLinecap="round" strokeLinejoin="round" />
                     {/* a wider invisible line that's easy to click */}
@@ -297,7 +297,7 @@ export function TeamChart({ team, canEdit }: { team: TeamInfo; canEdit: boolean 
                   <AgentAvatar agent={a} size={36} badge={false} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1 font-medium truncate">
-                      {team.leadId === m.agentId && <Crown size={13} className="text-accent shrink-0" aria-label="Lead" />}
+                      {team.leadId === m.agentId && <Crown size={13} className="text-accent-text shrink-0" aria-label="Lead" />}
                       <span className="truncate">{a?.name ?? "Agent"}</span>
                     </div>
                     <div className="text-xs text-muted truncate">{m.role ? m.role : canEdit ? <span className="text-faint">Click to add a role</span> : `@${a?.handle}`}</div>
@@ -357,7 +357,7 @@ export function TeamChart({ team, canEdit }: { team: TeamInfo; canEdit: boolean 
               {agents.length === 0 && (
                 <p className="text-sm text-muted px-1">
                   No agents yet.{" "}
-                  <a className="text-accent hover:underline" href="#/agents">
+                  <a className="text-accent-text hover:underline" href="#/agents">
                     Add one
                   </a>
                 </p>
@@ -455,7 +455,7 @@ function Inspector({
               </Pill>
             )}
           </div>
-          <a href={`#/agents/${member.agentId}/overview`} className="text-xs text-accent hover:underline">
+          <a href={`#/agents/${member.agentId}/overview`} className="text-xs text-accent-text hover:underline">
             @{agent?.handle}
           </a>
         </div>

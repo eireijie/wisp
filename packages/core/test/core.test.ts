@@ -111,7 +111,7 @@ describe("memory access", () => {
   });
 });
 
-import { GHOST_ACCESSORIES, GHOST_COLORS, GHOST_EYES, GHOST_HATS, GHOST_SHAPES, defaultAppearance } from "../src/index.ts";
+import { GHOST_ACCESSORIES, GHOST_EYES, GHOST_HATS, GHOST_PALETTES, GHOST_SHAPES, defaultAppearance } from "../src/index.ts";
 
 describe("teamChain", () => {
   it("follows bosses up through the teams they lead, and stops at loops", () => {
@@ -134,7 +134,7 @@ describe("default ghost", () => {
       expect(GHOST_EYES).toContain(g.eyes);
       expect(GHOST_HATS).toContain(g.hat);
       expect(GHOST_ACCESSORIES).toContain(g.accessory);
-      expect(GHOST_COLORS.map((c) => c.hex)).toContain(g.color);
+      expect(GHOST_PALETTES.map((p) => `${p.color}/${p.color2}`)).toContain(`${g.color}/${g.color2}`);
     }
     const shapes = new Set(Array.from({ length: 40 }, (_, i) => defaultAppearance(`agent-${i}`).shape));
     expect(shapes.size).toBeGreaterThan(2); // agents don't all look alike

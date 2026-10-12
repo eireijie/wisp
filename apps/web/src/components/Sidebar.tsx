@@ -1,13 +1,14 @@
 import { useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, ChevronRight, FolderPlus, Hand, Hash, LogOut, Monitor, MoreHorizontal, Pencil, Plus, Search, Server, Settings, ShieldQuestion, Sparkles, Trash2, Users } from "lucide-react";
-import type { Section } from "@warren/core";
+import { BookOpen, Bot, Brain, ChevronDown, FolderPlus, Hand, Hash, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { logout } from "../App.tsx";
 import { isDismissed, useOnboarding } from "../onboarding.ts";
+import { useAppearance } from "../theme.ts";
 import { ChannelBrowser, SectionDialog } from "./Channels.tsx";
-import { AgentAvatar, Menu, StatusDot, UserAvatar, cx } from "./ui.tsx";
+import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
 
 const COLLAPSE_KEY = "warren.sidebar.collapsed";
 const loadCollapsed = (): Record<string, boolean> => {
@@ -19,8 +20,9 @@ const loadCollapsed = (): Record<string, boolean> => {
 };
 
 /**
- * The workspace sidebar. On desktop it sits on the tinted window background; on phones the
- * same content is the Chats screen (variant "page") with larger touch targets.
+ * The workspace sidebar, organized like Paperclip's: the workspace, quick actions, then small
+ * labeled groups (Work, Org, Channels, Chats) and you at the bottom. On phones the same content
+ * is the Chats screen (variant "page") with larger touch targets.
  */
 export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?: "sidebar" | "page" }) {
   const me = useStore((s) => s.me)!;
@@ -35,6 +37,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const [editing, setEditing] = useState<Section | "new" | null>(null);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const { done } = useOnboarding();
+  const { resolvedMode, mode, toggleMode, setMode } = useAppearance();
   const progress = Object.values(done).filter(Boolean).length;
   const showGetStarted = route.view === "welcome" || (progress < 4 && !isDismissed());
   const page = variant === "page";
@@ -48,7 +51,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const helpNeeded = computers.filter((c) => c.help);
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
 
-  const toggle = (key: string) => {
+  const toggleGroup = (key: string) => {
     const next = { ...collapsed, [key]: !collapsed[key] };
     setCollapsed(next);
     try {
@@ -66,66 +69,81 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
 
   const channelRow = (c: ChannelInfo) => (
     <Item key={c.id} page={page} href={href({ view: "chat", channelId: c.id, threadId: null })} active={active === c.id} unread={c.unread > 0} dot={c.unread > 0}>
-      <Hash size={15} className="text-faint shrink-0" /> <span className="truncate">{c.name}</span>
+      <Hash size={16} className="shrink-0 opacity-70" /> <span className="truncate">{c.name}</span>
     </Item>
   );
 
   return (
     <nav className={cx("h-full flex flex-col", !page && "safe-top")}>
       {!page && (
-        <div className="px-3 pt-3 pb-2 flex items-center gap-2">
-          <img src="/icon.svg" alt="" className="size-6" />
-          <div className="font-semibold truncate flex-1">{me.workspace.name}</div>
+        <div className="h-15 shrink-0 px-4 flex items-center gap-2">
+          <WorkspaceTile name={me.workspace.name} />
+          <div className="text-sm font-bold truncate flex-1">{me.workspace.name}</div>
           <span className={cx("size-1.5 rounded-full shrink-0", connected ? "bg-ok" : "bg-faint animate-pulse")} title={connected ? "Connected" : "Reconnecting…"} />
         </div>
       )}
 
-      <div className={cx("px-2", page ? "pt-2" : "pt-1")}>
-        <button onClick={() => setPalette(true)} className={cx("w-full flex items-center gap-2 rounded-lg px-2.5 text-muted bg-side-hover hover:bg-side-active", page ? "h-11 text-[15px]" : "h-8 text-[13px]")}>
-          <Search size={15} />
-          <span className="flex-1 text-left">Search everything</span>
-          {!page && <kbd className="text-[11px] text-faint font-sans">⌘K</kbd>}
-        </button>
-      </div>
+      {page && (
+        <div className="px-3 pt-2">
+          <button onClick={() => setPalette(true)} className="w-full flex items-center gap-2 rounded-lg px-3 h-11 text-[15px] text-muted bg-side-hover">
+            <Search size={16} />
+            <span className="flex-1 text-left">Search everything</span>
+          </button>
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto pt-3 pb-4 space-y-4">
+      <div className={cx("flex-1 overflow-y-auto pb-4 space-y-3", page ? "pt-3" : "pt-1")}>
         {!page && (
           <div className="space-y-px">
+            <Item onClick={() => setPalette(true)}>
+              <Search size={16} className="shrink-0" /> Search
+              <kbd className="ml-auto text-[11px] text-faint font-sans">⌘K</kbd>
+            </Item>
             {showGetStarted && (
               <Item href={href({ view: "welcome" })} active={route.view === "welcome"}>
-                <Sparkles size={15} className="text-accent" /> Get started
+                <Sparkles size={16} className="shrink-0" /> Get started
                 <span className="ml-auto text-[11px] text-muted tabular-nums">{progress}/4</span>
               </Item>
             )}
-            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"}>
-              <Bot size={15} className="text-faint" /> Agents
-            </Item>
-            <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"}>
-              <Users size={15} className="text-faint" /> Teams
-            </Item>
-            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"}>
-              <BookOpen size={15} className="text-faint" /> Memory
-            </Item>
-            <Item href={href({ view: "about" })} active={route.view === "about"}>
-              <Brain size={15} className="text-faint" /> About you
-            </Item>
-            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
-              <Monitor size={15} className="text-faint" /> Computers
-              {working && <span className="ml-auto size-1.5 rounded-full bg-warn animate-pulse" title="An agent is working" />}
-            </Item>
-            <Item href={href({ view: "nodes" })} active={route.view === "nodes"}>
-              <Server size={15} className="text-faint" /> Devices
-            </Item>
           </div>
         )}
 
+        {!page && (
+          <Group title="Work" collapsed={!!collapsed.work} onToggle={() => toggleGroup("work")}>
+            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"}>
+              <BookOpen size={16} className="shrink-0" /> Memory
+            </Item>
+            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
+              <Monitor size={16} className="shrink-0" /> Computers
+              {working && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
+            </Item>
+            <Item href={href({ view: "about" })} active={route.view === "about"}>
+              <Brain size={16} className="shrink-0" /> About you
+            </Item>
+          </Group>
+        )}
+
+        {!page && (
+          <Group title="Org" collapsed={!!collapsed.org} onToggle={() => toggleGroup("org")}>
+            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"}>
+              <Bot size={16} className="shrink-0" /> Agents
+            </Item>
+            <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"}>
+              <Users size={16} className="shrink-0" /> Teams
+            </Item>
+            <Item href={href({ view: "nodes" })} active={route.view === "nodes"}>
+              <Server size={16} className="shrink-0" /> Devices
+            </Item>
+          </Group>
+        )}
+
         {!isGuest && pending.length + helpNeeded.length > 0 && (
-          <Group page={page} title="Waiting on you" collapsed={!!collapsed.waiting} onToggle={() => toggle("waiting")}>
+          <Group page={page} title="Waiting on you" collapsed={!!collapsed.waiting} onToggle={() => toggleGroup("waiting")}>
             {helpNeeded.map((c) => {
               const a = agents.find((x) => x.id === c.help!.agentId);
               return (
                 <Item key={c.id} page={page} href={href({ view: "computers", computerId: c.id })} active={route.view === "computers" && route.computerId === c.id} dot>
-                  <Hand size={15} className="text-accent shrink-0" />
+                  <Hand size={16} className="shrink-0 text-warn" />
                   <span className="truncate">
                     {a?.name ?? "Agent"}: {c.help!.request}
                   </span>
@@ -136,7 +154,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
               const a = agents.find((x) => x.id === p.agentId);
               return (
                 <Item key={p.id} page={page} href={href({ view: "chat", channelId: p.channelId, threadId: p.threadId })} dot>
-                  <ShieldQuestion size={15} className="text-accent shrink-0" />
+                  <ShieldQuestion size={16} className="shrink-0 text-warn" />
                   <span className="truncate">
                     {a?.name ?? "Agent"}: {p.summary}
                   </span>
@@ -154,11 +172,11 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
               page={page}
               title={
                 <>
-                  {s.emoji && <span className="text-[13px]">{s.emoji}</span>} {s.name}
+                  {s.emoji && <span className="text-[12px] not-italic">{s.emoji}</span>} {s.name}
                 </>
               }
               collapsed={!!collapsed[s.id]}
-              onToggle={() => toggle(s.id)}
+              onToggle={() => toggleGroup(s.id)}
               actions={
                 !isGuest && (
                   <>
@@ -198,7 +216,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           page={page}
           title="Channels"
           collapsed={!!collapsed.channels}
-          onToggle={() => toggle("channels")}
+          onToggle={() => toggleGroup("channels")}
           actions={
             <>
               <IconButton label="Add a channel" onClick={() => setBrowser({ sectionId: null })}>
@@ -214,19 +232,20 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         >
           {joined.filter((c) => !c.sectionId || !sections.some((s) => s.id === c.sectionId)).map(channelRow)}
           <Item page={page} onClick={() => setBrowser({ sectionId: null })}>
-            <Plus size={15} className="text-faint" /> <span className="text-muted">Add channels</span>
+            <Plus size={16} className="shrink-0 opacity-70" /> <span className="text-muted">Add channels</span>
           </Item>
         </Group>
 
-        <Group page={page} title="Direct messages" collapsed={!!collapsed.dms} onToggle={() => toggle("dms")} actions={!isGuest && <IconButton label="Add agent" onClick={() => go({ view: "agents", agentId: null })}><Plus size={14} /></IconButton>}>
+        <Group page={page} title="Chats" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="Add agent" onClick={() => go({ view: "agents", agentId: null })}><Plus size={14} /></IconButton>}>
           {agents.length === 0 && <p className="px-4 text-xs text-faint">No agents yet.</p>}
           {agents.map((a) => {
             const dm = dmFor(a.id);
             return (
-              <Item key={a.id} page={page} onClick={() => openDm(a.id)} active={!!dm && active === dm.id} unread={!!dm && dm.unread > 0} count={dm?.unread}>
+              <Item key={a.id} page={page} agent={a} onClick={() => openDm(a.id)} active={!!dm && active === dm.id} unread={!!dm && dm.unread > 0} count={dm?.unread}>
+                {/* the ghost dozes in gray when offline; a dot marks one that's working */}
                 <span className="relative shrink-0">
-                  <AgentAvatar agent={a} size={page ? 30 : 22} badge={false} live />
-                  <StatusDot status={a.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar" />
+                  <AgentAvatar agent={a} size={page ? 30 : 22} live />
+                  {a.status === "busy" && <StatusDot status={a.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar" />}
                 </span>
                 <span className="truncate">{a.name}</span>
               </Item>
@@ -236,26 +255,28 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       </div>
 
       {!page && (
-        <div className="p-2 safe-bottom">
-          <Menu
-            up
-            trigger={(_o, t) => (
-              <button onClick={t} className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-side-hover text-left">
-                <UserAvatar name={me.user.name} size={30} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium truncate">{me.user.name}</span>
-                  <span className="block text-xs text-muted truncate">{me.workspace.name}</span>
-                </span>
-              </button>
-            )}
-            items={[
-              { label: "Settings", icon: <Settings size={14} />, onSelect: () => go({ view: "settings" }) },
-              { label: "Computers", icon: <Monitor size={14} />, onSelect: () => go({ view: "computers", computerId: null }) },
-              { label: "Devices", icon: <Server size={14} />, onSelect: () => go({ view: "nodes" }) },
-              "divider",
-              { label: "Sign out", icon: <LogOut size={14} />, onSelect: logout },
-            ]}
-          />
+        <div className="shrink-0 px-2 py-2 flex items-center gap-1 safe-bottom">
+          <div className="flex-1 min-w-0">
+            <Menu
+              up
+              trigger={(_o, t) => (
+                <button onClick={t} className="w-full flex items-center gap-2.5 rounded-lg px-2 h-9 hover:bg-side-hover text-left">
+                  <UserAvatar name={me.user.name} size={24} />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink/80">{me.user.name}</span>
+                </button>
+              )}
+              items={[
+                { label: "Settings", icon: <Settings size={14} />, onSelect: () => go({ view: "settings" }) },
+                { label: "Appearance", icon: <Palette size={14} />, onSelect: () => go({ view: "settings" }) },
+                ...(mode !== "system" ? [{ label: "Match system light or dark", icon: <SunMoon size={14} />, onSelect: () => setMode("system") }] : []),
+                "divider",
+                { label: "Sign out", icon: <LogOut size={14} />, onSelect: logout },
+              ]}
+            />
+          </div>
+          <button onClick={toggleMode} className="p-2 rounded-lg text-muted hover:text-ink hover:bg-side-hover" aria-label={resolvedMode === "dark" ? "Switch to light mode" : "Switch to dark mode"} title={resolvedMode === "dark" ? "Light mode" : "Dark mode"}>
+            {resolvedMode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
         </div>
       )}
 
@@ -265,13 +286,23 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   );
 }
 
+/** The workspace's letter on a mint tile: Warren's one accent, like Paperclip's company tile. */
+export function WorkspaceTile({ name, size = 22 }: { name: string; size?: number }) {
+  return (
+    <span className="shrink-0 rounded-md grid place-items-center font-semibold bg-accent text-accent-ink" style={{ width: size, height: size, fontSize: size * 0.55 }} aria-hidden>
+      {(name.trim()[0] ?? "W").toUpperCase()}
+    </span>
+  );
+}
+
+/** A small mono label (WORK, ORG, CHATS); click it to fold the group away. */
 function Group({ title, collapsed, onToggle, actions, page, children }: { title: ReactNode; collapsed: boolean; onToggle: () => void; actions?: ReactNode; page?: boolean; children: ReactNode }) {
   return (
     <section className="space-y-px">
-      <div className={cx("group px-3 flex items-center gap-1", page ? "h-9" : "h-7")}>
-        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 text-[12px] font-semibold text-muted hover:text-ink" aria-expanded={!collapsed}>
-          <ChevronRight size={13} className={cx("shrink-0 transition-transform", !collapsed && "rotate-90")} />
+      <div className={cx("group px-4 flex items-center gap-1", page ? "h-9" : "h-7")}>
+        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70 hover:text-ink" aria-expanded={!collapsed}>
           <span className="truncate flex items-center gap-1">{title}</span>
+          <ChevronDown size={12} className={cx("shrink-0 transition-transform opacity-0 group-hover:opacity-100", collapsed && "-rotate-90 opacity-100")} />
         </button>
         <span className={cx("flex items-center", !page && "opacity-0 group-hover:opacity-100 focus-within:opacity-100")}>{actions}</span>
       </div>
@@ -288,30 +319,32 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
-function Item({ href: to, onClick, active, unread, dot, count, page, children }: { href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; page?: boolean; children: ReactNode }) {
+function Item({ href: to, onClick, active, unread, dot, count, page, agent, children }: { href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; page?: boolean; agent?: Agent; children: ReactNode }) {
   const cls = cx(
-    "mx-2 px-2 flex items-center gap-2 rounded-lg text-left w-[calc(100%-1rem)]",
-    page ? "h-11 text-[15px]" : "h-8 text-[13.5px]",
-    active ? "bg-side-active text-ink font-medium" : "hover:bg-side-hover",
+    "mx-2 px-2 flex items-center gap-2.5 rounded-lg text-left w-[calc(100%-1rem)] transition-colors",
+    page ? "h-11 text-[15px]" : "h-8 text-[13px] font-medium",
+    // the open item is tinted mint, or in the agent's own color for a chat with it
+    active ? (agent ? "agent-tint text-ink" : "bg-accent-soft text-ink") : "hover:bg-side-active/70 hover:text-ink",
     unread && !active && "font-semibold text-ink",
-    !unread && !active && "text-ink/85",
+    !unread && !active && "text-ink/80",
   );
   const inner = (
     <>
-      <span className="flex-1 min-w-0 flex items-center gap-2">{children}</span>
+      <span className="flex-1 min-w-0 flex items-center gap-2.5">{children}</span>
       {!!count && count > 0 ? (
-        <span className="text-[11px] font-semibold bg-ink text-panel rounded-full px-1.5 min-w-5 h-5 grid place-items-center">{count > 99 ? "99+" : count}</span>
+        <span className="text-[11px] font-semibold bg-accent text-accent-ink rounded-full px-1.5 min-w-5 h-5 grid place-items-center">{count > 99 ? "99+" : count}</span>
       ) : (
-        dot && <span className="size-1.5 rounded-full bg-ink shrink-0" />
+        dot && <span className="size-1.5 rounded-full bg-accent shrink-0" />
       )}
     </>
   );
+  const style = agent ? agentVar(agent) : undefined;
   return to ? (
-    <a href={to} className={cls}>
+    <a href={to} className={cls} style={style} aria-current={active ? "page" : undefined}>
       {inner}
     </a>
   ) : (
-    <button onClick={onClick} className={cls}>
+    <button onClick={onClick} className={cls} style={style}>
       {inner}
     </button>
   );

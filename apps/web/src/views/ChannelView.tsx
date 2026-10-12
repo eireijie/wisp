@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
-import { useHandleNames, useNames, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
+import { useHandleColors, useHandleNames, useNames, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, type Route } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { SectionSelect } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard, StartDiscussion } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
-import { AgentAvatar, Button, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, agentVar, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
 
@@ -46,7 +46,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   return (
     <div className="flex-1 min-h-0 flex">
       <div className={cx("flex-1 min-w-0 flex flex-col", route.threadId && "hidden lg:flex")}>
-        <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
+        <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
           {onBack && (
             <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back to chats">
               <ChevronLeft size={22} />
@@ -163,7 +163,7 @@ function AccessControl({ agent, ctx, canEdit }: { agent: Agent; ctx: AgentContex
           type="button"
           onClick={canEdit ? toggle : undefined}
           title={canEdit ? "Change what it can do" : ACCESS[a].body}
-          className={cx("h-8 px-2 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium", a === "full" ? "text-accent" : "text-muted", canEdit && "hover:bg-hover", open && "bg-hover")}
+          className={cx("h-8 px-2 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium", a === "full" ? "text-accent-text" : "text-muted", canEdit && "hover:bg-hover", open && "bg-hover")}
         >
           {a === "full" ? <ShieldAlert size={15} /> : a === "read-only" ? <Eye size={15} /> : <Shield size={15} />}
           <span className="hidden sm:inline">{ACCESS[a].label}</span>
@@ -184,12 +184,12 @@ function AccessControl({ agent, ctx, canEdit }: { agent: Agent; ctx: AgentContex
               }}
               className="w-full text-left rounded-xl px-2.5 py-2 hover:bg-hover flex items-start gap-2.5"
             >
-              <span className={cx("mt-0.5", k === "full" ? "text-accent" : "text-muted")}>{k === "full" ? <ShieldAlert size={16} /> : k === "read-only" ? <Eye size={16} /> : <Shield size={16} />}</span>
+              <span className={cx("mt-0.5", k === "full" ? "text-accent-text" : "text-muted")}>{k === "full" ? <ShieldAlert size={16} /> : k === "read-only" ? <Eye size={16} /> : <Shield size={16} />}</span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{ACCESS[k].label}</span>
                 <span className="block text-xs text-muted">{ACCESS[k].body}</span>
               </span>
-              {a === k && <Check size={15} className="mt-0.5 text-accent" />}
+              {a === k && <Check size={15} className="mt-0.5 text-accent-text" />}
             </button>
           ))}
           <a href={`#/agents/${agent.id}/permissions`} onClick={close} className="block px-2.5 py-2 text-xs text-muted hover:text-ink">
@@ -221,7 +221,7 @@ function ModelControl({ agent, ctx, catalog, canEdit }: { agent: Agent; ctx: Age
           title={`${HARNESS_LABELS[ctx.harness] ?? ctx.harness} · ${ctx.model ?? "default model"}${ctx.effort ? ` · ${ctx.effort} effort` : ""}${ctx.fast ? " · fast" : ""}`}
           className={cx("h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] min-w-0", canEdit && "hover:bg-hover", open && "bg-hover")}
         >
-          {ctx.fast && ctx.fastAvailable && <Zap size={13} className="text-accent fill-accent shrink-0" />}
+          {ctx.fast && ctx.fastAvailable && <Zap size={13} className="text-accent-text fill-accent shrink-0" />}
           <span className="font-medium truncate max-w-32 sm:max-w-none">{label}</span>
           {ctx.effort && <span className="text-muted whitespace-nowrap">{effortName(ctx.effort)}</span>}
           {canEdit && <ChevronDown size={14} className="text-faint shrink-0" />}
@@ -299,12 +299,12 @@ function ModelPanel({ agent, ctx, catalog, close }: { agent: Agent; ctx: AgentCo
           }}
           aria-pressed={fast}
           title={ctx.fastAvailable ? `Fast mode${ctx.fastDescription ? `: ${ctx.fastDescription}` : ""}` : "This model has no fast mode"}
-          className={cx("size-6 rounded-full grid place-items-center transition-colors", fast && ctx.fastAvailable ? "bg-accent-soft text-accent" : "text-muted hover:text-ink hover:bg-hover", !ctx.fastAvailable && "opacity-40")}
+          className={cx("size-6 rounded-full grid place-items-center transition-colors", fast && ctx.fastAvailable ? "bg-accent-soft text-accent-text" : "text-muted hover:text-ink hover:bg-hover", !ctx.fastAvailable && "opacity-40")}
         >
           <Zap size={13} className={cx(fast && ctx.fastAvailable && "fill-accent")} />
         </button>
         <div className="flex-1 min-w-0 text-center">
-          <div className="text-sm font-semibold text-accent leading-tight">{shown ? effortName(shown) : "Default"}</div>
+          <div className="text-sm font-semibold text-accent-text leading-tight">{shown ? effortName(shown) : "Default"}</div>
           <button onClick={() => setView("models")} className="inline-flex items-center gap-0.5 text-[11px] text-muted hover:text-ink">
             {prettyModel(current?.label ?? ctx.model ?? "Default model")}
             <ChevronRight size={12} />
@@ -313,7 +313,7 @@ function ModelPanel({ agent, ctx, catalog, close }: { agent: Agent; ctx: AgentCo
             <div className="text-[10px] text-faint">
               {!effort && "Default effort"}
               {!effort && fast && ctx.fastAvailable && " · "}
-              {fast && ctx.fastAvailable && <span className="text-accent">Fast{ctx.fastDescription ? `: ${ctx.fastDescription}` : ""}</span>}
+              {fast && ctx.fastAvailable && <span className="text-accent-text">Fast{ctx.fastDescription ? `: ${ctx.fastDescription}` : ""}</span>}
             </div>
           ) : null}
         </div>
@@ -471,7 +471,7 @@ function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: st
         {messages.map((m, i) => (
           <div key={m.id}>
             {m.id === firstNew && (
-              <div ref={dividerRef} className="flex items-center gap-3 px-5 my-2 text-[11px] font-semibold tracking-wide text-accent">
+              <div ref={dividerRef} className="flex items-center gap-3 px-5 my-2 text-[11px] font-semibold tracking-wide text-accent-text">
                 <span className="h-px flex-1 bg-accent/40" /> NEW <span className="h-px flex-1 bg-accent/40" />
               </div>
             )}
@@ -518,7 +518,7 @@ function ChannelIntro({ channel }: { channel: ChannelInfo }) {
       <p className="text-sm text-muted">
         {channel.topic ? `${channel.topic}. ` : "This is the start of the channel. "}
         @mention an agent to bring it in. New here?{" "}
-        <a href="#/welcome" className="text-accent font-medium hover:underline">
+        <a href="#/welcome" className="text-accent-text font-medium hover:underline">
           Get started
         </a>
       </p>
@@ -535,7 +535,8 @@ function isGrouped(prev: Message | undefined, m: Message) {
 function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message; grouped?: boolean; replies?: number; onReplies?: () => void; inThread?: boolean }) {
   const names = useNames();
   const handles = useHandleNames();
-  const html = useMemo(() => (m.body ? renderMarkdown(m.body, { handles }) : ""), [m.body, handles]);
+  const colors = useHandleColors();
+  const html = useMemo(() => (m.body ? renderMarkdown(m.body, { handles, colors }) : ""), [m.body, handles, colors]);
   const cards = useMemo(() => linkCards(m.body), [m.body]);
 
   if (m.author.id === "system")
@@ -569,7 +570,10 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
       <div className="min-w-0 flex-1">
         {!grouped && (
           <div className="flex items-baseline gap-2">
-            <span className="font-semibold text-[14.5px]">{name}</span>
+            {/* agents sign their messages in their own color */}
+            <span className={cx("font-semibold text-[14.5px]", agent && "agent-ink")} style={agent ? agentVar(agent) : undefined}>
+              {name}
+            </span>
             {agent && <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-medium">{HARNESS_LABELS[agent.harness]}</span>}
             <span className="text-xs text-faint">{time}</span>
           </div>
@@ -589,7 +593,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
         <Parts parts={m.parts} />
         <Reactions messageId={m.id} reactions={m.reactions ?? []} />
         {!!replies && onReplies && (
-          <button onClick={onReplies} className="mt-1 h-6 px-2 -ml-1 rounded-md text-xs font-medium text-accent hover:bg-accent-soft inline-flex items-center gap-1">
+          <button onClick={onReplies} className="mt-1 h-6 px-2 -ml-1 rounded-md text-xs font-medium text-accent-text hover:bg-accent-soft inline-flex items-center gap-1">
             <MessageSquare size={13} /> {replies} {replies === 1 ? "reply" : "replies"} <ChevronRight size={12} />
           </button>
         )}
@@ -658,7 +662,7 @@ function Reactions({ messageId, reactions }: { messageId: string; reactions: Rea
             key={r.emoji}
             onClick={() => toggleReaction(messageId, r.emoji)}
             title={`${who} reacted ${r.emoji}`}
-            className={cx("h-6 px-1.5 rounded-full border text-xs inline-flex items-center gap-1 tabular-nums", mine ? "border-accent/50 bg-accent-soft text-accent" : "border-line bg-panel hover:bg-hover text-muted")}
+            className={cx("h-6 px-1.5 rounded-full border text-xs inline-flex items-center gap-1 tabular-nums", mine ? "border-accent/50 bg-accent-soft text-accent-text" : "border-line bg-panel hover:bg-hover text-muted")}
           >
             <span className="text-[13px] leading-none">{r.emoji}</span> {r.actors.length}
           </button>
@@ -749,7 +753,7 @@ function Remembered({ tools }: { tools: MessagePart[] }) {
           className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-accent-soft/50 px-2.5 h-7 text-xs hover:bg-accent-soft"
           title="Saved to memory. Open it to edit or delete."
         >
-          <Brain size={13} className="text-accent shrink-0" />
+          <Brain size={13} className="text-accent-text shrink-0" />
           <span className="text-muted shrink-0">Remembered{KIND_LABEL[r.kind] ? ` ${KIND_LABEL[r.kind]}` : ""}:</span>
           <span className="truncate">{r.text}</span>
         </a>
@@ -788,8 +792,9 @@ function FileChip({ id, name }: { id: string; name: string }) {
 function StreamingItem({ run }: { run: LiveRun }) {
   const names = useNames();
   const handles = useHandleNames();
+  const colors = useHandleColors();
   const agent = names.agent(run.agentId);
-  const html = useMemo(() => renderMarkdown(run.text, { handles }), [run.text, handles]);
+  const html = useMemo(() => renderMarkdown(run.text, { handles, colors }), [run.text, handles, colors]);
   const computerId = agent?.computerId;
   return (
     <div className="px-3 md:px-5 pt-2.5 flex gap-3">
@@ -826,7 +831,7 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
   const close = () => go({ view: "chat", channelId, threadId: null });
   return (
     <section className="w-full lg:w-[420px] shrink-0 flex flex-col border-l border-line">
-      <header className="h-14 shrink-0 px-3 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-3 flex items-center gap-2 border-b border-line safe-top">
         <button onClick={close} className="lg:hidden p-1.5 rounded-md hover:bg-hover" aria-label="Back">
           <ChevronLeft size={20} />
         </button>
@@ -933,7 +938,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
 
   return (
     <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom">
-      <div className="relative rounded-2xl border border-line bg-panel focus-within:border-faint shadow-sm" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
+      <div className="relative rounded-2xl border border-line bg-bg focus-within:border-input" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
         {suggestions.length > 0 && (
           <div className="absolute bottom-full mb-2 left-0 w-72 rounded-xl border border-line bg-panel shadow-panel py-1 z-10" role="listbox">
             {suggestions.map((a, i) => (

@@ -1,61 +1,122 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
+/* `dark:` follows the chosen mode, not just the OS */
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
+
 /*
- * Design tokens: a blend of Buzz (warm, roomy chat) and Paperclip (calm, neutral control surfaces).
- * The window is a warm tinted "app" color; content sits on a floating panel. Burnt orange is
- * reserved for accents. Dark mode follows the OS.
+ * Design tokens: Paperclip's calm organization with room for personality. Appearance is a mode
+ * (light or dark, following the OS unless the person picks one) and a theme the person picks in
+ * Settings. Every theme shares these grays and status colors; a theme sets the accent (primary
+ * buttons, links, focus, unread, the open item) and an optional faint tint for the grays
+ * (--gc chroma, --gh hue). Mono, the default, is black and white. Agents always bring their own
+ * colors. index.html sets data-mode and data-theme before first paint; theme.ts keeps them in sync.
  */
 :root {
-  --app: #efe9df; /* window + sidebar tint */
-  --panel: #ffffff; /* floating content panel */
-  --bg: #f7f4ef; /* quiet surfaces inside the panel */
-  --sidebar: #efe9df;
-  --side-hover: rgb(60 40 20 / 0.06);
-  --side-active: rgb(60 40 20 / 0.1);
-  --ink: #1d1b18;
-  --muted: #6e6960;
-  --faint: #a29c92;
-  --line: #e9e4dc;
-  --hover: #f5f1eb;
-  --accent: #c2410c;
-  --accent-ink: #ffffff;
-  --accent-soft: #fdeee4;
-  --chip: #efeae2;
-  --ok: #15803d;
-  --warn: #b45309;
-  --bad: #b91c1c;
-  --info: #1d4ed8;
-  --code: #f4f0ea;
-  --shadow: 0 1px 2px rgb(60 40 20 / 0.06), 0 4px 16px rgb(60 40 20 / 0.05);
+  --gc: 0;
+  --gh: 0;
+  --app: oklch(0.97 var(--gc) var(--gh)); /* window + sidebar */
+  --panel: oklch(1 0 0); /* content */
+  --bg: oklch(0.975 var(--gc) var(--gh)); /* quiet surfaces inside content */
+  --sidebar: var(--app);
+  --side-hover: oklch(0.3 calc(var(--gc) * 3) var(--gh) / 0.05);
+  --side-active: oklch(0.915 calc(var(--gc) * 1.5) var(--gh));
+  --ink: oklch(0.16 calc(var(--gc) * 2.5) var(--gh));
+  --muted: oklch(0.52 calc(var(--gc) * 3) var(--gh));
+  --faint: oklch(0.68 calc(var(--gc) * 2.5) var(--gh));
+  --line: oklch(0.922 var(--gc) var(--gh));
+  --input: oklch(0.87 calc(var(--gc) * 1.75) var(--gh));
+  --hover: oklch(0.97 var(--gc) var(--gh));
+  --chip: oklch(0.95 calc(var(--gc) * 1.25) var(--gh));
+  --code: oklch(0.965 var(--gc) var(--gh));
+  --ok: #16a34a;
+  --warn: #cc7a00;
+  --bad: oklch(0.577 0.245 27.325);
+  --info: #2563eb;
+  --shadow: 0 1px 2px oklch(0.2 0 0 / 0.06), 0 6px 20px oklch(0.2 0 0 / 0.08);
+  --ghost-shadow: oklch(0.2 0 0 / 0.14);
+  /* status hues: chips and dots mix these with the surface, so one value works in both modes */
+  --status-idle: #a8aeb2;
+  --status-online: #22c55e;
+  --status-working: #2563eb;
+  --status-paused: #f59e0b;
+  --status-error: #dc2626;
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --app: #121110;
-    --panel: #1a1917;
-    --bg: #211f1d;
-    --sidebar: #121110;
-    --side-hover: rgb(255 255 255 / 0.05);
-    --side-active: rgb(255 255 255 / 0.09);
-    --ink: #ecebe7;
-    --muted: #a29e97;
-    --faint: #6d6964;
-    --line: rgb(255 255 255 / 0.08);
-    --hover: rgb(255 255 255 / 0.04);
-    --accent: #f97316;
-    --accent-ink: #1c0f05;
-    --accent-soft: rgb(249 115 22 / 0.14);
-    --chip: rgb(255 255 255 / 0.08);
-    --ok: #4ade80;
-    --warn: #fbbf24;
-    --bad: #f87171;
-    --info: #60a5fa;
-    --code: #24221f;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
-    color-scheme: dark;
-  }
+:root[data-mode="dark"] {
+  --app: oklch(0.2 calc(var(--gc) * 1.5) var(--gh));
+  --panel: oklch(0.16 var(--gc) var(--gh));
+  --bg: oklch(0.2 calc(var(--gc) * 1.5) var(--gh));
+  --side-hover: oklch(1 0 0 / 0.04);
+  --side-active: oklch(0.265 calc(var(--gc) * 2) var(--gh));
+  --ink: oklch(0.965 calc(var(--gc) * 0.75) var(--gh));
+  --muted: oklch(0.71 calc(var(--gc) * 2) var(--gh));
+  --faint: oklch(0.55 calc(var(--gc) * 2.5) var(--gh));
+  --line: oklch(1 0 0 / 0.09);
+  --input: oklch(1 0 0 / 0.14);
+  --hover: oklch(1 0 0 / 0.04);
+  --chip: oklch(1 0 0 / 0.075);
+  --code: oklch(0.21 calc(var(--gc) * 1.5) var(--gh));
+  --ok: #34d06f;
+  --warn: #fbbf24;
+  --bad: oklch(0.704 0.191 22.216);
+  --info: #60a5fa;
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.4);
+  --ghost-shadow: oklch(0 0 0 / 0.42);
+  color-scheme: dark;
+}
+
+/*
+ * --- themes: an accent per mode, and a faint tint for the grays ----------------------------
+ * Not tied to :root, so any element with data-theme and data-mode (like the previews in
+ * Settings) shows that theme's accent.
+ */
+
+/* Mono: near-black controls on white, white on near-black (like Grok Bot); links are ink */
+[data-theme="mono"] {
+  --gc: 0; --gh: 0;
+  --accent: oklch(0.2 0 0); --accent-ink: oklch(0.99 0 0); --accent-text: var(--ink);
+  --accent-soft: oklch(0 0 0 / 0.06); --ring: oklch(0.7 0 0); --loader: var(--faint);
+}
+[data-theme="mono"][data-mode="dark"] {
+  --accent: oklch(0.97 0 0); --accent-ink: oklch(0.17 0 0); --accent-soft: oklch(1 0 0 / 0.09); --ring: oklch(0.55 0 0);
+}
+
+[data-theme="mint"] {
+  --gc: 0.004; --gh: 265;
+  --accent: #1aa577; --accent-ink: #05281b; --accent-text: #0b7d57;
+  --accent-soft: color-mix(in oklab, #1aa577 16%, transparent); --ring: #1aa577; --loader: var(--accent);
+}
+[data-theme="mint"][data-mode="dark"] {
+  --accent: #43d19c; --accent-text: #5ddcae; --accent-soft: color-mix(in oklab, #43d19c 15%, transparent); --ring: #43d19c;
+}
+
+[data-theme="iris"] {
+  --gc: 0.004; --gh: 270;
+  --accent: #5b5fe0; --accent-ink: #ffffff; --accent-text: #4f52d6;
+  --accent-soft: color-mix(in oklab, #5b5fe0 13%, transparent); --ring: #5b5fe0; --loader: var(--accent);
+}
+[data-theme="iris"][data-mode="dark"] {
+  --accent: #8b8ef8; --accent-ink: #11123a; --accent-text: #a5a7ff; --accent-soft: color-mix(in oklab, #8b8ef8 18%, transparent); --ring: #8b8ef8;
+}
+
+[data-theme="lilac"] {
+  --gc: 0.005; --gh: 295;
+  --accent: #8455e0; --accent-ink: #ffffff; --accent-text: #7444d4;
+  --accent-soft: color-mix(in oklab, #8455e0 13%, transparent); --ring: #8455e0; --loader: var(--accent);
+}
+[data-theme="lilac"][data-mode="dark"] {
+  --accent: #b593ff; --accent-ink: #1e1038; --accent-text: #c9b0ff; --accent-soft: color-mix(in oklab, #b593ff 18%, transparent); --ring: #b593ff;
+}
+
+[data-theme="sky"] {
+  --gc: 0.004; --gh: 240;
+  --accent: #1aa3e8; --accent-ink: #04263a; --accent-text: #0369a1;
+  --accent-soft: color-mix(in oklab, #1aa3e8 14%, transparent); --ring: #1aa3e8; --loader: var(--accent);
+}
+[data-theme="sky"][data-mode="dark"] {
+  --accent: #38bdf8; --accent-text: #7dd3fc; --accent-soft: color-mix(in oklab, #38bdf8 16%, transparent); --ring: #38bdf8;
 }
 
 @theme inline {
@@ -69,9 +130,12 @@
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-line: var(--line);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --color-hover: var(--hover);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
+  --color-accent-text: var(--accent-text);
   --color-accent-soft: var(--accent-soft);
   --color-chip: var(--chip);
   --color-ok: var(--ok);
@@ -82,6 +146,36 @@
   --shadow-panel: var(--shadow);
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  /* Paperclip's tighter corners: controls ~6px, cards 8px, dialogs and the composer 12px */
+  --radius-lg: 0.4rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.75rem;
+}
+
+/* A status chip: a full pill tinted from its status hue (set --sc), like Paperclip's. */
+.status-chip {
+  background-color: color-mix(in srgb, var(--sc) 15%, white);
+  color: color-mix(in srgb, var(--sc) 82%, black);
+  border: 1px solid color-mix(in srgb, var(--sc) 70%, white);
+}
+:root[data-mode="dark"] .status-chip {
+  background-color: color-mix(in srgb, var(--sc) 22%, transparent);
+  color: color-mix(in srgb, var(--sc) 80%, white);
+  border-color: color-mix(in srgb, var(--sc) 48%, transparent);
+}
+
+/* Loading: a gray ghost drawing itself, then erasing, like Paperclip's paperclip. */
+.loader-draw {
+  stroke-dasharray: 0 100;
+  animation: loader-draw 1.6s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+}
+@keyframes loader-draw {
+  0% { stroke-dasharray: 0 100; stroke-dashoffset: 0; }
+  45%, 55% { stroke-dasharray: 100 100; stroke-dashoffset: 0; }
+  100% { stroke-dasharray: 100 100; stroke-dashoffset: -100; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader-draw { animation: none; stroke-dasharray: none; }
 }
 
 html,
@@ -114,7 +208,7 @@ body {
 .prose-w ul { list-style: disc; padding-left: 1.4em; }
 .prose-w ol { list-style: decimal; padding-left: 1.4em; }
 .prose-w li + li { margin-top: 0.15em; }
-.prose-w a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.prose-w a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
 .prose-w code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code); padding: 0.1em 0.35em; border-radius: 4px; }
 .prose-w pre { background: var(--code); padding: 0.75em 0.9em; border-radius: 8px; overflow-x: auto; }
 .prose-w pre code { background: none; padding: 0; }
@@ -122,7 +216,7 @@ body {
 .prose-w table { border-collapse: collapse; }
 .prose-w th, .prose-w td { border: 1px solid var(--line); padding: 0.25em 0.6em; }
 .prose-w hr { border-color: var(--line); }
-.prose-w .wikilink { color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 0 0.25em; text-decoration: none; cursor: pointer; }
+.prose-w .wikilink { color: var(--accent-text); background: var(--accent-soft); border-radius: 4px; padding: 0 0.25em; text-decoration: none; cursor: pointer; }
 .prose-w .wikilink.missing { color: var(--muted); background: none; border-bottom: 1px dashed var(--faint); }
 /* @agent mentions render as chips with a small bot icon, like Buzz */
 .prose-w .mention {
@@ -130,13 +224,41 @@ body {
   padding: 0 0.4em; border-radius: 6px; background: var(--chip); color: var(--ink); font-weight: 550; font-size: 0.95em;
 }
 .prose-w .mention svg { width: 0.9em; height: 0.9em; opacity: 0.7; }
-.prose-w .mention.user { background: var(--accent-soft); color: var(--accent); }
+.prose-w .mention.user { background: var(--accent-soft); color: var(--accent-text); }
+/* an agent's mention wears that agent's color (set as --agent on the chip) */
+.prose-w .mention.agent {
+  background: color-mix(in oklab, var(--agent) 16%, transparent);
+  color: var(--agent);
+  color: oklch(from var(--agent) clamp(0.42, l, 0.52) c h);
+}
+:root[data-mode="dark"] .prose-w .mention.agent { color: oklch(from var(--agent) clamp(0.74, l, 0.86) min(c, 0.16) h); }
 .prose-w .tag { color: var(--muted); }
+
+/* inline links are underlined (Paperclip's "Create one") in the readable mint */
+:is(p, li) a.text-accent {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+}
+:is(p, li) a.text-accent:hover { text-decoration-color: currentColor; }
 
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-top { padding-top: env(safe-area-inset-top); }
 
 ::selection { background: var(--accent-soft); }
+
+/*
+ * Agents bring their own color, like Grok Bot's: set --agent to the ghost's color and these
+ * keep it readable in either theme (darker on light surfaces, lighter on dark ones).
+ */
+.agent-ink {
+  color: var(--agent);
+  color: oklch(from var(--agent) clamp(0.42, l, 0.52) c h);
+}
+:root[data-mode="dark"] .agent-ink { color: oklch(from var(--agent) clamp(0.74, l, 0.86) min(c, 0.16) h); }
+.agent-tint { background-color: color-mix(in oklab, var(--agent) 14%, transparent); }
+:root[data-mode="dark"] .agent-tint { background-color: color-mix(in oklab, var(--agent) 18%, transparent); }
 
 /* --- ghosts --------------------------------------------------------------------------------- */
 .ghost svg g,
@@ -171,9 +293,16 @@ body {
 @keyframes ghost-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes ghost-glow { 0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 5px var(--glow)); } 50% { filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 10px var(--glow)); } }
 
+/* the shadow under a ghost shrinks as it rises, in step with its motion */
+.ghost-ground { fill: var(--ghost-shadow); transform-origin: center; }
+.ghost-ground-float { animation: ghost-ground-float 3.2s ease-in-out infinite; }
+.ghost-ground-bounce { animation: ghost-ground-bounce 1.7s ease-in-out infinite; }
+@keyframes ghost-ground-float { 0%, 100% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(0.84); opacity: 0.6; } }
+@keyframes ghost-ground-bounce {
+  0%, 100% { transform: scaleX(1.05); opacity: 1; }
+  45%, 60% { transform: scaleX(0.76); opacity: 0.55; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ghost *, .ghost { animation: none !important; }
 }
-.ghost-shadow { animation: ghost-shadow 3.2s ease-in-out infinite; }
-@keyframes ghost-shadow { 0%, 100% { transform: translateX(-50%) scaleX(1); opacity: 0.9; } 50% { transform: translateX(-50%) scaleX(0.82); opacity: 0.55; } }
-@media (prefers-reduced-motion: reduce) { .ghost-shadow { animation: none; } }

@@ -1,8 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Moon, Sun } from "lucide-react";
 import { api } from "../api.ts";
-import { Button, Field, Input } from "../components/ui.tsx";
+import { useAppearance } from "../theme.ts";
+import { Button, Field, GhostMark, Input } from "../components/ui.tsx";
 
 export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) {
+  const { resolvedMode, toggleMode } = useAppearance();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [form, setForm] = useState({ email: "", password: "", name: "", workspaceName: "" });
   const [error, setError] = useState<string | null>(null);
@@ -34,15 +37,20 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   }
 
   return (
-    <div className="min-h-full grid place-items-center p-4 safe-top">
-      <form onSubmit={submit} className="w-full max-w-sm space-y-5">
-        <div className="space-y-2 text-center">
-          <img src="/icon.svg" alt="" className="size-12 mx-auto" />
-          <h1 className="text-2xl font-semibold">{needsSetup ? "Set up Warren" : "Sign in to Warren"}</h1>
+    <div className="relative min-h-full bg-panel flex items-center px-6 sm:px-8 py-10 safe-top">
+      <button onClick={toggleMode} className="absolute top-4 right-4 p-2 rounded-lg text-muted hover:text-ink hover:bg-hover" aria-label={resolvedMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+        {resolvedMode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
+      <form onSubmit={submit} className="w-full max-w-sm space-y-6">
+        <div className="flex items-center gap-1.5 font-semibold">
+          <GhostMark size={18} className="text-accent-text" /> Warren
+        </div>
+        <div className="space-y-1.5">
+          <h1 className="text-xl font-semibold">{needsSetup ? "Set up Warren" : "Sign in to Warren"}</h1>
           <p className="text-sm text-muted">{needsSetup ? "You'll be the owner of this workspace." : "Where people and agents work together."}</p>
         </div>
         {needsSetup === null && !error ? (
-          <p className="text-center text-sm text-muted">Connecting…</p>
+          <p className="text-sm text-muted">Connecting…</p>
         ) : (
           <div className="space-y-4">
             {needsSetup && (

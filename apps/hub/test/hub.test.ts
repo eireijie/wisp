@@ -768,6 +768,12 @@ describe("ghost appearance", () => {
     expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { appearance: { ...look, color: "red;background:url(x)" } } })).status).toBe(400);
     expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { appearance: { ...look, extra: 1 } } })).status).toBe(400);
   });
+  it("takes a second color for a gradient body", async () => {
+    const r = await api("PATCH", `/api/agents/${nova.id}`, { settings: { appearance: { ...look, color2: "#ff51bf" } } });
+    expect(r.status).toBe(200);
+    expect(r.data.settings.appearance.color2).toBe("#ff51bf");
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { appearance: { ...look, color2: "url(x)" } } })).status).toBe(400);
+  });
 });
 
 describe("agent context", () => {

@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, CircleUser, LogOut, MessageSquare, Monitor, Search, Server, Settings, Sparkles, ChevronRight, Users } from "lucide-react";
+import { BookOpen, Bot, Brain, CircleUser, LogOut, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
-import { Sidebar } from "./components/Sidebar.tsx";
+import { useAppearance, type ModeChoice } from "./theme.ts";
+import { Sidebar, WorkspaceTile } from "./components/Sidebar.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ChannelView } from "./views/ChannelView.tsx";
 import { VaultView } from "./views/VaultView.tsx";
@@ -15,7 +16,7 @@ import { WelcomeView } from "./views/WelcomeView.tsx";
 import { TeamsView } from "./views/TeamsView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
-import { UserAvatar, cx } from "./components/ui.tsx";
+import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
 
 export function App() {
@@ -77,7 +78,7 @@ function Workspace() {
         </div>
       </div>
     );
-  if (!me) return <div className="h-full grid place-items-center text-muted text-sm">Loading…</div>;
+  if (!me) return <Loader />;
 
   const toChats = () => go({ view: "chats" });
   const toYou = () => go({ view: "you" });
@@ -113,12 +114,12 @@ function Workspace() {
   return (
     <div className="h-full flex overflow-hidden bg-app">
       {!phone && (
-        <aside className="w-64 shrink-0 bg-sidebar">
+        <aside className="w-60 shrink-0 bg-sidebar">
           <Sidebar route={route} />
         </aside>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
-        <main className={cx("flex-1 min-h-0 flex flex-col bg-panel overflow-hidden", !phone && "my-2 mr-2 rounded-2xl border border-line shadow-panel")}>{page}</main>
+        <main className="flex-1 min-h-0 flex flex-col bg-panel overflow-hidden">{page}</main>
         {showTabs && <TabBar route={route} />}
       </div>
       <CommandPalette />
@@ -131,7 +132,7 @@ function TabBar({ route }: { route: Route }) {
   const setPalette = useStore((s) => s.setPalette);
   const unread = channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread : 0), 0);
   const tab = (active: boolean, label: string, icon: ReactNode, target: string | (() => void), badge?: number) => {
-    const cls = cx("flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] h-14", active ? "text-ink font-medium" : "text-muted");
+    const cls = cx("flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] h-14", active ? "text-accent-text font-medium" : "text-muted");
     const inner = (
       <>
         <span className="relative">
@@ -169,7 +170,7 @@ function ChatsPage({ route }: { route: Route }) {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <header className="shrink-0 px-4 pt-4 pb-2 safe-top flex items-center gap-2.5">
-        <img src="/icon.svg" alt="" className="size-8" />
+        <WorkspaceTile name={me.workspace.name} size={32} />
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold leading-tight truncate">{me.workspace.name}</h1>
           <p className="text-xs text-muted">{connected ? "Connected" : "Reconnecting…"}</p>
@@ -215,10 +216,30 @@ function YouPage() {
           {row(<Server size={19} />, "Devices", href({ view: "nodes" }))}
           {row(<Settings size={19} />, "Settings", href({ view: "settings" }))}
         </div>
+        <ModePicker />
         <button onClick={logout} className="w-full h-12 rounded-2xl border border-line text-bad text-[15px] inline-flex items-center justify-center gap-2">
           <LogOut size={17} /> Sign out
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Light, dark, or whatever the device uses. Color themes live in Settings. */
+function ModePicker() {
+  const { mode, setMode } = useAppearance();
+  const options: [ModeChoice, string, ReactNode][] = [
+    ["system", "System", <SunMoon key="s" size={16} />],
+    ["light", "Light", <Sun key="l" size={16} />],
+    ["dark", "Dark", <Moon key="d" size={16} />],
+  ];
+  return (
+    <div className="flex rounded-2xl border border-line p-1" role="radiogroup" aria-label="Mode">
+      {options.map(([value, label, icon]) => (
+        <button key={value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)} className={cx("flex-1 h-10 rounded-xl text-[15px] inline-flex items-center justify-center gap-2", mode === value ? "bg-hover text-ink font-medium" : "text-muted")}>
+          {icon} {label}
+        </button>
+      ))}
     </div>
   );
 }

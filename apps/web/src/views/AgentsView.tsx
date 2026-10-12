@@ -9,7 +9,7 @@ import { go, type AgentTab } from "../router.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
 import { computerKindLabel } from "../devices.ts";
 import { TEMPLATES, type AgentTemplate } from "../templates.ts";
-import { AgentAvatar, Button, Empty, Field, HARNESS_LABELS, Input, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, Empty, Field, HARNESS_LABELS, Input, Modal, Pill, StatusChip, Textarea, cx } from "../components/ui.tsx";
 
 export function AgentsView({ agentId, tab }: { agentId: string | null; tab: AgentTab | null }) {
   const agents = useStore((s) => s.agents);
@@ -35,61 +35,70 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        <h1 className="font-semibold flex-1">Agents</h1>
-        {canEdit && (
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            <Plus size={16} /> Add agent
-          </Button>
-        )}
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
+        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Agents</h1>
       </header>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto @container">
         {agents.length === 0 ? (
           <Empty icon={<Bot />} title="Add your first agent">
             <p>Give it a job and a computer. Claude Code, Codex, Hermes, Gemini CLI, OpenCode, Goose and other agents all work here, share its channels and memory, and use their computers like you would.</p>
             {canEdit && (
               <Button variant="primary" onClick={() => setCreating(true)}>
-                <Plus size={16} /> Add agent
+                <Plus size={16} /> New agent
               </Button>
             )}
           </Empty>
         ) : (
           <div className="max-w-5xl px-4 md:px-6 py-5">
-            <div className="flex items-center gap-1 mb-3" role="tablist">
-              {(["all", "online", "offline"] as const).map((f) => (
-                <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx("h-8 px-3 rounded-lg text-sm capitalize", filter === f ? "bg-hover text-ink font-medium" : "text-muted hover:text-ink")}>
-                  {f}
-                  <span className="ml-1.5 text-faint tabular-nums">{f === "all" ? agents.length : agents.filter((a) => (f === "online" ? a.status !== "offline" : a.status === "offline")).length}</span>
-                </button>
-              ))}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 flex-1 min-w-0" role="tablist">
+                {(
+                  [
+                    ["all", "All"],
+                    ["online", "Online"],
+                    ["offline", "Offline"],
+                  ] as const
+                ).map(([f, label]) => (
+                  <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)} className={cx("relative h-9 px-2 text-sm font-medium", filter === f ? "text-ink after:absolute after:inset-x-1 after:-bottom-px after:h-0.5 after:rounded-full after:bg-accent" : "text-muted hover:text-ink")}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {canEdit && (
+                <Button onClick={() => setCreating(true)}>
+                  <Plus size={16} /> New agent
+                </Button>
+              )}
             </div>
-            <div className="rounded-2xl border border-line divide-y divide-line overflow-hidden">
+            <p className="mt-3 mb-1 text-xs text-muted">
+              {shown.length} agent{shown.length === 1 ? "" : "s"}
+            </p>
+            <div className="divide-y divide-line">
               {shown.map((a) => {
                 const device = nodes.find((n) => n.id === a.nodeId);
+                const computer = computers.find((c) => c.id === a.computerId)?.name ?? (a.settings.headless ? "headless" : "no computer");
                 return (
-                  <div key={a.id} className="flex items-center gap-3 px-4 py-3 hover:bg-hover">
+                  <div key={a.id} className="group flex items-center gap-3 px-2 py-3 hover:bg-hover/60">
                     <a href={`#/agents/${a.id}/overview`} className="flex items-center gap-3 min-w-0 flex-1">
-                      <AgentAvatar agent={a} size={44} live />
-                      <span className="min-w-0">
-                        <span className="block font-medium truncate">
-                          {a.name} <span className="text-muted font-normal">@{a.handle}</span>
-                        </span>
-                        <span className="block text-xs text-muted truncate">
-                          {HARNESS_LABELS[a.harness]} · {device ? device.name : "no device"} · {computers.find((c) => c.id === a.computerId)?.name ?? (a.settings.headless ? "headless" : "no computer")}
+                      <AgentAvatar agent={a} size={32} live />
+                      <span className="min-w-0 flex-1 @3xl:flex-none @3xl:w-56">
+                        <span className={cx("block text-sm truncate", a.status === "offline" && "text-muted")}>{a.name}</span>
+                        <span className="block text-xs text-muted truncate mt-0.5">{["@" + a.handle, ...a.groups.slice(0, 2)].join(" · ")}</span>
+                      </span>
+                      {/* machine facts in mono, like Paperclip's adapter column */}
+                      <span className="hidden @3xl:block w-48 min-w-0 leading-tight">
+                        <span className="block truncate font-mono text-xs text-muted">{HARNESS_LABELS[a.harness]}</span>
+                        <span className="block truncate font-mono text-[11px] text-muted/70">
+                          {device ? device.name : "no device"} · {computer}
                         </span>
                       </span>
                     </a>
-                    <span className="hidden sm:flex items-center gap-1.5 shrink-0">
-                      {a.groups.slice(0, 2).map((g) => (
-                        <Pill key={g} tone="accent">
-                          {g}
-                        </Pill>
-                      ))}
-                      <Pill tone={a.status === "online" ? "ok" : a.status === "busy" ? "info" : "neutral"}>{a.status}</Pill>
-                    </span>
-                    <Button variant="ghost" onClick={() => openDm(a.id)} aria-label={`Message ${a.name}`}>
-                      <MessageSquare size={15} /> <span className="hidden md:inline">Message</span>
+                    <Button variant="ghost" onClick={() => openDm(a.id)} aria-label={`Chat with ${a.name}`}>
+                      <MessageSquare size={15} className="sm:hidden" /> <span className="hidden sm:inline">Chat</span>
                     </Button>
+                    <span className="hidden sm:flex w-20 justify-end shrink-0">
+                      <StatusChip status={a.status} />
+                    </span>
                   </div>
                 );
               })}

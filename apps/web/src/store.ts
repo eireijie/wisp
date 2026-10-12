@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import type { Agent, AgentEvent, Approval, Channel, ClientEvent, Computer, Discussion, Message, Reaction, Section, Team } from "@warren/core";
 import { api } from "./api.ts";
+import { agentColor } from "./components/ui.tsx";
 
 export interface Me {
   kind: "user";
@@ -313,4 +314,10 @@ export function useNames() {
 export function useHandleNames(): Map<string, string> {
   const agents = useStore((s) => s.agents);
   return useMemo(() => new Map(agents.map((a) => [a.handle, a.name])), [agents]);
+}
+
+/** Each agent's own color by handle, for tinting its @mentions. */
+export function useHandleColors(): Map<string, string> {
+  const agents = useStore((s) => s.agents);
+  return useMemo(() => new Map(agents.map((a) => [a.handle, agentColor(a)])), [agents]);
 }

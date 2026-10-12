@@ -12,9 +12,10 @@ const BOT_ICON =
 /**
  * Markdown -> sanitized HTML, with Obsidian [[wikilinks]], @mentions and #tags.
  * `known` decides whether a wikilink target exists (rendered differently if missing).
- * `handles` maps agent handles to display names; mentions of them become chips.
+ * `handles` maps agent handles to display names; mentions of them become chips, tinted with the
+ * agent's own color when `colors` has one.
  */
-export function renderMarkdown(src: string, opts: { known?: (target: string) => boolean; handles?: Set<string> | Map<string, string>; stripFrontmatter?: boolean } = {}): string {
+export function renderMarkdown(src: string, opts: { known?: (target: string) => boolean; handles?: Set<string> | Map<string, string>; colors?: Map<string, string>; stripFrontmatter?: boolean } = {}): string {
   let text = src;
   if (opts.stripFrontmatter) text = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
 
@@ -33,7 +34,9 @@ export function renderMarkdown(src: string, opts: { known?: (target: string) => 
       const key = h.toLowerCase();
       if (!names.has(key)) return m;
       const label = names instanceof Map ? names.get(key)! : `@${h}`;
-      return `${pre}<span class="mention" title="@${escape(key)}">${BOT_ICON}${escape(label)}</span>`;
+      const color = opts.colors?.get(key);
+      const tint = color && /^#[0-9a-fA-F]{6}$/.test(color) ? ` agent" style="--agent:${color}` : "";
+      return `${pre}<span class="mention${tint}" title="@${escape(key)}">${BOT_ICON}${escape(label)}</span>`;
     });
   }
   text = text.replace(/(^|\s)#([a-zA-Z][\w/-]*)/g, (_m, pre: string, tag: string) => `${pre}<span class="tag">#${escape(tag)}</span>`);

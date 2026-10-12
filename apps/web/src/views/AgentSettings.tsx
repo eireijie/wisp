@@ -9,7 +9,7 @@ import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
-import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusDot, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { computerKindLabel, type DeviceInfo } from "../devices.ts";
@@ -23,29 +23,29 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
   {
     group: "Agent",
     items: [
-      { id: "overview", label: "Overview", icon: <LayoutGrid size={15} /> },
-      { id: "look", label: "Look", icon: <Ghost size={15} /> },
-      { id: "soul", label: "Soul", icon: <Sparkles size={15} /> },
-      { id: "instructions", label: "Instructions", icon: <ScrollText size={15} /> },
+      { id: "overview", label: "Overview", icon: <LayoutGrid size={16} /> },
+      { id: "look", label: "Look", icon: <Ghost size={16} /> },
+      { id: "soul", label: "Soul", icon: <Sparkles size={16} /> },
+      { id: "instructions", label: "Instructions", icon: <ScrollText size={16} /> },
     ],
   },
   {
     group: "Runtime",
     items: [
-      { id: "model", label: "Model", icon: <Cpu size={15} /> },
-      { id: "device", label: "Device", icon: <Server size={15} /> },
-      { id: "computer", label: "Computer", icon: <Monitor size={15} /> },
-      { id: "routines", label: "Routines", icon: <ListChecks size={15} /> },
+      { id: "model", label: "Model", icon: <Cpu size={16} /> },
+      { id: "device", label: "Device", icon: <Server size={16} /> },
+      { id: "computer", label: "Computer", icon: <Monitor size={16} /> },
+      { id: "routines", label: "Routines", icon: <ListChecks size={16} /> },
     ],
   },
   {
     group: "Access",
     items: [
-      { id: "permissions", label: "Permissions", icon: <Shield size={15} /> },
-      { id: "connect", label: "Connect", icon: <Plug size={15} /> },
+      { id: "permissions", label: "Permissions", icon: <Shield size={16} /> },
+      { id: "connect", label: "Connect", icon: <Plug size={16} /> },
     ],
   },
-  { group: "Activity", items: [{ id: "runs", label: "Runs", icon: <Activity size={15} /> }] },
+  { group: "Activity", items: [{ id: "runs", label: "Runs", icon: <Activity size={16} /> }] },
 ];
 
 /**
@@ -76,9 +76,9 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
       href={`#/agents/${agent.id}/${id}`}
       aria-current={active === id ? "page" : undefined}
       className={cx(
-        chip ? "h-8 px-3 rounded-full border text-sm whitespace-nowrap" : "h-8 px-2.5 rounded-lg text-[13.5px] w-full",
-        "flex items-center gap-2",
-        active === id ? (chip ? "border-ink bg-ink text-panel" : "bg-hover text-ink font-medium") : chip ? "border-line text-muted" : "text-muted hover:text-ink hover:bg-hover",
+        chip ? "h-8 px-3 rounded-full border text-sm whitespace-nowrap" : "h-8 px-2 rounded-lg text-[13px] font-medium w-full",
+        "flex items-center gap-2.5",
+        active === id ? (chip ? "border-accent bg-accent-soft text-ink" : "bg-accent-soft text-ink") : chip ? "border-line text-muted" : "text-ink/80 hover:text-ink hover:bg-hover",
       )}
     >
       {icon} {label}
@@ -88,15 +88,13 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
-        <a href="#/agents" className="text-sm text-muted hover:text-ink">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
+        <a href="#/agents" className="text-sm font-semibold uppercase tracking-wider text-muted hover:text-ink">
           Agents
         </a>
-        <ChevronRight size={14} className="text-faint" />
+        <ChevronRight size={14} className="text-faint shrink-0" />
         <span className="flex items-center gap-2 min-w-0 flex-1">
-          <AgentAvatar agent={agent} size={24} badge={false} live />
-          <span className="font-semibold truncate">{agent.name}</span>
-          <StatusDot status={agent.status} />
+          <span className="text-sm font-medium truncate">{agent.name}</span>
         </span>
         <Button onClick={openDm}>
           <MessageSquare size={15} /> <span className="hidden sm:inline">Message</span>
@@ -109,10 +107,10 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
         {NAV.flatMap((g) => g.items).map((i) => link(i.id, i.label, i.icon, true))}
       </nav>
       <div className="flex-1 min-h-0 flex">
-        <nav className="hidden md:block w-52 shrink-0 border-r border-line overflow-y-auto p-3 space-y-4" aria-label="Agent sections">
+        <nav className="hidden md:block w-52 shrink-0 border-r border-line overflow-y-auto p-2 pt-4 space-y-4" aria-label="Agent sections">
           {NAV.map((g) => (
-            <div key={g.group} className="space-y-0.5">
-              <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-faint">{g.group}</div>
+            <div key={g.group} className="space-y-px">
+              <div className="px-2 pb-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70">{g.group}</div>
               {g.items.map((i) => link(i.id, i.label, i.icon))}
             </div>
           ))}
@@ -243,7 +241,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
       <Intro title="Soul">
         <p>
           Who @{agent.handle} is: personality, voice, values and boundaries. It's read at the start of every conversation. Keep it short; every line should change how the agent behaves. What it should <i>do</i> goes in{" "}
-          <a className="text-accent hover:underline" href={`#/agents/${agent.id}/instructions`}>
+          <a className="text-accent-text hover:underline" href={`#/agents/${agent.id}/instructions`}>
             Instructions
           </a>
           .
@@ -310,7 +308,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
             <span className="inline-flex items-center gap-1.5">
               <GitCommitHorizontal size={14} />
               {editedByAgent ? `@${agent.handle} last refined its soul` : `Last edited by ${last.author}`} {timeAgo(last.date)} ·{" "}
-              <a className="text-accent hover:underline" href={`#/vault/${path}`}>
+              <a className="text-accent-text hover:underline" href={`#/vault/${path}`}>
                 history
               </a>
             </span>
@@ -527,7 +525,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
         {efforts.length > 0 && (
           <div className="max-w-sm space-y-1.5">
             <div className="flex items-baseline justify-between">
-              <span className="text-sm font-semibold text-accent">{effortName(shownEffort)}</span>
+              <span className="text-sm font-semibold text-accent-text">{effortName(shownEffort)}</span>
               <button type="button" onClick={() => setForm({ ...form, effort: "" })} disabled={!form.effort} className="text-xs text-muted hover:text-ink disabled:opacity-40">
                 {form.effort ? "Reset to default" : "Default"}
               </button>
@@ -558,7 +556,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           >
             <span className={cx("absolute top-0.5 size-4 rounded-full bg-white shadow transition-all", form.fast && selected?.fast ? "left-[18px]" : "left-0.5")} />
           </button>
-          <Zap size={14} className={cx(form.fast && selected?.fast && "text-accent fill-accent")} /> Fast mode
+          <Zap size={14} className={cx(form.fast && selected?.fast && "text-accent-text fill-accent")} /> Fast mode
         </label>
       </section>
 
@@ -652,7 +650,7 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
       </div>
       <p className="mt-3 text-sm text-muted">
         Need another computer?{" "}
-        <a className="text-accent hover:underline" href="#/nodes">
+        <a className="text-accent-text hover:underline" href="#/nodes">
           Add a device
         </a>
       </p>
@@ -720,11 +718,11 @@ function PermissionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDirt
         <Intro title="In memory">
           <p>
             Which folders and notes @{agent.handle} can use, and why. Change them with the share button on any folder or note in{" "}
-            <a className="text-accent hover:underline" href="#/vault">
+            <a className="text-accent-text hover:underline" href="#/vault">
               Memory
             </a>
             , or under{" "}
-            <a className="text-accent hover:underline" href="#/settings">
+            <a className="text-accent-text hover:underline" href="#/settings">
               Settings → Memory access
             </a>
             .
@@ -828,8 +826,8 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   return (
     <div className="space-y-8 max-w-3xl">
       <section className="flex items-start gap-4">
-        <a href={`#/agents/${agent.id}/look`} title="Change its look" className="rounded-full hover:ring-4 hover:ring-accent-soft transition-shadow">
-          <AgentAvatar agent={agent} size={96} live />
+        <a href={`#/agents/${agent.id}/look`} title="Change its look" className="rounded-xl p-1 -m-1 hover:bg-hover transition-colors">
+          <AgentAvatar agent={agent} size={80} live />
         </a>
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -855,9 +853,10 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                 </button>
               </h2>
               <p className="text-sm text-muted flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                <span>@{agent.handle}</span>
-                <Pill tone="neutral">{HARNESS_LABELS[agent.harness]}</Pill>
-                <Pill tone={agent.status === "online" ? "ok" : agent.status === "busy" ? "info" : "neutral"}>{agent.status}</Pill>
+                <span>
+                  @{agent.handle} · {HARNESS_LABELS[agent.harness]}
+                </span>
+                <StatusChip status={agent.status} />
               </p>
               <p className="text-sm text-muted mt-2">
                 {myTeams.length || bossOf.length ? (
@@ -868,7 +867,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                         <span key={t.id}>
                           {i > 0 && ", "}
                           {role ? `${role} on ` : "on "}
-                          <a className="text-accent hover:underline" href={`#/teams/${t.id}`}>
+                          <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
                             {t.name}
                           </a>
                         </span>
@@ -880,7 +879,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                         {bossOf.map((t, i) => (
                           <span key={t.id}>
                             {i > 0 && ", "}
-                            <a className="text-accent hover:underline" href={`#/teams/${t.id}`}>
+                            <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
                               {t.name}
                             </a>
                           </span>
@@ -891,7 +890,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                 ) : (
                   <>
                     Works on its own.{" "}
-                    <a className="text-accent hover:underline" href="#/teams">
+                    <a className="text-accent-text hover:underline" href="#/teams">
                       Put it on a team
                     </a>
                   </>
@@ -914,7 +913,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
       <section>
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold">Soul</h3>
-          <a className="text-sm text-accent hover:underline" href={`#/agents/${agent.id}/soul`}>
+          <a className="text-sm text-accent-text hover:underline" href={`#/agents/${agent.id}/soul`}>
             Edit
           </a>
         </div>
@@ -924,7 +923,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
       <section>
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold">Recent runs</h3>
-          <a className="text-sm text-accent hover:underline" href={`#/agents/${agent.id}/runs`}>
+          <a className="text-sm text-accent-text hover:underline" href={`#/agents/${agent.id}/runs`}>
             All runs
           </a>
         </div>

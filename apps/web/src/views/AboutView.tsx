@@ -85,14 +85,14 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-6 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {onBack && (
           <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
           </button>
         )}
-        <Brain size={17} className="text-accent" />
-        <h1 className="font-semibold flex-1 truncate">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h1>
+        <Brain size={17} className="text-accent-text" />
+        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h1>
         {me.role === "owner" && members.length > 1 && (
           <select value={userId} onChange={(e) => setUserId(e.target.value)} className="h-8 rounded-lg border border-line bg-panel px-2 text-sm" aria-label="Whose memory">
             {members.map((m) => (
@@ -108,7 +108,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
           <p className="text-sm text-muted">
             What agents have learned about {isMe ? "you" : profile?.person.name}. Every agent reads this before it works, so you don't have to repeat yourself. Fix or delete anything; it applies from the next message.{" "}
             {profile && (
-              <a className="text-accent hover:underline" href="#/vault">
+              <a className="text-accent-text hover:underline" href="#/vault">
                 It's plain notes in Memory, in the folder with {isMe ? "your" : "their"} name.
               </a>
             )}
@@ -185,7 +185,7 @@ function Origin({ item }: { item: Item }) {
           {" "}
           · from{" "}
           {item.channelId ? (
-            <a className="text-accent hover:underline" href={`#/c/${item.channelId}${item.messageId ? `/t/${item.messageId}` : ""}`}>
+            <a className="text-accent-text hover:underline" href={`#/c/${item.channelId}${item.messageId ? `/t/${item.messageId}` : ""}`}>
               {item.source}
             </a>
           ) : (
@@ -267,7 +267,7 @@ function Journal({ items }: { items: Item[] }) {
           <div key={d}>
             <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
               {d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "Undated"}
-              <a href={`#/vault/${entries[0].path}`} className="ml-auto inline-flex items-center gap-1 normal-case font-normal text-accent hover:underline">
+              <a href={`#/vault/${entries[0].path}`} className="ml-auto inline-flex items-center gap-1 normal-case font-normal text-accent-text hover:underline">
                 Edit day <ExternalLink size={11} />
               </a>
             </div>

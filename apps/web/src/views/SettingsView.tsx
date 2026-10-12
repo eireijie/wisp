@@ -1,10 +1,70 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, Pin, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Check, ChevronLeft, Moon, Pin, Plus, Sun, SunMoon, Trash2 } from "lucide-react";
 import type { AccessRule, MemoryLevel, Subject } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, Field, Input, Modal, Pill, UserAvatar } from "../components/ui.tsx";
+import { THEMES, useAppearance, type ModeChoice } from "../theme.ts";
+import { Button, Field, Input, Modal, Pill, UserAvatar, cx } from "../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
+
+/** Light or dark, and a color theme. Both are remembered on this device. */
+function AppearanceSettings() {
+  const { mode, resolvedMode, theme, setMode, setTheme } = useAppearance();
+  const modes: [ModeChoice, string, ReactNode][] = [
+    ["system", "System", <SunMoon key="s" size={15} />],
+    ["light", "Light", <Sun key="l" size={15} />],
+    ["dark", "Dark", <Moon key="d" size={15} />],
+  ];
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Appearance</h2>
+          <p className="text-sm text-muted">Pick a theme. It works in light and dark, and only changes how Warren looks on this device.</p>
+        </div>
+        <div className="inline-flex rounded-lg border border-line p-0.5" role="radiogroup" aria-label="Mode">
+          {modes.map(([value, label, icon]) => (
+            <button key={value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)} className={cx("h-8 px-3 rounded-md text-sm inline-flex items-center gap-1.5", mode === value ? "bg-hover text-ink font-medium" : "text-muted hover:text-ink")}>
+              {icon} {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
+        {THEMES.map((t) => {
+          const selected = theme === t.id;
+          return (
+            // each card carries its own theme, so its preview shows that theme's colors
+            <button
+              key={t.id}
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setTheme(t.id)}
+              data-theme={t.id}
+              data-mode={resolvedMode}
+              className={cx("text-left rounded-xl border p-3 transition-colors", selected ? "border-accent ring-1 ring-accent" : "border-line hover:bg-hover")}
+            >
+              <div className="rounded-lg border border-line bg-bg p-2.5 space-y-2" aria-hidden>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-6 px-2.5 rounded-full bg-accent text-accent-ink text-[11px] font-medium inline-flex items-center">New agent</span>
+                  <span className="text-[11px] text-accent-text underline underline-offset-2">a link</span>
+                </div>
+                <div className="h-6 rounded-md bg-accent-soft px-2 flex items-center gap-1.5 text-[11px] text-ink">
+                  <span className="size-1.5 rounded-full bg-accent" /># launch
+                </div>
+              </div>
+              <div className="mt-2.5 flex items-center gap-2">
+                <span className="text-sm font-medium flex-1">{t.name}</span>
+                {selected && <Check size={15} className="text-accent-text" />}
+              </div>
+              <p className="text-xs text-muted mt-0.5">{t.blurb}</p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export function SettingsView({ onBack }: { onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
@@ -21,23 +81,25 @@ export function SettingsView({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {onBack && (
           <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="font-semibold">Settings</h1>
+        <h1 className="text-sm font-semibold uppercase tracking-wider">Settings</h1>
       </header>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl p-4 md:p-8 space-y-10">
+          <AppearanceSettings />
+
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-semibold">Memory access</h2>
                 <p className="text-sm text-muted">
                   By default every agent reads and writes Shared, its own folder, its teams' folders and what it learns about people, and people can edit everything except each other's personal folders. These rules change that for one folder or note and everything inside it. You can also use the share button on any folder or note in{" "}
-                  <a className="text-accent hover:underline" href="#/vault">
+                  <a className="text-accent-text hover:underline" href="#/vault">
                     Memory
                   </a>
                   .
@@ -307,7 +369,7 @@ function ComputerSettings({ isOwner }: { isOwner: boolean }) {
         <h2 className="font-semibold">Computers</h2>
         <p className="text-sm text-muted">
           Agents can use a device's own screen or a VM on one of your devices with no setup here. For cloud computers that keep running when your devices are off, connect{" "}
-          <a className="text-accent hover:underline" href="https://www.orgo.ai/start" target="_blank" rel="noreferrer">
+          <a className="text-accent-text hover:underline" href="https://www.orgo.ai/start" target="_blank" rel="noreferrer">
             Orgo
           </a>
           . The key stays on this hub; browsers never see it.

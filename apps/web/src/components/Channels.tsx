@@ -122,7 +122,7 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
                   <Check size={13} /> Joined
                 </span>
               ) : (
-                <span className="text-xs font-medium text-accent">Join</span>
+                <span className="text-xs font-medium text-accent-text">Join</span>
               )}
             </button>
           ))}

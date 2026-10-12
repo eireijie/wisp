@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Moon, Brain, RotateCcw, Shuffle, Sun } from "lucide-react";
 import type { Agent } from "@warren/core";
-import { GHOST_ACCESSORIES, GHOST_COLORS, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import { GHOST_ACCESSORIES, GHOST_PALETTES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Ghost, type GhostMood } from "../components/Ghost.tsx";
@@ -80,17 +80,16 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
   return (
     <div>
       <Intro title="Look">
-        <p>Every agent is a little ghost. Dress {agent.name} up; it shows everywhere it appears, and it naps when its device is offline.</p>
+        <p>Every agent is a little ghost. Dress {agent.name} up; it shows everywhere it appears, concentrates while it works, and naps in gray when its device is offline.</p>
       </Intro>
 
       <div className="grid lg:grid-cols-[300px_1fr] gap-6 items-start">
         {/* stage */}
         <div className="lg:sticky lg:top-0 space-y-3">
-          <div className="relative rounded-3xl border border-line overflow-hidden" style={{ background: `radial-gradient(circle at 50% 40%, color-mix(in srgb, ${look.color} 38%, transparent), transparent 70%)` }}>
-            <div className="h-64 grid place-items-center pt-2">
-              <Ghost look={look} size={190} mood={mood} tile={false} wave label={`${agent.name}'s ghost`} />
+          <div className="rounded-2xl border border-line bg-bg overflow-hidden">
+            <div className="h-64 grid place-items-center">
+              <Ghost look={look} size={190} mood={mood} wave label={`${agent.name}'s ghost`} />
             </div>
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-24 h-3 rounded-[50%] bg-black/15 blur-[3px] ghost-shadow" aria-hidden />
           </div>
           <div className="flex rounded-xl border border-line p-0.5" role="radiogroup" aria-label="Preview mood">
             {(
@@ -127,24 +126,34 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
             </Tiles>
           </Group>
 
-          <Group title="Color">
+          <Group title="Colors">
             <div className="flex flex-wrap items-center gap-2">
-              {GHOST_COLORS.map((c) => (
-                <button
-                  key={c.hex}
-                  onClick={() => set("color", c.hex)}
-                  title={c.name}
-                  aria-label={c.name}
-                  aria-pressed={look.color.toLowerCase() === c.hex}
-                  className={cx("size-9 rounded-full border border-black/10 transition-transform", look.color.toLowerCase() === c.hex ? "ring-2 ring-offset-2 ring-offset-panel ring-accent scale-105" : "hover:scale-105")}
-                  style={{ background: c.hex }}
-                />
-              ))}
-              <label className={cx("relative size-9 rounded-full border border-line grid place-items-center cursor-pointer overflow-hidden", !GHOST_COLORS.some((c) => c.hex === look.color.toLowerCase()) && "ring-2 ring-offset-2 ring-offset-panel ring-accent")} title="Any color">
-                <span className="absolute inset-0" style={{ background: "conic-gradient(#ff6b6b, #ffd166, #6ee7b7, #60a5fa, #c084fc, #ff6b6b)" }} />
-                <span className="relative size-4 rounded-full border-2 border-white" style={{ background: look.color }} />
-                <input type="color" value={look.color} onChange={(e) => set("color", e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Pick any color" />
-              </label>
+              {GHOST_PALETTES.map((p) => {
+                const selected = look.color.toLowerCase() === p.color && look.color2?.toLowerCase() === p.color2;
+                return (
+                  <button
+                    key={p.name}
+                    onClick={() => setLook((l) => ({ ...l, color: p.color, color2: p.color2 }))}
+                    title={p.name}
+                    aria-label={p.name}
+                    aria-pressed={selected}
+                    className={cx("size-9 rounded-full border border-black/10 transition-transform", selected ? "ring-2 ring-offset-2 ring-offset-panel ring-accent scale-105" : "hover:scale-105")}
+                    style={{ background: `linear-gradient(180deg, ${p.color}, ${p.color2})` }}
+                  />
+                );
+              })}
+              {/* any two colors: the left half picks the top, the right half the bottom */}
+              <span
+                className={cx("relative size-9 rounded-full border border-line overflow-hidden flex", !GHOST_PALETTES.some((p) => p.color === look.color.toLowerCase() && p.color2 === look.color2?.toLowerCase()) && "ring-2 ring-offset-2 ring-offset-panel ring-accent")}
+                title="Pick your own top and bottom colors"
+              >
+                <label className="relative flex-1 cursor-pointer" style={{ background: look.color }}>
+                  <input type="color" value={look.color} onChange={(e) => set("color", e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Top color" />
+                </label>
+                <label className="relative flex-1 cursor-pointer" style={{ background: look.color2 ?? look.color }}>
+                  <input type="color" value={look.color2 ?? look.color} onChange={(e) => set("color2", e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Bottom color" />
+                </label>
+              </span>
               <Switch checked={look.glow} onChange={(v) => set("glow", v)} label="Glow" />
             </div>
           </Group>
@@ -212,7 +221,7 @@ function Face({ look }: { look: GhostAppearance }) {
   return (
     <span className="block size-14 overflow-hidden rounded-full">
       <span className="block origin-center" style={{ transform: "scale(1.9) translateY(4%)" }}>
-        <Ghost look={{ ...look, hat: "none", accessory: "none", glow: false }} size={56} animate={false} tile={false} />
+        <Ghost look={{ ...look, hat: "none", accessory: "none", glow: false }} size={56} animate={false} />
       </span>
     </span>
   );
@@ -244,7 +253,7 @@ function Tile({ label, selected, onClick, children }: { label: string; selected:
       className={cx("rounded-xl border p-2 flex flex-col items-center gap-1 transition-colors", selected ? "border-accent bg-accent-soft" : "border-line hover:bg-hover")}
     >
       {children}
-      <span className={cx("text-xs", selected ? "text-accent font-medium" : "text-muted")}>{label}</span>
+      <span className={cx("text-xs", selected ? "text-accent-text font-medium" : "text-muted")}>{label}</span>
     </button>
   );
 }

@@ -211,7 +211,7 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
                     {r.lastRunAt && ` · last ran ${timeAgo(r.lastRunAt)}`}
                   </div>
                 </div>
-                <a className="text-sm text-accent hover:underline" href={href({ view: "vault", path: r.notePath })}>
+                <a className="text-sm text-accent-text hover:underline" href={href({ view: "vault", path: r.notePath })}>
                   Steps
                 </a>
                 <Button variant="ghost" onClick={() => setScheduling(r)}>

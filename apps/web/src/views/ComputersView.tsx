@@ -54,13 +54,13 @@ export function ComputersView({ computerId, teach, onBack }: { computerId: strin
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {onBack && (
           <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="font-semibold flex-1">Computers</h1>
+        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Computers</h1>
         {canEdit && (
           <Button variant="primary" onClick={() => setAdding(true)}>
             <Plus size={16} /> Add computer
@@ -117,7 +117,7 @@ function ComputerCard({ computer: c, devices }: { computer: ComputerInfo; device
           ))}
         </span>
         <span className="text-xs text-muted truncate">
-          {c.help ? <span className="text-accent font-medium">Needs you: {c.help.request}</span> : c.activity && state.working ? c.activity.text : on.length ? on.map((a) => a.name).join(", ") : "No agents yet"}
+          {c.help ? <span className="text-accent-text font-medium">Needs you: {c.help.request}</span> : c.activity && state.working ? c.activity.text : on.length ? on.map((a) => a.name).join(", ") : "No agents yet"}
         </span>
       </div>
     </a>
@@ -271,7 +271,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="min-h-14 shrink-0 px-3 md:px-5 py-2 flex flex-wrap items-center gap-2 border-b border-line safe-top">
+      <header className="min-h-15 shrink-0 px-4 md:px-6 py-2 flex flex-wrap items-center gap-2 border-b border-line safe-top">
         <a href={href({ view: "computers", computerId: null })} className="text-sm text-muted hover:text-ink">
           Computers
         </a>
@@ -554,7 +554,7 @@ export function ComputerMini({ computer, request, showOpen = true, quiet }: { co
       </div>
       {request && !quiet && <p className="text-sm mb-2">{request}</p>}
       <ScreenThumb computer={computer} refreshMs={3000} />
-      {showOpen && <div className="mt-2 text-xs text-accent font-medium">{request && !computer.help ? "Handled ✓" : request ? "Open and take control →" : `Watch ${computer.name} →`}</div>}
+      {showOpen && <div className="mt-2 text-xs text-accent-text font-medium">{request && !computer.help ? "Handled ✓" : request ? "Open and take control →" : `Watch ${computer.name} →`}</div>}
     </a>
   );
 }

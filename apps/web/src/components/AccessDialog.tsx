@@ -276,7 +276,7 @@ function Row(p: {
         <button
           onClick={() => p.onStartup!(!p.startup)}
           disabled={p.disabled || p.level === "none" || p.startupInherited}
-          className={cx("p-1.5 rounded-md disabled:opacity-40", p.startup ? "text-accent bg-accent-soft" : "text-faint hover:text-ink hover:bg-hover")}
+          className={cx("p-1.5 rounded-md disabled:opacity-40", p.startup ? "text-accent-text bg-accent-soft" : "text-faint hover:text-ink hover:bg-hover")}
           title={p.startupInherited ? "Loads at startup because of a rule for its team, role or all agents" : p.startup ? "Loads at startup (click to stop)" : "Load at startup"}
           aria-label="Load at startup"
           aria-pressed={p.startup}

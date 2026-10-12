@@ -49,7 +49,7 @@ export function WelcomeView({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top md:hidden">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top md:hidden">
         {onBack && (
           <button className="p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
@@ -60,7 +60,7 @@ export function WelcomeView({ onBack }: { onBack?: () => void }) {
       <div ref={scroller} className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 md:py-12">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-accent bg-accent-soft rounded-full px-2.5 py-1">
+            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-accent-text bg-accent-soft rounded-full px-2.5 py-1">
               <Sparkles size={13} /> {allDone ? "You're all set" : `${count} of ${STEPS.length} done`}
             </div>
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{allDone ? `${me.workspace.name} is ready` : `Welcome to ${me.workspace.name}, ${me.user.name.split(" ")[0]}`}</h1>
@@ -457,7 +457,7 @@ function MemoryStep({ state }: { state: OnboardingState | null }) {
         <div className="rounded-xl border border-line divide-y divide-line">
           {notes.map((n) => (
             <button key={n.path} onClick={() => go({ view: "vault", path: n.path })} className="w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-hover">
-              <BookOpen size={15} className="text-accent shrink-0" />
+              <BookOpen size={15} className="text-accent-text shrink-0" />
               <span className="min-w-0 flex-1">
                 <span className="block font-medium truncate">{n.title}</span>
                 <span className="block text-xs text-muted truncate">{pretty(n.path)}</span>
@@ -503,7 +503,7 @@ function MoreTips() {
 function Tip({ icon, title, children, onClick }: { icon: ReactNode; title: string; children: ReactNode; onClick?: () => void }) {
   const body = (
     <>
-      <div className="size-8 rounded-lg bg-accent-soft text-accent grid place-items-center shrink-0">{icon}</div>
+      <div className="size-8 rounded-lg bg-accent-soft text-accent-text grid place-items-center shrink-0">{icon}</div>
       <div className="min-w-0">
         <div className="font-medium text-sm flex items-center gap-1">
           {title} {onClick && <ArrowRight size={13} className="text-faint" />}

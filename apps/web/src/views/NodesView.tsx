@@ -23,13 +23,13 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {onBack && (
           <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="font-semibold flex-1">Devices</h1>
+        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Devices</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus size={16} /> Add device
         </Button>
@@ -46,13 +46,13 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
           <div className="max-w-3xl p-4 md:p-8 space-y-3">
             {nodes?.map((n) => (
               <div key={n.id} className="rounded-xl border border-line p-4 flex items-center gap-4">
-                <div className={cx("size-10 rounded-xl grid place-items-center", n.online ? "bg-accent-soft text-accent" : "bg-hover text-faint")}>
+                <div className={cx("size-10 rounded-xl grid place-items-center", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
                   <Server size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium flex items-center gap-2">
                     {n.name}
-                    <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent" : "bg-hover text-muted")}>{n.online ? "online" : "offline"}</span>
+                    <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "online" : "offline"}</span>
                   </div>
                   <div className="text-xs text-muted truncate">
                     {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No agents assigned"}

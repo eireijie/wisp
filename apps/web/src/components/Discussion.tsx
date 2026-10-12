@@ -33,7 +33,7 @@ export function DiscussionCard({ id }: { id: string }) {
   return (
     <div className="mt-2 max-w-xl rounded-xl border border-line bg-bg p-3 text-sm">
       <div className="flex items-center gap-2">
-        <MessagesSquare size={15} className="text-accent shrink-0" />
+        <MessagesSquare size={15} className="text-accent-text shrink-0" />
         <span className="font-medium truncate flex-1">{d.topic}</span>
         <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>
       </div>
@@ -67,7 +67,7 @@ export function DiscussionCard({ id }: { id: string }) {
         </div>
       )}
       {d.decisionPath && (
-        <button onClick={() => go({ view: "vault", path: d.decisionPath })} className="mt-2 inline-flex items-center gap-1.5 text-accent hover:underline text-sm">
+        <button onClick={() => go({ view: "vault", path: d.decisionPath })} className="mt-2 inline-flex items-center gap-1.5 text-accent-text hover:underline text-sm">
           <BookOpen size={14} /> Read the decision
         </button>
       )}

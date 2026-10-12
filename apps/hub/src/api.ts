@@ -58,6 +58,7 @@ const APPEARANCE = z
   .object({
     shape: z.enum(GHOST_SHAPES),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a #rrggbb color"),
+    color2: z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a #rrggbb color").optional(),
     glow: z.boolean(),
     eyes: z.enum(GHOST_EYES),
     mouth: z.enum(GHOST_MOUTHS),

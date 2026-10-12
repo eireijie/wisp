@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, ChevronLeft, Crown, GitBranch, GitMerge, Hash, MessagesSquare, Network, Plus, Smile, Trash2, Users } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Crown, GitBranch, GitMerge, Hash, MessagesSquare, Network, Plus, Smile, Trash2, Users } from "lucide-react";
 import type { Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type DiscussionInfo, type TeamInfo } from "../store.ts";
@@ -21,13 +21,13 @@ export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab:
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-6 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {onBack && (
           <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="font-semibold flex-1">Teams</h1>
+        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Teams</h1>
         {canEdit && (
           <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus size={16} /> New team
@@ -85,7 +85,7 @@ function OrgChart() {
         <Network size={15} className="text-muted" /> How your agents are organized
       </div>
       <div className="rounded-2xl border border-line p-4">
-        <div className="inline-flex items-center gap-2 rounded-xl bg-accent-soft text-accent px-3 h-9 text-sm font-medium">You{me ? ` (${me.user.name})` : ""}</div>
+        <div className="inline-flex items-center gap-2 rounded-xl bg-accent-soft text-accent-text px-3 h-9 text-sm font-medium">You{me ? ` (${me.user.name})` : ""}</div>
         <ul className="mt-2 space-y-3 border-l border-line ml-3">
           {bosses.map((b) => {
             const a = agent(b);
@@ -134,7 +134,7 @@ function TeamCard({ team }: { team: TeamInfo }) {
   return (
     <a href={`#/teams/${team.id}`} className="block rounded-xl border border-line p-3 hover:bg-hover max-w-xl">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {team.emoji ? <span className="leading-none">{team.emoji}</span> : <Users size={15} className="text-accent shrink-0" />}
+        {team.emoji ? <span className="leading-none">{team.emoji}</span> : <Users size={15} className="text-accent-text shrink-0" />}
         <span className="font-semibold break-all">{team.name}</span>
         <span className="text-xs text-muted whitespace-nowrap">
           {team.members.length} agent{team.members.length === 1 ? "" : "s"}
@@ -248,12 +248,16 @@ function TeamDetail({ team, tab, canEdit }: { team: TeamInfo; tab: TeamTab; canE
   const channel = channels.find((c) => c.id === team.channelId);
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
-        <a href="#/teams" className="p-1.5 -ml-1.5 rounded-md hover:bg-hover text-muted" aria-label="All teams">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
+        <a href="#/teams" className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover text-muted" aria-label="All teams">
           <ChevronLeft size={20} />
         </a>
-        {team.emoji ? <span className="text-lg leading-none">{team.emoji}</span> : <Users size={17} className="text-accent" />}
-        <h1 className="font-semibold truncate">{team.name}</h1>
+        <a href="#/teams" className="hidden md:inline text-sm font-semibold uppercase tracking-wider text-muted hover:text-ink">
+          Teams
+        </a>
+        <ChevronRight size={14} className="hidden md:block text-faint shrink-0" />
+        {team.emoji && <span className="text-base leading-none">{team.emoji}</span>}
+        <h1 className="text-sm font-medium truncate">{team.name}</h1>
         <nav className="ml-2 flex gap-0.5 rounded-lg border border-line p-0.5" role="tablist">
           {TABS.map((t) => (
             <a key={t.id} role="tab" aria-selected={tab === t.id} href={href({ view: "teams", teamId: team.id, tab: t.id })} className={cx("h-7 px-2.5 rounded-md text-sm inline-flex items-center", tab === t.id ? "bg-hover text-ink font-medium" : "text-muted hover:text-ink")}>

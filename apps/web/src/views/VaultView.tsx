@@ -122,7 +122,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-14 shrink-0 px-3 md:px-5 flex items-center gap-2 border-b border-line safe-top">
+      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {onBack && (
           <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
             <ChevronLeft size={22} />
@@ -131,9 +131,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         <button className="p-1.5 rounded-md hover:bg-hover text-muted" onClick={() => setShowTree(!showTree)} aria-label="Toggle file list" title="Toggle file list">
           <PanelLeft size={18} />
         </button>
-        <h1 className="font-semibold flex items-center gap-2 flex-1 min-w-0">
-          <BookOpen size={17} className="text-accent shrink-0" /> <span className="truncate">Memory vault</span>
-        </h1>
+        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 min-w-0 truncate">Memory</h1>
         {isOwner && agents.length > 0 && (
           <label className="hidden sm:flex items-center gap-1.5 text-sm text-muted" title="See memory the way an agent does">
             <ScanEye size={16} />
@@ -166,7 +164,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
 
       {viewAs && (
         <div className="px-4 md:px-5 py-2 bg-accent-soft text-sm flex items-center gap-2">
-          <ScanEye size={15} className="text-accent shrink-0" />
+          <ScanEye size={15} className="text-accent-text shrink-0" />
           <span className="flex-1">
             Viewing as <b>@{agents.find((a) => `agent:${a.id}` === viewAs)?.handle}</b>: only the notes it can read are listed.
           </span>
@@ -308,7 +306,7 @@ function TreeItem({ node, depth, parent, ...rest }: TreeProps & { node: TreeNode
   const pad = { paddingLeft: 12 + depth * 14 };
   if (node.note)
     return (
-      <button onClick={() => onOpen(node.path)} style={pad} className={cx("w-full text-left pr-3 h-8 flex items-center gap-1.5 truncate", node.path === active ? "bg-accent-soft text-accent font-medium" : "hover:bg-hover")}>
+      <button onClick={() => onOpen(node.path)} style={pad} className={cx("w-full text-left pr-3 h-8 flex items-center gap-1.5 truncate", node.path === active ? "bg-accent-soft text-accent-text font-medium" : "hover:bg-hover")}>
         <span className="w-3.5" />
         <span className="truncate">{node.note.title !== base(node.path) ? node.note.title : base(node.path)}</span>
         <SharedMark path={node.path} ruled={ruled} />
@@ -448,13 +446,13 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
               <Pencil size={14} />
             </button>
           </div>
-          <button onClick={() => setSide(side === "links" ? null : "links")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "links" ? "text-accent" : "text-muted")} title="Links">
+          <button onClick={() => setSide(side === "links" ? null : "links")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "links" ? "text-accent-text" : "text-muted")} title="Links">
             <Link2 size={16} />
           </button>
-          <button onClick={() => setSide(side === "authors" ? null : "authors")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "authors" ? "text-accent" : "text-muted")} title="Who wrote what">
+          <button onClick={() => setSide(side === "authors" ? null : "authors")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "authors" ? "text-accent-text" : "text-muted")} title="Who wrote what">
             <UserPen size={16} />
           </button>
-          <button onClick={() => setSide(side === "history" ? null : "history")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "history" ? "text-accent" : "text-muted")} title="History">
+          <button onClick={() => setSide(side === "history" ? null : "history")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "history" ? "text-accent-text" : "text-muted")} title="History">
             <GitCommitHorizontal size={16} />
           </button>
           <button onClick={onShare} className="p-1.5 rounded-md hover:bg-hover text-muted" title="Who can see this note">
@@ -575,7 +573,7 @@ function LinkList({ title, items, empty }: { title: string; items: { label: stri
       {items.length === 0 && <p className="text-muted">{empty}</p>}
       {items.map((it) => (
         <button key={it.label + it.sub} disabled={!it.path} onClick={() => it.path && go({ view: "vault", path: it.path })} className="w-full text-left rounded-md px-2 py-1.5 hover:bg-hover disabled:hover:bg-transparent">
-          <div className={cx("truncate", it.path ? "text-accent" : "text-muted")}>{it.label}</div>
+          <div className={cx("truncate", it.path ? "text-accent-text" : "text-muted")}>{it.label}</div>
           <div className="text-xs text-muted truncate">{it.sub}</div>
         </button>
       ))}
@@ -671,7 +669,7 @@ function ActivityFeed({ onOpen }: { onOpen: (p: string) => void }) {
                 </div>
                 <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                   {c.files.map((f) => (
-                    <button key={f.path} disabled={f.change === "deleted"} onClick={() => onOpen(f.path)} className={cx("text-xs truncate max-w-full", f.change === "deleted" ? "text-muted line-through" : "text-accent hover:underline")}>
+                    <button key={f.path} disabled={f.change === "deleted"} onClick={() => onOpen(f.path)} className={cx("text-xs truncate max-w-full", f.change === "deleted" ? "text-muted line-through" : "text-accent-text hover:underline")}>
                       {verb[f.change]} {pathLabel(f.path, agents, members)}
                     </button>
                   ))}

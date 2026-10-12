@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 import type { GhostAppearance, GhostShape } from "@warren/core";
+import { GHOST_ASLEEP } from "@warren/core/src/appearance.ts";
 
 /** How the ghost feels right now; follows the agent's status where it matters. */
 export type GhostMood = "awake" | "thinking" | "asleep";
@@ -14,6 +15,8 @@ interface ShapeDef {
   hatScale: number;
   /** where neckwear goes, and half the body width there */
   neck: { y: number; half: number };
+  /** where its shadow sits, just under the hem */
+  ground: number;
 }
 
 const swap = (d: string, a: string, b: string) => d.replaceAll(a, "§").replaceAll(b, a).replaceAll("§", b);
@@ -27,11 +30,11 @@ const WISP_A = "M60 16 C80 16 90 32 90 52 C90 74 78 84 68 90 C60 95 58 104 66 10
 const WISP_B = "M60 16 C80 16 90 32 90 52 C90 74 80 86 70 92 C62 97 64 106 72 110 C58 110 52 100 52 92 C38 86 30 72 30 52 C30 32 40 16 60 16 Z";
 
 export const SHAPES: Record<GhostShape, ShapeDef> = {
-  classic: { body: [CLASSIC, swap(CLASSIC, "104", "88")], eyes: { y: 54, x: [50, 70] }, mouthY: 66, top: 18, hatScale: 1, neck: { y: 77, half: 30 } },
-  round: { body: [ROUND, swap(ROUND, "100", "84")], eyes: { y: 58, x: [47, 73] }, mouthY: 70, top: 26, hatScale: 1.1, neck: { y: 80, half: 37 } },
-  tall: { body: [TALL, swap(TALL, "110", "94")], eyes: { y: 44, x: [52, 68] }, mouthY: 56, top: 10, hatScale: 0.85, neck: { y: 68, half: 22 } },
-  sheet: { body: [SHEET_A, SHEET_B], eyes: { y: 46, x: [53, 67] }, mouthY: 57, top: 16, hatScale: 0.8, neck: { y: 64, half: 19 } },
-  wisp: { body: [WISP_A, WISP_B], eyes: { y: 50, x: [50, 70] }, mouthY: 62, top: 16, hatScale: 1, neck: { y: 72, half: 28 } },
+  classic: { body: [CLASSIC, swap(CLASSIC, "104", "88")], eyes: { y: 54, x: [50, 70] }, mouthY: 66, top: 18, hatScale: 1, neck: { y: 77, half: 30 }, ground: 111 },
+  round: { body: [ROUND, swap(ROUND, "100", "84")], eyes: { y: 58, x: [47, 73] }, mouthY: 70, top: 26, hatScale: 1.1, neck: { y: 80, half: 37 }, ground: 107 },
+  tall: { body: [TALL, swap(TALL, "110", "94")], eyes: { y: 44, x: [52, 68] }, mouthY: 56, top: 10, hatScale: 0.85, neck: { y: 68, half: 22 }, ground: 115 },
+  sheet: { body: [SHEET_A, SHEET_B], eyes: { y: 46, x: [53, 67] }, mouthY: 57, top: 16, hatScale: 0.8, neck: { y: 64, half: 19 }, ground: 110 },
+  wisp: { body: [WISP_A, WISP_B], eyes: { y: 50, x: [50, 70] }, mouthY: 62, top: 16, hatScale: 1, neck: { y: 72, half: 28 }, ground: 115 },
 };
 
 // --- color helpers ------------------------------------------------------------------------------
@@ -45,60 +48,103 @@ function mix(hex: string, to: [number, number, number], t: number) {
   const c = (a: number, z: number) => Math.round(a + (z - a) * t);
   return `rgb(${c(r, to[0])} ${c(g, to[1])} ${c(b, to[2])})`;
 }
-function luminance(hex: string) {
-  const [r, g, b] = rgb(hex).map((v) => {
+function luminance([r, g, b]: [number, number, number]) {
+  const lin = (v: number) => {
     const s = v / 255;
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
-const safeColor = (c: string) => (/^#[0-9a-fA-F]{6}$/.test(c) ? c : "#f4f1ff");
+const safeColor = (c: string | undefined, fallback: string) => (c && /^#[0-9a-fA-F]{6}$/.test(c) ? c : fallback);
+
+/** One-color ghosts (from before gradients) fade to a deeper, slightly richer shade of themselves. */
+function shade(hex: string): string {
+  const [r, g, b] = rgb(hex).map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return `hsl(${Math.round(h * 60 + 12)} ${Math.round(Math.min(1, s + 0.12) * 100)}% ${Math.round(Math.max(0.12, l - 0.16) * 100)}%)`;
+}
+
+/** Zz and thought marks, the same warm yellow on every palette (like Paperclip's). */
+const MARK = "#f5c542";
 
 // --- the ghost ----------------------------------------------------------------------------------
 
 /**
- * An animated ghost. Animations are CSS (float, blink, moods) plus an SVG hem ripple; all of
- * it switches off with `animate={false}` or when the OS asks for reduced motion.
+ * An animated ghost, drawn like a Paperclip agent: a two-color body with a lit center and a
+ * soft rim, floating over its own shadow. Its face follows the mood: focused while working,
+ * gray and dozing while offline. Animations are CSS (float, blink, moods) plus an SVG hem
+ * ripple; all of it switches off with `animate={false}` or when the OS asks for reduced motion.
  */
-export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = true, label }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string }) {
+export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const shape = SHAPES[look.shape] ?? SHAPES.classic;
-  const color = safeColor(look.color);
-  const dark = luminance(color) < 0.3;
-  const ink = dark ? "#f7f5ff" : "#2a2340";
   const asleep = mood === "asleep";
-  const motionClass = !animate || look.motion === "still" ? "" : `ghost-${look.motion}${mood === "thinking" ? " ghost-fast" : ""}`;
+  const top = asleep ? GHOST_ASLEEP.color : safeColor(look.color, "#f4f1ff");
+  const bottom = asleep ? GHOST_ASLEEP.color2 : look.color2 ? safeColor(look.color2, top) : shade(top);
+  // the face sits mid-body, so read ink against the middle of the gradient
+  const [r1, g1, b1] = rgb(top);
+  const [r2, g2, b2] = look.color2 && !asleep ? rgb(safeColor(look.color2, top)) : asleep ? rgb(GHOST_ASLEEP.color2) : [r1 * 0.8, g1 * 0.8, b1 * 0.8];
+  const dark = luminance([(r1 + r2) / 2, (g1 + g2) / 2, (b1 + b2) / 2]) < 0.16;
+  const ink = dark ? "#f7f7f8" : "#1d1d1f";
+  const moving = animate && look.motion !== "still";
+  const motionClass = moving ? `ghost-${look.motion}${mood === "thinking" ? " ghost-fast" : ""}` : "";
   const rippling = (wave ?? size >= 44) && animate && !prefersReducedMotion();
   const details = size >= 26; // drop tiny decorations at small sizes
+  const grounded = size >= 28;
   const { x: [ex1, ex2], y: ey } = shape.eyes;
+  const ripple = rippling ? <animate attributeName="d" dur={mood === "thinking" ? "1.4s" : "2.6s"} repeatCount="indefinite" values={`${shape.body[0]};${shape.body[1]};${shape.body[0]}`} calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1" /> : null;
 
   return (
     <span
       className="ghost relative inline-grid place-items-center shrink-0 rounded-full"
-      style={{ width: size, height: size, background: tile ? `color-mix(in srgb, ${color} ${dark ? 30 : 34}%, transparent)` : undefined }}
+      style={{ width: size, height: size, background: tile ? `color-mix(in srgb, ${top} 28%, transparent)` : undefined }}
       role="img"
       aria-label={label ?? "ghost"}
     >
       <svg
         // leave headroom only when there's a hat to fit; otherwise frame the ghost snugly
-        viewBox={look.hat === "none" ? "8 0 104 116" : "-6 -18 132 136"}
+        viewBox={look.hat === "none" ? "4.5 8 111 111" : "-8 -18 136 140"}
         width={size}
         height={size}
         className={look.glow ? "ghost-glow" : undefined}
-        style={look.glow ? ({ "--glow": color } as React.CSSProperties) : undefined}
+        style={look.glow ? ({ "--glow": bottom } as React.CSSProperties) : undefined}
         overflow="visible"
       >
         <defs>
           <linearGradient id={`b${uid}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={mix(color, [255, 255, 255], dark ? 0.18 : 0.55)} />
-            <stop offset="1" stopColor={color} />
+            <stop offset="0.08" stopColor={top} />
+            <stop offset="0.95" stopColor={bottom} />
           </linearGradient>
+          {/* the lit "face plate": brighter in the middle, falling off toward the edges */}
+          <radialGradient id={`l${uid}`} cx="0.5" cy="0.42" r="0.6">
+            <stop offset="0" stopColor="white" stopOpacity={asleep ? 0.1 : 0.24} />
+            <stop offset="0.65" stopColor="white" stopOpacity="0.06" />
+            <stop offset="1" stopColor="white" stopOpacity="0" />
+          </radialGradient>
+          <clipPath id={`c${uid}`}>
+            <path d={shape.body[0]}>{ripple}</path>
+          </clipPath>
         </defs>
-        <g className={motionClass} style={{ opacity: asleep ? 0.74 : 1 }}>
-          <path d={shape.body[0]} fill={`url(#b${uid})`} stroke={mix(color, [40, 30, 70], dark ? 0.2 : 0.5)} strokeWidth="2.4" strokeLinejoin="round">
-            {rippling && <animate attributeName="d" dur={mood === "thinking" ? "1.4s" : "2.6s"} repeatCount="indefinite" values={`${shape.body[0]};${shape.body[1]};${shape.body[0]}`} calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1" />}
+
+        {grounded && <ellipse cx="60" cy={shape.ground} rx="24" ry="3.4" className={cx("ghost-ground", moving && `ghost-ground-${look.motion}`, moving && mood === "thinking" && "ghost-fast")} />}
+
+        <g className={motionClass}>
+          <path d={shape.body[0]} fill={`url(#b${uid})`}>
+            {ripple}
           </path>
-          <ellipse cx={ex1 - 2} cy={shape.top + 14} rx="9" ry="5" fill="white" opacity={dark ? 0.12 : 0.45} />
+          <path d={shape.body[0]} fill={`url(#l${uid})`}>
+            {ripple}
+          </path>
+          {/* a soft rim just inside the edge, so the body reads as rounded */}
+          <path d={shape.body[0]} fill="none" stroke="black" strokeOpacity="0.1" strokeWidth="7" clipPath={`url(#c${uid})`}>
+            {ripple}
+          </path>
 
           {look.cheeks && !asleep && (
             <>
@@ -108,7 +154,8 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
           )}
 
           <Eyes style={asleep ? "closed" : look.eyes} x={[ex1, ex2]} y={ey} ink={ink} blink={animate && details && !asleep} thinking={mood === "thinking"} />
-          {(look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={asleep ? "smile" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
+          {(look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={asleep || mood === "thinking" ? "flat" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
+          {asleep && details && <path d={`M63.5 ${shape.mouthY + 2.2} q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z`} fill="#e8f6ff" opacity="0.95" />}
           {look.accessory !== "none" && <Accessory kind={look.accessory} shape={shape} />}
           {look.hat !== "none" && (
             <g transform={`translate(60 ${shape.top}) scale(${shape.hatScale})`}>
@@ -117,18 +164,18 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
           )}
         </g>
 
-        {asleep && details && animate && (
-          <g fill={ink} fontFamily="ui-rounded, system-ui, sans-serif" fontWeight="700">
-            <text x="92" y={shape.top + 6} fontSize="15" className="ghost-z">
+        {asleep && details && (
+          <g fill={MARK} fontFamily="ui-rounded, system-ui, sans-serif" fontWeight="800">
+            <text x="92" y={shape.top + 6} fontSize="15" className={animate ? "ghost-z" : undefined}>
               z
             </text>
-            <text x="100" y={shape.top - 4} fontSize="11" className="ghost-z ghost-z2">
+            <text x="101" y={shape.top - 5} fontSize="11" className={animate ? "ghost-z ghost-z2" : undefined}>
               z
             </text>
           </g>
         )}
         {mood === "thinking" && details && (
-          <g fill={dark ? color : mix(color, [40, 30, 70], 0.45)}>
+          <g fill={MARK}>
             {[0, 1, 2].map((i) => (
               <circle key={i} cx={90 + i * 7} cy={shape.top - 2 - i * 5} r={2.4 + i * 0.6} className={animate ? "ghost-think" : undefined} style={{ animationDelay: `${i * 0.25}s` }} />
             ))}
@@ -138,6 +185,8 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
     </span>
   );
 }
+
+const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
 function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -186,8 +235,10 @@ function Eyes({ style, x, y, ink, blink, thinking }: { style: GhostAppearance["e
   );
 }
 
-function Mouth({ style, x, y, ink }: { style: GhostAppearance["mouth"]; x: number; y: number; ink: string }) {
+function Mouth({ style, x, y, ink }: { style: GhostAppearance["mouth"] | "flat"; x: number; y: number; ink: string }) {
   switch (style) {
+    case "flat": // concentrating, or dozing
+      return <path d={`M${x - 3.2} ${y + 1.2} L${x + 3.2} ${y + 1.2}`} stroke={ink} strokeWidth="2.2" strokeLinecap="round" />;
     case "open":
       return (
         <g>

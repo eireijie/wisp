@@ -5,7 +5,7 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
 import { ComputerMini } from "../views/ComputersView.tsx";
-import { AgentAvatar, Button, Pill, Textarea, cx, timeAgo } from "./ui.tsx";
+import { AgentAvatar, Button, Pill, Textarea, agentVar, cx, timeAgo } from "./ui.tsx";
 
 /** An agent's request on its computer ("Sign in to Zendesk…"), with the screen live. */
 export function ComputerPart({ computerId, request }: { computerId: string; request?: string }) {
@@ -49,7 +49,7 @@ export function ApprovalCard({ id }: { id: string }) {
   return (
     <div className={cx("mt-1.5 max-w-lg rounded-2xl border p-3", pending ? "border-accent/40 bg-accent-soft/40" : "border-line bg-panel")}>
       <div className="flex items-start gap-2">
-        <ShieldQuestion size={16} className={cx("mt-0.5 shrink-0", pending ? "text-accent" : "text-muted")} />
+        <ShieldQuestion size={16} className={cx("mt-0.5 shrink-0", pending ? "text-accent-text" : "text-muted")} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">{approval.summary}</div>
           {approval.details && (
@@ -101,7 +101,7 @@ export function RoutineChip({ id }: { id: string }) {
   if (!routine) return null;
   return (
     <a href={href({ view: "agents", agentId: routine.agentId, tab: "routines" })} className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-panel px-3 h-8 text-xs hover:bg-hover">
-      <ListChecks size={14} className="text-accent shrink-0" />
+      <ListChecks size={14} className="text-accent-text shrink-0" />
       <span className="font-medium truncate">{routine.name}</span>
       {routine.status === "learning" ? (
         <Pill tone="info">learning</Pill>
@@ -153,7 +153,8 @@ export function HandoffPill({ agent, text, with: targets }: { agent?: Agent; tex
   return (
     <span className="inline-flex items-center gap-1.5">
       {agent && <AgentAvatar agent={agent} size={18} badge={false} live />}
-      <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2 h-6 text-xs", targets.length ? "bg-accent-soft text-accent font-medium" : "text-muted")}>
+      {/* "Sending to Chief…" wears Chief's color, like Grok Bot's handoffs */}
+      <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2 h-6 text-xs", targets.length ? "agent-tint agent-ink font-medium" : "text-muted")} style={targets.length ? agentVar(targets[0]) : undefined}>
         {targets.length > 0 && (
           <span className="inline-flex gap-0.5" aria-hidden>
             <span className="size-1 rounded-full bg-current animate-pulse" />
