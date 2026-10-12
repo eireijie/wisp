@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Activity, BookOpen, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
 import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@warren/core";
 import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
+import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { ApiError, api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
@@ -1038,7 +1039,6 @@ function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }
 
 function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] }) {
   const [token, setToken] = useState<string | null>(null);
-  const hub = location.origin;
   const device = nodes.find((n) => n.id === agent.nodeId);
   return (
     <div className="max-w-2xl space-y-8">
@@ -1058,20 +1058,7 @@ function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] })
         </h3>
         <p className="text-sm text-muted">Give any MCP-capable harness this agent's identity, memory, chat and task tools. The token is shown once.</p>
         {token ? (
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="font-medium mb-1">Claude Code</div>
-              <CopyBlock text={`claude mcp add warren --env WARREN_URL=${hub} --env WARREN_TOKEN=${token} -- warren-mcp`} />
-            </div>
-            <div>
-              <div className="font-medium mb-1">Codex (~/.codex/config.toml)</div>
-              <CopyBlock text={`[mcp_servers.warren]\ncommand = "warren-mcp"\nenv = { WARREN_URL = "${hub}", WARREN_TOKEN = "${token}" }`} />
-            </div>
-            <div>
-              <div className="font-medium mb-1">Any other MCP client (JSON)</div>
-              <CopyBlock text={JSON.stringify({ mcpServers: { warren: { command: "warren-mcp", env: { WARREN_URL: hub, WARREN_TOKEN: token } } } }, null, 2)} />
-            </div>
-          </div>
+          <ConnectionInstructions token={token} harness={agent.harness} />
         ) : (
           <Button onClick={async () => setToken((await api<{ token: string }>("POST", `/api/agents/${agent.id}/token`)).token)}>Create connection token</Button>
         )}

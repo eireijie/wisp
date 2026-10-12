@@ -319,3 +319,73 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ghost *, .ghost { animation: none !important; }
 }
+
+/* The add-agent side panel: identity, harness, then workspace. It uses the current theme's colors. */
+.agent-wizard { display: flex; flex-direction: column; max-width: 480px; outline: none; }
+.agent-wizard > :first-child { flex-shrink: 0; padding: 24px 32px 8px; }
+.agent-wizard > :nth-child(2) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.agent-wizard > :nth-child(2) > form, .agent-wizard > :nth-child(2) > .agent-wizard-body { flex: 1; min-height: 0; }
+.agent-wizard form { display: flex; flex-direction: column; }
+.agent-drawer-eyebrow { text-transform: uppercase; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; color: var(--muted); }
+.agent-wizard-progress { flex-shrink: 0; padding: 20px 32px 0; }
+.agent-step-progress { position: relative; display: flex; align-items: center; width: 164px; padding-bottom: 28px; }
+.agent-step-stop { display: flex; align-items: center; flex: 1; }
+.agent-step-stop:not(:nth-child(3))::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+.agent-step-stop:nth-child(3) { flex: 0; }
+.agent-step-dot { display: block; width: 16px; height: 16px; flex-shrink: 0; border: 1px solid var(--input); border-radius: 50%; outline: none; }
+.agent-step-dot.current { border-color: var(--accent); background: var(--accent); }
+.agent-step-dot.complete { border-color: var(--accent); background: var(--accent-soft); }
+.agent-step-dot:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
+.agent-step-label { color: var(--muted); font-size: 13px; font-weight: 400; }
+.agent-step-progress > .agent-step-label { position: absolute; bottom: 0; left: 0; white-space: nowrap; }
+.agent-wizard-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 32px; }
+.agent-wizard-hero { text-align: left; }
+.agent-wizard-hero h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.04em; line-height: 1.2; }
+.agent-wizard-hero p { margin-top: 12px; font-size: 16px; color: var(--muted); line-height: 1.5; }
+.agent-wizard-hero.compact { padding-bottom: 28px; }
+.agent-identity-step { display: flex; flex-direction: column; }
+.agent-identity-row { display: flex; align-items: center; gap: 24px; margin-top: 56px; }
+.agent-handle-preview { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.agent-identity-hint { font-size: 13px; line-height: 1.6; color: var(--muted); margin-top: 60px; }
+.agent-join-options { margin-top: auto; padding-top: 48px; }
+.agent-join-options h2 { font-size: 14px; font-weight: 500; border-top: 1px solid var(--line); padding-top: 28px; margin-bottom: 20px; }
+.agent-invite-link { display: flex; align-items: center; gap: 16px; width: 100%; border-radius: 8px; padding: 18px; background: var(--hover); font-size: 14px; text-align: left; }
+.agent-invite-link span { flex: 1; }
+.agent-invite-link:hover { background: var(--chip); }
+.agent-discover-link { display: inline-block; margin-top: 18px; text-align: left; color: var(--accent-text); font-size: 13px; }
+.agent-discover-link:hover { text-decoration: underline; }
+.agent-wizard-footer { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; flex-shrink: 0; padding: 20px 32px 24px; border-top: 1px solid var(--line); background: var(--panel); }
+.agent-wizard-footer > button:last-of-type { width: 100%; min-width: 0; }
+.agent-wizard-footer.identity-footer { grid-template-columns: 1fr; border-top: 0; padding-top: 32px; }
+.agent-wizard-footer.identity-footer > button:first-child { display: none; }
+.agent-wizard-footer.back-only { grid-template-columns: auto; justify-content: start; }
+.agent-footer-hint { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.agent-harness-card { position: relative; display: flex; align-items: center; gap: 10px; min-height: 68px; padding: 14px 22px 14px 12px; text-align: left; border: 1px solid var(--line); border-radius: 8px; transition: border-color 150ms, background 150ms; outline: none; }
+.agent-harness-card:hover { background: var(--hover); border-color: var(--input); }
+.agent-harness-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+.agent-harness-check { position: absolute; top: 7px; right: 6px; color: var(--accent-text); }
+.agent-harness-card:focus-visible, .agent-external-choice:focus-visible, .agent-invite-link:focus-visible, .agent-discover-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.agent-external-choice { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.agent-external-choice:hover:not(:disabled) { background: var(--hover); border-color: var(--input); }
+.ghost-face-tracking { transition: transform 150ms ease-out; }
+@media (max-height: 800px) {
+  .agent-identity-row { margin-top: 32px; }
+  .agent-identity-hint { margin-top: 32px; }
+  .agent-join-options { padding-top: 24px; }
+  .agent-wizard-footer.identity-footer { padding-top: 20px; }
+}
+@media (max-width: 639px) {
+  .agent-wizard { max-width: 100%; }
+  .agent-wizard > :first-child { padding: 20px 24px 8px; }
+  .agent-wizard-progress { padding: 16px 24px 0; }
+  .agent-wizard-body { padding: 28px 24px; }
+  .agent-wizard-hero h1 { font-size: 28px; }
+  .agent-identity-row { gap: 16px; margin-top: 40px; }
+  .agent-identity-row > .ghost { width: 88px !important; height: 88px !important; }
+  .agent-identity-row > .ghost > svg { width: 88px; height: 88px; }
+  .agent-identity-hint { margin-top: 40px; }
+  .agent-wizard-footer { padding: 20px 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ghost-face-tracking, .agent-harness-card { transition: none; }
+}

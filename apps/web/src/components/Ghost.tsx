@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { GhostAppearance, GhostShape } from "@warren/core";
 import { GHOST_ASLEEP } from "@warren/core/src/appearance.ts";
 import { motionReduced } from "../theme.ts";
@@ -82,7 +82,37 @@ const MARK = "#f5c542";
  * gray and dozing while offline. Animations are CSS (float, blink, moods) plus an SVG hem
  * ripple; all of it switches off with `animate={false}` or when the OS asks for reduced motion.
  */
-export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string }) {
+export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label, trackPointer = false }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string; trackPointer?: boolean }) {
+  const face = useRef<SVGGElement>(null);
+  const root = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!trackPointer || prefersReducedMotion() || mood === "asleep") return;
+    let frame = 0;
+    const reset = () => {
+      cancelAnimationFrame(frame);
+      face.current?.setAttribute("transform", "translate(0 0)");
+    };
+    const follow = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const box = root.current?.getBoundingClientRect();
+        if (!box) return;
+        const x = Math.max(-4.5, Math.min(4.5, (e.clientX - box.left - box.width / 2) / 65));
+        const y = Math.max(-3, Math.min(3, (e.clientY - box.top - box.height / 2) / 90));
+        face.current?.setAttribute("transform", `translate(${x} ${y})`);
+      });
+    };
+    window.addEventListener("pointermove", follow, { passive: true });
+    document.documentElement.addEventListener("pointerleave", reset);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("pointermove", follow);
+      document.documentElement.removeEventListener("pointerleave", reset);
+      window.removeEventListener("blur", reset);
+      reset();
+    };
+  }, [trackPointer, mood]);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const shape = SHAPES[look.shape] ?? SHAPES.classic;
   const asleep = mood === "asleep";
@@ -103,6 +133,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
 
   return (
     <span
+      ref={root}
       className="ghost relative inline-grid place-items-center shrink-0 rounded-full"
       style={{ width: size, height: size, background: tile ? `color-mix(in srgb, ${top} 28%, transparent)` : undefined }}
       role="img"
@@ -147,6 +178,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
             {ripple}
           </path>
 
+          <g ref={face} className={trackPointer ? "ghost-face-tracking" : undefined}>
           {look.cheeks && !asleep && (
             <>
               <ellipse cx={ex1 - 4} cy={ey + 8} rx="4.5" ry="2.6" fill="#ff8fab" opacity="0.5" />
@@ -157,6 +189,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
           <Eyes style={asleep ? "closed" : look.eyes} x={[ex1, ex2]} y={ey} ink={ink} blink={animate && details && !asleep} thinking={mood === "thinking"} />
           {(look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={asleep || mood === "thinking" ? "flat" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
           {asleep && details && <path d={`M63.5 ${shape.mouthY + 2.2} q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z`} fill="#e8f6ff" opacity="0.95" />}
+          </g>
           {look.accessory !== "none" && <Accessory kind={look.accessory} shape={shape} />}
           {look.hat !== "none" && (
             <g transform={`translate(60 ${shape.top}) scale(${shape.hatScale})`}>
