@@ -114,7 +114,7 @@ const channelMessages = async (thread?: string) => (await api<{ messages: Messag
 describe("hub", () => {
   it("reports onboarding progress from real state", async () => {
     const o = (await api("GET", "/api/onboarding")).data;
-    expect(o.devices).toEqual([{ id: expect.any(String), name: "test-node", online: true }]);
+    expect(o.devices).toEqual([{ id: expect.any(String), name: "test-node", online: true, mine: true, role: null }]);
     expect(o.agents.map((a: any) => a.handle)).toEqual(["atlas", "nova"]);
     expect(o.computers).toEqual([]);
     expect(o.firstReply).toBeNull();

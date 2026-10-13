@@ -26,6 +26,12 @@ export interface UserPrefs {
   toolCalls?: "collapsed" | "expanded" | "hidden";
 }
 
+/**
+ * What a device does for agents, picked by its owner: run their computers (VMs), lend them its own
+ * screen, or neither (agents there run headless). Null until someone picks.
+ */
+export type DeviceRole = "vms" | "screen" | "headless";
+
 /** How much an agent may do on its device. "full" also needs `allowFullAccess` in that device's config. */
 export type AccessLevel = "read-only" | "edit" | "full";
 

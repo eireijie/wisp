@@ -238,7 +238,8 @@ export class DockerVm implements Driver {
     private spec: ComputerSpec,
     nodeDir: string,
     readonly engine: Engine,
-    private onStatus: (text: string) => void = () => {},
+    /** how starting it goes: each step, then up or not, whatever asked for it */
+    private report: (status: "starting" | "ready" | "error", text: string) => void = () => {},
   ) {
     const safe = spec.id.replace(/[^a-zA-Z0-9_.-]/g, "-");
     this.name = `warren-${safe}`;
@@ -284,6 +285,20 @@ export class DockerVm implements Driver {
   private async boot() {
     const state = await this.running();
     if (state === true) return;
+    try {
+      await this.bringUp(state);
+      this.report("ready", "");
+    } catch (err) {
+      this.report("error", (err as Error).message);
+      throw err;
+    }
+  }
+
+  private onStatus(text: string) {
+    this.report("starting", text);
+  }
+
+  private async bringUp(state: boolean | null) {
     if (state === false) {
       this.onStatus("Starting the VM…");
       await must(this.bin, ["start", this.name], { timeoutMs: 120_000 });
@@ -296,7 +311,7 @@ export class DockerVm implements Driver {
           this.onStatus(`Pulling ${image}…`);
           await must(this.bin, this.engine.kind === "apple" ? ["image", "pull", image] : ["pull", image], { timeoutMs: 30 * 60_000 });
         }
-      } else image = await ensureImage(this.engine, this.onStatus);
+      } else image = await ensureImage(this.engine, (text) => this.onStatus(text));
       fs.mkdirSync(this.filesDir, { recursive: true });
       if (this.engine.kind === "apple" && (await exec(this.bin, ["volume", "inspect", this.volume], { timeoutMs: 15_000 })).code !== 0) {
         await must(this.bin, ["volume", "create", this.volume], { timeoutMs: 60_000 });

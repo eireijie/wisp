@@ -180,6 +180,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["nodes", "shared", "INTEGER NOT NULL DEFAULT 0"],
   ["runs", "requested_by", "TEXT"],
   ["tokens", "created_by", "TEXT"],
+  ["nodes", "role", "TEXT"],
   ["users", "preferred_name", "TEXT"],
   ["users", "timezone", "TEXT"],
   ["users", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
@@ -189,14 +190,24 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
 export function openDb(file: string): Database.Database {
   const db = new Database(file);
   db.exec(SCHEMA);
+  const added = new Set<string>();
   for (const [table, column, definition] of ADDED_COLUMNS) {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    if (!cols.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      added.add(`${table}.${column}`);
+    }
   }
   migrateGrants(db);
   migrateGroups(db);
   migrateNodeOwners(db);
+  if (added.has("nodes.role")) migrateNodeRoles(db);
   return db;
+}
+
+/** Devices from before they had a role: the ones already running agents' VMs do that. */
+function migrateNodeRoles(db: Database.Database) {
+  db.prepare(`UPDATE nodes SET role = 'vms' WHERE role IS NULL AND EXISTS (SELECT 1 FROM computers c WHERE c.node_id = nodes.id AND c.kind = 'vm')`).run();
 }
 
 /** Devices from before they had owners belong to the workspace's first owner. */

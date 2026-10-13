@@ -25,6 +25,8 @@ export interface HostOptions {
   /** let shell commands from Warren run on this device's own screen computer */
   allowDeviceShell?: boolean;
   log?: (m: string) => void;
+  /** a VM here is starting (saying what it's doing), came up, or couldn't, whatever started it */
+  onVmStatus?: (computerId: string, status: "starting" | "ready" | "error", text: string) => void;
 }
 
 export interface Tunnel {
@@ -104,14 +106,14 @@ export class ComputerHost {
     return this.preparing;
   }
 
-  async driver(spec: ComputerSpec, onStatus?: (text: string) => void): Promise<Driver> {
+  async driver(spec: ComputerSpec): Promise<Driver> {
     const known = this.drivers.get(spec.id);
     if (known) return known;
     let d: Driver;
     if (spec.kind === "vm") {
       const engine = await this.engineFor(spec);
       if (!engine) throw new Error("this device can't run VMs yet: run `warren setup`, then restart `warren node`");
-      d = new DockerVm(spec, this.opts.dir, engine, onStatus);
+      d = new DockerVm(spec, this.opts.dir, engine, (status, text) => this.opts.onVmStatus?.(spec.id, status, text));
     } else {
       d = desktopDriver(this.opts.allowDeviceShell);
       const vncPort = (spec.config as DeviceConfig).vncPort;
@@ -158,8 +160,8 @@ export class ComputerHost {
     return new DockerVm(spec, this.opts.dir, { bin: "docker", kind: "docker" }).filesDir;
   }
 
-  async act(spec: ComputerSpec, action: ComputerAction, onStatus?: (text: string) => void): Promise<unknown> {
-    const d = await this.driver(spec, onStatus);
+  async act(spec: ComputerSpec, action: ComputerAction): Promise<unknown> {
+    const d = await this.driver(spec);
     const result = await perform(d, action);
     if (action.action === "destroy") {
       this.unwatch(spec.id);

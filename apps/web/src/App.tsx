@@ -115,7 +115,7 @@ function Workspace() {
       case "settings":
         return <SettingsView page={route.page ?? null} onBack={phone ? toYou : undefined} />;
       case "welcome":
-        return <WelcomeView onBack={phone ? toYou : undefined} />;
+        return <WelcomeView />;
     }
   })();
   // conversations use the whole screen on phones; everything else keeps the tab bar

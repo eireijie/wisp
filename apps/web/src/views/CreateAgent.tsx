@@ -55,11 +55,22 @@ type ComputerChoice =
   | { kind: "later" }
   | { kind: "headless" };
 
-/** Reuse a shared computer first; never choose someone's own screen by default. */
+/**
+ * Follow what the device does for agents (its role); otherwise reuse a shared computer first.
+ * Someone's own screen is only the default on their own device set to lend it.
+ */
 function defaultComputer(
   node: NodeInfo | undefined,
   computers: ComputerInfo[],
 ): ComputerChoice {
+  if (node?.role === "headless") return { kind: "headless" };
+  if (node?.role === "screen" && node.mine) {
+    const screen = computers.find(
+      (c) => c.kind === "device" && c.nodeId === node.id,
+    );
+    if (screen) return { kind: "existing", id: screen.id };
+    if (node.capabilities?.screen.ok) return { kind: "screen" };
+  }
   const shared =
     computers.find((c) => c.kind === "vm" && c.nodeId === node?.id) ??
     computers.find((c) => c.kind === "orgo");
@@ -67,6 +78,10 @@ function defaultComputer(
   if (node?.capabilities?.vm.ok) return { kind: "vm" };
   return { kind: "later" };
 }
+
+/** Turning headless off on a device whose role is headless: pick a computer later. */
+const withComputer = (c: ComputerChoice): ComputerChoice =>
+  c.kind === "headless" ? { kind: "later" } : c;
 
 /** Make the chosen computer (if it's new) and return its id; null for none. */
 async function resolveComputer(
@@ -214,7 +229,7 @@ function ComputerPicker({
             onChange(
               e.target.checked
                 ? { kind: "headless" }
-                : defaultComputer(node, computers),
+                : withComputer(defaultComputer(node, computers)),
             )
           }
         />

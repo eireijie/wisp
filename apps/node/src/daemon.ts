@@ -87,7 +87,9 @@ export class NodeDaemon {
     this.api = new WarrenClient({ url: cfg.hub, token: cfg.token });
     this.registry = registry ?? deviceAdapters(cfg.harnesses);
     this.fixedRegistry = !!registry;
-    this.computers = computers ?? new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log });
+    this.computers =
+      computers ??
+      new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log, onVmStatus: (computerId, status, text) => this.send({ type: "computer_status", computerId, status, text }) });
   }
 
   private get sessionsFile() {
@@ -212,8 +214,7 @@ export class NodeDaemon {
     } else if (msg.type === "computer") {
       if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`warren node resume\`` });
       if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`warren node screen on\`)` });
-      const status = (text: string) => this.send({ type: "computer_status", computerId: msg.computer.id, status: "starting", text });
-      this.computers.act(msg.computer, msg.action, status).then(
+      this.computers.act(msg.computer, msg.action).then(
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
           if (msg.action.action === "start") this.send({ type: "computer_status", computerId: msg.computer.id, status: "ready", text: "" });

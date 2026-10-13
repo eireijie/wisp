@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2, Users } from "lucide-react";
-import type { DeviceCapabilities } from "@warren/core";
+import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2, Users } from "lucide-react";
+import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Button, CopyBlock, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
@@ -11,6 +11,8 @@ interface NodeInfo {
   ownerName: string | null;
   mine: boolean;
   shared: boolean;
+  /** what it does for agents; null until its owner chooses */
+  role: DeviceRole | null;
   paused: boolean;
   capabilities: DeviceCapabilities | null;
   online: boolean;
@@ -143,10 +145,38 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
 }
 
 /** Who can use the device: its own screen (only its owner, and only once it's on at the device) and whether others can add agents. */
+const ROLES: Record<DeviceRole, string> = { vms: "runs their computers (VMs)", screen: "lends them its own screen", headless: "runs them headless" };
+
 function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
   const screen = n.capabilities?.screen;
   return (
     <div className="mt-3 pl-14 space-y-1.5 text-xs text-muted">
+      <div className="flex items-center gap-2">
+        <Bot size={13} className="shrink-0" />
+        {n.mine ? (
+          <label className="flex items-center gap-2">
+            For agents, it
+            <select
+              aria-label={`What ${n.name} does for agents`}
+              value={n.role ?? ""}
+              onChange={async (e) => {
+                await api("PATCH", `/api/nodes/${n.id}`, { role: e.target.value || null }).catch((err) => alert((err as Error).message));
+                onChange();
+              }}
+              className="h-7 rounded-md border border-line bg-panel px-1.5 text-xs text-ink"
+            >
+              {!n.role && <option value="">Not chosen yet</option>}
+              {(Object.keys(ROLES) as DeviceRole[]).map((r) => (
+                <option key={r} value={r}>
+                  {ROLES[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span>For agents, it {n.role ? ROLES[n.role] : "has no job chosen yet"}.</span>
+        )}
+      </div>
       <div className="flex items-start gap-2">
         <Monitor size={13} className="mt-0.5 shrink-0" />
         <span>

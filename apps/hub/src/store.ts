@@ -1,4 +1,4 @@
-import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs } from "@warren/core";
+import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -170,11 +170,12 @@ export class Store {
 
   nodes(workspaceId: string) {
     return (
-      this.db.prepare("SELECT id, name, owner_id AS ownerId, shared, last_seen AS lastSeen, created_at AS createdAt FROM nodes WHERE workspace_id = ? ORDER BY name").all(workspaceId) as {
+      this.db.prepare("SELECT id, name, owner_id AS ownerId, shared, role, last_seen AS lastSeen, created_at AS createdAt FROM nodes WHERE workspace_id = ? ORDER BY name").all(workspaceId) as {
         id: string;
         name: string;
         ownerId: string | null;
         shared: number;
+        role: DeviceRole | null;
         lastSeen: string | null;
         createdAt: string;
       }[]
@@ -183,14 +184,18 @@ export class Store {
 
   /** A device: `ownerId` is the person who connected it; `shared` lets others in the workspace put agents and VMs on it. */
   node(nodeId: string) {
-    const r = this.db.prepare("SELECT id, workspace_id AS workspaceId, name, owner_id AS ownerId, shared FROM nodes WHERE id = ?").get(nodeId) as
-      | { id: string; workspaceId: string; name: string; ownerId: string | null; shared: number }
+    const r = this.db.prepare("SELECT id, workspace_id AS workspaceId, name, owner_id AS ownerId, shared, role FROM nodes WHERE id = ?").get(nodeId) as
+      | { id: string; workspaceId: string; name: string; ownerId: string | null; shared: number; role: DeviceRole | null }
       | undefined;
     return r && { ...r, shared: !!r.shared };
   }
 
   setNodeShared(nodeId: string, shared: boolean) {
     this.db.prepare("UPDATE nodes SET shared = ? WHERE id = ?").run(shared ? 1 : 0, nodeId);
+  }
+
+  setNodeRole(nodeId: string, role: DeviceRole | null) {
+    this.db.prepare("UPDATE nodes SET role = ? WHERE id = ?").run(role, nodeId);
   }
 
   setNodeCatalog(nodeId: string, catalog: HarnessCatalog[]) {

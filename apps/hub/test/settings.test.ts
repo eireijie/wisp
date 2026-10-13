@@ -124,6 +124,13 @@ describe("workspace settings", () => {
     expect((await api("GET", "/api/computers/mine", undefined, t)).status).toBe(401);
   });
 
+  it("lets a device's owner say what it does for agents", async () => {
+    const node = (await api("POST", "/api/nodes", { name: "box" })).data.node;
+    expect((await api("PATCH", `/api/nodes/${node.id}`, { role: "vms" })).status).toBe(200);
+    expect((await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === node.id).role).toBe("vms");
+    expect((await api("PATCH", `/api/nodes/${node.id}`, { role: "everything" })).status).toBe(400);
+  });
+
   it("renames the workspace and exports memory and conversations", async () => {
     expect((await api("PATCH", "/api/workspace", { name: "Lab 2" })).data.name).toBe("Lab 2");
     const zip = await fetch(base + "/api/export/vault.zip", { headers: { authorization: `Bearer ${owner}` } });

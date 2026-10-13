@@ -1,26 +1,31 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { Agent } from "@warren/core";
+import type { Agent, DeviceRole } from "@warren/core";
 import { api } from "./api.ts";
 import { useStore } from "./store.ts";
 
 export interface OnboardingState {
-  devices: { id: string; name: string; online: boolean }[];
+  /** `mine`: you connected it; `role`: what it does for agents, once someone chose */
+  devices: { id: string; name: string; online: boolean; mine: boolean; role: DeviceRole | null }[];
   computers: { id: string; name: string; kind: "vm" | "orgo"; nodeId: string | null; status: string }[];
   agents: Agent[];
   firstReply: { id: string; channelId: string; agentId: string } | null;
   memoryNotes: { path: string; title: string }[];
 }
 
-export type StepId = "device" | "computer" | "agent" | "hello" | "memory";
+/** The setup's screens, in order. */
+export const STEPS = ["device", "role", "agent", "harness", "hello"] as const;
+export type StepId = (typeof STEPS)[number];
 
 export function stepsDone(s: OnboardingState | null): Record<StepId, boolean> {
+  const agent = !!s?.agents.length;
   return {
     device: !!s?.devices.some((d) => d.online),
-    computer: !!s?.computers?.length,
-    agent: !!s?.agents.length,
+    role: !!s?.devices.some((d) => d.role),
+    agent,
+    // an agent is made with its harness
+    harness: agent,
     hello: !!s?.firstReply,
-    memory: !!s?.memoryNotes.length,
   };
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { DeviceCapabilities, DiscoveredAgent } from "@warren/core";
+import type { DeviceCapabilities, DeviceRole, DiscoveredAgent } from "@warren/core";
 import { api } from "./api.ts";
 import type { ComputerInfo } from "./store.ts";
 
@@ -14,6 +14,8 @@ export interface DeviceInfo {
   mine?: boolean;
   /** its owner lets others put agents and VMs on it */
   shared?: boolean;
+  /** what it does for agents: runs their VMs, lends its own screen, or neither (headless); null until chosen */
+  role?: DeviceRole | null;
   /** paused at the device (`warren node pause`) */
   paused?: boolean;
   online: boolean;

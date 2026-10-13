@@ -328,7 +328,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const agentNotes = vault.list((p) => canRead(p) && agents.some((a) => p.startsWith(`agents/${a.id}/`))).filter((n) => !/\/(About|SOUL)\.md$/.test(n.path));
     const sharedNotes = vault.list((p) => canRead(p) && p.startsWith("shared/")).filter((n) => n.path !== "shared/Welcome.md");
     return {
-      devices: nodes.map((n) => ({ id: n.id, name: n.name, online: hub.isNodeOnline(n.id) })),
+      devices: nodes.map((n) => ({ id: n.id, name: n.name, online: hub.isNodeOnline(n.id), mine: n.ownerId === c.actor.id, role: n.role })),
       // computers agents can share: VMs and cloud computers (never someone's own screen)
       computers: store
         .computers(c.workspaceId)
@@ -751,9 +751,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const node = store.node((req.params as { id: string }).id);
     if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
     if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the person who connected this device can change it" });
-    const body = parse(z.object({ shared: z.boolean() }).partial(), req.body, reply);
+    const body = parse(z.object({ shared: z.boolean(), role: z.enum(["vms", "screen", "headless"]).nullable() }).partial(), req.body, reply);
     if (!body) return;
     if (body.shared !== undefined) store.setNodeShared(node.id, body.shared);
+    if (body.role !== undefined) store.setNodeRole(node.id, body.role);
     return { ...store.node(node.id), ok: true };
   });
 
