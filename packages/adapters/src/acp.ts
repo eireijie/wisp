@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, HarnessCatalog, ModelOption } from "@warren/core";
+import type { AccessLevel, ConnectorSpec, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
 import { commandVersion, launched } from "./process.ts";
 
@@ -134,10 +134,15 @@ export class AcpError extends Error {
 }
 
 /** ACP wants MCP server env as a list of {name, value}. Exported for tests. */
-export function acpMcpServers(mcp: McpServerSpec | undefined, browser?: McpServerSpec): Json[] {
+export function acpMcpServers(mcp: McpServerSpec | undefined, browser?: McpServerSpec, connectors: ConnectorSpec[] = []): Json[] {
   const out: Json[] = [];
   for (const [name, s] of [["warren", mcp], ["browser", browser]] as [string, McpServerSpec | undefined][]) {
     if (s) out.push({ name, command: s.command, args: s.args, env: Object.entries(s.env).map(([n, value]) => ({ name: n, value })) });
+  }
+  // every ACP agent must accept stdio servers; http ones are optional in the protocol, so they're left out
+  for (const c of connectors) {
+    if (c.kind !== "mcp-stdio" || out.some((o) => o.name === c.name)) continue;
+    out.push({ name: c.name, command: c.command ?? "", args: c.args ?? [], env: Object.entries(c.env ?? {}).map(([n, value]) => ({ name: n, value })) });
   }
   return out;
 }
@@ -293,7 +298,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
 
       try {
         const init = await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "warren", version: "0.1.0" } }, 60_000);
-        const mcpServers = acpMcpServers(input.mcp, input.browser);
+        const mcpServers = acpMcpServers(input.mcp, input.browser, input.connectors);
         let session: Json = null;
         if (input.sessionId && init?.agentCapabilities?.loadSession) {
           try {

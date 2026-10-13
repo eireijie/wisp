@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 /**
  * Hash routes:
  *   #/c/<channelId>[/t/<threadId>]   chat
+ *   #/dashboard                      a bit of everything: agents, teams, tasks
  *   #/vault[/<path>]                 memory vault
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
  *   #/teams[/<teamId>[/<tab>]]       teams, the org chart, and each team's chart
@@ -10,14 +11,18 @@ import { useEffect, useState } from "react";
  *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
  *   #/nodes                          devices
+ *   #/connectors                     MCP servers and other connections agents can use
+ *   #/skills                         the skill shop: things agents can learn to do
  *   #/settings[/<page>]              your settings and the workspace's (see SETTINGS_PAGES)
  *   #/join/<code>                    accept an invite (signed out)
  *   #/welcome                        first-run onboarding
- *   #/chats                          channel list (phones; desktops jump to a channel)
+ *   #/                               the dashboard on desktops, the chats list on phones (App.tsx)
+ *   #/chats                          channel list (phones; desktops go to the dashboard)
  *   #/you                            account menu (phones)
  */
 export type Route =
   | { view: "chat"; channelId: string | null; threadId: string | null }
+  | { view: "dashboard" }
   | { view: "vault"; path: string | null }
   | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
   | { view: "teams"; teamId: string | null; tab?: TeamTab | null }
@@ -25,6 +30,8 @@ export type Route =
   | { view: "tasks" }
   | { view: "computers"; computerId: string | null; teach?: string | null }
   | { view: "nodes" }
+  | { view: "connectors" }
+  | { view: "skills" }
   | { view: "settings"; page?: SettingsPage | null }
   | { view: "welcome" }
   | { view: "chats" }
@@ -32,7 +39,7 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "addons", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["chart", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
@@ -40,6 +47,12 @@ export type TeamTab = (typeof TEAM_TABS)[number];
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   switch (parts[0]) {
+    case "dashboard":
+      return { view: "dashboard" };
+    case "connectors":
+      return { view: "connectors" };
+    case "skills":
+      return { view: "skills" };
     case "vault":
       return { view: "vault", path: parts.slice(1).join("/") || null };
     case "agents":
@@ -71,6 +84,12 @@ export function parseRoute(hash: string): Route {
 
 export function href(r: Route): string {
   switch (r.view) {
+    case "dashboard":
+      return "#/dashboard";
+    case "connectors":
+      return "#/connectors";
+    case "skills":
+      return "#/skills";
     case "vault":
       return "#/vault" + (r.path ? "/" + r.path.split("/").map(encodeURIComponent).join("/") : "");
     case "agents":

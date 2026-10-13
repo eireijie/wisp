@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, User, Users } from "lucide-react";
+import { Bell, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, Puzzle, RefreshCw, Shield, SlidersHorizontal, User, Users } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -7,6 +7,7 @@ import { Button, Pill, cx } from "../components/ui.tsx";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, MemoryAccessPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
+import { AddonsPage } from "./settings/addons.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
@@ -31,6 +32,7 @@ const NAV: { group: string; pages: { id: SettingsPage; label: string; icon: Reac
       { id: "memory", label: "Memory access", icon: <Shield size={16} /> },
       { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
       { id: "connections", label: "Connections", icon: <Link2 size={16} />, noGuests: true },
+      { id: "addons", label: "Addons", icon: <Puzzle size={16} />, noGuests: true },
       { id: "data", label: "Data & export", icon: <Database size={16} /> },
       { id: "updates", label: "Updates & about", icon: <RefreshCw size={16} /> },
     ],
@@ -50,6 +52,7 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   memory: () => <MemoryAccessPage />,
   computers: () => <ComputersPage />,
   connections: () => <ConnectionsPage />,
+  addons: () => <AddonsPage />,
   data: () => <DataPage />,
   updates: () => <UpdatesPage />,
 };

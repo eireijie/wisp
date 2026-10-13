@@ -14,6 +14,9 @@ const LOGOS: Record<string, { file: string; mono?: boolean }> = {
   grok: { file: "grok", mono: true },
 };
 
+/** Whether Warren ships a brand mark for this harness. */
+export const hasHarnessLogo = (harness: string) => harness in LOGOS;
+
 /** Source brand marks, kept locally so the picker never calls a third party. */
 export function HarnessLogo({
   harness,

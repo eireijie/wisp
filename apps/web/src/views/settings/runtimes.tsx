@@ -6,9 +6,16 @@ import { usableDevices, useDevices, type DeviceInfo } from "../../devices.ts";
 import { href } from "../../router.ts";
 import { Button, CopyBlock, Menu, Modal, Pill, cx } from "../../components/ui.tsx";
 import { Card, PageHeader, Section, Select } from "./parts.tsx";
+import { HarnessLogo, hasHarnessLogo } from "../../components/HarnessLogo.tsx";
 
-/** A harness's monogram, so rows line up without logos we'd have to ship. */
-function Mark({ label }: { label: string }) {
+/** A harness's brand mark on a tile, or its monogram when Warren has no logo for it. */
+function Mark({ id, label }: { id: string; label: string }) {
+  if (hasHarnessLogo(id))
+    return (
+      <span className="size-9 shrink-0 rounded-lg bg-chip border border-line grid place-items-center text-ink">
+        <HarnessLogo harness={id} size={20} />
+      </span>
+    );
   const letters = label.replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean);
   return <span className="size-9 shrink-0 rounded-lg bg-chip border border-line grid place-items-center text-[13px] font-semibold text-muted">{(letters.length > 1 ? letters[0][0] + letters[1][0] : (letters[0] ?? "?").slice(0, 2)).toUpperCase()}</span>;
 }
@@ -106,7 +113,7 @@ export function RuntimesPage() {
               ))}
               {declared.map((d) => (
                 <div key={d.id} className="px-4 py-3 flex items-center gap-3">
-                  <Mark label={d.id.slice(4)} />
+                  <Mark id={d.id} label={d.id.slice(4)} />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{harnessLabel(d.id)}</div>
                     <div className="text-xs text-muted">Added on {device.name} · {d.version ?? "ready"}</div>
@@ -127,7 +134,7 @@ export function RuntimesPage() {
         <Card>
           {HARNESSES.filter((h) => runsInVm(h.id)).map((h) => (
             <div key={h.id} className="px-4 py-3 flex items-center gap-3">
-              <Mark label={h.label} />
+              <Mark id={h.id} label={h.label} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{h.label}</div>
                 <div className="text-xs text-muted">{h.note}</div>
@@ -141,7 +148,7 @@ export function RuntimesPage() {
         <Card>
           {anywhere.map((h) => (
             <div key={h.id} className="px-4 py-3 flex items-center gap-3">
-              <Mark label={h.label} />
+              <Mark id={h.id} label={h.label} />
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{h.label}</div>
                 <div className="text-xs text-muted">{h.note}</div>
@@ -162,7 +169,7 @@ function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: Harne
   const npm = !!h.install?.npm;
   return (
     <div className="px-4 py-3 flex items-center gap-3">
-      <Mark label={h.label} />
+      <Mark id={h.id} label={h.label} />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
           {h.label}

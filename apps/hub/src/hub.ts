@@ -5,10 +5,12 @@ import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
 import { Routines } from "./routines.ts";
 import { Updates } from "./updates.ts";
+import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
+import { dispatcherSection } from "./orchestration.ts";
 import type { Store } from "./store.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -48,6 +50,8 @@ export class Hub {
   readonly computers: Computers;
   readonly routines: Routines;
   readonly updates: Updates;
+  readonly connectors: ConnectorStore;
+  readonly skills: SkillStore;
   /** how the hub reaches outside services (Orgo); tests swap it */
   fetchImpl: typeof fetch = (...args) => fetch(...args);
   /** git operations waiting for a device to answer */
@@ -63,6 +67,8 @@ export class Hub {
     this.computers = new Computers(this);
     this.routines = new Routines(this);
     this.updates = new Updates(this);
+    this.connectors = new ConnectorStore(store.db);
+    this.skills = new SkillStore(store.db);
   }
 
   /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
@@ -269,14 +275,16 @@ export class Hub {
         const author: Actor = { kind: "agent", id: run.agentId };
         // in a discussion, replies don't wake anyone: the discussion moves on by itself
         const route = run.discussionId ? false : undefined;
+        // the channel may have been deleted while the agent worked; then there's nowhere to reply
+        const gone = !store.channel(run.channelId);
         let body = "";
         if (msg.type === "run_done") {
           store.setRunStatus(run.id, "done");
           body = msg.finalText.trim() || live.text.trim();
-          if (body) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
+          if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
         } else {
           store.setRunStatus(run.id, "failed", msg.error);
-          this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${msg.error}` }], hop: run.hop + 1, route: false });
+          if (!gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${msg.error}` }], hop: run.hop + 1, route: false });
         }
         const agent = store.agent(run.agentId);
         if (agent) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
@@ -405,9 +413,10 @@ export class Hub {
         const c = agent.computerId ? this.store.computer(agent.computerId) : undefined;
         const computer: ComputerSpec | undefined = c?.kind === "vm" && c.nodeId === agent.nodeId ? this.computers.spec(c) : undefined;
         const inComputer = this.runsInComputer(agent);
+        const connectors = this.connectors.specsFor(agent.id);
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
         });
       },
       (err) => this.store.setRunStatus(run.id, "failed", (err as Error).message),
@@ -556,7 +565,7 @@ export class Hub {
     const others = store
       .agents(agent.workspaceId)
       .filter((a) => a.id !== agent.id)
-      .map((a) => `@${a.handle} (${a.name}, ${a.harness})`);
+      .map((a) => `@${a.handle} (${a.name}, ${a.harness}${a.settings.role?.trim() ? `, ${a.settings.role.trim()}` : ""})`);
     const where = channel.kind === "dm" ? "a direct message" : `#${channel.name}${threadId ? " (in a thread)" : ""}`;
     const person = this.memory.personFor(agent.workspaceId, channelId, threadId, triggerId);
     // the person's own clock, so "tomorrow morning" means theirs
@@ -567,6 +576,9 @@ export class Hub {
       : "";
     const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
+    const dispatch = dispatcherSection(store, agent);
+    const skills = this.skills.promptSection(agent.id);
+    const connectors = this.connectors.promptSection(agent.id);
     const soulNote = agent.settings.soulLocked
       ? "Your soul is locked by your owner; don't try to edit it."
       : "As you learn who you are, you may refine it with memory_write on me/SOUL.md. Keep it short.";
@@ -576,7 +588,9 @@ export class Hub {
       // models often don't know their exact version, so say what this agent actually runs on
       `You run in ${harnessLabel(agent.harness)} with ${agent.model ? `the model "${agent.model}"` : "its default model"}${agent.settings.effort ? ` at ${agent.settings.effort} reasoning effort` : ""}. If asked what model you are, say exactly that.`,
       soul ? `\n## Your soul (me/SOUL.md): who you are\n${soul}\n\n${soulNote}` : "",
+      agent.settings.role?.trim() ? `\n## Your role\nYou are the workspace's ${agent.settings.role.trim()}.${agent.settings.roleNotes?.trim() ? ` ${agent.settings.roleNotes.trim()}` : ""}` : "",
       agent.instructions ? `\n## Your instructions (from your owner): your job\n${agent.instructions}` : "",
+      dispatch ? `\n${dispatch}` : "",
       memory ? `\n${memory}` : "",
       `\n## Where you are`,
       `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
@@ -587,6 +601,8 @@ export class Hub {
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
       localTime,
       this.computerSection(agent.id),
+      skills ? `\n${skills}` : "",
+      connectors ? `\n${connectors}` : "",
       routines ? `\n${routines}` : "",
       discussion ? `\n${discussion}` : "",
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${m.body}`).join("\n")}` : "",

@@ -8,3 +8,5 @@ export * from "./teams.ts";
 export * from "./computers.ts";
 export * from "./harnesses.ts";
 export * from "./schedule.ts";
+export * from "./connectors.ts";
+export * from "./skills.ts";

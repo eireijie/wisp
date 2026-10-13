@@ -326,22 +326,31 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
   const refreshAgents = useStore((s) => s.refreshAgents);
   const others = useStore((s) => s.agents).filter((a) => a.id !== agent.id);
   const saved = agent.instructions ?? "";
+  const savedRole = agent.settings.role ?? "";
+  const savedNotes = agent.settings.roleNotes ?? "";
   const [draft, setDraft] = useState(saved);
+  const [role, setRole] = useState(savedRole);
+  const [roleNotes, setRoleNotes] = useState(savedNotes);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = draft !== saved;
+  const roleDirty = role.trim() !== savedRole || roleNotes !== savedNotes;
+  const dirty = draft !== saved || roleDirty;
   useEffect(() => {
     onDirty(dirty);
   }, [dirty, onDirty]);
   // follow edits made elsewhere when there's no local draft
   useEffect(() => {
-    if (!dirty) setDraft(saved);
+    if (!dirty) {
+      setDraft(saved);
+      setRole(savedRole);
+      setRoleNotes(savedNotes);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved]);
+  }, [saved, savedRole, savedNotes]);
 
   const helper = others[0] ? `@${others[0].handle}` : "@another-agent";
   const snippets = [
-    { label: "Role", text: `## Role\nYou own <area>. You decide <what>, and you ask before <what>.` },
+    { label: "What it owns", text: `## What you own\nYou own <area>. You decide <what>, and you ask before <what>.` },
     { label: "Memory habits", text: `## Memory\n- Search memory before answering questions about past work.\n- After finishing something, append one line to me/log.md: what changed and why.\n- Put decisions everyone needs in shared/.` },
     { label: "Handoffs", text: `## Working with others\n- Hand work outside your area to ${helper} with task_delegate. Include what "done" means.\n- Mark your own tasks done with task_update and a short result.` },
     { label: "Reply style", text: `## Replies\n- Lead with the answer.\n- Say what you changed and where, with file paths.` },
@@ -351,7 +360,7 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
     setSaving(true);
     setError(null);
     try {
-      await api("PATCH", `/api/agents/${agent.id}`, { instructions: draft });
+      await api("PATCH", `/api/agents/${agent.id}`, { instructions: draft, ...(roleDirty ? { settings: { role: role.trim(), roleNotes } } : {}) });
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
@@ -368,6 +377,14 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
           <Lock size={13} /> Only people can edit instructions. Agents can't change their own.
         </p>
       </Intro>
+      <div className="mb-6 grid gap-3 sm:grid-cols-[minmax(0,14rem)_1fr]">
+        <Field label="Role" hint="A short title, like Engineer or Researcher.">
+          <Input value={role} onChange={(e) => setRole(e.target.value)} maxLength={60} placeholder="Engineer" aria-label="Role" />
+        </Field>
+        <Field label="What the role covers (optional)" hint="What it owns and what to send its way. A dispatcher hands out work by this.">
+          <Input value={roleNotes} onChange={(e) => setRoleNotes(e.target.value)} maxLength={2000} placeholder="Owns the backend and the build; send it bugs and API work." aria-label="What the role covers" />
+        </Field>
+      </div>
       <div className="mb-2 flex flex-wrap gap-1.5">
         <span className="text-xs text-muted self-center mr-1">Add a section:</span>
         {snippets.map((s) => (
@@ -386,7 +403,7 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
       />
       <div className="mt-1 text-xs text-faint text-right">{draft.length.toLocaleString()} / 20,000</div>
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setDraft(saved)} active={active} note={saved ? "Instructions are active." : "No instructions yet."} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => (setDraft(saved), setRole(savedRole), setRoleNotes(savedNotes))} active={active} note={saved ? "Instructions are active." : "No instructions yet."} />
     </div>
   );
 }

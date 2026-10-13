@@ -681,6 +681,19 @@ export class Store {
     return (this.db.prepare("SELECT member_kind AS kind, member_id AS id FROM channel_members WHERE channel_id = ?").all(channelId) as Actor[]).map((a) => ({ kind: a.kind, id: a.id }) as Actor);
   }
 
+  /**
+   * Delete a channel. Its messages, members, read marks, approvals and discussions go with it (FK
+   * cascade) and routines posting there lose it (FK set null); tasks and files that point at it
+   * without a foreign key are let go of here, so nothing points at a channel that's gone.
+   */
+  deleteChannel(channelId: string) {
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE tasks SET channel_id = NULL, thread_id = NULL WHERE channel_id = ?").run(channelId);
+      this.db.prepare("UPDATE files SET channel_id = NULL WHERE channel_id = ?").run(channelId);
+      this.db.prepare("DELETE FROM channels WHERE id = ?").run(channelId);
+    })();
+  }
+
   /** Get or create the DM channel between a user and an agent. */
   dmChannel(workspaceId: string, userId: string, agentId: string): Channel {
     const name = `dm:${userId}:${agentId}`;
@@ -897,14 +910,14 @@ export class Store {
 
   // --- tasks ----------------------------------------------------------------
 
-  createTask(t: { workspaceId: string; from: Actor; toAgentId: string; title: string; brief: string; channelId: string | null; threadId: string | null; teamId?: string | null; branch?: string | null; reviewOf?: string | null }) {
+  createTask(t: { workspaceId: string; from: Actor; toAgentId: string; title: string; brief: string; channelId: string | null; threadId: string | null; teamId?: string | null; branch?: string | null; reviewOf?: string | null; parentId?: string | null }) {
     const taskId = id("task");
     const ts = now();
     this.db
       .prepare(
-        "INSERT INTO tasks (id, workspace_id, from_kind, from_id, to_agent_id, title, brief, status, channel_id, thread_id, team_id, branch, review_of, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tasks (id, workspace_id, from_kind, from_id, to_agent_id, title, brief, status, channel_id, thread_id, team_id, branch, review_of, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(taskId, t.workspaceId, t.from.kind, t.from.id, t.toAgentId, t.title, t.brief, t.channelId, t.threadId, t.teamId ?? null, t.branch ?? null, t.reviewOf ?? null, ts, ts);
+      .run(taskId, t.workspaceId, t.from.kind, t.from.id, t.toAgentId, t.title, t.brief, t.channelId, t.threadId, t.teamId ?? null, t.branch ?? null, t.reviewOf ?? null, t.parentId ?? null, ts, ts);
     return this.task(taskId)!;
   }
 
@@ -925,6 +938,11 @@ export class Store {
       params.push(filter.status);
     }
     return (this.db.prepare(sql + " ORDER BY created_at DESC LIMIT 200").all(...params) as TaskRow[]).map(toTask);
+  }
+
+  /** The pieces a task was broken into, oldest first. */
+  subtasks(parentId: string) {
+    return (this.db.prepare("SELECT * FROM tasks WHERE parent_id = ? ORDER BY created_at").all(parentId) as TaskRow[]).map(toTask);
   }
 
   /** The task a thread is about (tasks are discussed in the thread of the message that handed them out). */
@@ -1215,6 +1233,7 @@ type TaskRow = {
   branch: string | null;
   review_of: string | null;
   merged_at: string | null;
+  parent_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1278,6 +1297,8 @@ function toTask(r: TaskRow) {
     branch: r.branch,
     reviewOf: r.review_of,
     mergedAt: r.merged_at,
+    /** the task this is a piece of (a subtask the parent's agent handed out); null at the top */
+    parentId: r.parent_id ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

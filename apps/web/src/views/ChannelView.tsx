@@ -5,7 +5,7 @@ import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, type Route } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { SectionSelect } from "../components/Channels.tsx";
+import { ChannelSettings, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard, StartDiscussion } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
@@ -18,7 +18,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const setActive = useStore((s) => s.setActive);
   const loadChannel = useStore((s) => s.loadChannel);
   const names = useNames();
-  const [settings, setSettings] = useState(false);
+  const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
 
   const channel = channels.find((c) => c.id === route.channelId) ?? (route.channelId ? undefined : channels.find((c) => c.name === "general"));
   // where you'd stopped reading when you opened the channel; the "NEW" divider goes there
@@ -76,10 +76,15 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           )}
           {channel.kind === "channel" && (
             <div className="flex items-center gap-1 shrink-0">
-              <span className="h-8 px-2 rounded-lg border border-line text-xs text-muted inline-flex items-center gap-1" title={`${channel.memberCount} members`}>
+              <button
+                onClick={() => setSettings("members")}
+                className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1"
+                title={`${channel.memberCount} ${channel.memberCount === 1 ? "member" : "members"}`}
+                aria-label={`Members: ${channel.memberCount}`}
+              >
                 <Users size={14} /> {channel.memberCount}
-              </span>
-              <button onClick={() => setSettings(true)} className="size-8 rounded-lg border border-line text-muted hover:text-ink grid place-items-center" aria-label="Channel settings" title="Channel settings">
+              </button>
+              <button onClick={() => setSettings("about")} className="size-8 rounded-lg border border-line text-muted hover:text-ink grid place-items-center" aria-label="Channel settings" title="Channel settings">
                 <Settings2 size={15} />
               </button>
             </div>
@@ -89,7 +94,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
         <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} />
       </div>
       {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
-      {settings && <ChannelSettings channel={channel} onClose={() => setSettings(false)} />}
+      {settings && <ChannelSettings key={settings} channel={channel} tab={settings} onClose={() => setSettings(null)} />}
     </div>
   );
 }
@@ -1105,64 +1110,5 @@ function AgentWorking({ run }: { run: LiveRun }) {
         <Square size={10} /> Stop
       </button>
     </span>
-  );
-}
-
-// --- settings -----------------------------------------------------------------------------------
-
-function ChannelSettings({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
-  const sections = useStore((s) => s.sections);
-  const refreshChannels = useStore((s) => s.refreshChannels);
-  const [name, setName] = useState(channel.name);
-  const [topic, setTopic] = useState(channel.topic);
-  const [section, setSection] = useState<string | null>(channel.sectionId);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <Modal title={`#${channel.name}`} onClose={onClose}>
-      <form
-        className="space-y-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            await api("PATCH", `/api/channels/${channel.id}`, { name, topic, sectionId: section });
-            await refreshChannels();
-            onClose();
-          } catch (err) {
-            setError((err as Error).message);
-          }
-        }}
-      >
-        <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} required />
-        </Field>
-        <Field label="Topic">
-          <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this channel for?" />
-        </Field>
-        <Field label="Sidebar section">
-          <SectionSelect sections={sections} value={section} onChange={setSection} />
-        </Field>
-        {error && <p className="text-sm text-bad">{error}</p>}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          {channel.name !== "general" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-bad"
-              onClick={async () => {
-                await api("POST", `/api/channels/${channel.id}/leave`);
-                await refreshChannels();
-                onClose();
-                go({ view: "chat", channelId: null, threadId: null });
-              }}
-            >
-              Leave channel
-            </Button>
-          ) : (
-            <span />
-          )}
-          <Button variant="primary">Save</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }

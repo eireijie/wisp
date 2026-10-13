@@ -58,6 +58,26 @@ export interface AgentSettings {
    * all stay in there) or directly on the device. Unset means the device, as agents did before.
    */
   runIn?: "computer" | "device";
+  /** its job title, e.g. "Engineer" or "Researcher"; with the Orchestration addon the dispatcher hands work out by it */
+  role?: string;
+  /** what the role means for how it works: what it owns, what to send its way */
+  roleNotes?: string;
+}
+
+/**
+ * The Orchestration addon (a workspace setting, off by default): one agent, the dispatcher, takes
+ * every task nobody assigned and hands the pieces out as subtasks to agents with roles.
+ */
+export interface OrchestrationSettings {
+  enabled: boolean;
+  /** the agent that trumps all others: it takes every unassigned task and assigns the work */
+  dispatcherId: string | null;
+}
+
+/** The addon's setup checklist; tasks work once every step is done. */
+export interface OrchestrationStatus extends OrchestrationSettings {
+  steps: { id: "enabled" | "dispatcher" | "roles"; label: string; done: boolean }[];
+  ready: boolean;
 }
 
 /** A model a device's harness can run, as reported by that device. */

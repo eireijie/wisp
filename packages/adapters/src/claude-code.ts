@@ -24,6 +24,11 @@ export function claudeArgs(input: RunInput): string[] {
   const servers: Record<string, unknown> = {};
   if (input.mcp) servers.warren = { type: "stdio", ...input.mcp };
   if (input.browser) servers.browser = { type: "stdio", ...input.browser };
+  for (const c of input.connectors ?? []) {
+    if (servers[c.name]) continue;
+    if (c.kind === "mcp-stdio") servers[c.name] = { type: "stdio", command: c.command, args: c.args ?? [], env: c.env ?? {} };
+    else if (c.kind === "mcp-http") servers[c.name] = { type: /\/sse\/?$/.test(c.url ?? "") ? "sse" : "http", url: c.url, headers: c.headers ?? {} };
+  }
   if (Object.keys(servers).length) {
     args.push("--mcp-config", JSON.stringify({ mcpServers: servers }));
     args.push("--allowedTools", Object.keys(servers).map((n) => `mcp__${n}`).join(","));

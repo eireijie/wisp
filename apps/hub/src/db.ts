@@ -155,6 +155,30 @@ CREATE TABLE IF NOT EXISTS files (
   sha256 TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
   uploader_kind TEXT NOT NULL, uploader_id TEXT NOT NULL, channel_id TEXT, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS connectors (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN ('mcp-stdio','mcp-http','secret')), catalog_id TEXT,
+  command TEXT, args_json TEXT NOT NULL DEFAULT '[]', url TEXT, headers_json TEXT NOT NULL DEFAULT '{}',
+  env_json TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1, created_by TEXT, created_at TEXT NOT NULL,
+  UNIQUE (workspace_id, name)
+);
+CREATE TABLE IF NOT EXISTS agent_connectors (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  connector_id TEXT NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+  PRIMARY KEY (agent_id, connector_id)
+);
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL CHECK (source IN ('catalog','custom','taught')), catalog_id TEXT, tags_json TEXT NOT NULL DEFAULT '[]',
+  content TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE (workspace_id, slug)
+);
+CREATE TABLE IF NOT EXISTS agent_skills (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  PRIMARY KEY (agent_id, skill_id)
+);
 `;
 
 /** Columns added after a table first shipped. CREATE TABLE IF NOT EXISTS won't add them to existing databases. */
@@ -185,6 +209,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["users", "timezone", "TEXT"],
   ["users", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["discussions", "requested_by", "TEXT"],
+  ["tasks", "parent_id", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {

@@ -66,6 +66,8 @@ export const myHarness: HarnessAdapter = {
     // input.effort     - reasoning effort (null = default)
     // input.access     - "read-only" | "edit" | "full"; map it to the harness's sandbox/permissions
     // input.signal     - aborted when someone presses Stop
+    // input.connectors - more MCP servers the agent's owner connected (Connectors page); register them like input.mcp
+    // input.env        - environment for the harness, including API keys from "key" connectors
     // Call onEvent({ type: "session", id }) once you know the harness session id,
     // and onEvent text / tool_call / tool_result events as they happen.
     return { finalText, sessionId };
@@ -82,6 +84,19 @@ The prompt already contains the agent's soul (its `SOUL.md`) and instructions. D
 Register it in `packages/adapters/src/index.ts`, add it to `HARNESSES` in `packages/core/src/harnesses.ts`, and add a parser test like `packages/adapters/test/adapters.test.ts` using real output lines from the harness.
 
 `packages/adapters/src/process.ts` has `runJsonl`, which handles spawning, JSONL parsing, stderr capture and cancellation. See `claude-code.ts` and `codex.ts` for complete examples, and `acp.ts` for the ACP client.
+
+## Connectors and skills
+
+People add **connectors** on the Connectors page (MCP servers, local or remote, and API keys) and pick which agents get each. The hub sends an agent's enabled ones with every run (`RunRequest.connectors`), with `{{NAME}}` templates filled and secrets in the clear; the device passes MCP ones to the adapter as `input.connectors` and puts keys in `input.env`. Today:
+
+| | local MCP (stdio) | remote MCP (http/sse) | keys (env) |
+|---|---|---|---|
+| Claude Code | `--mcp-config` | `--mcp-config` | yes |
+| Codex | `-c mcp_servers.<name>.command/args/env` | `-c mcp_servers.<name>.url/http_headers` | yes |
+| ACP agents | `session/new` `mcpServers` | not yet (optional in ACP) | yes |
+| MCP-only (Grok, custom) | not wired: they run outside Warren | | |
+
+**Skills** from the Skills page are written into each agent's private folder as `agents/<id>/skills/<slug>/SKILL.md` and listed in its prompt (name, when to use it, path), so any harness that can read its memory follows them. Nothing adapter-specific is needed.
 
 ## Bringing in agents that already exist
 

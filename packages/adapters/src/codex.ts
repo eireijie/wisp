@@ -26,6 +26,19 @@ export function codexArgs(input: RunInput): string[] {
     // exec mode can't prompt, so pre-approve these tools (the hub enforces what the agent may touch; the browser is its own VM's)
     common.push("-c", `mcp_servers.${name}.default_tools_approval_mode="approve"`);
   }
+  for (const c of input.connectors ?? []) {
+    if (c.name === "warren" || c.name === "browser" || c.kind === "secret") continue;
+    const key = `mcp_servers.${tomlKey(c.name)}`;
+    if (c.kind === "mcp-stdio") {
+      common.push("-c", `${key}.command=${tomlString(c.command ?? "")}`);
+      common.push("-c", `${key}.args=[${(c.args ?? []).map(tomlString).join(",")}]`);
+      if (c.env && Object.keys(c.env).length) common.push("-c", `${key}.env=${tomlTable(c.env)}`);
+    } else {
+      common.push("-c", `${key}.url=${tomlString(c.url ?? "")}`);
+      if (c.headers && Object.keys(c.headers).length) common.push("-c", `${key}.http_headers=${tomlTable(c.headers)}`);
+    }
+    common.push("-c", `${key}.default_tools_approval_mode="approve"`);
+  }
   return input.sessionId ? ["exec", "resume", input.sessionId, ...common, "-"] : ["exec", ...common, "-"];
 }
 
@@ -193,6 +206,15 @@ export function parseCodexLine(m: any): AdapterEvent[] {
     default:
       return [];
   }
+}
+
+/** A TOML key: bare when it can be, quoted otherwise. */
+function tomlKey(k: string) {
+  return /^[A-Za-z0-9_-]+$/.test(k) ? k : tomlString(k);
+}
+
+function tomlTable(o: Record<string, string>) {
+  return `{${Object.entries(o).map(([k, v]) => `${tomlKey(k)}=${tomlString(v)}`).join(",")}}`;
 }
 
 function tomlString(s: string) {

@@ -1,4 +1,4 @@
-import type { AccessLevel, AgentEvent, HarnessCatalog } from "@warren/core";
+import type { AccessLevel, AgentEvent, ConnectorSpec, HarnessCatalog } from "@warren/core";
 
 /** How a harness reaches the Warren MCP server (memory, chat, tasks tools). */
 export interface McpServerSpec {
@@ -24,6 +24,8 @@ export interface RunInput {
   mcp?: McpServerSpec;
   /** the agent's computer's browser, as MCP tools that work on page elements (Playwright MCP) */
   browser?: McpServerSpec;
+  /** connectors the agent's owner gave it: more MCP servers (and secrets, which arrive in `env`) */
+  connectors?: ConnectorSpec[];
   /**
    * Start the harness somewhere else, e.g. inside the agent's VM: gets the command as the adapter
    * would run it here and returns what to actually run.

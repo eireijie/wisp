@@ -832,3 +832,63 @@ describe("agents inside their computers", () => {
     expect((await api<any>("PATCH", `/api/tasks/${t.id}`, { status: "done", result: "Booked." })).data.status).toBe("done");
   });
 });
+
+describe("orchestration addon", () => {
+  it("is off until set up, then routes unassigned tasks to the dispatcher, who hands out subtasks", async () => {
+    const off = (await api<any>("GET", "/api/settings/orchestration")).data;
+    expect(off).toMatchObject({ enabled: false, dispatcherId: null, ready: false });
+    expect(off.steps.map((s: any) => s.id)).toEqual(["enabled", "dispatcher", "roles"]);
+
+    // only owners turn it on
+    const sam = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
+    expect((await api("PUT", "/api/settings/orchestration", { enabled: true }, sam)).status).toBe(403);
+    expect((await api("PUT", "/api/settings/orchestration", { dispatcherId: "agent_nope" })).status).toBe(404);
+    const on = (await api<any>("PUT", "/api/settings/orchestration", { enabled: true, dispatcherId: atlas.id })).data;
+    expect(on.steps.find((s: any) => s.id === "dispatcher").done).toBe(true);
+
+    // roles live in the agent's settings
+    await api("PATCH", `/api/agents/${nova.id}`, { settings: { role: "Engineer", roleNotes: "Owns the build." } });
+    const ready = (await api<any>("GET", "/api/settings/orchestration")).data;
+    expect(ready).toMatchObject({ enabled: true, dispatcherId: atlas.id, ready: true });
+
+    // an unassigned task goes to the dispatcher, who's told to plan it and who has which role
+    const before = node.runs.length;
+    const parent = (await api<any>("POST", "/api/tasks", { title: "Ship the release", brief: "Get 2.0 out." })).data;
+    expect(parent.toAgentId).toBe(atlas.id);
+    expect(parent.parentId).toBeNull();
+    expect(parent.brief).toContain("You're the dispatcher");
+    const run = await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id));
+    const prompt = run.type === "run" ? run.run.prompt : "";
+    expect(prompt).toContain("## You're the dispatcher");
+    expect(prompt).toContain("@nova (Nova): Engineer. Owns the build.");
+
+    // what the dispatcher hands out while working the task becomes its subtask
+    const file = path.join(dir, "warren.db");
+    const db = openDb(file);
+    const runId = run.type === "run" ? run.run.runId : "";
+    db.prepare("UPDATE runs SET status = 'running' WHERE id = ?").run(runId);
+    const asAtlas = { "x-warren-agent": atlas.id };
+    const sub = (await api<any>("POST", "/api/tasks", { to: "nova", title: "Run the release build", brief: "build it" }, nodeToken, asAtlas)).data;
+    db.prepare("UPDATE runs SET status = 'done' WHERE id = ?").run(runId);
+    db.close();
+    expect(sub.parentId).toBe(parent.id);
+    // or names it outright
+    const sub2 = (await api<any>("POST", "/api/tasks", { to: "nova", title: "Write the changelog", brief: "notes", parentTaskId: parent.id }, nodeToken, asAtlas)).data;
+    expect(sub2.parentId).toBe(parent.id);
+    expect((await api("POST", "/api/tasks", { to: "nova", title: "x", brief: "x", parentTaskId: "task_nope" }, nodeToken, asAtlas)).status).toBe(404);
+
+    // a finished subtask tells the dispatcher how far along the whole thing is
+    await api("PATCH", `/api/tasks/${sub.id}`, { status: "done", result: "built" }, nodeToken, { "x-warren-agent": nova.id });
+    const report = await waitFor(async () => (await channelMessagesIn(sub.channelId, sub.threadId)).find((m) => m.body.includes("subtasks done")));
+    expect(report.body).toContain("1/2 subtasks done");
+    expect(report.body).toContain("@atlas");
+    // which wakes the dispatcher up with it
+    await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.agentId === atlas.id && r.run.prompt.includes("1/2 subtasks done")));
+    await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.agentId === nova.id && r.run.prompt.includes("Write the changelog")));
+    await new Promise((r) => setTimeout(r, 200));
+
+    await api("PUT", "/api/settings/orchestration", { enabled: false });
+    // off again: "auto" falls back to the old guess
+    expect((await api<any>("GET", "/api/settings/orchestration")).data.ready).toBe(false);
+  });
+});

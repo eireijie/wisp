@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { Agent, AgentEvent, Approval, Channel, ClientEvent, Computer, Discussion, Message, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
+import type { Agent, AgentEvent, Approval, Channel, ClientEvent, Computer, Discussion, Message, OrchestrationStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
@@ -81,6 +81,8 @@ interface State {
   tasksVersion: number;
   /** the New task dialog is open */
   newTaskOpen: boolean;
+  /** the Orchestration addon (Settings → Addons): on/off, its dispatcher and setup checklist; null until loaded */
+  orchestration: OrchestrationStatus | null;
   activeChannel: string | null;
   paletteOpen: boolean;
 
@@ -90,6 +92,7 @@ interface State {
   refreshAgents(): Promise<void>;
   refreshTeams(): Promise<void>;
   refreshComputers(): Promise<void>;
+  refreshOrchestration(): Promise<void>;
   loadApproval(id: string): Promise<void>;
   loadDiscussion(id: string): Promise<void>;
   setDiscussion(d: DiscussionInfo): void;
@@ -131,6 +134,7 @@ export const useStore = create<State>((set, get) => ({
   routinesVersion: 0,
   tasksVersion: 0,
   newTaskOpen: false,
+  orchestration: null,
   activeChannel: null,
   paletteOpen: false,
 
@@ -146,7 +150,14 @@ export const useStore = create<State>((set, get) => ({
     ]);
     set({ me, channels, sections, agents, members, teams });
     get().refreshComputers();
+    get().refreshOrchestration();
     api<Approval[]>("GET", "/api/approvals?status=pending").then((list) => set((s) => ({ approvals: { ...s.approvals, ...Object.fromEntries(list.map((a) => [a.id, a])) } })), () => {});
+  },
+
+  async refreshOrchestration() {
+    // a hub older than this page has no addons: treat it as off
+    const o = await api<OrchestrationStatus>("GET", "/api/settings/orchestration").catch(() => null);
+    set({ orchestration: o ?? { enabled: false, dispatcherId: null, steps: [], ready: false } });
   },
 
   async refreshComputers() {
@@ -171,6 +182,8 @@ export const useStore = create<State>((set, get) => ({
 
   async refreshAgents() {
     set({ agents: await api<Agent[]>("GET", "/api/agents") });
+    // roles count toward the Orchestration addon's setup
+    get().refreshOrchestration();
   },
 
   async loadDiscussion(id) {
@@ -281,6 +294,9 @@ export const useStore = create<State>((set, get) => ({
       get().refreshSections();
     } else if (e.type === "teams_changed") {
       get().refreshTeams();
+      get().refreshOrchestration();
+    } else if (e.type === "orchestration_changed") {
+      get().refreshOrchestration();
     } else if (e.type === "discussion") {
       // the event has the discussion; who has answered comes with a fetch
       get().loadDiscussion(e.discussion.id);

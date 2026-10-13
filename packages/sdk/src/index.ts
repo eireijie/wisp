@@ -65,7 +65,7 @@ export class WarrenClient {
   react(messageId: string, emoji: string, on?: boolean) {
     return this.request("POST", `/api/messages/${messageId}/reactions`, { emoji, on });
   }
-  delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[] } = {}) {
+  delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[]; parentTaskId?: string } = {}) {
     return this.request("POST", "/api/tasks", { to, title, brief, ...opts });
   }
   updateTask(id: string, status: "open" | "in_progress" | "done" | "failed", result?: string) {

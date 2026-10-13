@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ComputerAction, DeviceCapabilities } from "./computers.ts";
+import { ConnectorSpec } from "./connectors.ts";
 
 /**
  * Hub <-> node wire protocol. Nodes dial out to the hub over WebSocket and
@@ -98,6 +99,8 @@ export const RunRequest = z.object({
   computer: ComputerSpec.optional(),
   /** run the harness inside `computer` (a VM) rather than on the device */
   inComputer: z.boolean().optional(),
+  /** the agent's enabled connectors (MCP servers and secrets), resolved */
+  connectors: z.array(ConnectorSpec).max(100).optional(),
 });
 export type RunRequest = z.infer<typeof RunRequest>;
 
@@ -167,6 +170,7 @@ export type ClientEvent =
   | { type: "sections_changed" }
   | { type: "channels_changed" }
   | { type: "teams_changed" }
+  | { type: "orchestration_changed" }
   | { type: "discussion"; discussion: import("./types.ts").Discussion }
   | { type: "computer"; computer: import("./computers.ts").Computer }
   | { type: "computer_removed"; computerId: string }

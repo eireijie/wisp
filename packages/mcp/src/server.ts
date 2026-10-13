@@ -110,19 +110,27 @@ export async function createWarrenMcp(client: WarrenClient) {
   server.registerTool(
     "task_delegate",
     {
-      description: "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done.",
-      inputSchema: { to: z.string().describe("agent handle, e.g. @nova"), title: z.string(), brief: z.string().describe("everything they need to do the work"), channel: z.string().optional(), file_ids: z.array(z.string()).optional() },
+      description:
+        "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done. Work you hand out while working on a task becomes a subtask of it (or name the parent with parent_task_id); if you're the dispatcher, this is how you assign the pieces of a task to agents by their roles.",
+      inputSchema: {
+        to: z.string().describe('agent handle, e.g. @nova, or "team:<name>" for a team\'s lead'),
+        title: z.string(),
+        brief: z.string().describe("everything they need to do the work"),
+        channel: z.string().optional(),
+        file_ids: z.array(z.string()).optional(),
+        parent_task_id: z.string().optional().describe("the task this is a piece of; defaults to the task you're working on"),
+      },
     },
-    safe(async ({ to, title, brief, channel, file_ids }) => {
+    safe(async ({ to, title, brief, channel, file_ids, parent_task_id }) => {
       const ch = channel ? await resolveChannel(channel) : undefined;
-      const t = await client.delegate(to, title, brief, { channelId: ch?.id, fileIds: file_ids });
-      return text(`Created task ${t.id} for ${to}.`);
+      const t = (await client.delegate(to, title, brief, { channelId: ch?.id, fileIds: file_ids, parentTaskId: parent_task_id })) as { id: string; parentId?: string | null };
+      return text(`Created task ${t.id} for ${to}${t.parentId ? ` (a subtask of ${t.parentId})` : ""}.`);
     }),
   );
 
   server.registerTool(
     "task_update",
-    { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason.", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional() } },
+    { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason. A task you split into subtasks isn't finished on its own: mark it done once its subtasks are in (results of subtasks come back to you with how many are done).", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional() } },
     safe(async ({ task_id, status, result }) => {
       await client.updateTask(task_id, status, result);
       return text(`Task ${task_id} is now ${status}.`);

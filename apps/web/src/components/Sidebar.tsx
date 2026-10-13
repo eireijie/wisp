@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BookOpen, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BookOpen, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -7,7 +7,7 @@ import { go, href, type Route } from "../router.ts";
 import { logout } from "../App.tsx";
 import { isDismissed, useOnboarding } from "../onboarding.ts";
 import { useAppearance } from "../theme.ts";
-import { ChannelBrowser, SectionDialog } from "./Channels.tsx";
+import { ChannelBrowser, ChannelMenu, SectionDialog } from "./Channels.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
 
 const COLLAPSE_KEY = "warren.sidebar.collapsed";
@@ -20,9 +20,10 @@ const loadCollapsed = (): Record<string, boolean> => {
 };
 
 /**
- * The workspace sidebar, organized like Paperclip's: the workspace, quick actions, then small
- * labeled groups (Work, Org, Channels, Chats) and you at the bottom. On phones the same content
- * is the Chats screen (variant "page") with larger touch targets.
+ * The workspace sidebar, top to bottom: the workspace, Dashboard and quick actions, anything
+ * waiting on you, your agents, channels, then everything else under Workspace, and you at the
+ * bottom. On phones the same content is the Chats screen (variant "page": agents then channels)
+ * with larger touch targets.
  */
 export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?: "sidebar" | "page" }) {
   const me = useStore((s) => s.me)!;
@@ -68,10 +69,16 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
     go({ view: "chat", channelId: ch.id, threadId: null });
   }
 
+  // the "…" menu (rename, members, leave) sits beside the link, not inside it, and shows on hover
   const channelRow = (c: ChannelInfo) => (
-    <Item key={c.id} page={page} href={href({ view: "chat", channelId: c.id, threadId: null })} active={active === c.id} unread={c.unread > 0} dot={c.unread > 0}>
-      <Hash size={16} className="shrink-0 opacity-70" /> <span className="truncate">{c.name}</span>
-    </Item>
+    <div key={c.id} className="group/ch relative">
+      <Item page={page} href={href({ view: "chat", channelId: c.id, threadId: null })} active={active === c.id} unread={c.unread > 0} dot={c.unread > 0}>
+        <Hash size={16} className="shrink-0 opacity-70" /> <span className="truncate">{c.name}</span>
+      </Item>
+      <span className={cx("absolute right-3 top-1/2 -translate-y-1/2", !page && "opacity-0 group-hover/ch:opacity-100 focus-within:opacity-100")}>
+        <ChannelMenu channel={c} />
+      </span>
+    </div>
   );
 
   return (
@@ -96,6 +103,9 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       <div className={cx("flex-1 overflow-y-auto pb-4 space-y-3", page ? "pt-3" : "pt-1")}>
         {!page && (
           <div className="space-y-px">
+            <Item href={href({ view: "dashboard" })} active={route.view === "dashboard" || (route.view === "chat" && !route.channelId)}>
+              <LayoutDashboard size={16} className="shrink-0" /> Dashboard
+            </Item>
             {!isGuest && (
               <Item onClick={() => useStore.setState({ newTaskOpen: true })}>
                 <SquarePen size={16} className="shrink-0" /> New task
@@ -114,38 +124,6 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
               </Item>
             )}
           </div>
-        )}
-
-        {!page && (
-          <Group title="Work" collapsed={!!collapsed.work} onToggle={() => toggleGroup("work")}>
-            <Item href={href({ view: "tasks" })} active={route.view === "tasks"}>
-              <ListTodo size={16} className="shrink-0" /> Tasks
-            </Item>
-            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"}>
-              <BookOpen size={16} className="shrink-0" /> Memory
-            </Item>
-            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
-              <Monitor size={16} className="shrink-0" /> Computers
-              {working && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
-            </Item>
-            <Item href={href({ view: "about" })} active={route.view === "about"}>
-              <Brain size={16} className="shrink-0" /> About you
-            </Item>
-          </Group>
-        )}
-
-        {!page && (
-          <Group title="Org" collapsed={!!collapsed.org} onToggle={() => toggleGroup("org")}>
-            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"}>
-              <Bot size={16} className="shrink-0" /> Agents
-            </Item>
-            <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"}>
-              <Users size={16} className="shrink-0" /> Teams
-            </Item>
-            <Item href={href({ view: "nodes" })} active={route.view === "nodes"}>
-              <Server size={16} className="shrink-0" /> Devices
-            </Item>
-          </Group>
         )}
 
         {!isGuest && pending.length + helpNeeded.length > 0 && (
@@ -174,6 +152,23 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
             })}
           </Group>
         )}
+
+        <Group page={page} title="Agents" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="Add agent" onClick={() => go({ view: "agents", agentId: null })}><Plus size={14} /></IconButton>}>
+          {agents.length === 0 && <p className="px-4 text-xs text-faint">No agents yet.</p>}
+          {agents.map((a) => {
+            const dm = dmFor(a.id);
+            return (
+              <Item key={a.id} page={page} agent={a} onClick={() => openDm(a.id)} active={!!dm && active === dm.id} unread={!!dm && dm.unread > 0} count={dm?.unread}>
+                {/* the ghost dozes in gray when offline; a dot marks one that's working */}
+                <span className="relative shrink-0">
+                  <AgentAvatar agent={a} size={page ? 30 : 22} live />
+                  {a.status === "busy" && <StatusDot status={a.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar" />}
+                </span>
+                <span className="truncate">{a.name}</span>
+              </Item>
+            );
+          })}
+        </Group>
 
         {sections.map((s) => {
           const list = joined.filter((c) => c.sectionId === s.id);
@@ -247,22 +242,39 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           </Item>
         </Group>
 
-        <Group page={page} title="Chats" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="Add agent" onClick={() => go({ view: "agents", agentId: null })}><Plus size={14} /></IconButton>}>
-          {agents.length === 0 && <p className="px-4 text-xs text-faint">No agents yet.</p>}
-          {agents.map((a) => {
-            const dm = dmFor(a.id);
-            return (
-              <Item key={a.id} page={page} agent={a} onClick={() => openDm(a.id)} active={!!dm && active === dm.id} unread={!!dm && dm.unread > 0} count={dm?.unread}>
-                {/* the ghost dozes in gray when offline; a dot marks one that's working */}
-                <span className="relative shrink-0">
-                  <AgentAvatar agent={a} size={page ? 30 : 22} live />
-                  {a.status === "busy" && <StatusDot status={a.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar" />}
-                </span>
-                <span className="truncate">{a.name}</span>
-              </Item>
-            );
-          })}
-        </Group>
+        {!page && (
+          <Group title="Workspace" collapsed={!!collapsed.workspace} onToggle={() => toggleGroup("workspace")}>
+            <Item href={href({ view: "tasks" })} active={route.view === "tasks"}>
+              <ListTodo size={16} className="shrink-0" /> Tasks
+            </Item>
+            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"}>
+              <BookOpen size={16} className="shrink-0" /> Memory
+            </Item>
+            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
+              <Monitor size={16} className="shrink-0" /> Computers
+              {working && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
+            </Item>
+            <Item href={href({ view: "nodes" })} active={route.view === "nodes"}>
+              <Server size={16} className="shrink-0" /> Devices
+            </Item>
+            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"}>
+              <Bot size={16} className="shrink-0" /> Agents
+            </Item>
+            <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"}>
+              <Users size={16} className="shrink-0" /> Teams
+            </Item>
+            <Item href={href({ view: "connectors" })} active={route.view === "connectors"}>
+              <Plug size={16} className="shrink-0" /> Connectors
+            </Item>
+            <Item href={href({ view: "skills" })} active={route.view === "skills"}>
+              <Wand2 size={16} className="shrink-0" /> Skills
+            </Item>
+            <Item href={href({ view: "about" })} active={route.view === "about"}>
+              <Brain size={16} className="shrink-0" /> About you
+            </Item>
+          </Group>
+        )}
+
       </div>
 
       {!page && (
@@ -311,7 +323,7 @@ export function WorkspaceTile({ name, size = 22 }: { name: string; size?: number
   );
 }
 
-/** A small mono label (WORK, ORG, CHATS); click it to fold the group away. */
+/** A small mono label (AGENTS, CHANNELS, WORKSPACE); click it to fold the group away. */
 function Group({ title, collapsed, onToggle, actions, page, children }: { title: ReactNode; collapsed: boolean; onToggle: () => void; actions?: ReactNode; page?: boolean; children: ReactNode }) {
   return (
     <section className="space-y-px">

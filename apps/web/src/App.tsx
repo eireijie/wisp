@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, CircleUser, LogOut, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users } from "lucide-react";
+import { BookOpen, Bot, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -17,6 +17,9 @@ import { TeamsView } from "./views/TeamsView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
 import { NewTask, TasksView } from "./views/TasksView.tsx";
+import { DashboardView } from "./views/DashboardView.tsx";
+import { ConnectorsView } from "./views/ConnectorsView.tsx";
+import { SkillsView } from "./views/SkillsView.tsx";
 import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
@@ -70,7 +73,8 @@ function Workspace() {
 
   // the phone-only pages have desktop equivalents, and the bare root is the chats list on phones
   useEffect(() => {
-    if (!phone && route.view === "chats") go({ view: "chat", channelId: null, threadId: null });
+    // the bare root is the dashboard on desktops (replace, so Back doesn't bounce here again)
+    if (!phone && (route.view === "chats" || (route.view === "chat" && !route.channelId))) location.replace(href({ view: "dashboard" }));
     if (!phone && route.view === "you") go({ view: "settings" });
     if (phone && route.view === "chat" && !route.channelId) go({ view: "chats" });
   }, [phone, route]);
@@ -93,11 +97,19 @@ function Workspace() {
   const page = (() => {
     switch (route.view) {
       case "chat":
+        // the bare root: the dashboard on desktops, the chats list on phones (the effect above fixes the URL)
+        if (!route.channelId) return phone ? <ChatsPage route={route} /> : <DashboardView />;
         return <ChannelView route={route} onBack={phone ? toChats : undefined} />;
       case "chats":
         return <ChatsPage route={route} />;
       case "you":
         return <YouPage />;
+      case "dashboard":
+        return <DashboardView onBack={phone ? toYou : undefined} />;
+      case "connectors":
+        return <ConnectorsView onBack={phone ? toYou : undefined} />;
+      case "skills":
+        return <SkillsView onBack={phone ? toYou : undefined} />;
       case "vault":
         return <VaultView path={route.path} />;
       case "agents":
@@ -169,7 +181,7 @@ function TabBar({ route }: { route: Route }) {
       {tab(route.view === "agents", "Agents", <Bot size={22} />, href({ view: "agents", agentId: null }))}
       {tab(false, "Search", <Search size={22} />, () => setPalette(true))}
       {tab(route.view === "vault", "Memory", <BookOpen size={22} />, href({ view: "vault", path: null }))}
-      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
+      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about", "dashboard", "connectors", "skills", "tasks"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
     </nav>
   );
 }
@@ -221,10 +233,13 @@ function YouPage() {
         </div>
         <div className="rounded-2xl border border-line overflow-hidden">
           {progress < Object.keys(done).length ? row(<Sparkles size={19} />, "Get started", href({ view: "welcome" }), `${progress}/${Object.keys(done).length}`) : null}
+          {row(<LayoutDashboard size={19} />, "Dashboard", href({ view: "dashboard" }))}
           {row(<Brain size={19} />, "About you", href({ view: "about" }))}
           {row(<Users size={19} />, "Teams", href({ view: "teams", teamId: null }))}
           {row(<Monitor size={19} />, "Computers", href({ view: "computers", computerId: null }))}
           {row(<Server size={19} />, "Devices", href({ view: "nodes" }))}
+          {row(<Plug size={19} />, "Connectors", href({ view: "connectors" }))}
+          {row(<Wand2 size={19} />, "Skills", href({ view: "skills" }))}
           {row(<Settings size={19} />, "Settings", href({ view: "settings" }))}
         </div>
         <ModePicker />

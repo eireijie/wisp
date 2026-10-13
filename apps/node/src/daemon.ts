@@ -372,6 +372,9 @@ export class NodeDaemon {
           sessionId,
           mcp,
           browser,
+          // MCP connectors go to the harness's own config; secrets go in its environment
+          connectors: run.connectors?.filter((c) => c.kind !== "secret"),
+          env: Object.assign({}, ...(run.connectors ?? []).filter((c) => c.kind === "secret").map((c) => c.env ?? {})),
           launch: inside ? vm!.launcher(run.runId) : undefined,
           signal: abort.signal,
           options: this.cfg.harnessOptions?.[agent.harness],

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { HARNESSES, type Agent } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
@@ -237,44 +238,72 @@ export function timeAgo(iso: string): string {
 /** A small dropdown menu. Closes on outside click, Escape, or choosing an item. */
 export function Menu({ trigger, items, align = "left", up = false }: { trigger: (open: boolean, toggle: () => void) => ReactNode; items: ({ label: string; icon?: ReactNode; onSelect: () => void; danger?: boolean } | "divider")[]; align?: "left" | "right"; up?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<CSSProperties | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The menu is drawn on the page itself (fixed, in a portal) so cards and scroll areas that clip
+  // their contents can't cut it off. It opens upward when there's no room below.
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const h = menuRef.current?.offsetHeight ?? 0;
+    const goUp = up || (h > 0 && r.bottom + 4 + h > window.innerHeight - 8 && r.top - 4 - h > 8);
+    const style: CSSProperties = { position: "fixed", maxWidth: "min(22rem, calc(100vw - 16px))" };
+    if (goUp) style.bottom = window.innerHeight - r.top + 4;
+    else style.top = r.bottom + 4;
+    if (align === "right") style.right = Math.max(8, window.innerWidth - r.right);
+    else style.left = Math.max(8, r.left);
+    setPos(style);
+  }, [open, up, align, items.length]);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node) && !menuRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const shut = (e: Event) => {
+      if (!menuRef.current?.contains(e.target as Node)) setOpen(false);
     };
     window.addEventListener("mousedown", close);
     window.addEventListener("keydown", close);
+    window.addEventListener("scroll", shut, true);
+    window.addEventListener("resize", shut);
     return () => {
       window.removeEventListener("mousedown", close);
       window.removeEventListener("keydown", close);
+      window.removeEventListener("scroll", shut, true);
+      window.removeEventListener("resize", shut);
     };
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      {trigger(open, () => setOpen((o) => !o))}
-      {open && (
-        <div role="menu" className={cx("absolute z-50 min-w-48 rounded-xl border border-line bg-panel shadow-panel p-1", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-1" : "top-full mt-1")}>
-          {items.map((it, i) =>
-            it === "divider" ? (
-              <div key={i} className="-mx-1 my-1 h-px bg-line" />
-            ) : (
-              <button
-                key={it.label}
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  it.onSelect();
-                }}
-                className={cx("w-full px-2 h-8 rounded-md flex items-center gap-2 text-sm text-left hover:bg-hover", it.danger && "text-bad")}
-              >
-                {it.icon}
-                {it.label}
-              </button>
-            ),
-          )}
-        </div>
-      )}
+      {trigger(open, () => {
+        setPos(null);
+        setOpen((o) => !o);
+      })}
+      {open &&
+        createPortal(
+          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="z-[100] min-w-48 rounded-xl border border-line bg-panel shadow-panel p-1">
+            {items.map((it, i) =>
+              it === "divider" ? (
+                <div key={i} className="-mx-1 my-1 h-px bg-line" />
+              ) : (
+                <button
+                  key={it.label}
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    it.onSelect();
+                  }}
+                  className={cx("w-full px-2 py-1.5 min-h-8 rounded-md flex items-start gap-2 text-sm text-left hover:bg-hover", it.danger && "text-bad")}
+                >
+                  {it.icon && <span className="shrink-0 mt-0.5">{it.icon}</span>}
+                  <span className="min-w-0 break-words">{it.label}</span>
+                </button>
+              ),
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
