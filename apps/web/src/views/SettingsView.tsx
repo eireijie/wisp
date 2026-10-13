@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, User, Users } from "lucide-react";
+import { Bell, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, User, Users } from "../icons.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -9,7 +9,7 @@ import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage
 import { RuntimesPage } from "./settings/runtimes.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
-/** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
+/** Settings, split into pages: yours first, then the workspace's. */
 const NAV: { group: string; pages: { id: SettingsPage; label: string; icon: ReactNode; ownerOnly?: boolean; noGuests?: boolean }[] }[] = [
   {
     group: "Account",
@@ -73,7 +73,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
     <nav className="space-y-5" aria-label="Settings">
       {nav.map((g) => (
         <div key={g.group}>
-          <div className="px-2 mb-1 text-[11px] font-mono uppercase tracking-wider text-faint">{g.group}</div>
+          <div className="px-2 mb-1 text-xs font-semibold text-muted">{g.group}</div>
           <div className="space-y-px">
             {g.pages.map((p) => (
               <a
@@ -101,7 +101,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider truncate">
+        <h1 className="font-display text-[17px] font-semibold tracking-tight truncate">
           Settings
           {label && <span className="text-muted font-normal normal-case tracking-normal"> / {label}</span>}
         </h1>

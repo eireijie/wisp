@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
+import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "../../icons.tsx";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
 import { api, getToken } from "../../api.ts";
 import { useStore } from "../../store.ts";

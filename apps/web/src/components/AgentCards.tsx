@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, ListChecks, ShieldQuestion, X } from "lucide-react";
+import { CalendarClock, Check, ListChecks, ShieldQuestion, X } from "../icons.tsx";
 import { describeCron, type Agent, type Routine } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";

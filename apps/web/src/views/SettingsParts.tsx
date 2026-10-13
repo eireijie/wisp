@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Check } from "lucide-react";
+import { Check } from "../icons.tsx";
 import { Button, cx } from "../components/ui.tsx";
 
 /** Sticky save bar. ⌘/Ctrl+S saves while the panel is visible. */

@@ -14,7 +14,7 @@ import {
   Search,
   Shuffle,
   UserPlus,
-} from "lucide-react";
+} from "../icons.tsx";
 import {
   defaultAppearance,
   randomAppearance,

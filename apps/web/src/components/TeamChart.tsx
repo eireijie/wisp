@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowLeft, Crown, GripVertical, LayoutGrid, Plus, UserMinus, X } from "lucide-react";
+import { ArrowLeft, Crown, GripVertical, LayoutGrid, Plus, UserMinus, X } from "../icons.tsx";
 import type { Agent, TeamMember } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type TeamInfo } from "../store.ts";

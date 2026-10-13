@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 /**
  * Appearance, all remembered on this device:
  * - mode: light or dark, following the OS unless the person picks one
- * - theme: the color theme; Mono (black and white) unless the person picks another
+ * - theme: the color theme; Moonlight unless the person picks another
  * - text size: small, default or large (scales everything sized in rem)
  * - motion: "reduce" stills animations (ghosts, spinners stay), on top of the OS setting
  * index.html sets these before first paint; this keeps them in sync.
@@ -14,6 +14,7 @@ export type ThemeId = (typeof THEMES)[number]["id"];
 
 /** The themes a person can pick. Swatches are [light-mode accent, dark-mode accent]. */
 export const THEMES = [
+  { id: "moon", name: "Moonlight", blurb: "Night ink and moonlight. Warren's own.", swatch: ["#2e2f7a", "#dcdcf7"] },
   { id: "mono", name: "Mono", blurb: "Black and white. Color only for status and agents.", swatch: ["#171717", "#f5f5f5"] },
   { id: "mint", name: "Ghost mint", blurb: "Fresh mint with cool grays.", swatch: ["#1aa577", "#43d19c"] },
   { id: "iris", name: "Iris", blurb: "Calm periwinkle with cool grays.", swatch: ["#5b5fe0", "#8b8ef8"] },
@@ -54,7 +55,7 @@ function storedMode(): ModeChoice {
 }
 function storedTheme(): ThemeId {
   const v = read(THEME_KEY);
-  return THEMES.some((t) => t.id === v) ? (v as ThemeId) : "mono";
+  return THEMES.some((t) => t.id === v) ? (v as ThemeId) : "moon";
 }
 
 let mode = storedMode();
@@ -88,7 +89,7 @@ export function setMode(next: ModeChoice) {
 
 export function setTheme(next: ThemeId) {
   theme = next;
-  write(THEME_KEY, next === "mono" ? null : next);
+  write(THEME_KEY, next === "moon" ? null : next);
   apply();
 }
 

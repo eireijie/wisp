@@ -1,4 +1,4 @@
-import { Bot, Plug } from "lucide-react";
+import { Bot, Plug } from "../icons.tsx";
 
 const LOGOS: Record<string, { file: string; mono?: boolean }> = {
   "claude-code": { file: "claude-color" },

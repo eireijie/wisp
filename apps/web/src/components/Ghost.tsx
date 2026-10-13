@@ -71,14 +71,17 @@ function shade(hex: string): string {
   return `hsl(${Math.round(h * 60 + 12)} ${Math.round(Math.min(1, s + 0.12) * 100)}% ${Math.round(Math.max(0.12, l - 0.16) * 100)}%)`;
 }
 
-/** Zz and thought marks, the same warm yellow on every palette (like Paperclip's). */
+/** Warren's own ghost (the guide in setup, the sign-in screen): pale and moonlit. */
+export const WARREN_GHOST: GhostAppearance = { shape: "classic", color: "#f6f4ff", color2: "#a7a9ff", glow: true, eyes: "dots", mouth: "smile", cheeks: true, hat: "none", accessory: "none", motion: "float" };
+
+/** Zz and thought marks, the same warm yellow on every palette. */
 const MARK = "#f5c542";
 
 // --- the ghost ----------------------------------------------------------------------------------
 
 /**
- * An animated ghost, drawn like a Paperclip agent: a two-color body with a lit center and a
- * soft rim, floating over its own shadow. Its face follows the mood: focused while working,
+ * An animated ghost: a two-color body with a lit center and a soft rim, glowing softly in its
+ * own color (more at night). Its face follows the mood: focused while working,
  * gray and dozing while offline. Animations are CSS (float, blink, moods) plus an SVG hem
  * ripple; all of it switches off with `animate={false}` or when the OS asks for reduced motion.
  */
@@ -162,9 +165,16 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
           <clipPath id={`c${uid}`}>
             <path d={shape.body[0]}>{ripple}</path>
           </clipPath>
+          {/* its glow: its own color, fading out around it */}
+          <radialGradient id={`g${uid}`} cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stopColor={bottom} style={{ stopOpacity: "var(--ghost-glow)" }} />
+            <stop offset="0.55" stopColor={bottom} style={{ stopOpacity: "calc(var(--ghost-glow) * 0.35)" }} />
+            <stop offset="1" stopColor={bottom} stopOpacity="0" />
+          </radialGradient>
         </defs>
 
-        {grounded && <ellipse cx="60" cy={shape.ground} rx="24" ry="3.4" className={cx("ghost-ground", moving && `ghost-ground-${look.motion}`, moving && mood === "thinking" && "ghost-fast")} />}
+        {grounded && !asleep && <ellipse cx="60" cy={shape.ground - 34} rx="58" ry="54" fill={`url(#g${uid})`} className={cx("ghost-aura", moving && "ghost-aura-breathe")} />}
+        {grounded && asleep && <ellipse cx="60" cy={shape.ground} rx="22" ry="3" className="ghost-ground" />}
 
         <g className={motionClass}>
           <path d={shape.body[0]} fill={`url(#b${uid})`}>

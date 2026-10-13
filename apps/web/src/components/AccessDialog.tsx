@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Bot, Pin, RotateCcw, Users } from "lucide-react";
+import { Bot, Pin, RotateCcw, Users } from "../icons.tsx";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type Member } from "../store.ts";
@@ -235,7 +235,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted">
         {icon} {title}
       </div>
       <div className="rounded-xl border border-line divide-y divide-line">{children}</div>

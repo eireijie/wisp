@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Eye, FilePlus, Folder, FolderPlus, GitCommitHorizontal, History, Network, Pencil, RefreshCw, ScanEye, Search, Trash2, UserPen, Users, X, PanelLeft, Link2 } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Eye, FilePlus, Folder, FolderPlus, GitCommitHorizontal, History, Network, Pencil, RefreshCw, ScanEye, Search, Trash2, UserPen, Users, X, PanelLeft, Link2 } from "../icons.tsx";
 import type { AccessRule, MemoryLevel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -131,7 +131,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         <button className="p-1.5 rounded-md hover:bg-hover text-muted" onClick={() => setShowTree(!showTree)} aria-label="Toggle file list" title="Toggle file list">
           <PanelLeft size={18} />
         </button>
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 min-w-0 truncate">Memory</h1>
+        <h1 className="font-display text-[17px] font-semibold tracking-tight flex-1 min-w-0 truncate">Memory</h1>
         {isOwner && agents.length > 0 && (
           <label className="hidden sm:flex items-center gap-1.5 text-sm text-muted" title="See memory the way an agent does">
             <ScanEye size={16} />
@@ -531,7 +531,7 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
               <LinkList title="Links to" items={outgoing.map((o) => ({ label: o.target, sub: o.path ?? "not created yet", path: o.path }))} empty="No outgoing links." />
               {note.tags.length > 0 && (
                 <div>
-                  <div className="text-xs font-semibold uppercase text-muted mb-2">Tags</div>
+                  <div className="text-xs font-semibold text-muted mb-2">Tags</div>
                   <div className="flex flex-wrap gap-1">
                     {note.tags.map((t) => (
                       <span key={t} className="text-xs bg-hover rounded px-1.5 py-0.5">
@@ -569,7 +569,7 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
 function LinkList({ title, items, empty }: { title: string; items: { label: string; sub: string; path: string | null }[]; empty: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase text-muted mb-2">{title}</div>
+      <div className="text-xs font-semibold text-muted mb-2">{title}</div>
       {items.length === 0 && <p className="text-muted">{empty}</p>}
       {items.map((it) => (
         <button key={it.label + it.sub} disabled={!it.path} onClick={() => it.path && go({ view: "vault", path: it.path })} className="w-full text-left rounded-md px-2 py-1.5 hover:bg-hover disabled:hover:bg-transparent">

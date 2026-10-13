@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, MessageSquare, Plus } from "lucide-react";
+import { Bot, MessageSquare, Plus } from "../icons.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
@@ -34,7 +34,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Agents</h1>
+        <h1 className="font-display text-[17px] font-semibold tracking-tight flex-1 truncate">Agents</h1>
       </header>
       <div className="flex-1 overflow-y-auto @container">
         {agents.length === 0 ? (
@@ -83,10 +83,10 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                         <span className={cx("block text-sm truncate", a.status === "offline" && "text-muted")}>{a.name}</span>
                         <span className="block text-xs text-muted truncate mt-0.5">{["@" + a.handle, ...a.groups.slice(0, 2)].join(" · ")}</span>
                       </span>
-                      {/* machine facts in mono, like Paperclip's adapter column */}
+                      {/* where it runs: its harness, device and computer */}
                       <span className="hidden @3xl:block w-48 min-w-0 leading-tight">
-                        <span className="block truncate font-mono text-xs text-muted">{HARNESS_LABELS[a.harness]}</span>
-                        <span className="block truncate font-mono text-[11px] text-muted/70">
+                        <span className="block truncate text-xs text-ink/80">{HARNESS_LABELS[a.harness]}</span>
+                        <span className="block truncate text-[11px] text-muted mt-0.5">
                           {device ? device.name : "no device"} · {computer}
                         </span>
                       </span>

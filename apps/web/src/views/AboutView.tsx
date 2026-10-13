@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Brain, Check, ChevronLeft, ExternalLink, Pencil, Pin, PinOff, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Brain, Check, ChevronLeft, ExternalLink, Pencil, Pin, PinOff, Plus, RotateCcw, Trash2 } from "../icons.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Button, Empty, Input, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
@@ -92,7 +92,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
           </button>
         )}
         <Brain size={17} className="text-accent-text" />
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h1>
+        <h1 className="font-display text-[17px] font-semibold tracking-tight flex-1 truncate">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h1>
         {me.role === "owner" && members.length > 1 && (
           <select value={userId} onChange={(e) => setUserId(e.target.value)} className="h-8 rounded-lg border border-line bg-panel px-2 text-sm" aria-label="Whose memory">
             {members.map((m) => (
@@ -265,7 +265,7 @@ function Journal({ items }: { items: Item[] }) {
         const entries = items.filter((i) => (i.date ?? "") === d);
         return (
           <div key={d}>
-            <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+            <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-muted">
               {d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "Undated"}
               <a href={`#/vault/${entries[0].path}`} className="ml-auto inline-flex items-center gap-1 normal-case font-normal text-accent-text hover:underline">
                 Edit day <ExternalLink size={11} />

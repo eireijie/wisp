@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
-import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@warren/core";
+import { Activity, ArrowLeft, BookOpen, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "../icons.tsx";
+import { harnessLabel, type AccessLevel, type AccessRule, type Agent, type HarnessCatalog, type ModelOption } from "@warren/core";
 import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { ApiError, api } from "../api.ts";
@@ -10,7 +10,7 @@ import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
-import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusChip, Textarea, agentVar, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { computerKindLabel, type DeviceInfo } from "../devices.ts";
@@ -19,7 +19,7 @@ export type NodeInfo = DeviceInfo;
 
 type FullAgent = Agent & { instructions?: string };
 
-/** Paperclip-style grouped navigation for an agent's settings. */
+/** An agent's sections, in groups (shown as tabs with a gap between groups). */
 const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNode }[] }[] = [
   {
     group: "Agent",
@@ -50,8 +50,8 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
 ];
 
 /**
- * One agent's page: a breadcrumb header, a grouped secondary sidebar (chips on phones), and
- * the selected section. Editable sections stay mounted so drafts survive switching sections;
+ * One agent's page, like its own room: a band in its color with its ghost and name, tabs for
+ * its sections, and the selected section. Editable sections stay mounted so drafts survive switching sections;
  * sections with unsaved changes show a dot.
  */
 export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: NodeInfo[]; tab: AgentTab | null }) {
@@ -71,51 +71,48 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
     go({ view: "chat", channelId: ch.id, threadId: null });
   }
 
-  const link = (id: AgentTab, label: string, icon: ReactNode, chip?: boolean) => (
+  const tabLink = (id: AgentTab, label: string, icon: ReactNode) => (
     <a
       key={id}
       href={`#/agents/${agent.id}/${id}`}
       aria-current={active === id ? "page" : undefined}
-      className={cx(
-        chip ? "h-8 px-3 rounded-full border text-sm whitespace-nowrap" : "h-8 px-2 rounded-lg text-[13px] font-medium w-full",
-        "flex items-center gap-2.5",
-        active === id ? (chip ? "border-accent bg-accent-soft text-ink" : "bg-accent-soft text-ink") : chip ? "border-line text-muted" : "text-ink/80 hover:text-ink hover:bg-hover",
-      )}
+      className={cx("relative h-10 px-2.5 flex items-center gap-1.5 text-[13.5px] whitespace-nowrap border-b-2", active === id ? "agent-tab-on text-ink font-medium" : "border-transparent text-muted hover:text-ink")}
     >
       {icon} {label}
-      {dirty[id] && <span className="ml-auto size-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
+      {dirty[id] && <span className="size-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
     </a>
   );
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        <a href="#/agents" className="text-sm font-semibold uppercase tracking-wider text-muted hover:text-ink">
-          Agents
-        </a>
-        <ChevronRight size={14} className="text-faint shrink-0" />
-        <span className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-sm font-medium truncate">{agent.name}</span>
-        </span>
-        <Button onClick={openDm}>
-          <MessageSquare size={15} /> <span className="hidden sm:inline">Message</span>
-        </Button>
-        <Button variant="ghost" onClick={() => go({ view: "vault", path: soulPath(agent.id) })} title="Open its memory folder">
-          <BookOpen size={15} /> <span className="hidden sm:inline">Memory</span>
-        </Button>
-      </header>
-      <nav className="md:hidden shrink-0 flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-line" aria-label="Agent sections">
-        {NAV.flatMap((g) => g.items).map((i) => link(i.id, i.label, i.icon, true))}
-      </nav>
-      <div className="flex-1 min-h-0 flex">
-        <nav className="hidden md:block w-52 shrink-0 border-r border-line overflow-y-auto p-2 pt-4 space-y-4" aria-label="Agent sections">
-          {NAV.map((g) => (
-            <div key={g.group} className="space-y-px">
-              <div className="px-2 pb-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70">{g.group}</div>
-              {g.items.map((i) => link(i.id, i.label, i.icon))}
+      <header className="agent-band shrink-0 border-b border-line safe-top" style={agentVar(agent)}>
+        <div className="px-4 md:px-6 pt-3 flex items-center gap-3">
+          <a href="#/agents" className="p-1.5 -ml-1.5 rounded-lg text-muted hover:text-ink hover:bg-hover" aria-label="All agents" title="All agents">
+            <ArrowLeft size={18} />
+          </a>
+          <AgentAvatar agent={agent} size={36} live />
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-[19px] font-semibold tracking-tight truncate leading-tight">{agent.name}</div>
+            <div className="text-xs text-muted truncate">
+              @{agent.handle} · {harnessLabel(agent.harness)}
+            </div>
+          </div>
+          <Button variant="primary" onClick={openDm}>
+            <MessageSquare size={15} /> <span className="hidden sm:inline">Message</span>
+          </Button>
+          <Button variant="ghost" onClick={() => go({ view: "vault", path: soulPath(agent.id) })} title="Open its memory folder">
+            <BookOpen size={15} /> <span className="hidden sm:inline">Memory</span>
+          </Button>
+        </div>
+        <nav className="mt-1 px-2 md:px-4 flex items-center overflow-x-auto" aria-label="Agent sections">
+          {NAV.map((g, i) => (
+            <div key={g.group} className={cx("flex items-center", i > 0 && "ml-2 pl-2 border-l border-line h-5")} aria-label={g.group} role="group">
+              {g.items.map((it) => tabLink(it.id, it.label, it.icon))}
             </div>
           ))}
         </nav>
+      </header>
+      <div className="flex-1 min-h-0 flex">
         <div ref={content} className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 py-6">
           <Panel show={active === "overview"}>
             <OverviewPanel agent={agent} nodes={nodes} active={active === "overview"} />
@@ -290,7 +287,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
               className={cx("min-h-[420px] w-full resize-y rounded-xl border border-line bg-bg px-4 py-3 font-mono text-[13.5px] leading-relaxed outline-none focus:border-accent", view === "preview" && "hidden lg:block")}
             />
             <div className={cx("min-h-[420px] rounded-xl border border-line px-5 py-4 overflow-y-auto", view === "write" && "hidden lg:block")}>
-              <div className="text-[11px] uppercase tracking-wide text-faint mb-2">Preview</div>
+              <div className="text-[11px] text-faint mb-2">Preview</div>
               <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronLeft, CircleDot, Hand, ListTodo, Loader2, Paperclip, Plus, Sparkles, X } from "lucide-react";
+import { Check, ChevronLeft, CircleDot, Hand, ListTodo, Loader2, Paperclip, Plus, Sparkles, X } from "../icons.tsx";
 import type { Actor } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -79,7 +79,7 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Tasks</h1>
+        <h1 className="font-display text-[17px] font-semibold tracking-tight flex-1 truncate">Tasks</h1>
         <label className="hidden sm:flex items-center gap-2 text-xs text-muted mr-2">
           <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Only what I asked for
         </label>
@@ -103,7 +103,7 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
           <div className="p-4 md:p-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4 max-w-7xl">
             {COLUMNS.map((col) => (
               <section key={col.id} className="min-w-0">
-                <h2 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                <h2 className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted">
                   {col.title} <span className="tabular-nums text-faint">{board[col.id].length}</span>
                 </h2>
                 <div className="space-y-2">

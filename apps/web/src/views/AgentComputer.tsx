@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, Cloud, FileText, KeyRound, Laptop, Loader2, Lock, Monitor, Play, Plus, Trash2, Video } from "lucide-react";
+import { CalendarClock, Check, Cloud, FileText, KeyRound, Laptop, Loader2, Lock, Monitor, Play, Plus, Trash2, Video } from "../icons.tsx";
 import { describeCron, harnessInfo, harnessLabel, nextRun, runsInVm, type Agent, type Routine } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";

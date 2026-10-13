@@ -23,7 +23,7 @@
         if (m !== "light" && m !== "dark") m = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         var root = document.documentElement;
         root.dataset.mode = m;
-        root.dataset.theme = t || "mono";
+        root.dataset.theme = t || "moon";
         try {
           var s = localStorage.getItem("warren.textSize");
           root.dataset.text = s === "small" || s === "large" ? s : "default";

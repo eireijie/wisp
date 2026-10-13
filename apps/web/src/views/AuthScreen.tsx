@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "../icons.tsx";
 import { api } from "../api.ts";
 import { useAppearance } from "../theme.ts";
-import { Button, Field, GhostMark, Input } from "../components/ui.tsx";
+import { Button, Field, Input } from "../components/ui.tsx";
+import { Ghost, WARREN_GHOST } from "../components/Ghost.tsx";
 
 /** An invite link: #/join/<code>. */
 const inviteCode = () => location.hash.match(/^#\/join\/([\w-]+)/)?.[1] ?? null;
@@ -50,15 +51,16 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   }
 
   return (
-    <div className="relative min-h-full bg-panel flex items-center px-6 sm:px-8 py-10 safe-top">
+    <div className="relative min-h-full bg-app flex items-center justify-center px-4 sm:px-8 py-10 safe-top">
       <button onClick={toggleMode} className="absolute top-4 right-4 p-2 rounded-lg text-muted hover:text-ink hover:bg-hover" aria-label={resolvedMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
         {resolvedMode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
       </button>
-      <form onSubmit={submit} className="w-full max-w-sm space-y-6">
-        <div className="flex items-center gap-1.5 font-semibold">
-          <GhostMark size={18} className="text-accent-text" /> Warren
+      <form onSubmit={submit} className="sheet w-full max-w-sm space-y-6 rounded-3xl bg-panel px-6 py-7 sm:px-8">
+        <div className="flex flex-col items-center gap-1 -mt-1">
+          <Ghost look={WARREN_GHOST} size={64} label="Warren" />
+          <span className="font-display text-lg font-semibold tracking-tight">Warren</span>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 text-center">
           <h1 className="text-xl font-semibold">{needsSetup ? "Set up Warren" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Warren"}</h1>
           <p className="text-sm text-muted">
             {needsSetup ? "You'll be the owner of this workspace." : joining ? (invite ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}. Make your account.` : "Checking your invite…") : "Where people and agents work together."}

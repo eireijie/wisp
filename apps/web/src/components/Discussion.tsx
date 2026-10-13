@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Check, Clock, Loader2, MessagesSquare, Square, X } from "lucide-react";
+import { BookOpen, Check, Clock, Loader2, MessagesSquare, Square, X } from "../icons.tsx";
 import type { Discussion } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type DiscussionInfo } from "../store.ts";

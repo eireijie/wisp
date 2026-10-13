@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
+import { ArrowDown, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "../icons.tsx";
 import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -172,7 +172,7 @@ function AccessControl({ agent, ctx, canEdit }: { agent: Agent; ctx: AgentContex
     >
       {(close) => (
         <div role="menu">
-          <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-faint">What {agent.name} can do</div>
+          <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-faint">What {agent.name} can do</div>
           {(Object.keys(ACCESS) as AccessLevel[]).map((k) => (
             <button
               key={k}

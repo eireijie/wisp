@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BookOpen, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BookOpen, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "../icons.tsx";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -8,7 +8,7 @@ import { logout } from "../App.tsx";
 import { isDismissed, useOnboarding } from "../onboarding.ts";
 import { useAppearance } from "../theme.ts";
 import { ChannelBrowser, SectionDialog } from "./Channels.tsx";
-import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
+import { AgentAvatar, GhostMark, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
 
 const COLLAPSE_KEY = "warren.sidebar.collapsed";
 const loadCollapsed = (): Record<string, boolean> => {
@@ -20,9 +20,9 @@ const loadCollapsed = (): Record<string, boolean> => {
 };
 
 /**
- * The workspace sidebar, organized like Paperclip's: the workspace, quick actions, then small
- * labeled groups (Work, Org, Channels, Chats) and you at the bottom. On phones the same content
- * is the Chats screen (variant "page") with larger touch targets.
+ * The workspace sidebar: the workspace and a greeting, quick actions, then groups (Work, Your
+ * warren, Channels, Chats) and you at the bottom. On phones the same content is the Chats
+ * screen (variant "page") with larger touch targets.
  */
 export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?: "sidebar" | "page" }) {
   const me = useStore((s) => s.me)!;
@@ -77,10 +77,13 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   return (
     <nav className={cx("h-full flex flex-col", !page && "safe-top")}>
       {!page && (
-        <div className="h-15 shrink-0 px-4 flex items-center gap-2">
-          <WorkspaceTile name={me.workspace.name} />
-          <div className="text-sm font-bold truncate flex-1">{me.workspace.name}</div>
-          <span className={cx("size-1.5 rounded-full shrink-0", connected ? "bg-ok" : "bg-faint animate-pulse")} title={connected ? "Connected" : "Reconnecting…"} />
+        <div className="shrink-0 px-4 pt-4 pb-3">
+          <div className="flex items-center gap-2">
+            <GhostMark size={17} className="shrink-0 text-accent-text mark-glow" />
+            <div className="font-display text-[15px] font-semibold tracking-tight truncate flex-1">{me.workspace.name}</div>
+            <span className={cx("size-1.5 rounded-full shrink-0", connected ? "bg-ok" : "bg-faint animate-pulse")} title={connected ? "Connected" : "Reconnecting…"} />
+          </div>
+          <div className="mt-1 text-xs text-muted truncate">{greeting(me.user.preferredName || me.user.name.split(" ")[0], agents)}</div>
         </div>
       )}
 
@@ -135,7 +138,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         )}
 
         {!page && (
-          <Group title="Org" collapsed={!!collapsed.org} onToggle={() => toggleGroup("org")}>
+          <Group title="Your warren" collapsed={!!collapsed.org} onToggle={() => toggleGroup("org")}>
             <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"}>
               <Bot size={16} className="shrink-0" /> Agents
             </Item>
@@ -302,21 +305,31 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   );
 }
 
-/** The workspace's letter on a mint tile: Warren's one accent, like Paperclip's company tile. */
-export function WorkspaceTile({ name, size = 22 }: { name: string; size?: number }) {
+/** "Good evening, Yug · 2 agents working": the time of day and what the agents are up to. */
+function greeting(name: string, agents: Agent[]): string {
+  const h = new Date().getHours();
+  const part = h < 5 ? "Up late" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  const busy = agents.filter((a) => a.status === "busy").length;
+  const awake = agents.filter((a) => a.status !== "offline").length;
+  const what = busy ? `${busy} agent${busy === 1 ? "" : "s"} working` : awake ? `${awake} agent${awake === 1 ? "" : "s"} around` : agents.length ? "all quiet" : "";
+  return [`${part}, ${name}`, what].filter(Boolean).join(" · ");
+}
+
+/** The workspace's mark: Warren's ghost on a night tile. */
+export function WorkspaceTile({ size = 22 }: { name?: string; size?: number }) {
   return (
-    <span className="shrink-0 rounded-md grid place-items-center font-semibold bg-accent text-accent-ink" style={{ width: size, height: size, fontSize: size * 0.55 }} aria-hidden>
-      {(name.trim()[0] ?? "W").toUpperCase()}
+    <span className="shrink-0 rounded-[32%] grid place-items-center bg-accent text-accent-ink" style={{ width: size, height: size }} aria-hidden>
+      <GhostMark size={size * 0.6} />
     </span>
   );
 }
 
-/** A small mono label (WORK, ORG, CHATS); click it to fold the group away. */
+/** A group's name in plain words; click it to fold the group away. */
 function Group({ title, collapsed, onToggle, actions, page, children }: { title: ReactNode; collapsed: boolean; onToggle: () => void; actions?: ReactNode; page?: boolean; children: ReactNode }) {
   return (
     <section className="space-y-px">
       <div className={cx("group px-4 flex items-center gap-1", page ? "h-9" : "h-7")}>
-        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70 hover:text-ink" aria-expanded={!collapsed}>
+        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 text-xs font-semibold text-muted hover:text-ink" aria-expanded={!collapsed}>
           <span className="truncate flex items-center gap-1">{title}</span>
           <ChevronDown size={12} className={cx("shrink-0 transition-transform opacity-0 group-hover:opacity-100", collapsed && "-rotate-90 opacity-100")} />
         </button>
@@ -338,9 +351,9 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
 function Item({ href: to, onClick, active, unread, dot, count, page, agent, children }: { href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; page?: boolean; agent?: Agent; children: ReactNode }) {
   const cls = cx(
     "mx-2 px-2 flex items-center gap-2.5 rounded-lg text-left w-[calc(100%-1rem)] transition-colors",
-    page ? "h-11 text-[15px]" : "h-8 text-[13px] font-medium",
-    // the open item is tinted mint, or in the agent's own color for a chat with it
-    active ? (agent ? "agent-tint text-ink" : "bg-accent-soft text-ink") : "hover:bg-side-active/70 hover:text-ink",
+    page ? "h-11 text-[15px]" : "h-8 text-[13.5px] font-medium",
+    // the open item lifts off the night (its icon in the accent), or wears the agent's color for a chat with it
+    active ? (agent ? "agent-tint text-ink" : "side-open text-ink") : "hover:bg-side-hover hover:text-ink",
     unread && !active && "font-semibold text-ink",
     !unread && !active && "text-ink/80",
   );

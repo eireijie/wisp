@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Hash, Plus, Search } from "lucide-react";
+import { Check, Hash, Plus, Search } from "../icons.tsx";
 import type { Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Check, Laptop, LogOut, Moon, Smartphone, Sun, SunMoon, Volume2 } from "lucide-react";
+import { Bell, Check, Laptop, LogOut, Moon, Smartphone, Sun, SunMoon, Volume2 } from "../../icons.tsx";
 import { api } from "../../api.ts";
 import { useStore, usePrefs } from "../../store.ts";
 import { href } from "../../router.ts";

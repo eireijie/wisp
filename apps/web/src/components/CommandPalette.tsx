@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Bot, CornerDownLeft, FileText, Hash, MessageSquare, Plus, Search, Server, Settings } from "lucide-react";
+import { BookOpen, Bot, CornerDownLeft, FileText, Hash, MessageSquare, Plus, Search, Server, Settings } from "../icons.tsx";
 import type { Agent, Channel, Message } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -142,7 +142,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             const header = r.group !== lastGroup ? (lastGroup = r.group) : null;
             return (
               <div key={r.key}>
-                {header && <div className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-faint">{header}</div>}
+                {header && <div className="px-4 pt-2 pb-1 text-[11px] font-semibold text-faint">{header}</div>}
                 <button
                   data-index={i}
                   onMouseMove={() => setSel(i)}

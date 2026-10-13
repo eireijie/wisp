@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Moon, Brain, RotateCcw, Shuffle, Sun } from "lucide-react";
+import { Moon, Brain, RotateCcw, Shuffle, Sun } from "../icons.tsx";
 import type { Agent } from "@warren/core";
 import { GHOST_ACCESSORIES, GHOST_PALETTES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";

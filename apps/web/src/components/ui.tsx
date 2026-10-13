@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
-import { X } from "lucide-react";
+import { X } from "../icons.tsx";
 import { HARNESSES, type Agent } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { Ghost, type GhostMood } from "./Ghost.tsx";
@@ -8,18 +8,18 @@ export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
 }
 
-/** Paperclip's buttons: a filled primary, an outlined default, a bare ghost. */
+/** Warren's buttons: the one filled primary (it glows a little at night), a soft tonal default, a bare ghost. */
 export function Button({ variant = "default", className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default" | "primary" | "ghost" | "danger" }) {
   return (
     <button
       {...p}
       className={cx(
         "inline-flex items-center justify-center gap-1.5 h-9 text-sm font-medium whitespace-nowrap transition-colors disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-        // the one mint, pill-shaped call to action (Grok Bot's shape); everything else stays square-ish
-        variant === "primary" ? "rounded-full px-4 bg-accent text-accent-ink hover:bg-accent/90" : "rounded-lg px-3",
-        variant === "default" && "border border-input bg-panel dark:bg-input/30 hover:bg-hover dark:hover:bg-input/50",
+        "rounded-lg",
+        variant === "primary" ? "btn-primary px-4 bg-accent text-accent-ink hover:bg-accent/90" : "px-3",
+        variant === "default" && "bg-chip hover:bg-input/60",
         variant === "ghost" && "text-ink/85 hover:bg-hover hover:text-ink",
-        variant === "danger" && "border border-input text-bad hover:bg-hover",
+        variant === "danger" && "bg-chip text-bad hover:bg-bad/10",
         className,
       )}
     />
@@ -149,7 +149,7 @@ export function UserAvatar({ name, size = 32 }: { name: string; size?: number })
 
 /**
  * One word and one look per agent status, used the same way everywhere. Online is the normal
- * state, so it stays quiet (a gray chip with a green presence dot) and never reads as the mint
+ * state, so it stays quiet (a green dot and a gray word) and never reads as the
  * accent; working is blue.
  */
 export const AGENT_STATUS: Record<Agent["status"], { label: string; hue: string; dot?: string }> = {
@@ -163,36 +163,34 @@ export function StatusDot({ status, className }: { status: Agent["status"]; clas
   return <span className={cx("inline-block size-2 rounded-full", status === "busy" && "animate-pulse", className)} style={{ background: s.dot ?? s.hue }} title={s.label} />;
 }
 
+/** A glowing dot and a word: how an agent is doing. */
 export function StatusChip({ status }: { status: Agent["status"] }) {
   const s = AGENT_STATUS[status];
   return (
-    <span className={cx("status-chip inline-flex items-center gap-1.5 rounded-full px-2.5 h-[22px] text-xs font-medium leading-none whitespace-nowrap", status === "offline" && "opacity-70")} style={{ "--sc": s.hue } as CSSProperties}>
-      {s.dot && <span className={cx("size-1.5 rounded-full", status === "busy" && "animate-pulse")} style={{ background: s.dot }} />}
+    <span className={cx("status-tag", status === "busy" && "pulse text-ink", status === "offline" && "text-faint")} style={{ "--sc": s.dot ?? s.hue } as CSSProperties}>
       {s.label}
     </span>
   );
 }
 
-/** Warren's mark: a ghost outline. `draw` animates it drawing itself (the loading state). */
-export function GhostMark({ size = 20, draw, className }: { size?: number; draw?: boolean; className?: string }) {
+/** Warren's mark: a ghost outline with its eyes. */
+export function GhostMark({ size = 20, className }: { size?: number; className?: string }) {
   return (
-    <svg viewBox="22 10 76 104" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={draw ? 4.5 : 9} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path className={draw ? "loader-draw" : undefined} pathLength={100} d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z" />
-      {!draw && (
-        <g fill="currentColor" stroke="none">
-          <circle cx="50" cy="56" r="6" />
-          <circle cx="70" cy="56" r="6" />
-        </g>
-      )}
+    <svg viewBox="22 10 76 104" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={9} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z" />
+      <g fill="currentColor" stroke="none">
+        <circle cx="50" cy="56" r="6" />
+        <circle cx="70" cy="56" r="6" />
+      </g>
     </svg>
   );
 }
 
-/** Full-page loading: a large, centered, gray ghost drawing itself. */
+/** Full-page loading: Warren's ghost bobbing in the dark. */
 export function Loader({ label = "Loading…" }: { label?: string }) {
   return (
-    <div role="status" className="h-full w-full grid place-items-center bg-panel" style={{ color: "var(--loader)" }}>
-      <GhostMark size={88} draw />
+    <div role="status" className="h-full w-full grid place-items-center bg-app" style={{ color: "var(--loader)" }}>
+      <GhostMark size={64} className="loader-float" />
       <span className="sr-only">{label}</span>
     </div>
   );
@@ -279,7 +277,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
   );
 }
 
-/** Rounded status pill, Paperclip-style: a tinted chip, color only where it carries meaning. */
+/** A small tinted tag, color only where it carries meaning. */
 export function Pill({ tone = "neutral", children }: { tone?: "neutral" | "ok" | "warn" | "bad" | "info" | "accent"; children: ReactNode }) {
   const hues = {
     neutral: "var(--status-idle)",
@@ -290,7 +288,7 @@ export function Pill({ tone = "neutral", children }: { tone?: "neutral" | "ok" |
     accent: "var(--accent)",
   };
   return (
-    <span className="status-chip inline-flex items-center gap-1 rounded-full px-2 h-5 text-[11px] font-medium leading-none whitespace-nowrap" style={{ "--sc": hues[tone] } as CSSProperties}>
+    <span className="tone-tag inline-flex items-center gap-1 rounded-md px-1.5 h-5 text-[11px] font-medium leading-none whitespace-nowrap" style={{ "--sc": hues[tone] } as CSSProperties}>
       {children}
     </span>
   );

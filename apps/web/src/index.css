@@ -1,79 +1,95 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/bricolage-grotesque";
 
 /* `dark:` follows the chosen mode, not just the OS */
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
 /*
- * Design tokens: Paperclip's calm organization with room for personality. Appearance is a mode
- * (light or dark, following the OS unless the person picks one) and a theme the person picks in
- * Settings. Every theme shares these grays and status colors; a theme sets the accent (primary
- * buttons, links, focus, unread, the open item) and an optional faint tint for the grays
- * (--gc chroma, --gh hue). Mono, the default, is black and white. Agents always bring their own
- * colors. index.html sets data-mode and data-theme before first paint; theme.ts keeps them in sync.
+ * Warren's look: a warren at night. Dark mode is a deep night sky where the ghosts glow; light
+ * mode is clean white with ink. Content sits on a rounded sheet above the window. Appearance is
+ * a mode (light or dark, following the OS unless the person picks one) and a theme the person
+ * picks in Settings. A theme sets the accent (primary buttons, links, focus, unread, the open
+ * item) and the tint of the grays (--gc chroma, --gh hue); Moonlight, the default, is night ink
+ * and moonlight. Agents always bring their own colors. index.html sets data-mode and data-theme
+ * before first paint; theme.ts keeps them in sync.
  */
 :root {
-  --gc: 0;
-  --gh: 0;
-  --app: oklch(0.97 var(--gc) var(--gh)); /* window + sidebar */
-  --panel: oklch(1 0 0); /* content */
-  --bg: oklch(0.975 var(--gc) var(--gh)); /* quiet surfaces inside content */
+  --gc: 0.012;
+  --gh: 280;
+  --app: oklch(0.968 calc(var(--gc) * 0.8) var(--gh)); /* the window and sidebar */
+  --panel: oklch(1 0 0); /* the content sheet */
+  --bg: oklch(0.977 calc(var(--gc) * 0.6) var(--gh)); /* quiet surfaces inside content */
   --sidebar: var(--app);
   --side-hover: oklch(0.3 calc(var(--gc) * 3) var(--gh) / 0.05);
-  --side-active: oklch(0.915 calc(var(--gc) * 1.5) var(--gh));
-  --ink: oklch(0.16 calc(var(--gc) * 2.5) var(--gh));
-  --muted: oklch(0.52 calc(var(--gc) * 3) var(--gh));
-  --faint: oklch(0.68 calc(var(--gc) * 2.5) var(--gh));
-  --line: oklch(0.922 var(--gc) var(--gh));
-  --input: oklch(0.87 calc(var(--gc) * 1.75) var(--gh));
-  --hover: oklch(0.97 var(--gc) var(--gh));
-  --chip: oklch(0.95 calc(var(--gc) * 1.25) var(--gh));
-  --code: oklch(0.965 var(--gc) var(--gh));
+  --side-active: oklch(1 0 0);
+  --ink: oklch(0.2 calc(var(--gc) * 3) var(--gh));
+  --muted: oklch(0.5 calc(var(--gc) * 3) var(--gh));
+  --faint: oklch(0.66 calc(var(--gc) * 2.5) var(--gh));
+  --line: oklch(0.915 calc(var(--gc) * 1.2) var(--gh));
+  --input: oklch(0.86 calc(var(--gc) * 1.75) var(--gh));
+  --hover: oklch(0.963 calc(var(--gc) * 1.2) var(--gh));
+  --chip: oklch(0.945 calc(var(--gc) * 1.6) var(--gh));
+  --code: oklch(0.96 calc(var(--gc) * 1.2) var(--gh));
   --ok: #16a34a;
   --warn: #cc7a00;
   --bad: oklch(0.577 0.245 27.325);
   --info: #2563eb;
-  --shadow: 0 1px 2px oklch(0.2 0 0 / 0.06), 0 6px 20px oklch(0.2 0 0 / 0.08);
-  --ghost-shadow: oklch(0.2 0 0 / 0.14);
-  /* status hues: chips and dots mix these with the surface, so one value works in both modes */
-  --status-idle: #a8aeb2;
+  --shadow: 0 1px 2px oklch(0.25 0.03 280 / 0.06), 0 12px 32px -8px oklch(0.25 0.03 280 / 0.14);
+  --sheet-shadow: 0 1px 2px oklch(0.25 0.03 280 / 0.05), 0 4px 18px -6px oklch(0.25 0.03 280 / 0.1);
+  /* how strongly ghosts glow in their own color */
+  --ghost-glow: 0.28;
+  /* status hues: dots and tags mix these with the surface, so one value works in both modes */
+  --status-idle: #a3a8b8;
   --status-online: #22c55e;
-  --status-working: #2563eb;
+  --status-working: #6d7cff;
   --status-paused: #f59e0b;
   --status-error: #dc2626;
   color-scheme: light;
 }
 
 :root[data-mode="dark"] {
-  --app: oklch(0.2 calc(var(--gc) * 1.5) var(--gh));
-  --panel: oklch(0.16 var(--gc) var(--gh));
-  --bg: oklch(0.2 calc(var(--gc) * 1.5) var(--gh));
-  --side-hover: oklch(1 0 0 / 0.04);
-  --side-active: oklch(0.265 calc(var(--gc) * 2) var(--gh));
-  --ink: oklch(0.965 calc(var(--gc) * 0.75) var(--gh));
-  --muted: oklch(0.71 calc(var(--gc) * 2) var(--gh));
-  --faint: oklch(0.55 calc(var(--gc) * 2.5) var(--gh));
-  --line: oklch(1 0 0 / 0.09);
-  --input: oklch(1 0 0 / 0.14);
-  --hover: oklch(1 0 0 / 0.04);
-  --chip: oklch(1 0 0 / 0.075);
-  --code: oklch(0.21 calc(var(--gc) * 1.5) var(--gh));
+  --app: oklch(0.145 calc(var(--gc) * 2) var(--gh)); /* the night */
+  --panel: oklch(0.18 calc(var(--gc) * 2) var(--gh));
+  --bg: oklch(0.205 calc(var(--gc) * 2) var(--gh));
+  --side-hover: oklch(1 0 0 / 0.045);
+  --side-active: oklch(0.85 calc(var(--gc) * 4) var(--gh) / 0.1);
+  --ink: oklch(0.955 calc(var(--gc) * 0.8) var(--gh));
+  --muted: oklch(0.72 calc(var(--gc) * 2.2) var(--gh));
+  --faint: oklch(0.54 calc(var(--gc) * 2.5) var(--gh));
+  --line: oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.1);
+  --input: oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.17);
+  --hover: oklch(1 0 0 / 0.045);
+  --chip: oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.09);
+  --code: oklch(0.215 calc(var(--gc) * 2) var(--gh));
   --ok: #34d06f;
   --warn: #fbbf24;
   --bad: oklch(0.704 0.191 22.216);
-  --info: #60a5fa;
-  --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.4);
-  --ghost-shadow: oklch(0 0 0 / 0.42);
+  --info: #8a96ff;
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.35), 0 16px 40px -10px oklch(0 0 0 / 0.6);
+  --sheet-shadow: 0 0 0 1px oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.07), 0 18px 50px -20px oklch(0 0 0 / 0.7);
+  --ghost-glow: 0.55;
   color-scheme: dark;
 }
 
 /*
- * --- themes: an accent per mode, and a faint tint for the grays ----------------------------
+ * --- themes: an accent per mode, and the tint of the grays -----------------------------------
  * Not tied to :root, so any element with data-theme and data-mode (like the previews in
  * Settings) shows that theme's accent.
  */
 
-/* Mono: near-black controls on white, white on near-black (like Grok Bot); links are ink */
+/* Moonlight: night ink on white; moonlight on the night */
+[data-theme="moon"] {
+  --gc: 0.014; --gh: 280;
+  --accent: oklch(0.36 0.11 278); --accent-ink: oklch(0.985 0.01 280); --accent-text: oklch(0.45 0.15 278);
+  --accent-soft: oklch(0.55 0.15 278 / 0.1); --ring: oklch(0.55 0.15 278); --loader: oklch(0.55 0.12 278);
+}
+[data-theme="moon"][data-mode="dark"] {
+  --accent: oklch(0.92 0.045 285); --accent-ink: oklch(0.2 0.045 280); --accent-text: oklch(0.85 0.08 285);
+  --accent-soft: oklch(0.82 0.1 285 / 0.13); --ring: oklch(0.8 0.1 285); --loader: oklch(0.85 0.07 285);
+}
+
+/* Mono: black and white, no tint */
 [data-theme="mono"] {
   --gc: 0; --gh: 0;
   --accent: oklch(0.2 0 0); --accent-ink: oklch(0.99 0 0); --accent-text: var(--ink);
@@ -84,7 +100,7 @@
 }
 
 [data-theme="mint"] {
-  --gc: 0.004; --gh: 265;
+  --gc: 0.006; --gh: 200;
   --accent: #1aa577; --accent-ink: #05281b; --accent-text: #0b7d57;
   --accent-soft: color-mix(in oklab, #1aa577 16%, transparent); --ring: #1aa577; --loader: var(--accent);
 }
@@ -93,7 +109,7 @@
 }
 
 [data-theme="iris"] {
-  --gc: 0.004; --gh: 270;
+  --gc: 0.01; --gh: 270;
   --accent: #5b5fe0; --accent-ink: #ffffff; --accent-text: #4f52d6;
   --accent-soft: color-mix(in oklab, #5b5fe0 13%, transparent); --ring: #5b5fe0; --loader: var(--accent);
 }
@@ -102,7 +118,7 @@
 }
 
 [data-theme="lilac"] {
-  --gc: 0.005; --gh: 295;
+  --gc: 0.01; --gh: 300;
   --accent: #8455e0; --accent-ink: #ffffff; --accent-text: #7444d4;
   --accent-soft: color-mix(in oklab, #8455e0 13%, transparent); --ring: #8455e0; --loader: var(--accent);
 }
@@ -111,7 +127,7 @@
 }
 
 [data-theme="sky"] {
-  --gc: 0.004; --gh: 240;
+  --gc: 0.008; --gh: 240;
   --accent: #1aa3e8; --accent-ink: #04263a; --accent-text: #0369a1;
   --accent-soft: color-mix(in oklab, #1aa3e8 14%, transparent); --ring: #1aa3e8; --loader: var(--accent);
 }
@@ -144,38 +160,49 @@
   --color-info: var(--info);
   --color-code: var(--code);
   --shadow-panel: var(--shadow);
-  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  /* Paperclip's tighter corners: controls ~6px, cards 8px, dialogs and the composer 12px */
-  --radius-lg: 0.4rem;
-  --radius-xl: 0.5rem;
-  --radius-2xl: 0.75rem;
+  /* soft, round shapes: controls 10px, cards 14px, dialogs and sheets 20px */
+  --radius-md: 0.5rem;
+  --radius-lg: 0.65rem;
+  --radius-xl: 0.9rem;
+  --radius-2xl: 1.25rem;
 }
 
-/* A status chip: a full pill tinted from its status hue (set --sc), like Paperclip's. */
-.status-chip {
-  background-color: color-mix(in srgb, var(--sc) 15%, white);
-  color: color-mix(in srgb, var(--sc) 82%, black);
-  border: 1px solid color-mix(in srgb, var(--sc) 70%, white);
-}
-:root[data-mode="dark"] .status-chip {
-  background-color: color-mix(in srgb, var(--sc) 22%, transparent);
-  color: color-mix(in srgb, var(--sc) 80%, white);
-  border-color: color-mix(in srgb, var(--sc) 48%, transparent);
+/* headings speak in Warren's display face */
+h1, h2, .font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.015em;
 }
 
-/* Loading: a gray ghost drawing itself, then erasing, like Paperclip's paperclip. */
-.loader-draw {
-  stroke-dasharray: 0 100;
-  animation: loader-draw 1.6s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+/* the content sheet floats on the night (desktop) */
+.sheet { box-shadow: var(--sheet-shadow); }
+:root[data-mode="dark"] .sheet {
+  background-image: radial-gradient(900px 340px at 78% -60px, color-mix(in oklab, var(--accent) 7%, transparent), transparent 70%);
 }
-@keyframes loader-draw {
-  0% { stroke-dasharray: 0 100; stroke-dashoffset: 0; }
-  45%, 55% { stroke-dasharray: 100 100; stroke-dashoffset: 0; }
-  100% { stroke-dasharray: 100 100; stroke-dashoffset: -100; }
+
+/* the primary action glows a little at night */
+:root[data-mode="dark"] .btn-primary { box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent), 0 8px 24px -10px color-mix(in oklab, var(--accent) 70%, transparent); }
+
+/* status: a small glowing dot and a quiet word, never a filled pill (set --sc to the hue) */
+.status-tag { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--muted); font-size: 12px; line-height: 1; }
+.status-tag::before {
+  content: ""; width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; background: var(--sc);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--sc) 16%, transparent), 0 0 8px color-mix(in oklab, var(--sc) 60%, transparent);
 }
+.status-tag.pulse::before { animation: status-pulse 1.6s ease-in-out infinite; }
+@keyframes status-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--sc) 10%, transparent), 0 0 12px color-mix(in oklab, var(--sc) 80%, transparent); } }
+/* a tag: a soft tinted label (set --sc) */
+.tone-tag { background-color: color-mix(in oklab, var(--sc) 13%, transparent); color: color-mix(in oklab, var(--sc) 75%, var(--ink)); }
+:root[data-mode="dark"] .tone-tag { background-color: color-mix(in oklab, var(--sc) 18%, transparent); color: color-mix(in oklab, var(--sc) 70%, white); }
+
+/* Loading: Warren's ghost bobbing in the dark, glowing softly */
+.loader-float { animation: loader-float 2.2s ease-in-out infinite; filter: drop-shadow(0 0 10px color-mix(in oklab, currentColor 45%, transparent)); }
+@keyframes loader-float { 0%, 100% { transform: translateY(4px); opacity: 0.55; } 50% { transform: translateY(-6px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .loader-draw { animation: none; stroke-dasharray: none; }
+  .loader-float, .status-tag.pulse::before { animation: none; }
 }
 
 html,
@@ -202,7 +229,6 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 0.875rem;
-  font-feature-settings: "cv11", "ss01"; /* Inter: single-storey a, open digits */
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
@@ -247,7 +273,7 @@ body {
 :root[data-mode="dark"] .prose-w .mention.agent { color: oklch(from var(--agent) clamp(0.74, l, 0.86) min(c, 0.16) h); }
 .prose-w .tag { color: var(--muted); }
 
-/* inline links are underlined (Paperclip's "Create one") in the readable mint */
+/* inline links are underlined in the readable accent */
 :is(p, li) a.text-accent {
   color: var(--accent-text);
   text-decoration: underline;
@@ -306,8 +332,11 @@ body {
 @keyframes ghost-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes ghost-glow { 0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 5px var(--glow)); } 50% { filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 10px var(--glow)); } }
 
-/* the shadow under a ghost shrinks as it rises, in step with its motion */
-.ghost-ground { fill: var(--ghost-shadow); transform-origin: center; }
+/* a ghost's glow breathes as it floats; a dozing ghost just rests on a faint shadow */
+.ghost-aura { transform-origin: center; }
+.ghost-aura-breathe { animation: ghost-aura-breathe 3.2s ease-in-out infinite; }
+@keyframes ghost-aura-breathe { 0%, 100% { transform: scale(0.94); opacity: 0.8; } 50% { transform: scale(1.04); opacity: 1; } }
+.ghost-ground { fill: oklch(0.3 0.02 280 / 0.18); transform-origin: center; }
 .ghost-ground-float { animation: ghost-ground-float 3.2s ease-in-out infinite; }
 .ghost-ground-bounce { animation: ghost-ground-bounce 1.7s ease-in-out infinite; }
 @keyframes ghost-ground-float { 0%, 100% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(0.84); opacity: 0.6; } }
@@ -326,7 +355,7 @@ body {
 .agent-wizard > :nth-child(2) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .agent-wizard > :nth-child(2) > form, .agent-wizard > :nth-child(2) > .agent-wizard-body { flex: 1; min-height: 0; }
 .agent-wizard form { display: flex; flex-direction: column; }
-.agent-drawer-eyebrow { text-transform: uppercase; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; color: var(--muted); }
+.agent-drawer-eyebrow { font-size: 12px; font-weight: 600; color: var(--muted); }
 .agent-wizard-progress { flex-shrink: 0; padding: 20px 32px 0; }
 .agent-step-progress { position: relative; display: flex; align-items: center; width: 164px; padding-bottom: 28px; }
 .agent-step-stop { display: flex; align-items: center; flex: 1; }
@@ -396,3 +425,22 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .wizard-in { animation: none; }
 }
+
+/* --- the sidebar ----------------------------------------------------------------------------- */
+/* the open page lifts off the window: a white card by day, a soft lit patch at night */
+.side-open { background: var(--side-active); box-shadow: 0 1px 2px oklch(0.25 0.03 280 / 0.08), 0 0 0 1px oklch(0.25 0.03 280 / 0.04); }
+.side-open svg { color: var(--accent-text); }
+:root[data-mode="dark"] .side-open { box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.04); }
+/* Warren's mark glows at night */
+:root[data-mode="dark"] .mark-glow { filter: drop-shadow(0 0 6px color-mix(in oklab, currentColor 55%, transparent)); }
+
+/* --- setup: a conversation with the guide ghost ---------------------------------------------- */
+/* what you answer with sits under the guide's message, lined up with its words */
+@media (min-width: 640px) {
+  .setup-turn > :not(:first-child) { margin-left: 52px; }
+}
+
+/* --- an agent's page: a band in its own color, and tabs underlined in it ---------------------- */
+.agent-band { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--agent) 13%, transparent), color-mix(in oklab, var(--agent) 3%, transparent)); }
+:root[data-mode="dark"] .agent-band { background-image: linear-gradient(to bottom, color-mix(in oklab, var(--agent) 16%, transparent), color-mix(in oklab, var(--agent) 4%, transparent)); }
+.agent-tab-on { border-color: var(--agent); }

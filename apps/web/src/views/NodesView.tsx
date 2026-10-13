@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2, Users } from "lucide-react";
+import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2, Users } from "../icons.tsx";
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -44,7 +44,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Devices</h1>
+        <h1 className="font-display text-[17px] font-semibold tracking-tight flex-1 truncate">Devices</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus size={16} /> Add device
         </Button>

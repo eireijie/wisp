@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Crown, GitBranch, GitMerge, Hash, MessagesSquare, Network, Plus, Smile, Trash2, Users } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Crown, GitBranch, GitMerge, Hash, MessagesSquare, Network, Plus, Smile, Trash2, Users } from "../icons.tsx";
 import type { Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type DiscussionInfo, type TeamInfo } from "../store.ts";
@@ -27,7 +27,7 @@ export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab:
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Teams</h1>
+        <h1 className="font-display text-[17px] font-semibold tracking-tight flex-1 truncate">Teams</h1>
         {canEdit && (
           <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus size={16} /> New team
@@ -112,7 +112,7 @@ function OrgChart() {
             ))}
           {solo.length > 0 && (
             <li className="relative pl-6 before:absolute before:left-0 before:top-0 before:h-5 before:w-5 before:border-b before:border-line">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Working on their own</div>
+              <div className="text-xs font-semibold text-muted mb-1.5">Working on their own</div>
               <div className="flex flex-wrap gap-2">
                 {solo.map((a) => (
                   <a key={a.id} href={`#/agents/${a.id}/overview`} className="inline-flex items-center gap-2 rounded-xl border border-line px-2.5 h-9 text-sm hover:bg-hover">
@@ -252,7 +252,7 @@ function TeamDetail({ team, tab, canEdit }: { team: TeamInfo; tab: TeamTab; canE
         <a href="#/teams" className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover text-muted" aria-label="All teams">
           <ChevronLeft size={20} />
         </a>
-        <a href="#/teams" className="hidden md:inline text-sm font-semibold uppercase tracking-wider text-muted hover:text-ink">
+        <a href="#/teams" className="hidden md:inline font-display text-[17px] font-semibold tracking-tight text-muted hover:text-ink">
           Teams
         </a>
         <ChevronRight size={14} className="hidden md:block text-faint shrink-0" />

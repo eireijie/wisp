@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, CircleUser, LogOut, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users } from "lucide-react";
+import { BookOpen, Bot, Brain, CircleUser, LogOut, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users } from "./icons.tsx";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -129,7 +129,8 @@ function Workspace() {
         </aside>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
-        <main className="flex-1 min-h-0 flex flex-col bg-panel overflow-hidden">{page}</main>
+        {/* on a computer, the page is a rounded sheet floating on the window */}
+        <main className={cx("flex-1 min-h-0 flex flex-col bg-panel overflow-hidden", !phone && "sheet m-2 ml-0 rounded-2xl")}>{page}</main>
         {showTabs && <TabBar route={route} />}
       </div>
       <CommandPalette />

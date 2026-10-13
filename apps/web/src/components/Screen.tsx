@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Loader2, MonitorOff, RefreshCw, Sparkle } from "lucide-react";
+import { Loader2, MonitorOff, RefreshCw, Sparkle } from "../icons.tsx";
 import type { ComputerAction, RecordedStep } from "@warren/core";
 import { ApiError, api, getToken } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";

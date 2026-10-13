@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, KeyRound, Laptop, Loader2, Monitor, Plus, Server, Smartphone, TerminalSquare, Users } from "lucide-react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, KeyRound, Laptop, Loader2, Monitor, Plus, Server, Smartphone, TerminalSquare, Users } from "../icons.tsx";
 import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
@@ -10,24 +10,40 @@ import { STEPS, setDismissed, useOnboarding, type OnboardingState, type StepId }
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
-import { Ghost } from "../components/Ghost.tsx";
+import { Ghost, WARREN_GHOST } from "../components/Ghost.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
-import { AgentAvatar, Button, CopyBlock, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, GhostMark, cx } from "../components/ui.tsx";
 
 /**
- * First-run setup, laid out like Paperclip's: one question per screen on a plain page, a
- * progress strip on top, Back and Continue underneath. Each screen checks itself against what
- * actually happened (a device connected, an agent replied), so it picks up where you left off.
+ * First-run setup as a conversation with Warren's guide ghost. It asks one thing at a time,
+ * your answers stay above as replies (pick one to change it), and the little ghosts at the top
+ * light up as steps get done. Each step checks itself against what actually happened (a device
+ * connected, an agent replied), so setup picks up where you left off.
  */
 
 const LABELS: Record<StepId, string> = { device: "Device", role: "Its job", agent: "Agent", harness: "Harness", hello: "First task" };
 
+/** What the guide asked, as it reads above your answer once you've moved on. */
+const ASKED: Record<StepId, string> = {
+  device: "Where will your agents live?",
+  role: "What should it do for them?",
+  agent: "Who's your first agent?",
+  harness: "Which harness does it run?",
+  hello: "What should it do first?",
+};
+
+/** The guide is Warren's own ghost. */
+const GUIDE = WARREN_GHOST;
+
 type Screen = StepId | "done";
 
-/** The filled field Paperclip's setup uses: no outline until it's focused. */
+/** A filled field: no outline until it's focused. */
 const FILLED = "h-11 w-full rounded-lg border border-transparent bg-chip px-3.5 text-[15px] outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^[^a-z]+/, "").replace(/-+$/, "").slice(0, 32);
+
+/** The agent being made, shown under the guide's question on the agent steps. */
+const HeroContext = createContext<ReactNode>(null);
 
 export function WelcomeView() {
   const me = useStore((s) => s.me)!;
@@ -52,10 +68,12 @@ export function WelcomeView() {
   const agent = agentId ? agents.find((a) => a.id === agentId) : fresh ? undefined : (agents.find((a) => a.nodeId === device?.id) ?? agents.find((a) => a.nodeId) ?? agents[0]);
 
   const scroller = useRef<HTMLDivElement>(null);
-  const show = (s: Screen) => {
-    setScreen(s);
-    scroller.current?.scrollTo({ top: 0 });
-  };
+  const current = useRef<HTMLDivElement>(null);
+  // a new question scrolls into view, like a new message
+  useEffect(() => {
+    current.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [screen]);
+  const show = (s: Screen) => setScreen(s);
   const next = (from: StepId) => show(STEPS[STEPS.indexOf(from) + 1] ?? "done");
   const back = (from: StepId) => show(STEPS[STEPS.indexOf(from) - 1] ?? from);
   const leave = (channelId: string | null = null) => {
@@ -63,92 +81,120 @@ export function WelcomeView() {
     go({ view: "chat", channelId, threadId: null });
   };
 
-  const hero = screen === "agent" || screen === "harness" || screen === "hello";
   const look = agent ? (agent.settings.appearance ?? defaultAppearance(agent.handle)) : defaultAppearance(slug(name) || "new-agent");
+  const hero =
+    screen === "agent" || screen === "harness" || screen === "hello" ? (
+      <div className="flex items-center gap-3">
+        <Ghost look={look} size={72} trackPointer wave={screen === "hello" && !!state?.firstReply} label={agent ? `${agent.name}, your agent` : "Your new agent, looking toward your pointer"} />
+        <div className="min-w-0">
+          <div className="font-display text-lg font-semibold truncate">{agent?.name ?? (name.trim() || "Your agent")}</div>
+          <div className="text-sm text-muted truncate">{agent ? `@${agent.handle}` : slug(name) ? `@${slug(name)}` : "It gets a name in a moment"}</div>
+        </div>
+      </div>
+    ) : null;
+
+  // your answers so far, as replies under what the guide asked
+  const at = screen === "done" ? STEPS.length : screen ? STEPS.indexOf(screen) : 0;
+  const answers: Record<StepId, string | null> = {
+    device: device?.online ? device.name : null,
+    role: device?.role ? ROLE_TEXT[device.role] : null,
+    agent: agent ? `${agent.name} (@${agent.handle})` : null,
+    harness: agent ? harnessLabel(agent.harness) : null,
+    hello: state?.firstReply ? "Sent it a first task" : null,
+  };
+  const history = STEPS.slice(0, at).filter((s) => done[s] && answers[s]);
+  const first = me.user.preferredName || me.user.name.split(" ")[0];
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-panel" data-testid="setup">
+    <div className="fixed inset-0 z-40 flex flex-col bg-app" data-testid="setup">
       <header className="shrink-0 safe-top">
         <div className="h-14 px-4 md:px-6 flex items-center gap-3">
-          <span className="text-sm font-medium text-muted truncate">Set up {me.workspace.name}</span>
+          <GhostMark size={17} className="shrink-0 text-accent-text mark-glow" />
+          <span className="font-display text-[15px] font-semibold truncate">Setting up {me.workspace.name}</span>
+          {screen && <Progress current={screen} done={done} onJump={show} />}
           <button onClick={() => leave()} className="ml-auto text-sm text-muted hover:text-ink">
             {screen === "done" ? "Close" : "Skip setup"}
           </button>
         </div>
       </header>
-      <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-        <div className="mx-auto my-auto w-[560px] max-w-full shrink-0 px-6 sm:px-10 pt-6 pb-12">
-          {screen && <Stepper current={screen} done={done} onJump={show} />}
+      <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto w-[640px] max-w-full px-4 sm:px-6 pt-6 pb-16 space-y-6">
+          <GuideSays>
+            <p>
+              Hi {first}! I'll help you get {me.workspace.name} ready: a device for your agents, your first agent, and something for it to do.
+            </p>
+          </GuideSays>
+          {history.map((s) => (
+            <div key={s} className="space-y-2">
+              <GuideSays quiet>{ASKED[s]}</GuideSays>
+              <YouSaid onChange={() => show(s)}>{answers[s]}</YouSaid>
+            </div>
+          ))}
           {error && (
-            <div role="alert" className="mb-6 rounded-xl border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">
+            <div role="alert" className="rounded-xl border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">
               {error}
             </div>
           )}
-          {/* one ghost across the agent screens, so moving between them doesn't replay it */}
-          {hero && (
-            <div className="mb-6 flex flex-col items-center gap-1">
-              <Ghost look={look} size={132} trackPointer wave={screen === "hello" && !!state?.firstReply} label={agent ? `${agent.name}, your agent` : "Your new agent, looking toward your pointer"} />
-              <div className="h-5 text-sm font-medium text-muted">{agent ? `@${agent.handle}` : slug(name) ? `@${slug(name)}` : ""}</div>
-            </div>
-          )}
           {!screen || !devices ? (
-            <div className="py-24 grid place-items-center text-muted" role="status">
-              <Loader2 className="animate-spin" />
-            </div>
+            <GuideSays>
+              <Loader2 size={16} className="animate-spin text-muted" />
+            </GuideSays>
           ) : (
-            <div key={screen} className="wizard-in">
-              {screen === "device" && (
-                <DeviceScreen
-                  usable={usable}
-                  device={device}
-                  onPick={setDeviceId}
-                  onNext={(id) => {
-                    setDeviceId(id);
-                    refresh();
-                    next("device");
-                  }}
-                />
-              )}
-              {screen === "role" && (device ? <RoleScreen device={device} onBack={() => back("role")} onNext={() => (refresh(), next("role"))} /> : <NoDevice onBack={() => back("role")} />)}
-              {screen === "agent" && (
-                <AgentScreen
-                  usable={usable}
-                  device={device}
-                  agent={agent}
-                  name={name}
-                  setName={setName}
-                  onBack={() => back("agent")}
-                  onNext={() => next("agent")}
-                  onFresh={() => {
-                    setAgentId(null);
-                    setFresh(true);
-                  }}
-                  onBrought={(a) => {
-                    setAgentId(a.id);
-                    refresh();
-                    show("hello");
-                  }}
-                />
-              )}
-              {screen === "harness" &&
-                (device ? (
-                  <HarnessScreen
+            <HeroContext.Provider value={hero}>
+              <div ref={current} key={screen} className="setup-turn wizard-in">
+                {screen === "device" && (
+                  <DeviceScreen
+                    usable={usable}
                     device={device}
-                    name={name.trim()}
+                    onPick={setDeviceId}
+                    onNext={(id) => {
+                      setDeviceId(id);
+                      refresh();
+                      next("device");
+                    }}
+                  />
+                )}
+                {screen === "role" && (device ? <RoleScreen device={device} onBack={() => back("role")} onNext={() => (refresh(), next("role"))} /> : <NoDevice onBack={() => back("role")} />)}
+                {screen === "agent" && (
+                  <AgentScreen
+                    usable={usable}
+                    device={device}
                     agent={agent}
-                    onCreated={(a) => {
+                    name={name}
+                    setName={setName}
+                    onBack={() => back("agent")}
+                    onNext={() => next("agent")}
+                    onFresh={() => {
+                      setAgentId(null);
+                      setFresh(true);
+                    }}
+                    onBrought={(a) => {
                       setAgentId(a.id);
                       refresh();
+                      show("hello");
                     }}
-                    onBack={() => back("harness")}
-                    onNext={() => next("harness")}
                   />
-                ) : (
-                  <NoDevice onBack={() => back("harness")} />
-                ))}
-              {screen === "hello" && <HelloScreen state={state} agent={agent} onBack={() => back("hello")} onFinish={leave} />}
-              {screen === "done" && <DoneScreen state={state} onFinish={() => leave()} />}
-            </div>
+                )}
+                {screen === "harness" &&
+                  (device ? (
+                    <HarnessScreen
+                      device={device}
+                      name={name.trim()}
+                      agent={agent}
+                      onCreated={(a) => {
+                        setAgentId(a.id);
+                        refresh();
+                      }}
+                      onBack={() => back("harness")}
+                      onNext={() => next("harness")}
+                    />
+                  ) : (
+                    <NoDevice onBack={() => back("harness")} />
+                  ))}
+                {screen === "hello" && <HelloScreen state={state} agent={agent} onBack={() => back("hello")} onFinish={leave} />}
+                {screen === "done" && <DoneScreen state={state} onFinish={() => leave()} />}
+              </div>
+            </HeroContext.Provider>
           )}
         </div>
       </div>
@@ -161,45 +207,71 @@ function pickDevice(ds: DeviceInfo[]): DeviceInfo | undefined {
   return ds.find((d) => d.online && d.mine && d.role) ?? ds.find((d) => d.online && d.mine) ?? ds.find((d) => d.online) ?? ds[0];
 }
 
-// --- the frame ------------------------------------------------------------------------------------
+// --- the conversation -------------------------------------------------------------------------------
 
-/** Paperclip's progress strip: one segment per step, filled up to here. Finished ones take you back. */
-function Stepper({ current, done, onJump }: { current: Screen; done: Record<StepId, boolean>; onJump: (s: StepId) => void }) {
+/** Five little ghosts, one per step: lit once done, bobbing on the current one. Lit ones take you back. */
+function Progress({ current, done, onJump }: { current: Screen; done: Record<StepId, boolean>; onJump: (s: StepId) => void }) {
   const at = current === "done" ? STEPS.length : STEPS.indexOf(current);
   return (
-    <nav aria-label="Setup steps" className="mb-10">
-      <div className="mb-2.5 text-xs text-muted">{current === "done" ? "All set" : `Step ${at + 1} of ${STEPS.length} · ${LABELS[current]}`}</div>
-      <ol className="flex gap-1.5">
-        {STEPS.map((s, i) => {
-          // you can go back anywhere, and forward to a step whose earlier ones are done
-          const reachable = i !== at && STEPS.slice(0, i).every((p) => done[p]);
-          return (
-            <li key={s} className="flex-1">
-              <button
-                type="button"
-                disabled={!reachable}
-                onClick={() => onJump(s)}
-                aria-label={`${LABELS[s]}, step ${i + 1} of ${STEPS.length}${done[s] ? ", done" : ""}`}
-                aria-current={i === at ? "step" : undefined}
-                title={LABELS[s]}
-                className={cx("block h-1.5 w-full rounded-full transition-colors disabled:cursor-default", i <= at ? "bg-accent" : done[s] ? "bg-accent/35" : "bg-chip", reachable && "hover:opacity-75")}
-              />
-            </li>
-          );
-        })}
-      </ol>
+    <nav aria-label="Setup steps" className="hidden sm:flex items-center gap-1 ml-3">
+      {STEPS.map((s, i) => {
+        // you can go back anywhere, and forward to a step whose earlier ones are done
+        const reachable = i !== at && STEPS.slice(0, i).every((p) => done[p]);
+        return (
+          <button
+            key={s}
+            type="button"
+            disabled={!reachable}
+            onClick={() => onJump(s)}
+            aria-label={`${LABELS[s]}, step ${i + 1} of ${STEPS.length}${done[s] ? ", done" : ""}`}
+            aria-current={i === at ? "step" : undefined}
+            title={LABELS[s]}
+            className={cx("p-1 rounded-md disabled:cursor-default", reachable && "hover:bg-hover", i === at ? "text-accent-text" : done[s] ? "text-accent-text/70" : "text-faint/60")}
+          >
+            <GhostMark size={13} className={cx(i === at && "loader-float", (i === at || done[s]) && "mark-glow")} />
+          </button>
+        );
+      })}
     </nav>
   );
 }
 
-/** The big centered question, and a line under it. */
-function Heading({ title, children }: { title: ReactNode; children?: ReactNode }) {
+/** The guide ghost saying something. `quiet`: an earlier question, smaller. */
+function GuideSays({ children, quiet }: { children: ReactNode; quiet?: boolean }) {
   return (
-    <div className="mb-9 text-center">
-      <h1 tabIndex={-1} className="text-[26px] leading-tight font-semibold tracking-tight text-balance outline-none">
-        {title}
-      </h1>
-      {children && <p className="mt-2 text-base leading-relaxed text-muted text-balance">{children}</p>}
+    <div className="flex items-start gap-3">
+      <div className={cx("shrink-0", quiet ? "w-10 flex justify-center pt-0.5" : "")}>
+        {quiet ? <GhostMark size={14} className="text-faint" /> : <Ghost look={GUIDE} size={40} label="Warren's guide" />}
+      </div>
+      <div className={cx("min-w-0", quiet ? "text-sm text-muted pt-0.5" : "rounded-2xl rounded-tl-md bg-panel px-4 py-3 text-[15px] leading-relaxed shadow-[var(--sheet-shadow)]")}>{children}</div>
+    </div>
+  );
+}
+
+/** Your answer to an earlier question, on the right; pick it to change it. */
+function YouSaid({ children, onChange }: { children: ReactNode; onChange: () => void }) {
+  return (
+    <div className="flex justify-end">
+      <button onClick={onChange} title="Change this" className="group max-w-[80%] rounded-2xl rounded-tr-md bg-accent-soft px-4 py-2 text-[15px] text-ink text-left hover:bg-accent/15">
+        {children}
+        <span className="ml-2 text-xs text-muted opacity-0 group-hover:opacity-100">Change</span>
+      </button>
+    </div>
+  );
+}
+
+/** What the guide asks now, and a line more about it; the agent being made appears under it. */
+function Heading({ title, children }: { title: ReactNode; children?: ReactNode }) {
+  const hero = useContext(HeroContext);
+  return (
+    <div className="mb-5 space-y-4">
+      <GuideSays>
+        <h1 tabIndex={-1} className="font-display text-xl leading-snug font-semibold tracking-tight text-balance outline-none">
+          {title}
+        </h1>
+        {children && <p className="mt-1 text-muted">{children}</p>}
+      </GuideSays>
+      {hero && <div className="sm:pl-[52px]">{hero}</div>}
     </div>
   );
 }
@@ -207,7 +279,7 @@ function Heading({ title, children }: { title: ReactNode; children?: ReactNode }
 /** Back on the left, the one thing to do next on the right. */
 function Footer({ onBack, label, onNext, disabled, busy, waiting, extra }: { onBack?: () => void; label: string; onNext: () => void; disabled?: boolean; busy?: boolean; waiting?: boolean; extra?: ReactNode }) {
   return (
-    <div className="mt-10 flex items-center gap-3">
+    <div className="mt-6 flex items-center gap-3">
       {onBack && (
         <Button variant="ghost" onClick={onBack} className="-ml-3">
           <ArrowLeft size={16} /> Back
@@ -260,7 +332,7 @@ function Status({ ok, children }: { ok: boolean | null; children: ReactNode }) {
 function Command({ label, text, children }: { label?: string; text: string; children?: ReactNode }) {
   return (
     <div className="space-y-1.5">
-      {label && <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>}
+      {label && <div className="text-xs font-semibold text-muted">{label}</div>}
       <CopyBlock text={text} />
       {children && <p className="text-xs text-muted">{children}</p>}
     </div>
@@ -300,8 +372,8 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
     const live = usable.find((d) => d.id === created.id && d.online);
     return (
       <>
-        <Heading title={`Connect ${created.name}`}>
-          On {created.name}, open a terminal in the Warren folder and run these. It needs Node 22 or newer.
+        <Heading title={`Now connect ${created.name}`}>
+          On {created.name}, open a terminal in the Warren folder and run these (it needs Node 22 or newer). I'll notice when it connects.
         </Heading>
         <div className="space-y-5">
           <Command label="1 · Install the warren command, once" text="npm install && npm link">
@@ -536,7 +608,7 @@ function AgentScreen({
   if (agent)
     return (
       <>
-        <Heading title={`Meet ${agent.name}`}>
+        <Heading title={`You already have ${agent.name}`}>
           {harnessLabel(agent.harness)}
           {agent.nodeId ? ` on ${usable.find((d) => d.id === agent.nodeId)?.name ?? "a device"}` : ""}. It wakes up when you @mention it.
         </Heading>
@@ -562,7 +634,7 @@ function AgentScreen({
 
   return (
     <>
-      <Heading title={agents.length ? "Create an agent" : "Create your first agent"} />
+      <Heading title={agents.length ? "Want another agent? What's its name?" : "Now, your first agent. What should we call it?"} />
       <label className="block space-y-2">
         <span className="text-sm font-medium">Agent name</span>
         <input
@@ -681,7 +753,7 @@ function HarnessScreen({ device, name, agent, onCreated, onBack, onNext }: { dev
 
   return (
     <>
-      <Heading title={`Pick ${name}'s harness`}>The agent program it runs, with your own subscription.</Heading>
+      <Heading title={`Which harness should ${name} run?`}>The agent program it runs, with your own subscription.</Heading>
       <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Harness">
         {shown.map((id) => (
           <button
@@ -783,7 +855,7 @@ function SignIn({ agent, device, onBack, onNext }: { agent: Agent; device: Devic
   if (!inVm || !computer)
     return (
       <>
-        <Heading title={`${agent.name} is in`}>
+        <Heading title={`${agent.name} is set up`}>
           {label} runs on {device.name} and uses its sign-in there.
         </Heading>
         {login && (
@@ -886,7 +958,7 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
   if (!agent)
     return (
       <>
-        <Heading title="Let's get started">Add an agent first, then come back here.</Heading>
+        <Heading title="First, an agent">Add one in the step before, then come back here.</Heading>
         <Footer onBack={onBack} label="Send" disabled onNext={() => {}} />
       </>
     );
@@ -908,7 +980,7 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
 
   return (
     <>
-      <Heading title="Let's get started">{agent.name} is ready to work. {computer ? "Ask for something on the web and watch it happen." : "Say hello and give it something to do."}</Heading>
+      <Heading title={`${agent.name} is ready. What should it do first?`}>{computer ? "Ask for something on the web and watch it happen." : "Say hello and give it something to do."}</Heading>
       {computer?.kind === "device" && <Lend computer={computer} agent={agent} />}
       {!sentAt ? (
         <label className="block space-y-2">
@@ -985,7 +1057,7 @@ function DoneScreen({ state, onFinish }: { state: OnboardingState | null; onFini
   const me = useStore((s) => s.me)!;
   return (
     <>
-      <Heading title={`${me.workspace.name} is ready`}>Your agents talk to you and to each other, hand work across devices, and build up memory you can read and edit.</Heading>
+      <Heading title={`All set! ${me.workspace.name} is ready.`}>Your agents talk to you and to each other, hand work across devices, and build up memory you can read and edit.</Heading>
       <div className="grid sm:grid-cols-2 gap-3">
         <Tip icon={<Bot size={17} />} title="Add more agents" onClick={() => go({ view: "agents", agentId: null })}>
           Give each one a job. They @mention each other and hand off tasks.

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Check } from "lucide-react";
+import { Check } from "../../icons.tsx";
 import { cx } from "../../components/ui.tsx";
 
 /** The top of a settings page: its name and what it's for. */
