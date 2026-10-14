@@ -179,6 +179,23 @@ CREATE TABLE IF NOT EXISTS agent_skills (
   skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
   PRIMARY KEY (agent_id, skill_id)
 );
+CREATE TABLE IF NOT EXISTS background (
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL DEFAULT 1, every_minutes INTEGER NOT NULL DEFAULT 60,
+  quiet_start TEXT NOT NULL DEFAULT '22:00', quiet_end TEXT NOT NULL DEFAULT '07:00',
+  next_at TEXT, next_reason TEXT NOT NULL DEFAULT '', last_at TEXT, last_note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+  PRIMARY KEY (agent_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS followups (
+  id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, user_id TEXT,
+  due_at TEXT NOT NULL, note TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','cancelled')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS followups_due ON followups(status, due_at);
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  keys_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
 `;
 
 /** Columns added after a table first shipped. CREATE TABLE IF NOT EXISTS won't add them to existing databases. */
@@ -210,6 +227,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["users", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["discussions", "requested_by", "TEXT"],
   ["tasks", "parent_id", "TEXT"],
+  ["runs", "kind", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {

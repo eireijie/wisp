@@ -4,6 +4,8 @@ import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
 import { Routines } from "./routines.ts";
+import { BACKGROUND_THREAD, Background } from "./background.ts";
+import { Push } from "./push.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
@@ -49,6 +51,8 @@ export class Hub {
   readonly discussions: Discussions;
   readonly computers: Computers;
   readonly routines: Routines;
+  readonly background: Background;
+  readonly push: Push;
   readonly updates: Updates;
   readonly connectors: ConnectorStore;
   readonly skills: SkillStore;
@@ -66,6 +70,8 @@ export class Hub {
     this.discussions = new Discussions(this);
     this.computers = new Computers(this);
     this.routines = new Routines(this);
+    this.background = new Background(this);
+    this.push = new Push(this);
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
@@ -95,6 +101,7 @@ export class Hub {
     this.closed = true;
     this.computers.shutdown();
     this.routines.stop();
+    this.background.stop();
     for (const c of this.clients) c.socket.terminate();
     for (const n of this.nodes.values()) n.socket.terminate();
     this.clients.clear();
@@ -263,7 +270,8 @@ export class Hub {
         const live = this.live.get(run.id) ?? { parts: [], text: "" };
         collect(live, msg.event);
         this.live.set(run.id, live);
-        this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, event: msg.event });
+        // a background check works quietly: nothing shows in the DM unless it messages the person
+        if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, event: msg.event });
         return;
       }
       case "run_done":
@@ -278,7 +286,10 @@ export class Hub {
         // the channel may have been deleted while the agent worked; then there's nowhere to reply
         const gone = !store.channel(run.channelId);
         let body = "";
-        if (msg.type === "run_done") {
+        if (run.kind === "background") {
+          store.setRunStatus(run.id, msg.type === "run_done" ? "done" : "failed", msg.type === "run_failed" ? msg.error : undefined);
+          this.background.finished(run, msg.type === "run_done" ? msg.finalText.trim() || live.text.trim() : `The check failed: ${msg.error}`);
+        } else if (msg.type === "run_done") {
           store.setRunStatus(run.id, "done");
           body = msg.finalText.trim() || live.text.trim();
           if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
@@ -325,6 +336,7 @@ export class Hub {
     if (!channel) throw new Error("channel not found");
     const msg = this.store.insertMessage(m);
     this.broadcast(channel.workspaceId, { type: "message", message: msg });
+    this.push.onMessage(msg, channel, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     return msg;
   }
@@ -396,9 +408,9 @@ export class Hub {
     this.store.setRunStatus(run.id, "running");
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
     // like a teammate saying "on it": the agent marks the message it picked up
-    this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
+    if (run.kind !== "background") this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
-    this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } });
+    if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } });
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
       (prompt) => {
         // looked up after the prompt so a task handed out in this same tick is linked to its thread by now
@@ -416,7 +428,7 @@ export class Hub {
         const connectors = this.connectors.specsFor(agent.id);
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
         });
       },
       (err) => this.store.setRunStatus(run.id, "failed", (err as Error).message),
@@ -529,6 +541,14 @@ export class Hub {
     return lines.join("\n");
   }
 
+  /** A message as an agent reads it in its history; an approval card shows the draft it was about and the answer. */
+  historyLine(m: Message): string {
+    const part = m.parts.find((p) => p.type === "approval");
+    const a = part && part.type === "approval" ? this.store.approval(part.approvalId) : undefined;
+    if (!a) return m.body;
+    return `${m.body}${a.details ? `\n${a.details}` : ""}\n(${a.status === "pending" ? "not answered yet" : a.status}${a.note ? `: ${a.note}` : ""})`;
+  }
+
   handleOf(agentId: string): string {
     return `@${this.store.agent(agentId)?.handle ?? "unknown"}`;
   }
@@ -554,20 +574,29 @@ export class Hub {
    * where it is, the recent conversation, and the new message. Sent fresh every run so
    * edits to the soul or instructions apply to ongoing conversations too.
    */
-  async buildPrompt(agentId: string, channelId: string, threadId: string | null, triggerId: string, run?: { discussionId: string | null; phase: string | null }): Promise<string> {
+  async buildPrompt(
+    agentId: string,
+    channelId: string,
+    threadId: string | null,
+    triggerId: string,
+    run?: { id?: string; discussionId: string | null; phase: string | null; kind?: "background" | null; requestedBy?: string | null },
+  ): Promise<string> {
     const { store } = this;
     const agent = store.agent(agentId)!;
     const channel = store.channel(channelId)!;
+    // a background check has no message that woke it; it gets its own section instead
+    const background = run?.kind === "background" && run.id ? this.background.promptSection({ id: run.id, agentId, channelId, requestedBy: run.requestedBy ?? null }) : "";
     // a discussion thread is the whole conversation, so agents see all of it
-    const history = store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
-    const discussion = run ? this.discussions.promptSection(run) : "";
-    const trigger = store.message(triggerId)!;
+    const history = background ? [] : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
+    const discussion = run && !background ? this.discussions.promptSection(run) : "";
+    const trigger = store.message(triggerId) ?? { body: "", parts: [], author: { kind: "user" as const, id: "system" } };
     const others = store
       .agents(agent.workspaceId)
       .filter((a) => a.id !== agent.id)
       .map((a) => `@${a.handle} (${a.name}, ${a.harness}${a.settings.role?.trim() ? `, ${a.settings.role.trim()}` : ""})`);
     const where = channel.kind === "dm" ? "a direct message" : `#${channel.name}${threadId ? " (in a thread)" : ""}`;
-    const person = this.memory.personFor(agent.workspaceId, channelId, threadId, triggerId);
+    const forUser = background && run?.requestedBy ? store.user(run.requestedBy) : undefined;
+    const person = forUser ? { id: forUser.id, name: forUser.name } : this.memory.personFor(agent.workspaceId, channelId, threadId, triggerId);
     // the person's own clock, so "tomorrow morning" means theirs
     const user = person ? store.user(person.id) : undefined;
     const tz = user?.timezone ?? null;
@@ -593,20 +622,22 @@ export class Hub {
       dispatch ? `\n${dispatch}` : "",
       memory ? `\n${memory}` : "",
       `\n## Where you are`,
-      `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
+      background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available.`,
-      `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
+      background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
+      background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
       localTime,
       this.computerSection(agent.id),
       skills ? `\n${skills}` : "",
       connectors ? `\n${connectors}` : "",
       routines ? `\n${routines}` : "",
       discussion ? `\n${discussion}` : "",
-      history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${m.body}`).join("\n")}` : "",
-      `\nNew message from ${this.displayName(trigger.author)}:\n${trigger.body}`,
+      background,
+      history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
+      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${trigger.body}`,
     ]
       .filter(Boolean)
       .join("\n");

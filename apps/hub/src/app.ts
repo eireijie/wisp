@@ -25,6 +25,7 @@ export async function buildHub(opts: HubOptions) {
   const hub = new Hub(new Store(db), vault);
   await hub.ensureTeams();
   hub.routines.start();
+  hub.background.start();
 
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
   await app.register(websocket);

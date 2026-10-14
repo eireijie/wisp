@@ -279,6 +279,65 @@ export async function createWarrenMcp(client: WarrenClient) {
   const computer = await client.myComputer().catch(() => null);
   if (computer) registerComputerTools(server, client, computer, safe);
 
+  // --- reaching the person, and coming back to things -------------------------------------------
+
+  server.registerTool(
+    "message_person",
+    {
+      description:
+        "Write to the person you work for, first, in your DM with them: it reaches their phone. Use it when something needs them (a deadline, an email they missed, a reply that arrived, a finished task), not to say you checked. Keep it short and specific; do the work first (a draft, the answer) and include it. For anything you'd send, buy or delete for them, use approval_request instead.",
+      inputSchema: { text: z.string(), file_ids: z.array(z.string()).optional() },
+    },
+    safe(async ({ text: t, file_ids }) => {
+      await client.messagePerson(t, file_ids ?? []);
+      return text("Sent.");
+    }),
+  );
+
+  server.registerTool(
+    "next_check",
+    {
+      description:
+        "When you're working in the background: say when to look again (10 minutes to 24 hours) and why. Soon while something is moving (waiting on a reply, a deadline today); a few hours when it's calm. Call it at the end of every background check.",
+      inputSchema: { minutes: z.number().describe("minutes from now"), reason: z.string().describe("why then, in a few words") },
+    },
+    safe(async ({ minutes, reason }) => {
+      const r = await client.nextCheck(minutes, reason);
+      return text(r.on ? `Next check in ${r.minutes} minutes (${new Date(r.nextAt).toISOString()}).` : `Noted, but background checks are off for this person; use followup_set for a specific time.`);
+    }),
+  );
+
+  server.registerTool(
+    "followup_set",
+    {
+      description:
+        "Come back to something at a set time, even if background checks are off: you'll be woken then with this note (e.g. '8am tomorrow: remind them the essay is due at noon'). Give `at` as local time on the person's clock, 'YYYY-MM-DD HH:MM', or `in_minutes`.",
+      inputSchema: { at: z.string().optional(), in_minutes: z.number().optional(), note: z.string().describe("what to do then, written to your future self") },
+    },
+    safe(async ({ at, in_minutes, note }) => {
+      const f = await client.setFollowup({ at, inMinutes: in_minutes, note });
+      return text(`Set (${f.id}) for ${new Date(f.dueAt).toLocaleString("en-US", { timeZone: f.timezone, dateStyle: "medium", timeStyle: "short" })} ${f.timezone}.`);
+    }),
+  );
+
+  server.registerTool(
+    "followup_list",
+    { description: "Follow-ups you've set that haven't happened yet.", inputSchema: {} },
+    safe(async () => {
+      const list = await client.followups();
+      return text(list.map((f) => `${f.id} ${f.dueAt}: ${f.note}`).join("\n") || "None.");
+    }),
+  );
+
+  server.registerTool(
+    "followup_cancel",
+    { description: "Cancel a follow-up that's no longer needed.", inputSchema: { followup_id: z.string() } },
+    safe(async ({ followup_id }) => {
+      await client.cancelFollowup(followup_id);
+      return text("Cancelled.");
+    }),
+  );
+
   // --- approvals & routines ---------------------------------------------------------
 
   server.registerTool(
