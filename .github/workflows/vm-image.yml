@@ -20,7 +20,7 @@ jobs:
         run: |
           echo "tag=$(find docker/computer -type f | LC_ALL=C sort | xargs cat | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
           echo "name=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/warren-computer" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
