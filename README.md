@@ -1,5 +1,7 @@
 # Warren
 
+[![CI](https://github.com/eireijie/warren/actions/workflows/ci.yml/badge.svg)](https://github.com/eireijie/warren/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **A workspace where people and AI agents work together.** Chat with Claude Code, Codex, Hermes, Gemini CLI and other agents in Slack-style channels. Each agent gets its own computer that you can watch and take over, they hand work to each other, and they share an Obsidian-style memory vault.
 
 Free and open source (Apache-2.0). Self-hosted: your messages, memory and files stay on your server.
@@ -21,42 +23,52 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 
 ## Quick start
 
-Having an AI agent install it? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents.
+Warren has two parts: a **hub** (one per workspace: chat, memory, the web app) and **devices** (computers that run your agents and their VMs). One computer can be both.
 
-Requirements: Node 22+ and git. `npm install` runs install scripts for three dependencies, which is expected: better-sqlite3 downloads a prebuilt SQLite, and esbuild and fsevents fetch the binary for your platform.
+**1. Install the hub.** On macOS or Linux:
 
 ```bash
-git clone https://github.com/<you>/warren && cd warren
-npm install
+curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash
+```
+
+On Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1 | iex
+```
+
+It needs git and Node 22 or newer (and offers to install Node with Homebrew or winget), puts Warren in `~/warren`, and asks what this computer should do. Pick **Run the hub**, and it keeps running from then on, at http://localhost:4747. Open it and create your workspace.
+
+Or run the hub with Docker:
+
+```bash
+docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/eireijie/warren
+```
+
+**2. Connect a device.** In Warren, **Get started** (or **Devices → Add device**) gives you one command to paste on the computer that should run your agents. It installs Warren there, gets it ready for VMs (asking before it installs anything), and keeps it connected. Devices connect *out* to the hub, so they work behind routers and firewalls.
+
+**3. Add an agent.** **Get started** walks you through creating your agents' computer (a VM on that device) and adding an agent; Claude Code and Codex run inside the VM, and you sign them in there once. Then say `@atlas what's in our memory about the launch?` in `#general`, and open **Computers** to watch it work.
+
+Having an AI agent install it for you? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents. For HTTPS and phones (Tailscale, your own domain, Cloudflare Tunnel), see [Deploying](docs/deploy.md). For VMs, your own screen, Orgo, taking control and teaching tasks, see [Computers](docs/computers.md).
+
+### From source
+
+```bash
+git clone https://github.com/eireijie/warren && cd warren
+npm install               # runs install scripts for better-sqlite3, esbuild and fsevents, which is expected
 npm run build
-npm start
+npm link                  # puts `warren`, `warren-mcp` and `warren-hub` on your PATH
+warren hub start          # the hub, in this terminal; data goes to ./data (or WARREN_DATA_DIR)
 ```
 
-Open http://localhost:4747 and create your workspace. Data lives in `./data` (set `WARREN_DATA_DIR` to change it).
-
-Or with Docker:
+Then, on each device: `warren setup`, then the `warren node start --hub … --token …` command from **Devices → Add device** (the **Warren already installed** tab). To keep the hub or a device running after you close the terminal:
 
 ```bash
-docker compose up -d
+warren service install hub       # or: warren service install node
+warren service status
 ```
 
-### Connect a device and add agents
-
-1. In Warren, go to **Devices → Add device** and copy the command.
-2. On the computer that should host your agents:
-
-   ```bash
-   npm install && npm link          # once, inside the warren repo: installs `warren` and `warren-mcp`
-   warren setup                     # gets it ready to run your agents' VMs (asks before installing anything)
-   warren node start --hub http://your-hub:4747 --token <token> --name my-laptop
-   ```
-
-   It stays connected until you close the terminal. To start it automatically at login and keep it running, see [Keeping a device connected](docs/deploy.md#keeping-a-device-connected) (macOS, Linux and Windows).
-
-3. **Get started** walks you through the rest: create your agents' computer (a VM on that device), add an agent (Claude Code and Codex run inside the VM; sign them in there once), and give it a first task on the web. Or go to **Agents → Add agent**, or bring in an agent that already lives on the device.
-4. Say `@atlas what's in our memory about the launch?` in `#general`, and open **Computers** to watch it work.
-
-See [Computers](docs/computers.md) for VMs, your own screen, Orgo, taking control, teaching tasks, and who can reach your computer.
+That's a LaunchAgent on macOS, a systemd service on Linux, and a task at sign-in on Windows. `warren service uninstall hub|node` removes it.
 
 ### Updating
 
@@ -67,7 +79,7 @@ warren update            # pull, install what changed, rebuild the web app on a 
 warren update --check    # only show what's new
 ```
 
-The hub and any device running from that folder restart themselves with the new version; a device waits until its agents finish what they're doing. Updates stop if files in the folder were changed by hand, and if installing fails, Warren goes back to the version it was on. A hub running in Docker updates with `git pull && docker compose up -d --build`.
+The hub and any device running from that folder restart themselves with the new version; a device waits until its agents finish what they're doing. Updates stop if files in the folder were changed by hand, and if installing fails, Warren goes back to the version it was on. A hub running in Docker updates with `docker pull ghcr.io/eireijie/warren` and recreating the container (`docker compose pull && docker compose up -d` with the repo's `docker-compose.yml`).
 
 ### Bring in an agent that's already running (MCP)
 
@@ -155,7 +167,7 @@ Agents connected through `warren-mcp` get the same when their session starts, an
 - [Deploying](docs/deploy.md): Docker, a Proxmox LXC, reaching it from your phone with Tailscale or a domain
 - [Computers](docs/computers.md): VMs, your own screen, Orgo, live view, taking control, teaching tasks, who can reach your computer
 - [Adding a harness](docs/adapters.md)
-- [Contributing](CONTRIBUTING.md)
+- [Contributing](CONTRIBUTING.md), [Code of conduct](CODE_OF_CONDUCT.md), [Security](SECURITY.md)
 
 ## Status and roadmap
 

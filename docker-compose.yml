@@ -1,7 +1,9 @@
+# The Warren hub. `docker compose up -d` pulls the published image; in a checkout of the repo,
+# `docker compose up -d --build` builds it from source instead. Update with `docker compose pull && docker compose up -d`.
 services:
   warren:
+    image: ghcr.io/eireijie/warren:latest
     build: .
-    image: warren-hub
     restart: unless-stopped
     ports:
       - "4747:4747"

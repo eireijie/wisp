@@ -1,8 +1,10 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
+import { REPO_ROOT } from "@warren/update";
 import { Vault } from "@warren/vault";
 import { registerApi } from "./api.ts";
 import { openDb } from "./db.ts";
@@ -27,6 +29,7 @@ export async function buildHub(opts: HubOptions) {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
   await app.register(websocket);
   app.get("/healthz", async () => ({ ok: true }));
+  registerInstallers(app);
   registerApi(app, hub, { filesDir: path.join(opts.dataDir, "files"), dataDir: path.resolve(opts.dataDir) });
 
   if (opts.webDir && fs.existsSync(opts.webDir)) {
@@ -50,4 +53,27 @@ export async function buildHub(opts: HubOptions) {
   app.addHook("preClose", async () => hub.shutdown());
   app.addHook("onClose", async () => db.close());
   return { app, hub };
+}
+
+/**
+ * The installers from the repo, served by the hub so Devices → Add device can give a one-line
+ * command. They clone from wherever this hub's copy came from, when that's a public https URL.
+ */
+function registerInstallers(app: FastifyInstance) {
+  let origin = "";
+  try {
+    origin = execFileSync("git", ["remote", "get-url", "origin"], { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {}
+  const repo = /^https:\/\/[^@\s]+$/.test(origin) ? origin : "";
+  for (const [file, type, pattern] of [
+    ["install.sh", "text/x-shellscript", /^WARREN_REPO="\$\{WARREN_REPO:-[^}]*\}"$/m],
+    ["install.ps1", "text/plain", /^\$Repo = .*$/m],
+  ] as const) {
+    app.get(`/${file}`, async (_req, reply) => {
+      let text = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
+      if (repo)
+        text = text.replace(pattern, file === "install.sh" ? `WARREN_REPO="\${WARREN_REPO:-${repo}}"` : `$Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "${repo}" }`);
+      return reply.type(`${type}; charset=utf-8`).header("cache-control", "no-cache").send(text);
+    });
+  }
 }

@@ -2,13 +2,25 @@
 
 Warren is one process (the hub) plus any number of devices that run agents. The hub is light: well under 1 GB of RAM. Agents are heavier, because each run starts a harness like Claude Code or Codex.
 
+## The installer
+
+On a personal computer or a small server, the installer is the quickest way. It clones Warren to `~/warren`, installs it, and keeps the hub running with the system's service manager:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash -s -- --hub-server
+```
+
+On Windows: `irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1 | iex`. The hub serves the same scripts at `/install.sh` and `/install.ps1`, which is what **Devices → Add device** uses.
+
 ## Docker
 
 ```bash
-docker compose up -d
+docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/eireijie/warren
 ```
 
-Data is stored in `./data`:
+Or, in a checkout, `docker compose up -d` (add `--build` to build the image from source).
+
+Data is stored in `/data` in the container (`./data` with the compose file):
 
 | Path | Contents |
 | --- | --- |
@@ -30,7 +42,7 @@ Hub LXC, either with Docker (enable `nesting=1` on the container) or directly wi
 ```bash
 apt-get update && apt-get install -y git curl
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs
-git clone https://github.com/<you>/warren /opt/warren && cd /opt/warren
+git clone https://github.com/eireijie/warren /opt/warren && cd /opt/warren
 npm ci && npm run build
 WARREN_DATA_DIR=/var/lib/warren npm start
 ```
@@ -58,7 +70,15 @@ systemctl enable --now warren
 
 ## Keeping a device connected
 
-`warren node start` stays connected and reconnects by itself when the hub restarts or the network drops, but it stops when you close its terminal or restart the computer. Run it once in a terminal with `--hub`, `--token` and `--name` (they're saved to `~/.warren/node.json`), then have the system start it from then on. Always run it as the person who signed in to the harnesses (`claude`, `codex`…), not as root.
+`warren node start` stays connected and reconnects by itself when the hub restarts or the network drops, but it stops when you close its terminal or restart the computer. To have the system start it from then on, run this from a terminal where your agent CLIs work, as the person who signed in to them (not root):
+
+```bash
+warren service install node --hub <hub URL> --token <token> --name <name>   # later runs: warren service install node
+warren service status
+warren service uninstall node
+```
+
+It writes and starts the service described below for your system, with that terminal's `PATH`, and waits until the device connects. `warren service install hub` does the same for a hub. The rest of this section is what it does, if you'd rather set it up yourself.
 
 ### macOS (LaunchAgent)
 
@@ -138,7 +158,7 @@ Every hub and device runs from a git checkout of Warren, so updating means getti
 
 The restart works the same under systemd, launchd, Task Scheduler or a plain terminal: `warren-hub` and `warren node start` run the real process as a child and start it again after an update, so the services above need no changes. The user that runs Warren needs to be able to write to the checkout and to `git pull` from where it was cloned (for a private repository, a read-only deploy key works).
 
-A hub in Docker can't update itself: run `git pull && docker compose up -d --build` where you cloned Warren.
+A hub in Docker can't update itself: pull the new image and recreate the container (`docker compose pull && docker compose up -d`, or `docker pull ghcr.io/eireijie/warren` and `docker run` again with the same volume).
 
 ## Reaching it from your phone
 

@@ -9,6 +9,17 @@ Warren has two parts:
 
 Every machine gets its own git checkout of Warren and runs it from there. Updates later are `warren update` or a button in the app.
 
+**The short way.** On a personal computer, the installer does steps 2–4 below for you. It doesn't use sudo and asks before installing anything:
+
+```bash
+# the hub, on macOS or Linux (Windows: irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1 | iex)
+curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash -s -- --hub-server
+# a device, with the token the person got from Devices → Add device
+curl -fsSL <hub URL>/install.sh | bash -s -- --hub <hub URL> --token <token> --name "<device name>"
+```
+
+It clones to `~/warren` (`--dir` to change it), installs dependencies, links `warren` into `~/.local/bin`, and runs `warren service install hub|node`, which starts it at login: a LaunchAgent on macOS, a systemd user service on Linux (or a system service when run as root), a task at sign-in on Windows. On a dedicated Linux server, follow the steps below instead so the hub runs as its own user.
+
 ## Ground rules
 
 - **Never ask for passwords, API keys or GitHub credentials in chat.** When something needs a sign-in (GitHub, Tailscale, a harness like Claude Code), start the browser flow and ask the person to approve it there.
@@ -51,7 +62,7 @@ Use `pvesh get /cluster/nextid` for a free ID, `pvesm status` for storage that a
 git clone https://github.com/eireijie/warren.git <folder>
 ```
 
-**If the repository is private:** a server should get a **read-only deploy key**, not someone's GitHub login.
+**If you're installing from a private fork:** a server should get a **read-only deploy key**, not someone's GitHub login.
 1. As the user that runs Warren, run `ssh-keygen -t ed25519 -N "" -f ~/.ssh/warren_deploy`.
 2. Point git at it: add `Host github.com` / `IdentityFile ~/.ssh/warren_deploy` / `IdentitiesOnly yes` to `~/.ssh/config`, and run `ssh-keyscan github.com >> ~/.ssh/known_hosts`.
 3. Add the public key to the repo. If `gh` is signed in somewhere with access, run `gh repo deploy-key add <file.pub> --repo eireijie/warren`. Otherwise show the person the key and the page to add it on (repository → Settings → Deploy keys, read-only).
@@ -105,14 +116,12 @@ You need the hub's URL and a device token from **Devices → Add device**.
 ```bash
 npm link                      # optional: puts `warren` on PATH; otherwise use `node bin/warren.mjs`
 warren setup                  # harnesses, a VM engine, and the VM image (asks before installing anything)
-warren node start --hub <hub URL> --token <token> --name "<device name>"
+warren service install node --hub <hub URL> --token <token> --name "<device name>"
 ```
 
-Wait for `connected to … as "<name>"`, then stop it. The hub, token and name are saved to `~/.warren/node.json`. If the hub runs on the same machine, `http://127.0.0.1:4747` works as the hub URL.
+The last command saves the hub, token and name to `~/.warren/node.json`, starts the device at login with the system's service manager, and waits until it says `Connected to … as "<name>"`. If the hub runs on the same machine, `http://127.0.0.1:4747` works as the hub URL. Run it from a terminal where the person's harnesses (`claude`, `codex`…) work: it saves that terminal's `PATH` for the service. `warren service status` shows whether it's running; the log is `~/.warren/node.log`. The manual steps are in [docs/deploy.md → Keeping a device connected](docs/deploy.md#keeping-a-device-connected). Two things go wrong most often:
 
-Keep it running with the system's service manager. The exact steps for macOS (LaunchAgent), Linux (systemd) and Windows (a scheduled task at sign-in, not a service) are in [docs/deploy.md → Keeping a device connected](docs/deploy.md#keeping-a-device-connected). Two things go wrong most often:
-
-- **macOS:** launchd starts programs with a minimal `PATH`, so write the person's `PATH` into the LaunchAgent, or `warren node` won't find `claude`, `codex` and the rest.
+- **New harness later:** run `warren service install node` again so its folder is on the saved `PATH`.
 - **Screen access:** a device's own screen is off by default. Only if the person wants to use it from Warren (and lend it to agents) do they run `warren node screen on`, and macOS then needs **Screen Recording** and **Accessibility** for whatever runs `warren node`. `warren doctor` prints exactly what to add. Tell the person; don't run it or change it yourself.
 
 **VMs:** agents work on VMs on the device, so `warren setup` matters. It asks before installing a VM engine: ask the person and pass their answer on (or run `warren setup --yes` once they've agreed). On a Mac with Apple silicon it installs Apple's `container` with Homebrew; on Linux it prints the commands for Docker or Podman, which need `sudo`, so leave those to the person. It then gets the VM image (a download, or a build of a few minutes). In the app, **Get started → Give your agents a computer** creates the first VM.
@@ -126,7 +135,7 @@ Keep it running with the system's service manager. The exact steps for macOS (La
 ## Starting over
 
 To remove Warren from a machine:
-1. Stop and remove its service (`systemctl disable --now warren warren-node`; `launchctl bootout gui/$(id -u)/ai.warren.node`; or `Unregister-ScheduledTask -TaskName "Warren node"`).
+1. Stop and remove its service: `warren service uninstall hub` and `warren service uninstall node` (or, for a service you wrote by hand, `systemctl disable --now warren warren-node`).
 2. Delete the checkout, and `~/.warren` on devices.
 3. On a hub, delete the data folder (`/var/lib/warren`) as well. **That deletes the workspace**, so only do it when the person asked for it.
 4. Delete a removed device in the app under **Devices**.

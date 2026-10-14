@@ -12,7 +12,7 @@ import { ComputerMini } from "./ComputersView.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
 import { Ghost } from "../components/Ghost.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
-import { AgentAvatar, Button, CopyBlock, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, DeviceInstall, cx } from "../components/ui.tsx";
 
 /**
  * First-run setup, laid out like Paperclip's: one question per screen on a plain page, a
@@ -300,16 +300,13 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
     const live = usable.find((d) => d.id === created.id && d.online);
     return (
       <>
-        <Heading title={`Connect ${created.name}`}>
-          On {created.name}, open a terminal in the Warren folder and run these. It needs Node 22 or newer.
-        </Heading>
+        <Heading title={`Connect ${created.name}`}>On {created.name}, run this once. It installs Warren if it isn't there yet and keeps the device connected.</Heading>
         <div className="space-y-5">
-          <Command label="1 · Install the warren command, once" text="npm install && npm link">
-            {onHub() && "If this is the computer running Warren, it's the same folder you started it from."}
-          </Command>
-          <Command label="2 · Connect it" text={`warren node start --hub ${location.origin} --token ${created.token} --name "${created.name}"`}>
-            The token is shown once and saved on the device, so next time it's just <code>warren node start</code>.
-          </Command>
+          <DeviceInstall token={created.token} name={created.name} />
+          <p className="text-xs text-muted">
+            The token is shown once and saved on the device.
+            {onHub() && " If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from."}
+          </p>
           <Status ok={!!live}>{live ? `${created.name} is connected` : `Waiting for ${created.name} to connect…`}</Status>
         </div>
         <Footer onBack={() => setCreated(null)} label={live ? "Continue" : "Waiting"} waiting={!live} disabled={!live} onNext={() => onNext(created.id)} />
