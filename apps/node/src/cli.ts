@@ -10,12 +10,22 @@ import { deviceAdapters } from "@warren/adapters";
 import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { discoverAgents } from "./discover.ts";
+import { installService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, type NodeConfig } from "./daemon.ts";
 import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
-const HELP = `warren — connect this device to a Warren hub
+const HELP = `warren — run a Warren hub, or connect this device to one
 
 Usage:
+  warren hub start
+      Run the hub (the workspace and web app) in this terminal, on PORT (default 4747) with
+      its data in WARREN_DATA_DIR (default ./data in the Warren folder).
+  warren service install hub
+  warren service install node [--hub URL --token TOKEN] [--name NAME]
+      Keep the hub or this device running, started at login (macOS LaunchAgent, systemd on
+      Linux, a task at sign-in on Windows). Uses this terminal's PATH so agents' CLIs are found.
+  warren service uninstall hub|node
+  warren service status
   warren setup [--yes]
       Get this device ready to give agents their own computers (VMs): checks the harnesses,
       offers to install a VM engine (Apple's container on a Mac with Apple silicon), and gets
@@ -89,23 +99,10 @@ if (values.help || !cmd) {
   for (const a of found) console.log(`  ${a.name} (${a.harness}) ${a.path}`);
 } else if (cmd === "setup") {
   await setup(values.yes ?? false);
+} else if (cmd === "service") {
+  await service(sub, positionals[2]);
 } else if (cmd === "node" && sub === "start") {
-  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
-  const cfg: NodeConfig = {
-    ...saved,
-    hub: values.hub ?? process.env.WARREN_HUB ?? saved.hub ?? "",
-    token: values.token ?? process.env.WARREN_NODE_TOKEN ?? saved.token ?? "",
-    name: values.name ?? saved.name ?? os.hostname(),
-    allowFullAccess: values["allow-full-access"] ?? saved.allowFullAccess ?? false,
-    dir,
-  };
-  if (!cfg.hub || !cfg.token) {
-    console.error("Missing --hub and --token. Create a node in Warren → Nodes to get them.");
-    process.exit(1);
-  }
-  fs.mkdirSync(dir, { recursive: true });
-  const { dir: _dir, ...keep } = cfg;
-  fs.writeFileSync(configFile, JSON.stringify(keep, null, 2), { mode: 0o600 });
+  const cfg = saveNodeConfig();
   const kept = underKeeper();
   const daemon = new NodeDaemon(cfg);
   daemon.start();
@@ -159,6 +156,74 @@ if (values.help || !cmd) {
 } else {
   console.log(HELP);
   process.exit(1);
+}
+
+/** Merges --hub, --token, --name and --allow-full-access into DIR/node.json; exits if hub or token is missing. */
+function saveNodeConfig(): NodeConfig {
+  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
+  const cfg: NodeConfig = {
+    ...saved,
+    hub: values.hub ?? process.env.WARREN_HUB ?? saved.hub ?? "",
+    token: values.token ?? process.env.WARREN_NODE_TOKEN ?? saved.token ?? "",
+    name: values.name ?? saved.name ?? os.hostname(),
+    allowFullAccess: values["allow-full-access"] ?? saved.allowFullAccess ?? false,
+    dir,
+  };
+  if (!cfg.hub || !cfg.token) {
+    console.error("Missing --hub and --token. Get them in Warren → Devices → Add device.");
+    process.exit(1);
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const { dir: _dir, ...keep } = cfg;
+  fs.writeFileSync(configFile, JSON.stringify(keep, null, 2), { mode: 0o600 });
+  return cfg;
+}
+
+/** `warren service`: start the hub or this device at login and keep it running. */
+async function service(action: string | undefined, kind: string | undefined) {
+  const kinds: ServiceKind[] = ["hub", "node"];
+  if (action === "status") {
+    for (const k of kind ? [kind as ServiceKind] : kinds) {
+      const s = serviceStatus(k, dir);
+      console.log(`${k.padEnd(5)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
+    }
+    return;
+  }
+  if ((action !== "install" && action !== "uninstall") || !kinds.includes(kind as ServiceKind)) {
+    console.log("Usage: warren service install|uninstall hub|node, or warren service status");
+    process.exit(1);
+  }
+  const k = kind as ServiceKind;
+  if (action === "uninstall") {
+    const s = uninstallService(k, dir);
+    console.log(`Removed ${s.name}. Warren's data and settings are untouched.`);
+    return;
+  }
+  const cfg = k === "node" ? saveNodeConfig() : undefined;
+  const log = path.join(dir, `${k}.log`);
+  const from = fs.existsSync(log) ? fs.statSync(log).size : 0;
+  let s;
+  try {
+    s = installService(k, dir);
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
+  console.log(`Installed ${s.name}: it starts at login and restarts if it stops. Log: ${s.log}`);
+  // wait for it to come up, so problems show here instead of in a log nobody reads
+  const deadline = Date.now() + 30_000;
+  const port = process.env.PORT ?? "4747";
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1000));
+    if (k === "hub") {
+      const ok = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok, () => false);
+      if (ok) return console.log(`The hub is up at http://localhost:${port}`);
+    } else if (fs.existsSync(s.log)) {
+      const recent = fs.readFileSync(s.log, "utf8").slice(from).split("\n").slice(-50).join("\n");
+      if (recent.includes(`connected to ${cfg!.hub} as`)) return console.log(`Connected to ${cfg!.hub} as "${cfg!.name}".`);
+    }
+  }
+  console.log(`It hasn't ${k === "hub" ? "answered yet" : "connected yet"}. Check ${s.log}${process.platform === "linux" ? ` or journalctl ${process.getuid?.() === 0 ? "" : "--user "}-u ${s.name}` : ""}.`);
 }
 
 /** `warren setup`: harnesses, a VM engine, and the VM image, so agents get their own computers here. */

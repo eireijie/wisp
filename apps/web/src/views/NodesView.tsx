@@ -3,7 +3,7 @@ import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2,
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, CopyBlock, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
+import { Button, DeviceInstall, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 interface NodeInfo {
   id: string;
@@ -229,9 +229,9 @@ function CreateNode({ onClose }: { onClose: () => void }) {
       {token ? (
         <div className="space-y-4 text-sm">
           <p>
-            On <b>{name}</b>, with the Warren repo checked out, run this once. The token is saved locally so later starts are just <code>warren node start</code>.
+            On <b>{name}</b>, run this once. It installs Warren if it isn't there yet and keeps the device connected.
           </p>
-          <CopyBlock text={`warren node start --hub ${location.origin} --token ${token} --name "${name}"`} />
+          <DeviceInstall token={token} name={name} />
           <p className="text-muted">The token is shown only once. Then assign agents to this device from the Agents page.</p>
           <div className="flex justify-end">
             <Button variant="primary" onClick={onClose}>

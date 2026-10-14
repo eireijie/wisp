@@ -1,0 +1,16 @@
+name: Release
+# Push a tag like v0.2.0 to publish a GitHub release with notes generated from the merged pull
+# requests and commits since the last one. The hub image for the tag is published by hub-image.yml.
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -381,3 +381,48 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
     </div>
   );
 }
+
+/**
+ * The one-line command that installs Warren on a device and connects it, served by this hub
+ * (GET /install.sh, /install.ps1), with a tab per OS and the manual command for a device that
+ * already has Warren.
+ */
+export function DeviceInstall({ token, name }: { token: string; name: string }) {
+  const windowsGuess = /Windows/.test(navigator.userAgent);
+  const [os, setOs] = useState<"unix" | "windows" | "manual">(windowsGuess ? "windows" : "unix");
+  const hub = location.origin;
+  const sh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+  const pwsh = (s: string) => `'${s.replace(/'/g, "''")}'`;
+  const commands = {
+    unix: `curl -fsSL ${hub}/install.sh | bash -s -- --hub ${hub} --token ${token} --name ${sh(name)}`,
+    windows: `& ([scriptblock]::Create((irm ${hub}/install.ps1))) -Hub ${hub} -Token ${token} -Name ${pwsh(name)}`,
+    manual: `warren node start --hub ${hub} --token ${token} --name ${sh(name)}`,
+  };
+  const tabs = [
+    ["unix", "Mac or Linux"],
+    ["windows", "Windows"],
+    ["manual", "Warren already installed"],
+  ] as const;
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1 text-xs">
+        {tabs.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            className={cx("px-2.5 py-1 rounded-md border", os === id ? "bg-panel border-line text-ink font-medium" : "border-transparent text-muted hover:bg-hover")}
+            onClick={() => setOs(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <CopyBlock text={commands[os]} />
+      <p className="text-xs text-muted">
+        {os === "unix" && "In Terminal. It installs Warren in ~/warren (it needs git and Node 22+, and offers Node with Homebrew on a Mac), checks for a VM engine, and keeps the device connected from then on."}
+        {os === "windows" && "In PowerShell. It installs Warren in your home folder (offering git and Node with winget) and keeps the device connected whenever you're signed in."}
+        {os === "manual" && "Inside the Warren folder on that device. It stays connected until you close the terminal; `warren service install node` keeps it running."}
+      </p>
+    </div>
+  );
+}

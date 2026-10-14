@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in Warren doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Screenshots help.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Installing or updating
+        - The web app
+        - The hub
+        - A device (warren node)
+        - An agent's VM
+        - Memory
+        - warren-mcp
+        - Something else
+  - type: input
+    id: harness
+    attributes:
+      label: Harness
+      description: The agent CLI involved, with its version, if any (for example Claude Code 2.1.0, Codex 0.50.0)
+  - type: input
+    id: version
+    attributes:
+      label: Warren version
+      description: From Settings → Updates, or `git log -1 --format='%h %cs'` in the Warren folder
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Of the hub and of the device, if they're different (for example "hub on Debian 12, device on macOS 26")
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The hub's or device's output around the problem (`~/.warren/hub.log`, `~/.warren/node.log`, or the terminal). Remove tokens and anything private.
+      render: text
