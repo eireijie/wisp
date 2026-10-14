@@ -64,6 +64,34 @@ export function dispatcherSection(store: Store, agent: Agent): string {
     .join("\n");
 }
 
+/**
+ * The run that was working a task failed: the task fails with the reason, and whoever handed it
+ * out hears about it in the task's thread. An agent that handed it out (the dispatcher, a lead) is
+ * @mentioned, so it wakes up and can hand the work out again or report back.
+ */
+export function failTaskOfRun(hub: Hub, run: { agentId: string; channelId: string; threadId: string | null; requestedBy: string | null }, reason: string) {
+  const { store } = hub;
+  const task = run.threadId ? store.taskByThread(run.threadId) : undefined;
+  if (!task || task.toAgentId !== run.agentId || (task.status !== "open" && task.status !== "in_progress")) return;
+  const agent = store.agent(run.agentId);
+  const result = `@${agent?.handle ?? "agent"}'s run failed: ${reason}`;
+  store.updateTask(task.id, "failed", result);
+  hub.broadcast(task.workspaceId, { type: "tasks_changed" });
+  const from = task.from.kind === "agent" ? store.agent(task.from.id) : undefined;
+  const parent = task.parentId ? store.task(task.parentId) : undefined;
+  hub.postMessage({
+    channelId: run.channelId,
+    threadId: run.threadId,
+    author: { kind: "user", id: "system" },
+    body: `${from ? `@${from.handle} ` : ""}Task **${task.title}** failed: ${result}.${parent ? ` It's part of **${parent.title}** (\`${parent.id}\`); hand it out again or report back.` : " Fix the cause and hand it out again, or reopen it on the Tasks page."}`,
+    hop: 1,
+    // only an agent that handed the work out gets woken; a person sees it on the Tasks page
+    route: !!from,
+    // still for whoever the failed run was for, so an agent on their device can be woken
+    onBehalfOf: run.requestedBy,
+  });
+}
+
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
   parse<S extends z.ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | null;

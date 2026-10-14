@@ -358,6 +358,19 @@ describe("approvals", () => {
     expect(calls.at(-1)!.prompt).toContain('Approved: go ahead with "Send 3 intros to the Acme team". Use the short version.');
     await expect(owner.request("POST", `/api/approvals/${a.id}/decide`, { approve: false })).rejects.toThrow(/already approved/);
   });
+
+  it("keeps an approval between the people in the conversation it was asked in", async () => {
+    const a = await agentApi.requestApproval("Delete the old drafts", "");
+    await owner.request("POST", "/api/members", { email: "pat@example.com", name: "Pat", password: "password123", role: "member" });
+    const login = await (await fetch(url + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "pat@example.com", password: "password123" }) })).json();
+    const pat = new WarrenClient({ url, token: login.token });
+    // asked in the agent's DM with the owner: Pat isn't in it
+    expect((await owner.request("GET", "/api/approvals?status=pending")).map((x: any) => x.id)).toContain(a.id);
+    expect((await pat.request("GET", "/api/approvals?status=pending")).map((x: any) => x.id)).not.toContain(a.id);
+    await expect(pat.request("GET", `/api/approvals/${a.id}`)).rejects.toThrow();
+    await expect(pat.request("POST", `/api/approvals/${a.id}/decide`, { approve: true })).rejects.toThrow();
+    expect((await owner.request("POST", `/api/approvals/${a.id}/decide`, { approve: false })).status).toBe("denied");
+  });
 });
 
 describe("routines", () => {

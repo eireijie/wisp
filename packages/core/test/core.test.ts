@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { builtinRules, covers, teamChain, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, startupRules, subjectKey, type AccessRule, type Viewer } from "../src/index.ts";
+import { builtinRules, covers, teamChain, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, signInProblem, startupRules, subjectKey, type AccessRule, type Viewer } from "../src/index.ts";
 
 describe("parseMentions", () => {
   it("finds handles, ignores emails and code", () => {
@@ -138,5 +138,19 @@ describe("default ghost", () => {
     }
     const shapes = new Set(Array.from({ length: 40 }, (_, i) => defaultAppearance(`agent-${i}`).shape));
     expect(shapes.size).toBeGreaterThan(2); // agents don't all look alike
+  });
+});
+
+describe("signInProblem", () => {
+  it("turns a harness's sign-in error into what to do on the device", () => {
+    const claude = signInProblem("claude-code", "Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue.");
+    expect(claude?.explain("my-mac")).toBe("Claude Code on my-mac needs to be signed in again. In a terminal there, run `claude (then /login)`; then ask again.");
+    expect(signInProblem("codex", "Error: Not logged in. Run `codex login`.")?.login).toBe("codex login");
+    expect(signInProblem("gemini", "not authenticated")?.label).toBe("Gemini CLI");
+  });
+  it("leaves other errors alone", () => {
+    expect(signInProblem("claude-code", "harness crashed")).toBeNull();
+    expect(signInProblem("codex", "exited with code 1")).toBeNull();
+    expect(signInProblem("custom", "not logged in")).toBeNull();
   });
 });

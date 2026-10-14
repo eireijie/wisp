@@ -99,3 +99,14 @@ describe("claude env", () => {
     expect(claudeEnv({ prompt: "", cwd: "/", env: { A: "1" } })).toEqual({ A: "1", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
   });
 });
+
+import { escapeForCmd } from "../src/process.ts";
+
+describe("windows command lines", () => {
+  it("quotes arguments so JSON and spaces reach a .cmd shim intact", () => {
+    expect(escapeForCmd("--verbose")).toBe('^"--verbose^"');
+    expect(escapeForCmd('{"a":"b c"}')).toBe('^"{\\^"a\\^":\\^"b c\\^"}^"');
+    expect(escapeForCmd("x&y|z")).toBe('^"x^&y^|z^"');
+    expect(escapeForCmd("dir\\")).toBe('^"dir\\\\^"');
+  });
+});

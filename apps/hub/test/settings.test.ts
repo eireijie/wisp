@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import WebSocket from "ws";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 
@@ -86,15 +87,38 @@ describe("workspace settings", () => {
     expect((await api("POST", "/api/invites", {}, joined.data.token)).status).toBe(403);
   });
 
-  it("changes roles and removes people, keeping at least one owner", async () => {
+  it("changes roles and removes people, keeping at least one owner, and disconnects what they connected", async () => {
     const sam = (await api<any[]>("GET", "/api/members")).data.find((m) => m.name === "Sam");
     const me = (await api<any[]>("GET", "/api/members")).data.find((m) => m.role === "owner");
     expect((await api("PATCH", `/api/members/${me.id}`, { role: "member" })).status).toBe(409);
-    expect((await api("PATCH", `/api/members/${sam.id}`, { role: "guest" })).data.role).toBe("guest");
     const samToken = await login("sam@example.com", "password123");
+    // Sam's laptop is connected, with an agent on it that has a harness token
+    const laptop = (await api("POST", "/api/nodes", { name: "sams-laptop" }, samToken)).data;
+    const nodeSocket = (token: string) => {
+      const ws = new WebSocket(base.replace("http", "ws") + "/ws/node", { headers: { authorization: `Bearer ${token}` } });
+      const closed = new Promise<number>((resolve) => ws.on("close", (code) => resolve(code)));
+      const opened = new Promise<boolean>((resolve) => {
+        ws.on("message", () => resolve(true));
+        ws.on("close", () => resolve(false));
+      });
+      return { ws, closed, opened };
+    };
+    const live = nodeSocket(laptop.token);
+    expect(await live.opened).toBe(true);
+    const agent = (await api("POST", "/api/agents", { handle: "lap", name: "Lap", harness: "codex", nodeId: laptop.node.id }, samToken)).data;
+    const harnessToken = (await api("POST", `/api/node/agents/${agent.id}/token`, undefined, laptop.token)).data.token;
+    expect((await api("GET", "/api/me", undefined, harnessToken)).status).toBe(200);
+    expect((await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === laptop.node.id)).toMatchObject({ online: true, ownerId: sam.id });
+
+    expect((await api("PATCH", `/api/members/${sam.id}`, { role: "guest" })).data.role).toBe("guest");
     expect((await api("DELETE", `/api/members/${sam.id}`)).status).toBe(200);
     expect((await api("GET", "/api/me", undefined, samToken)).status).toBe(401);
     expect((await api<any[]>("GET", "/api/members")).data.map((m) => m.name)).toEqual(["Yugal Patel"]);
+    // the laptop is off the hub, its token and the agent's harness token no longer work, and it belongs to nobody
+    expect(await live.closed).toBe(4401);
+    expect(await nodeSocket(laptop.token).opened).toBe(false);
+    expect((await api("GET", "/api/me", undefined, harnessToken)).status).toBe(401);
+    expect((await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === laptop.node.id)).toMatchObject({ online: false, ownerId: null });
   });
 
   it("sets what agents ask about first, how far they can ping each other, and new agents' access", async () => {

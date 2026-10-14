@@ -4,7 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { harnessInfo, type UserPrefs } from "@warren/core";
 import type { Caller } from "./api.ts";
-import { bearer, hashPassword, issueToken, verifyPassword } from "./auth.ts";
+import { bearer, hashPassword, issueToken, revokeSubjectTokens, verifyPassword } from "./auth.ts";
 import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
@@ -141,9 +141,18 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const m = memberOf(c, (req.params as { id: string }).id);
     if (!m) return reply.code(404).send({ error: "not a member" });
     if (m.id === c.actor.id) return reply.code(409).send({ error: "you can't remove yourself; another owner can" });
-    // what they connected stops working too
+    // what they connected stops working too: their tokens, and the devices they own (with the
+    // harness tokens of the agents on them). The devices stay listed, owned by nobody, until an
+    // owner removes them; they can't reconnect without a new token.
     db.prepare("DELETE FROM tokens WHERE created_by = ?").run(m.id);
+    for (const n of store.nodes(c.workspaceId).filter((n) => n.ownerId === m.id)) {
+      revokeSubjectTokens(db, "node", n.id);
+      for (const a of store.agentsOnNode(n.id)) db.prepare("DELETE FROM tokens WHERE kind = 'agent' AND subject_id = ? AND label LIKE 'harness:%'").run(a.id);
+      store.setNodeOwner(n.id, null);
+      hub.disconnectNode(n.id);
+    }
     store.removeMember(c.workspaceId, m.id);
+    hub.disconnectUser(m.id);
     return { ok: true };
   });
 

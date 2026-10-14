@@ -60,3 +60,32 @@ export function harnessInfo(id: string): HarnessInfo | undefined {
 export function harnessLabel(id: string): string {
   return harnessInfo(id)?.label ?? (id.startsWith("acp:") ? id.slice(4) : id);
 }
+
+/** What a run's error looks like when the harness wants a person to sign in (or sign in again). */
+const SIGN_IN_ERRORS: Record<string, RegExp> = {
+  "claude-code": /OAuth (access )?token (has )?expired|Failed to authenticate|not logged in|run \/login|Invalid API key|authentication_error|Please log in/i,
+  codex: /not logged in|codex login|401 Unauthorized|Unauthorized|Missing (API key|credentials)|No API key|Please log ?in/i,
+};
+const SIGN_IN_ANY = /not logged in|not authenticated|not signed in|please (sign|log) in|login required|token (has )?expired|authentication (failed|error|required)|\b401\b/i;
+
+export interface SignInProblem {
+  harness: string;
+  label: string;
+  /** the command to run on the device */
+  login: string;
+  /** the whole thing in plain words, naming the device */
+  explain(device: string): string;
+}
+
+/**
+ * Is this run error the harness saying it needs a person to sign in on its device? Then what to
+ * tell people, so "API Error: 401 OAuth access token has expired" becomes something they can act on.
+ */
+export function signInProblem(harness: string, error: string): SignInProblem | null {
+  const info = harnessInfo(harness);
+  if (!info?.login) return null;
+  const pattern = SIGN_IN_ERRORS[harness] ?? SIGN_IN_ANY;
+  if (!pattern.test(error)) return null;
+  const { label, login } = info;
+  return { harness, label, login, explain: (device) => `${label} on ${device} needs to be signed in again. In a terminal there, run \`${login}\`; then ask again.` };
+}

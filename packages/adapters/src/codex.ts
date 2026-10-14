@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
-import { commandVersion, launched, runJsonl } from "./process.ts";
+import { commandVersion, execCommand, launched, runJsonl } from "./process.ts";
 
-const exec = promisify(execFile);
 const SANDBOX: Record<AccessLevel, string> = { "read-only": "read-only", edit: "workspace-write", full: "danger-full-access" };
 
 /** CLI arguments for one run. Exported for tests. */
@@ -141,7 +138,7 @@ export const codex: HarnessAdapter = {
     // the live catalog can refresh over the network; fall back to the one bundled with the binary
     for (const args of [["debug", "models"], ["debug", "models", "--bundled"]]) {
       try {
-        const { stdout } = await exec(this.binary, args, { timeout: 15_000, maxBuffer: 32 * 1024 * 1024 });
+        const stdout = await execCommand(this.binary, args, { timeout: 15_000, maxBuffer: 32 * 1024 * 1024 });
         models = parseCodexCatalog(stdout);
         if (models.length) break;
       } catch {}

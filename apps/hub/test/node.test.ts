@@ -2,16 +2,23 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import WebSocket from "ws";
 import type { HarnessAdapter, RunInput } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 
 let dir: string;
+let url: string;
+let nodeDir: string;
+let nodeToken: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
 let owner: WarrenClient;
 const calls: RunInput[] = [];
+const logs: string[] = [];
+/** lets a "slow" run finish */
+let release: () => void = () => {};
 
 const fake: HarnessAdapter = {
   id: "custom",
@@ -22,6 +29,12 @@ const fake: HarnessAdapter = {
     onEvent({ type: "session", id: input.sessionId ?? "sess-1" });
     onEvent({ type: "tool_call", name: "memory_search", input: {} });
     if (input.prompt.includes("explode")) throw new Error("harness crashed");
+    // a run that takes as long as the test wants, and stops when cancelled
+    if (input.prompt.includes("slow"))
+      await new Promise<void>((resolve, reject) => {
+        release = resolve;
+        input.signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+      });
     return { finalText: `reply #${calls.length}`, sessionId: "sess-1" };
   },
 };
@@ -40,13 +53,15 @@ beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-node-"));
   const { app } = await buildHub({ dataDir: path.join(dir, "hub") });
   await app.listen({ port: 0, host: "127.0.0.1" });
-  const url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
+  url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123" }) })).json();
   owner = new WarrenClient({ url, token: setup.token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
+  nodeToken = token;
+  nodeDir = path.join(dir, "node");
   await owner.request("POST", "/api/agents", { handle: "bolt", name: "Bolt", harness: "custom", nodeId: node.id });
-  daemon = new NodeDaemon({ hub: url, token, name: "box", dir: path.join(dir, "node") }, () => {}, { custom: fake });
+  daemon = new NodeDaemon({ hub: url, token, name: "box", dir: nodeDir }, (m) => logs.push(m), { custom: fake });
   daemon.start();
   await waitFor(async () => (await owner.agents()).find((a) => a.status === "online"));
 });
@@ -96,5 +111,71 @@ describe("node daemon", () => {
     await owner.send(ch.id, "@bolt explode");
     await waitFor(async () => (await owner.messages(ch.id)).messages.find((m) => m.parts.some((p) => p.type === "status")));
     expect(calls.length - before).toBe(1);
+  });
+
+  it("reports what it has, so a connector that can't start is caught before a run", async () => {
+    const box = await waitFor(async () => (await owner.request("GET", "/api/nodes")).find((n: any) => n.name === "box" && n.capabilities?.commands));
+    expect(box.capabilities.commands.node).toBe(true);
+    expect(box.capabilities.commands.uvx).toEqual(expect.any(Boolean));
+  });
+
+  it("says when a connector didn't start because its command isn't on the device", async () => {
+    const bolt = (await owner.agents()).find((a) => a.handle === "bolt")!;
+    const conn = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Widgets", command: "warren-no-such-command-xyz", args: [], agentIds: [bolt.id] });
+    const ch = await owner.request("POST", "/api/channels", { name: "widgets" });
+    await owner.send(ch.id, "@bolt use widgets");
+    const reply = await waitFor(async () => (await owner.messages(ch.id)).messages.find((m) => m.author.id === bolt.id));
+    expect(reply.parts).toContainEqual({ type: "notice", text: `Connector widgets didn't start: "warren-no-such-command-xyz" isn't installed on box.` });
+    expect(calls.at(-1)!.connectors ?? []).toEqual([]);
+    expect(logs.some((l) => l.includes("Connector widgets didn't start"))).toBe(true);
+    await owner.request("DELETE", `/api/connectors/${conn.id}`);
+  });
+
+  it("keeps a run's result for the hub when the connection drops, and sends it once it's back", async () => {
+    const general = await owner.request("POST", "/api/channels", { name: "away" });
+    const n = calls.length + 1;
+    await owner.send(general.id, "@bolt slow one");
+    await waitFor(async () => (calls.length >= n ? true : undefined));
+    // another connection with this device's token bumps the daemon off the hub
+    const bump = new WebSocket(url.replace("http", "ws") + "/ws/node", { headers: { authorization: `Bearer ${nodeToken}` } });
+    await new Promise<void>((resolve) => bump.on("message", () => resolve()));
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    await waitFor(async () => (logs.some((l) => l.includes("will report")) ? true : undefined));
+    bump.close();
+    const reply = await waitFor(async () => (await owner.messages(general.id)).messages.find((m) => m.body === `reply #${n}`), 8000);
+    expect(reply).toBeTruthy();
+    expect(logs.some((l) => l.includes("finished while the hub was away"))).toBe(true);
+  });
+
+  it("pausing the device also stops runs that were still waiting their turn", async () => {
+    const ch = await owner.request("POST", "/api/channels", { name: "pausing" });
+    const n = calls.length + 1;
+    await owner.send(ch.id, "@bolt slow two");
+    await owner.send(ch.id, "@bolt queued three");
+    await waitFor(async () => (calls.length >= n ? true : undefined));
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ paused: true }));
+    await waitFor(async () => ((await owner.request("GET", "/api/nodes")).find((x: any) => x.name === "box")?.paused === true ? true : undefined), 8000);
+    const statuses = await waitFor(async () => {
+      const texts = (await owner.messages(ch.id)).messages.flatMap((m) => m.parts).flatMap((p) => (p.type === "status" ? [p.text] : []));
+      return texts.filter((t) => t.includes("paused")).length >= 2 ? texts : undefined;
+    }, 8000);
+    expect(statuses).toContain("Run failed: stopped: box was paused");
+    expect(statuses).toContain("Run failed: box is paused; ask again once someone resumes it there");
+    // the queued one never ran
+    expect(calls.some((c) => c.prompt.includes("queued three"))).toBe(false);
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ paused: false }));
+    await waitFor(async () => ((await owner.request("GET", "/api/nodes")).find((x: any) => x.name === "box")?.paused === false ? true : undefined), 8000);
+  });
+
+  it("waits for runs in flight to report before stopping", async () => {
+    const ch = await owner.request("POST", "/api/channels", { name: "stopping" });
+    const n = calls.length + 1;
+    await owner.send(ch.id, "@bolt slow four");
+    await waitFor(async () => (calls.length >= n ? true : undefined));
+    await daemon.stop();
+    const status = (await owner.messages(ch.id)).messages.flatMap((m) => m.parts).find((p) => p.type === "status" && p.text.startsWith("Run failed"));
+    expect(status).toEqual({ type: "status", text: "Run failed: cancelled" });
+    await waitFor(async () => ((await owner.agents()).find((a) => a.handle === "bolt")?.status === "offline" ? true : undefined));
   });
 });

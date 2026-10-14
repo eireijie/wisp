@@ -4,13 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
 import type { HubToNode, Message, NodeToHub } from "@warren/core";
+import Database from "better-sqlite3";
 import { buildHub } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
+import type { Hub } from "../src/hub.ts";
 import { Store } from "../src/store.ts";
 
 let dir: string;
 let base: string;
 let close: () => Promise<void>;
+let hub: Hub;
 let token: string;
 
 async function api<T = any>(method: string, url: string, body?: unknown, auth = token, headers: Record<string, string> = {}): Promise<{ status: number; data: T }> {
@@ -22,7 +25,23 @@ async function api<T = any>(method: string, url: string, body?: unknown, auth = 
   return { status: res.status, data: (await res.json()) as T };
 }
 
-/** A scripted fake node: answers every run with `reply(prompt)`. */
+/** A browser's socket: collects every event the hub sends it. */
+async function clientSocket(sessionToken: string): Promise<{ events: any[]; close: () => void }> {
+  const ws = new WebSocket(base.replace("http", "ws") + "/ws");
+  const events: any[] = [];
+  await new Promise<void>((resolve, reject) => {
+    ws.on("open", () => ws.send(JSON.stringify({ token: sessionToken })));
+    ws.on("message", (raw) => {
+      const e = JSON.parse(raw.toString());
+      if (e.type === "ready") resolve();
+      else events.push(e);
+    });
+    ws.on("error", reject);
+  });
+  return { events, close: () => ws.close() };
+}
+
+/** A scripted fake node: answers every run with `reply(prompt)`; a reply starting with "FAIL:" fails the run with the rest as the error. */
 class FakeNode {
   ws!: WebSocket;
   runs: HubToNode[] = [];
@@ -46,6 +65,10 @@ class FakeNode {
         if (msg.type === "run") {
           this.runs.push(msg);
           const text = this.reply(msg.run.prompt, msg.run.agentId);
+          if (text.startsWith("FAIL:")) {
+            this.send({ type: "run_failed", runId: msg.run.runId, error: text.slice(5) });
+            return;
+          }
           this.send({ type: "run_event", runId: msg.run.runId, event: { type: "tool_call", name: "memory_search", input: { q: "x" } } });
           this.send({ type: "run_event", runId: msg.run.runId, event: { type: "usage", model: "fake-1", effort: "medium", contextUsed: 4321, contextWindow: 200000 } });
           this.send({ type: "run_done", runId: msg.run.runId, finalText: text });
@@ -77,7 +100,9 @@ let node: FakeNode;
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-hub-"));
-  const { app } = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir });
+  const { app } = built;
+  hub = built.hub;
   await app.listen({ port: 0, host: "127.0.0.1" });
   const addr = app.server.address() as { port: number };
   base = `http://127.0.0.1:${addr.port}`;
@@ -97,6 +122,8 @@ beforeAll(async () => {
     if (agentId === atlas.id && last.includes("ask nova")) return "@nova can you check the build?";
     if (agentId === atlas.id && last.includes("loop")) return "@nova loop";
     if (agentId === nova.id && last.includes("loop")) return "@atlas loop";
+    if (agentId === atlas.id && last.includes("expired token")) return "FAIL:Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue.";
+    if (agentId === nova.id && prompt.includes("please crash")) return "FAIL:harness crashed";
     return `${agentId === atlas.id ? "atlas" : "nova"} heard: ${last}`;
   });
   await node.connect();
@@ -890,5 +917,159 @@ describe("orchestration addon", () => {
     await api("PUT", "/api/settings/orchestration", { enabled: false });
     // off again: "auto" falls back to the old guess
     expect((await api<any>("GET", "/api/settings/orchestration")).data.ready).toBe(false);
+  });
+});
+
+describe("privacy", () => {
+  let eve: string;
+  let dm: any;
+  beforeAll(async () => {
+    await api("POST", "/api/members", { email: "eve@example.com", name: "Eve", password: "password123", role: "member" });
+    eve = (await api("POST", "/api/auth/login", { email: "eve@example.com", password: "password123" }, "")).data.token;
+    dm = (await api("POST", `/api/dm/${nova.id}`)).data;
+  });
+
+  it("never sends a DM, its run events or its reactions to someone else's socket", async () => {
+    const mine = await clientSocket(token);
+    const hers = await clientSocket(eve);
+    const sent = (await api("POST", `/api/channels/${dm.id}/messages`, { body: "my secret plan" })).data;
+    await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${dm.id}/messages`)).data.messages.find((m) => m.author.id === nova.id && m.body.includes("secret plan")));
+    await api("POST", `/api/messages/${sent.id}/reactions`, { emoji: "🔒" });
+    // something she may see, so we know her socket works
+    await api("POST", `/api/channels/${general}/messages`, { body: "hello everyone" });
+    await waitFor(async () => hers.events.find((e) => e.type === "message" && e.message.body === "hello everyone"));
+    await new Promise((r) => setTimeout(r, 100));
+    mine.close();
+    hers.close();
+
+    const about = (events: any[]) => events.filter((e) => e.channelId === dm.id || e.message?.channelId === dm.id);
+    expect(about(mine.events).map((e) => e.type)).toEqual(expect.arrayContaining(["message", "run_event", "reactions"]));
+    expect(about(hers.events)).toEqual([]);
+    expect(JSON.stringify(hers.events)).not.toContain("secret plan");
+  });
+
+  it("hides what was said in a DM from an agent's run list, and the DM's files, for people outside it", async () => {
+    const mineRuns = (await api<any[]>("GET", `/api/agents/${nova.id}/runs`)).data;
+    const hersRuns = (await api<any[]>("GET", `/api/agents/${nova.id}/runs`, undefined, eve)).data;
+    const inDm = (runs: any[]) => runs.filter((r) => r.channelId === dm.id);
+    expect(inDm(mineRuns)[0].trigger).toContain("my secret plan");
+    expect(inDm(hersRuns).length).toBe(inDm(mineRuns).length);
+    for (const r of inDm(hersRuns)) expect([r.trigger, r.channelName]).toEqual([null, null]);
+
+    const res = await fetch(base + "/api/files", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream", "x-filename": "plan.txt", "x-mime-type": "text/plain", "x-channel-id": dm.id }, body: "the plan" });
+    const file = await res.json();
+    expect((await api<any[]>("GET", "/api/files")).data.some((f) => f.id === file.id)).toBe(true);
+    expect((await api<any[]>("GET", "/api/files", undefined, eve)).data.some((f) => f.id === file.id)).toBe(false);
+    expect((await api("GET", `/api/files?channel=${dm.id}`, undefined, eve)).status).toBe(404);
+    expect((await api("GET", `/api/files/${file.id}`, undefined, eve)).status).toBe(404);
+  });
+
+  it("lets guests look but not give agents work, make channels or stop runs", async () => {
+    await api("POST", "/api/members", { email: "peek@example.com", name: "Peek", password: "password123", role: "guest" });
+    const g = (await api("POST", "/api/auth/login", { email: "peek@example.com", password: "password123" }, "")).data.token;
+    expect((await api("GET", "/api/tasks", undefined, g)).status).toBe(200);
+    expect((await api("POST", "/api/tasks", { to: "nova", title: "x", brief: "x" }, g)).status).toBe(403);
+    expect((await api("POST", "/api/channels", { name: "guest-made" }, g)).status).toBe(403);
+    const task = (await api<any[]>("GET", "/api/tasks")).data[0];
+    expect((await api("PATCH", `/api/tasks/${task.id}`, { status: "done" }, g)).status).toBe(403);
+    const run = (await api<any[]>("GET", `/api/agents/${nova.id}/runs`)).data[0];
+    expect((await api("POST", `/api/runs/${run.id}/cancel`, undefined, g)).status).toBe(403);
+    // a run that isn't in the workspace doesn't exist to it
+    expect((await api("POST", "/api/runs/run_nope/cancel")).status).toBe(404);
+    expect((await api("POST", `/api/runs/${run.id}/cancel`)).data).toEqual({ ok: false });
+  });
+
+  it("only lets the agent's device owner remove an agent on that device", async () => {
+    const temp = (await api("POST", "/api/agents", { handle: "temp", name: "Temp", harness: "codex", nodeId: atlas.nodeId })).data;
+    expect((await api("DELETE", `/api/agents/${temp.id}`, undefined, eve)).status).toBe(403);
+    expect((await api("DELETE", `/api/agents/${temp.id}`)).status).toBe(200);
+  });
+});
+
+describe("runs that go wrong", () => {
+  it("fails the task a failed run was working on and tells whoever handed it out", async () => {
+    const asAtlas = { "x-warren-agent": atlas.id };
+    const before = node.runs.length;
+    const task = (await api("POST", "/api/tasks", { to: "nova", title: "Crash test", brief: "please crash" }, nodeToken, asAtlas)).data;
+    const failed = await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((t) => t.id === task.id && t.status === "failed"));
+    expect(failed.result).toContain("harness crashed");
+    const thread = await channelMessagesIn(task.channelId, task.threadId);
+    expect(thread.some((m) => m.parts.some((p) => p.type === "status" && p.text === "Run failed: harness crashed"))).toBe(true);
+    const note = thread.find((m) => m.body.includes("Task **Crash test** failed"));
+    expect(note?.body).toContain("@atlas");
+    // which wakes atlas, who handed it out
+    await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id && r.run.prompt.includes("Crash test")));
+  });
+
+  it("explains a harness that needs signing in, in the channel and on the agent's page", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "signin" })).data.id;
+    await api("POST", `/api/channels/${ch}/messages`, { body: "@atlas expired token" });
+    const status = await waitFor(async () => (await channelMessagesIn(ch)).flatMap((m) => m.parts).find((p) => p.type === "status" && p.text.startsWith("Run failed")));
+    expect(status.type === "status" && status.text).toBe("Run failed: Claude Code on test-node needs to be signed in again. In a terminal there, run `claude (then /login)`; then ask again.");
+    const runs = (await api<any[]>("GET", `/api/agents/${atlas.id}/runs`)).data;
+    expect(runs[0]).toMatchObject({ status: "failed", error: expect.stringContaining("401"), hint: expect.stringContaining("needs to be signed in again") });
+  });
+
+  it("says so when a prompt can't even be built", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "no-prompt" })).data.id;
+    const original = hub.buildPrompt;
+    hub.buildPrompt = async () => {
+      throw new Error("vault exploded");
+    };
+    try {
+      await api("POST", `/api/channels/${ch}/messages`, { body: "@nova hi" });
+      const status = await waitFor(async () => (await channelMessagesIn(ch)).flatMap((m) => m.parts).find((p) => p.type === "status" && p.text.startsWith("Run failed")));
+      expect(status.type === "status" && status.text).toBe("Run failed: couldn't prepare the request: vault exploded");
+      expect((await api<any[]>("GET", "/api/agents")).data.find((a) => a.id === nova.id).status).toBe("online");
+    } finally {
+      hub.buildPrompt = original;
+    }
+  });
+
+  it("keeps an agent's finished tasks when it's removed, and fails the unfinished ones", async () => {
+    const gone = (await api("POST", "/api/agents", { handle: "gone", name: "Gone", harness: "codex", nodeId: atlas.nodeId })).data;
+    const done = (await api("POST", "/api/tasks", { to: "gone", title: "Finished work", brief: "done already" })).data;
+    await api("PATCH", `/api/tasks/${done.id}`, { status: "done", result: "yes" });
+    const open = (await api("POST", "/api/tasks", { to: "gone", title: "Unfinished work", brief: "not yet" })).data;
+    await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((t) => t.id === open.id && t.status !== "open"));
+    expect((await api("DELETE", `/api/agents/${gone.id}`)).status).toBe(200);
+    const tasks = (await api<any[]>("GET", "/api/tasks")).data;
+    expect(tasks.find((t) => t.id === done.id)).toMatchObject({ status: "done", toAgentId: null, result: "yes" });
+    expect(tasks.find((t) => t.id === open.id)).toMatchObject({ status: "failed", toAgentId: null, result: expect.stringContaining("removed") });
+  });
+
+  it("rebuilds the tasks table so finished tasks outlive their agent", async () => {
+    const file = path.join(dir, "old-tasks.db");
+    const raw = new Database(file);
+    raw.pragma("foreign_keys = OFF");
+    raw.exec(`CREATE TABLE tasks (
+      id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      from_kind TEXT NOT NULL, from_id TEXT NOT NULL, to_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      title TEXT NOT NULL, brief TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('open','in_progress','done','failed')),
+      result TEXT, channel_id TEXT, thread_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    )`);
+    raw.prepare("INSERT INTO tasks (id, workspace_id, from_kind, from_id, to_agent_id, title, brief, status, created_at, updated_at) VALUES ('task_1', 'ws_1', 'user', 'u1', 'agt_a', 'Old', 'x', 'done', '2026-01-01', '2026-01-01')").run();
+    raw.close();
+    const db = openDb(file);
+    const fk = (db.prepare("PRAGMA foreign_key_list(tasks)").all() as any[]).find((f) => f.from === "to_agent_id");
+    expect(fk.on_delete).toBe("SET NULL");
+    expect(db.prepare("SELECT id, to_agent_id, status FROM tasks").all()).toEqual([{ id: "task_1", to_agent_id: "agt_a", status: "done" }]);
+    db.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('ws_1', 'Old', '2026-01-01')").run();
+    db.prepare("INSERT INTO agents (id, workspace_id, handle, name, harness, created_at) VALUES ('agt_a', 'ws_1', 'a', 'A', 'codex', '2026-01-01')").run();
+    db.prepare("DELETE FROM agents WHERE id = 'agt_a'").run();
+    expect(db.prepare("SELECT to_agent_id FROM tasks WHERE id = 'task_1'").get()).toEqual({ to_agent_id: null });
+    db.close();
+  });
+});
+
+describe("connector prerequisites", () => {
+  it("warns when an agent's device doesn't have the command a connector needs", async () => {
+    node.send({ type: "capabilities", capabilities: { platform: "darwin", arch: "arm64", screen: { ok: false, detail: "" }, vm: { ok: false, detail: "" }, commands: { uvx: false, npx: true } } });
+    await waitFor(async () => (await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === atlas.nodeId && n.capabilities?.commands?.npx === true));
+    const git = (await api("POST", "/api/connectors", { kind: "mcp-stdio", name: "Git", command: "uvx", args: ["mcp-server-git"], agentIds: [nova.id] })).data;
+    expect(git.warnings).toEqual([`@nova's device test-node doesn't have "uvx", so Git won't start there until it's installed.`]);
+    const fetchServer = (await api("POST", "/api/connectors", { kind: "mcp-stdio", name: "Fetch", command: "npx", args: ["-y", "fetch-mcp"], agentIds: [nova.id] })).data;
+    expect(fetchServer.warnings).toEqual([]);
+    expect((await api("DELETE", `/api/connectors/${git.id}/agents/${nova.id}`)).data.warnings).toEqual([]);
   });
 });

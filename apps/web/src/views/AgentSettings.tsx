@@ -845,6 +845,14 @@ interface RunRow {
   channelName: string | null;
   channelKind: string | null;
   trigger: string | null;
+  /** a failure in plain words, when the hub recognised it (the harness needs signing in on its device) */
+  hint?: string | null;
+}
+
+/** What's wrong with the agent right now: its latest run failed for a reason people can fix. */
+function problem(runs: RunRow[] | null): string | null {
+  const last = runs?.[0];
+  return last?.status === "failed" && last.hint ? last.hint : null;
 }
 
 const RUN_TONE: Record<string, "ok" | "bad" | "warn" | "info" | "neutral"> = { done: "ok", failed: "bad", running: "info", queued: "warn", cancelled: "neutral" };
@@ -962,6 +970,16 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
           )}
         </div>
       </section>
+
+      {problem(runs) && (
+        <section role="alert" className="rounded-xl border border-warn/40 bg-warn/10 p-4 flex items-start gap-3">
+          <ShieldAlert size={18} className="text-warn shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <div className="font-medium">{agent.name} can't work right now</div>
+            <div className="text-muted mt-0.5">{problem(runs)}</div>
+          </div>
+        </section>
+      )}
 
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         {cards.map((c) => (

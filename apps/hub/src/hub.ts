@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
+import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -10,7 +10,7 @@ import type { Vault } from "@warren/vault";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
-import { dispatcherSection } from "./orchestration.ts";
+import { dispatcherSection, failTaskOfRun } from "./orchestration.ts";
 import type { Store } from "./store.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -113,6 +113,37 @@ export class Hub {
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
     const data = JSON.stringify(event);
     for (const c of this.clients) if (c.workspaceId === workspaceId && c.socket.readyState === 1 && (!only || only(c.userId))) c.socket.send(data);
+  }
+
+  /**
+   * Who may hear about a channel: everyone for a channel; for a DM, its members and the
+   * workspace's owners (the same rule the REST API uses). Undefined means everyone.
+   */
+  audience(channelId: string): ((userId: string) => boolean) | undefined {
+    const ch = this.store.channel(channelId);
+    if (!ch || ch.kind !== "dm") return undefined;
+    const members = new Set(this.store.channelMembers(ch.id).filter((m) => m.kind === "user").map((m) => m.id));
+    return (userId) => members.has(userId) || this.store.role(ch.workspaceId, userId) === "owner";
+  }
+
+  /** Drop a person's browser connections (they were removed from the workspace). */
+  disconnectUser(userId: string) {
+    for (const c of this.clients) {
+      if (c.userId !== userId) continue;
+      this.clients.delete(c);
+      c.socket.close(4401, "removed from the workspace");
+    }
+  }
+
+  /** Drop a device's connection; with its token revoked it can't come back. */
+  disconnectNode(nodeId: string) {
+    const conn = this.nodes.get(nodeId);
+    if (!conn) return;
+    this.nodes.delete(nodeId);
+    this.pausedNodes.delete(nodeId);
+    conn.socket.close(4401, "device removed");
+    for (const a of this.store.agentsOnNode(nodeId)) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: a.id, status: "offline" });
+    this.computers.nodeGone(nodeId);
   }
 
   // --- nodes ----------------------------------------------------------------
@@ -263,32 +294,14 @@ export class Hub {
         const live = this.live.get(run.id) ?? { parts: [], text: "" };
         collect(live, msg.event);
         this.live.set(run.id, live);
-        this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, event: msg.event });
+        this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, event: msg.event }, this.audience(run.channelId));
         return;
       }
       case "run_done":
       case "run_failed": {
         const run = this.ownedRun(conn, msg.runId);
         if (!run || run.status === "done" || run.status === "failed") return;
-        const live = this.live.get(run.id) ?? { parts: [], text: "" };
-        this.live.delete(run.id);
-        const author: Actor = { kind: "agent", id: run.agentId };
-        // in a discussion, replies don't wake anyone: the discussion moves on by itself
-        const route = run.discussionId ? false : undefined;
-        // the channel may have been deleted while the agent worked; then there's nowhere to reply
-        const gone = !store.channel(run.channelId);
-        let body = "";
-        if (msg.type === "run_done") {
-          store.setRunStatus(run.id, "done");
-          body = msg.finalText.trim() || live.text.trim();
-          if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
-        } else {
-          store.setRunStatus(run.id, "failed", msg.error);
-          if (!gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${msg.error}` }], hop: run.hop + 1, route: false });
-        }
-        const agent = store.agent(run.agentId);
-        if (agent) this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
-        if (run.discussionId) void this.discussions.onRunFinished(run, body);
+        this.finishRun(conn.workspaceId, run, msg.type === "run_done" ? { finalText: msg.finalText } : { error: msg.error });
         return;
       }
       case "git_done": {
@@ -300,6 +313,45 @@ export class Hub {
         return;
       }
     }
+  }
+
+  /**
+   * A run ended: post its reply (or a "Run failed" line), free the agent, and move on whatever
+   * waited on it (a discussion, a task). Used for the device's report and for failures on the hub.
+   */
+  private finishRun(workspaceId: string, run: NonNullable<ReturnType<Store["run"]>>, result: { finalText: string } | { error: string }) {
+    const { store } = this;
+    const live = this.live.get(run.id) ?? { parts: [], text: "" };
+    this.live.delete(run.id);
+    const author: Actor = { kind: "agent", id: run.agentId };
+    // in a discussion, replies don't wake anyone: the discussion moves on by itself
+    const route = run.discussionId ? false : undefined;
+    // the channel may have been deleted while the agent worked; then there's nowhere to reply
+    const gone = !store.channel(run.channelId);
+    const agent = store.agent(run.agentId);
+    let body = "";
+    if ("finalText" in result) {
+      store.setRunStatus(run.id, "done");
+      body = result.finalText.trim() || live.text.trim();
+      if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
+    } else {
+      store.setRunStatus(run.id, "failed", result.error);
+      const text = agent ? this.explainFailure(agent, result.error) : result.error;
+      if (!gone) {
+        this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "status", text: `Run failed: ${text}` }], hop: run.hop + 1, route: false });
+        failTaskOfRun(this, run, text);
+      }
+    }
+    if (agent) this.broadcast(workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
+    if (run.discussionId) void this.discussions.onRunFinished(run, body);
+  }
+
+  /** A failure in plain words when it's a known one (a harness that needs signing in again), else as reported. */
+  explainFailure(agent: Pick<Agent, "harness" | "nodeId">, error: string): string {
+    const problem = signInProblem(agent.harness, error);
+    if (!problem) return error;
+    const device = agent.nodeId ? this.store.node(agent.nodeId)?.name : undefined;
+    return problem.explain(device ?? "its device");
   }
 
   private ownedRun(conn: NodeConn, runId: string) {
@@ -324,7 +376,7 @@ export class Hub {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
     const msg = this.store.insertMessage(m);
-    this.broadcast(channel.workspaceId, { type: "message", message: msg });
+    this.broadcast(channel.workspaceId, { type: "message", message: msg }, this.audience(channel.id));
     if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     return msg;
   }
@@ -382,7 +434,7 @@ export class Hub {
   private postSystem(near: Message, text: string) {
     const channel = this.store.channel(near.channelId)!;
     const sys = this.store.insertMessage({ channelId: near.channelId, threadId: near.threadId, author: { kind: "user", id: "system" }, body: "", parts: [{ type: "status", text }], hop: near.hop });
-    this.broadcast(channel.workspaceId, { type: "message", message: sys });
+    this.broadcast(channel.workspaceId, { type: "message", message: sys }, this.audience(channel.id));
   }
 
   /** Send a queued run to its agent's device (if it's online; otherwise it waits until the device connects). */
@@ -398,7 +450,7 @@ export class Hub {
     // like a teammate saying "on it": the agent marks the message it picked up
     this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
-    this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } });
+    this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } }, this.audience(run.channelId));
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
       (prompt) => {
         // looked up after the prompt so a task handed out in this same tick is linked to its thread by now
@@ -419,7 +471,8 @@ export class Hub {
           run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
         });
       },
-      (err) => this.store.setRunStatus(run.id, "failed", (err as Error).message),
+      // the prompt couldn't be built (a vault read failed, say): say so like any other failure
+      (err) => this.finishRun(conn.workspaceId, run, { error: `couldn't prepare the request: ${(err as Error).message}` }),
     );
   }
 
@@ -429,7 +482,7 @@ export class Hub {
     const channel = msg && this.store.channel(msg.channelId);
     if (!msg || !channel) return false;
     const added = this.store.toggleReaction(messageId, actor, emoji, on);
-    this.broadcast(channel.workspaceId, { type: "reactions", messageId, channelId: msg.channelId, threadId: msg.threadId, reactions: this.store.reactions([messageId])[messageId] ?? [] });
+    this.broadcast(channel.workspaceId, { type: "reactions", messageId, channelId: msg.channelId, threadId: msg.threadId, reactions: this.store.reactions([messageId])[messageId] ?? [] }, this.audience(channel.id));
     return added;
   }
 
@@ -615,6 +668,7 @@ export class Hub {
 
 function collect(live: LiveRun, e: AgentEvent) {
   if (e.type === "text") live.text += e.text;
+  else if (e.type === "notice") live.parts.push({ type: "notice", text: e.text });
   else if (e.type === "tool_call") live.parts.push({ type: "tool_call", name: e.name, input: e.input });
   else if (e.type === "tool_result") {
     const call = [...live.parts].reverse().find((p) => p.type === "tool_call" && p.name === e.name && p.output === undefined);

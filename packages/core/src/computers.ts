@@ -80,6 +80,8 @@ export const DeviceCapabilities = z.object({
   }),
   /** someone ran `warren node pause` on the device: no agent runs and no computer use until they resume */
   paused: z.boolean().optional(),
+  /** which commands connectors need are on the device's PATH (npx, uvx, docker…), so a connector that can't start is caught before it's enabled */
+  commands: z.record(z.string().max(100), z.boolean()).optional(),
 });
 export type DeviceCapabilities = z.infer<typeof DeviceCapabilities>;
 

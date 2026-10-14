@@ -48,6 +48,24 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     return [...new Set(ids)];
   }
 
+  /**
+   * Why a connector may not start for the agents it's given: a command its device doesn't have
+   * (as the device last reported). Said when it's connected, so nobody finds out from a failed run.
+   */
+  function warnings(connectorId: string): string[] {
+    const conn = connectors.get(connectorId);
+    if (!conn || conn.kind !== "mcp-stdio" || !conn.command) return [];
+    const out: string[] = [];
+    for (const agentId of conn.agentIds) {
+      const agent = store.agent(agentId);
+      const node = agent?.nodeId ? store.node(agent.nodeId) : undefined;
+      const commands = node ? store.nodeCapabilities(node.id)?.commands : undefined;
+      if (node && commands && commands[conn.command] === false) out.push(`@${agent!.handle}'s device ${node.name} doesn't have "${conn.command}", so ${conn.name} won't start there until it's installed.`);
+    }
+    return out;
+  }
+  const withWarnings = (connectorId: string) => ({ ...connectors.get(connectorId)!, warnings: warnings(connectorId) });
+
   // --- connectors -------------------------------------------------------------------------------
 
   app.get("/api/connectors", async (req, reply) => {
@@ -66,7 +84,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!agentIds) return;
     const conn = connectors.create(c.workspaceId, c.actor.id, body);
     if (agentIds.length) connectors.setAgents(conn.id, agentIds);
-    return connectors.get(conn.id);
+    return withWarnings(conn.id);
   });
 
   const ownConnector = (c: Caller, req: FastifyRequest, reply: FastifyReply) => {
@@ -100,7 +118,8 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
       if (!ids) return;
       connectors.setAgents(conn.id, ids);
     }
-    return connectors.update(conn.id, body);
+    connectors.update(conn.id, body);
+    return withWarnings(conn.id);
   });
 
   app.delete("/api/connectors/:id", async (req, reply) => {
@@ -124,7 +143,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
         const ids = agentsIn(c, [(req.params as { agentId: string }).agentId], reply);
         if (!ids) return;
         connectors.attach(conn.id, ids[0], method === "PUT");
-        return connectors.get(conn.id);
+        return withWarnings(conn.id);
       },
     });
   }

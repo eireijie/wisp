@@ -63,9 +63,10 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  from_kind TEXT NOT NULL, from_id TEXT NOT NULL, to_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  from_kind TEXT NOT NULL, from_id TEXT NOT NULL, to_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
   title TEXT NOT NULL, brief TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('open','in_progress','done','failed')),
-  result TEXT, channel_id TEXT, thread_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  result TEXT, channel_id TEXT, thread_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  team_id TEXT, branch TEXT, review_of TEXT, merged_at TEXT, parent_id TEXT
 );
 CREATE TABLE IF NOT EXISTS grants (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -227,7 +228,33 @@ export function openDb(file: string): Database.Database {
   migrateGroups(db);
   migrateNodeOwners(db);
   if (added.has("nodes.role")) migrateNodeRoles(db);
+  migrateTaskAssignee(db);
   return db;
+}
+
+/**
+ * Tasks used to vanish with their agent (ON DELETE CASCADE on a NOT NULL to_agent_id). Finished
+ * work should outlive the agent that did it, so the column becomes nullable and is cleared instead.
+ * SQLite can't change a column's constraints in place, so the table is rebuilt once.
+ */
+function migrateTaskAssignee(db: Database.Database) {
+  const fk = (db.prepare("PRAGMA foreign_key_list(tasks)").all() as { from: string; on_delete: string }[]).find((f) => f.from === "to_agent_id");
+  if (!fk || fk.on_delete === "SET NULL") return;
+  const columns = (db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map((c) => c.name).join(", ");
+  db.pragma("foreign_keys = OFF");
+  db.transaction(() => {
+    db.exec(`CREATE TABLE tasks_new (
+      id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      from_kind TEXT NOT NULL, from_id TEXT NOT NULL, to_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+      title TEXT NOT NULL, brief TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('open','in_progress','done','failed')),
+      result TEXT, channel_id TEXT, thread_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      team_id TEXT, branch TEXT, review_of TEXT, merged_at TEXT, parent_id TEXT
+    )`);
+    db.exec(`INSERT INTO tasks_new (${columns}) SELECT ${columns} FROM tasks`);
+    db.exec("DROP TABLE tasks");
+    db.exec("ALTER TABLE tasks_new RENAME TO tasks");
+  })();
+  db.pragma("foreign_keys = ON");
 }
 
 /** Devices from before they had a role: the ones already running agents' VMs do that. */

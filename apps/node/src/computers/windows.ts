@@ -12,6 +12,9 @@ import { ActionError, cached, type Button, type Direction, type Driver, type Sho
  */
 const HELPER = String.raw`
 $ErrorActionPreference = 'Stop'
+# commands and answers are UTF-8 JSON, so typed text in any script comes through unchanged
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @"
 using System;
@@ -123,8 +126,10 @@ export class WindowsDesktop implements Driver {
   private helper(): ChildProcessWithoutNullStreams {
     if (this.proc && this.proc.exitCode === null) return this.proc;
     const file = path.join(os.tmpdir(), `warren-input-${process.pid}.ps1`);
-    fs.writeFileSync(file, HELPER);
+    // with a BOM, PowerShell reads the script as UTF-8 whatever the system code page is
+    fs.writeFileSync(file, "\ufeff" + HELPER);
     const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    p.stdin.setDefaultEncoding("utf8");
     p.stdout.setEncoding("utf8");
     p.stdout.on("data", (chunk: string) => {
       this.buf += chunk;

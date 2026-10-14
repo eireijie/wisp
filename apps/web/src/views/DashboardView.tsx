@@ -10,7 +10,7 @@ import { AgentAvatar, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx
 interface TaskLite {
   id: string;
   from: Actor;
-  toAgentId: string;
+  toAgentId: string | null;
   title: string;
   status: "open" | "in_progress" | "done" | "failed";
   channelId: string | null;
