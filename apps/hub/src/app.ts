@@ -4,11 +4,13 @@ import path from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { REPO_ROOT } from "@warren/update";
+import { REPO_ROOT, RESTART_CODE } from "@warren/update";
 import { Vault } from "@warren/vault";
 import { registerApi } from "./api.ts";
 import { openDb } from "./db.ts";
 import { Hub } from "./hub.ts";
+import { registerVaultGit } from "./vault-git.ts";
+import { carryOverVault, rememberVaultDir, resolveVaultLocation } from "./vault-location.ts";
 import { Store } from "./store.ts";
 
 export interface HubOptions {
@@ -20,18 +22,37 @@ export interface HubOptions {
 export async function buildHub(opts: HubOptions) {
   fs.mkdirSync(opts.dataDir, { recursive: true });
   const db = openDb(path.join(opts.dataDir, "warren.db"));
-  const vault = new Vault(path.join(opts.dataDir, "vault"), db);
+  // memory lives in <data>/vault unless the owner pointed it at another folder (maybe an Obsidian vault)
+  const location = resolveVaultLocation(opts.dataDir);
+  const moved = carryOverVault(opts.dataDir, location.path);
+  const vault = new Vault(location.path, db);
   await vault.init();
-  const hub = new Hub(new Store(db), vault);
+  if (moved && moved.files > 0) await vault.syncFromDisk({ name: "Warren", email: "warren@localhost" }, "Brought over memory from the earlier folder");
+  rememberVaultDir(opts.dataDir, location.path);
+  const store = new Store(db);
+  const hub = new Hub(store, vault);
   await hub.ensureTeams();
   hub.routines.start();
   hub.background.start();
+  // edits made in Obsidian on this machine show up in Warren
+  const stopWatching = vault.watch({
+    onChange: () => {
+      const ws = store.firstWorkspace();
+      if (ws) hub.broadcast(ws.id, { type: "memory_changed" });
+    },
+  });
 
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
   await app.register(websocket);
   app.get("/healthz", async () => ({ ok: true }));
   registerInstallers(app);
-  registerApi(app, hub, { filesDir: path.join(opts.dataDir, "files"), dataDir: path.resolve(opts.dataDir) });
+  registerApi(app, hub, {
+    filesDir: path.join(opts.dataDir, "files"),
+    dataDir: path.resolve(opts.dataDir),
+    vault: { location, moved },
+    restart: () => app.close().then(() => process.exit(RESTART_CODE)),
+  });
+  registerVaultGit(app, hub, { dataDir: path.resolve(opts.dataDir) });
 
   if (opts.webDir && fs.existsSync(opts.webDir)) {
     // wildcard serving picks up rebuilt assets without a restart
@@ -51,7 +72,10 @@ export async function buildHub(opts: HubOptions) {
     });
   }
 
-  app.addHook("preClose", async () => hub.shutdown());
+  app.addHook("preClose", async () => {
+    stopWatching();
+    await hub.shutdown();
+  });
   app.addHook("onClose", async () => db.close());
   return { app, hub };
 }

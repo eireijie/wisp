@@ -38,6 +38,8 @@ import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
 import { registerUpdateApi } from "./updates.ts";
 import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
+import { registerMemoryStorageApi } from "./api-memory.ts";
+import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { activeDispatcher, registerOrchestrationApi } from "./orchestration.ts";
@@ -100,7 +102,16 @@ const SUBJECT = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all_agents") }),
 ]);
 
-export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: string; dataDir: string }) {
+export interface RegisterOptions {
+  filesDir: string;
+  dataDir: string;
+  /** where memory was opened from at startup, and what happened to an earlier vault */
+  vault: { location: VaultLocation; moved: MoveResult | null };
+  /** stop the hub so whatever keeps it running starts it again */
+  restart: () => void;
+}
+
+export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOptions) {
   const { store, vault } = hub;
   const db = store.db;
 
@@ -1383,29 +1394,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     return { content: await vault.readAt(p, q.rev ?? "") };
   });
 
-  app.get("/api/vault/graph", async (req, reply) => {
-    const c = need(req, reply);
-    if (!c) return;
-    const notes = vault.list(readable(c));
-    const byKey = new Map<string, string>();
-    for (const n of notes) {
-      byKey.set(n.path.replace(/\.md$/i, "").toLowerCase(), n.path);
-      const base = n.path.split("/").pop()!.replace(/\.md$/i, "").toLowerCase();
-      if (!byKey.has(base)) byKey.set(base, n.path);
-    }
-    const edges: { source: string; target: string }[] = [];
-    for (const n of notes) for (const l of n.links) {
-      const t = byKey.get(l);
-      if (t && t !== n.path) edges.push({ source: n.path, target: t });
-    }
-    return { nodes: notes.map((n) => ({ id: n.path, title: n.title })), edges };
-  });
-
   /** Pick up edits made outside Warren (Obsidian, git pull). */
   app.post("/api/vault/sync", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return { notes: await vault.syncFromDisk(commitAuthor(c)) };
+    // edits found on disk are credited to Obsidian, not to whoever pressed the button
+    const changed = await vault.syncFromDisk();
+    return { notes: vault.list().length, changed };
   });
 
   /** Who last changed each line of a note. */
@@ -1672,6 +1667,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
 
   registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf });
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
+  registerMemoryStorageApi(app, hub, { need, parse, dataDir: opts.dataDir, started: opts.vault, restart: opts.restart });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerOrchestrationApi(app, hub, { need, parse });

@@ -192,6 +192,10 @@ CREATE TABLE IF NOT EXISTS followups (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS followups_due ON followups(status, due_at);
+CREATE TABLE IF NOT EXISTS vault_tokens (
+  id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, last_used TEXT
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL
