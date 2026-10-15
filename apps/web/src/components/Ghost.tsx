@@ -88,25 +88,42 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
   useEffect(() => {
     if (!trackPointer || prefersReducedMotion() || mood === "asleep") return;
     let frame = 0;
+    let lastMove = 0;
+    const look = (x: number, y: number) => face.current?.setAttribute("transform", `translate(${x} ${y})`);
     const reset = () => {
       cancelAnimationFrame(frame);
-      face.current?.setAttribute("transform", "translate(0 0)");
+      look(0, 0);
     };
     const follow = (e: PointerEvent) => {
       if (e.pointerType === "touch") return;
+      lastMove = Date.now();
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const box = root.current?.getBoundingClientRect();
         if (!box) return;
         const x = Math.max(-4.5, Math.min(4.5, (e.clientX - box.left - box.width / 2) / 65));
         const y = Math.max(-3, Math.min(3, (e.clientY - box.top - box.height / 2) / 90));
-        face.current?.setAttribute("transform", `translate(${x} ${y})`);
+        look(x, y);
       });
     };
+    // left alone, it looks around on its own: busy little glances while it works, lazy ones otherwise
+    let glance: ReturnType<typeof setTimeout>;
+    let side = 1;
+    const wander = () => {
+      const idle = Date.now() - lastMove > 2500;
+      if (idle) {
+        if (mood === "thinking") look((side = -side) * 3.5, -1.5);
+        else if (Math.random() < 0.3) look(0, 0);
+        else look((Math.random() * 2 - 1) * 4.5, (Math.random() * 2 - 1) * 2.5);
+      }
+      glance = setTimeout(wander, mood === "thinking" ? 700 + Math.random() * 500 : 1800 + Math.random() * 2600);
+    };
+    glance = setTimeout(wander, 1200);
     window.addEventListener("pointermove", follow, { passive: true });
     document.documentElement.addEventListener("pointerleave", reset);
     window.addEventListener("blur", reset);
     return () => {
+      clearTimeout(glance);
       window.removeEventListener("pointermove", follow);
       document.documentElement.removeEventListener("pointerleave", reset);
       window.removeEventListener("blur", reset);

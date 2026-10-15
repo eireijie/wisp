@@ -367,7 +367,13 @@ body {
 .agent-harness-card:focus-visible, .agent-external-choice:focus-visible, .agent-invite-link:focus-visible, .agent-discover-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .agent-external-choice { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
 .agent-external-choice:hover:not(:disabled) { background: var(--hover); border-color: var(--input); }
-.ghost-face-tracking { transition: transform 150ms ease-out; }
+.ghost-face-tracking { transition: transform 260ms cubic-bezier(0.3, 0.7, 0.3, 1); }
+/* the agent's home in a DM: a pill at the top, where its ghost hops when you come say hi */
+.agent-pill .ghost { transition: transform 200ms ease-out; }
+.agent-pill:hover .ghost { animation: ghost-hop 520ms cubic-bezier(0.3, 0.7, 0.3, 1); }
+.agent-pill-arrow { display: inline-flex; max-width: 0; opacity: 0; margin-left: -6px; transition: max-width 200ms ease-out, opacity 200ms ease-out, margin 200ms ease-out; overflow: hidden; }
+.agent-pill:hover .agent-pill-arrow, .agent-pill:focus-visible .agent-pill-arrow { max-width: 18px; opacity: 1; margin-left: 0; }
+@keyframes ghost-hop { 0% { transform: translateY(0); } 35% { transform: translateY(-6px) rotate(-4deg); } 65% { transform: translateY(-2px) rotate(3deg); } 100% { transform: translateY(0); } }
 @media (max-height: 800px) {
   .agent-identity-row { margin-top: 32px; }
   .agent-identity-hint { margin-top: 32px; }
@@ -387,7 +393,8 @@ body {
   .agent-wizard-footer { padding: 20px 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ghost-face-tracking, .agent-harness-card { transition: none; }
+  .ghost-face-tracking, .agent-harness-card, .agent-pill-arrow { transition: none; }
+  .agent-pill:hover .ghost { animation: none; }
 }
 
 /* setup: each screen eases in where the last one stood */
