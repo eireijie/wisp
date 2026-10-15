@@ -36,6 +36,42 @@ export interface DeviceConfig {
    * (until `until`, or until they stop when `until` is null), and only for things the owner asked for.
    */
   lend?: { until: string | null };
+  /**
+   * An agent borrowing this screen (a person approved its request). Only that agent can use it,
+   * only until `until`; the owner can take it back at any moment.
+   */
+  loan?: DeviceLoan;
+}
+
+/** The longest a screen is lent to one agent, even when the owner picks "until it hands it back". */
+export const LOAN_MAX_MINUTES = 12 * 60;
+
+export interface DeviceLoan {
+  agentId: string;
+  /** when it ends; a loan never outlives this */
+  until: string;
+  since: string;
+  /** who approved it (the device's owner) */
+  approvedBy: string;
+  approvalId: string;
+  /** where the agent was working, so it can be told when the loan ends */
+  channelId: string;
+  threadId: string | null;
+  /** the person the agent was working for */
+  requestedBy: string | null;
+}
+
+/** What an agent asked for with `device_request`; kept on the approval card. */
+export interface DeviceLoanRequest {
+  nodeId: string;
+  deviceName: string;
+  /** the device's owner: the only one who can decide */
+  ownerId: string;
+  /** what the agent needs it for */
+  reason: string;
+  channelId: string;
+  threadId: string | null;
+  requestedBy: string | null;
 }
 
 export type ComputerConfig = VmConfig & Partial<OrgoConfig> & DeviceConfig;
@@ -138,6 +174,13 @@ export function lentNow(c: Pick<Computer, "kind" | "config">, at = Date.now()): 
   const lend = (c.config as DeviceConfig).lend;
   if (!lend) return false;
   return lend.until === null || new Date(lend.until).getTime() > at;
+}
+
+/** The loan on a device's screen if it is still running, else null. */
+export function activeLoan(c: Pick<Computer, "kind" | "config">, at = Date.now()): DeviceLoan | null {
+  if (c.kind !== "device") return null;
+  const loan = (c.config as DeviceConfig).loan;
+  return loan && new Date(loan.until).getTime() > at ? loan : null;
 }
 
 /** Screenshots for agents are scaled to fit this box: big enough to read, small enough to be cheap. */

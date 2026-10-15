@@ -125,8 +125,20 @@ export class WarrenClient {
     }
   }
   /** Do something on this agent's computer (screenshots come back as base64 JPEG). */
-  computer<T = any>(action: ComputerAction) {
-    return this.request<T>("POST", "/api/computers/mine/act", { action });
+  computer<T = any>(action: ComputerAction, device?: string) {
+    return this.request<T>("POST", "/api/computers/mine/act", { action, ...(device ? { computer: device } : {}) });
+  }
+  /** Devices this agent could ask to borrow, and whether each can be asked right now. */
+  borrowableDevices() {
+    return this.request<{ name: string; owner: string; available: boolean; note: string }[]>("GET", "/api/computers/borrowable");
+  }
+  /** Ask a device's owner to let this agent use its screen; the answer arrives as a message that wakes the agent. */
+  requestDevice(device: string, reason: string) {
+    return this.request<{ ok: boolean; approvalId: string; deviceName: string }>("POST", "/api/computers/loans", { device, reason });
+  }
+  /** Hand a borrowed device back. */
+  returnDevice(device?: string) {
+    return this.request<{ ok: boolean; deviceName: string }>("POST", "/api/computers/loans/return", { device });
   }
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {

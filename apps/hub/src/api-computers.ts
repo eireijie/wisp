@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { ComputerAction, DEVICE_HARNESS, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type RecordedStep } from "@warren/core";
+import { ComputerAction, DEVICE_HARNESS, LOAN_MAX_MINUTES, activeLoan, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type RecordedStep } from "@warren/core";
 import type { Caller } from "./api.ts";
 import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
@@ -377,8 +377,18 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply);
     if (!c) return;
     if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    const comp = myComputer(c, reply);
-    if (!comp) return;
+    // `computer` names a device the agent is borrowing; without it the action is on its own computer
+    const borrowed = (req.body as { computer?: unknown })?.computer;
+    let comp: Computer | null;
+    if (typeof borrowed === "string" && borrowed.trim() && !/^(mine|my vm|my computer)$/i.test(borrowed.trim())) {
+      const want = borrowed.trim().toLowerCase();
+      const own = store.agent(c.actor.id)?.computerId;
+      comp = store.computers(c.workspaceId).find((x) => x.kind === "device" && (x.id === borrowed || x.name.toLowerCase() === want) && (x.config as { loan?: { agentId: string } }).loan?.agentId === c.actor.id && x.id !== own) ?? null;
+      if (!comp) return reply.code(403).send({ error: `You aren't borrowing "${borrowed}". Ask its owner with device_request (it may also have run out or been taken back); leave the computer argument out to use your own computer.` });
+    } else {
+      comp = myComputer(c, reply);
+      if (!comp) return;
+    }
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
     if (["destroy", "stop", "signin"].includes(action.action)) return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : "only people can stop or remove a computer" });
@@ -387,6 +397,56 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     } catch (err) {
       return fail(reply, err);
     }
+  });
+
+  // --- borrowing a device -----------------------------------------------------------------------
+
+  /** Devices this agent could ask to borrow, and whether each can be asked right now. */
+  app.get("/api/computers/borrowable", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
+    return computers.borrowable(c.workspaceId, c.actor.id);
+  });
+
+  /** An agent asks to use a device's screen; the device's owner gets an Approve / Deny card. */
+  app.post("/api/computers/loans", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents ask to borrow a device; people lend it on the Computers page" });
+    const body = parse(z.object({ device: z.string().trim().min(1).max(200), reason: z.string().trim().min(1).max(1000) }), req.body, reply);
+    if (!body) return;
+    try {
+      const approval = computers.requestLoan(c.workspaceId, c.actor.id, body.device, body.reason);
+      return { ok: true, approvalId: approval.id, deviceName: approval.loan!.deviceName };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  /** An agent hands a borrowed device back. */
+  app.post("/api/computers/loans/return", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
+    const body = parse(z.object({ device: z.string().max(200).optional() }), req.body ?? {}, reply);
+    if (!body) return;
+    try {
+      return { ok: true, deviceName: computers.returnLoan(c.workspaceId, c.actor.id, body.device).name };
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  /** The owner takes the device back from the agent borrowing it. */
+  app.post("/api/computers/:id/loan/end", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const comp = own(c, (req.params as { id: string }).id);
+    if (!comp) return reply.code(404).send({ error: "computer not found" });
+    if (!activeLoan(comp)) return reply.code(409).send({ error: "nobody is borrowing it" });
+    computers.endLoan(comp, "taken back", c.actor);
+    return computers.view(store.computer(comp.id)!);
   });
 
   app.post("/api/computers/mine/help", async (req, reply) => {
@@ -439,15 +499,36 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
     if (!a || a.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default("") }), req.body, reply);
+    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), minutes: z.number().int().min(1).max(LOAN_MAX_MINUTES).nullable().optional() }), req.body, reply);
     if (!body) return;
     if (a.status !== "pending") return reply.code(409).send({ error: `already ${a.status}` });
+    const agent = store.agent(a.agentId);
+    const note = body.note.trim() ? ` ${body.note.trim()}` : "";
+    if (a.loan) {
+      // lending a device is its owner's call alone
+      const owner = store.user(a.loan.ownerId)?.name ?? "its owner";
+      if (c.actor.id !== a.loan.ownerId) return reply.code(403).send({ error: `Only ${owner} can lend ${a.loan.deviceName}` });
+      let verdict: string;
+      if (body.approve) {
+        try {
+          const loan = computers.startLoan(a, c.actor.id, body.minutes === undefined ? 60 : body.minutes);
+          const mins = Math.round((new Date(loan.until).getTime() - Date.now()) / 60_000);
+          verdict = `Approved: you can use "${a.loan.deviceName}" for ${mins >= 60 && mins % 60 === 0 ? `${mins / 60} hour${mins === 60 ? "" : "s"}` : `${mins} minutes`} (until ${new Date(loan.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}). Pass computer: "${a.loan.deviceName}" to the computer_* tools to act on it; without it they still act on your own computer. When you're done, call device_return.`;
+        } catch (err) {
+          return fail(reply, err);
+        }
+      } else verdict = `Denied: ${owner} didn't lend you "${a.loan.deviceName}". Carry on without it, or ask in chat.`;
+      const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
+      hub.broadcast(c.workspaceId, { type: "approval", approval: decided });
+      // the agent is woken where it was working, for the person it was working for
+      if (agent && store.channel(a.loan.channelId)) hub.postMessage({ channelId: a.loan.channelId, threadId: a.loan.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}`, onBehalfOf: a.loan.requestedBy ?? c.actor.id });
+      return decided;
+    }
     const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
     hub.broadcast(c.workspaceId, { type: "approval", approval: decided });
-    const agent = store.agent(a.agentId);
     if (agent && store.channel(a.channelId)) {
       const verdict = body.approve ? `Approved: go ahead with "${a.summary}".` : `Don't do "${a.summary}".`;
-      hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${body.note.trim() ? ` ${body.note.trim()}` : ""}` });
+      hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}` });
     }
     return decided;
   });

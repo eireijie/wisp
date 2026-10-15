@@ -316,6 +316,11 @@ export class Store {
     return (this.db.prepare("SELECT * FROM computers WHERE node_id = ?").all(nodeId) as ComputerRow[]).map(toComputer);
   }
 
+  /** Device screens someone is borrowing. */
+  loanedComputers(): Computer[] {
+    return (this.db.prepare(`SELECT * FROM computers WHERE kind = 'device' AND config_json LIKE '%"loan"%'`).all() as ComputerRow[]).map(toComputer);
+  }
+
   updateComputer(computerId: string, patch: Partial<{ name: string; config: ComputerConfig; status: ComputerStatus; statusText: string; help: Computer["help"] }>) {
     const cur = this.computer(computerId);
     if (!cur) return undefined;
@@ -355,11 +360,11 @@ export class Store {
 
   // --- approvals ------------------------------------------------------------
 
-  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string }): Approval {
+  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; loan?: Approval["loan"] }): Approval {
     const approvalId = id("apr");
     this.db
-      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)")
-      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now());
+      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, loan_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)")
+      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.loan ? JSON.stringify(a.loan) : null);
     return this.approval(approvalId)!;
   }
 
@@ -1172,6 +1177,7 @@ type ApprovalRow = {
   note: string;
   created_at: string;
   decided_at: string | null;
+  loan_json: string | null;
 };
 
 function toApproval(r: ApprovalRow): Approval {
@@ -1188,6 +1194,7 @@ function toApproval(r: ApprovalRow): Approval {
     note: r.note,
     createdAt: r.created_at,
     decidedAt: r.decided_at,
+    loan: r.loan_json ? JSON.parse(r.loan_json) : null,
   };
 }
 
