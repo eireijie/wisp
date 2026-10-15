@@ -12,7 +12,7 @@ import type { Vault } from "@warren/vault";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
-import { dispatcherSection } from "./orchestration.ts";
+import { leadSection } from "./lead.ts";
 import type { Store } from "./store.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -605,7 +605,7 @@ export class Hub {
       : "";
     const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
-    const dispatch = dispatcherSection(store, agent);
+    const leading = leadSection(store, agent);
     const skills = this.skills.promptSection(agent.id);
     const connectors = this.connectors.promptSection(agent.id);
     const soulNote = agent.settings.soulLocked
@@ -619,7 +619,7 @@ export class Hub {
       soul ? `\n## Your soul (me/SOUL.md): who you are\n${soul}\n\n${soulNote}` : "",
       agent.settings.role?.trim() ? `\n## Your role\nYou are the workspace's ${agent.settings.role.trim()}.${agent.settings.roleNotes?.trim() ? ` ${agent.settings.roleNotes.trim()}` : ""}` : "",
       agent.instructions ? `\n## Your instructions (from your owner): your job\n${agent.instructions}` : "",
-      dispatch ? `\n${dispatch}` : "",
+      leading ? `\n${leading}` : "",
       memory ? `\n${memory}` : "",
       `\n## Where you are`,
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,

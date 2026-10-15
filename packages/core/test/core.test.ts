@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { builtinRules, covers, teamChain, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, startupRules, subjectKey, type AccessRule, type Viewer } from "../src/index.ts";
+import { TEAM_TEMPLATES, HARNESS_IDS, builtinRules, covers, pickReviewer, teamChain, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, startupRules, subjectKey, type AccessRule, type Viewer } from "../src/index.ts";
 
 describe("parseMentions", () => {
   it("finds handles, ignores emails and code", () => {
@@ -138,5 +138,43 @@ describe("default ghost", () => {
     }
     const shapes = new Set(Array.from({ length: 40 }, (_, i) => defaultAppearance(`agent-${i}`).shape));
     expect(shapes.size).toBeGreaterThan(2); // agents don't all look alike
+  });
+});
+
+describe("pickReviewer", () => {
+  const c = (agentId: string, harness: string, role = "", lead = false) => ({ agentId, harness, role, lead });
+  const builder = { agentId: "b", harness: "codex" };
+
+  it("prefers a reviewer role, then another harness, then the lead, and never the builder", () => {
+    expect(pickReviewer(builder, [c("b", "codex"), c("k", "kimi"), c("r", "claude-code", "Reviewer"), c("l", "hermes", "", true)])).toBe("r");
+    expect(pickReviewer(builder, [c("c2", "codex", "Code reviewer"), c("k", "kimi")])).toBe("c2");
+    expect(pickReviewer(builder, [c("c2", "codex"), c("k", "kimi")])).toBe("k");
+    expect(pickReviewer(builder, [c("c2", "codex"), c("c3", "codex", "", true)])).toBe("c3");
+    expect(pickReviewer(builder, [c("b", "codex", "Reviewer", true)])).toBeNull();
+    expect(pickReviewer(builder, [])).toBeNull();
+  });
+
+  it("among reviewers, takes the one on another harness", () => {
+    expect(pickReviewer(builder, [c("a", "codex", "Reviewer"), c("z", "claude-code", "Reviewer")])).toBe("z");
+  });
+});
+
+describe("team templates", () => {
+  it("have one lead each, unique roles, and only known harnesses", () => {
+    expect(TEAM_TEMPLATES.map((t) => t.id)).toEqual(["build", "research", "solo-reviewer"]);
+    for (const t of TEAM_TEMPLATES) {
+      expect(t.roles.filter((r) => r.lead)).toHaveLength(1);
+      expect(new Set(t.roles.map((r) => r.role)).size).toBe(t.roles.length);
+      for (const r of t.roles) {
+        expect(r.notes.length).toBeGreaterThan(10);
+        expect(HARNESS_IDS).toContain(r.harness);
+      }
+    }
+    expect(TEAM_TEMPLATES[0].roles.map((r) => [r.role, r.harness])).toEqual([
+      ["Lead & builder", "hermes"],
+      ["Backend", "codex"],
+      ["Frontend & design", "kimi"],
+      ["Reviewer", "claude-code"],
+    ]);
   });
 });

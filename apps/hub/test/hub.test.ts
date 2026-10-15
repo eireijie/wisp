@@ -7,6 +7,7 @@ import type { HubToNode, Message, NodeToHub } from "@warren/core";
 import { buildHub } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
 import { Store } from "../src/store.ts";
+import { workspaceLead } from "../src/lead.ts";
 
 let dir: string;
 let base: string;
@@ -824,7 +825,7 @@ describe("agents inside their computers", () => {
     const t = (await api<any>("POST", "/api/tasks", { to: "auto", title: "Plan the offsite", brief: "Three venues under $5k." })).data;
     expect([atlas.id, nova.id]).toContain(t.toAgentId);
     const thread = await waitFor(async () => (await channelMessagesIn(t.channelId)).find((m) => m.id === t.threadId));
-    expect(thread.body).toContain("You were picked to route this");
+    expect(thread.body).toContain("You're the lead: plan this");
     // the agent picking it up moves it to in progress
     const working = await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((x) => x.id === t.id && x.status === "in_progress"));
     expect(working).toBeTruthy();
@@ -833,36 +834,34 @@ describe("agents inside their computers", () => {
   });
 });
 
-describe("orchestration addon", () => {
-  it("is off until set up, then routes unassigned tasks to the dispatcher, who hands out subtasks", async () => {
-    const off = (await api<any>("GET", "/api/settings/orchestration")).data;
-    expect(off).toMatchObject({ enabled: false, dispatcherId: null, ready: false });
-    expect(off.steps.map((s: any) => s.id)).toEqual(["enabled", "dispatcher", "roles"]);
-
-    // only owners turn it on
+describe("the lead", () => {
+  it("takes every unassigned task, knows who has which role, and hands out subtasks", async () => {
+    // only owners pick the lead
     const sam = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
-    expect((await api("PUT", "/api/settings/orchestration", { enabled: true }, sam)).status).toBe(403);
-    expect((await api("PUT", "/api/settings/orchestration", { dispatcherId: "agent_nope" })).status).toBe(404);
-    const on = (await api<any>("PUT", "/api/settings/orchestration", { enabled: true, dispatcherId: atlas.id })).data;
-    expect(on.steps.find((s: any) => s.id === "dispatcher").done).toBe(true);
+    expect((await api("PUT", "/api/settings/lead", { leadId: atlas.id }, sam)).status).toBe(403);
+    expect((await api("PUT", "/api/settings/lead", { leadId: "agent_nope" })).status).toBe(404);
+    const picked = (await api<any>("PUT", "/api/settings/lead", { leadId: atlas.id })).data;
+    expect(picked).toEqual({ leadId: atlas.id, lead: atlas.id });
+    expect((await api<any>("GET", "/api/settings/lead")).data).toEqual(picked);
 
-    // roles live in the agent's settings
+    // roles live in the agent's settings, or on its team
     await api("PATCH", `/api/agents/${nova.id}`, { settings: { role: "Engineer", roleNotes: "Owns the build." } });
-    const ready = (await api<any>("GET", "/api/settings/orchestration")).data;
-    expect(ready).toMatchObject({ enabled: true, dispatcherId: atlas.id, ready: true });
+    const tess = (await api("POST", "/api/agents", { handle: "tess", name: "Tess", harness: "kimi", nodeId: atlas.nodeId })).data;
+    await api("POST", "/api/teams", { name: "squad", leadId: atlas.id, members: [{ agentId: tess.id, role: "Frontend & design", roleNotes: "Owns how it looks." }] });
 
-    // an unassigned task goes to the dispatcher, who's told to plan it and who has which role
+    // no add-on to turn on: an unassigned task goes to the lead, who's told to plan it
     const before = node.runs.length;
     const parent = (await api<any>("POST", "/api/tasks", { title: "Ship the release", brief: "Get 2.0 out." })).data;
     expect(parent.toAgentId).toBe(atlas.id);
     expect(parent.parentId).toBeNull();
-    expect(parent.brief).toContain("You're the dispatcher");
+    expect(parent.brief).toContain("You're the lead");
     const run = await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id));
     const prompt = run.type === "run" ? run.run.prompt : "";
-    expect(prompt).toContain("## You're the dispatcher");
-    expect(prompt).toContain("@nova (Nova): Engineer. Owns the build.");
+    expect(prompt).toContain("## You're the lead");
+    expect(prompt).toContain("@nova (Nova, codex): Engineer. Owns the build.");
+    expect(prompt).toContain("@tess (Tess, kimi): Frontend & design. Owns how it looks.");
 
-    // what the dispatcher hands out while working the task becomes its subtask
+    // what the lead hands out while working the task becomes its subtask
     const file = path.join(dir, "warren.db");
     const db = openDb(file);
     const runId = run.type === "run" ? run.run.runId : "";
@@ -877,18 +876,78 @@ describe("orchestration addon", () => {
     expect(sub2.parentId).toBe(parent.id);
     expect((await api("POST", "/api/tasks", { to: "nova", title: "x", brief: "x", parentTaskId: "task_nope" }, nodeToken, asAtlas)).status).toBe(404);
 
-    // a finished subtask tells the dispatcher how far along the whole thing is
+    // a finished subtask tells the lead how far along the whole thing is
     await api("PATCH", `/api/tasks/${sub.id}`, { status: "done", result: "built" }, nodeToken, { "x-warren-agent": nova.id });
     const report = await waitFor(async () => (await channelMessagesIn(sub.channelId, sub.threadId)).find((m) => m.body.includes("subtasks done")));
     expect(report.body).toContain("1/2 subtasks done");
     expect(report.body).toContain("@atlas");
-    // which wakes the dispatcher up with it
+    // which wakes the lead up with it
     await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.agentId === atlas.id && r.run.prompt.includes("1/2 subtasks done")));
     await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.agentId === nova.id && r.run.prompt.includes("Write the changelog")));
     await new Promise((r) => setTimeout(r, 200));
 
-    await api("PUT", "/api/settings/orchestration", { enabled: false });
-    // off again: "auto" falls back to the old guess
-    expect((await api<any>("GET", "/api/settings/orchestration")).data.ready).toBe(false);
+    // unpicking falls back to a team lead
+    await api("PUT", "/api/settings/lead", { leadId: null });
+    const status = (await api<any>("GET", "/api/settings/lead")).data;
+    expect(status.leadId).toBeNull();
+    expect(status.lead).toBeTruthy();
+  });
+
+  it("keeps the dispatcher an old workspace picked as its lead", () => {
+    const db = openDb(path.join(dir, "old-dispatcher.db"));
+    db.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('ws_1', 'Old', '2026-01-01')").run();
+    for (const h of ["a", "b"]) db.prepare("INSERT INTO agents (id, workspace_id, handle, name, harness, created_at) VALUES (?, 'ws_1', ?, ?, 'codex', '2026-01-01')").run(`agt_${h}`, h, h);
+    const store = new Store(db);
+    store.setSetting("ws_1", "orchestration", JSON.stringify({ enabled: false, dispatcherId: "agt_b" }));
+    expect(workspaceLead(store, "ws_1")?.id).toBe("agt_b");
+    // a lead picked now wins over the old setting
+    store.setSetting("ws_1", "lead", JSON.stringify({ leadId: "agt_a" }));
+    expect(workspaceLead(store, "ws_1")?.id).toBe("agt_a");
+    db.close();
+  });
+});
+
+describe("review by someone else", () => {
+  const as = (agent: any) => ({ "x-warren-agent": agent.id });
+  const mk = async (handle: string, harness: string) => (await api<any>("POST", "/api/agents", { handle, name: handle, harness, nodeId: atlas.nodeId })).data;
+  const reviewFor = (teamId: string, taskId: string) => waitFor(async () => (await api<any[]>("GET", `/api/tasks?team=${teamId}`)).data.find((t) => t.reviewOf === taskId));
+
+  it("goes to the team's reviewer, never the builder, and the builder can't merge its own work", async () => {
+    const rune = await mk("rune", "claude-code");
+    const kai = await mk("kai", "kimi");
+    const team = (await api<any>("POST", "/api/teams", { name: "stack", leadId: nova.id, repo: "/srv/stack", members: [{ agentId: kai.id, role: "Frontend & design" }, { agentId: rune.id, role: "Reviewer" }] })).data;
+    const task = (await api<any>("POST", "/api/tasks", { to: "kai", title: "Restyle the header", brief: "Make it nicer", channelId: team.channelId }, nodeToken, as(nova))).data;
+    await api("PATCH", `/api/tasks/${task.id}`, { status: "done", result: "restyled" }, nodeToken, as(kai));
+    const review = await reviewFor(team.id, task.id);
+    expect(review.toAgentId).toBe(rune.id);
+    expect((await api("POST", `/api/tasks/${review.id}/merge`, undefined, nodeToken, as(kai))).status).toBe(403);
+    expect((await api("POST", `/api/tasks/${review.id}/merge`, undefined, nodeToken, as(rune))).status).toBe(200);
+  });
+
+  it("falls back to a teammate on another harness, who can then merge, and skips review when nobody else is there", async () => {
+    const lia = await mk("lia", "codex");
+    const kim = await mk("kim", "kimi");
+    const team = (await api<any>("POST", "/api/teams", { name: "pair", leadId: lia.id, repo: "/srv/pair", members: [{ agentId: kim.id }] })).data;
+    // the lead builds, so the only other teammate reviews it
+    const task = (await api<any>("POST", "/api/tasks", { to: "lia", title: "Add search", brief: "x", channelId: team.channelId })).data;
+    await api("PATCH", `/api/tasks/${task.id}`, { status: "done", result: "done" }, nodeToken, as(lia));
+    const review = await reviewFor(team.id, task.id);
+    expect(review.toAgentId).toBe(kim.id);
+    // kim isn't the lead or called a reviewer, but is reviewing this one
+    expect((await api("POST", `/api/tasks/${review.id}/merge`, undefined, nodeToken, as(kim))).status).toBe(200);
+
+    // alone on its team, the work goes to the workspace's lead, unless that's the builder
+    const solo = (await api<any>("POST", "/api/teams", { name: "loner", leadId: lia.id, repo: "/srv/loner" })).data;
+    await api("PUT", "/api/settings/lead", { leadId: lia.id });
+    const alone = (await api<any>("POST", "/api/tasks", { to: "lia", title: "Fix typo", brief: "x", channelId: solo.channelId })).data;
+    await api("PATCH", `/api/tasks/${alone.id}`, { status: "done", result: "done" }, nodeToken, as(lia));
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await api<any[]>("GET", `/api/tasks?team=${solo.id}`)).data.some((t) => t.reviewOf === alone.id)).toBe(false);
+    await api("PUT", "/api/settings/lead", { leadId: atlas.id });
+    const second = (await api<any>("POST", "/api/tasks", { to: "lia", title: "Fix another typo", brief: "x", channelId: solo.channelId })).data;
+    await api("PATCH", `/api/tasks/${second.id}`, { status: "done", result: "done" }, nodeToken, as(lia));
+    expect((await reviewFor(solo.id, second.id)).toAgentId).toBe(atlas.id);
+    // let the review runs finish before the hub shuts down
+    await new Promise((r) => setTimeout(r, 300));
   });
 });

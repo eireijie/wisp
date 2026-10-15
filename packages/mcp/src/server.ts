@@ -111,7 +111,7 @@ export async function createWarrenMcp(client: WarrenClient) {
     "task_delegate",
     {
       description:
-        "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done. Work you hand out while working on a task becomes a subtask of it (or name the parent with parent_task_id); if you're the dispatcher, this is how you assign the pieces of a task to agents by their roles.",
+        "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done. Work you hand out while working on a task becomes a subtask of it (or name the parent with parent_task_id); if you're the lead, this is how you assign the pieces of a task to agents by their roles.",
       inputSchema: {
         to: z.string().describe('agent handle, e.g. @nova, or "team:<name>" for a team\'s lead'),
         title: z.string(),
