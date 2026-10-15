@@ -650,7 +650,7 @@ function HarnessScreen({ device, name, agent, onCreated, onBack, onNext }: { dev
         computerId,
         settings: {
           ...(device.role === "headless" ? { headless: true } : {}),
-          // in a VM on its own device, Claude Code and Codex run inside it, away from the device
+          // in a VM on its own device, these harnesses run inside it, away from the device
           ...(kind === "vm" && runsInVm(harness) ? { runIn: "computer" as const } : {}),
         },
       });

@@ -257,7 +257,7 @@ async function setup(yes: boolean) {
 
   console.log("1. Harnesses");
   const found = Object.values(deviceAdapters(saved.harnesses)).filter((a) => which(a.binary));
-  console.log(found.length ? `   ${found.map((a) => a.label).join(", ")}` : "   none yet. Agents can still run inside their VMs (Claude Code and Codex come with it).");
+  console.log(found.length ? `   ${found.map((a) => a.label).join(", ")}` : "   none yet. Agents can still run inside their VMs (Claude Code, Codex, Hermes and Kimi CLI come with it).");
 
   console.log("\n2. Something to run VMs");
   let { engine, detail } = await detectEngine(saved.vmEngine);

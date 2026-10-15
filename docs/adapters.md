@@ -5,7 +5,7 @@ There are three ways an agent harness can take part in Warren. Most harnesses ne
 | Harness | How Warren runs it |
 | --- | --- |
 | Claude Code, Codex | Their own adapters (`claude -p`, `codex exec`) |
-| Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw | The ACP adapter (`hermes acp`, `gemini --acp`, `opencode acp`, …) |
+| Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw | The ACP adapter (`hermes acp`, `gemini --acp`, `opencode acp`, …). Hermes and Kimi CLI also come with the VM image and run inside the agent's VM, like Claude Code and Codex (see [Computers](computers.md)) |
 | Anything else that speaks ACP | Declare it on the device (below) |
 | Anything that speaks MCP | `warren-mcp` from wherever it runs |
 
@@ -44,7 +44,9 @@ To run an ACP agent Warren doesn't know yet, declare it in the device's `~/.warr
 }
 ```
 
-`acp:my-bot` then appears as a harness when adding an agent on that device. The second entry changes how a known harness starts (for an older version). Commands come only from the device's own config, never from the hub.
+`acp:my-bot` then appears as a harness when adding an agent on that device.
+
+Inside a VM, the ACP adapter starts the copy of the agent that comes with the VM image (`hermes acp`, `kimi acp`) through the run's `launch` option, so a device's own `command` or `args` for a known harness only apply to runs on the device. To put another harness in the VM, install it in `docker/computer/Dockerfile`, add its id to `VM_HARNESSES` in `packages/core/src/harnesses.ts`, and give it a sign-in command and a signed-in check in `apps/node/src/computers/docker.ts`. The second entry changes how a known harness starts (for an older version). Commands come only from the device's own config, never from the hub.
 
 Some agents (OpenClaw) refuse MCP servers per session. Warren still runs them, says so in the conversation, and you can add `warren-mcp` to that agent's own MCP settings instead.
 
@@ -100,4 +102,4 @@ People add **connectors** on the Connectors page (MCP servers, local or remote, 
 
 ## Bringing in agents that already exist
 
-When a device connects, it reports agents it finds there: Hermes profiles (`~/.hermes`, `~/.hermes/profiles/*`), OpenClaw workspaces (`~/.openclaw/workspace*`), Claude Code subagents (`~/.claude/agents/*.md`) and OpenCode agents (`~/.config/opencode/agent*/*.md`). Only names and counts leave the device. When someone picks one under **Add agent → Bring in an existing agent**, the device sends its soul, instructions and notes, and Warren puts them in the new agent's memory folder (notes under `imported/`). Add more sources in `apps/node/src/discover.ts`.
+When a device connects, it reports agents it finds there: Hermes profiles (`~/.hermes`, `~/.hermes/profiles/*`), OpenClaw workspaces (`~/.openclaw/workspace*`), Claude Code subagents (`~/.claude/agents/*.md`) and OpenCode agents (`~/.config/opencode/agent*/*.md`). Only names and counts leave the device. When someone picks one under **Add agent → Bring in an existing agent**, the device sends its soul, instructions and notes, and Warren puts them in the new agent's memory folder (notes under `imported/`). Hermes profiles are text only (soul and notes), so they move into a VM like any other agent; its provider keys stay behind, and the agent is signed in on the VM once. Add more sources in `apps/node/src/discover.ts`.

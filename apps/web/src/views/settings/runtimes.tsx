@@ -72,7 +72,7 @@ export function RuntimesPage() {
 
   return (
     <>
-      <PageHeader title="Agent runtimes">The agent tools (harnesses) Warren can run on each of your devices. Agents in a VM also get Claude Code and Codex inside it.</PageHeader>
+      <PageHeader title="Agent runtimes">The agent tools (harnesses) Warren can run on each of your devices. Agents in a VM also get Claude Code, Codex, Hermes and Kimi CLI inside it.</PageHeader>
       {devices === null ? (
         <p className="text-sm text-muted">Loading devices…</p>
       ) : !device ? (

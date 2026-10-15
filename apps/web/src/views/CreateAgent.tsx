@@ -955,7 +955,7 @@ export function freeHandle(name: string, taken: string[]): string {
 }
 
 /**
- * Bring in an agent found on a device. Claude Code and Codex move into a VM on that device when
+ * Bring in an agent found on a device. Claude Code, Codex, Hermes and Kimi CLI move into a VM on that device when
  * it has one (their instructions and memories come along); others keep running on the device.
  */
 export async function importFound(
