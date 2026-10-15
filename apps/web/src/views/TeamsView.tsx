@@ -331,7 +331,7 @@ function AddMember({ team, onClose }: { team: TeamInfo; onClose: () => void }) {
           }
         }}
       >
-        <SlotEditor slot={slot} agents={free} taken={new Set()} canCreate={canCreate} onChange={(p) => setSlot({ ...slot, ...p })} />
+        <SlotEditor slot={slot} devices={devices ?? []} agents={free} taken={new Set()} canCreate={canCreate} onChange={(p) => setSlot({ ...slot, ...p })} />
         {(problem || error) && <p className="text-sm text-bad">{problem ?? error}</p>}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>

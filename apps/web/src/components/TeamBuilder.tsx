@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { Plus, Smile, X } from "lucide-react";
-import { TEAM_TEMPLATES, harnessLabel, type Agent } from "@warren/core";
+import { TEAM_TEMPLATES, harnessLabel, runsInVm, type Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type TeamInfo } from "../store.ts";
 import { go } from "../router.ts";
 import { useDevices, type DeviceInfo } from "../devices.ts";
 import { freeHandle } from "../views/CreateAgent.tsx";
-import { NEW_AGENT_HARNESSES, blankSlot, deviceFor, slotProblem, slotsFor, withLead, type Slot } from "../teamSetup.ts";
+import { computerNote, ownComputer, resolveComputer, vmOnDevice } from "../agentComputer.ts";
+import { NEW_AGENT_HARNESSES, blankSlot, deviceFor, harnessNote, slotProblem, slotsFor, withLead, type Slot } from "../teamSetup.ts";
 import { Button, EmojiPicker, Field, Input, Modal, Popover, Textarea, cx } from "./ui.tsx";
 
 const selectCls = "h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm";
 
 /** One role: its name, what it owns, and which agent fills it (one you have, or a new one on any harness). */
-export function SlotEditor({ slot, onChange, onRemove, agents, taken, canCreate, showLead }: { slot: Slot; onChange: (patch: Partial<Slot>) => void; onRemove?: () => void; agents: Agent[]; taken: Set<string>; canCreate: boolean; showLead?: boolean }) {
+export function SlotEditor({ slot, onChange, onRemove, agents, taken, canCreate, showLead, devices }: { slot: Slot; onChange: (patch: Partial<Slot>) => void; onRemove?: () => void; agents: Agent[]; taken: Set<string>; canCreate: boolean; showLead?: boolean; devices: DeviceInfo[] }) {
+  const computers = useStore((s) => s.computers);
+  const node = deviceFor(slot.harness, devices);
   return (
     <div className="rounded-xl border border-line p-3 space-y-2.5">
       <div className="flex items-center gap-2">
@@ -40,16 +43,20 @@ export function SlotEditor({ slot, onChange, onRemove, agents, taken, canCreate,
         </select>
         {slot.pick === "new" && (
           <select value={slot.harness} onChange={(e) => onChange({ harness: e.target.value })} className={selectCls} aria-label="Harness for the new agent" disabled={!canCreate}>
+            <option value="" disabled>
+              Choose a harness…
+            </option>
             {NEW_AGENT_HARNESSES.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.label}
-                {h.id === slot.suggested ? " (suggested)" : ""}
+                {h.id === slot.suggested ? " (suggested)" : ""} {harnessNote(h.id, devices) ?? ""}
               </option>
             ))}
           </select>
         )}
       </div>
-      {slot.pick === "new" && <Input value={slot.name} onChange={(e) => onChange({ name: e.target.value })} placeholder={`Name (${harnessLabel(slot.harness)})`} aria-label="Name for the new agent" maxLength={80} />}
+      {slot.pick === "new" && <Input value={slot.name} onChange={(e) => onChange({ name: e.target.value })} placeholder={`Name (${slot.harness ? harnessLabel(slot.harness) : "new agent"})`} aria-label="Name for the new agent" maxLength={80} />}
+      {slot.pick === "new" && slot.harness && canCreate && <p className="text-xs text-muted">{computerNote(ownComputer(node, computers), node)}</p>}
     </div>
   );
 }
@@ -63,10 +70,17 @@ export async function createSlotAgents(slots: Slot[], agents: Agent[], devices: 
       out.set(s.key, s.pick);
       continue;
     }
+    const node = deviceFor(s.harness, devices);
+    const computers = useStore.getState().computers;
+    const choice = ownComputer(node, computers);
     const name = s.name.trim() || harnessLabel(s.harness);
     const handle = freeHandle(name, handles);
     handles.push(handle);
-    const made = await api<Agent>("POST", "/api/agents", { harness: s.harness, name, handle, nodeId: deviceFor(s.harness, devices)?.id ?? null, instructions: "" });
+    // every agent gets its own computer, the same way Add agent does it
+    const computerId = node ? await resolveComputer(choice, node.id, name) : null;
+    const settings = { ...(choice.kind === "headless" ? { headless: true } : {}), ...(node && vmOnDevice(choice, node.id, computers) && runsInVm(s.harness) ? { runIn: "computer" as const } : {}) };
+    const made = await api<Agent>("POST", "/api/agents", { harness: s.harness, name, handle, nodeId: node?.id ?? null, computerId, instructions: "", settings });
+    await useStore.getState().refreshComputers();
     out.set(s.key, made.id);
     onMade(s.key, made.id);
   }
@@ -89,7 +103,7 @@ export function TeamBuilder({ onClose }: { onClose: () => void }) {
   const choose = (id: string) => {
     const t = TEAM_TEMPLATES.find((x) => x.id === id) ?? null;
     setTemplateId(id);
-    setSlots(slotsFor(t, agents));
+    setSlots(slotsFor(t, agents, devices));
     setF((cur) => ({ ...cur, emoji: t?.emoji ?? cur.emoji, description: t?.description ?? "" }));
   };
   const patch = (k: string, p: Partial<Slot>) => setSlots((cur) => cur.map((s) => (s.key === k ? { ...s, ...p } : p.lead ? { ...s, lead: false } : s)));
@@ -172,7 +186,7 @@ export function TeamBuilder({ onClose }: { onClose: () => void }) {
           <div className="text-sm font-medium">Roles</div>
           {slots.length === 0 && <p className="text-sm text-muted">No roles yet. Add one, or create the team empty and add agents later.</p>}
           {slots.map((s) => (
-            <SlotEditor key={s.key} slot={s} agents={agents} taken={taken} canCreate={canCreate} showLead onChange={(p) => patch(s.key, p)} onRemove={() => setSlots((cur) => cur.filter((x) => x.key !== s.key))} />
+            <SlotEditor key={s.key} slot={s} devices={devices ?? []} agents={agents} taken={taken} canCreate={canCreate} showLead onChange={(p) => patch(s.key, p)} onRemove={() => setSlots((cur) => cur.filter((x) => x.key !== s.key))} />
           ))}
           <Button type="button" onClick={() => setSlots((cur) => [...cur, blankSlot()])}>
             <Plus size={15} /> Add a role
