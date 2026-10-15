@@ -49,7 +49,7 @@ A device's own screen is its owner's: the person who connected the device. It's 
 warren node screen on     # on that device; `warren node screen off` turns it off again
 ```
 
-Then **Computers → Add computer → Your own screen**. Agents can't use it until you **Lend it to agents** (for an hour, four hours, the rest of the day, or until you stop), and even then only for things you asked for, directly or through other agents. An agent working on someone else's request is turned away. Everything done on it shows under **Activity** on its page.
+Then **Computers → Add computer → Your own screen**. Agents can't use it until you **Lend it to agents** (for an hour, four hours, the rest of the day, or until you stop), and even then only for things you asked for, directly or through other agents. Or an agent can ask for it mid-task, and you approve just that ([below](#borrowing-your-device-mid-task)). An agent working on someone else's request is turned away. Everything done on it shows under **Activity** on its page.
 
 Use it when a task needs an app or file that only lives on your computer. For everything else, agents have their own VMs.
 
@@ -60,6 +60,19 @@ Use it when a task needs an app or file that only lives on your computer. For ev
 Live view streams screenshots (about two a second). If the device already runs a VNC server, set its port on the computer and Warren relays that instead.
 
 `"noScreen": true` in `node.json` stops a device from ever offering its screen, whatever `warren node screen on` says. Shell commands from Warren (`computer_run`) only run on a device's own screen when the device opted in with `--allow-full-access`.
+
+### Borrowing your device mid-task
+
+An agent works on its own VM and asks for your device only when a task needs it, say a Windows POS app that exists only on the shop PC. The agent calls `device_request` ("I need the shop PC to enter today's sales in the POS") and you get an **Approve / Deny** card in your chat with that agent (and a push notification, like any approval). You pick how long it gets: 15 minutes, 1 hour, or until it hands the device back (never more than 12 hours).
+
+- **Only the device's owner can say yes.** Nobody else in the workspace can approve it, and an agent can't approve its own request.
+- **The screen has to be on.** If `warren node screen on` was never run at the device, the agent is told the owner has to turn it on there; Warren can't do that remotely. A device that is paused (`warren node pause`) or offline can't be asked either, and pausing during a loan stops the agent at once.
+- **One agent, one loan, a screen and no shell.** Only the agent you approved can use the device; other agents are turned away, and `computer_run` is refused on a borrowed device. This works even if the agent is doing a task for someone else, because you decided. The loan is separate from **Lend it to agents**, which lets agents use the screen for things you ask them.
+- **It always ends.** When the time is up, when the agent calls `device_return`, when you press **Take back**, when you press **Stop lending it**, or when the screen is turned off at the device. The agent is told in the conversation it was working in (except when it handed the device back itself), and the loan can't outlive its limit: every use is checked against it, whether or not anything has cleaned up yet. Taking control and handing back works as before and leaves the loan alone; agents wait while you have control.
+
+While a device is on loan, its page and its card on **Computers** say "Lent to @hermes until 3:40 PM" with a **Take back** button. Everything the agent does shows under **Activity**.
+
+**How an agent picks which computer.** Its own computer stays the default: every `computer_*` tool acts on it, borrowed device or not. To act on the device, the agent adds `computer: "<device name>"` to the tool call (`computer_screenshot`, `computer_click`, …). Leaving it out never touches your device, and naming a device it isn't borrowing is refused. Agents without a computer of their own can borrow too; they have to pass `computer` every time. Agents that were set up as headless can't borrow.
 
 ### Orgo
 
@@ -92,6 +105,6 @@ Routines run when someone presses **Run now**, when you ask the agent, or on a s
 
 ## The tools agents get
 
-With a computer, an agent's `warren-mcp` tools include `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run` (VMs and cloud computers) and `computer_ask_human`. Coordinates are pixels in the latest screenshot (scaled to fit 1280×800), and every action returns a fresh screenshot. Every agent also has `approval_request`, `routine_save`, `routine_list` and `file_view`.
+With a computer, an agent's `warren-mcp` tools include `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run` (VMs and cloud computers) and `computer_ask_human`. Coordinates are pixels in the latest screenshot (scaled to fit 1280×800), and every action returns a fresh screenshot. Every computer tool takes an optional `computer` (the name of a device the agent is borrowing). Every agent also has `device_list`, `device_request` and `device_return` (see [Borrowing your device mid-task](#borrowing-your-device-mid-task)), `approval_request`, `routine_save`, `routine_list` and `file_view`.
 
 **Browser tools.** With a VM, an agent also gets [Playwright MCP](https://github.com/microsoft/playwright-mcp) on the VM's own Chrome, the one you watch, with its sign-ins: `browser_navigate`, `browser_snapshot` (the page as text, with a ref for each element), `browser_click`, `browser_type`, `browser_fill_form`, `browser_select_option`, `browser_tabs`, `browser_wait_for` and more. Working with page elements instead of pixels is faster, cheaper and much more reliable on websites; agents use the screenshot tools for everything else. The browser tools run inside the VM whichever way the agent runs.
