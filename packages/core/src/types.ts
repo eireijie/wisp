@@ -110,6 +110,11 @@ export interface ContextUsage {
   effort?: string | null;
   contextUsed?: number;
   contextWindow?: number;
+  /** tokens the whole run used, where the harness reports it */
+  inputTokens?: number;
+  outputTokens?: number;
+  /** the part of `inputTokens` served from the harness's cache */
+  cachedInputTokens?: number;
   at: string;
 }
 
@@ -285,6 +290,26 @@ export interface BackgroundWork {
   lastNote: string;
   /** a check is running or waiting for the device right now */
   checking: boolean;
+  /** the model for checks (from the device's catalog); null = the agent's own */
+  model: string | null;
+  /** reasoning effort for checks; null = the harness default (or the agent's, when the model isn't changed) */
+  effort: string | null;
+  /** most regular checks a day on the person's clock; null = no limit */
+  dailyCap: number | null;
+}
+
+/** What background checks used, from the token counts harnesses report. Null = no check reported any. */
+export interface BackgroundUsage {
+  /** tokens in the latest finished check */
+  lastTokens: number | null;
+  /** since midnight on the person's clock */
+  todayTokens: number | null;
+  /** over the last 7 days */
+  weekTokens: number | null;
+  /** checks started today, of any kind */
+  checksToday: number;
+  /** the daily cap is used up, so regular checks wait for tomorrow */
+  capReached: boolean;
 }
 
 /** Something a background check can look at: an app the agent is connected to, its computer, or a memory folder. */

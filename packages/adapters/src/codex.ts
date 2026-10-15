@@ -110,6 +110,16 @@ export function codexUsageFromRollout(text: string): Extract<AgentEvent, { type:
   };
 }
 
+/**
+ * `turn.completed` ends each turn of `codex exec --json` with that turn's token counts.
+ * Codex's `input_tokens` already includes the cached part. Exported for tests.
+ */
+export function codexTokens(m: any): { inputTokens: number; outputTokens: number; cachedInputTokens: number } | null {
+  const u = m?.type === "turn.completed" ? m.usage : null;
+  if (!u || typeof u !== "object") return null;
+  return { inputTokens: u.input_tokens ?? 0, outputTokens: (u.output_tokens ?? 0) + (u.reasoning_output_tokens ?? 0), cachedInputTokens: u.cached_input_tokens ?? 0 };
+}
+
 /** Find a session's file: sessions/YYYY/MM/DD/rollout-<time>-<id>.jsonl, newest days first. */
 async function findRollout(sessionId: string): Promise<string | null> {
   const root = path.join(codexHome(), "sessions");
@@ -156,9 +166,13 @@ export const codex: HarnessAdapter = {
     let finalText = "";
     let sessionId: string | null = input.sessionId ?? null;
     let error: string | null = null;
+    let tokens = null as ReturnType<typeof codexTokens>;
 
     const l = launched(input, this.binary, args, input.env);
     const proc = await runJsonl(l.command, l.args, { cwd: l.cwd, env: l.env, stdin: input.prompt, signal: input.signal }, (m) => {
+      const t = codexTokens(m);
+      // a run can take several turns: add them up
+      if (t) tokens = { inputTokens: (tokens?.inputTokens ?? 0) + t.inputTokens, outputTokens: (tokens?.outputTokens ?? 0) + t.outputTokens, cachedInputTokens: (tokens?.cachedInputTokens ?? 0) + t.cachedInputTokens };
       for (const e of parseCodexLine(m)) {
         if (e.type === "session") sessionId = e.id;
         if (e.type === "text") finalText = e.text; // the last agent message is the reply
@@ -171,8 +185,9 @@ export const codex: HarnessAdapter = {
     if (sessionId) {
       const file = await findRollout(sessionId);
       const usage = file ? codexUsageFromRollout(await fs.readFile(file, "utf8").catch(() => "")) : null;
-      if (usage) onEvent(usage);
-    }
+      if (usage) onEvent({ ...usage, ...tokens });
+      else if (tokens) onEvent({ type: "usage", ...tokens });
+    } else if (tokens) onEvent({ type: "usage", ...tokens });
     if (error && !finalText) throw new Error(error);
     if (proc.exitCode !== 0 && !finalText) throw new Error(proc.stderr.trim().split("\n").pop() || `codex exited with code ${proc.exitCode}`);
     return { finalText, sessionId };
