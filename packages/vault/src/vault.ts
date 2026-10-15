@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { watch as watchDir, type FSWatcher } from "node:fs";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +7,13 @@ import type Database from "better-sqlite3";
 import { basename, normalizeTarget, parseNote } from "./markdown.ts";
 
 const exec = promisify(execFile);
+
+/** Who edits made outside Warren (in Obsidian, an editor, a git pull on the hub's machine) are credited to. */
+export const OUTSIDE_AUTHOR: CommitAuthor = { name: "Edited in Obsidian", email: "obsidian@localhost" };
+const WARREN_AUTHOR: CommitAuthor = { name: "Warren", email: "warren@localhost" };
+
+/** Folders that belong to tools (.git, .obsidian, .trash), never notes. */
+export const isHiddenPath = (p: string) => p.replace(/\\/g, "/").split("/").some((s) => s.startsWith("."));
 
 export interface NoteMeta {
   path: string; // vault-relative, forward slashes, ends in .md
@@ -60,28 +68,60 @@ export interface Change {
  */
 export class Vault {
   private gitQueue: Promise<unknown> = Promise.resolve();
+  /** notes Warren is in the middle of saving: the watcher must not mistake them for outside edits */
+  private pending = new Map<string, number>();
+  /** the commit the search index is up to date with */
+  private indexedHead: string | null = null;
+  private authored = new Map<string, string>();
 
   constructor(
     readonly root: string,
     private db: Database.Database,
   ) {}
 
+  /**
+   * Open the folder as a vault: a new or empty folder, an existing Obsidian vault, or a folder
+   * that is already a git repository. Nothing in it is deleted or rewritten; `.obsidian/` and
+   * `.trash/` are kept out of git and out of the index.
+   */
   async init(): Promise<void> {
+    await fs.mkdir(this.root, { recursive: true });
     await fs.mkdir(path.join(this.root, "shared"), { recursive: true });
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS vault_notes (path TEXT PRIMARY KEY, title TEXT, tags TEXT, updated_at INTEGER);
       CREATE TABLE IF NOT EXISTS vault_links (src TEXT, target TEXT);
       CREATE INDEX IF NOT EXISTS vault_links_target ON vault_links(target);
       CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(path UNINDEXED, title, body);
+      CREATE TABLE IF NOT EXISTS vault_authors (hash TEXT PRIMARY KEY, name TEXT NOT NULL);
     `);
     try {
       await fs.access(path.join(this.root, ".git"));
     } catch {
       await this.git(["init", "-q"]);
-      await fs.writeFile(path.join(this.root, ".gitignore"), ".obsidian/workspace*.json\n.trash/\n");
-      await this.commitAll({ name: "Warren", email: "warren@localhost" }, "Initialize vault");
+    }
+    const started = !!(await this.head());
+    const ignoreChanged = await this.ensureIgnore();
+    if (!started) {
+      const existing = (await walk(this.root)).length;
+      await this.commitAll(WARREN_AUTHOR, existing ? "Start tracking this folder" : "Initialize vault");
+    } else if (ignoreChanged) {
+      await this.commit([".gitignore"], WARREN_AUTHOR, "Keep Obsidian settings and trash out of memory");
     }
     await this.reindex();
+  }
+
+  /** Make sure git skips Obsidian's settings and trash. Returns whether .gitignore changed. */
+  private async ensureIgnore(): Promise<boolean> {
+    const file = path.join(this.root, ".gitignore");
+    let text = "";
+    try {
+      text = await fs.readFile(file, "utf8");
+    } catch {}
+    const lines = text.split(/\r?\n/).map((l) => l.trim().replace(/^\//, ""));
+    const missing = [".obsidian/", ".trash/"].filter((e) => !lines.includes(e) && !lines.includes(e.slice(0, -1)));
+    if (!missing.length) return false;
+    await fs.writeFile(file, text + (text && !text.endsWith("\n") ? "\n" : "") + missing.join("\n") + "\n");
+    return true;
   }
 
   /** Resolve a vault-relative path safely, refusing anything that escapes the root. */
@@ -111,11 +151,13 @@ export class Vault {
   async write(rel: string, content: string, author: CommitAuthor, message?: string): Promise<NoteMeta> {
     const p = notePath(rel);
     const abs = this.resolve(p);
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, content, "utf8");
-    const meta = this.indexNote(p, content, Date.now());
-    await this.commit([p], author, message ?? `Update ${p}`);
-    return meta;
+    return this.saving([p], async () => {
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, content, "utf8");
+      const meta = this.indexNote(p, content, Date.now());
+      await this.commit([p], author, message ?? `Update ${p}`);
+      return meta;
+    });
   }
 
   async append(rel: string, text: string, author: CommitAuthor): Promise<NoteMeta> {
@@ -131,25 +173,29 @@ export class Vault {
 
   async remove(rel: string, author: CommitAuthor): Promise<void> {
     const p = notePath(rel);
-    try {
-      await fs.unlink(this.resolve(p));
-    } catch {
-      throw new VaultError("note not found", 404);
-    }
-    this.unindex(p);
-    await this.commit([p], author, `Delete ${p}`);
+    await this.saving([p], async () => {
+      try {
+        await fs.unlink(this.resolve(p));
+      } catch {
+        throw new VaultError("note not found", 404);
+      }
+      this.unindex(p);
+      await this.commit([p], author, `Delete ${p}`);
+    });
   }
 
   async move(from: string, to: string, author: CommitAuthor): Promise<NoteMeta> {
     const a = notePath(from);
     const b = notePath(to);
     const note = await this.read(a);
-    await fs.mkdir(path.dirname(this.resolve(b)), { recursive: true });
-    await fs.rename(this.resolve(a), this.resolve(b));
-    this.unindex(a);
-    const meta = this.indexNote(b, note.content, Date.now());
-    await this.commit([a, b], author, `Move ${a} -> ${b}`);
-    return meta;
+    return this.saving([a, b], async () => {
+      await fs.mkdir(path.dirname(this.resolve(b)), { recursive: true });
+      await fs.rename(this.resolve(a), this.resolve(b));
+      this.unindex(a);
+      const meta = this.indexNote(b, note.content, Date.now());
+      await this.commit([a, b], author, `Move ${a} -> ${b}`);
+      return meta;
+    });
   }
 
   /** All notes, optionally only those `allow` accepts (used to apply access rules). */
@@ -214,7 +260,7 @@ export class Vault {
       .filter(Boolean)
       .map((l) => {
         const [hash, author, date, message] = l.split("\x1f");
-        return { hash, author, date, message };
+        return { hash, author: this.credit(hash, author), date, message };
       });
   }
 
@@ -238,7 +284,7 @@ export class Vault {
       else if (line.startsWith("\t")) {
         const last = blocks[blocks.length - 1];
         if (last?.hash === cur.hash) last.lines.push(line.slice(1));
-        else blocks.push({ hash: cur.hash, author: cur.author, date: new Date(cur.time * 1000).toISOString(), lines: [line.slice(1)] });
+        else blocks.push({ hash: cur.hash, author: this.credit(cur.hash, cur.author), date: new Date(cur.time * 1000).toISOString(), lines: [line.slice(1)] });
       }
     }
     return blocks;
@@ -259,7 +305,7 @@ export class Vault {
           .map((l) => l.split("\t"))
           .filter((f) => f.length >= 2 && f[f.length - 1].toLowerCase().endsWith(".md"))
           .map((f) => ({ path: f[f.length - 1], change: kinds[f[0][0]] ?? "modified", ...(f[0][0] === "R" ? { from: f[1] } : {}) }));
-        return { hash, author, date, message, files };
+        return { hash, author: this.credit(hash, author), date, message, files };
       });
   }
 
@@ -274,22 +320,206 @@ export class Vault {
   /** Rebuild the index from disk (e.g. after edits made in Obsidian or a git pull). */
   async reindex(): Promise<number> {
     const files = await walk(this.root);
-    const tx = this.db.transaction(() => {
+    this.db.transaction(() => {
       this.db.exec("DELETE FROM vault_notes; DELETE FROM vault_links; DELETE FROM vault_fts;");
-    });
-    tx();
+    })();
     for (const f of files) {
       const abs = path.join(this.root, f);
       const [raw, stat] = await Promise.all([fs.readFile(abs, "utf8"), fs.stat(abs)]);
       this.indexNote(f, raw, stat.mtimeMs);
     }
+    this.indexedHead = await this.head();
     return files.length;
   }
 
-  /** Commit any changes made outside Warren (Obsidian, editors) and reindex. */
-  async syncFromDisk(author: CommitAuthor): Promise<number> {
-    await this.commitAll(author, "Sync external changes");
-    return this.reindex();
+  /**
+   * Pick up changes made outside Warren (Obsidian, another editor, a git pull on this machine):
+   * commit them to git as `author`, then re-index just the notes that changed. Returns how many
+   * notes changed. Notes Warren is saving this moment are left to the save.
+   */
+  syncFromDisk(author: CommitAuthor = OUTSIDE_AUTHOR, message = "Edited in Obsidian"): Promise<number> {
+    return this.serial(() => this.syncNow(author, message));
+  }
+
+  private async syncNow(author: CommitAuthor, message: string): Promise<number> {
+    const dirty = (await this.dirtyPaths()).filter((p) => !isHiddenPath(p) && !this.pending.has(p));
+    if (dirty.length) {
+      for (let i = 0; i < dirty.length; i += 200) await this.git(["add", "-A", "--", ...dirty.slice(i, i + 200)]);
+      await this.commitStaged(author, message, undefined, false);
+    }
+    const head = await this.head();
+    if (head === this.indexedHead) return 0;
+    let changed: string[] | null = null;
+    if (head && this.indexedHead) {
+      try {
+        changed = await this.changedPaths(this.indexedHead, head);
+      } catch {} // history was rewritten
+    }
+    if (!changed) return this.reindex();
+    this.indexedHead = head;
+    return this.reindexPaths(changed);
+  }
+
+  /** Files git sees as changed or new in the working folder. */
+  private async dirtyPaths(): Promise<string[]> {
+    const { stdout } = await this.git(["status", "--porcelain=v1", "-z", "--no-renames", "-uall"]);
+    return stdout
+      .split("\0")
+      .filter((e) => e.length > 3)
+      .map((e) => e.slice(3));
+  }
+
+  private async changedPaths(from: string, to: string): Promise<string[]> {
+    const { stdout } = await this.git(["diff", "--name-only", "-z", "--no-renames", from, to]);
+    return stdout.split("\0").filter(Boolean);
+  }
+
+  /** Bring the index in line with these paths on disk. Returns how many notes that touched. */
+  private async reindexPaths(paths: string[]): Promise<number> {
+    let n = 0;
+    for (const p of paths) {
+      if (isHiddenPath(p) || !p.toLowerCase().endsWith(".md")) continue;
+      n++;
+      try {
+        const abs = path.join(this.root, p);
+        const stat = await fs.lstat(abs);
+        if (!stat.isFile()) throw new Error("not a file");
+        this.indexNote(p, await fs.readFile(abs, "utf8"), stat.mtimeMs);
+      } catch {
+        this.unindex(p);
+      }
+    }
+    return n;
+  }
+
+  /**
+   * Keep watching the folder so edits made in Obsidian show up: a file watcher (with a quiet
+   * moment before acting, since editors save in bursts) plus a slow timer in case the watcher
+   * misses something. Returns a function that stops it.
+   */
+  watch(opts: { intervalMs?: number; debounceMs?: number; onChange?: (notes: number) => void } = {}): () => void {
+    let timer: NodeJS.Timeout | undefined;
+    let stopped = false;
+    const run = () => {
+      this.syncFromDisk()
+        .then((n) => n && !stopped && opts.onChange?.(n))
+        .catch(() => undefined);
+    };
+    const soon = () => {
+      clearTimeout(timer);
+      timer = setTimeout(run, opts.debounceMs ?? 1000);
+    };
+    let watcher: FSWatcher | undefined;
+    try {
+      watcher = watchDir(this.root, { recursive: true }, (_event, name) => {
+        if (!name || !isHiddenPath(name.toString())) soon();
+      });
+      watcher.on("error", () => undefined);
+    } catch {} // not supported here: the timer still catches everything
+    const poll = setInterval(run, opts.intervalMs ?? 30_000);
+    poll.unref();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      clearInterval(poll);
+      watcher?.close();
+    };
+  }
+
+  /** Mark commits as made by someone (pushes from Obsidian carry the person's own git name; Activity shows who they are in Warren). */
+  attribute(hashes: string[], name: string) {
+    const ins = this.db.prepare("INSERT OR REPLACE INTO vault_authors (hash, name) VALUES (?, ?)");
+    this.db.transaction(() => hashes.forEach((h) => ins.run(h, name)))();
+    for (const h of hashes) this.authored.set(h, name);
+  }
+
+  private credit(hash: string, author: string): string {
+    const known = this.authored.get(hash);
+    if (known) return known;
+    const row = this.db.prepare("SELECT name FROM vault_authors WHERE hash = ?").get(hash) as { name: string } | undefined;
+    if (row) this.authored.set(hash, row.name);
+    return row?.name ?? author;
+  }
+
+  /** The commit the vault is at, or null before the first commit. */
+  async head(): Promise<string | null> {
+    try {
+      return (await this.git(["rev-parse", "--verify", "-q", "HEAD"])).stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The branch the vault is on, or null when it's detached. */
+  async branch(): Promise<string | null> {
+    try {
+      return (await this.git(["symbolic-ref", "--short", "-q", "HEAD"])).stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Every path that has ever been in the vault's history, for deciding what a clone would reveal. */
+  async pathsEver(): Promise<string[]> {
+    const head = await this.head();
+    if (!head) return [];
+    if (this.everCache?.head !== head) {
+      const { stdout } = await this.git(["log", "--name-only", "--no-renames", "-z", "--format="]);
+      this.everCache = { head, paths: [...new Set(stdout.split("\0").filter(Boolean))] };
+    }
+    return this.everCache.paths;
+  }
+  private everCache?: { head: string; paths: string[] };
+
+  /** Where git keeps the vault's objects, so another repository can borrow them. */
+  async objectsDir(): Promise<string> {
+    return (await this.git(["rev-parse", "--path-format=absolute", "--git-path", "objects"])).stdout.trim();
+  }
+
+  /**
+   * Run `fn` while nothing else changes the vault's git state (no other commits, merges or
+   * syncs). Used to take in a push from another computer.
+   */
+  exclusive<T>(fn: (tx: VaultTx) => Promise<T>): Promise<T> {
+    return this.serial(() =>
+      fn({
+        head: () => this.head(),
+        branch: () => this.branch(),
+        sync: () => this.syncNow(OUTSIDE_AUTHOR, "Edited in Obsidian"),
+        adopt: (source, branch, from, to, who) => this.adopt(source, branch, from, to, who),
+      }),
+    );
+  }
+
+  /** Fast-forward the vault to commits fetched from `source` (the one given as `to`), index what changed and credit `who`. */
+  private async adopt(source: string, branch: string, from: string, to: string, who: string): Promise<string[]> {
+    if ((await this.head()) !== from) throw new VaultError("memory changed while receiving; pull and try again", 409);
+    await this.git(["fetch", "-q", "--no-tags", source, `refs/heads/${branch}`]);
+    try {
+      await this.git(["merge", "--ff-only", "-q", to]);
+    } catch {
+      throw new VaultError("Warren is saving changes to the same notes right now; try again in a moment", 409);
+    }
+    const paths = await this.changedPaths(from, to);
+    const commits = (await this.git(["rev-list", `${from}..${to}`])).stdout.split("\n").filter(Boolean);
+    this.attribute(commits, who);
+    if (this.indexedHead === from) this.indexedHead = to;
+    await this.reindexPaths(paths);
+    return paths;
+  }
+
+  /** Mark notes as being saved by Warren while `fn` runs. */
+  private async saving<T>(paths: string[], fn: () => Promise<T>): Promise<T> {
+    for (const p of paths) this.pending.set(p, (this.pending.get(p) ?? 0) + 1);
+    try {
+      return await fn();
+    } finally {
+      for (const p of paths) {
+        const n = (this.pending.get(p) ?? 1) - 1;
+        if (n > 0) this.pending.set(p, n);
+        else this.pending.delete(p);
+      }
+    }
   }
 
   private indexNote(p: string, raw: string, updatedAt: number): NoteMeta {
@@ -318,19 +548,25 @@ export class Vault {
   private commit(paths: string[], author: CommitAuthor, message: string) {
     return this.serial(async () => {
       await this.git(["add", "-A", "--", ...paths]);
-      const { stdout } = await this.git(["status", "--porcelain", "--", ...paths]);
-      if (!stdout.trim()) return;
-      await this.git(["commit", "-q", "-m", message, "--author", `${author.name} <${author.email}>`, "--", ...paths], author);
+      await this.commitStaged(author, message, paths);
     });
   }
 
   private commitAll(author: CommitAuthor, message: string) {
     return this.serial(async () => {
       await this.git(["add", "-A"]);
-      const { stdout } = await this.git(["status", "--porcelain"]);
-      if (!stdout.trim()) return;
-      await this.git(["commit", "-q", "-m", message, "--author", `${author.name} <${author.email}>`], author);
+      await this.commitStaged(author, message);
     });
+  }
+
+  /** Commit what's staged (only `paths`, when given). Does nothing when there's nothing to commit. `indexed`: the commit's notes are already in the index. */
+  private async commitStaged(author: CommitAuthor, message: string, paths?: string[], indexed = true) {
+    const { stdout } = await this.git(["status", "--porcelain", ...(paths ? ["--", ...paths] : [])]);
+    if (!stdout.trim()) return;
+    const before = await this.head();
+    await this.git(["-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", message, "--author", `${author.name} <${author.email}>`, ...(paths ? ["--", ...paths] : [])], author);
+    // Warren's own saves are already in the index; edits found on disk are not
+    if (indexed && this.indexedHead === before) this.indexedHead = await this.head();
   }
 
   /** git operations must not interleave (index.lock). */
@@ -348,6 +584,15 @@ export class Vault {
       env: { ...process.env, GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email, GIT_AUTHOR_NAME: who.name, GIT_AUTHOR_EMAIL: who.email },
     });
   }
+}
+
+/** What a caller holding the vault exclusively may do. */
+export interface VaultTx {
+  head(): Promise<string | null>;
+  branch(): Promise<string | null>;
+  /** commit and index edits made outside Warren first, so the vault is up to date */
+  sync(): Promise<number>;
+  adopt(source: string, branch: string, from: string, to: string, who: string): Promise<string[]>;
 }
 
 export class VaultError extends Error {
@@ -393,8 +638,9 @@ async function walk(root: string, dir = ""): Promise<string[]> {
   for (const e of await fs.readdir(path.join(root, dir), { withFileTypes: true })) {
     if (e.name.startsWith(".")) continue;
     const rel = dir ? `${dir}/${e.name}` : e.name;
+    // links to other places aren't followed: a note must really live in the vault
     if (e.isDirectory()) out.push(...(await walk(root, rel)));
-    else if (e.name.toLowerCase().endsWith(".md")) out.push(rel);
+    else if (e.isFile() && e.name.toLowerCase().endsWith(".md")) out.push(rel);
   }
   return out;
 }
