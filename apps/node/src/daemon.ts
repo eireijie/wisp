@@ -365,9 +365,10 @@ export class NodeDaemon {
         {
           prompt: run.prompt,
           cwd,
-          model: agent.model,
-          effort: agent.settings?.effort ?? null,
-          fast: agent.settings?.fast ?? false,
+          // a background check can run on its own (usually smaller) model; fast mode is the agent's, for its own model
+          model: run.model ?? agent.model,
+          effort: run.effort ?? (run.model ? null : (agent.settings?.effort ?? null)),
+          fast: run.model ? false : (agent.settings?.fast ?? false),
           access,
           sessionId,
           mcp,
@@ -381,6 +382,8 @@ export class NodeDaemon {
         },
         (e) => {
           if (e.type === "session") {
+            // a fresh run is never continued, so there's nothing to remember
+            if (run.fresh) return;
             this.sessions[sessionKey] = e.id;
             writeJson(this.sessionsFile, this.sessions);
           } else this.send({ type: "run_event", runId: run.runId, event: e });
@@ -389,7 +392,7 @@ export class NodeDaemon {
 
     try {
       let result;
-      const resumeId = this.sessions[sessionKey] ?? null;
+      const resumeId = run.fresh ? null : (this.sessions[sessionKey] ?? null);
       try {
         result = await attempt(resumeId);
       } catch (err) {

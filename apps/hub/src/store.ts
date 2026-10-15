@@ -890,8 +890,24 @@ export class Store {
     }[];
   }
 
+  /** A run can report usage more than once (token counts, then the context window): later reports add to the earlier ones. */
   setRunUsage(runId: string, usage: Omit<ContextUsage, "at">) {
-    this.db.prepare("UPDATE runs SET usage_json = ? WHERE id = ?").run(JSON.stringify(usage), runId);
+    const before = this.db.prepare("SELECT usage_json FROM runs WHERE id = ?").get(runId) as { usage_json: string | null } | undefined;
+    const merged = { ...(before?.usage_json ? JSON.parse(before.usage_json) : {}), ...usage };
+    this.db.prepare("UPDATE runs SET usage_json = ? WHERE id = ?").run(JSON.stringify(merged), runId);
+  }
+
+  /** Background checks for one person since `since`, newest first, with what each reported using. */
+  backgroundRuns(agentId: string, userId: string, since: string) {
+    const rows = this.db
+      .prepare("SELECT status, created_at AS createdAt, usage_json AS usage FROM runs WHERE agent_id = ? AND requested_by = ? AND kind = 'background' AND created_at >= ? ORDER BY created_at DESC")
+      .all(agentId, userId, since) as { status: string; createdAt: string; usage: string | null }[];
+    return rows.map((r) => {
+      const u = r.usage ? (JSON.parse(r.usage) as Omit<ContextUsage, "at">) : null;
+      // tokens only when the harness said how many
+      const tokens = u && (u.inputTokens !== undefined || u.outputTokens !== undefined) ? (u.inputTokens ?? 0) + (u.outputTokens ?? 0) : null;
+      return { status: r.status, createdAt: r.createdAt, tokens };
+    });
   }
 
   /** The most recent usage report for an agent in one conversation (channel + thread). */
@@ -1033,7 +1049,7 @@ export class Store {
   // --- background work and follow-ups ---------------------------------------------------------
 
   private backgroundSql = `SELECT b.agent_id AS agentId, b.user_id AS userId, b.enabled, b.every_minutes AS everyMinutes, b.focus, b.quiet_start AS quietStart, b.quiet_end AS quietEnd,
-    b.next_at AS nextAt, b.next_reason AS nextReason, b.last_at AS lastAt, b.last_note AS lastNote,
+    b.next_at AS nextAt, b.next_reason AS nextReason, b.last_at AS lastAt, b.last_note AS lastNote, b.model, b.effort, b.daily_cap AS dailyCap,
     EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = b.agent_id AND r.kind = 'background' AND r.requested_by = b.user_id AND r.status IN ('queued','running')) AS checking
     FROM background b`;
   private toBackground = (r: Record<string, unknown>): BackgroundWork => ({ ...(r as unknown as BackgroundWork), enabled: !!r.enabled, checking: !!r.checking });
@@ -1053,12 +1069,12 @@ export class Store {
     return (this.db.prepare(`${this.backgroundSql} WHERE b.enabled = 1`).all() as Record<string, unknown>[]).map(this.toBackground);
   }
 
-  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote">>): BackgroundWork {
+  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote" | "model" | "effort" | "dailyCap">>): BackgroundWork {
     this.db.prepare("INSERT OR IGNORE INTO background (agent_id, user_id, created_at) VALUES (?, ?, ?)").run(agentId, userId, now());
     const v = { ...this.background(agentId, userId)!, ...patch };
     this.db
-      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ? WHERE agent_id = ? AND user_id = ?")
-      .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, agentId, userId);
+      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ?, model = ?, effort = ?, daily_cap = ? WHERE agent_id = ? AND user_id = ?")
+      .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, v.model, v.effort, v.dailyCap, agentId, userId);
     return this.background(agentId, userId)!;
   }
 

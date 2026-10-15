@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Caller } from "./api.ts";
-import { parseWhen } from "./background.ts";
+import { DEFAULT_DAILY_CAP, parseWhen } from "./background.ts";
 import type { Hub } from "./hub.ts";
 
 interface Helpers {
@@ -44,6 +44,8 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
       followups: store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === c.actor.id),
       notAllowed: hub.whyNotAllowed(agent, c.actor.id),
       sources: hub.background.sources(agent.id),
+      usage: hub.background.usage(agent.id, c.actor.id),
+      defaultDailyCap: DEFAULT_DAILY_CAP,
     };
   });
 
@@ -54,11 +56,14 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     if (!agent) return;
     const notAllowed = hub.whyNotAllowed(agent, c.actor.id);
     if (notAllowed) return reply.code(403).send({ error: notAllowed });
-    const body = parse(z.object({ enabled: z.boolean(), everyMinutes: z.number().int().min(10).max(1440), focus: z.string().trim().max(2000), quietStart: HHMM, quietEnd: HHMM }).partial().strict(), req.body, reply);
+    const body = parse(z.object({ enabled: z.boolean(), everyMinutes: z.number().int().min(10).max(1440), focus: z.string().trim().max(2000), quietStart: HHMM, quietEnd: HHMM, model: z.string().trim().max(200).nullable(), effort: z.string().trim().max(32).nullable(), dailyCap: z.number().int().min(1).max(1000).nullable() }).partial().strict(), req.body, reply);
     if (!body) return;
     const was = store.background(agent.id, c.actor.id);
     // turning it on starts with a check right away, so you see it working
-    const b = store.setBackground(agent.id, c.actor.id, { ...body, ...(body.enabled && !was?.enabled ? { nextAt: null } : {}) });
+    // a blank model or effort means "the same as the agent"; a higher limit lets a check that was waiting for tomorrow go ahead
+    const raised = body.dailyCap === null || (body.dailyCap !== undefined && body.dailyCap > (was?.dailyCap ?? Infinity));
+    const patch = { ...body, ...(body.model !== undefined ? { model: body.model || null } : {}), ...(body.effort !== undefined ? { effort: body.effort || null } : {}) };
+    const b = store.setBackground(agent.id, c.actor.id, { ...patch, ...((body.enabled && !was?.enabled) || (raised && was?.nextReason === "daily limit reached") ? { nextAt: null, nextReason: "" } : {}) });
     hub.broadcast(c.workspaceId, { type: "background_changed", agentId: agent.id });
     // even in quiet hours: they just turned it on, so they expect to see it work
     if (body.enabled && !was?.enabled) hub.background.wake(agent.id, c.actor.id);
