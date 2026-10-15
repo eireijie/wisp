@@ -100,10 +100,34 @@ describe("background work", () => {
     await idle();
   });
 
+  it("names everything it can look at, what the person cares about, and its watch notes", async () => {
+    const ws = hub.store.agent(agentId)!.workspaceId;
+    const notion = hub.connectors.create(ws, me, { kind: "mcp-http", name: "Notion", catalogId: "notion", url: "https://mcp.notion.com/mcp", headers: {}, env: {} });
+    hub.connectors.attach(notion.id, agentId, true);
+    await hub.vault.write("Projects/launch.md", "# Launch", { name: "t", email: "t@example.com" }, "add");
+    await hub.vault.write(`agents/${agentId}/background/${me}.md`, "Notion: last saw page 'Q4 plan' edited 9am", { name: "t", email: "t@example.com" }, "add");
+    await owner.request("PUT", `/api/agents/${agentId}/background`, { focus: "the launch project and anything from my landlord" });
+    const sources = (await owner.request("GET", `/api/agents/${agentId}/background`)).sources;
+    expect(sources.map((x: { kind: string; name: string }) => `${x.kind}:${x.name}`)).toEqual(expect.arrayContaining(["app:Notion", "memory:shared/"]));
+    let prompt = "";
+    onCheck = async (_agent, input) => {
+      prompt = input.prompt;
+      return "checked Notion";
+    };
+    await owner.request("POST", `/api/agents/${agentId}/background/check`);
+    await waitFor(() => prompt || undefined);
+    expect(prompt).toContain("- Notion (connected app:");
+    expect(prompt).toContain("asked you to keep an eye on: the launch project and anything from my landlord");
+    expect(prompt).toContain(`me/background/${me}.md`);
+    expect(prompt).toContain("Notion: last saw page 'Q4 plan' edited 9am");
+    expect(prompt).not.toContain("You aren't connected to any apps yet");
+    await idle();
+  });
+
   it("writes first with message_person, and that reaches the person's devices by push", async () => {
     await owner.request("POST", "/api/push/subscribe", { endpoint: "https://push.example.com/abc", keys: { p256dh: "BNcR", auth: "tBHI" } });
     onCheck = async (agent, input) => {
-      expect(input.prompt).toContain("Your note to yourself from last time: Inbox quiet");
+      expect(input.prompt).toContain("Your note to yourself from last time: checked Notion");
       await agent.messagePerson("Your essay is due tomorrow at noon.");
       return "told them about the essay";
     };

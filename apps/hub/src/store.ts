@@ -1032,7 +1032,7 @@ export class Store {
 
   // --- background work and follow-ups ---------------------------------------------------------
 
-  private backgroundSql = `SELECT b.agent_id AS agentId, b.user_id AS userId, b.enabled, b.every_minutes AS everyMinutes, b.quiet_start AS quietStart, b.quiet_end AS quietEnd,
+  private backgroundSql = `SELECT b.agent_id AS agentId, b.user_id AS userId, b.enabled, b.every_minutes AS everyMinutes, b.focus, b.quiet_start AS quietStart, b.quiet_end AS quietEnd,
     b.next_at AS nextAt, b.next_reason AS nextReason, b.last_at AS lastAt, b.last_note AS lastNote,
     EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = b.agent_id AND r.kind = 'background' AND r.requested_by = b.user_id AND r.status IN ('queued','running')) AS checking
     FROM background b`;
@@ -1053,12 +1053,12 @@ export class Store {
     return (this.db.prepare(`${this.backgroundSql} WHERE b.enabled = 1`).all() as Record<string, unknown>[]).map(this.toBackground);
   }
 
-  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote">>): BackgroundWork {
+  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote">>): BackgroundWork {
     this.db.prepare("INSERT OR IGNORE INTO background (agent_id, user_id, created_at) VALUES (?, ?, ?)").run(agentId, userId, now());
     const v = { ...this.background(agentId, userId)!, ...patch };
     this.db
-      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ? WHERE agent_id = ? AND user_id = ?")
-      .run(v.enabled ? 1 : 0, v.everyMinutes, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, agentId, userId);
+      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ? WHERE agent_id = ? AND user_id = ?")
+      .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, agentId, userId);
     return this.background(agentId, userId)!;
   }
 

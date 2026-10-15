@@ -228,6 +228,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["discussions", "requested_by", "TEXT"],
   ["tasks", "parent_id", "TEXT"],
   ["runs", "kind", "TEXT"],
+  ["background", "focus", "TEXT NOT NULL DEFAULT ''"],
 ];
 
 export function openDb(file: string): Database.Database {

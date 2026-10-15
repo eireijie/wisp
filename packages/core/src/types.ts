@@ -272,6 +272,8 @@ export interface BackgroundWork {
   userId: string;
   enabled: boolean;
   everyMinutes: number;
+  /** what the person most wants watched, in their words; empty = everything it can reach */
+  focus: string;
   /** quiet hours in the person's timezone ("HH:MM"); no regular checks, and messages only if urgent */
   quietStart: string;
   quietEnd: string;
@@ -283,6 +285,13 @@ export interface BackgroundWork {
   lastNote: string;
   /** a check is running or waiting for the device right now */
   checking: boolean;
+}
+
+/** Something a background check can look at: an app the agent is connected to, its computer, or a memory folder. */
+export interface BackgroundSource {
+  kind: "app" | "computer" | "memory";
+  name: string;
+  detail: string;
 }
 
 /** Something an agent said it would come back to at a set time ("8am tomorrow: remind Sam about the essay"). */

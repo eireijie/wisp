@@ -43,6 +43,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
       background: store.background(agent.id, c.actor.id) ?? null,
       followups: store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === c.actor.id),
       notAllowed: hub.whyNotAllowed(agent, c.actor.id),
+      sources: hub.background.sources(agent.id),
     };
   });
 
@@ -53,13 +54,14 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     if (!agent) return;
     const notAllowed = hub.whyNotAllowed(agent, c.actor.id);
     if (notAllowed) return reply.code(403).send({ error: notAllowed });
-    const body = parse(z.object({ enabled: z.boolean(), everyMinutes: z.number().int().min(10).max(1440), quietStart: HHMM, quietEnd: HHMM }).partial().strict(), req.body, reply);
+    const body = parse(z.object({ enabled: z.boolean(), everyMinutes: z.number().int().min(10).max(1440), focus: z.string().trim().max(2000), quietStart: HHMM, quietEnd: HHMM }).partial().strict(), req.body, reply);
     if (!body) return;
     const was = store.background(agent.id, c.actor.id);
     // turning it on starts with a check right away, so you see it working
     const b = store.setBackground(agent.id, c.actor.id, { ...body, ...(body.enabled && !was?.enabled ? { nextAt: null } : {}) });
     hub.broadcast(c.workspaceId, { type: "background_changed", agentId: agent.id });
-    if (body.enabled && !was?.enabled) hub.background.tick();
+    // even in quiet hours: they just turned it on, so they expect to see it work
+    if (body.enabled && !was?.enabled) hub.background.wake(agent.id, c.actor.id);
     return { background: store.background(agent.id, c.actor.id) ?? b };
   });
 

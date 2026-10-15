@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { BellRing, Clock, Moon, RefreshCw, X } from "lucide-react";
-import type { Agent, BackgroundWork, Followup } from "@warren/core";
+import { AppWindow, BellRing, Clock, FolderOpen, Monitor, Moon, RefreshCw, X } from "lucide-react";
+import type { Agent, BackgroundSource, BackgroundWork, Followup } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
 import { pushOnHere } from "../push.ts";
 import { Intro } from "./SettingsParts.tsx";
 import { Toggle } from "./settings/parts.tsx";
-import { Button, Pill, timeAgo } from "../components/ui.tsx";
+import { Button, Pill, Textarea, timeAgo } from "../components/ui.tsx";
 
 const PACES = [
   [15, "every 15 minutes"],
@@ -30,14 +30,15 @@ const at = (iso: string) => {
 export function BackgroundPanel({ agent, active }: { agent: Agent; active: boolean }) {
   const version = useStore((s) => s.backgroundVersion);
   const offline = useStore((s) => s.agents.find((a) => a.id === agent.id)?.status === "offline");
-  const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null } | null>(null);
+  const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null; sources: BackgroundSource[] } | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = () => api<NonNullable<typeof state>>("GET", `/api/agents/${agent.id}/background`).then(setState, (e) => setError((e as Error).message));
   useEffect(() => {
     if (active) void load();
   }, [active, agent.id, version]);
 
-  const save = async (patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "quietStart" | "quietEnd">>) => {
+  const save = async (patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd">>) => {
     setError(null);
     try {
       await api("PUT", `/api/agents/${agent.id}/background`, patch);
@@ -57,13 +58,14 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
   };
 
   const b = state?.background;
+  const apps = state?.sources.filter((x) => x.kind === "app") ?? [];
   const on = !!b?.enabled;
   return (
     <div className="max-w-3xl space-y-5">
       <Intro title="Background">
         <p>
-          @{agent.handle} keeps an eye on things for you on its own: it looks at the apps it's connected to, what it knows about you and your conversations, and writes to you only when something needs you, like a deadline tomorrow or an email you missed, with a
-          draft ready for your OK. It decides when to look again.
+          @{agent.handle} keeps an eye on everything it can reach for you, on its own: your connected apps (email, calendars, drives, projects, to-do lists…), its computer, your memory and your conversations. It writes to you only when something needs you, with
+          the work done and ready for your OK, and decides by itself when to look again.
         </p>
       </Intro>
       {error && <p className="text-sm text-bad">{error}</p>}
@@ -131,6 +133,37 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
             )}
           </div>
 
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">What to keep an eye on</h4>
+            <Textarea
+              rows={2}
+              placeholder="Everything it can reach. Or say what matters most, like: my inbox and calendar, the launch project in Linear, anything from my landlord."
+              value={focus ?? b?.focus ?? ""}
+              onChange={(e) => setFocus(e.target.value)}
+              onBlur={() => focus !== null && focus !== (b?.focus ?? "") && void save({ focus }).then(() => setFocus(null))}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">What it can see</h4>
+            <div className="rounded-xl border border-line divide-y divide-line text-sm">
+              {state.sources.map((x) => (
+                <div key={`${x.kind}:${x.name}`} className="px-4 py-2 flex items-center gap-2.5">
+                  {x.kind === "app" ? <AppWindow size={14} className="text-muted" /> : x.kind === "computer" ? <Monitor size={14} className="text-muted" /> : <FolderOpen size={14} className="text-muted" />}
+                  <span className="font-medium">{x.name}</span>
+                  <span className="text-muted truncate">{x.kind === "memory" ? "memory" : x.detail}</span>
+                </div>
+              ))}
+              <div className="px-4 py-2 text-muted">
+                {apps.length ? "Connect more apps" : "No apps yet. Connect your email, calendar, drive or project tools"} on{" "}
+                <a className="text-accent-text hover:underline" href={href({ view: "connectors" })}>
+                  Connectors
+                </a>{" "}
+                and let @{agent.handle} use them.{agent.computerId ? " It can also check sites you've signed in to on its computer." : ""}
+              </div>
+            </div>
+          </div>
+
           {on && !pushOnHere() && (
             <p className="rounded-xl border border-line p-4 text-sm flex items-start gap-2">
               <BellRing size={15} className="mt-0.5 shrink-0 text-accent-text" />
@@ -141,15 +174,6 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                 </a>{" "}
                 on your phone and computers.
               </span>
-            </p>
-          )}
-          {on && (
-            <p className="text-xs text-muted">
-              It can only look at what it can reach: apps on{" "}
-              <a className="text-accent-text hover:underline" href={href({ view: "connectors" })}>
-                Connectors
-              </a>{" "}
-              it's allowed to use, and sites you've signed in to on its computer.
             </p>
           )}
 

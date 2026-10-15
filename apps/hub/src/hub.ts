@@ -585,7 +585,7 @@ export class Hub {
     const agent = store.agent(agentId)!;
     const channel = store.channel(channelId)!;
     // a background check has no message that woke it; it gets its own section instead
-    const background = run?.kind === "background" && run.id ? this.background.promptSection({ id: run.id, agentId, channelId, requestedBy: run.requestedBy ?? null }) : "";
+    const background = run?.kind === "background" && run.id ? await this.background.promptSection({ id: run.id, agentId, channelId, requestedBy: run.requestedBy ?? null }) : "";
     // a discussion thread is the whole conversation, so agents see all of it
     const history = background ? [] : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
     const discussion = run && !background ? this.discussions.promptSection(run) : "";

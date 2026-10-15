@@ -1,4 +1,4 @@
-import { zonedParts, type Followup } from "@warren/core";
+import { CONNECTOR_CATALOG, zonedParts, type BackgroundSource, type Followup } from "@warren/core";
 import type { Hub } from "./hub.ts";
 
 /** The device sees background checks as their own conversation, so they don't mix into the DM's. */
@@ -130,8 +130,40 @@ export class Background {
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId: agent.id });
   }
 
+  /**
+   * Everything the agent can look at for someone: the apps it's connected to, its computer, the
+   * memory folders it can read, and Warren itself. Shown on its Background tab and in each check.
+   */
+  sources(agentId: string): BackgroundSource[] {
+    const { store, vault, access } = this.hub;
+    const agent = store.agent(agentId);
+    if (!agent) return [];
+    const out: BackgroundSource[] = [];
+    const connectors = store.db
+      .prepare("SELECT c.name, c.catalog_id AS catalogId FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 ORDER BY c.created_at")
+      .all(agentId) as { name: string; catalogId: string | null }[];
+    for (const c of connectors) out.push({ kind: "app", name: c.name, detail: CONNECTOR_CATALOG.find((x) => x.id === c.catalogId)?.description ?? "an app connected through MCP" });
+    const computer = agent.computerId ? store.computer(agent.computerId) : undefined;
+    if (computer) out.push({ kind: "computer", name: computer.name, detail: "its computer: websites signed in on its browser, and the files on it" });
+    // top-level memory folders it can read (its own folder counts once, as "me/")
+    const can = access.checker(agent.workspaceId, access.agentViewer(agent));
+    const folders = new Set<string>();
+    for (const n of vault.list()) {
+      const parts = n.path.split("/");
+      const folder = parts[0] === "agents" || parts[0] === "people" || parts[0] === "teams" ? parts.slice(0, 2).join("/") : parts.length > 1 ? parts[0] : "";
+      if (folder && !folders.has(folder) && folder !== `agents/${agentId}` && can(n.path).level !== "none") folders.add(folder);
+    }
+    for (const f of [...folders].sort().slice(0, 20)) out.push({ kind: "memory", name: `${f}/`, detail: "notes in Warren's memory" });
+    return out;
+  }
+
+  /** Where the agent keeps its notes for checks for one person: where it left off in each source. */
+  watchNotesPath(agentId: string, userId: string) {
+    return `agents/${agentId}/background/${userId}.md`;
+  }
+
   /** What a background check is about, for the prompt: replaces "where you are" and the new message. */
-  promptSection(run: { id: string; agentId: string; channelId: string; requestedBy: string | null }): string {
+  async promptSection(run: { id: string; agentId: string; channelId: string; requestedBy: string | null }): Promise<string> {
     const { store } = this.hub;
     const agent = store.agent(run.agentId)!;
     const user = run.requestedBy ? store.user(run.requestedBy) : undefined;
@@ -144,6 +176,10 @@ export class Background {
     const dm = store.messages(run.channelId, { limit: 20 }).filter((m) => m.author.id !== "system");
     const tasks = store.tasks(agent.workspaceId, { agentId: agent.id }).filter((t) => t.status === "open" || t.status === "in_progress").slice(0, 15);
     const later = store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === user?.id);
+    const sources = this.sources(agent.id);
+    const notesPath = user ? this.watchNotesPath(agent.id, user.id) : null;
+    const notes = notesPath ? await this.hub.vault.read(notesPath).then((n) => n.content.trim(), () => "") : "";
+    const sourceLine = (x: BackgroundSource) => `- ${x.kind === "app" ? `${x.name} (connected app: ${x.detail})` : x.kind === "computer" ? `${x.name}, ${x.detail}` : `${x.name} (memory folder)`}`;
     const approvals = store.db.prepare("SELECT summary, created_at AS createdAt FROM approvals WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10").all(agent.id) as { summary: string; createdAt: string }[];
 
     return [
@@ -153,7 +189,17 @@ export class Background {
         ? `You set ${followups.length === 1 ? "a follow-up" : "follow-ups"} for now:\n${followups.map((f) => `- ${f.note} (set for ${fmt(f.dueAt)})`).join("\n")}\nDo what you said you'd do.`
         : `This is a regular check.${b?.lastAt ? ` Your last one started ${fmt(b.lastAt)}.` : ""}`,
       b?.lastNote ? `Your note to yourself from last time: ${b.lastNote}` : "",
-      `Look at what you can reach: the apps you're connected to (email, calendar, school or work tools…), what you know about ${name} (plans and due dates above), your open tasks, and your recent conversation with them. Then decide whether anything needs ${name} now. Good reasons: a deadline coming up, something important they haven't seen, a reply they were waiting for, a task that finished or got stuck, something you said you'd follow up on.`,
+      `\nWhat you can look at:`,
+      ...sources.map(sourceLine),
+      `- Warren itself: your tasks and approvals (below), channels you're in (chat_read), files people shared (file_view), and what you know about ${name} (above).`,
+      sources.some((x) => x.kind === "app")
+        ? ""
+        : `You aren't connected to any apps yet (email, calendar, drive, project tools…). If ${name} seems to expect you to watch something you can't reach, tell them once which connection would let you (Connectors in Warren), not on every check.`,
+      b?.focus ? `\n${name} asked you to keep an eye on: ${b.focus}\nStart there, then look at the rest.` : `\n${name} hasn't said what matters most, so keep an eye on all of it.`,
+      `Go through each source and look for what's new or changed since your last check, and what's coming up. Then decide whether any of it needs ${name} now: something to do, answer, decide or get ready for; something they'd want to know; a problem, conflict or risk; a change to something they care about; or something you said you'd follow up on.`,
+      notesPath
+        ? `\nYour watch notes (${notesPath.replace(`agents/${agent.id}/`, "me/")}) are your working memory for these checks: for each source, where you left off (the latest thing you've seen) and what you're keeping track of. Read them before you look, and update them with memory_write before you finish.${notes ? `\nThey say now:\n${notes.length > 6000 ? notes.slice(0, 6000) + "\n…(read the rest with memory_read)" : notes}` : " You haven't written any yet: start them this time."}`
+        : "",
       `- If something does, tell them with message_person: short, specific, and readable on a phone's lock screen. If you can do the work, do it first (write the draft, find the answer), then show it. Before sending, buying or deleting anything for them, ask with approval_request and include the draft.`,
       `- If nothing does, don't message. Saying nothing is usually right. Never message just to say you checked, and don't repeat what you already told them unless it's become urgent.`,
       quiet ? `- It's quiet hours for ${name} (${b!.quietStart}–${b!.quietEnd}). Only message for something that can't wait until morning.` : "",
