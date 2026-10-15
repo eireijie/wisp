@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Activity, BookOpen, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, HandMetal, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Activity, BookOpen, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, X } from "lucide-react";
 import type { Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
@@ -244,26 +244,32 @@ function ComputerCard({ agent, computer: c }: { agent: Agent; computer: Computer
   );
 }
 
-/** The computer, big: watch it, or take control and hand it back. */
+/**
+ * The computer, big. Click the screen to take control; it's yours (blue ring) until you hand it
+ * back, leave it alone for a while, or the agent needs it after you've stopped using it.
+ */
 function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; computer: ComputerInfo; onClose: () => void }) {
   const me = useStore((s) => s.me);
   const state = useComputerState(c);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mine = !!me && c.controller?.id === me.user.id;
   const canControl = me?.role !== "guest" && c.online && !c.paused;
   const someoneElse = !!c.controller && !mine;
+  const touched = useRef(0);
 
   const control = async (take: boolean) => {
-    setBusy(true);
     setError(null);
     try {
       await api("POST", `/api/computers/${c.id}/control`, { take });
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setBusy(false);
     }
+  };
+  // while you work on it, tell the hub now and then that you're still there (VNC input skips the hub)
+  const activity = () => {
+    if (Date.now() - touched.current < 15_000) return;
+    touched.current = Date.now();
+    void api("POST", `/api/computers/${c.id}/control`, { take: true }).catch(() => {});
   };
   // leaving the big view gives the computer back, so agents aren't stuck waiting on a closed window
   const close = () => {
@@ -281,48 +287,42 @@ function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; com
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col p-3 md:p-5 safe-top safe-bottom" role="dialog" aria-modal="true" aria-label={`${c.name}'s screen`}>
-      <div className="shrink-0 flex items-center gap-2 pb-3 text-white">
+      <div className="shrink-0 relative flex items-center gap-2 pb-3 min-h-11 text-white">
         <AgentAvatar agent={agent} size={26} live />
         <span className="font-medium truncate">{c.name}</span>
-        {state.working ? <WorkingBadge text={c.activity?.text ?? "Working"} /> : <Pill tone={state.tone}>{state.label}</Pill>}
+        {!mine && (state.working ? <WorkingBadge text={c.activity?.text ?? "Working"} /> : <Pill tone={state.tone}>{state.label}</Pill>)}
+        {mine && (
+          <div className="absolute left-1/2 top-0 -translate-x-1/2 inline-flex items-center gap-2 rounded-full bg-info text-white pl-3.5 pr-1 h-9 text-sm font-medium shadow-panel" role="status">
+            <Hand size={15} /> You are in control
+            <button onClick={() => control(false)} className="h-7 px-3 rounded-full bg-white/20 hover:bg-white/30 text-xs font-medium">
+              Hand back
+            </button>
+          </div>
+        )}
         <button onClick={close} className="ml-auto size-9 rounded-full hover:bg-white/10 grid place-items-center" aria-label="Exit full screen" title="Exit full screen">
           <Minimize2 size={18} />
         </button>
       </div>
       <div className="flex-1 min-h-0">
-        <LiveScreen computer={c} control={mine} />
+        <LiveScreen computer={c} control={mine} onTakeControl={canControl && !someoneElse ? () => void control(true) : undefined} onActivity={activity} />
       </div>
-      {c.help && (
-        <p className="shrink-0 mt-3 text-center text-sm text-white/80">
-          <span className="font-medium">{agent.name} needs you:</span> {c.help.request}
-        </p>
-      )}
-      {error && <p className="shrink-0 mt-2 text-center text-sm text-bad">{error}</p>}
-      <div className="shrink-0 mt-3 flex justify-center">
-        <div className="inline-flex items-center gap-1 rounded-full bg-neutral-900/90 border border-white/10 p-1 text-sm text-white">
-          {mine ? (
-            <>
-              <span className="inline-flex items-center gap-1.5 px-3 h-9 text-white/80">
-                <Hand size={15} /> You're in control
-              </span>
-              <button onClick={() => control(false)} disabled={busy} className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full bg-white text-black font-medium disabled:opacity-60">
-                <HandMetal size={15} /> Hand back
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="inline-flex items-center gap-1.5 px-3 h-9 text-white/80">
-                <Eye size={15} /> {someoneElse ? state.label : "Watching"}
-              </span>
-              {canControl && (
-                <button onClick={() => control(true)} disabled={busy || someoneElse} className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full bg-white text-black font-medium disabled:opacity-60">
-                  Take control
-                </button>
-              )}
-            </>
-          )}
-        </div>
+      <div className="shrink-0 mt-3 text-center text-sm text-white/70 min-h-5">
+        {c.help ? (
+          <span>
+            <span className="font-medium text-white">{agent.name} needs you:</span> {c.help.request}
+            {mine ? " Hand back when you're done." : " Click the screen to take control."}
+          </span>
+        ) : mine ? (
+          `${agent.name} gets it back if you hand it back or stop using it.`
+        ) : someoneElse ? (
+          state.label
+        ) : canControl ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Eye size={14} /> Watching · click the screen to take control
+          </span>
+        ) : null}
       </div>
+      {error && <p className="shrink-0 mt-1 text-center text-sm text-bad">{error}</p>}
     </div>
   );
 }

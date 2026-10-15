@@ -8,6 +8,8 @@ import type { Hub } from "./hub.ts";
 import { computerDefaults } from "./policy.ts";
 /** Viewer links are single-use and short-lived, since they travel in a URL. */
 const TICKET_MS = 60_000;
+/** How long a person has to leave a computer alone before an agent that needs it takes it back. */
+const AGENT_RECLAIM_MS = 30_000;
 /** The same thing done again within this long is one line in a computer's activity. */
 const LOG_COALESCE_MS = 60_000;
 
@@ -179,8 +181,15 @@ export class Computers {
     if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null);
     if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`warren node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
-      const who = this.hub.store.user(ctl.id)?.name ?? "Someone";
-      throw new ComputerError(`${who} has taken control of ${c.name}. Wait until they hand it back (you'll hear from them), or ask them in chat.`, 409);
+      // a person who's stopped using it doesn't keep the agent waiting: it takes the computer back
+      if (Date.now() - ctl.touched >= AGENT_RECLAIM_MS) {
+        this.control.delete(c.id);
+        this.log(c, by, "Took control back");
+        this.changed(c.id);
+      } else {
+        const who = this.hub.store.user(ctl.id)?.name ?? "Someone";
+        throw new ComputerError(`${who} is using ${c.name} right now. Wait until they hand it back (you'll hear from them), or ask them in chat.`, 409);
+      }
     }
     if (by.kind === "agent" && input) this.dropHelp(c.id, by.id);
     if (by.kind === "user" && input) {
@@ -274,6 +283,11 @@ export class Computers {
     const cur = this.control.get(c.id);
     if (cur && cur.id !== userId && Date.now() - cur.touched < this.idleMs(c.workspaceId)) {
       throw new ComputerError(`${this.hub.store.user(cur.id)?.name ?? "Someone"} is using it right now`, 409);
+    }
+    // taking it again while you have it just says you're still using it (the browser does this as you work)
+    if (cur?.id === userId) {
+      cur.touched = Date.now();
+      return;
     }
     this.control.set(c.id, { kind: "user", id: userId, since: now(), touched: Date.now() });
     this.log(c, { kind: "user", id: userId }, "Took control");

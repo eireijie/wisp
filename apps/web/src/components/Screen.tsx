@@ -83,13 +83,17 @@ interface Props {
   onInput?: (i: ScreenInput) => void;
   /** a small preview (the chat side panel): no minimum height or rounded frame of its own */
   compact?: boolean;
+  /** clicking the screen while you don't have control asks for it */
+  onTakeControl?: () => void;
+  /** you did something while in control (so the hub knows you're still using it) */
+  onActivity?: () => void;
 }
 
 /**
  * The computer's screen, live. VMs and cloud computers stream over VNC (noVNC); a device's own
  * screen streams frames through the hub. Input only goes through while you have control.
  */
-export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput, compact }, ref) {
+export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput, compact, onTakeControl, onActivity }, ref) {
   const [state, setState] = useState<"connecting" | "live" | "closed" | "error">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -100,8 +104,10 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
   const frameSize = useRef({ width: 0, height: 0 });
   const controlRef = useRef(control);
   const inputRef = useRef(onInput);
+  const activityRef = useRef(onActivity);
   controlRef.current = control;
   inputRef.current = onInput;
+  activityRef.current = onActivity;
   const transport = computer.transport;
 
   useImperativeHandle(ref, () => ({
@@ -233,6 +239,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 
     const onDown = (e: PointerEvent) => {
       if (!controlRef.current) return;
+      activityRef.current?.();
       const p = where(e);
       if (p) down = { ...p, button: e.button };
       if (frames) e.preventDefault();
@@ -258,6 +265,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
     let wheelAt = 0;
     const onWheel = (e: WheelEvent) => {
       if (!controlRef.current) return;
+      activityRef.current?.();
       if (frames) e.preventDefault();
       if (Date.now() - wheelAt < 120) return;
       wheelAt = Date.now();
@@ -270,6 +278,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
     };
     const onKey = (e: KeyboardEvent) => {
       if (!controlRef.current) return;
+      activityRef.current?.();
       if (frames) e.preventDefault();
       if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
       const combo = e.ctrlKey || e.metaKey || (e.altKey && e.key.length > 1);
@@ -304,11 +313,20 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
   }, [transport, state]);
 
   return (
-    <div className={cx("relative size-full overflow-hidden bg-[#1f1d1b]", !compact && "min-h-64 rounded-2xl", control && "ring-2 ring-accent")}>
+    <div
+      className={cx("relative size-full overflow-hidden bg-[#1f1d1b] transition-shadow", !compact && "min-h-64 rounded-2xl", control && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
+      onPointerDownCapture={(e) => {
+        // clicking a live screen you don't control takes control; that click doesn't reach the computer
+        if (control || !onTakeControl || state !== "live" || e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onTakeControl();
+      }}
+    >
       {transport === "vnc" ? (
         <div ref={holder} className="absolute inset-0" />
       ) : (
-        <div tabIndex={0} className={cx("absolute inset-0 grid place-items-center outline-none", control ? "cursor-default" : "cursor-not-allowed")}>
+        <div tabIndex={0} className={cx("absolute inset-0 grid place-items-center outline-none", control ? "cursor-default" : onTakeControl ? "cursor-pointer" : "cursor-not-allowed")}>
           <img ref={img} alt={`${computer.name}'s screen`} className={cx("max-w-full max-h-full select-none", state !== "live" && "invisible")} draggable={false} />
         </div>
       )}
