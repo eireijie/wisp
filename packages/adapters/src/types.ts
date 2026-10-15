@@ -7,12 +7,20 @@ export interface McpServerSpec {
   env: Record<string, string>;
 }
 
+/** A file a run needs next to it (an MCP config with tokens in it, say): on disk here, and copied along by a launcher that runs the command somewhere else. */
+export interface LaunchFile {
+  /** where the adapter wrote it; the args refer to it by this path */
+  path: string;
+  content: string;
+}
+
 /** How a harness process starts: what to run, where, with which environment. */
 export interface Launch {
   command: string;
   args: string[];
   cwd: string;
   env: Record<string, string>;
+  files?: LaunchFile[];
 }
 
 export interface RunInput {
@@ -28,9 +36,9 @@ export interface RunInput {
   connectors?: ConnectorSpec[];
   /**
    * Start the harness somewhere else, e.g. inside the agent's VM: gets the command as the adapter
-   * would run it here and returns what to actually run.
+   * would run it here (with the files it needs) and returns what to actually run.
    */
-  launch?: (l: Launch) => Launch;
+  launch?: (l: Launch) => Launch | Promise<Launch>;
   env?: Record<string, string>;
   signal?: AbortSignal;
   /** reasoning effort; null/undefined = harness default */

@@ -1,12 +1,51 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import type { Launch, RunInput } from "./types.ts";
+import type { Launch, LaunchFile, RunInput } from "./types.ts";
 
 /** The command an adapter runs, after the run's launcher (if any) has had its say. */
-export function launched(input: Pick<RunInput, "launch" | "cwd">, command: string, args: string[], env: Record<string, string> = {}): Launch {
-  const l = { command, args, cwd: input.cwd, env };
+export async function launched(input: Pick<RunInput, "launch" | "cwd">, command: string, args: string[], env: Record<string, string> = {}, files: LaunchFile[] = []): Promise<Launch> {
+  const l: Launch = { command, args, cwd: input.cwd, env, ...(files.length ? { files } : {}) };
   return input.launch ? input.launch(l) : l;
+}
+
+/**
+ * Files one run needs on disk, in a folder only this user can read, gone when the run is over.
+ * Anything with a token in it goes here rather than on the command line, where `ps` shows it.
+ */
+export class RunFiles {
+  private dir: string | null = null;
+  readonly list: LaunchFile[] = [];
+
+  constructor(private prefix: string) {}
+
+  async add(name: string, content: string): Promise<LaunchFile> {
+    this.dir ??= await fsp.mkdtemp(path.join(os.tmpdir(), this.prefix));
+    const file = { path: path.join(this.dir, name), content };
+    await fsp.writeFile(file.path, content, { mode: 0o600 });
+    this.list.push(file);
+    return file;
+  }
+
+  async cleanup() {
+    if (this.dir) await fsp.rm(this.dir, { recursive: true, force: true }).catch(() => undefined);
+    this.dir = null;
+  }
+}
+
+/** How long a cancelled harness gets to stop on SIGTERM before SIGKILL. */
+const KILL_AFTER_MS = 5000;
+
+/** Ask a process to stop, and make it if it won't. On Windows the first signal already ends it. */
+export function stopProcess(child: ChildProcessWithoutNullStreams, killAfterMs = KILL_AFTER_MS): () => void {
+  child.kill("SIGTERM");
+  const timer = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }, killAfterMs);
+  timer.unref();
+  return () => clearTimeout(timer);
 }
 
 /** On Windows, a harness installed with npm is a `claude.cmd` shim; only cmd.exe can start those. */
@@ -54,14 +93,16 @@ export interface JsonlProcess {
 export function runJsonl(
   command: string,
   args: string[],
-  opts: { cwd: string; env?: Record<string, string>; stdin?: string; signal?: AbortSignal },
+  opts: { cwd: string; env?: Record<string, string>; stdin?: string; signal?: AbortSignal; killAfterMs?: number },
   onLine: (obj: any) => void,
 ): Promise<JsonlProcess> {
   return new Promise((resolve, reject) => {
     const child = spawnCommand(command, args, { cwd: opts.cwd, env: { ...process.env, ...opts.env }, stdio: ["pipe", "pipe", "pipe"] });
     let buf = "";
     let stderr = "";
-    const onAbort = () => child.kill("SIGTERM");
+    // a cancel asks nicely first, then insists: a harness stuck in a tool call would otherwise live on
+    let forget = () => {};
+    const onAbort = () => (forget = stopProcess(child, opts.killAfterMs));
     opts.signal?.addEventListener("abort", onAbort, { once: true });
 
     child.stdout.setEncoding("utf8");
@@ -85,10 +126,12 @@ export function runJsonl(
     });
     child.on("error", (err) => {
       opts.signal?.removeEventListener("abort", onAbort);
+      forget();
       reject(err);
     });
     child.on("close", (code) => {
       opts.signal?.removeEventListener("abort", onAbort);
+      forget();
       if (buf.trim()) {
         try {
           onLine(JSON.parse(buf.trim()));

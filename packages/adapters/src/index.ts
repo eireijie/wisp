@@ -5,9 +5,9 @@ import { codex } from "./codex.ts";
 import type { HarnessAdapter } from "./types.ts";
 
 export * from "./types.ts";
-export { commandVersion, execCommand, spawnCommand } from "./process.ts";
-export { claudeCode, claudeArgs, claudeEnv, claudeUsage, parseClaudeLine } from "./claude-code.ts";
-export { codex, codexArgs, codexDefaults, codexUsageFromRollout, parseCodexCatalog, parseCodexLine } from "./codex.ts";
+export { RunFiles, commandVersion, execCommand, runJsonl, spawnCommand, stopProcess } from "./process.ts";
+export { claudeCode, claudeArgs, claudeEnv, claudeMcpConfig, claudeUsage, parseClaudeLine } from "./claude-code.ts";
+export { codex, codexArgs, codexDefaults, codexEnv, codexMcpConfig, codexUsageFromRollout, parseCodexCatalog, parseCodexLine } from "./codex.ts";
 export { AcpConnection, acpAdapter, acpMcpServers, acpModels, parseAcpUpdate, permissionOutcome } from "./acp.ts";
 
 /**

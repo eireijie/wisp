@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConnectorSpec } from "@warren/core";
-import { acpMcpServers, claudeArgs, codexArgs } from "../src/index.ts";
+import { acpMcpServers, claudeArgs, codexArgs, codexEnv } from "../src/index.ts";
 
 const connectors: ConnectorSpec[] = [
   { name: "github", kind: "mcp-http", url: "https://api.githubcopilot.com/mcp/", headers: { Authorization: "Bearer t0k" } },
@@ -27,18 +27,36 @@ describe("connectors reach the harness", () => {
     expect(Object.keys(JSON.parse(a[a.indexOf("--mcp-config") + 1]).mcpServers)).toEqual(["postgres"]);
   });
 
-  it("codex: -c mcp_servers overrides", () => {
-    const a = codexArgs({ prompt: "", cwd: "/", mcp: warren, connectors });
+  it("codex: -c mcp_servers overrides, with tokens and headers read from the environment rather than written on the command line", () => {
+    const input = { prompt: "", cwd: "/", mcp: warren, connectors };
+    const a = codexArgs(input);
     expect(a).toEqual(
       expect.arrayContaining([
         'mcp_servers.github.url="https://api.githubcopilot.com/mcp/"',
-        'mcp_servers.github.http_headers={Authorization="Bearer t0k"}',
+        'mcp_servers.github.env_http_headers={Authorization="WARREN_HEADER_GITHUB_AUTHORIZATION"}',
         'mcp_servers.postgres.command="npx"',
         'mcp_servers.postgres.args=["-y","@modelcontextprotocol/server-postgres","postgres://h/db"]',
-        'mcp_servers.postgres.env={PGSSL="1"}',
+        'mcp_servers.postgres.env_vars=["PGSSL"]',
+        'mcp_servers.warren.env_vars=["WARREN_TOKEN"]',
       ]),
     );
     expect(a).not.toContain('mcp_servers.warren.command="evil"');
+    // nothing secret in `ps`
+    expect(a.join(" ")).not.toMatch(/t0k|WARREN_TOKEN="x"/);
+    expect(codexEnv(input)).toEqual({ WARREN_TOKEN: "x", PGSSL: "1", WARREN_HEADER_GITHUB_AUTHORIZATION: "Bearer t0k" });
+  });
+
+  it("codex: two servers wanting the same variable with different values don't get each other's", () => {
+    const two: ConnectorSpec[] = [
+      { name: "a", kind: "mcp-stdio", command: "a-mcp", env: { API_KEY: "one" } },
+      { name: "b", kind: "mcp-stdio", command: "b-mcp", env: { API_KEY: "two", REGION: "eu" } },
+    ];
+    const input = { prompt: "", cwd: "/", connectors: two };
+    const a = codexArgs(input);
+    expect(a).toContain('mcp_servers.a.env_vars=["API_KEY"]');
+    expect(a).toContain('mcp_servers.b.env_vars=["REGION"]');
+    expect(a).toContain('mcp_servers.b.env={API_KEY="two"}');
+    expect(codexEnv(input)).toEqual({ API_KEY: "one", REGION: "eu" });
   });
 
   it("acp: stdio connectors only", () => {

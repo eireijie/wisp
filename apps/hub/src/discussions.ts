@@ -38,14 +38,42 @@ export class Discussions {
     return store.discussion(d.id)!;
   }
 
-  /** Start round `n`, or the write-up once every round is done. */
+  /**
+   * Start round `n`, or the write-up once every round is done. Only agents whose device is
+   * connected take part: a run for an offline agent would wait for its device and the discussion
+   * would wait for the run, so they sit the round out (and someone else writes the decision when
+   * the moderator is away). When nobody is there, the discussion stops.
+   */
   private next(d: Discussion, n: number) {
     const { store } = this.hub;
     const summary = n > d.rounds;
     const phase = summary ? "summary" : `round:${n}`;
-    const updated = store.updateDiscussion(d.id, { round: n, status: summary ? "summarizing" : "running" })!;
-    this.notice(updated, summary ? `${this.hub.handleOf(d.moderatorId)} is writing up the decision` : `Round ${n} of ${d.rounds}`);
-    for (const agentId of summary ? [d.moderatorId] : d.participants) {
+    const handle = (a: string) => this.hub.handleOf(a);
+    const list = (ids: string[]) => `${ids.map(handle).join(", ")} ${ids.length === 1 ? "is" : "are"}`;
+    const here = (a: string) => {
+      const agent = store.agent(a);
+      return !!agent && this.hub.agentAvailable(agent);
+    };
+    const away = d.participants.filter((a) => !here(a));
+    let moderatorId = d.moderatorId;
+    let standIn = "";
+    if (summary && !here(moderatorId)) {
+      const other = d.participants.find(here);
+      if (other) {
+        standIn = ` instead of ${handle(moderatorId)}, who is offline`;
+        moderatorId = other;
+      }
+    }
+    const agents = summary ? [moderatorId] : d.participants.filter(here);
+    if (!agents.some(here)) {
+      const stopped = store.updateDiscussion(d.id, { status: "cancelled" })!;
+      this.notice(stopped, summary ? `${handle(moderatorId)} is offline, so nobody can write up the decision. Start the discussion again when an agent is back.` : `${list(away)} offline, so the discussion stopped before round ${n}. Start it again when they're back.`);
+      return this.broadcast(d.id);
+    }
+    const updated = store.updateDiscussion(d.id, { round: n, status: summary ? "summarizing" : "running", moderatorId })!;
+    const sitOut = !summary && away.length ? ` (${list(away)} offline and sit${away.length === 1 ? "s" : ""} this round out)` : "";
+    this.notice(updated, summary ? `${handle(moderatorId)} is writing up the decision${standIn}` : `Round ${n} of ${d.rounds}${sitOut}`);
+    for (const agentId of agents) {
       const runId = store.createRun({ agentId, channelId: d.channelId, threadId: d.threadId, triggerMessageId: d.threadId, hop: 0, discussionId: d.id, phase, requestedBy: d.requestedBy ?? null });
       this.hub.dispatchRun(runId);
     }

@@ -29,3 +29,9 @@ describe("warren service", () => {
     expect(systemdUnit(s, false)).toContain('Environment="PATH=/a b:/c"');
   });
 });
+
+describe("one daemon per device", () => {
+  it("marks the service's own daemon, so `warren node start` by hand can tell it's already running", () => {
+    expect(spec("node", "/home/sam/.warren").env.WARREN_SERVICE).toBe("1");
+  });
+});

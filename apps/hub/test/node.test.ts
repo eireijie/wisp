@@ -5,7 +5,7 @@ import path from "node:path";
 import WebSocket from "ws";
 import type { HarnessAdapter, RunInput } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
-import { NodeDaemon } from "../../node/src/daemon.ts";
+import { NodeDaemon, normalizeHubUrl } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 
 let dir: string;
@@ -26,11 +26,15 @@ const fake: HarnessAdapter = {
   binary: "true",
   async run(input, onEvent) {
     calls.push(input);
+    // what it does depends on the message that woke it (the prompt's last line), not on the channel's history
+    const last = input.prompt.trim().split("\n").pop() ?? "";
+    // a session the harness no longer has: it fails before anything happens
+    if (last.includes("stale") && input.sessionId) throw new Error("No conversation found with session ID");
     onEvent({ type: "session", id: input.sessionId ?? "sess-1" });
     onEvent({ type: "tool_call", name: "memory_search", input: {} });
-    if (input.prompt.includes("explode")) throw new Error("harness crashed");
+    if (last.includes("explode")) throw new Error("harness crashed");
     // a run that takes as long as the test wants, and stops when cancelled
-    if (input.prompt.includes("slow"))
+    if (last.includes("slow"))
       await new Promise<void>((resolve, reject) => {
         release = resolve;
         input.signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
@@ -113,6 +117,33 @@ describe("node daemon", () => {
     expect(calls.length - before).toBe(1);
   });
 
+  it("starts a fresh session only when resuming failed before anything happened", async () => {
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    const failures = async () => (await owner.messages(general.id)).messages.filter((m) => m.parts.some((p) => p.type === "status" && p.text.includes("harness crashed"))).length;
+    // a crash after the harness got going (it made a tool call): reported once, not run again from scratch
+    const crashed = await failures();
+    let before = calls.length;
+    await owner.send(general.id, "@bolt explode");
+    await waitFor(async () => ((await failures()) > crashed ? true : undefined));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(calls.slice(before).map((c) => c.sessionId)).toEqual(["sess-1"]);
+    // a session the harness has lost: a fresh one, without the old id
+    before = calls.length;
+    await owner.send(general.id, "@bolt stale");
+    await waitFor(async () => (await owner.messages(general.id)).messages.find((m) => m.body === `reply #${before + 2}`));
+    expect(calls.slice(before).map((c) => c.sessionId)).toEqual(["sess-1", null]);
+    expect(logs.some((l) => l.includes("resume failed before it got going"))).toBe(true);
+  });
+
+  it("takes the hub's address the way people type it", () => {
+    expect(normalizeHubUrl("my-server:4747")).toBe("http://my-server:4747");
+    expect(normalizeHubUrl("https://warren.example.com/")).toBe("https://warren.example.com");
+    expect(normalizeHubUrl("ws://localhost:4747")).toBe("http://localhost:4747");
+    expect(normalizeHubUrl(" http://10.0.0.5:4747/warren/ ")).toBe("http://10.0.0.5:4747/warren");
+    expect(() => normalizeHubUrl("not a url")).toThrow(/isn't a hub address/);
+    expect(() => normalizeHubUrl("")).toThrow(/isn't a hub address/);
+  });
+
   it("reports what it has, so a connector that can't start is caught before a run", async () => {
     const box = await waitFor(async () => (await owner.request("GET", "/api/nodes")).find((n: any) => n.name === "box" && n.capabilities?.commands));
     expect(box.capabilities.commands.node).toBe(true);
@@ -178,4 +209,25 @@ describe("node daemon", () => {
     expect(status).toEqual({ type: "status", text: "Run failed: cancelled" });
     await waitFor(async () => ((await owner.agents()).find((a) => a.handle === "bolt")?.status === "offline" ? true : undefined));
   });
+
+  it("stops when another daemon keeps taking its place on the hub, rather than the two replacing each other forever", async () => {
+    const bolt = async () => (await owner.agents()).find((a) => a.handle === "bolt")?.status;
+    daemon.start(); // the test above stopped it
+    await waitFor(async () => ((await bolt()) === "online" ? true : undefined));
+    const bump = async () => {
+      const w = new WebSocket(url.replace("http", "ws") + "/ws/node", { headers: { authorization: `Bearer ${nodeToken}` } });
+      await new Promise<void>((resolve) => w.on("message", () => resolve()));
+      return w;
+    };
+    // once: the daemon comes back after a moment and takes its place again
+    const first = await bump();
+    await waitFor(async () => (first.readyState === WebSocket.CLOSED ? true : undefined), 8000);
+    // twice within a minute: that's another daemon with the same token, so this one gives up
+    const second = await bump();
+    await waitFor(async () => (logs.some((l) => l.includes("This one stops")) ? true : undefined), 8000);
+    second.close();
+    await waitFor(async () => ((await bolt()) === "offline" ? true : undefined));
+    await new Promise((r) => setTimeout(r, 2500));
+    expect(await bolt()).toBe("offline");
+  }, 20_000);
 });

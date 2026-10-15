@@ -110,3 +110,43 @@ describe("windows command lines", () => {
     expect(escapeForCmd("dir\\")).toBe('^"dir\\\\^"');
   });
 });
+
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import { RunFiles, claudeMcpConfig, runJsonl } from "../src/index.ts";
+
+describe("secrets stay off the command line", () => {
+  const mcp = { command: "node", args: ["warren-mcp.mjs"], env: { WARREN_URL: "http://hub", WARREN_TOKEN: "wr_agent_secret" } };
+
+  it("claude gets its MCP config (tokens and all) as a private file", async () => {
+    const input = { prompt: "", cwd: "/", mcp };
+    const files = new RunFiles("warren-test-");
+    const file = await files.add("mcp.json", JSON.stringify(claudeMcpConfig(input)));
+    try {
+      const a = claudeArgs(input, { mcpConfigFile: file.path });
+      expect(a[a.indexOf("--mcp-config") + 1]).toBe(file.path);
+      expect(a[a.indexOf("--allowedTools") + 1]).toBe("mcp__warren");
+      expect(a.join(" ")).not.toContain("wr_agent_secret");
+      expect(JSON.parse(fs.readFileSync(file.path, "utf8")).mcpServers.warren.env.WARREN_TOKEN).toBe("wr_agent_secret");
+      if (process.platform !== "win32") expect((await fsp.stat(file.path)).mode & 0o777).toBe(0o600);
+    } finally {
+      await files.cleanup();
+    }
+    // gone with the run
+    expect(fs.existsSync(file.path)).toBe(false);
+    expect(claudeMcpConfig({ prompt: "", cwd: "/" })).toBeNull();
+    expect(claudeArgs({ prompt: "", cwd: "/" })).not.toContain("--mcp-config");
+  });
+});
+
+describe("cancelling a run", () => {
+  it("kills a harness that ignores SIGTERM", async () => {
+    const ac = new AbortController();
+    const started = Date.now();
+    const proc = runJsonl(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { cwd: process.cwd(), signal: ac.signal, killAfterMs: 300 }, () => {});
+    setTimeout(() => ac.abort(), 200);
+    const res = await proc;
+    expect(res.exitCode).toBeNull(); // ended by a signal, not on its own
+    expect(Date.now() - started).toBeLessThan(5000);
+  }, 10_000);
+});

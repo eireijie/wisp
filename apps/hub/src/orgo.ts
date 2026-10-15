@@ -32,6 +32,7 @@ export class OrgoClient {
     private apiKey: string,
     private fetchImpl: Fetch = fetch,
     private base = ORGO_API,
+    private ws = ORGO_WS,
   ) {}
 
   async request<T = any>(method: string, path: string, body?: unknown, timeoutMs = 60_000): Promise<T> {
@@ -76,12 +77,16 @@ export class OrgoClient {
     return (await this.request<{ password: string }>("GET", `/computers/${computerId}/vnc-password`)).password;
   }
 
-  /** Where to reach the computer's screen over VNC (websockify). The password is root on it: hub only. */
-  async vncUrl(cfg: OrgoConfig): Promise<string> {
+  /**
+   * Where the hub reaches the computer's screen over VNC (websockify), and the password for it.
+   * The password is root on the computer, so it never leaves the hub: browsers watch through the
+   * hub's relay, which signs in for them (see vnc-relay.ts).
+   */
+  async vncTarget(cfg: OrgoConfig): Promise<{ url: string; password: string }> {
     const instanceId = cfg.instanceId ?? (await this.get(cfg.computerId)).instanceId;
     if (!instanceId) throw new OrgoError("Orgo hasn't placed this computer yet; try again in a moment");
     const password = await this.vncPassword(cfg.computerId);
-    return `${ORGO_WS}/desktops/${instanceId}/ws/websockify?token=${encodeURIComponent(password)}`;
+    return { url: `${this.ws}/desktops/${instanceId}/ws/websockify?token=${encodeURIComponent(password)}`, password };
   }
 
   /** Do one Warren computer action on an Orgo computer. */

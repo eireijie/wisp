@@ -54,6 +54,8 @@ export class Hub {
   readonly skills: SkillStore;
   /** how the hub reaches outside services (Orgo); tests swap it */
   fetchImpl: typeof fetch = (...args) => fetch(...args);
+  /** where Orgo computers' screens are (websockify); tests point it at a fake */
+  orgoWs = "wss://www.orgo.ai";
   /** git operations waiting for a device to answer */
   private pendingGit = new Map<string, { resolve: (r: { ok: boolean; output: string }) => void; timer: ReturnType<typeof setTimeout> }>();
 
@@ -155,6 +157,11 @@ export class Hub {
   /** Paused at the device itself (`warren node pause`): it takes no work until it's resumed there. */
   isNodePaused(nodeId: string | null): boolean {
     return !!nodeId && this.pausedNodes.has(nodeId);
+  }
+
+  /** Could this agent start a run right now: is its device connected and not paused? */
+  agentAvailable(agent: { nodeId: string | null }): boolean {
+    return this.isNodeOnline(agent.nodeId) && !this.isNodePaused(agent.nodeId);
   }
 
   /**
@@ -300,7 +307,8 @@ export class Hub {
       case "run_done":
       case "run_failed": {
         const run = this.ownedRun(conn, msg.runId);
-        if (!run || run.status === "done" || run.status === "failed") return;
+        // a device reporting late (after a cancel, or twice) doesn't reopen a run that's over
+        if (!run || run.status !== "running") return;
         this.finishRun(conn.workspaceId, run, msg.type === "run_done" ? { finalText: msg.finalText } : { error: msg.error });
         return;
       }

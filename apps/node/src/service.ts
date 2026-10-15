@@ -24,7 +24,8 @@ export function spec(kind: ServiceKind, dir: string): Spec {
   const script = path.join(REPO_ROOT, "bin", kind === "hub" ? "warren-hub.mjs" : "warren.mjs");
   // service managers start programs with a minimal PATH, so keep this terminal's: the device needs
   // it to find `claude`, `codex` and the VM engine
-  const env: Record<string, string> = { PATH: process.env.PATH ?? "" };
+  // WARREN_SERVICE tells `warren node start` it's the service itself, not a second copy started by hand
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "", WARREN_SERVICE: "1" };
   if (kind === "hub") for (const k of ["WARREN_DATA_DIR", "PORT", "HOST", "WARREN_WEB_DIR"]) if (process.env[k]) env[k] = process.env[k]!;
   if (kind === "node" && dir !== path.join(os.homedir(), ".warren")) env.WARREN_NODE_DIR = dir;
   const name = process.platform === "darwin" ? `ai.warren.${kind}` : process.platform === "win32" ? `Warren ${kind}` : kind === "hub" ? "warren" : "warren-node";

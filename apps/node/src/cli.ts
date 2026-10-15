@@ -11,7 +11,7 @@ import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { discoverAgents } from "./discover.ts";
 import { installService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
-import { NodeDaemon, type NodeConfig } from "./daemon.ts";
+import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
 import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
 const HELP = `warren — run a Warren hub, or connect this device to one
@@ -105,6 +105,12 @@ if (values.help || !cmd) {
 } else if (cmd === "node" && sub === "start") {
   const cfg = saveNodeConfig();
   const kept = underKeeper();
+  // two daemons with one token would take turns replacing each other on the hub
+  const service = process.env.WARREN_SERVICE ? null : serviceStatus("node", dir);
+  if (service?.running) {
+    console.error(`This device is already connected by its service (${service.name}), so there's nothing to start. To run it in this terminal instead: warren service uninstall node`);
+    process.exit(1);
+  }
   const daemon = new NodeDaemon(cfg);
   daemon.start();
   watchForUpdates(async () => {
@@ -175,6 +181,12 @@ function saveNodeConfig(): NodeConfig {
   };
   if (!cfg.hub || !cfg.token) {
     console.error("Missing --hub and --token. Get them in Warren → Devices → Add device.");
+    process.exit(1);
+  }
+  try {
+    cfg.hub = normalizeHubUrl(cfg.hub);
+  } catch (e) {
+    console.error((e as Error).message);
     process.exit(1);
   }
   fs.mkdirSync(dir, { recursive: true });

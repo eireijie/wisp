@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
-import type { WebSocket } from "ws";
+import WebSocket from "ws";
 import { ComputerAction, lentNow, tunnelFrame, type Actor, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
 import { id, now } from "./auth.ts";
 import { OrgoClient, parseResolution } from "./orgo.ts";
+import { relayVnc } from "./vnc-relay.ts";
 import type { Hub } from "./hub.ts";
 
 import { computerDefaults } from "./policy.ts";
@@ -135,7 +136,7 @@ export class Computers {
 
   orgo(workspaceId: string): OrgoClient | null {
     const key = this.hub.store.setting(workspaceId, "orgo.apiKey");
-    return key ? new OrgoClient(key, this.hub.fetchImpl) : null;
+    return key ? new OrgoClient(key, this.hub.fetchImpl, undefined, this.hub.orgoWs) : null;
   }
 
   // --- requests to devices ------------------------------------------------------------------------
@@ -456,11 +457,21 @@ export class Computers {
     }
   }
 
-  /** The Orgo VNC address, for the browser to connect to directly. Contains the computer's password. */
-  async orgoVnc(c: Computer): Promise<string> {
+  /**
+   * Relay a browser's VNC connection to an Orgo computer. The hub signs in with the computer's
+   * password, which stays here; the browser gets a password-free connection.
+   */
+  openOrgoRelay(c: Computer, socket: WebSocket) {
     const client = this.orgo(c.workspaceId);
-    if (!client) throw new ComputerError("add an Orgo API key in Settings → Computers first", 412);
-    return client.vncUrl(c.config as OrgoConfig);
+    if (!client) return socket.close(4412, "add an Orgo API key in Settings → Computers first");
+    let upstream: WebSocket | undefined;
+    void client
+      .vncTarget(c.config as OrgoConfig)
+      .then(({ url, password }) => relayVnc(socket, (upstream = new WebSocket(url)), password))
+      .catch((err) => {
+        upstream?.close();
+        if (socket.readyState <= 1) socket.close(4502, String((err as Error).message).slice(0, 120));
+      });
   }
 
   /** Make an Orgo computer for this workspace. */

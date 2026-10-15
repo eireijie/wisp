@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, ConnectorSpec, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
-import { commandVersion, launched, spawnCommand } from "./process.ts";
+import { commandVersion, launched, spawnCommand, stopProcess } from "./process.ts";
 
 /**
  * Agent Client Protocol (https://agentclientprotocol.com): JSON-RPC 2.0 over stdio, one JSON
@@ -119,7 +119,8 @@ export class AcpConnection {
     try {
       this.child.stdin.end();
     } catch {}
-    this.child.kill("SIGTERM");
+    // SIGTERM, and SIGKILL a little later for an agent that ignores it
+    stopProcess(this.child);
   }
 }
 
@@ -268,7 +269,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
 
     async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {
       const cmd = command(input);
-      const l = launched(input, cmd.command, cmd.args, input.env);
+      const l = await launched(input, cmd.command, cmd.args, input.env);
       const child = spawnCommand(l.command, l.args, { cwd: l.cwd, env: { ...process.env, ...l.env }, stdio: ["pipe", "pipe", "pipe"] });
       const tools = new Map<string, string>();
       let text = "";

@@ -7,6 +7,63 @@ import { commandVersion, execCommand, launched, runJsonl } from "./process.ts";
 
 const SANDBOX: Record<AccessLevel, string> = { "read-only": "read-only", edit: "workspace-write", full: "danger-full-access" };
 
+/**
+ * The MCP servers a run gets, as `-c` overrides, and the environment they take their secrets
+ * from. Tokens and headers go in Codex's own environment and are named in `env_vars` /
+ * `env_http_headers` rather than written into the command line, where `ps` would show them.
+ * (Only when two servers want the same variable with different values does the second one's
+ * value stay inline.) Exported for tests.
+ */
+export function codexMcpConfig(input: RunInput): { overrides: string[]; env: Record<string, string> } {
+  const overrides: string[] = [];
+  const env: Record<string, string> = {};
+  const set = (key: string, value: string) => overrides.push("-c", `${key}=${value}`);
+  const viaEnv = (key: string, vars: Record<string, string>) => {
+    const names: string[] = [];
+    const inline: Record<string, string> = {};
+    for (const [name, value] of Object.entries(vars)) {
+      if (name in env && env[name] !== value) inline[name] = value;
+      else {
+        env[name] = value;
+        names.push(name);
+      }
+    }
+    if (names.length) set(`${key}.env_vars`, `[${names.map(tomlString).join(",")}]`);
+    if (Object.keys(inline).length) set(`${key}.env`, tomlTable(inline));
+  };
+  const servers: [string, { command: string; args: string[]; env?: Record<string, string> }][] = [];
+  if (input.mcp) servers.push(["warren", input.mcp]);
+  if (input.browser) servers.push(["browser", input.browser]);
+  for (const [name, spec] of servers) {
+    const key = `mcp_servers.${name}`;
+    set(`${key}.command`, tomlString(spec.command));
+    set(`${key}.args`, `[${spec.args.map(tomlString).join(",")}]`);
+    viaEnv(key, spec.env ?? {});
+    // exec mode can't prompt, so pre-approve these tools (the hub enforces what the agent may touch; the browser is its own VM's)
+    set(`${key}.default_tools_approval_mode`, `"approve"`);
+  }
+  for (const c of input.connectors ?? []) {
+    if (c.name === "warren" || c.name === "browser" || c.kind === "secret") continue;
+    const key = `mcp_servers.${tomlKey(c.name)}`;
+    if (c.kind === "mcp-stdio") {
+      set(`${key}.command`, tomlString(c.command ?? ""));
+      set(`${key}.args`, `[${(c.args ?? []).map(tomlString).join(",")}]`);
+      if (c.env && Object.keys(c.env).length) viaEnv(key, c.env);
+    } else {
+      set(`${key}.url`, tomlString(c.url ?? ""));
+      // each header's value lives in a variable named after the connector and header
+      const headers = Object.entries(c.headers ?? {});
+      if (headers.length) {
+        const byVar = Object.fromEntries(headers.map(([h, v]) => [`WARREN_HEADER_${(c.name + "_" + h).toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`, v]));
+        Object.assign(env, byVar);
+        set(`${key}.env_http_headers`, `{${headers.map(([h], i) => `${tomlKey(h)}=${tomlString(Object.keys(byVar)[i])}`).join(",")}}`);
+      }
+    }
+    set(`${key}.default_tools_approval_mode`, `"approve"`);
+  }
+  return { overrides, env };
+}
+
 /** CLI arguments for one run. Exported for tests. */
 export function codexArgs(input: RunInput): string[] {
   // `exec resume` has no -s flag, so the sandbox is set through config for both forms
@@ -15,28 +72,13 @@ export function codexArgs(input: RunInput): string[] {
   if (input.effort) common.push("-c", `model_reasoning_effort=${tomlString(input.effort)}`);
   // Codex's fast mode is the "priority" service tier (models advertise it in their catalog)
   if (input.fast) common.push("-c", `service_tier="priority"`);
-  for (const [name, spec] of [["warren", input.mcp], ["browser", input.browser]] as const) {
-    if (!spec) continue;
-    common.push("-c", `mcp_servers.${name}.command=${tomlString(spec.command)}`);
-    common.push("-c", `mcp_servers.${name}.args=[${spec.args.map(tomlString).join(",")}]`);
-    common.push("-c", `mcp_servers.${name}.env={${Object.entries(spec.env).map(([k, v]) => `${k}=${tomlString(v)}`).join(",")}}`);
-    // exec mode can't prompt, so pre-approve these tools (the hub enforces what the agent may touch; the browser is its own VM's)
-    common.push("-c", `mcp_servers.${name}.default_tools_approval_mode="approve"`);
-  }
-  for (const c of input.connectors ?? []) {
-    if (c.name === "warren" || c.name === "browser" || c.kind === "secret") continue;
-    const key = `mcp_servers.${tomlKey(c.name)}`;
-    if (c.kind === "mcp-stdio") {
-      common.push("-c", `${key}.command=${tomlString(c.command ?? "")}`);
-      common.push("-c", `${key}.args=[${(c.args ?? []).map(tomlString).join(",")}]`);
-      if (c.env && Object.keys(c.env).length) common.push("-c", `${key}.env=${tomlTable(c.env)}`);
-    } else {
-      common.push("-c", `${key}.url=${tomlString(c.url ?? "")}`);
-      if (c.headers && Object.keys(c.headers).length) common.push("-c", `${key}.http_headers=${tomlTable(c.headers)}`);
-    }
-    common.push("-c", `${key}.default_tools_approval_mode="approve"`);
-  }
+  common.push(...codexMcpConfig(input).overrides);
   return input.sessionId ? ["exec", "resume", input.sessionId, ...common, "-"] : ["exec", ...common, "-"];
+}
+
+/** Environment for one run: the run's own (connector secrets) plus what the MCP servers read theirs from. Exported for tests. */
+export function codexEnv(input: RunInput): Record<string, string> {
+  return { ...input.env, ...codexMcpConfig(input).env };
 }
 
 /** Turn `codex debug models` output into Warren model options (listed models only). Exported for tests. */
@@ -154,7 +196,7 @@ export const codex: HarnessAdapter = {
     let sessionId: string | null = input.sessionId ?? null;
     let error: string | null = null;
 
-    const l = launched(input, this.binary, args, input.env);
+    const l = await launched(input, this.binary, args, codexEnv(input));
     const proc = await runJsonl(l.command, l.args, { cwd: l.cwd, env: l.env, stdin: input.prompt, signal: input.signal }, (m) => {
       for (const e of parseCodexLine(m)) {
         if (e.type === "session") sessionId = e.id;

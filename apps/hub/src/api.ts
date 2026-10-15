@@ -99,6 +99,22 @@ const SUBJECT = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all_agents") }),
 ]);
 
+/** The name an upload came with (`x-filename`, URL-encoded by the web app), as a plain file name; a badly encoded one is taken as it is. */
+export function fileName(header: unknown): string {
+  const raw = typeof header === "string" ? header : "";
+  let name = raw;
+  try {
+    name = decodeURIComponent(raw);
+  } catch {}
+  return name.replace(/[/\\]/g, "_").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 200) || "file";
+}
+
+/** A `?limit=` query value as a whole number within [1, max]; anything else (missing, "abc", 0, -5) means the default. */
+export function limitParam(raw: unknown, fallback: number, max: number): number {
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, max) : fallback;
+}
+
 export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: string; dataDir: string }) {
   const { store, vault } = hub;
   const db = store.db;
@@ -577,7 +593,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
-    const limit = Math.min(Number((req.query as { limit?: string }).limit ?? 20) || 20, 100);
+    const limit = limitParam((req.query as { limit?: string }).limit, 20, 100);
     // runs in a DM the caller isn't part of show as runs, but not where or what was said
     return store.agentRuns(agent.id, limit).map((r) => {
       const hidden = !channelVisible(c, r.channelId);
@@ -619,7 +635,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     const q = req.query as { thread?: string; before?: string; limit?: string };
-    const messages = store.withReactions(store.messages(ch.id, { threadId: q.thread, before: q.before, limit: q.limit ? Number(q.limit) : undefined }));
+    const messages = store.withReactions(store.messages(ch.id, { threadId: q.thread, before: q.before, limit: limitParam(q.limit, 50, 200) }));
     return { messages, replyCounts: q.thread ? {} : store.replyCounts(messages.map((m) => m.id)) };
   });
 
@@ -1383,7 +1399,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const c = need(req, reply);
     if (!c) return;
     const q = req.query as { q?: string; limit?: string };
-    return vault.search(q.q ?? "", readable(c), q.limit ? Math.min(Number(q.limit), 100) : 20);
+    return vault.search(q.q ?? "", readable(c), limitParam(q.limit, 20, 100));
   });
 
   app.get("/api/vault/resolve", async (req, reply) => {
@@ -1452,7 +1468,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const q = req.query as { limit?: string; author?: string; path?: string };
     const canRead = readable(c);
     const prefix = q.path ? cleanRulePath(q.path).toLowerCase() : "";
-    const limit = Math.min(Number(q.limit) || 50, 200);
+    const limit = limitParam(q.limit, 50, 200);
     return (await vault.changes(limit * 4))
       .map((ch) => ({ ...ch, files: ch.files.filter((f) => canRead(f.path) && (!prefix || f.path.toLowerCase() === prefix || f.path.toLowerCase().startsWith(prefix + "/"))) }))
       .filter((ch) => ch.files.length && (!q.author || ch.author === q.author))
@@ -1668,7 +1684,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const buf = req.body as Buffer;
     if (!Buffer.isBuffer(buf) || !buf.length) return reply.code(400).send({ error: "send the file as application/octet-stream" });
-    const name = decodeURIComponent(String(req.headers["x-filename"] ?? "file")).replace(/[/\\]/g, "_").slice(0, 200);
+    const name = fileName(req.headers["x-filename"]);
     const mime = String(req.headers["x-mime-type"] ?? "application/octet-stream");
     const channelId = typeof req.headers["x-channel-id"] === "string" ? req.headers["x-channel-id"] : null;
     if (channelId && !channelVisible(c, channelId)) return reply.code(404).send({ error: "channel not found" });
@@ -1715,8 +1731,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const ticket = hub.computers.redeem((req.query as { ticket?: string }).ticket, computerId);
     const comp = ticket ? store.computer(computerId) : undefined;
     if (!ticket || !comp || comp.workspaceId !== ticket.workspaceId || ticket.kind !== transport) return socket.close(4401, "unauthorized");
-    if (transport === "vnc") hub.computers.openTunnel(comp, socket);
-    else hub.computers.addFrameViewer(comp, socket, ticket.userId);
+    if (transport !== "vnc") hub.computers.addFrameViewer(comp, socket, ticket.userId);
+    else if (comp.kind === "orgo") hub.computers.openOrgoRelay(comp, socket);
+    else hub.computers.openTunnel(comp, socket);
   });
 
   /** Browsers can't set headers on WebSockets, so the session token arrives in the first frame. */
