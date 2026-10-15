@@ -192,6 +192,11 @@ CREATE TABLE IF NOT EXISTS followups (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS followups_due ON followups(status, due_at);
+CREATE TABLE IF NOT EXISTS connector_auth (
+  connector_id TEXT PRIMARY KEY REFERENCES connectors(id) ON DELETE CASCADE,
+  required INTEGER NOT NULL DEFAULT 1, redirect_url TEXT, client_json TEXT, tokens_json TEXT, expires_at TEXT,
+  verifier TEXT, state TEXT, signed_in_by TEXT, error TEXT, updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL

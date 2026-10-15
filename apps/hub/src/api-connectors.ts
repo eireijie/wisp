@@ -3,6 +3,7 @@ import { z } from "zod";
 import { agentSkillPath, catalogSkill, skillFile, skillSlug, type Skill } from "@warren/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
+import { CALLBACK_PATH } from "./connector-auth.ts";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -17,9 +18,9 @@ const AGENT_IDS = z.array(z.string().min(1)).max(500);
 const NAME = z.string().trim().min(1).max(60);
 
 const CONNECTOR = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("mcp-stdio"), name: NAME, catalogId: z.string().max(60).nullish(), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
-  z.object({ kind: z.literal("mcp-http"), name: NAME, catalogId: z.string().max(60).nullish(), url: URL_, headers: HEADERS.default({}), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
-  z.object({ kind: z.literal("secret"), name: NAME, catalogId: z.string().max(60).nullish(), env: ENV.refine((o) => Object.values(o).some(Boolean), "add at least one value"), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
+  z.object({ kind: z.literal("mcp-stdio"), name: NAME, catalogId: z.string().max(300).nullish(), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100).default([]), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
+  z.object({ kind: z.literal("mcp-http"), name: NAME, catalogId: z.string().max(300).nullish(), url: URL_, headers: HEADERS.default({}), env: ENV.default({}), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
+  z.object({ kind: z.literal("secret"), name: NAME, catalogId: z.string().max(300).nullish(), env: ENV.refine((o) => Object.values(o).some(Boolean), "add at least one value"), enabled: z.boolean().optional(), agentIds: AGENT_IDS.optional() }),
 ]);
 
 const CONNECTOR_PATCH = z
@@ -66,6 +67,61 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     if (!agentIds) return;
     const conn = connectors.create(c.workspaceId, c.actor.id, body);
     if (agentIds.length) connectors.setAgents(conn.id, agentIds);
+    // a remote server that wants people to sign in says so now, so the page can offer it
+    if (conn.kind === "mcp-http") await connectors.auth.probe(conn.id, connectors.serverUrl(conn.id)!, connectors.serverHeaders(conn.id));
+    return connectors.get(conn.id);
+  });
+
+  // --- the marketplace (the MCP Registry) and signing in -----------------------------------------
+
+  app.get("/api/marketplace", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const q = String((req.query as { q?: string }).q ?? "").slice(0, 100);
+    try {
+      return { entries: await hub.marketplace.search(q), featured: !q.trim() };
+    } catch (e) {
+      return reply.code(502).send({ error: `Couldn't reach the MCP Registry: ${(e as Error).message}` });
+    }
+  });
+
+  app.post("/api/connectors/:id/signin", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const conn = ownConnector(c, req, reply);
+    if (!conn) return;
+    const body = parse(z.object({ origin: URL_ }), req.body, reply);
+    if (!body) return;
+    const url = connectors.serverUrl(conn.id);
+    if (!url) return reply.code(400).send({ error: "only remote MCP servers can be signed in to" });
+    try {
+      const to = await connectors.auth.start(conn.id, url, new URL(body.origin).origin, c.actor.id);
+      return to ? { url: to } : { signedIn: true };
+    } catch (e) {
+      return reply.code(502).send({ error: `${conn.name} didn't offer a way to sign in: ${(e as Error).message}` });
+    }
+  });
+
+  /** Where the sign-in page sends the browser back. No Warren token here: the state ties it to the sign-in that started it. */
+  app.get(CALLBACK_PATH, async (req, reply) => {
+    const q = req.query as { state?: string; code?: string; error?: string; error_description?: string };
+    const back = (msg?: string) => reply.redirect(`/?signin=${msg ? encodeURIComponent(msg) : "ok"}#/connectors`);
+    if (q.error) return back(q.error_description || q.error);
+    if (!q.state || !q.code) return back("the sign-in page didn't send a code back");
+    try {
+      await connectors.auth.finish(q.state, q.code, (id) => connectors.serverUrl(id));
+      return back();
+    } catch (e) {
+      return back((e as Error).message);
+    }
+  });
+
+  app.post("/api/connectors/:id/signout", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const conn = ownConnector(c, req, reply);
+    if (!conn) return;
+    connectors.auth.signOut(conn.id);
     return connectors.get(conn.id);
   });
 
