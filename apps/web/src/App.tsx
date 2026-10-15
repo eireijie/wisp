@@ -51,6 +51,17 @@ function useIsPhone() {
   return phone;
 }
 
+/** Unread messages on the app icon: the Dock in Warren's desktop app, or the installed PWA's badge. */
+function useUnreadBadge() {
+  const unread = useStore((s) => s.channels.reduce((n, c) => n + (c.unread || 0), 0));
+  useEffect(() => {
+    const desktop = (window as { warrenDesktop?: { setBadge(n: number): void } }).warrenDesktop;
+    if (desktop) return desktop.setBadge(unread);
+    const nav = navigator as Navigator & { setAppBadge?(n: number): Promise<void>; clearAppBadge?(): Promise<void> };
+    (unread ? nav.setAppBadge?.(unread) : nav.clearAppBadge?.())?.catch(() => {});
+  }, [unread]);
+}
+
 function Workspace() {
   const me = useStore((s) => s.me);
   const load = useStore((s) => s.load);
@@ -70,6 +81,7 @@ function Workspace() {
   useEffect(() => {
     if (userId) primeTasks();
   }, [userId]);
+  useUnreadBadge();
 
   // the phone-only pages have desktop equivalents, and the bare root is the chats list on phones
   useEffect(() => {

@@ -19,7 +19,7 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 - **Teams, like a small company.** Put agents on teams with a lead, roles and a shared memory pool, and have teams report to a boss agent. Ask the boss for anything, or go straight to a team's lead. Agents can also work on their own.
 - **Agents that collaborate.** Agents @mention each other, delegate tasks (`task_delegate`), pass files, and report back, and you see it happen ("Sending to Chief…"). They can talk a topic through in rounds before starting (`discussion_start`), with the decision saved to the team's memory. Coding teams get a branch per task, a review, and a merge. A loop guard keeps them from pinging each other forever.
 - **Feels like a team chat.** Channels grouped into sections, DMs, threads, reactions, unread state that follows you across devices, ⌘K to search everything, and agents that react 👀 when they pick up your message and show what they're doing while they work.
-- **Works everywhere.** The web app is an installable PWA: iPhone (Add to Home Screen, with a bottom tab bar), Android, Mac, Windows and Linux.
+- **Works everywhere.** A desktop app for Mac, Windows and Linux runs the hub for you, connects that computer as a device with one click, and stays in the menu bar ([apps/desktop](apps/desktop)). A native iPhone and iPad app covers chats, agents, approvals and watching or taking over computers ([apps/ios](apps/ios)). The web app is also an installable PWA for any browser.
 
 ## Quick start
 
@@ -115,6 +115,8 @@ That session can now chat in channels, delegate tasks, and read and write memory
 | `apps/hub` | Fastify server: REST + WebSocket API, routing, permissions, serves the web app |
 | `apps/web` | React PWA |
 | `apps/node` | `warren` CLI and device daemon |
+| `apps/desktop` | Electron desktop app: the workspace in a window, a hub on this computer, this computer as a device |
+| `apps/ios` | Native SwiftUI app for iPhone and iPad |
 | `packages/core` | Shared types, wire protocol, mention parsing, loop guard, memory access rules |
 | `packages/vault` | Git-backed markdown vault with links, backlinks and search |
 | `packages/adapters` | Harness adapters: Claude Code, Codex, and any ACP agent |
