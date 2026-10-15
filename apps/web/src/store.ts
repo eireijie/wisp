@@ -77,6 +77,8 @@ interface State {
   approvals: Record<string, Approval>;
   /** bumps when routines change, so open lists refetch */
   routinesVersion: number;
+  /** bumped when an agent's background work or follow-ups change */
+  backgroundVersion: number;
   /** bumps when tasks change, so the Tasks page refetches */
   tasksVersion: number;
   /** the New task dialog is open */
@@ -132,6 +134,7 @@ export const useStore = create<State>((set, get) => ({
   computers: [],
   approvals: {},
   routinesVersion: 0,
+  backgroundVersion: 0,
   tasksVersion: 0,
   newTaskOpen: false,
   orchestration: null,
@@ -317,6 +320,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ approvals: { ...s.approvals, [e.approval.id]: e.approval } }));
     } else if (e.type === "routines_changed") {
       set((s) => ({ routinesVersion: s.routinesVersion + 1 }));
+    } else if (e.type === "background_changed") {
+      set((s) => ({ backgroundVersion: s.backgroundVersion + 1 }));
     } else if (e.type === "tasks_changed") {
       set((s) => ({ tasksVersion: s.tasksVersion + 1 }));
     } else if (e.type === "run_event") {

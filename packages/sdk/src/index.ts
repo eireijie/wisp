@@ -1,4 +1,4 @@
-import type { Agent, Approval, Channel, ComputerAction, Message, Routine } from "@warren/core";
+import type { Agent, Approval, Channel, ComputerAction, Message, Routine, Followup } from "@warren/core";
 
 export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -135,6 +135,23 @@ export class WarrenClient {
   /** Ask a person's OK before doing something; the answer arrives as a message that wakes the agent. */
   requestApproval(summary: string, details = "") {
     return this.request<Approval>("POST", "/api/approvals", { summary, details });
+  }
+  /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
+  messagePerson(text: string, fileIds: string[] = []) {
+    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds });
+  }
+  /** When this agent's next background check should be. */
+  nextCheck(minutes: number, reason = "") {
+    return this.request<{ nextAt: string; minutes: number; on: boolean }>("POST", "/api/background/next", { minutes, reason });
+  }
+  followups() {
+    return this.request<Followup[]>("GET", "/api/followups");
+  }
+  setFollowup(f: { at?: string; inMinutes?: number; note: string }) {
+    return this.request<Followup & { timezone: string }>("POST", "/api/followups", f);
+  }
+  cancelFollowup(followupId: string) {
+    return this.request<{ ok: boolean }>("DELETE", `/api/followups/${followupId}`);
   }
   routines() {
     return this.request<Routine[]>("GET", "/api/routines");

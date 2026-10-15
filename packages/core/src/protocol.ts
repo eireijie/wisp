@@ -176,6 +176,7 @@ export type ClientEvent =
   | { type: "computer_removed"; computerId: string }
   | { type: "approval"; approval: import("./types.ts").Approval }
   | { type: "routines_changed" }
+  | { type: "background_changed"; agentId: string }
   | { type: "tasks_changed" };
 
 /**

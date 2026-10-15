@@ -1,4 +1,4 @@
-import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole } from "@warren/core";
+import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -791,21 +791,22 @@ export class Store {
   // --- runs -----------------------------------------------------------------
 
   /** `requestedBy`: the person this run is ultimately for (who asked, or who asked the agent that asked); null when nobody did. */
-  createRun(r: { agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; hop: number; discussionId?: string; phase?: string; requestedBy?: string | null }) {
+  /** `kind: "background"` is a check the agent does on its own: no trigger message, and nothing posted when it ends. */
+  createRun(r: { agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; hop: number; discussionId?: string; phase?: string; requestedBy?: string | null; kind?: "background" }) {
     const runId = id("run");
     this.db
-      .prepare("INSERT INTO runs (id, agent_id, channel_id, thread_id, trigger_message_id, status, hop, discussion_id, phase, requested_by, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)")
-      .run(runId, r.agentId, r.channelId, r.threadId, r.triggerMessageId, r.hop, r.discussionId ?? null, r.phase ?? null, r.requestedBy ?? null, now());
+      .prepare("INSERT INTO runs (id, agent_id, channel_id, thread_id, trigger_message_id, status, hop, discussion_id, phase, requested_by, kind, created_at) VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)")
+      .run(runId, r.agentId, r.channelId, r.threadId, r.triggerMessageId, r.hop, r.discussionId ?? null, r.phase ?? null, r.requestedBy ?? null, r.kind ?? null, now());
     return runId;
   }
 
   run(runId: string) {
     return this.db
       .prepare(
-        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy FROM runs WHERE id = ?",
+        "SELECT id, agent_id AS agentId, channel_id AS channelId, thread_id AS threadId, trigger_message_id AS triggerMessageId, status, hop, discussion_id AS discussionId, phase, requested_by AS requestedBy, kind FROM runs WHERE id = ?",
       )
       .get(runId) as
-      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null }
+      | { id: string; agentId: string; channelId: string; threadId: string | null; triggerMessageId: string; status: string; hop: number; discussionId: string | null; phase: string | null; requestedBy: string | null; kind: "background" | null }
       | undefined;
   }
 
@@ -1027,6 +1028,77 @@ export class Store {
       params.push(channelId);
     }
     return this.db.prepare(sql + " ORDER BY created_at DESC LIMIT 200").all(...params) as FileRecord[];
+  }
+
+  // --- background work and follow-ups ---------------------------------------------------------
+
+  private backgroundSql = `SELECT b.agent_id AS agentId, b.user_id AS userId, b.enabled, b.every_minutes AS everyMinutes, b.focus, b.quiet_start AS quietStart, b.quiet_end AS quietEnd,
+    b.next_at AS nextAt, b.next_reason AS nextReason, b.last_at AS lastAt, b.last_note AS lastNote,
+    EXISTS (SELECT 1 FROM runs r WHERE r.agent_id = b.agent_id AND r.kind = 'background' AND r.requested_by = b.user_id AND r.status IN ('queued','running')) AS checking
+    FROM background b`;
+  private toBackground = (r: Record<string, unknown>): BackgroundWork => ({ ...(r as unknown as BackgroundWork), enabled: !!r.enabled, checking: !!r.checking });
+
+  background(agentId: string, userId: string): BackgroundWork | undefined {
+    const r = this.db.prepare(`${this.backgroundSql} WHERE b.agent_id = ? AND b.user_id = ?`).get(agentId, userId) as Record<string, unknown> | undefined;
+    return r && this.toBackground(r);
+  }
+
+  /** Every person an agent works in the background for (turned on or not). */
+  backgroundFor(agentId: string): BackgroundWork[] {
+    return (this.db.prepare(`${this.backgroundSql} WHERE b.agent_id = ?`).all(agentId) as Record<string, unknown>[]).map(this.toBackground);
+  }
+
+  /** Background work that's on, across every workspace. */
+  activeBackground(): BackgroundWork[] {
+    return (this.db.prepare(`${this.backgroundSql} WHERE b.enabled = 1`).all() as Record<string, unknown>[]).map(this.toBackground);
+  }
+
+  setBackground(agentId: string, userId: string, patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "nextAt" | "nextReason" | "lastAt" | "lastNote">>): BackgroundWork {
+    this.db.prepare("INSERT OR IGNORE INTO background (agent_id, user_id, created_at) VALUES (?, ?, ?)").run(agentId, userId, now());
+    const v = { ...this.background(agentId, userId)!, ...patch };
+    this.db
+      .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ? WHERE agent_id = ? AND user_id = ?")
+      .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, agentId, userId);
+    return this.background(agentId, userId)!;
+  }
+
+  private followupSql = "SELECT id, agent_id AS agentId, user_id AS userId, due_at AS dueAt, note, status, created_at AS createdAt FROM followups";
+
+  createFollowup(f: { agentId: string; userId: string | null; dueAt: string; note: string }): Followup {
+    const fid = id("fup");
+    this.db.prepare("INSERT INTO followups (id, agent_id, user_id, due_at, note, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)").run(fid, f.agentId, f.userId, f.dueAt, f.note, now());
+    return this.followup(fid)!;
+  }
+
+  followup(followupId: string): Followup | undefined {
+    return this.db.prepare(`${this.followupSql} WHERE id = ?`).get(followupId) as Followup | undefined;
+  }
+
+  /** An agent's follow-ups that haven't happened yet, soonest first. */
+  pendingFollowups(agentId: string): Followup[] {
+    return this.db.prepare(`${this.followupSql} WHERE agent_id = ? AND status = 'pending' ORDER BY due_at`).all(agentId) as Followup[];
+  }
+
+  dueFollowups(at: string): Followup[] {
+    return this.db.prepare(`${this.followupSql} WHERE status = 'pending' AND due_at <= ? ORDER BY due_at`).all(at) as Followup[];
+  }
+
+  setFollowupStatus(followupId: string, status: Followup["status"]) {
+    this.db.prepare("UPDATE followups SET status = ? WHERE id = ?").run(status, followupId);
+  }
+
+  // --- web push ---------------------------------------------------------------------------------
+
+  savePushSubscription(userId: string, endpoint: string, keys: { p256dh: string; auth: string }) {
+    this.db.prepare("INSERT INTO push_subscriptions (endpoint, user_id, keys_json, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, keys_json = excluded.keys_json").run(endpoint, userId, JSON.stringify(keys), now());
+  }
+
+  deletePushSubscription(endpoint: string) {
+    this.db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
+  }
+
+  pushSubscriptions(userId: string): { endpoint: string; keys: { p256dh: string; auth: string } }[] {
+    return (this.db.prepare("SELECT endpoint, keys_json FROM push_subscriptions WHERE user_id = ?").all(userId) as { endpoint: string; keys_json: string }[]).map((r) => ({ endpoint: r.endpoint, keys: JSON.parse(r.keys_json) }));
   }
 }
 
