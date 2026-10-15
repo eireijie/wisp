@@ -16,12 +16,12 @@ export function AgentPill({ agent }: { agent: Agent }) {
   return (
     <button
       onClick={() => go({ view: "agents", agentId: agent.id, tab: "overview" })}
-      className="agent-pill inline-flex items-center gap-2 h-12 pl-2 pr-4 rounded-full bg-panel/95 backdrop-blur border border-line shadow-panel hover:bg-hover transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="agent-pill inline-flex items-center gap-2.5 h-14 pl-2 pr-5 rounded-full bg-panel/95 backdrop-blur border border-line shadow-panel hover:bg-hover transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={`${agent.name}${mood === "thinking" ? ", working" : mood === "asleep" ? ", offline" : ""}. Open its page`}
     >
-      <Ghost look={look} size={38} mood={mood} animate trackPointer label={agent.name} />
+      <Ghost look={look} size={46} mood={mood} animate trackPointer label={agent.name} />
       <span className="flex flex-col items-start leading-tight">
-        <span className={cx("font-semibold text-[15px]", mood === "asleep" && "text-muted")}>{agent.name}</span>
+        <span className={cx("font-semibold text-base", mood === "asleep" && "text-muted")}>{agent.name}</span>
         {mood !== "awake" && <span className="text-[11px] text-muted">{mood === "thinking" ? "working…" : "offline"}</span>}
       </span>
       <span className="agent-pill-arrow text-muted">

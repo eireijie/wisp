@@ -47,7 +47,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   return (
     <div className="flex-1 min-h-0 flex">
       <div className={cx("flex-1 min-w-0 flex flex-col", route.threadId && "hidden lg:flex")}>
-        <header className={cx("h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 safe-top", dmAgent ? "relative h-18" : "border-b border-line")}>
+        <header className={cx("h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 safe-top", dmAgent ? "relative h-20" : "border-b border-line")}>
           {onBack && (
             <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back to chats">
               <ChevronLeft size={22} />
