@@ -389,13 +389,13 @@ function NoteReader({ path, resolve, folderLabel, onChanged, onShare }: { path: 
         <div className="px-4 md:px-8 py-2 flex items-center gap-2 border-b border-line text-sm">
           <div className="flex-1 min-w-0 flex items-center gap-1 text-muted truncate">
             {crumbs.map((c, i) => (
-              <span key={i} className={cx("flex items-center gap-1 truncate", i < crumbs.length - 1 && side && "hidden")}>
+              <span key={i} className={cx("flex items-center gap-1 truncate", i < crumbs.length - 1 ? (side ? "hidden" : "hidden xl:flex") : "min-w-24")}>
                 {i > 0 && <ChevronRight size={12} className="text-faint" />}
                 <span className={cx(i === crumbs.length - 1 && "text-ink font-medium")}>{i === crumbs.length - 1 ? base(c) : folderLabel(c, crumbs[i - 1] ?? "")}</span>
               </span>
             ))}
             {note.editedBy && !side && (
-              <span className="hidden lg:inline ml-2 text-xs text-faint truncate" title={note.editedAt ? new Date(note.editedAt).toLocaleString() : undefined}>
+              <span className="hidden 2xl:inline ml-2 text-xs text-faint truncate" title={note.editedAt ? new Date(note.editedAt).toLocaleString() : undefined}>
                 edited by {note.editedBy}
                 {note.editedAt ? ` · ${timeAgo(note.editedAt)}` : ""}
               </span>
@@ -554,7 +554,7 @@ function OpenInObsidian({ note, className }: { note?: string; className?: string
   const direct = storage?.path && onHubMachine();
   const label = (
     <>
-      <ExternalLink size={15} /> <span className={note ? "hidden sm:inline" : undefined}>Open in Obsidian</span>
+      <ExternalLink size={15} /> <span className={note ? "hidden xl:inline" : undefined}>Open in Obsidian</span>
     </>
   );
   const style = cx("inline-flex items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium hover:bg-hover whitespace-nowrap", className);

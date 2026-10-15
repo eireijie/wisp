@@ -296,7 +296,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     store.addChannelMember(general.id, { kind: "user", id: user.id });
     await vault.write(
       "shared/Welcome.md",
-      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; backlinks and the graph update automatically.\n- Every change is a git commit, so nothing is ever lost.\n`,
+      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; Obsidian shows backlinks and a graph of them.\n- Every change is a git commit, so nothing is ever lost.\n`,
       { name: user.name, email: user.email },
       "Create welcome note",
     );
