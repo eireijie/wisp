@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Eye, FilePlus, Folder, FolderPlus, GitCommitHorizontal, History, Network, Pencil, RefreshCw, ScanEye, Search, Trash2, UserPen, Users, X, PanelLeft, Link2 } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Folder, GitCommitHorizontal, History, RefreshCw, ScanEye, Search, UserPen, Users, X, PanelLeft } from "lucide-react";
 import type { AccessRule, MemoryLevel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { go } from "../router.ts";
+import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { Button, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
-import { AccessDialog, folderPaths, pathLabel } from "../components/AccessDialog.tsx";
-import { Graph } from "../components/Graph.tsx";
+import { Button, Empty, Input, cx, timeAgo } from "../components/ui.tsx";
+import { AccessDialog, pathLabel } from "../components/AccessDialog.tsx";
+import { obsidianLink, onHubMachine, useMemoryStorage } from "../obsidian.ts";
 
 interface NoteMeta {
   path: string;
@@ -56,16 +56,15 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [showTree, setShowTree] = useState(true);
-  const [graph, setGraph] = useState(false);
   const [activity, setActivity] = useState(false);
-  const [makingFolder, setMakingFolder] = useState(false);
-  const [creating, setCreating] = useState<string | null>(null);
   const [sharing, setSharing] = useState<{ path: string; folder: boolean } | null>(null);
   // owners can look at memory the way one agent sees it
   const [viewAs, setViewAs] = useState<string | null>(null);
   const [ruled, setRuled] = useState<Set<string>>(new Set());
   const agents = useStore((s) => s.agents);
   const isOwner = useStore((s) => s.me?.role === "owner");
+  // notes changed in Obsidian (or pushed from another computer): reload the list
+  const memoryVersion = useStore((s) => s.memoryVersion);
 
   const refresh = useCallback(async () => {
     const [list, rules] = await Promise.all([api<NoteMeta[]>("GET", `/api/vault/notes${viewAs ? `?as=${encodeURIComponent(viewAs)}` : ""}`), api<AccessRule[]>("GET", "/api/access/rules").catch(() => [])]);
@@ -74,7 +73,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   }, [viewAs]);
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, memoryVersion]);
 
   useEffect(() => {
     if (!query.trim()) return setHits(null);
@@ -145,20 +144,11 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
             </select>
           </label>
         )}
-        <Button variant={activity ? "primary" : "ghost"} onClick={() => (setActivity(!activity), setGraph(false))} title="Who changed what, newest first">
+        <Button variant={activity ? "primary" : "ghost"} onClick={() => setActivity(!activity)} title="Who changed what, newest first">
           <History size={16} /> <span className="hidden lg:inline">Activity</span>
         </Button>
-        <Button variant={graph ? "primary" : "ghost"} onClick={() => (setGraph(!graph), setActivity(false))} title="Graph view">
-          <Network size={16} /> <span className="hidden sm:inline">Graph</span>
-        </Button>
-        <Button variant="ghost" onClick={() => api("POST", "/api/vault/sync").then(refresh)} title="Pick up changes made in Obsidian or on disk">
-          <RefreshCw size={16} /> <span className="hidden sm:inline">Sync</span>
-        </Button>
-        <Button variant="ghost" onClick={() => setMakingFolder(true)} title="New folder">
-          <FolderPlus size={16} /> <span className="hidden lg:inline">New folder</span>
-        </Button>
-        <Button variant="default" onClick={() => setCreating(path ? path.split("/").slice(0, -1).join("/") : "shared")}>
-          <FilePlus size={16} /> <span className="hidden sm:inline">New note</span>
+        <Button variant="ghost" onClick={() => api("POST", "/api/vault/sync").then(refresh)} title="Look for changes made in Obsidian or on disk">
+          <RefreshCw size={16} /> <span className="hidden sm:inline">Refresh</span>
         </Button>
       </header>
 
@@ -201,7 +191,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
                   <p className="px-4 text-muted">No matches.</p>
                 )
               ) : notes ? (
-                <Tree notes={notes} active={path} onOpen={openPath} label={folderLabel} onNew={(dir) => setCreating(dir)} onShare={(dir) => setSharing({ path: dir, folder: true })} ruled={ruled} />
+                <Tree notes={notes} active={path} onOpen={openPath} label={folderLabel} onShare={(dir) => setSharing({ path: dir, folder: true })} ruled={ruled} />
               ) : (
                 <p className="px-4 text-muted">Loading…</p>
               )}
@@ -212,45 +202,23 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         <div className={cx("flex-1 min-w-0", showTree && "hidden md:block")}>
           {activity ? (
             <ActivityFeed onOpen={(p) => (setActivity(false), openPath(p))} />
-          ) : graph ? (
-            <Graph active={path} onOpen={(p) => (setGraph(false), openPath(p))} labelFor={(p) => notes?.find((n) => n.path === p)?.title ?? base(p)} />
           ) : path ? (
-            <NoteEditor key={path} path={path} resolve={resolve} onChanged={refresh} folderLabel={folderLabel} onCreate={(dir, name) => setCreating(`${dir}\u0000${name}`)} onShare={() => setSharing({ path, folder: false })} />
+            <NoteReader key={path} path={path} resolve={resolve} folderLabel={folderLabel} onShare={() => setSharing({ path, folder: false })} />
           ) : (
             <Empty icon={<BookOpen />} title="Your shared memory">
-              <p>Plain markdown with [[wikilinks]], like Obsidian. Every agent has a private folder, everyone shares <b>Shared</b>, and every edit is saved in git history.</p>
-              <p>Make any folders you like. Use the share button on a folder or note to choose which agents can read or edit it, and which ones load it every time they work.</p>
+              <p>
+                Write and organize notes in <b>Obsidian</b>; this page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
+              </p>
+              <p>Every agent has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.</p>
+              <p>
+                <OpenInObsidian className="mt-1" />
+              </p>
             </Empty>
           )}
         </div>
       </div>
 
       {sharing && <AccessDialog path={sharing.path} folder={sharing.folder} onClose={() => setSharing(null)} onChanged={refresh} />}
-      {makingFolder && (
-        <NewFolder
-          folders={notes ? folderPaths(notes) : []}
-          onClose={() => setMakingFolder(false)}
-          onCreated={async (dir, readme) => {
-            setMakingFolder(false);
-            await refresh();
-            openPath(readme);
-            // right away: who should be able to use it
-            setSharing({ path: dir, folder: true });
-          }}
-        />
-      )}
-      {creating !== null && (
-        <NewNote
-          initial={creating}
-          folders={notes ? folderPaths(notes) : []}
-          onClose={() => setCreating(null)}
-          onCreated={async (p) => {
-            setCreating(null);
-            await refresh();
-            openPath(p);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -262,7 +230,7 @@ function snippetHtml(s: string) {
 
 type TreeNode = { name: string; path: string; children: Map<string, TreeNode>; note?: NoteMeta };
 
-type TreeProps = { active: string | null; onOpen: (p: string) => void; label: (seg: string, parent: string) => string; onNew: (dir: string) => void; onShare: (dir: string) => void; ruled: Set<string> };
+type TreeProps = { active: string | null; onOpen: (p: string) => void; label: (seg: string, parent: string) => string; onShare: (dir: string) => void; ruled: Set<string> };
 
 function Tree({ notes, ...rest }: TreeProps & { notes: NoteMeta[] }) {
   const root = useMemo(() => {
@@ -301,7 +269,7 @@ function SharedMark({ path, ruled }: { path: string; ruled: Set<string> }) {
 }
 
 function TreeItem({ node, depth, parent, ...rest }: TreeProps & { node: TreeNode; depth: number; parent: string }) {
-  const { active, onOpen, label, onNew, onShare, ruled } = rest;
+  const { active, onOpen, label, onShare, ruled } = rest;
   const [open, setOpen] = useState(depth < 1 || !!active?.startsWith(node.path + "/"));
   const pad = { paddingLeft: 12 + depth * 14 };
   if (node.note)
@@ -325,95 +293,49 @@ function TreeItem({ node, depth, parent, ...rest }: TreeProps & { node: TreeNode
         <button onClick={() => onShare(node.path)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-muted hover:text-ink" title="Who can see this folder" aria-label={`Share ${node.path}`}>
           <Users size={13} />
         </button>
-        <button onClick={() => onNew(node.path)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-muted hover:text-ink" title="New note here" aria-label="New note here">
-          <FilePlus size={13} />
-        </button>
       </div>
       {open && kids.map((k) => <TreeItem key={k.path} node={k} depth={depth + 1} parent={node.name} {...rest} />)}
     </div>
   );
 }
 
-function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }: { path: string; resolve: (t: string, from?: string | null) => string | null; onChanged: () => void; folderLabel: (s: string, p: string) => string; onCreate: (dir: string, name: string) => void; onShare: () => void }) {
+/** A note, read-only: writing happens in Obsidian. History, who wrote what and who can see it stay here. */
+function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onShare: () => void }) {
   const [note, setNote] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"preview" | "edit">("preview");
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [side, setSide] = useState<"links" | "history" | "authors" | null>(null);
+  const [side, setSide] = useState<"history" | "authors" | null>(null);
   const [history, setHistory] = useState<Commit[] | null>(null);
   const [blame, setBlame] = useState<BlameBlock[] | null>(null);
   const [viewing, setViewing] = useState<{ commit: Commit; content: string } | null>(null);
   const agents = useStore((s) => s.agents);
+  const memoryVersion = useStore((s) => s.memoryVersion);
   const handles = useMemo(() => new Set(agents.map((a) => a.handle)), [agents]);
 
-  const load = useCallback(() => {
+  useEffect(() => {
     setError(null);
-    api<Note>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`)
-      .then((n) => {
-        setNote(n);
-        setDraft(n.content);
-      })
-      .catch((e) => setError(e.message));
-  }, [path]);
-  useEffect(load, [load]);
+    api<Note>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`).then(setNote, (e) => setError(e.message));
+  }, [path, memoryVersion]);
 
   useEffect(() => {
     if (side === "history") api<Commit[]>("GET", `/api/vault/history?path=${encodeURIComponent(path)}`).then(setHistory);
     if (side === "authors") api<BlameBlock[]>("GET", `/api/vault/blame?path=${encodeURIComponent(path)}`).then(setBlame);
   }, [side, path, note]);
 
-  const dirty = note && draft !== note.content;
+  const html = useMemo(() => renderMarkdown(viewing?.content ?? note?.content ?? "", { known: (t) => !!resolve(t, path), handles, stripFrontmatter: true }), [note, viewing, resolve, path, handles]);
 
-  const save = useCallback(async () => {
-    if (!note || draft === note.content) return;
-    setSaving(true);
-    try {
-      await api("PUT", "/api/vault/note", { path, content: draft });
-      setNote({ ...note, content: draft });
-      onChanged();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }, [note, draft, path, onChanged]);
-
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        save();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "e") {
-        e.preventDefault();
-        setMode((m) => (m === "edit" ? "preview" : "edit"));
-      }
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [save]);
-
-  const html = useMemo(() => renderMarkdown(viewing?.content ?? draft, { known: (t) => !!resolve(t, path), handles, stripFrontmatter: true }), [draft, viewing, resolve, path, handles]);
-
-  // wikilink navigation inside the preview
-  const onPreviewClick = (e: React.MouseEvent) => {
+  // wikilink navigation inside the note; links to notes that don't exist yet do nothing
+  const onClick = (e: React.MouseEvent) => {
     const a = (e.target as HTMLElement).closest<HTMLElement>("[data-wikilink]");
     if (!a) return;
     e.preventDefault();
-    const target = a.dataset.wikilink!;
-    const found = resolve(target, path);
+    const found = resolve(a.dataset.wikilink!, path);
     if (found) go({ view: "vault", path: found });
-    else onCreate(path.split("/").slice(0, -1).join("/"), target);
   };
 
   if (error) return <Empty icon={<BookOpen />} title="Can't open this note">{error}</Empty>;
   if (!note) return <div className="p-6 text-sm text-muted">Loading…</div>;
 
   const crumbs = path.split("/");
-  const readOnly = note.access === "read";
-  const outgoing = [...new Set(note.links)].map((l) => ({ target: l, path: resolve(l, path) }));
-
   return (
     <div className="h-full flex">
       <div className="flex-1 min-w-0 flex flex-col">
@@ -432,23 +354,7 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
               </span>
             )}
           </div>
-          {dirty && (
-            <Button variant="primary" onClick={save} disabled={saving} className="h-8">
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          )}
-          {readOnly && <Pill>Read only</Pill>}
-          <div className={cx("flex rounded-lg border border-line p-0.5", readOnly && "hidden")}>
-            <button onClick={() => setMode("preview")} className={cx("px-2 h-7 rounded-md flex items-center gap-1", mode === "preview" ? "bg-hover" : "text-muted")} title="Preview (⌘E)">
-              <Eye size={14} />
-            </button>
-            <button onClick={() => setMode("edit")} className={cx("px-2 h-7 rounded-md flex items-center gap-1", mode === "edit" ? "bg-hover" : "text-muted")} title="Edit (⌘E)">
-              <Pencil size={14} />
-            </button>
-          </div>
-          <button onClick={() => setSide(side === "links" ? null : "links")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "links" ? "text-accent-text" : "text-muted")} title="Links">
-            <Link2 size={16} />
-          </button>
+          <OpenInObsidian note={path} className="h-8" />
           <button onClick={() => setSide(side === "authors" ? null : "authors")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "authors" ? "text-accent-text" : "text-muted")} title="Who wrote what">
             <UserPen size={16} />
           </button>
@@ -458,54 +364,26 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
           <button onClick={onShare} className="p-1.5 rounded-md hover:bg-hover text-muted" title="Who can see this note">
             <Users size={16} />
           </button>
-          <button
-            hidden={readOnly}
-            onClick={async () => {
-              if (!confirm(`Delete ${path}? It stays recoverable in git history.`)) return;
-              await api("DELETE", `/api/vault/note?path=${encodeURIComponent(path)}`);
-              onChanged();
-              go({ view: "vault", path: null });
-            }}
-            className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-bad"
-            title="Delete"
-          >
-            <Trash2 size={16} />
-          </button>
         </div>
         {viewing && (
           <div className="px-4 md:px-8 py-2 bg-accent-soft text-sm flex items-center gap-2">
             <span className="flex-1">
               Viewing version from {new Date(viewing.commit.date).toLocaleString()} by {viewing.commit.author}
             </span>
-            <Button
-              className="h-7"
-              hidden={readOnly}
-              onClick={() => {
-                setDraft(viewing.content);
-                setViewing(null);
-                setMode("edit");
-              }}
-            >
-              Restore
-            </Button>
             <Button variant="ghost" className="h-7" onClick={() => setViewing(null)}>
               Back to current
             </Button>
           </div>
         )}
         <div className="flex-1 overflow-y-auto">
-          {mode === "edit" && !viewing && !readOnly ? (
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck className="w-full h-full resize-none bg-transparent px-4 md:px-8 py-6 font-mono text-[14px] leading-relaxed outline-none" />
-          ) : (
-            <div onClick={onPreviewClick} className="prose-w max-w-3xl px-4 md:px-8 py-6 text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
-          )}
+          <div onClick={onClick} className="prose-w max-w-3xl px-4 md:px-8 py-6 text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
       </div>
 
       {side && (
         <aside className="fixed inset-y-0 right-0 z-20 w-80 max-w-full bg-panel lg:static lg:z-auto border-l border-line overflow-y-auto text-sm safe-top">
           <div className="flex items-center justify-between px-4 h-12 border-b border-line">
-            <span className="font-semibold">{side === "links" ? "Links" : side === "authors" ? "Who wrote what" : "History"}</span>
+            <span className="font-semibold">{side === "authors" ? "Who wrote what" : "History"}</span>
             <button onClick={() => setSide(null)} className="p-1 text-muted" aria-label="Close">
               <X size={16} />
             </button>
@@ -524,23 +402,6 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
                     <div className="text-[13px] whitespace-pre-wrap break-words line-clamp-6">{b.lines.join("\n").trim()}</div>
                   </div>
                 ))}
-            </div>
-          ) : side === "links" ? (
-            <div className="p-4 space-y-5">
-              <LinkList title="Linked from" items={note.backlinks.map((p) => ({ label: base(p), sub: p, path: p }))} empty="No notes link here yet." />
-              <LinkList title="Links to" items={outgoing.map((o) => ({ label: o.target, sub: o.path ?? "not created yet", path: o.path }))} empty="No outgoing links." />
-              {note.tags.length > 0 && (
-                <div>
-                  <div className="text-xs font-semibold uppercase text-muted mb-2">Tags</div>
-                  <div className="flex flex-wrap gap-1">
-                    {note.tags.map((t) => (
-                      <span key={t} className="text-xs bg-hover rounded px-1.5 py-0.5">
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <div className="py-2">
@@ -566,66 +427,27 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
   );
 }
 
-function LinkList({ title, items, empty }: { title: string; items: { label: string; sub: string; path: string | null }[]; empty: string }) {
-  return (
-    <div>
-      <div className="text-xs font-semibold uppercase text-muted mb-2">{title}</div>
-      {items.length === 0 && <p className="text-muted">{empty}</p>}
-      {items.map((it) => (
-        <button key={it.label + it.sub} disabled={!it.path} onClick={() => it.path && go({ view: "vault", path: it.path })} className="w-full text-left rounded-md px-2 py-1.5 hover:bg-hover disabled:hover:bg-transparent">
-          <div className={cx("truncate", it.path ? "text-accent-text" : "text-muted")}>{it.label}</div>
-          <div className="text-xs text-muted truncate">{it.sub}</div>
-        </button>
-      ))}
-    </div>
+/**
+ * Opens the vault, or one note, in Obsidian. On the same computer as Warren that's a direct link;
+ * from anywhere else it leads to the steps for syncing the vault into Obsidian.
+ */
+function OpenInObsidian({ note, className }: { note?: string; className?: string }) {
+  const storage = useMemoryStorage();
+  const direct = storage?.path && onHubMachine();
+  const label = (
+    <>
+      <ExternalLink size={15} /> <span className={note ? "hidden sm:inline" : undefined}>Open in Obsidian</span>
+    </>
   );
-}
-
-function NewNote({ initial, folders, onClose, onCreated }: { initial: string; folders: string[]; onClose: () => void; onCreated: (p: string) => void }) {
-  const [dirInit, nameInit] = initial.split("\u0000");
-  const agents = useStore((s) => s.agents);
-  const [dir, setDir] = useState(dirInit ?? "shared");
-  const [name, setName] = useState(nameInit ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const suggestions = [...new Set(["shared", ...agents.map((a) => `agents/${a.id}`), ...folders])];
-  const label = (f: string) => (f === "shared" ? "Shared (everyone)" : (agents.find((a) => f === `agents/${a.id}`) && `@${agents.find((a) => f === `agents/${a.id}`)!.handle} (private)`) || f);
-  return (
-    <Modal title="New note" onClose={onClose}>
-      <form
-        className="space-y-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          const clean = name.trim().replace(/\.md$/i, "");
-          if (!clean) return;
-          const folder = dir.trim().replace(/^\/+|\/+$/g, "");
-          const p = `${folder ? folder + "/" : ""}${clean}.md`;
-          try {
-            await api("PUT", "/api/vault/note", { path: p, content: `# ${base(clean)}\n\n`, message: `Create ${p}` });
-            onCreated(p);
-          } catch (err) {
-            setError((err as Error).message);
-          }
-        }}
-      >
-        <Field label="Folder" hint="Pick one, or type a new name like Projects to make a folder. New folders are private to people until you share them with agents.">
-          <Input value={dir} onChange={(e) => setDir(e.target.value)} list="vault-folders" placeholder="Projects" />
-          <datalist id="vault-folders">
-            {suggestions.map((f) => (
-              <option key={f} value={f}>
-                {label(f)}
-              </option>
-            ))}
-          </datalist>
-        </Field>
-        <Field label="Name" hint="Use slashes for subfolders, e.g. web/launch-plan">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meeting notes" required />
-        </Field>
-        {error && <p className="text-sm text-bad">{error}</p>}
-        <div className="flex justify-end">
-          <Button variant="primary">Create</Button>
-        </div>
-      </form>
-    </Modal>
+  const style = cx("inline-flex items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium hover:bg-hover whitespace-nowrap", className);
+  return direct ? (
+    <a href={obsidianLink(storage.path!, note)} className={style} title="Opens this in the Obsidian app on this computer">
+      {label}
+    </a>
+  ) : (
+    <a href={href({ view: "settings", page: "memory" })} className={style} title="Steps for using this memory in Obsidian on your computer">
+      {label}
+    </a>
   );
 }
 
@@ -680,54 +502,6 @@ function ActivityFeed({ onOpen }: { onOpen: (p: string) => void }) {
         )}
       </div>
     </div>
-  );
-}
-
-/** A folder only exists with a note in it, so a new folder starts with a README saying what it's for. */
-function NewFolder({ folders, onClose, onCreated }: { folders: string[]; onClose: () => void; onCreated: (dir: string, readme: string) => void }) {
-  const [parent, setParent] = useState("");
-  const [name, setName] = useState("");
-  const [about, setAbout] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <Modal title="New folder" onClose={onClose}>
-      <form
-        className="space-y-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          const clean = name.trim().replace(/^\/+|\/+$/g, "");
-          if (!clean) return;
-          const dir = [parent.trim().replace(/^\/+|\/+$/g, ""), clean].filter(Boolean).join("/");
-          const readme = `${dir}/README.md`;
-          try {
-            await api("PUT", "/api/vault/note", { path: readme, content: `# ${clean.split("/").pop()}\n\n${about.trim() || "What this folder is for."}\n`, message: `Create folder ${dir}` });
-            onCreated(dir, readme);
-          } catch (err) {
-            setError((err as Error).message);
-          }
-        }}
-      >
-        <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Projects" required />
-        </Field>
-        <Field label="Inside" hint="Leave empty for a top-level folder.">
-          <Input value={parent} onChange={(e) => setParent(e.target.value)} list="new-folder-parents" placeholder="(top level)" />
-          <datalist id="new-folder-parents">
-            {folders.map((f) => (
-              <option key={f} value={f} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label="What it's for" hint="Saved as the folder's README. Agents that can use the folder read it.">
-          <Input value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Notes for my side projects" />
-        </Field>
-        <p className="text-xs text-muted">Next you'll choose which agents can use it. New folders are visible to people only until you share them.</p>
-        {error && <p className="text-sm text-bad">{error}</p>}
-        <div className="flex justify-end">
-          <Button variant="primary">Create folder</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 

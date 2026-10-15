@@ -390,7 +390,8 @@ export function AgentsPolicyPage() {
 
 // --- Memory access ----------------------------------------------------------------------------
 
-export function MemoryAccessPage() {
+/** The rules half of Settings → Memory (the rest is in memory.tsx). */
+export function MemoryRules() {
   const isOwner = useIsOwner();
   const members = useStore((s) => s.members);
   const agents = useStore((s) => s.agents);
@@ -403,15 +404,17 @@ export function MemoryAccessPage() {
   }, []);
   return (
     <>
-      <PageHeader title="Memory access">
-        By default every agent reads and writes Shared, its own folder, its teams' folders and what it learns about people, and people can edit everything except each other's personal folders. Rules here change that for a folder or note and everything inside it. You can also use the share button on any folder or note in{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "vault", path: null })}>
-          Memory
-        </a>
-        .
-      </PageHeader>
       <Section
-        title="Rules"
+        title="Who can see and edit what"
+        description={
+          <>
+            By default every agent reads and writes Shared, its own folder, its teams' folders and what it learns about people, and people can edit everything except each other's personal folders. Rules here change that for a folder or note and everything inside it. You can also use the share button on any folder or note in{" "}
+            <a className="text-accent-text hover:underline" href={href({ view: "vault", path: null })}>
+              Memory
+            </a>
+            .
+          </>
+        }
         action={
           isOwner && (
             <Button onClick={() => setAdding(true)}>

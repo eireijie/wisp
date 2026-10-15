@@ -790,7 +790,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
             </a>
             , or under{" "}
             <a className="text-accent-text hover:underline" href="#/settings">
-              Settings → Memory access
+              Settings → Memory
             </a>
             .
           </p>

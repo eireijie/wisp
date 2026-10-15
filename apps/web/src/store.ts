@@ -81,6 +81,8 @@ interface State {
   backgroundVersion: number;
   /** bumps when tasks change, so the Tasks page refetches */
   tasksVersion: number;
+  /** bumps when notes change outside Warren, so Memory reloads */
+  memoryVersion: number;
   /** the New task dialog is open */
   newTaskOpen: boolean;
   /** the Orchestration addon (Settings → Addons): on/off, its dispatcher and setup checklist; null until loaded */
@@ -136,6 +138,7 @@ export const useStore = create<State>((set, get) => ({
   routinesVersion: 0,
   backgroundVersion: 0,
   tasksVersion: 0,
+  memoryVersion: 0,
   newTaskOpen: false,
   orchestration: null,
   activeChannel: null,
@@ -324,6 +327,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ backgroundVersion: s.backgroundVersion + 1 }));
     } else if (e.type === "tasks_changed") {
       set((s) => ({ tasksVersion: s.tasksVersion + 1 }));
+    } else if (e.type === "memory_changed") {
+      set((s) => ({ memoryVersion: s.memoryVersion + 1 }));
     } else if (e.type === "run_event") {
       set((s) => {
         const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, text: "", tools: [], last: null, usedComputer: false };
