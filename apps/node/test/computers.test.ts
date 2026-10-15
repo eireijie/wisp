@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { recipeTag, runArgs } from "../src/computers/docker.ts";
+import { HARNESSES, VM_HARNESSES, harnessInfo, runsInVm } from "@warren/core";
+import { SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs } from "../src/computers/docker.ts";
 import { jpegSize } from "../src/computers/driver.ts";
 import { xdo } from "../src/computers/x11.ts";
 import { textPieces } from "../src/computers/macos.ts";
@@ -34,6 +35,27 @@ describe("VM containers", () => {
     // sha256 of every file's contents in path order (Dockerfile, desktop/dock.xml, start.sh): sha256("abc")
     expect(recipeTag(dir)).toBe("ba7816bf8f01");
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("harnesses inside a VM", () => {
+  it("can all be signed in from the VM's screen and checked, and are installed by the image", () => {
+    const dockerfile = fs.readFileSync(new URL("../../../docker/computer/Dockerfile", import.meta.url), "utf8");
+    expect(VM_HARNESSES).toEqual(expect.arrayContaining(["claude-code", "codex", "hermes", "kimi"]));
+    for (const id of VM_HARNESSES) {
+      expect(runsInVm(id)).toBe(true);
+      expect(SIGN_IN_COMMAND[id], `${id} sign-in command`).toBeTruthy();
+      expect(SIGNED_IN[id], `${id} signed-in check`).toBeTruthy();
+      // the sign-in command starts the harness's own binary, which the image has to provide
+      expect(SIGN_IN_COMMAND[id].split(" ")[0]).toBe(harnessInfo(id)!.binary);
+    }
+    expect(SIGN_IN_COMMAND.hermes).toBe("hermes setup");
+    expect(SIGN_IN_COMMAND.kimi).toBe("kimi login");
+    expect(dockerfile).toContain("@moonshot-ai/kimi-code@");
+    expect(dockerfile).toContain("hermes-agent");
+    expect(dockerfile).toContain("ln -s /opt/hermes/hermes-agent/venv/bin/hermes /usr/local/bin/hermes");
+    // agents that only borrow the VM's screen are the other harnesses
+    expect(HARNESSES.filter((h) => !runsInVm(h.id) && h.protocol === "acp").map((h) => h.id)).not.toContain("hermes");
   });
 });
 

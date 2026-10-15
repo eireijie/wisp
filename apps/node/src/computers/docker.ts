@@ -14,11 +14,17 @@ const DISPLAY = ":1";
 /** The VM's home folder and the folder it shares with the device. */
 export const VM_HOME = "/home/warren";
 export const VM_FILES = "/home/warren/files";
+/** Where the VM image installs Hermes (outside the home folder, which is a volume). */
+const HERMES_DIR = "/opt/hermes/hermes-agent";
 
 /** Which file says a harness is signed in, inside a VM. */
-const SIGNED_IN: Record<string, string> = {
+export const SIGNED_IN: Record<string, string> = {
   "claude-code": "test -s ~/.claude/.credentials.json || test -s ~/.claude/.credentials",
   codex: "test -s ~/.codex/auth.json",
+  // Hermes keeps keys, OAuth logins and provider settings in several places; ask it whether it can resolve a provider
+  hermes: `cd ${HERMES_DIR} && venv/bin/python -c "from acp_adapter.auth import detect_provider as d; raise SystemExit(0 if d() else 1)" 2>/dev/null`,
+  // `kimi login` writes ~/.kimi-code/credentials/<profile>.json; an API key goes in config.toml
+  kimi: "ls ~/.kimi-code/credentials/*.json >/dev/null 2>&1 || grep -qs api_key ~/.kimi-code/config.toml",
 };
 
 /**
@@ -66,6 +72,8 @@ console.log("null");
 export const SIGN_IN_COMMAND: Record<string, string> = {
   "claude-code": "claude",
   codex: "codex login",
+  hermes: "hermes setup",
+  kimi: "kimi login",
 };
 
 /**

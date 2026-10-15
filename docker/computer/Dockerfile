@@ -1,6 +1,6 @@
 # The computer Warren's agents work on: Debian 13 ("trixie") with Xfce, Google Chrome, a terminal
 # and a file manager on a dock, driven with xdotool and shown live over VNC. Agents' harnesses
-# (Claude Code, Codex) can run inside it too, and agents work the browser by page element through
+# (Claude Code, Codex, Hermes, Kimi CLI) can run inside it too, and agents work the browser by page element through
 # Playwright MCP. `warren node` pulls this (when it's published for this exact recipe) or builds it
 # the first time a VM is needed on a device. The kernel is the VM engine's, not Debian's.
 FROM node:22-trixie-slim
@@ -25,6 +25,28 @@ RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor
 RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code && npm cache clean --force
 RUN npm install -g --no-audit --no-fund @openai/codex && npm cache clean --force
 RUN npm install -g --no-audit --no-fund @playwright/mcp@0.0.83 && npm cache clean --force
+
+# Kimi CLI (Moonshot's "Kimi Code", the successor of the archived Python kimi-cli): npm package with
+# prebuilt binaries for linux x64 and arm64. `kimi acp` is how Warren drives it; `kimi login` signs it in.
+RUN npm install -g --no-audit --no-fund @moonshot-ai/kimi-code@2.2.0 && npm cache clean --force
+
+# Hermes Agent (Nous Research), from its own installer pinned to a release tag and commit. The
+# installer's stages are the supported way to skip its browser tools (Chrome and Playwright MCP are
+# here already). It goes in /opt, not the home folder, because the home folder is a volume; its state
+# (~/.hermes) lives in the home folder. 1000 is the warren user, created below; Hermes installs extra
+# Python packages on demand, so that user owns the install.
+ARG HERMES_TAG=v2026.9.24
+ARG HERMES_COMMIT=f97608f178d1ffeca59860195ab7da295f7c8e5f
+RUN curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_TAG}/scripts/install.sh" -o /tmp/hermes-install.sh \
+ && export HERMES_HOME=/opt/hermes \
+ && for stage in prerequisites repository venv python-deps; do \
+      bash /tmp/hermes-install.sh --stage "$stage" --commit "$HERMES_COMMIT" --dir /opt/hermes/hermes-agent --skip-browser --skip-computer-use </dev/null || exit 1; \
+    done \
+ && rm -rf /tmp/hermes-install.sh /opt/hermes/hermes-agent/.git /root/.cache /root/.hermes \
+ && ln -s /opt/hermes/hermes-agent/venv/bin/hermes /usr/local/bin/hermes \
+ && ln -s /opt/hermes/bin/uv /usr/local/bin/uv \
+ && chown -R 1000:1000 /opt/hermes \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Chrome always starts the way Warren needs it (see chrome.sh). Downloads land in ~/files, the folder
 # shared with the device (and the agents' working folder).

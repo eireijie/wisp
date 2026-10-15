@@ -29,11 +29,11 @@ export interface HarnessInfo {
 export const HARNESSES: HarnessInfo[] = [
   { id: "claude-code", label: "Claude Code", binary: "claude", protocol: "native", note: "Anthropic's coding agent", login: "claude (then /login)", install: { npm: "@anthropic-ai/claude-code" } },
   { id: "codex", label: "Codex", binary: "codex", protocol: "native", note: "OpenAI's coding agent", login: "codex login", install: { npm: "@openai/codex" } },
-  { id: "hermes", label: "Hermes", binary: "hermes", protocol: "acp", acpArgs: ["acp"], note: "Nous Research's agent, with its own skills", login: "hermes setup", install: { docs: "https://github.com/NousResearch/hermes-agent" } },
+  { id: "hermes", label: "Hermes", binary: "hermes", protocol: "acp", acpArgs: ["acp"], note: "Nous Research's agent, with its own skills", login: "hermes setup", install: { command: "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash", docs: "https://github.com/NousResearch/hermes-agent" } },
   { id: "gemini", label: "Gemini CLI", binary: "gemini", protocol: "acp", acpArgs: ["--acp"], note: "Google's agent", login: "gemini (then sign in)", install: { npm: "@google/gemini-cli" } },
   { id: "opencode", label: "OpenCode", binary: "opencode", protocol: "acp", acpArgs: ["acp"], note: "Open-source agent for any model", login: "opencode auth login", install: { npm: "opencode-ai" } },
   { id: "goose", label: "Goose", binary: "goose", protocol: "acp", acpArgs: ["acp"], note: "Block's open-source agent", login: "goose configure", install: { command: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash", docs: "https://block.github.io/goose/docs/getting-started/installation" } },
-  { id: "kimi", label: "Kimi CLI", binary: "kimi", protocol: "acp", acpArgs: ["acp"], note: "Moonshot's agent", login: "kimi (then /login)", install: { command: "uv tool install kimi-cli", docs: "https://github.com/MoonshotAI/kimi-cli" } },
+  { id: "kimi", label: "Kimi CLI", binary: "kimi", protocol: "acp", acpArgs: ["acp"], note: "Moonshot's agent", login: "kimi login", install: { npm: "@moonshot-ai/kimi-code", docs: "https://github.com/MoonshotAI/kimi-code" } },
   { id: "qwen", label: "Qwen Code", binary: "qwen", protocol: "acp", acpArgs: ["--acp"], note: "Alibaba's agent", login: "qwen (then sign in)", install: { npm: "@qwen-code/qwen-code" } },
   { id: "cursor", label: "Cursor", binary: "cursor-agent", protocol: "acp", acpArgs: ["acp"], note: "Cursor's agent CLI", login: "cursor-agent login", install: { command: "curl https://cursor.com/install -fsS | bash", docs: "https://cursor.com/cli" } },
   { id: "openclaw", label: "OpenClaw", binary: "openclaw", protocol: "acp", acpArgs: ["acp"], note: "Needs its gateway running", login: "openclaw onboard", install: { npm: "openclaw" } },
@@ -44,7 +44,7 @@ export const HARNESSES: HarnessInfo[] = [
 export const HARNESS_IDS = HARNESSES.map((h) => h.id);
 
 /** Harnesses that come with Warren's VM image, so an agent can run entirely inside its VM. */
-export const VM_HARNESSES = ["claude-code", "codex"];
+export const VM_HARNESSES = ["claude-code", "codex", "hermes", "kimi"];
 
 export function runsInVm(harness: string): boolean {
   return VM_HARNESSES.includes(harness);
