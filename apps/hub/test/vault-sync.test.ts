@@ -267,6 +267,14 @@ describe("edits made in Obsidian on this machine", () => {
     expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(Number(before) + 1);
     expect(await git(root, "log", "-1", "--format=%an")).toBe("Yugal");
 
+    // editing and deleting in Warren (the web app's Save and Delete) don't add outside-edit commits either
+    const n = Number(await git(root, "rev-list", "--count", "HEAD"));
+    await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nfixed by a person" });
+    await api("DELETE", "/api/vault/note?path=shared/agent-note.md");
+    await sleep(2500);
+    expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(n + 2);
+    expect(await git(root, "log", "-2", "--format=%an")).toBe("Yugal\nYugal");
+
     // deleting in Obsidian removes it from search too
     fs.rmSync(path.join(root, "Projects/Idea.md"));
     await waitFor(async () => (await api<any[]>("GET", "/api/vault/search?q=zebrafinch")).data.length === 0);

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, Folder, GitCommitHorizontal, History, RefreshCw, ScanEye, Search, UserPen, Users, X, PanelLeft } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, FilePlus, Folder, Pencil, Trash2, GitCommitHorizontal, History, RefreshCw, ScanEye, Search, UserPen, Users, X, PanelLeft } from "lucide-react";
 import type { AccessRule, MemoryLevel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { Button, Empty, Input, cx, timeAgo } from "../components/ui.tsx";
+import { Button, Empty, Field, Input, Modal, cx, timeAgo } from "../components/ui.tsx";
 import { AccessDialog, pathLabel } from "../components/AccessDialog.tsx";
 import { obsidianLink, onHubMachine, useMemoryStorage } from "../obsidian.ts";
 
@@ -57,6 +57,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [showTree, setShowTree] = useState(true);
   const [activity, setActivity] = useState(false);
+  const [creating, setCreating] = useState<string | null>(null);
   const [sharing, setSharing] = useState<{ path: string; folder: boolean } | null>(null);
   // owners can look at memory the way one agent sees it
   const [viewAs, setViewAs] = useState<string | null>(null);
@@ -150,6 +151,11 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         <Button variant="ghost" onClick={() => api("POST", "/api/vault/sync").then(refresh)} title="Look for changes made in Obsidian or on disk">
           <RefreshCw size={16} /> <span className="hidden sm:inline">Refresh</span>
         </Button>
+        {!viewAs && (
+          <Button variant="default" onClick={() => setCreating(path ? path.split("/").slice(0, -1).join("/") : "shared")} title="Write a new note here">
+            <FilePlus size={16} /> <span className="hidden sm:inline">New note</span>
+          </Button>
+        )}
       </header>
 
       {viewAs && (
@@ -203,11 +209,11 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
           {activity ? (
             <ActivityFeed onOpen={(p) => (setActivity(false), openPath(p))} />
           ) : path ? (
-            <NoteReader key={path} path={path} resolve={resolve} folderLabel={folderLabel} onShare={() => setSharing({ path, folder: false })} />
+            <NoteReader key={path} path={path} resolve={resolve} folderLabel={folderLabel} onChanged={refresh} onShare={() => setSharing({ path, folder: false })} />
           ) : (
             <Empty icon={<BookOpen />} title="Your shared memory">
               <p>
-                Write and organize notes in <b>Obsidian</b>; this page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
+                Obsidian is the best place to write and organize notes. You can also fix, add or delete notes here. This page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
               </p>
               <p>Every agent has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.</p>
               <p>
@@ -218,6 +224,18 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         </div>
       </div>
 
+      {creating !== null && (
+        <NewNote
+          initial={creating}
+          folders={notes ? [...new Set(notes.map((n) => n.path.split("/").slice(0, -1).join("/")).filter(Boolean))].sort() : []}
+          onClose={() => setCreating(null)}
+          onCreated={async (p) => {
+            setCreating(null);
+            await refresh();
+            openPath(p);
+          }}
+        />
+      )}
       {sharing && <AccessDialog path={sharing.path} folder={sharing.folder} onClose={() => setSharing(null)} onChanged={refresh} />}
     </div>
   );
@@ -299,14 +317,16 @@ function TreeItem({ node, depth, parent, ...rest }: TreeProps & { node: TreeNode
   );
 }
 
-/** A note, read-only: writing happens in Obsidian. History, who wrote what and who can see it stay here. */
-function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onShare: () => void }) {
+/** A note: read here, with a plain editor for quick fixes (Obsidian is the better place to write). History, who wrote what and who can see it. */
+function NoteReader({ path, resolve, folderLabel, onChanged, onShare }: { path: string; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onChanged: () => void; onShare: () => void }) {
   const [note, setNote] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"history" | "authors" | null>(null);
   const [history, setHistory] = useState<Commit[] | null>(null);
   const [blame, setBlame] = useState<BlameBlock[] | null>(null);
   const [viewing, setViewing] = useState<{ commit: Commit; content: string } | null>(null);
+  const [draft, setDraft] = useState<string | null>(null); // set while editing
+  const [saving, setSaving] = useState(false);
   const agents = useStore((s) => s.agents);
   const memoryVersion = useStore((s) => s.memoryVersion);
   const handles = useMemo(() => new Set(agents.map((a) => a.handle)), [agents]);
@@ -335,6 +355,33 @@ function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; res
   if (error) return <Empty icon={<BookOpen />} title="Can't open this note">{error}</Empty>;
   if (!note) return <div className="p-6 text-sm text-muted">Loading…</div>;
 
+  const canEdit = note.access === "edit" || note.access === "manage";
+  const save = async () => {
+    if (draft === null) return;
+    setSaving(true);
+    try {
+      if (draft !== note.content) await api("PUT", "/api/vault/note", { path, content: draft });
+      setNote({ ...note, content: draft });
+      setDraft(null);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async () => {
+    if (!confirm(`Delete ${path}? It stays recoverable in git history.`)) return;
+    try {
+      await api("DELETE", `/api/vault/note?path=${encodeURIComponent(path)}`);
+      onChanged();
+      go({ view: "vault", path: null });
+    } catch (e) {
+      alert((e as Error).message);
+    }
+  };
+
   const crumbs = path.split("/");
   return (
     <div className="h-full flex">
@@ -354,7 +401,25 @@ function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; res
               </span>
             )}
           </div>
-          <OpenInObsidian note={path} className="h-8" />
+          {draft !== null ? (
+            <>
+              <Button variant="primary" className="h-8" onClick={save} disabled={saving}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              <Button variant="ghost" className="h-8" onClick={() => setDraft(null)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <OpenInObsidian note={path} className="h-8" />
+              {canEdit && !viewing && (
+                <Button variant="ghost" className="h-8" onClick={() => setDraft(note.content)} title="Edit this note here">
+                  <Pencil size={15} /> <span className="hidden sm:inline">Edit</span>
+                </Button>
+              )}
+            </>
+          )}
           <button onClick={() => setSide(side === "authors" ? null : "authors")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "authors" ? "text-accent-text" : "text-muted")} title="Who wrote what">
             <UserPen size={16} />
           </button>
@@ -364,6 +429,11 @@ function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; res
           <button onClick={onShare} className="p-1.5 rounded-md hover:bg-hover text-muted" title="Who can see this note">
             <Users size={16} />
           </button>
+          {canEdit && draft === null && (
+            <button onClick={remove} className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-bad" title="Delete">
+              <Trash2 size={16} />
+            </button>
+          )}
         </div>
         {viewing && (
           <div className="px-4 md:px-8 py-2 bg-accent-soft text-sm flex items-center gap-2">
@@ -376,7 +446,11 @@ function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; res
           </div>
         )}
         <div className="flex-1 overflow-y-auto">
-          <div onClick={onClick} className="prose-w max-w-3xl px-4 md:px-8 py-6 text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
+          {draft !== null ? (
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck autoFocus aria-label="Note text" className="w-full h-full resize-none bg-transparent px-4 md:px-8 py-6 font-mono text-[14px] leading-relaxed outline-none" />
+          ) : (
+            <div onClick={onClick} className="prose-w max-w-3xl px-4 md:px-8 py-6 text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
+          )}
         </div>
       </div>
 
@@ -424,6 +498,50 @@ function NoteReader({ path, resolve, folderLabel, onShare }: { path: string; res
         </aside>
       )}
     </div>
+  );
+}
+
+function NewNote({ initial, folders, onClose, onCreated }: { initial: string; folders: string[]; onClose: () => void; onCreated: (p: string) => void }) {
+  const agents = useStore((s) => s.agents);
+  const [dir, setDir] = useState(initial);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const suggestions = [...new Set(["shared", ...agents.map((a) => `agents/${a.id}`), ...folders])];
+  return (
+    <Modal title="New note" onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const clean = name.trim().replace(/\.md$/i, "");
+          if (!clean) return;
+          const folder = dir.trim().replace(/^\/+|\/+$/g, "");
+          const p = `${folder ? folder + "/" : ""}${clean}.md`;
+          try {
+            await api("PUT", "/api/vault/note", { path: p, content: `# ${base(clean)}\n\n`, message: `Create ${p}` });
+            onCreated(p);
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      >
+        <Field label="Folder" hint="Pick one or type a new name to make a folder.">
+          <Input value={dir} onChange={(e) => setDir(e.target.value)} list="vault-folders" placeholder="shared" />
+          <datalist id="vault-folders">
+            {suggestions.map((f) => (
+              <option key={f} value={f} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meeting notes" required />
+        </Field>
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <div className="flex justify-end">
+          <Button variant="primary">Create</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
