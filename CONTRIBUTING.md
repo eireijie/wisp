@@ -16,7 +16,8 @@ Open http://localhost:5173 during development; it proxies the API to the hub.
 - `apps/hub/src/api.ts`: HTTP and WebSocket routes, permission checks
 - `apps/hub/src/hub.ts`: message routing, agent runs, the loop guard, prompt building
 - `apps/hub/src/store.ts`: all SQL
-- `packages/vault`: the markdown vault (files on disk are the source of truth; the SQLite index can be rebuilt)
+- `packages/vault`: the markdown vault (files on disk are the source of truth; the SQLite index can be rebuilt; it also watches the folder for edits made in Obsidian)
+- `apps/hub/src/vault-git.ts`, `vault-location.ts`, `api-memory.ts`: the vault served over git for Obsidian's Git plugin, where the vault folder lives, and Settings → Memory's routes
 - `packages/adapters`: one file per harness (see [docs/adapters.md](docs/adapters.md))
 - `apps/web/src`: React UI (`views/` for screens, `store.ts` for state)
 

@@ -14,7 +14,7 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 - **Bring in agents you already have.** Warren finds your Claude Code setup (CLAUDE.md and the memories it saved), Codex's AGENTS.md, Gemini CLI's GEMINI.md, Goose hints, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents on your devices, and brings them in with their soul, instructions and notes, one at a time or all at once (right in **Get started**, too). Claude Code and Codex move into a VM; the rest keep running on their device. Or start from a job: Chief of Staff, Inbox Manager, Sales Outbound, Research and more.
 - **Hand off work in one step.** **New task** (top of the sidebar): say what needs doing, pick an agent, a team, or **Let Warren pick** (your boss agent or a team lead routes it), attach files, done. **Tasks** shows everything by where it stands, To do, Working, Waiting on you and Done, and anything an agent needs from you (an OK, a sign-in) is pulled out so it never sits unseen.
 - **Any device.** Agents run on whatever computer you assign them: a laptop, a home server, a VM. Devices connect *out* to the hub, so they work behind routers and firewalls.
-- **A real memory vault.** Plain markdown with `[[wikilinks]]`, backlinks, tags, search, a graph view, and full git history for every edit. Each agent has a private folder and everyone shares `shared/`. Make your own folders and set who can read or edit each folder or note, and which agents load a note every time they work. Open the same folder in Obsidian.
+- **A real memory vault, edited in Obsidian.** Plain markdown with `[[wikilinks]]` in a git repo, with full history for every edit. Browse and write it in [Obsidian](https://obsidian.md) (point Warren at your existing vault, or sync it to another computer with Obsidian's Git plugin); Warren's **Memory** page is for search, **Activity** (who changed what) and permissions. Each agent has a private folder and everyone shares `shared/`. Set who can read or edit each folder or note, and which agents load a note every time they work.
 - **Agents you can shape.** Each agent has a `SOUL.md` (personality, voice, values; it can refine its own unless you lock it), instructions for its job (only people can change those), and a model, reasoning effort and access level picked from what its device actually offers.
 - **A second brain every agent shares.** Agents save what they learn about you (preferences, plans, what you did, small details) as they go, and every agent loads it before it works. You see all of it on **About you**, with which agent saved it and from which conversation, and can fix or delete anything.
 - **Teams, like a small company.** Put agents on teams with a lead, roles and a shared memory pool, and have teams report to a boss agent. Ask the boss for anything, or go straight to a team's lead. Agents can also work on their own.
@@ -97,7 +97,7 @@ That session can now chat in channels, delegate tasks, and read and write memory
 ```
  phone / laptop browser ──►  Hub (one process or container)
                               ├─ channels, DMs, threads, tasks   (SQLite)
-                              ├─ memory vault                    (markdown + git, FTS search)
+                              ├─ memory vault                    (markdown + git, FTS search; synced with Obsidian)
                               ├─ files                           (content-addressed)
                               └─ permissions (scopes + grants)
                                     ▲  outbound WebSocket
@@ -125,7 +125,7 @@ That session can now chat in channels, delegate tasks, and read and write memory
 
 ### Memory permissions
 
-Every folder and note can have its own access rules. Use the share button on a folder or note in **Memory**, or **Settings → Memory access**.
+Every folder and note can have its own access rules. Use the share button on a folder or note in **Memory**, or **Settings → Memory**.
 
 | Default | Can read and write |
 | --- | --- |
@@ -143,6 +143,17 @@ Every folder and note can have its own access rules. Use the share button on a f
 - **View as:** owners can see memory exactly as an agent sees it with **View as** in Memory.
 
 Agents can write `me/notes.md` as shorthand for their own folder.
+
+### Memory in Obsidian
+
+The vault is a folder of markdown files in a git repo, so Obsidian reads it as it is. Warren's own **Memory** page doesn't edit notes: it lists and searches them, shows **Activity** and each note's history, and is where you set permissions and **View as**.
+
+- **Where it lives.** By default `<data>/vault`. To use a folder you already have, including an existing Obsidian vault, set `WARREN_VAULT_DIR` where Warren runs, or an owner picks one in **Settings → Memory** (it applies after a restart). Existing folders are adopted in place: git is started if it isn't there, notes are indexed, and Obsidian's own `.obsidian/` and `.trash/` folders are never touched, committed or indexed. If you were already using Warren, your earlier notes are copied across on the next start (an empty folder gets everything, history included; a folder that already has notes only gets the files it lacks, and nothing is overwritten). The earlier folder is never deleted.
+- **Same computer.** Open the folder as a vault in Obsidian (**Open in Obsidian** in Memory does it with one click when you're on the computer that runs Warren). Warren watches the folder, indexes what changed within a few seconds and commits it as "Edited in Obsidian". Agents' own writes are tracked separately, so the two never loop.
+- **Another computer.** The hub serves the vault over git (`/git/vault.git`) with a per-person token made in **Settings → Memory**. Clone it, open it in Obsidian, and use the community **Git** plugin (Vinzent03/obsidian-git) to pull and push on a schedule; step-by-step instructions are on that page. Every push is checked against the memory rules before it's accepted, and shows up in Activity under the person's Warren name.
+- **Who can sync.** A clone contains the whole history, and git can't hide single folders, so it's limited to people who can read every note that has ever existed (owners always; members until a rule hides something from them; never guests). Pushes are held to what the person can edit, and can't touch hidden folders like `.obsidian`, add symlinks, delete the branch or push other branches.
+
+See [docs/deploy.md](docs/deploy.md#memory-and-obsidian) for the details.
 
 ### What agents know when they start
 
@@ -177,7 +188,6 @@ v0.1 covers the hub, chat, agents on devices, delegation, files and the memory v
 - Connectors: one MCP gateway for GitHub, Slack, Gmail and others, granted per agent
 - A shared skills library synced into each harness
 - A nightly tidy-up of memory (summaries, duplicates, finished plans)
-- Linking existing folders from disk into the vault
 - Honcho and Hindsight memory backends next to the vault
 - Windows and macOS VMs on a device
 - Passkeys and OIDC sign-in; web push notifications (desktop notifications work today, while Warren is open)
