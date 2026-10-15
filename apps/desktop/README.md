@@ -16,6 +16,14 @@ npm install
 npm run desktop
 ```
 
+## Desk buddy
+
+After you sign in, your lead (or first) agent appears as a small ghost on the desktop. Drag it anywhere; Warren remembers its position. Use the tray's **Desk buddy** submenu to choose another agent or turn it off; the agent choice is saved for each hub.
+
+The buddy uses your agent's appearance and live work mood. New messages, completed tasks you handed off, and approval requests appear in short, named bubbles. Bubbles hide after eight seconds unless hovered. Click one to open its conversation, or click the ghost to poke it and open Warren. Transparent space around it lets clicks through. It sleeps when the hub disconnects and respects reduced motion.
+
+Run `npm run build` to update the hub's web UI, then `npm run desktop`. A remote hub must also serve the updated web UI. Linux uses a lightweight cursor check for click-through; always-on-top and workspace behavior depend on the window manager.
+
 ## Build the app
 
 ```bash

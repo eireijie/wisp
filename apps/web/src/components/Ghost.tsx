@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { GhostAppearance, GhostShape } from "@warren/core";
 import { GHOST_ASLEEP } from "@warren/core/src/appearance.ts";
-import { motionReduced } from "../theme.ts";
+import { useMotionReduced } from "../theme.ts";
+import { useGhostActivity } from "../ghostActivity.ts";
 
 /** How the ghost feels right now; follows the agent's status where it matters. */
-export type GhostMood = "awake" | "thinking" | "asleep";
+export type GhostMood = "awake" | "listening" | "thinking" | "asleep" | "working" | "done" | "waiting" | "error";
 
 interface ShapeDef {
   /** body path, and an alternate with the hem rippled the other way (animated between) */
@@ -73,6 +74,8 @@ function shade(hex: string): string {
 
 /** Zz and thought marks, the same warm yellow on every palette (like Paperclip's). */
 const MARK = "#f5c542";
+const HEART = "#ff8fab";
+const LAPTOP = { shell: "#343244", screen: "#a6e8d4" };
 
 // --- the ghost ----------------------------------------------------------------------------------
 
@@ -82,11 +85,36 @@ const MARK = "#f5c542";
  * gray and dozing while offline. Animations are CSS (float, blink, moods) plus an SVG hem
  * ripple; all of it switches off with `animate={false}` or when the OS asks for reduced motion.
  */
-export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label, trackPointer = false }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string; trackPointer?: boolean }) {
+export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, tile = false, label, trackPointer = false, interactive = false, ambient = true, speakingLevel }: { look: GhostAppearance; size?: number; mood?: GhostMood; animate?: boolean; wave?: boolean; tile?: boolean; label?: string; trackPointer?: boolean; interactive?: boolean; ambient?: boolean; speakingLevel?: number }) {
+  const reduced = useMotionReduced();
+  const animated = animate && !reduced;
+  const ambientMotion = animated && ambient;
+  const touchable = interactive && size >= 24 && animate;
+  const pageActivity = useGhostActivity(animate && size >= 24);
+  const activity = mood === "awake" ? pageActivity : "active";
+  const [poke, setPoke] = useState<{ id: number; spin: boolean; heart: boolean } | null>(null);
+  const pokes = useRef({ count: 0, at: 0 });
+  const pokeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(pokeTimer.current), []);
+  useEffect(() => {
+    if (!touchable) {
+      clearTimeout(pokeTimer.current);
+      setPoke(null);
+    }
+  }, [touchable]);
+  const reactToPoke = () => {
+    const now = Date.now();
+    const count = now - pokes.current.at < 1800 ? pokes.current.count + 1 : 1;
+    pokes.current = { count, at: now };
+    clearTimeout(pokeTimer.current);
+    setPoke((previous) => ({ id: (previous?.id ?? 0) + 1, spin: count % 5 === 0, heart: count >= 2 }));
+    pokeTimer.current = setTimeout(() => setPoke(null), 800);
+  };
+  const happy = !!poke || mood === "done";
   const face = useRef<SVGGElement>(null);
   const root = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (!trackPointer || prefersReducedMotion() || mood === "asleep") return;
+    if (!trackPointer || !animated || mood !== "awake" || happy || activity !== "active") return;
     let frame = 0;
     const reset = () => {
       cancelAnimationFrame(frame);
@@ -112,7 +140,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
       window.removeEventListener("blur", reset);
       reset();
     };
-  }, [trackPointer, mood]);
+  }, [trackPointer, mood, animated, happy, activity]);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const shape = SHAPES[look.shape] ?? SHAPES.classic;
   const asleep = mood === "asleep";
@@ -123,9 +151,9 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
   const [r2, g2, b2] = look.color2 && !asleep ? rgb(safeColor(look.color2, top)) : asleep ? rgb(GHOST_ASLEEP.color2) : [r1 * 0.8, g1 * 0.8, b1 * 0.8];
   const dark = luminance([(r1 + r2) / 2, (g1 + g2) / 2, (b1 + b2) / 2]) < 0.16;
   const ink = dark ? "#f7f7f8" : "#1d1d1f";
-  const moving = animate && look.motion !== "still";
+  const moving = ambientMotion && look.motion !== "still";
   const motionClass = moving ? `ghost-${look.motion}${mood === "thinking" ? " ghost-fast" : ""}` : "";
-  const rippling = (wave ?? size >= 44) && animate && !prefersReducedMotion();
+  const rippling = (wave ?? size >= 44) && ambientMotion;
   const details = size >= 26; // drop tiny decorations at small sizes
   const grounded = size >= 28;
   const { x: [ex1, ex2], y: ey } = shape.eyes;
@@ -134,7 +162,9 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
   return (
     <span
       ref={root}
-      className="ghost relative inline-grid place-items-center shrink-0 rounded-full"
+      className={cx("ghost relative inline-grid place-items-center shrink-0 rounded-full", touchable && animated && "ghost-interactive")}
+      onClick={touchable ? reactToPoke : undefined}
+      data-animate={animated ? undefined : "false"}
       style={{ width: size, height: size, background: tile ? `color-mix(in srgb, ${top} 28%, transparent)` : undefined }}
       role="img"
       aria-label={label ?? "ghost"}
@@ -144,7 +174,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
         viewBox={look.hat === "none" ? "4.5 8 111 111" : "-8 -18 136 140"}
         width={size}
         height={size}
-        className={look.glow ? "ghost-glow" : undefined}
+        className={cx(look.glow && "ghost-glow", !ambientMotion && "ghost-glow-still")}
         style={look.glow ? ({ "--glow": bottom } as React.CSSProperties) : undefined}
         overflow="visible"
       >
@@ -166,44 +196,88 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
 
         {grounded && <ellipse cx="60" cy={shape.ground} rx="24" ry="3.4" className={cx("ghost-ground", moving && `ghost-ground-${look.motion}`, moving && mood === "thinking" && "ghost-fast")} />}
 
-        <g className={motionClass}>
-          <path d={shape.body[0]} fill={`url(#b${uid})`}>
-            {ripple}
-          </path>
-          <path d={shape.body[0]} fill={`url(#l${uid})`}>
-            {ripple}
-          </path>
-          {/* a soft rim just inside the edge, so the body reads as rounded */}
-          <path d={shape.body[0]} fill="none" stroke="black" strokeOpacity="0.1" strokeWidth="7" clipPath={`url(#c${uid})`}>
-            {ripple}
-          </path>
+        <g className={animated ? mood === "done" ? "ghost-done" : activity === "waking" ? "ghost-startle" : undefined : undefined}>
+          <g key={poke?.id ?? "rest"} className={animated && poke ? poke.spin ? "ghost-poke-spin" : "ghost-poke" : undefined}>
+            <g className={cx(touchable && !poke && mood === "awake" && activity === "active" && "ghost-greeting", mood === "listening" && "ghost-listening")}>
+              <g className={cx(motionClass, animated && mood === "waiting" && "ghost-waiting", animated && mood === "error" && "ghost-error")}>
+                <path d={shape.body[0]} fill={`url(#b${uid})`}>
+                  {ripple}
+                </path>
+                <path d={shape.body[0]} fill={`url(#l${uid})`}>
+                  {ripple}
+                </path>
+                {/* a soft rim just inside the edge, so the body reads as rounded */}
+                <path d={shape.body[0]} fill="none" stroke="black" strokeOpacity="0.1" strokeWidth="7" clipPath={`url(#c${uid})`}>
+                  {ripple}
+                </path>
 
-          <g ref={face} className={trackPointer ? "ghost-face-tracking" : undefined}>
-          {look.cheeks && !asleep && (
-            <>
-              <ellipse cx={ex1 - 4} cy={ey + 8} rx="4.5" ry="2.6" fill="#ff8fab" opacity="0.5" />
-              <ellipse cx={ex2 + 4} cy={ey + 8} rx="4.5" ry="2.6" fill="#ff8fab" opacity="0.5" />
-            </>
-          )}
+                <g ref={face} className={trackPointer && animated ? "ghost-face-tracking" : undefined}>
+                  <g transform={mood === "listening" ? "translate(0 -2)" : mood === "working" && !happy ? "translate(0 3)" : undefined}>
+                    {look.cheeks && !asleep && (
+                      <>
+                        <ellipse cx={ex1 - 4} cy={ey + 8} rx="4.5" ry="2.6" fill="#ff8fab" opacity="0.5" />
+                        <ellipse cx={ex2 + 4} cy={ey + 8} rx="4.5" ry="2.6" fill="#ff8fab" opacity="0.5" />
+                      </>
+                    )}
 
-          <Eyes style={asleep ? "closed" : look.eyes} x={[ex1, ex2]} y={ey} ink={ink} blink={animate && details && !asleep} thinking={mood === "thinking"} />
-          {(look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={asleep || mood === "thinking" ? "flat" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
-          {asleep && details && <path d={`M63.5 ${shape.mouthY + 2.2} q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z`} fill="#e8f6ff" opacity="0.95" />}
-          </g>
-          {look.accessory !== "none" && <Accessory kind={look.accessory} shape={shape} />}
-          {look.hat !== "none" && (
-            <g transform={`translate(60 ${shape.top}) scale(${shape.hatScale})`}>
-              <Hat kind={look.hat} animate={animate} />
+                    <g className={activity === "idle" && !happy ? "ghost-drowsy" : "ghost-alert"} style={{ transformOrigin: `60px ${ey}px` }}>
+                      <Eyes style={mood === "listening" ? "big" : happy ? "happy" : asleep ? "closed" : mood === "error" ? "dizzy" : look.eyes} x={[ex1, ex2]} y={ey} ink={ink} blink={ambientMotion && details && !asleep && activity !== "idle"} thinking={mood === "thinking"} working={mood === "working" && !happy} />
+                    </g>
+                    {speakingLevel !== undefined ? <ellipse cx="60" cy={shape.mouthY + 1} rx={animated ? 3.4 + Math.min(1, Math.max(0, speakingLevel)) * 1.5 : 3.4} ry={animated ? 1 + Math.min(1, Math.max(0, speakingLevel)) * 5 : 2.5} fill={ink} /> : (look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={happy ? "open" : mood === "error" ? "wavy" : asleep || mood === "thinking" || mood === "working" ? "flat" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
+                    {asleep && details && <path d={`M63.5 ${shape.mouthY + 2.2} q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z`} fill="#e8f6ff" opacity="0.95" />}
+                  </g>
+                </g>
+                {look.accessory !== "none" && <Accessory kind={look.accessory} shape={shape} />}
+                {look.hat !== "none" && (
+                  <g transform={`translate(60 ${shape.top}) scale(${shape.hatScale})`}>
+                    <Hat kind={look.hat} animate={ambientMotion} />
+                  </g>
+                )}
+                {mood === "error" && details && (
+                  <path d={`M${ex2 + 5} ${shape.top + 8} c-1 4 -5 7 -4 10 c1 4 7 4 7 0 c0 -3 -2 -7 -3 -10 Z`} fill="#a9dfff" stroke="#e4f6ff" strokeWidth="0.7" />
+                )}
+                {mood === "working" && details && (
+                  <g transform={`translate(60 ${shape.neck.y + 8})`}>
+                    <rect x="-24" y="-5" width="48" height="27" rx="3" fill={LAPTOP.shell} />
+                    <rect x="-20" y="-1" width="40" height="17" rx="1.5" fill={LAPTOP.screen} />
+                    <path d="M-27 23 H27 L23 27 H-23 Z" fill={LAPTOP.shell} />
+                    {[0, 1, 2].map((i) => <path key={i} d={`M${-13 + i * 10} 7 h6`} stroke={LAPTOP.shell} strokeWidth="2" className={animated ? "ghost-key" : undefined} style={{ animationDelay: `${i * 0.2}s` }} />)}
+                    <ellipse cx={-Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={top} className={animated ? "ghost-type" : undefined} />
+                    <ellipse cx={Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={top} className={animated ? "ghost-type" : undefined} style={{ animationDelay: "-0.3s" }} />
+                  </g>
+                )}
+                {mood === "waiting" && details && (
+                  <g transform={`translate(${60 + shape.neck.half - 1} ${shape.neck.y})`}>
+                    <g className={animated ? "ghost-sign" : undefined}>
+                      <path d="M0 0 L16 -27" stroke="#817785" strokeWidth="3" strokeLinecap="round" />
+                      <rect x="6" y="-49" width="20" height="23" rx="4" fill={MARK} />
+                      <path d="M13 -42 C13 -47 21 -47 20 -42 Q20 -40 16 -38 V-36" stroke={LAPTOP.shell} strokeWidth="2.4" fill="none" strokeLinecap="round" />
+                      <circle cx="16" cy="-32" r="1.3" fill={LAPTOP.shell} />
+                    </g>
+                    <circle r="4.5" fill={top} />
+                  </g>
+                )}
+              </g>
             </g>
-          )}
+          </g>
         </g>
+        {poke?.heart && size >= 24 && (
+          <path key={`heart${poke.id}`} d={`M88 ${shape.top + 11} c-15 -9 -10 -20 -2.5 -14 c7.5 -6 12.5 5 2.5 14 Z`} fill={HEART} className={animated ? "ghost-heart" : undefined} />
+        )}
+        {mood === "done" && details && (
+          <g fill={MARK}>
+            <path d={`M92 ${shape.top} l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2 Z`} className={animated ? "ghost-sparkles" : undefined} />
+            <path d={`M25 ${shape.top + 15} l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5 Z`} className={animated ? "ghost-sparkles" : undefined} style={{ animationDelay: "0.12s" }} />
+            <path d={`M49 ${shape.top - 12} l1.5 4.5 4.5 1.5 -4.5 1.5 -1.5 4.5 -1.5 -4.5 -4.5 -1.5 4.5 -1.5 Z`} className={animated ? "ghost-sparkles" : undefined} style={{ animationDelay: "0.24s" }} />
+          </g>
+        )}
 
         {asleep && details && (
           <g fill={MARK} fontFamily="ui-rounded, system-ui, sans-serif" fontWeight="800">
-            <text x="92" y={shape.top + 6} fontSize="15" className={animate ? "ghost-z" : undefined}>
+            <text x="92" y={shape.top + 6} fontSize="15" className={ambientMotion ? "ghost-z" : undefined}>
               z
             </text>
-            <text x="101" y={shape.top - 5} fontSize="11" className={animate ? "ghost-z ghost-z2" : undefined}>
+            <text x="101" y={shape.top - 5} fontSize="11" className={ambientMotion ? "ghost-z ghost-z2" : undefined}>
               z
             </text>
           </g>
@@ -211,7 +285,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
         {mood === "thinking" && details && (
           <g fill={MARK}>
             {[0, 1, 2].map((i) => (
-              <circle key={i} cx={90 + i * 7} cy={shape.top - 2 - i * 5} r={2.4 + i * 0.6} className={animate ? "ghost-think" : undefined} style={{ animationDelay: `${i * 0.25}s` }} />
+              <circle key={i} cx={90 + i * 7} cy={shape.top - 2 - i * 5} r={2.4 + i * 0.6} className={ambientMotion ? "ghost-think" : undefined} style={{ animationDelay: `${i * 0.25}s` }} />
             ))}
           </g>
         )}
@@ -222,14 +296,12 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
-function prefersReducedMotion() {
-  return typeof window !== "undefined" && motionReduced();
-}
-
-function Eyes({ style, x, y, ink, blink, thinking }: { style: GhostAppearance["eyes"] | "closed"; x: [number, number]; y: number; ink: string; blink: boolean; thinking: boolean }) {
-  const look = thinking ? { dx: 1.4, dy: -1.6 } : { dx: 0, dy: 0 };
+function Eyes({ style, x, y, ink, blink, thinking, working }: { style: GhostAppearance["eyes"] | "closed" | "dizzy"; x: [number, number]; y: number; ink: string; blink: boolean; thinking: boolean; working: boolean }) {
+  const look = thinking ? { dx: 1.4, dy: -1.6 } : { dx: 0, dy: working ? 2.5 : 0 };
   const one = (cx: number, i: number): ReactNode => {
     switch (style) {
+      case "dizzy":
+        return <path d={`M${cx - 5} ${y} c0 -7 11 -7 11 0 c0 6 -9 6 -9 0 c0 -3 6 -3 6 0 q0 3 -3 1`} stroke={ink} strokeWidth="1.8" fill="none" strokeLinecap="round" />;
       case "closed":
         return <path d={`M${cx - 4.5} ${y} Q${cx} ${y + 3.6} ${cx + 4.5} ${y}`} stroke={ink} strokeWidth="2.4" fill="none" strokeLinecap="round" />;
       case "happy":
@@ -269,8 +341,10 @@ function Eyes({ style, x, y, ink, blink, thinking }: { style: GhostAppearance["e
   );
 }
 
-function Mouth({ style, x, y, ink }: { style: GhostAppearance["mouth"] | "flat"; x: number; y: number; ink: string }) {
+function Mouth({ style, x, y, ink }: { style: GhostAppearance["mouth"] | "flat" | "wavy"; x: number; y: number; ink: string }) {
   switch (style) {
+    case "wavy":
+      return <path d={`M${x - 5} ${y + 1} q1.7 -3 3.4 0 t3.4 0 t3.4 0`} stroke={ink} strokeWidth="2" fill="none" strokeLinecap="round" />;
     case "flat": // concentrating, or dozing
       return <path d={`M${x - 3.2} ${y + 1.2} L${x + 3.2} ${y + 1.2}`} stroke={ink} strokeWidth="2.2" strokeLinecap="round" />;
     case "open":

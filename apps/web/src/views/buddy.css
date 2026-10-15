@@ -1,0 +1,54 @@
+html.desk-buddy, .desk-buddy body, .desk-buddy #root {
+  background: transparent !important;
+  overflow: hidden;
+  color-scheme: only light;
+}
+.buddy-stage { width: 100vw; height: 100vh; user-select: none; }
+.buddy-ghost {
+  position: absolute; right: 12px; bottom: 12px; width: 116px; height: 116px;
+  border: 0; background: transparent; padding: 0; cursor: grab; touch-action: none;
+  pointer-events: none; transition: transform 220ms ease;
+}
+.buddy-ghost:active { cursor: grabbing; }
+.buddy-ghost * { pointer-events: none; }
+.buddy-ghost svg :is(path, ellipse, circle, rect, text, line, polygon, polyline) { pointer-events: visiblePainted; }
+.buddy-stage[data-raised] .buddy-ghost { transform: translateY(-8px); }
+.buddy-bubble {
+  position: absolute; bottom: 150px; left: 10px; right: 10px; padding: 12px 14px;
+  border: 1px solid var(--input); border-radius: 18px; background: var(--panel); color: var(--ink);
+  font-size: 12px; line-height: 1.4; text-align: left; overflow-wrap: anywhere; cursor: pointer;
+  box-shadow: 0 5px 16px rgb(0 0 0 / 0.1), 0 1px 3px rgb(0 0 0 / 0.04);
+  transform-origin: calc(100% - 57px) calc(100% + 7px);
+  animation: buddy-pop 380ms both;
+}
+.buddy-bubble-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.buddy-author { display: block; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.buddy-review { flex-shrink: 0; padding: 2px 7px; border-radius: 99px; font-size: 10px; font-weight: 600; line-height: 1.4; }
+.buddy-message { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.buddy-bubble::after {
+  content: ""; position: absolute; right: 50px; bottom: -7px; width: 12px; height: 12px;
+  background: var(--panel); border-right: 1px solid var(--input); border-bottom: 1px solid var(--input); border-bottom-right-radius: 3px; transform: rotate(45deg);
+}
+.buddy-bubble[data-leaving] { animation: buddy-fade 200ms ease-out both; pointer-events: none; }
+.buddy-ghost:focus-visible, .buddy-bubble:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.buddy-call {
+  position: absolute; right: 8px; bottom: 113px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); display: grid; place-items: center; opacity: 0; pointer-events: none;
+  transform: translateY(5px) scale(0.8); cursor: pointer; z-index: 2; box-shadow: 0 3px 10px rgb(0 0 0 / 0.08);
+  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.buddy-stage[data-controls] .buddy-call, .buddy-stage:focus-within .buddy-call { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+.buddy-call:active { scale: 0.92; }
+.buddy-call:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@keyframes buddy-pop {
+  0% { opacity: 0; transform: scale(0.6); animation-timing-function: ease-out; }
+  70% { opacity: 1; transform: scale(1.04); animation-timing-function: ease-in-out; }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes buddy-fade { to { opacity: 0; transform: translateY(3px) scale(0.97); } }
+html[data-motion="reduce"] :is(.buddy-ghost, .buddy-bubble, .buddy-call) { animation: none; transition: none; }
+html[data-motion="reduce"] .buddy-call { transform: none; scale: none; }
+@media (prefers-reduced-motion: reduce) {
+  .buddy-ghost, .buddy-bubble, .buddy-call { animation: none; transition: none; }
+  .buddy-call { transform: none; scale: none; }
+}

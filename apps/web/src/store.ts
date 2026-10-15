@@ -104,7 +104,7 @@ interface State {
   setPalette(open: boolean): void;
   /** change some of your preferences; saved on the hub */
   setPrefs(patch: Partial<UserPrefs>): Promise<void>;
-  handle(e: ClientEvent): void;
+  handle(e: ClientEvent, notify?: boolean): void;
   setConnected(c: boolean): void;
 }
 
@@ -263,7 +263,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  handle(e) {
+  handle(e, notify = true) {
     const before = get();
     if (e.type === "message") {
       const m = e.message;
@@ -325,7 +325,7 @@ export const useStore = create<State>((set, get) => ({
         return { live: { ...s.live, [e.runId]: applyEvent(cur, e.event) } };
       });
     }
-    notifyOn(e, before, get());
+    if (notify) notifyOn(e, before, get());
   },
 }));
 

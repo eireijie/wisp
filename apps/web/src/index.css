@@ -291,6 +291,52 @@ body {
 .ghost-halo { animation: ghost-halo 2.4s ease-in-out infinite; transform-origin: center; }
 .ghost-spin { animation: ghost-spin 0.9s linear infinite; transform-origin: center; }
 .ghost-glow { filter: drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 7px var(--glow)); animation: ghost-glow 2.8s ease-in-out infinite; }
+.ghost-glow-still { animation: none; }
+.ghost-poke, .ghost-poke-spin, .ghost-done, .ghost-startle, .ghost-greeting, .ghost-waiting, .ghost-error { transform-origin: 60px 85px; }
+.ghost-poke { animation: ghost-poke 800ms ease-out; }
+.ghost-poke-spin { animation: ghost-poke-spin 800ms ease-out; }
+.ghost-done { animation: ghost-done 1.2s ease-out; }
+.ghost-startle { animation: ghost-startle 600ms ease-out; }
+.ghost-heart { pointer-events: none; transform-box: fill-box; transform-origin: center; animation: ghost-heart 800ms ease-out both; }
+.ghost-sparkles { pointer-events: none; transform-box: fill-box; transform-origin: center; animation: ghost-sparkles 1.2s ease-out both; }
+.ghost-waiting { animation: ghost-nudge 4.5s ease-in-out infinite; }
+.ghost-sign { transform-origin: left bottom; animation: ghost-sign 2.8s ease-in-out infinite; }
+.ghost-error { animation: ghost-wobble 2.5s ease-in-out infinite; }
+.ghost-key { animation: ghost-key 900ms steps(2, end) infinite; }
+.ghost-type { animation: ghost-type 600ms ease-in-out infinite; }
+.ghost-drowsy { transform: scaleY(0.45); transition: transform 4s ease-in; }
+.ghost-alert { transform: scaleY(1); transition: transform 150ms ease-out; }
+@media (hover: hover) and (pointer: fine) {
+  .ghost-interactive:hover .ghost-greeting { animation: ghost-wave 900ms ease-in-out 1.5s; }
+}
+@keyframes ghost-poke {
+  0%, 100% { transform: scale(1); }
+  18% { transform: translateY(3px) scale(1.12, 0.84); }
+  42% { transform: translateY(-7px) scale(0.94, 1.07); }
+  68% { transform: translateY(1px) scale(1.03, 0.97); }
+}
+@keyframes ghost-poke-spin {
+  0% { transform: rotate(0) scale(1); }
+  18% { transform: rotate(-12deg) scale(1.15, 0.82); }
+  75% { transform: translateY(-6px) rotate(365deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes ghost-wave { 0%, 100% { transform: rotate(0); } 25%, 65% { transform: rotate(-9deg); } 45%, 82% { transform: rotate(7deg); } }
+@keyframes ghost-startle { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px) scale(0.97, 1.04); } 65% { transform: translateY(1px); } }
+@keyframes ghost-done { 0%, 100% { transform: translateY(0); } 20% { transform: translateY(2px) scale(1.06, 0.94); } 45% { transform: translateY(-9px); } 70% { transform: translateY(1px); } }
+@keyframes ghost-heart { 0% { opacity: 0; transform: translateY(3px) scale(0.65); } 20% { opacity: 1; transform: translateY(-1px) scale(1); } 100% { opacity: 0; transform: translateY(-18px) scale(1.08); } }
+@keyframes ghost-sparkles {
+  0% { opacity: 0; transform: scale(0.6) rotate(-8deg); }
+  18%, 60% { opacity: 1; transform: scale(1.12) rotate(4deg); }
+  38%, 78% { opacity: 1; transform: scale(0.92) rotate(-4deg); }
+  100% { opacity: 0; transform: scale(0.7) rotate(8deg); }
+}
+@keyframes ghost-nudge { 0%, 72%, 100% { transform: rotate(0); } 80%, 92% { transform: rotate(-4deg); } 86% { transform: rotate(4deg); } }
+@keyframes ghost-sign { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes ghost-wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes ghost-key { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+@keyframes ghost-type { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.ghost[data-animate="false"] *, :root[data-motion="reduce"] .ghost * { animation: none !important; transition: none !important; }
 
 @keyframes ghost-float { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-4px); } }
 @keyframes ghost-bounce {
@@ -317,7 +363,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ghost *, .ghost { animation: none !important; }
+  .ghost *, .ghost { animation: none !important; transition: none !important; }
 }
 
 /* The add-agent side panel: identity, harness, then workspace. It uses the current theme's colors. */

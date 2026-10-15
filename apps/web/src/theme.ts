@@ -108,9 +108,16 @@ export function setReduceMotion(on: boolean) {
   apply();
 }
 
+const motionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+motionMedia.addEventListener("change", () => listeners.forEach((l) => l()));
+
 /** Animations should stay still: the person asked here, or their OS asks for less motion. */
 export function motionReduced(): boolean {
-  return reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return reduceMotion || motionMedia.matches;
+}
+
+export function useMotionReduced() {
+  return useSyncExternalStore(subscribe, motionReduced, () => true);
 }
 
 const snapshot = () => `${mode}:${resolved()}:${theme}:${textSize}:${reduceMotion ? 1 : 0}`;

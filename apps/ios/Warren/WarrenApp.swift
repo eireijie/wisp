@@ -2,7 +2,8 @@ import SwiftUI
 
 @main
 struct WarrenApp: App {
-  @State private var store = Store()
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  private var store: Store { delegate.store }
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some Scene {
@@ -13,6 +14,7 @@ struct WarrenApp: App {
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .active { store.resume() }
+      if phase == .background { store.updateBadge() }
     }
   }
 }
@@ -59,6 +61,16 @@ struct MainTabs: View {
       Tab("Inbox", systemImage: "tray", value: 3) { InboxView() }
         .badge(store.pendingApprovals.count + store.computers.filter { $0.help != nil }.count)
       Tab("You", systemImage: "person.crop.circle", value: 4) { YouView() }
+    }
+    .onChange(of: store.unreadTotal, initial: true) { store.updateBadge() }
+    // a tapped notification: go to its tab; the tab's own screen opens the chat or computer
+    .onChange(of: store.route, initial: true) { _, route in
+      switch route {
+      case .chat: tab = 0
+      case .computer: tab = 2
+      case .approval: tab = 3; store.route = nil
+      case nil: break
+      }
     }
   }
 }

@@ -81,13 +81,15 @@ interface Props {
   control: boolean;
   /** called for each thing you do while in control (teaching a task) */
   onInput?: (i: ScreenInput) => void;
+  /** a small preview (the chat side panel): no minimum height or rounded frame of its own */
+  compact?: boolean;
 }
 
 /**
  * The computer's screen, live. VMs and cloud computers stream over VNC (noVNC); a device's own
  * screen streams frames through the hub. Input only goes through while you have control.
  */
-export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput }, ref) {
+export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput, compact }, ref) {
   const [state, setState] = useState<"connecting" | "live" | "closed" | "error">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -302,7 +304,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
   }, [transport, state]);
 
   return (
-    <div className={cx("relative size-full min-h-64 rounded-2xl overflow-hidden bg-[#1f1d1b]", control && "ring-2 ring-accent")}>
+    <div className={cx("relative size-full overflow-hidden bg-[#1f1d1b]", !compact && "min-h-64 rounded-2xl", control && "ring-2 ring-accent")}>
       {transport === "vnc" ? (
         <div ref={holder} className="absolute inset-0" />
       ) : (

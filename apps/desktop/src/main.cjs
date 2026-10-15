@@ -12,7 +12,7 @@ const LOCAL_HUB = `http://localhost:${PORT}`;
 const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
 
-/** @type {{ mode?: "local" | "remote", hubUrl?: string, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle }} */
+/** @type {{ mode?: "local" | "remote", hubUrl?: string, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
@@ -31,6 +31,15 @@ let hubOrigin = null; // the hub the window shows, once it's reachable
 let hubBy = ""; // "app" | "service" | "already running" | "remote"
 let deviceBy = ""; // "app" | "service"
 let deviceError = "";
+const buddy = require("./buddy.cjs")({
+  config, save, mainWindow: () => win, refresh,
+  open: (route) => {
+    if (!hubOrigin) return;
+    showWindow();
+    if (win.webContents.getURL().startsWith(hubOrigin + "/")) win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(route)}`);
+    else win.loadURL(`${hubOrigin}/${route}`);
+  },
+});
 
 const logDir = app.getPath("logs");
 const hub = new engine.Child("hub", logDir, () => refresh());
@@ -92,6 +101,7 @@ function createWindow() {
 function showWindow() {
   if (!win) createWindow();
   if (process.platform === "darwin") app.dock?.show();
+  if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
 }
@@ -104,6 +114,7 @@ function showSetup(state = {}) {
 
 function openHub(url, route = "") {
   hubOrigin = new URL(url).origin;
+  buddy.connect(hubOrigin);
   if (!win) createWindow();
   win.loadURL(hubOrigin + "/" + route);
   refresh();
@@ -300,6 +311,7 @@ function trayMenu() {
     { label: deviceLine(), enabled: false },
     { type: "separator" },
     { label: "Open Warren", click: () => showWindow() },
+    buddy.menu(),
     { type: "separator" },
     isDevice
       ? { label: "Disconnect This Computer", enabled: deviceBy !== "service", click: () => stopDevice() }
@@ -427,6 +439,7 @@ app.whenReady().then(() => {
   if (process.platform === "darwin" && fs.existsSync(ICON)) app.dock?.setIcon(nativeImage.createFromPath(ICON));
   Menu.setApplicationMenu(appMenu());
   makeTray();
+  buddy.ready();
   createWindow();
   connect();
 });
@@ -435,6 +448,7 @@ app.on("activate", () => showWindow());
 app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", () => {
   quitting = true;
+  buddy.destroy();
   hub.stop();
   device.stop();
 });

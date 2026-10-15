@@ -6,7 +6,7 @@ import { useStore } from "../src/store.ts";
 import { HARNESSES, type Agent } from "@warren/core";
 import { HarnessLogo } from "../src/components/HarnessLogo.tsx";
 
-vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
+vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, useMotionReduced: () => false }));
 
 const initial = useStore.getState();
 afterEach(() => useStore.setState(initial, true));

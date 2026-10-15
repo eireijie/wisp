@@ -72,6 +72,19 @@ struct ChatsView: View {
       .navigationDestination(for: Channel.self) { ChannelView(channel: $0) }
       .navigationDestination(for: ThreadRef.self) { ThreadView(ref: $0) }
     }
+    .task(id: store.route) { await open(store.route) }
+  }
+
+  /** Open the chat (and thread) a tapped notification is about. */
+  private func open(_ route: Route?) async {
+    guard case .chat(let channelId, let threadId) = route else { return }
+    if !store.channels.contains(where: { $0.id == channelId }) { await store.refreshChannels() }
+    store.route = nil
+    guard let ch = store.channels.first(where: { $0.id == channelId }) else { return }
+    var p = NavigationPath()
+    p.append(ch)
+    if let threadId { p.append(ThreadRef(channelId: channelId, rootId: threadId)) }
+    path = p
   }
 }
 

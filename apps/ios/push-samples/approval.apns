@@ -1,0 +1,1 @@
+{"Simulator Target Bundle":"ai.warren.ios","aps":{"alert":{"title":"Atlas wants your OK","body":"Send the weekly report to the team"},"sound":"default"},"warren":{"kind":"approval","approvalId":"apv_APPROVAL_ID","channelId":"ch_CHANNEL_ID"}}

@@ -8,6 +8,7 @@ import { bearer, hashPassword, issueToken, verifyPassword } from "./auth.ts";
 import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
+import { DEFAULT_TOPIC } from "./apns.ts";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -107,6 +108,89 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const mine = sha(bearer(req.headers.authorization) ?? "");
     const n = db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND hash != ?").run(c.actor.id, mine).changes;
     return { signedOut: n };
+  });
+
+  // --- push notifications to Warren's iOS app ---------------------------------------------------------
+
+  /** Whether this hub can send pushes, and the phones you get them on. */
+  app.get("/api/me/push", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    return { available: !!hub.apns.config(c.workspaceId), devices: hub.apns.devices(c.actor.id).length };
+  });
+
+  /** The iOS app sends its APNs device token here after you allow notifications. */
+  app.post("/api/me/push", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const body = parse(
+      z.object({ token: z.string().regex(/^[0-9a-fA-F]{32,200}$/, "an APNs device token in hex"), bundleId: z.string().max(200).nullish(), environment: z.enum(["production", "sandbox"]).nullish() }),
+      req.body,
+      reply,
+    );
+    if (!body) return;
+    if (c.principal.kind !== "session") return reply.code(403).send({ error: "only a signed-in app can get pushes" });
+    hub.apns.register(sha(bearer(req.headers.authorization) ?? ""), c.actor.id, c.workspaceId, body);
+    return { ok: true, available: !!hub.apns.config(c.workspaceId) };
+  });
+
+  /** Stop pushes to this sign-in (or one of its phones). Signing out does this too. */
+  app.delete("/api/me/push", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const token = (req.query as { token?: string }).token;
+    return { removed: hub.apns.unregister(sha(bearer(req.headers.authorization) ?? ""), token) };
+  });
+
+  /** Send yourself a test push. */
+  app.post("/api/me/push/test", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    if (!hub.apns.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key first" });
+    return hub.apns.sendTo(c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test" } });
+  });
+
+  /** The APNs key, without the key itself. */
+  const pushSettings = (workspaceId: string) => {
+    const cfg = hub.apns.config(workspaceId);
+    return cfg ? { configured: true, source: cfg.source, keyId: cfg.keyId, teamId: cfg.teamId, topic: cfg.topic, environment: cfg.environment } : { configured: false };
+  };
+
+  app.get("/api/settings/push", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    return pushSettings(c.workspaceId);
+  });
+
+  app.put("/api/settings/push", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    const body = parse(
+      z
+        .object({
+          keyId: z.string().trim().regex(/^[A-Z0-9]{10}$/, "the 10-character Key ID"),
+          teamId: z.string().trim().regex(/^[A-Z0-9]{10}$/, "the 10-character Team ID"),
+          key: z.string().trim().max(10_000),
+          topic: z.string().trim().max(200).default(DEFAULT_TOPIC),
+          environment: z.enum(["production", "sandbox"]).default("production"),
+        }),
+      req.body,
+      reply,
+    );
+    if (!body) return;
+    try {
+      hub.apns.saveConfig(c.workspaceId, body);
+    } catch {
+      return reply.code(400).send({ error: "that isn't a .p8 key; paste the whole file, BEGIN and END lines included" });
+    }
+    return pushSettings(c.workspaceId);
+  });
+
+  app.delete("/api/settings/push", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    hub.apns.saveConfig(c.workspaceId, null);
+    return pushSettings(c.workspaceId);
   });
 
   // --- the workspace and its people ------------------------------------------------------------------

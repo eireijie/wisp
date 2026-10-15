@@ -32,7 +32,10 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Warren uses your microphone when you call an agent."
+      }
     },
     "win": {
       "icon": "build/icon.png",

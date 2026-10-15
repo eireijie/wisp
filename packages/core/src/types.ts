@@ -46,6 +46,8 @@ export interface AgentSettings {
   fast?: boolean;
   /** how its ghost looks; unset = a default derived from its handle */
   appearance?: import("./appearance.ts").GhostAppearance;
+  /** Voice IDs per speech engine; unset voices are derived from the agent handle. */
+  voice?: { device?: string; openai?: string; elevenlabs?: string };
   /** an owner chose to run it without a computer (it can't see or use a screen) */
   headless?: boolean;
   /**

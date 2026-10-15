@@ -21,9 +21,11 @@
 		9090DBF9F852BDF0CBF86AF3 /* Ghost.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB970218AAD524154ED3477B /* Ghost.swift */; };
 		92001F53136957D1C27B17E4 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6307D6AAE8BA08F79C7C17F /* MessageRow.swift */; };
 		C6CAF60FAFA5CCEBBE028A19 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2BF673384EC2F035B08700C /* YouView.swift */; };
+		D06A02FB594B6445EC1424A3 /* Push.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26E9CB4124B1DFF3D52B8D49 /* Push.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		26E9CB4124B1DFF3D52B8D49 /* Push.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Push.swift; sourceTree = "<group>"; };
 		299CA5756D2F3494FC63A55A /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		438DF6DC6455C1194CEFB566 /* ComputersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputersView.swift; sourceTree = "<group>"; };
 		4AFA4D03542D8A8DB87AB33E /* WarrenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarrenApp.swift; sourceTree = "<group>"; };
@@ -36,6 +38,7 @@
 		C77C8FB2EDAE7920FBCE16D6 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
 		C77F213042CEE11B1336585E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		D6307D6AAE8BA08F79C7C17F /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
+		D7A5E6C8E9A6B4514011BE6A /* Warren.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Warren.entitlements; sourceTree = "<group>"; };
 		DF01C95837B542AA02127F23 /* ChatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatsView.swift; sourceTree = "<group>"; };
 		E0CD71E6C596ECC2902E2CB0 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		EB970218AAD524154ED3477B /* Ghost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ghost.swift; sourceTree = "<group>"; };
@@ -65,8 +68,10 @@
 				A7AB482BE489F86DB9D606AB /* Info.plist */,
 				D6307D6AAE8BA08F79C7C17F /* MessageRow.swift */,
 				C77F213042CEE11B1336585E /* Models.swift */,
+				26E9CB4124B1DFF3D52B8D49 /* Push.swift */,
 				E0CD71E6C596ECC2902E2CB0 /* SignInView.swift */,
 				299CA5756D2F3494FC63A55A /* Store.swift */,
+				D7A5E6C8E9A6B4514011BE6A /* Warren.entitlements */,
 				4AFA4D03542D8A8DB87AB33E /* WarrenApp.swift */,
 				F2BF673384EC2F035B08700C /* YouView.swift */,
 			);
@@ -160,6 +165,7 @@
 				3C4B0FC9D5A82CEFD959747F /* InboxView.swift in Sources */,
 				92001F53136957D1C27B17E4 /* MessageRow.swift in Sources */,
 				3BC609BD9F4FA4D98D744E9C /* Models.swift in Sources */,
+				D06A02FB594B6445EC1424A3 /* Push.swift in Sources */,
 				6F90FDF81BE5AB48C835CA84 /* SignInView.swift in Sources */,
 				762BC27018EFF337F4CF28EF /* Store.swift in Sources */,
 				64E201E1CF5EF81820B0871D /* WarrenApp.swift in Sources */,
@@ -300,6 +306,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Warren/Warren.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -326,6 +333,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Warren/Warren.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;

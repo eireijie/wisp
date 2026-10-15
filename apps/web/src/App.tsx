@@ -23,9 +23,16 @@ import { SkillsView } from "./views/SkillsView.tsx";
 import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
+import { BuddyView } from "./views/BuddyView.tsx";
+import { useDesktopAgents } from "./desktop.ts";
 
 export function App() {
   const [authed, setAuthed] = useState(() => !!getToken());
+  const route = useRoute();
+  useEffect(() => {
+    if (!authed && route.view !== "buddy") window.warrenDesktop?.buddy.agents([], null);
+  }, [authed, route.view]);
+  if (route.view === "buddy") return <BuddyView />;
   if (!authed)
     return (
       <AuthScreen
@@ -82,6 +89,7 @@ function Workspace() {
     if (userId) primeTasks();
   }, [userId]);
   useUnreadBadge();
+  useDesktopAgents();
 
   // the phone-only pages have desktop equivalents, and the bare root is the chats list on phones
   useEffect(() => {

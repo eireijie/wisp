@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UIKit
+import UserNotifications
 
 /** Everything the app knows about the workspace, kept current by the hub's live events (/ws). */
 @MainActor @Observable
@@ -29,6 +30,11 @@ final class Store {
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
+  /** where a tapped notification wants to go; the screen that shows it clears it */
+  var route: Route?
+  /** whether this hub has an APNs key (push is optional for self-hosters) */
+  var pushAvailable = false
+  var notificationStatus: UNAuthorizationStatus = .notDetermined
 
   private var socket: URLSessionWebSocketTask?
   private var socketGeneration = 0
@@ -65,7 +71,10 @@ final class Store {
     me = nil
     channels = []; agents = []; members = []; computers = []; approvals = []
     messages = [:]; threads = [:]; activity = [:]; activityChannel = [:]
+    route = nil
     phase = .signedOut
+    // the hub forgets this phone's push token along with the sign-in
+    updateBadge()
   }
 
   // MARK: loading
@@ -87,6 +96,7 @@ final class Store {
       connect()
       await refreshComputers()
       await refreshApprovals()
+      await setUpPush()
     } catch let e as API.Failure where e.status == 401 {
       signOut()
     } catch {
@@ -133,6 +143,7 @@ final class Store {
     struct Body: Encodable { var body: String; var threadId: String? }
     let m: Message = try await api!.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread))
     insert(m)
+    askForNotificationsIfDue()
   }
 
   func markRead(_ channelId: String) {

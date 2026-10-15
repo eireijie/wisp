@@ -66,12 +66,21 @@ export async function fileUrl(id: string): Promise<string> {
   return URL.createObjectURL(await res.blob());
 }
 
+const eventListeners = new Set<(event: ClientEvent) => void>();
+/** Observe the existing live connection; calls never open a second socket. */
+export function observeEvents(listener: (event: ClientEvent) => void): () => void {
+  eventListeners.add(listener);
+  return () => { eventListeners.delete(listener); };
+}
+
 /** Realtime events with automatic reconnect. Returns a disposer. */
 export function connectEvents(onEvent: (e: ClientEvent) => void, onStatus: (connected: boolean) => void): () => void {
   let ws: WebSocket | null = null;
   let stopped = false;
   let delay = 500;
+  let retry: ReturnType<typeof setTimeout> | undefined;
   const open = () => {
+    if (stopped) return;
     const proto = location.protocol === "https:" ? "wss" : "ws";
     // The token goes in the first frame, not the URL, so it never lands in access logs.
     ws = new WebSocket(`${proto}://${location.host}/ws`);
@@ -86,18 +95,22 @@ export function connectEvents(onEvent: (e: ClientEvent) => void, onStatus: (conn
       if (e.type === "ready") {
         delay = 500;
         onStatus(true);
-      } else onEvent(e);
+      } else {
+        onEvent(e);
+        eventListeners.forEach((listener) => listener(e));
+      }
     };
     ws.onclose = () => {
       onStatus(false);
       if (stopped) return;
-      setTimeout(open, delay);
+      retry = setTimeout(open, delay);
       delay = Math.min(delay * 2, 10_000);
     };
   };
   open();
   return () => {
     stopped = true;
+    clearTimeout(retry);
     ws?.close();
   };
 }

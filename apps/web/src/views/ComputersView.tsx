@@ -21,7 +21,7 @@ export function computerState(c: ComputerInfo, meId: string | undefined, agents:
   return { label: c.status === "stopped" ? "Stopped" : "Ready", tone: "ok", working: false };
 }
 
-function useComputerState(c: ComputerInfo) {
+export function useComputerState(c: ComputerInfo) {
   const me = useStore((s) => s.me);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);

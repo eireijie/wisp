@@ -227,6 +227,22 @@ describe("computers", () => {
     await agentApi.computer({ action: "click", x: 1, y: 1 });
   });
 
+  it("drops a help request once the agent is working again without it", async () => {
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    // someone skips the request and messages the agent instead
+    await agentApi.computerHelp("Enter the 2FA code for me.");
+    await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).help);
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    await owner.send(general.id, "@nova never mind, skip that site");
+    await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).help === null);
+
+    // or the agent goes ahead on the computer by itself
+    await agentApi.computerHelp("Accept the cookie banner?");
+    await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).help);
+    await agentApi.computer({ action: "click", x: 1, y: 1 });
+    expect((await owner.request("GET", `/api/computers/${vm.id}`)).help).toBeNull();
+  });
+
   it("serves the screen as an image", async () => {
     const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
     const res = await fetch(`${url}/api/computers/${vm.id}/screen`, { headers: { authorization: `Bearer ${(owner as any).opts.token}` } });

@@ -3,9 +3,10 @@ import SwiftUI
 /** Agents' computers: watch any of them live, take control when one needs you, and hand it back. */
 struct ComputersView: View {
   @Environment(Store.self) private var store
+  @State private var path: [String] = []
 
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $path) {
       ScrollView {
         if store.computers.isEmpty {
           ContentUnavailableView("No computers yet", systemImage: "desktopcomputer", description: Text("Give an agent a computer from Warren on your computer: a VM on one of your devices, or an Orgo cloud computer."))
@@ -40,6 +41,13 @@ struct ComputersView: View {
       .navigationTitle("Computers")
       .refreshable { await store.refreshComputers() }
       .navigationDestination(for: String.self) { ComputerDetail(computerId: $0) }
+    }
+    .task(id: store.route) {
+      // a tapped "needs you on its computer" notification
+      guard case .computer(let id) = store.route else { return }
+      store.route = nil
+      if !store.computers.contains(where: { $0.id == id }) { await store.refreshComputers() }
+      path = [id]
     }
   }
 }

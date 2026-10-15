@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
+import { ArrowDown, Mic, Monitor, Phone, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -10,6 +10,8 @@ import { EffortSlider, effortName, prettyModel } from "../components/EffortSlide
 import { DiscussionCard, StartDiscussion } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { CallScreen } from "../voice/CallScreen.tsx";
+import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
 
@@ -18,7 +20,24 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const setActive = useStore((s) => s.setActive);
   const loadChannel = useStore((s) => s.loadChannel);
   const names = useNames();
+  const [calling, setCalling] = useState(!!route.call);
+  useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
+  // the agent beside its DM (Details · Computer · Settings); stays open across DMs once you open it
+  const [panel, setPanelState] = useState<AgentPanelTab | null>(() => {
+    try {
+      return (localStorage.getItem("warren.agentPanel") as AgentPanelTab | null) || null;
+    } catch {
+      return null;
+    }
+  });
+  const setPanel = (t: AgentPanelTab | null) => {
+    setPanelState(t);
+    try {
+      if (t) localStorage.setItem("warren.agentPanel", t);
+      else localStorage.removeItem("warren.agentPanel");
+    } catch {}
+  };
 
   const channel = channels.find((c) => c.id === route.channelId) ?? (route.channelId ? undefined : channels.find((c) => c.name === "general"));
   // where you'd stopped reading when you opened the channel; the "NEW" divider goes there
@@ -53,7 +72,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             </button>
           )}
           {dmAgent ? (
-            <button className="flex items-center gap-2.5 min-w-0 flex-1 text-left" onClick={() => go({ view: "agents", agentId: dmAgent.id, tab: "overview" })}>
+            <button className="flex items-center gap-2.5 min-w-0 flex-1 text-left" onClick={() => setPanel(panel ? null : "details")} aria-expanded={!!panel} title={`About ${dmAgent.name}`}>
               <AgentAvatar agent={dmAgent} size={30} live />
               <div className="min-w-0">
                 <div className="font-semibold leading-tight flex items-center gap-1.5">
@@ -74,6 +93,12 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
               {channel.topic && <div className="text-xs text-muted truncate">{channel.topic}</div>}
             </div>
           )}
+          {dmAgent?.computerId && (
+            <button onClick={() => setPanel(panel === "computer" ? null : "computer")} className={cx("size-9 rounded-full hover:bg-hover grid place-items-center hover:text-ink", panel === "computer" ? "text-ink bg-hover" : "text-muted")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>
+              <Monitor size={18} />
+            </button>
+          )}
+          {dmAgent && <button onClick={() => setCalling(true)} className="size-9 rounded-full hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={18} /></button>}
           {channel.kind === "channel" && (
             <div className="flex items-center gap-1 shrink-0">
               <button
@@ -94,6 +119,8 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
         <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} />
       </div>
       {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
+      {dmAgent && panel && !route.threadId && <AgentPanel agent={dmAgent} tab={panel} onTab={setPanel} onClose={() => setPanel(null)} onCall={() => setCalling(true)} />}
+      {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
       {settings && <ChannelSettings key={settings} channel={channel} tab={settings} onClose={() => setSettings(null)} />}
     </div>
   );
@@ -705,7 +732,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
           {files.map((f) => f.type === "file" && <FileChip key={f.fileId} id={f.fileId} name={f.name} />)}
         </div>
       )}
-      {status.map((s, i) => s.type === "status" && <div key={i} className="mt-1 text-sm text-bad">{s.text}</div>)}
+      {status.map((s, i) => s.type === "status" && <div key={i} className={cx("mt-1", s.text === "Voice message" ? "text-[11px] text-faint inline-flex items-center gap-1" : "text-sm text-bad")}>{s.text === "Voice message" && <Mic size={11} />}{s.text}</div>)}
       <Remembered tools={tools} />
       {tools.length > 0 && toolCalls !== "hidden" && (
         <div className="mt-1">

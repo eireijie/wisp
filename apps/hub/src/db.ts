@@ -174,6 +174,12 @@ CREATE TABLE IF NOT EXISTS skills (
   content TEXT NOT NULL, created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   UNIQUE (workspace_id, slug)
 );
+CREATE TABLE IF NOT EXISTS push_devices (
+  token TEXT PRIMARY KEY, session_hash TEXT NOT NULL REFERENCES tokens(hash) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, workspace_id TEXT NOT NULL, platform TEXT NOT NULL DEFAULT 'ios',
+  bundle_id TEXT, environment TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS push_devices_by_user ON push_devices(user_id);
 CREATE TABLE IF NOT EXISTS agent_skills (
   agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
   skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,

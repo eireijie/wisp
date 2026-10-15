@@ -182,6 +182,7 @@ export class Computers {
       const who = this.hub.store.user(ctl.id)?.name ?? "Someone";
       throw new ComputerError(`${who} has taken control of ${c.name}. Wait until they hand it back (you'll hear from them), or ask them in chat.`, 409);
     }
+    if (by.kind === "agent" && input) this.dropHelp(c.id, by.id);
     if (by.kind === "user" && input) {
       if (!ctl || ctl.id !== by.id) throw new ComputerError("take control of the computer first", 409);
       ctl.touched = Date.now();
@@ -294,6 +295,17 @@ export class Computers {
         this.hub.postMessage({ channelId: help.channelId, threadId: help.threadId, author: { kind: "user", id: userId }, body });
       }
     }
+    this.changed(c.id);
+  }
+
+  /**
+   * The agent that asked for help is working again (someone messaged it, or it went ahead on the
+   * computer itself): its "needs you" request is stale, so drop it.
+   */
+  dropHelp(computerId: string, agentId: string) {
+    const c = this.hub.store.computer(computerId);
+    if (!c?.help || c.help.agentId !== agentId) return;
+    this.hub.store.updateComputer(c.id, { help: null });
     this.changed(c.id);
   }
 

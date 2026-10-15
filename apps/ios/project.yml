@@ -31,6 +31,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Warren connects to the Warren hub on your own network.
         CODE_SIGN_STYLE: Automatic
+        # push notifications; Xcode switches this to production when you archive for TestFlight / the App Store
+        CODE_SIGN_ENTITLEMENTS: Warren/Warren.entitlements
     info:
       path: Warren/Info.plist
       properties:

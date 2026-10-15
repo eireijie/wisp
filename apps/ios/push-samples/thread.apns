@@ -1,0 +1,1 @@
+{"Simulator Target Bundle":"ai.warren.ios","aps":{"alert":{"title":"Atlas in a thread","body":"Looked: the deploy failed on a missing env var."},"sound":"default","badge":3,"thread-id":"ch_CHANNEL_ID"},"warren":{"kind":"message","channelId":"ch_CHANNEL_ID","threadId":"msg_THREAD_ROOT_ID"}}

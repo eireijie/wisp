@@ -3,6 +3,7 @@ import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, type Agent, pa
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
+import { Apns } from "./apns.ts";
 import { Routines } from "./routines.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
@@ -52,6 +53,8 @@ export class Hub {
   readonly updates: Updates;
   readonly connectors: ConnectorStore;
   readonly skills: SkillStore;
+  /** iOS push notifications (optional; needs an APNs key) */
+  readonly apns: Apns;
   /** how the hub reaches outside services (Orgo); tests swap it */
   fetchImpl: typeof fetch = (...args) => fetch(...args);
   /** git operations waiting for a device to answer */
@@ -69,6 +72,7 @@ export class Hub {
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
+    this.apns = new Apns(this);
   }
 
   /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
@@ -113,6 +117,7 @@ export class Hub {
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
     const data = JSON.stringify(event);
     for (const c of this.clients) if (c.workspaceId === workspaceId && c.socket.readyState === 1 && (!only || only(c.userId))) c.socket.send(data);
+    if (!this.closed) this.apns.onEvent(workspaceId, event, only);
   }
 
   // --- nodes ----------------------------------------------------------------
@@ -397,6 +402,8 @@ export class Hub {
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
     // like a teammate saying "on it": the agent marks the message it picked up
     this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
+    // working again, so an earlier "needs you on my computer" no longer stands
+    if (agent.computerId) this.computers.dropHelp(agent.computerId, agent.id);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
     this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } });
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
