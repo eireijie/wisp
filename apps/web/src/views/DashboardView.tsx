@@ -34,9 +34,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
   const approvals = useStore((s) => s.approvals);
   const channels = useStore((s) => s.channels);
   const version = useStore((s) => s.tasksVersion);
-  // Tasks is an addon (Settings → Addons); the section only shows once it is on
-  const orchestration = useStore((s) => s.orchestration);
-  // null = not loaded or tasks are unavailable (an optional addon); the section hides then
+  // null = not loaded or tasks are unavailable; the section hides then
   const [tasks, setTasks] = useState<TaskLite[] | null>(null);
 
   useEffect(() => {
@@ -208,7 +206,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             )}
           </Section>
 
-          {tasks && orchestration?.enabled && (
+          {tasks && (
             <Section title="Tasks" count={tasks.length} more={{ label: "Open Tasks", to: href({ view: "tasks" }) }}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                 <Stat label="To do" value={counts.open} />

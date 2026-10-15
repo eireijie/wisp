@@ -386,7 +386,7 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
         <Field label="Role" hint="A short title, like Engineer or Researcher.">
           <Input value={role} onChange={(e) => setRole(e.target.value)} maxLength={60} placeholder="Engineer" aria-label="Role" />
         </Field>
-        <Field label="What the role covers (optional)" hint="What it owns and what to send its way. A dispatcher hands out work by this.">
+        <Field label="What the role covers (optional)" hint="What it owns and what to send its way. The lead hands out work by it.">
           <Input value={roleNotes} onChange={(e) => setRoleNotes(e.target.value)} maxLength={2000} placeholder="Owns the backend and the build; send it bugs and API work." aria-label="What the role covers" />
         </Field>
       </div>

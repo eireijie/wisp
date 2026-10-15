@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
  *   #/dashboard                      a bit of everything: agents, teams, tasks
  *   #/vault[/<path>]                 memory vault
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
- *   #/teams[/<teamId>[/<tab>]]       teams, the org chart, and each team's chart
+ *   #/teams[/<teamId>[/<tab>]]       teams, and each team (members, work, settings)
  *   #/about                          what agents remember about you
  *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
@@ -39,9 +39,9 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "addons", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
-export const TEAM_TABS = ["chart", "work", "settings"] as const;
+export const TEAM_TABS = ["members", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
 
 export function parseRoute(hash: string): Route {
@@ -95,7 +95,7 @@ export function href(r: Route): string {
     case "agents":
       return "#/agents" + (r.agentId ? `/${r.agentId}${r.tab ? `/${r.tab}` : ""}` : "");
     case "teams":
-      return "#/teams" + (r.teamId ? `/${r.teamId}${r.tab && r.tab !== "chart" ? `/${r.tab}` : ""}` : "");
+      return "#/teams" + (r.teamId ? `/${r.teamId}${r.tab && r.tab !== "members" ? `/${r.tab}` : ""}` : "");
     case "about":
       return "#/about";
     case "tasks":

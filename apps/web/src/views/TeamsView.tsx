@@ -1,23 +1,24 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Crown, GitBranch, GitMerge, Hash, MessagesSquare, Network, Plus, Smile, Trash2, Users } from "lucide-react";
-import type { Agent } from "@warren/core";
+import { BookOpen, ChevronLeft, ChevronRight, Crown, GitBranch, GitMerge, Hash, MessagesSquare, Plus, Smile, Trash2, Users } from "lucide-react";
+import { harnessLabel, type Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type DiscussionInfo, type TeamInfo } from "../store.ts";
-import { StartDiscussion } from "../components/Discussion.tsx";
-import { TeamChart } from "../components/TeamChart.tsx";
+import { SlotEditor, TeamBuilder, createSlotAgents } from "../components/TeamBuilder.tsx";
+import { useDevices } from "../devices.ts";
+import { blankSlot, slotProblem, type Slot } from "../teamSetup.ts";
 import { go, href, type TeamTab } from "../router.ts";
 import { AgentAvatar, Button, EmojiPicker, Empty, Field, Input, Modal, Pill, Popover, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 /**
- * Teams and how they fit together: agents work alone or in teams with a lead and roles, and
- * teams can report to a boss agent (who can report to another).
+ * Teams: agents working together, each with a role. A team has a lead who hands out the work, and
+ * the workspace has a lead too, who takes every task nobody assigned.
  */
 export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab: TeamTab | null; onBack?: () => void }) {
   const teams = useStore((s) => s.teams);
   const canEdit = useStore((s) => s.me?.role !== "guest");
   const [creating, setCreating] = useState(false);
   const team = teams.find((t) => t.id === teamId);
-  if (team) return <TeamDetail key={team.id} team={team} tab={tab ?? "chart"} canEdit={canEdit} />;
+  if (team) return <TeamDetail key={team.id} team={team} tab={tab ?? "members"} canEdit={canEdit} />;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -35,96 +36,103 @@ export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab:
         )}
       </header>
       <div className="flex-1 overflow-y-auto">
-        {teams.length === 0 ? (
-          <Empty icon={<Users />} title="Put agents to work together">
-            <p>A team shares a channel and a memory pool. Give it a lead who hands out work, roles like reviewer or frontend, and optionally a boss agent it reports to, so you can ask the boss for anything and it gets done across teams.</p>
-            <p>Agents that aren't on a team keep working on their own.</p>
-            {canEdit && (
-              <Button variant="primary" onClick={() => setCreating(true)}>
-                <Plus size={16} /> New team
-              </Button>
-            )}
-          </Empty>
-        ) : (
-          <div className="max-w-5xl px-4 md:px-6 py-5 space-y-6">
-            <OrgChart />
-          </div>
-        )}
+        <div className="max-w-3xl px-4 md:px-6 py-5 space-y-6">
+          <WorkspaceLead />
+          {teams.length === 0 ? (
+            <Empty icon={<Users />} title="Put agents to work together">
+              <p>A team is a few agents with a role each, like a lead who hands out work, a backend, a frontend and a reviewer. Start from a template or build your own, and pick any agent for each role.</p>
+              <p>Agents that aren't on a team keep working on their own.</p>
+              {canEdit && (
+                <Button variant="primary" onClick={() => setCreating(true)}>
+                  <Plus size={16} /> New team
+                </Button>
+              )}
+            </Empty>
+          ) : (
+            <TeamList />
+          )}
+        </div>
       </div>
-      {creating && <CreateTeam onClose={() => setCreating(false)} />}
+      {creating && <TeamBuilder onClose={() => setCreating(false)} />}
     </div>
   );
 }
 
-/** You at the top, then bosses and the teams under them, then agents working alone. */
-function OrgChart() {
+/** Who takes tasks nobody assigned: pick one, or leave it to Warren (a team lead, else the first agent). */
+function WorkspaceLead() {
+  const agents = useStore((s) => s.agents);
+  const lead = useStore((s) => s.lead);
+  const owner = useStore((s) => s.me)?.role === "owner";
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    useStore.getState().refreshLead();
+  }, []);
+  if (!agents.length) return null;
+  const current = agents.find((a) => a.id === lead?.lead);
+  const save = async (leadId: string | null) => {
+    setError(null);
+    try {
+      useStore.setState({ lead: await api("PUT", "/api/settings/lead", { leadId }) });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <section className="rounded-2xl border border-line p-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <Crown size={16} className="text-accent-text shrink-0" />
+        <div className="flex-1 min-w-48">
+          <div className="text-sm font-semibold">Lead</div>
+          <p className="text-xs text-muted">Takes every task nobody assigned, splits it up and hands the pieces to agents by role.</p>
+        </div>
+        {owner ? (
+          <select value={lead?.leadId ?? ""} onChange={(e) => save(e.target.value || null)} className={cx(selectCls, "max-w-60")} aria-label="Lead agent">
+            <option value="">{current ? `Automatic (${current.name})` : "Automatic"}</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                @{a.handle} ({a.name})
+              </option>
+            ))}
+          </select>
+        ) : (
+          current && (
+            <span className="inline-flex items-center gap-1.5 text-sm">
+              <AgentAvatar agent={current} size={20} badge={false} /> {current.name}
+            </span>
+          )
+        )}
+      </div>
+      {error && <p className="text-sm text-bad">{error}</p>}
+    </section>
+  );
+}
+
+/** Every team, then the agents that work on their own. */
+function TeamList() {
   const teams = useStore((s) => s.teams);
   const agents = useStore((s) => s.agents);
-  const me = useStore((s) => s.me);
-  const agent = (id: string | null) => agents.find((a) => a.id === id);
-  // a team sits under the team its boss leads; otherwise under its boss directly, or at the top
-  const parentTeam = (t: TeamInfo) => (t.reportsTo ? teams.find((x) => x.leadId === t.reportsTo && x.id !== t.id) : undefined);
-  const roots = teams.filter((t) => !parentTeam(t));
-  const bosses = [...new Set(roots.map((t) => t.reportsTo).filter((a): a is string => !!a))];
   const onTeams = new Set(teams.flatMap((t) => t.members.map((m) => m.agentId)));
-  const solo = agents.filter((a) => !onTeams.has(a.id) && !bosses.includes(a.id));
-
-  const branch = (t: TeamInfo): ReactNode => {
-    const kids = teams.filter((x) => parentTeam(x)?.id === t.id);
-    return (
-      <li key={t.id} className="relative pl-6 before:absolute before:left-2 before:top-0 before:h-6 before:w-3 before:border-l before:border-b before:border-line before:rounded-bl-lg">
-        <TeamCard team={t} />
-        {kids.length > 0 && <ul className="mt-2 space-y-2 border-l border-line ml-2">{kids.map(branch)}</ul>}
-      </li>
-    );
-  };
-
+  const solo = agents.filter((a) => !onTeams.has(a.id));
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Network size={15} className="text-muted" /> How your agents are organized
+    <>
+      <div className="space-y-3">
+        {teams.map((t) => (
+          <TeamCard key={t.id} team={t} />
+        ))}
       </div>
-      <div className="rounded-2xl border border-line p-4">
-        <div className="inline-flex items-center gap-2 rounded-xl bg-accent-soft text-accent-text px-3 h-9 text-sm font-medium">You{me ? ` (${me.user.name})` : ""}</div>
-        <ul className="mt-2 space-y-3 border-l border-line ml-3">
-          {bosses.map((b) => {
-            const a = agent(b);
-            return (
-              <li key={b} className="relative pl-6 before:absolute before:left-0 before:top-0 before:h-5 before:w-5 before:border-b before:border-line">
-                <a href={`#/agents/${b}/overview`} className="inline-flex items-center gap-2 rounded-xl border border-line px-3 h-10 hover:bg-hover">
-                  <AgentAvatar agent={a} size={24} badge={false} />
-                  <span className="font-medium">@{a?.handle ?? "boss"}</span>
-                  <Pill tone="accent">
-                    <Crown size={11} /> boss
-                  </Pill>
-                </a>
-                <ul className="mt-2 space-y-2 border-l border-line ml-3">{roots.filter((t) => t.reportsTo === b).map(branch)}</ul>
-              </li>
-            );
-          })}
-          {roots
-            .filter((t) => !t.reportsTo)
-            .map((t) => (
-              <li key={t.id} className="relative pl-6 before:absolute before:left-0 before:top-0 before:h-6 before:w-5 before:border-b before:border-line">
-                <TeamCard team={t} />
-                <ul className="mt-2 space-y-2 border-l border-line ml-2">{teams.filter((x) => parentTeam(x)?.id === t.id).map(branch)}</ul>
-              </li>
+      {solo.length > 0 && (
+        <section>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Working on their own</div>
+          <div className="flex flex-wrap gap-2">
+            {solo.map((a) => (
+              <a key={a.id} href={`#/agents/${a.id}/overview`} className="inline-flex items-center gap-2 rounded-xl border border-line px-2.5 h-9 text-sm hover:bg-hover">
+                <AgentAvatar agent={a} size={22} badge={false} /> @{a.handle}
+              </a>
             ))}
-          {solo.length > 0 && (
-            <li className="relative pl-6 before:absolute before:left-0 before:top-0 before:h-5 before:w-5 before:border-b before:border-line">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Working on their own</div>
-              <div className="flex flex-wrap gap-2">
-                {solo.map((a) => (
-                  <a key={a.id} href={`#/agents/${a.id}/overview`} className="inline-flex items-center gap-2 rounded-xl border border-line px-2.5 h-9 text-sm hover:bg-hover">
-                    <AgentAvatar agent={a} size={22} badge={false} /> @{a.handle}
-                  </a>
-                ))}
-              </div>
-            </li>
-          )}
-        </ul>
-      </div>
-    </section>
+          </div>
+        </section>
+      )}
+    </>
   );
 }
 
@@ -161,90 +169,16 @@ function TeamCard({ team }: { team: TeamInfo }) {
   );
 }
 
-const agentOptions = (agents: Agent[], none: string) => [
-  <option key="" value="">
-    {none}
-  </option>,
-  ...agents.map((a) => (
-    <option key={a.id} value={a.id}>
-      @{a.handle} ({a.name})
-    </option>
-  )),
-];
 const selectCls = "h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm";
 
-function CreateTeam({ onClose }: { onClose: () => void }) {
-  const refreshTeams = useStore((s) => s.refreshTeams);
-  const [f, setF] = useState({ name: "", emoji: "", description: "" });
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <Modal title="New team" onClose={onClose}>
-      <form
-        className="space-y-4"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            const t = await api<TeamInfo>("POST", "/api/teams", f);
-            await refreshTeams();
-            onClose();
-            go({ view: "teams", teamId: t.id });
-          } catch (err) {
-            setError((err as Error).message);
-          }
-        }}
-      >
-        <div className="flex gap-3">
-          <Field label="Label">
-            <Popover
-              up={false}
-              trigger={(_, toggle) => (
-                <button type="button" onClick={toggle} className="size-9 rounded-lg border border-line bg-panel text-lg grid place-items-center hover:bg-hover" aria-label="Pick a label">
-                  {f.emoji || <Smile size={16} className="text-muted" />}
-                </button>
-              )}
-            >
-              {(close) => (
-                <div>
-                  <EmojiPicker onPick={(emoji) => (setF({ ...f, emoji }), close())} />
-                  {f.emoji && (
-                    <button type="button" onClick={() => (setF({ ...f, emoji: "" }), close())} className="w-full h-8 text-xs text-muted hover:text-ink border-t border-line">
-                      No label
-                    </button>
-                  )}
-                </div>
-              )}
-            </Popover>
-          </Field>
-          <div className="flex-1">
-            <Field label="Name" hint="Becomes the channel #team-name and the memory folder teams/name/.">
-              <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="web" required autoFocus />
-            </Field>
-          </div>
-        </div>
-        <Field label="What it's for" hint="Starts the team's brief, which every member reads before working.">
-          <Textarea rows={3} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Builds and ships the website." />
-        </Field>
-        <p className="text-xs text-muted">Next you'll build the team on its chart: drag agents in, draw who reports to whom, and give them roles.</p>
-        {error && <p className="text-sm text-bad">{error}</p>}
-        <div className="flex justify-end">
-          <Button variant="primary" disabled={!f.name.trim()}>
-            Create team
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 const TABS = [
-  { id: "chart", label: "Chart" },
+  { id: "members", label: "Members" },
   { id: "work", label: "Work" },
   { id: "settings", label: "Settings" },
 ] as const;
 
 function TeamDetail({ team, tab, canEdit }: { team: TeamInfo; tab: TeamTab; canEdit: boolean }) {
   const channels = useStore((s) => s.channels);
-  const [discussing, setDiscussing] = useState(false);
   const channel = channels.find((c) => c.id === team.channelId);
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -274,33 +208,152 @@ function TeamDetail({ team, tab, canEdit }: { team: TeamInfo; tab: TeamTab; canE
         <Button variant="ghost" onClick={() => go({ view: "vault", path: `${team.folder}/README.md` })} title="Team memory">
           <BookOpen size={15} /> <span className="hidden lg:inline">Memory</span>
         </Button>
-        {canEdit && team.members.length >= 2 && (
-          <Button variant="ghost" onClick={() => setDiscussing(true)} title="Have the team talk something through">
-            <MessagesSquare size={15} /> <span className="hidden lg:inline">Discuss</span>
-          </Button>
-        )}
       </header>
-      {tab === "chart" ? (
-        <TeamChart team={team} canEdit={canEdit} />
-      ) : (
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl px-4 md:px-6 py-5 space-y-8">{tab === "work" ? <TeamWork team={team} canEdit={canEdit} /> : <TeamSettings team={team} canEdit={canEdit} />}</div>
-        </div>
-      )}
-      {discussing && <StartDiscussion teamId={team.id} onClose={() => setDiscussing(false)} />}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl px-4 md:px-6 py-5 space-y-8">{tab === "members" ? <TeamMembers team={team} canEdit={canEdit} /> : tab === "work" ? <TeamWork team={team} canEdit={canEdit} /> : <TeamSettings team={team} canEdit={canEdit} />}</div>
+      </div>
     </div>
   );
 }
 
-/** Everything about a team that isn't on its chart: label, brief, boss, code. */
+/** The lead, then everyone else, with their roles. Edit a role in place; add or remove people. */
+function TeamMembers({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
+  const refreshTeams = useStore((s) => s.refreshTeams);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const call = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await fn();
+      await refreshTeams();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const lead = team.members.find((m) => m.agentId === team.leadId);
+  const others = team.members.filter((m) => m.agentId !== team.leadId);
+  return (
+    <section className="space-y-3">
+      <p className="text-sm text-muted">The lead takes the team's work and hands pieces to the others by role. Each role's note goes into that agent's prompt, so say what it owns and what to send its way.</p>
+      {lead ? <MemberRow key={lead.agentId} team={team} member={lead} isLead canEdit={canEdit} call={call} /> : <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">No lead yet. Make one of the members the lead.</p>}
+      {others.map((m) => (
+        <MemberRow key={m.agentId} team={team} member={m} canEdit={canEdit} call={call} />
+      ))}
+      {team.members.length === 0 && <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Nobody is on this team yet.</p>}
+      {error && <p className="text-sm text-bad">{error}</p>}
+      {canEdit && (
+        <Button onClick={() => setAdding(true)}>
+          <Plus size={15} /> Add someone
+        </Button>
+      )}
+      {adding && <AddMember team={team} onClose={() => setAdding(false)} />}
+    </section>
+  );
+}
+
+function MemberRow({ team, member, isLead, canEdit, call }: { team: TeamInfo; member: TeamInfo["members"][number]; isLead?: boolean; canEdit: boolean; call: (fn: () => Promise<unknown>) => Promise<void> }) {
+  const agent = useStore((s) => s.agents.find((a) => a.id === member.agentId));
+  const [role, setRole] = useState(member.role);
+  const [notes, setNotes] = useState(member.roleNotes);
+  const dirty = role.trim() !== member.role || notes.trim() !== member.roleNotes;
+  return (
+    <div className="rounded-xl border border-line p-3 space-y-2.5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <a href={`#/agents/${member.agentId}/overview`} className="inline-flex items-center gap-2 min-w-0 hover:underline">
+          <AgentAvatar agent={agent} size={28} badge={false} />
+          <span className="font-medium truncate">{agent?.name ?? "Agent"}</span>
+          <span className="text-xs text-muted">@{agent?.handle}</span>
+        </a>
+        {agent && <span className="text-xs text-muted">{harnessLabel(agent.harness)}</span>}
+        {isLead && (
+          <Pill tone="accent">
+            <Crown size={11} /> lead
+          </Pill>
+        )}
+        <span className="flex-1" />
+        {canEdit && !isLead && (
+          <Button variant="ghost" className="h-7" onClick={() => call(() => api("PATCH", `/api/teams/${team.id}`, { leadId: member.agentId }))}>
+            Make lead
+          </Button>
+        )}
+        {canEdit && (
+          <Button variant="ghost" className="h-7" onClick={() => confirm(`Take @${agent?.handle} off ${team.name}?`) && call(() => api("DELETE", `/api/teams/${team.id}/members/${member.agentId}`))}>
+            Remove
+          </Button>
+        )}
+      </div>
+      <Input value={role} disabled={!canEdit} onChange={(e) => setRole(e.target.value)} placeholder="Role, e.g. Backend" aria-label="Role" maxLength={60} />
+      <Textarea rows={2} value={notes} disabled={!canEdit} onChange={(e) => setNotes(e.target.value)} placeholder="What it owns and what to send its way. The agent reads this." aria-label="What the role owns" maxLength={4000} />
+      {canEdit && dirty && (
+        <div className="flex gap-2">
+          <Button variant="primary" className="h-8" onClick={() => call(() => api("PUT", `/api/teams/${team.id}/members/${member.agentId}`, { role: role.trim(), roleNotes: notes.trim() }))}>
+            Save
+          </Button>
+          <Button variant="ghost" className="h-8" onClick={() => (setRole(member.role), setNotes(member.roleNotes))}>
+            Discard
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Put an agent on the team in a role: one you have, or a new one on any harness. */
+function AddMember({ team, onClose }: { team: TeamInfo; onClose: () => void }) {
+  const agents = useStore((s) => s.agents);
+  const refreshTeams = useStore((s) => s.refreshTeams);
+  const devices = useDevices(10_000);
+  const free = agents.filter((a) => !team.members.some((m) => m.agentId === a.id));
+  const [slot, setSlot] = useState<Slot>(() => ({ ...blankSlot(), pick: free[0]?.id ?? "new" }));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canCreate = (devices ?? []).some((d) => (d.mine || d.shared) && d.online);
+  const problem = slotProblem([slot], canCreate);
+  return (
+    <Modal title={`Add to ${team.name}`} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (problem || busy) return;
+          setBusy(true);
+          setError(null);
+          try {
+            const who = await createSlotAgents([slot], agents, devices ?? [], (k, id) => setSlot((cur) => (cur.key === k ? { ...cur, pick: id } : cur)));
+            // new members report to the lead, like the rest of the team
+            await api("PUT", `/api/teams/${team.id}/members/${who.get(slot.key)}`, { role: slot.role.trim(), roleNotes: slot.notes.trim(), ...(team.leadId ? { managerId: team.leadId } : {}) });
+            await Promise.all([refreshTeams(), useStore.getState().refreshAgents()]);
+            onClose();
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <SlotEditor slot={slot} agents={free} taken={new Set()} canCreate={canCreate} onChange={(p) => setSlot({ ...slot, ...p })} />
+        {(problem || error) && <p className="text-sm text-bad">{problem ?? error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={busy || !!problem}>
+            {busy ? "Adding…" : "Add to team"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/** Everything about a team that isn't its members: label, brief, code. */
 function TeamSettings({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
   const agents = useStore((s) => s.agents);
   const refreshTeams = useStore((s) => s.refreshTeams);
-  const initial = { emoji: team.emoji, description: team.description, reportsTo: team.reportsTo ?? "", repo: team.repo ?? "", baseBranch: team.baseBranch };
+  const initial = { emoji: team.emoji, description: team.description, repo: team.repo ?? "", baseBranch: team.baseBranch };
   const [f, setF] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const dirty = JSON.stringify(f) !== JSON.stringify(initial);
-  const handle = (id: string | null) => (id ? `@${agents.find((a) => a.id === id)?.handle ?? "?"}` : null);
   const run = async (fn: () => Promise<unknown>) => {
     setError(null);
     try {
@@ -313,13 +366,7 @@ function TeamSettings({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
   return (
     <>
       <p className="text-sm text-muted">
-        Members and {team.reportsTo ? "everyone the team reports to" : "its boss, if it gets one,"} can read and write <b className="text-ink">{team.folder}/</b>. Every member reads the team brief, its recent decisions and the chart before working
-        {team.above.length ? (
-          <>
-            . Reports to <b className="text-ink">{team.above.map(handle).join(" → ")}</b>
-          </>
-        ) : null}
-        .
+        Members can read and write <b className="text-ink">{team.folder}/</b>. Every member reads the team brief, its recent decisions and who's on the team before working.
       </p>
       <section className="space-y-4">
         <div className="flex gap-3">
@@ -348,14 +395,6 @@ function TeamSettings({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
             </Field>
           </div>
         </div>
-        <Field label="Reports to" hint="A boss agent outside the team: it can see the team's memory and hand it work. The team's lead is whoever's at the top of the chart.">
-          <select value={f.reportsTo} disabled={!canEdit} onChange={(e) => setF({ ...f, reportsTo: e.target.value })} className={selectCls}>
-            {agentOptions(
-              agents.filter((a) => a.id !== team.leadId),
-              "No one (reports to you)",
-            )}
-          </select>
-        </Field>
         <div className="grid sm:grid-cols-[1fr_10rem] gap-4">
           <Field label="Code repository" hint="A git URL, or a path on the device the agents run on. Tasks for this team get their own branch and checkout.">
             <Input value={f.repo} disabled={!canEdit} onChange={(e) => setF({ ...f, repo: e.target.value })} placeholder="git@github.com:you/app.git" />
@@ -368,7 +407,7 @@ function TeamSettings({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
           <div className="flex gap-2">
             <Button
               variant="primary"
-              onClick={() => run(() => api("PATCH", `/api/teams/${team.id}`, { emoji: f.emoji, description: f.description, reportsTo: f.reportsTo || null, repo: f.repo.trim() || null, baseBranch: f.baseBranch.trim() || "main" }))}
+              onClick={() => run(() => api("PATCH", `/api/teams/${team.id}`, { emoji: f.emoji, description: f.description, repo: f.repo.trim() || null, baseBranch: f.baseBranch.trim() || "main" }))}
             >
               Save
             </Button>
@@ -438,7 +477,7 @@ function TeamWork({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
         <h2 className="font-semibold">Work</h2>
         {team.repo ? (
           <p className="text-sm text-muted">
-            Tasks handed out in this team's channel get their own branch of <code>{team.repo}</code>. When one is done, {team.members.some((m) => /review/i.test(m.role)) ? "the reviewer" : "the lead"} gets a review task and merges it into <code>{team.baseBranch}</code>.
+            Tasks handed out in this team's channel get their own branch of <code>{team.repo}</code>. When one is done, someone other than whoever built it reviews it ({team.members.some((m) => /review/i.test(m.role)) ? "the reviewer, preferably on another harness" : "a teammate on another harness if there is one, else the lead"}) and merges it into <code>{team.baseBranch}</code>.
           </p>
         ) : (
           <p className="text-sm text-muted">Set a code repository above and coding tasks get their own branch, a review, and a merge.</p>
@@ -447,7 +486,7 @@ function TeamWork({ team, canEdit }: { team: TeamInfo; canEdit: boolean }) {
         {!tasks ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : tasks.length === 0 ? (
-          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">No tasks yet. Ask the lead (or the boss) for something, or have the team discuss it first.</p>
+          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">No tasks yet. Ask the lead for something and it hands the pieces out.</p>
         ) : (
           <div className="rounded-xl border border-line divide-y divide-line">
             {tasks.slice(0, 30).map((t) => {
