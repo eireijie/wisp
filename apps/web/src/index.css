@@ -313,10 +313,10 @@ body {
 }
 .ghost-squish { transform-origin: 60px 100px; }
 .ghost-arm { transform-box: view-box !important; transform-origin: 0 0; }
-.ghost-arm-left.ghost-arm-cheer { transform: translateY(-5px) rotate(50deg); }
-.ghost-arm-right.ghost-arm-cheer { transform: translateY(-5px) rotate(-50deg); }
+.ghost-arm-left.ghost-arm-cheer { transform: translateY(-4px) rotate(80deg); }
+.ghost-arm-right.ghost-arm-cheer { transform: translateY(-4px) rotate(-80deg); }
 @keyframes ghost-squish { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.06, 0.94); } 75% { transform: scale(0.98, 1.03); } }
-@keyframes ghost-arm-wave { 0%, 100% { transform: translateY(-3px) rotate(-35deg); } 50% { transform: translateY(-6px) rotate(-65deg); } }
+@keyframes ghost-arm-wave { 0%, 100% { transform: translateY(-3px) rotate(-60deg); } 50% { transform: translateY(-5px) rotate(-95deg); } }
 @keyframes ghost-poke {
   0%, 100% { transform: scale(1); }
   18% { transform: translateY(3px) scale(1.12, 0.84); }

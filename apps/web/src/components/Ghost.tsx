@@ -22,6 +22,12 @@ interface ShapeDef {
   ground: number;
 }
 
+/**
+ * An arm, pointing right from the shoulder at 0,0: a soft taper into a rounded mitten. The
+ * shoulder sits inside the body, which is drawn over it, so the arm grows out of the side.
+ */
+const ARM = "M-7 -10 C1 -10 8 -7.5 13.5 -4 C18.5 -0.8 18.2 4.6 14 5.6 C9 6.8 1.5 7.5 -7 9 Z";
+
 const swap = (d: string, a: string, b: string) => d.replaceAll(a, "§").replaceAll(b, a).replaceAll("§", b);
 
 const CLASSIC = "M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z";
@@ -162,6 +168,20 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
             <stop offset="0.08" stopColor={top} />
             <stop offset="0.95" stopColor={bottom} />
           </linearGradient>
+          {/* the body's colors at each height, for hands drawn `at` a height on the body (their own origin),
+              so they read as part of it, not stuck on */}
+          {(
+            [
+              ["a", shape.neck.y - 2],
+              ["t", shape.neck.y + 6],
+              ["w", shape.neck.y],
+            ] as const
+          ).map(([k, at]) => (
+            <linearGradient key={k} id={`${k}${uid}`} gradientUnits="userSpaceOnUse" x1="0" y1={shape.top - at} x2="0" y2={shape.ground - 6 - at}>
+              <stop offset="0.08" stopColor={top} />
+              <stop offset="0.95" stopColor={bottom} />
+            </linearGradient>
+          ))}
           {/* the lit "face plate": brighter in the middle, falling off toward the edges */}
           <radialGradient id={`l${uid}`} cx="0.5" cy="0.42" r="0.6">
             <stop offset="0" stopColor="white" stopOpacity={asleep ? 0.1 : 0.24} />
@@ -181,6 +201,18 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
               <g key={poke?.id ?? "rest"} className={animated && poke ? poke.spin ? "ghost-poke-spin" : "ghost-poke" : undefined}>
                 <g className={cx(touchable && !poke && mood === "awake" && activity === "active" && "ghost-greeting", mood === "listening" && "ghost-listening")}>
                   <g className={cx(motionClass, animated && mood === "waiting" && "ghost-waiting", animated && mood === "error" && "ghost-error")}>
+                    {/* arms grow out of the sides: drawn behind the body in its own colors, so there's no seam */}
+                    {details && mood !== "working" && [-1, 1].map((side) => mood === "waiting" && side === 1 ? null : (
+                      <g key={side} transform={`translate(${60 + side * (shape.neck.half - 4)} ${shape.neck.y - 2})`}>
+                        <g className={cx("ghost-arm", side === 1 ? "ghost-arm-right" : "ghost-arm-left", mood === "done" && "ghost-arm-cheer")}>
+                          <g transform={`scale(${side} 1) rotate(28)`}>
+                            <path d={ARM} fill={`url(#a${uid})`} />
+                            {/* the body's edge is shaded; so is the arm, so the two read as one surface */}
+                            <path d={ARM} fill="black" fillOpacity="0.09" stroke="black" strokeOpacity="0.12" strokeWidth="1.4" strokeLinejoin="round" />
+                          </g>
+                        </g>
+                      </g>
+                    ))}
                     <path d={shape.body[0]} fill={`url(#b${uid})`}>
                       {ripple}
                     </path>
@@ -192,14 +224,6 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                       {ripple}
                     </path>
 
-                    {details && mood !== "working" && [-1, 1].map((side) => mood === "waiting" && side === 1 ? null : (
-                      <g key={side} transform={`translate(${60 + side * (shape.neck.half + 1)} ${shape.neck.y})`}>
-                        <g className={cx("ghost-arm", side === 1 ? "ghost-arm-right" : "ghost-arm-left", mood === "done" && "ghost-arm-cheer")}>
-                          <ellipse cx={side * 2} cy="0" rx="6" ry="4.5" fill={top} stroke="black" strokeOpacity="0.1" strokeWidth="1.2" />
-                          <ellipse cx={side * 2} cy="-1.4" rx="4" ry="1.5" fill="white" opacity="0.2" />
-                        </g>
-                      </g>
-                    ))}
                     <g ref={face}>
                       <g transform={mood === "listening" ? "translate(0 -2)" : mood === "working" && !happy ? "translate(0 3)" : undefined}>
                         {(look.cheeks || size >= 40) && !asleep && (
@@ -231,8 +255,8 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                         <rect x="-20" y="-1" width="40" height="17" rx="1.5" fill={LAPTOP.screen} />
                         <path d="M-27 23 H27 L23 27 H-23 Z" fill={LAPTOP.shell} />
                         {[0, 1, 2].map((i) => <path key={i} d={`M${-13 + i * 10} 7 h6`} stroke={LAPTOP.shell} strokeWidth="2" className={animated ? "ghost-key" : undefined} style={{ animationDelay: `${i * 0.2}s` }} />)}
-                        <ellipse cx={-Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={top} className={animated ? "ghost-type" : undefined} />
-                        <ellipse cx={Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={top} className={animated ? "ghost-type" : undefined} style={{ animationDelay: "-0.3s" }} />
+                        <ellipse cx={-Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={`url(#t${uid})`} className={animated ? "ghost-type" : undefined} />
+                        <ellipse cx={Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={`url(#t${uid})`} className={animated ? "ghost-type" : undefined} style={{ animationDelay: "-0.3s" }} />
                       </g>
                     )}
                     {mood === "waiting" && details && (
@@ -243,7 +267,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                           <path d="M13 -42 C13 -47 21 -47 20 -42 Q20 -40 16 -38 V-36" stroke={LAPTOP.shell} strokeWidth="2.4" fill="none" strokeLinecap="round" />
                           <circle cx="16" cy="-32" r="1.3" fill={LAPTOP.shell} />
                         </g>
-                        <circle r="4.5" fill={top} />
+                        <circle r="4.5" fill={`url(#w${uid})`} />
                       </g>
                     )}
                   </g>
