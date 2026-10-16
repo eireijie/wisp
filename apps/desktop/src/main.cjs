@@ -1,7 +1,7 @@
 // Warren desktop: the workspace in its own window, plus what only an app on this computer can do:
 // run a hub here, connect this computer as a device for agents (one click, no token to copy), and
 // keep both going from the menu bar after the window closes.
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, shell, Notification } = require("electron");
+const { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, shell, Notification } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -31,6 +31,7 @@ let hubOrigin = null; // the hub the window shows, once it's reachable
 let hubBy = ""; // "app" | "service" | "already running" | "remote"
 let deviceBy = ""; // "app" | "service"
 let deviceError = "";
+let deviceWaiting = false; // added as soon as someone signs in
 const buddy = require("./buddy.cjs")({
   config, save, mainWindow: () => win, refresh,
   open: (route) => {
@@ -145,30 +146,27 @@ async function connect() {
   if (await engine.hubUp(LOCAL_HUB)) hubBy = (await engine.serviceRunning("hub")) ? "service" : hub.running() ? "app" : "already running";
   else {
     const found = needs();
-    if (found.problem) return showSetup({ step: "choose", problem: found.problem });
+    if (found.problem) return showSetup({ step: "create", problem: found.problem });
     showSetup({ step: "starting" });
-    hub.start(found.node.bin, found.warrenDir, ["hub", "start"], { PORT: String(PORT) });
+    hub.start(found.node, found.warrenDir, ["hub", "start"], { ...found.env, PORT: String(PORT) });
     hubBy = "app";
     if (!(await waitFor(LOCAL_HUB, 90_000))) {
       hub.stop();
-      return showSetup({ step: "choose", problem: "The hub didn't start.", log: hub.tail() });
+      return showSetup({ step: "create", problem: "The server didn't start.", log: hub.tail() });
     }
   }
   openHub(LOCAL_HUB);
   startDeviceIfWanted();
 }
 
-/** What running Warren here needs: Node 22+ and a Warren folder. */
+/** How to run Warren here: the app's own copy, or from source a Warren folder and Node 22+. */
 function needs() {
-  const node = engine.findNode();
-  const warrenDir = engine.findWarren(config.warrenDir);
-  if (!node) return { problem: "Warren needs Node.js 22 or newer. Install it from nodejs.org, then try again." };
-  if (!warrenDir) return { problem: "Warren isn't installed on this computer yet. Run the installer below, or choose the folder you cloned it into." };
-  if (config.warrenDir !== warrenDir) {
-    config.warrenDir = warrenDir; // so a copy of the app elsewhere (or a moved one) finds it again
+  const found = engine.runtime(config.warrenDir);
+  if (!found.problem && !found.bundled && config.warrenDir !== found.warrenDir) {
+    config.warrenDir = found.warrenDir; // so a copy of the app elsewhere (or a moved one) finds it again
     save();
   }
-  return { node, warrenDir };
+  return found;
 }
 
 // ---------------------------------------------------------------- this computer as a device
@@ -183,25 +181,55 @@ async function sessionToken() {
   }
 }
 
+/**
+ * Make this computer a device of the Warren in the window, if the person chose that. A device
+ * already set up for this hub just starts; otherwise it's added for whoever signs in, as soon as
+ * they do (a hub's first account is made in the window, after the app has opened it).
+ */
 async function startDeviceIfWanted() {
-  if (config.device) await startDevice({ quiet: true });
+  if (!config.device || !hubOrigin) return;
+  const cfg = engine.readNodeConfig();
+  if (cfg.hub && cfg.token && sameOrigin(cfg.hub, hubOrigin)) return startDevice({ quiet: true });
+  waitForSignIn();
 }
 
-async function startDevice({ quiet = false } = {}) {
+let signInTimer = null;
+function waitForSignIn() {
+  clearInterval(signInTimer);
+  const origin = hubOrigin;
+  deviceError = "";
+  deviceWaiting = true;
+  refresh();
+  signInTimer = setInterval(async () => {
+    if (!config.device || hubOrigin !== origin || device.running() || deviceBy) return stopWaiting();
+    if (!(await sessionToken())) return;
+    stopWaiting();
+    startDevice({ confirmed: true });
+  }, 1500);
+}
+function stopWaiting() {
+  clearInterval(signInTimer);
+  signInTimer = null;
+  deviceWaiting = false;
+  refresh();
+}
+
+async function startDevice({ quiet = false, confirmed = false } = {}) {
   deviceError = "";
   if (!hubOrigin) return;
-  if (await engine.serviceRunning("node")) {
+  const service = await engine.serviceRunning("node");
+  let cfg = engine.readNodeConfig();
+  const sameHub = cfg.hub && cfg.token && sameOrigin(cfg.hub, hubOrigin);
+  if (service && sameHub) {
     deviceBy = "service";
     config.device = true;
     save();
     return refresh();
   }
   const found = needs();
-  if (found.problem) return fail(found.problem);
+  if (!service && found.problem) return fail(found.problem);
 
-  let cfg = engine.readNodeConfig();
-  const sameHub = cfg.hub && cfg.token && sameOrigin(cfg.hub, hubOrigin);
-  if (cfg.hub && cfg.token && !sameHub) {
+  if (cfg.hub && cfg.token && !sameHub && !confirmed) {
     const { response } = await dialog.showMessageBox(win, {
       type: "question",
       buttons: ["Connect to this Warren", "Cancel"],
@@ -230,9 +258,17 @@ async function startDevice({ quiet = false } = {}) {
   }
   config.device = true;
   save();
+  if (service) {
+    // `warren service install node` runs the device here: point it at this hub instead
+    await engine.restartService("node");
+    deviceBy = "service";
+    refresh();
+    if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Warren → Devices.");
+    return;
+  }
   deviceBy = "app";
-  device.start(found.node.bin, found.warrenDir, ["node", "start"]);
-  if (!quiet) notify("This computer is connected", "Agents can now run here. Choose what it does for them in Warren → Devices.");
+  device.start(found.node, found.warrenDir, ["node", "start"], found.env);
+  if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Warren → Devices.");
 
   function fail(msg) {
     deviceError = msg;
@@ -242,6 +278,7 @@ async function startDevice({ quiet = false } = {}) {
 }
 
 function stopDevice() {
+  stopWaiting();
   config.device = false;
   save();
   device.stop();
@@ -280,11 +317,11 @@ function setDeviceFlag(key, on) {
 
 function hubLine() {
   if (!config.mode) return "Not set up yet";
-  if (config.mode === "remote") return `Connected to ${hostOf(config.hubUrl)}`;
-  if (hub.state === "error") return "Hub stopped unexpectedly";
-  if (hub.state === "starting") return "Hub starting…";
-  if (hubBy === "service") return "Hub running here (as a service)";
-  return hubOrigin ? "Hub running on this computer" : "Hub not running";
+  if (config.mode === "remote") return `Joined ${hostOf(config.hubUrl)}`;
+  if (hub.state === "error") return "Server stopped unexpectedly";
+  if (hub.state === "starting" && !hubOrigin) return "Server starting…";
+  if (hubBy === "service") return "Server running here (as a service)";
+  return hubOrigin ? "Server running on this computer" : "Server not running";
 }
 
 function deviceLine() {
@@ -292,6 +329,7 @@ function deviceLine() {
   if (device.state === "starting" && device.running()) return "This computer: connected";
   if (device.state === "error") return "This computer: stopped unexpectedly";
   if (deviceError) return `This computer: ${deviceError}`;
+  if (deviceWaiting) return "This computer: becomes a device when you sign in";
   return "This computer: not a device";
 }
 
@@ -303,6 +341,19 @@ const hostOf = (u) => {
   }
 };
 
+/** Where other computers join a server running here: copy it from the menu to send to them. */
+function serverAddressItems() {
+  if (config.mode !== "local" || !hubOrigin) return [];
+  const addrs = engine.lanAddresses(PORT);
+  if (!addrs.length) return [];
+  return [
+    {
+      label: "Copy Server Address",
+      submenu: addrs.map((a) => ({ label: a.replace(/^http:\/\//, ""), click: () => (clipboard.writeText(a), notify("Server address copied", `Others join with ${a} in their Warren app.`)) })),
+    },
+  ];
+}
+
 function trayMenu() {
   const n = engine.readNodeConfig();
   const isDevice = deviceBy === "service" || device.running();
@@ -311,15 +362,16 @@ function trayMenu() {
     { label: deviceLine(), enabled: false },
     { type: "separator" },
     { label: "Open Warren", click: () => showWindow() },
+    ...serverAddressItems(),
     buddy.menu(),
     { type: "separator" },
-    isDevice
-      ? { label: "Disconnect This Computer", enabled: deviceBy !== "service", click: () => stopDevice() }
+    isDevice || deviceWaiting
+      ? { label: deviceWaiting ? "Don't Make This Computer a Device" : "Disconnect This Computer", enabled: deviceBy !== "service", click: () => stopDevice() }
       : { label: "Connect This Computer for Agents…", enabled: !!hubOrigin, click: () => startDevice() },
     { label: "Let Me Use This Screen from Warren", type: "checkbox", visible: isDevice, checked: !!n.shareScreen && !n.noScreen, click: (i) => setDeviceFlag("shareScreen", i.checked) },
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
-    { label: "Switch Warren…", click: () => showSetup({ step: "choose" }) },
+    { label: "Create or Join Another Server…", click: () => showSetup() },
     { label: "Show Logs", click: () => shell.openPath(logDir) },
     { type: "separator" },
     { label: "Quit Warren", accelerator: "CmdOrCtrl+Q", click: () => app.quit() },
@@ -338,7 +390,7 @@ function appMenu() {
     ...(mac
       ? [{ label: "Warren", submenu: [{ role: "about" }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
       : []),
-    { label: "File", submenu: [{ label: "Switch Warren…", click: () => showSetup({ step: "choose" }) }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
+    { label: "File", submenu: [{ label: "Create or Join Another Server…", click: () => showSetup() }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
     { role: "editMenu" },
     {
       label: "View",
@@ -387,43 +439,44 @@ const fromSetup = (e) => (e.senderFrame?.url ?? "").startsWith("file:");
 const setup = (name, fn) => ipcMain.handle(name, (e, ...args) => (fromSetup(e) ? fn(...args) : null));
 
 setup("setup:check", () => {
-  const node = engine.findNode();
-  const warrenDir = engine.findWarren(config.warrenDir);
-  return { node: node?.version ?? null, warrenDir, platform: process.platform, hubUrl: config.hubUrl ?? "", mode: config.mode ?? null };
+  const found = engine.runtime(config.warrenDir);
+  return { problem: found.problem ?? null, platform: process.platform, hubUrl: config.hubUrl ?? "", mode: config.mode ?? null, device: config.device ?? true, deviceName: deviceName() };
 });
 
-setup("setup:choose-folder", async () => {
-  const r = await dialog.showOpenDialog(win, { title: "Where is Warren?", properties: ["openDirectory"], message: "Choose the folder you cloned Warren into" });
-  if (r.canceled || !r.filePaths[0]) return { ok: false };
-  if (!engine.isWarren(r.filePaths[0])) return { ok: false, error: "That folder doesn't look like Warren (no bin/warren.mjs)." };
-  config.warrenDir = r.filePaths[0];
-  save();
-  return { ok: true, warrenDir: config.warrenDir };
-});
-
-setup("setup:local", async () => {
-  config.mode = "local";
-  save();
-  connect();
-});
-
-setup("setup:remote", async (url) => {
-  let u;
-  try {
-    u = new URL(/^https?:\/\//.test(url) ? url : `https://${url}`);
-  } catch {
-    return { ok: false, error: "That isn't a web address." };
-  }
-  if (!(await engine.hubUp(u.origin))) return { ok: false, error: `No Warren answered at ${u.origin}.` };
-  config.mode = "remote";
-  config.hubUrl = u.origin;
-  save();
+/** Create: run a server on this computer, then open it (the window makes the first account). */
+setup("setup:create", async ({ device: asDevice = true } = {}) => {
+  const found = needs();
+  if (found.problem) return { ok: false, error: found.problem };
+  switchTo({ mode: "local", hubUrl: undefined, device: !!asDevice });
   connect();
   return { ok: true };
 });
 
+/** Test a server address without joining it. */
+setup("setup:test", (url) => engine.testHub(url));
+
+/** Join: test the address once more, then open it; this computer becomes a device when you sign in. */
+setup("setup:join", async (url, { device: asDevice = true } = {}) => {
+  const test = await engine.testHub(url);
+  if (!test.ok) return test;
+  switchTo({ mode: "remote", hubUrl: test.url, device: !!asDevice });
+  connect();
+  return test;
+});
+
+/** Leave the current server for another: stop what this app runs for it first. */
+function switchTo(next) {
+  stopWaiting();
+  if (config.mode === "local" && next.mode !== "local") hub.stop();
+  if (deviceBy === "app") device.stop();
+  deviceBy = "";
+  deviceError = "";
+  hubOrigin = null;
+  Object.assign(config, next);
+  save();
+}
+
 setup("setup:retry", () => connect());
-setup("setup:install", () => shell.openExternal("https://github.com/eireijie/warren#install"));
 
 ipcMain.on("badge", (_e, n) => {
   const count = Math.max(0, Math.floor(Number(n) || 0));

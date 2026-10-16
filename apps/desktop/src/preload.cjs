@@ -29,9 +29,8 @@ contextBridge.exposeInMainWorld("warrenDesktop", {
 if (location.protocol === "file:")
   contextBridge.exposeInMainWorld("warrenSetup", {
     check: () => ipcRenderer.invoke("setup:check"),
-    chooseFolder: () => ipcRenderer.invoke("setup:choose-folder"),
-    local: () => ipcRenderer.invoke("setup:local"),
-    remote: (url) => ipcRenderer.invoke("setup:remote", url),
+    create: (opts) => ipcRenderer.invoke("setup:create", opts),
+    test: (url) => ipcRenderer.invoke("setup:test", url),
+    join: (url, opts) => ipcRenderer.invoke("setup:join", url, opts),
     retry: () => ipcRenderer.invoke("setup:retry"),
-    install: () => ipcRenderer.invoke("setup:install"),
   });

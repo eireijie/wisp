@@ -8,10 +8,11 @@
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --dir",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "bundle": "node scripts/bundle-warren.mjs",
+    "dist": "npm run bundle && electron-builder --dir",
+    "dist:mac": "npm run bundle && electron-builder --mac",
+    "dist:win": "npm run bundle && electron-builder --win",
+    "dist:linux": "npm run bundle && electron-builder --linux"
   },
   "build": {
     "appId": "ai.warren.desktop",
@@ -50,7 +51,8 @@
         "deb"
       ],
       "category": "Office"
-    }
+    },
+    "afterPack": "scripts/after-pack.cjs"
   },
   "devDependencies": {
     "electron": "44.7.2",

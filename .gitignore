@@ -7,3 +7,4 @@ data
 .claude/
 apps/ios/**/xcuserdata/
 apps/ios/build/
+apps/desktop/build/warren-runtime/
