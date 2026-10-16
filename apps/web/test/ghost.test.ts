@@ -89,13 +89,16 @@ describe("soft ghost details", () => {
     expect(render(22)).not.toContain('opacity="0.18"');
     expect(render(40, "asleep")).not.toContain('opacity="0.18"');
   });
-  it("keeps the laptop hands and sign hand clear and raises both arms to cheer", () => {
+  it("keeps the laptop hands clear, holds the sign up with the right hand and raises both arms to cheer", () => {
     expect(render(40)).toContain("ghost-arm-right");
     expect(render(40, "working")).not.toContain("ghost-arm-right");
     expect(render(40, "working")).not.toContain("ghost-arm-left");
     expect(render(40, "waiting")).toContain("ghost-arm-left");
-    expect(render(40, "waiting")).not.toContain("ghost-arm-right");
-    expect(render(40, "done").match(/ghost-arm-cheer/g)).toHaveLength(2);
+    expect(render(40, "waiting")).toContain("ghost-arm-right ghost-arm-raise");
+    // each arm is drawn twice (its body-colored fill, then its outline outside the body)
+    const done = render(40, "done");
+    expect(done.match(/ghost-arm-left ghost-arm-(cheer|up)/g)).toHaveLength(2);
+    expect(done.match(/ghost-arm-right ghost-arm-(cheer|up)/g)).toHaveLength(2);
     expect(render(22)).not.toContain("ghost-arm-right");
   });
 });
