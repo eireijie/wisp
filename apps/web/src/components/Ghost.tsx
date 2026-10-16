@@ -158,26 +158,19 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
       mood === "waiting" && side === 1 && "ghost-arm-raise",
       animated && mood === "awake" && side === 1 && "ghost-arm-hi",
     );
-  const armLayer = (outline: boolean) =>
-    details && mood !== "working"
-      ? ([-1, 1] as const).map((side) => (
-          <g key={side} className={mood === "waiting" && side === 1 && animated ? "ghost-raise" : undefined}>
-            <g transform={`translate(${shoulder(side).x} ${shoulder(side).y})`}>
-              <g className={armClass(side)}>
-                <g transform={`scale(${side} 1) rotate(28)`}>{outline ? (
-                    <path d={ARM} fill="none" stroke="black" strokeOpacity="0.12" strokeWidth="1.4" strokeLinejoin="round" />
-                  ) : (
-                    <>
-                      <path d={ARM} fill={`url(#a${uid})`} />
-                      {/* a touch of the body's glow, so it doesn't look darker than where it comes from */}
-                      <path d={ARM} fill="white" fillOpacity={asleep ? 0.04 : 0.1} />
-                    </>
-                  )}</g>
-              </g>
+  const hands = details && mood !== "working";
+  const arms = () =>
+    ([-1, 1] as const).map((side) => (
+      <g key={side} className={mood === "waiting" && side === 1 && animated ? "ghost-raise" : undefined}>
+        <g transform={`translate(${shoulder(side).x} ${shoulder(side).y})`}>
+          <g className={armClass(side)}>
+            <g transform={`scale(${side} 1) rotate(28)`}>
+              <path d={ARM} fill={`url(#a${uid})`} />
             </g>
           </g>
-        ))
-      : null;
+        </g>
+      </g>
+    ));
   // the raised right hand (rotated 28° − 85° from pointing out) holds the sign's pole
   const signAt = { x: shoulder(1).x + 12 * Math.cos((-57 * Math.PI) / 180), y: shoulder(1).y + 12 * Math.sin((-57 * Math.PI) / 180) };
   const ripple = rippling ? <animate attributeName="d" dur={mood === "thinking" ? "1.4s" : "2.6s"} repeatCount="indefinite" values={`${shape.body[0]};${shape.body[1]};${shape.body[0]}`} calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1" /> : null;
@@ -226,11 +219,23 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
             <stop offset="0.65" stopColor="white" stopOpacity="0.06" />
             <stop offset="1" stopColor="white" stopOpacity="0" />
           </radialGradient>
-          {/* everything but the body: arm outlines only show where the arm leaves it */}
-          <mask id={`m${uid}`} maskUnits="userSpaceOnUse" x="-60" y="-80" width="240" height="260">
-            <rect x="-60" y="-80" width="240" height="260" fill="white" />
-            <path d={shape.body[0]} fill="black" />
-          </mask>
+          {/* one soft shape from the body and hands: blurred together and cut sharp again, so the shoulders
+              flow into the arms; then the shading at the edge, all the way around */}
+          <filter id={`g${uid}`} filterUnits="userSpaceOnUse" x="-40" y="-60" width="200" height="200" colorInterpolationFilters="sRGB">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="blur" />
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo" />
+            <feComposite in="SourceGraphic" in2="goo" operator="atop" result="shape" />
+            <feMorphology in="goo" operator="erode" radius="3" result="inner" />
+            <feComposite in="goo" in2="inner" operator="out" result="ring" />
+            <feGaussianBlur in="ring" stdDeviation="1.4" result="soft" />
+            <feFlood floodColor="black" floodOpacity="0.13" />
+            <feComposite in2="soft" operator="in" />
+            <feComposite in2="goo" operator="in" result="rim" />
+            <feMerge>
+              <feMergeNode in="shape" />
+              <feMergeNode in="rim" />
+            </feMerge>
+          </filter>
           <clipPath id={`c${uid}`}>
             <path d={shape.body[0]}>{ripple}</path>
           </clipPath>
@@ -244,18 +249,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
               <g key={poke?.id ?? "rest"} className={animated && poke ? poke.spin ? "ghost-poke-spin" : "ghost-poke" : undefined}>
                 <g className={cx(touchable && !poke && mood === "awake" && activity === "active" && "ghost-greeting", mood === "listening" && "ghost-listening")}>
                   <g className={cx(motionClass, animated && mood === "waiting" && "ghost-waiting", animated && mood === "error" && "ghost-error")}>
-                    <path d={shape.body[0]} fill={`url(#b${uid})`}>
-                      {ripple}
-                    </path>
-                    <path d={shape.body[0]} fill={`url(#l${uid})`}>
-                      {ripple}
-                    </path>
-                    {/* a soft rim just inside the edge, so the body reads as rounded */}
-                    <path d={shape.body[0]} fill="none" stroke="black" strokeOpacity="0.1" strokeWidth="7" clipPath={`url(#c${uid})`}>
-                      {ripple}
-                    </path>
-
-                    {/* the hand holding up the sign grips its pole, so the pole goes first */}
+                    {/* the sign goes behind, so the hand that holds it up grips its pole */}
                     {mood === "waiting" && details && (
                       <g className={animated ? "ghost-raise" : undefined}>
                         <g transform={`translate(${signAt.x} ${signAt.y})`}>
@@ -268,9 +262,23 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                         </g>
                       </g>
                     )}
-                    {/* arms grow out of the sides in the body's own colors; their outline shows only outside it, so there's no seam */}
-                    {armLayer(false)}
-                    <g mask={`url(#m${uid})`}>{armLayer(true)}</g>
+                    {/* the body and its hands are one shape: drawn together, melted into each other at the
+                        shoulders, with the rim and glow running around all of it */}
+                    <g filter={hands ? `url(#g${uid})` : undefined}>
+                      <path d={shape.body[0]} fill={`url(#b${uid})`}>
+                        {ripple}
+                      </path>
+                      {hands && arms()}
+                      <path d={shape.body[0]} fill={`url(#l${uid})`}>
+                        {ripple}
+                      </path>
+                    </g>
+                    {/* small ghosts skip the filter: a plain soft rim just inside the edge */}
+                    {!hands && (
+                      <path d={shape.body[0]} fill="none" stroke="black" strokeOpacity="0.1" strokeWidth="7" clipPath={`url(#c${uid})`}>
+                        {ripple}
+                      </path>
+                    )}
                     <g ref={face}>
                       <g transform={mood === "listening" ? "translate(0 -2)" : mood === "working" && !happy ? "translate(0 3)" : undefined}>
                         {(look.cheeks || size >= 40) && !asleep && (
