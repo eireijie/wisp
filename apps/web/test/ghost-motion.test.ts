@@ -1,7 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Agent, Message } from "@warren/core";
-import type { ChannelInfo } from "../src/store.ts";
-import { boundPet, chatPet, petBounds, petLoop, petTarget, sidebarPet } from "../src/ghostRoam.ts";
 import { gazeTarget, ghostPointer, refreshGhostGaze, registerGhost } from "../src/ghostGaze.ts";
 
 const motion = vi.hoisted(() => ({ reduced: false }));
@@ -111,44 +108,5 @@ describe("shared ghost gaze", () => {
       p.flush();
       expect(a.face.setAttribute.mock.lastCall?.[1]).toBe("translate(0 0)");
     } finally { a.stop(); }
-  });
-});
-
-describe("roaming pet placement", () => {
-  it("keeps targets and resized positions inside margins, including tiny containers", () => {
-    const bounds = petBounds(240, 64, 36);
-    expect(petTarget(bounds, () => 0)).toEqual({ x: 12, y: 8 });
-    expect(petTarget(bounds, () => 1)).toEqual({ x: 188, y: 20 });
-    expect(boundPet({ x: 999, y: -50 }, bounds)).toEqual({ x: 188, y: 8 });
-    expect(petTarget(petBounds(10, 10, 44))).toEqual({ x: 0, y: 0 });
-  });
-
-  it("finishes a complete celebration loop in bounds and returns to its starting point", () => {
-    const bounds = petBounds(240, 64, 36);
-    const start = { x: bounds.maxX, y: bounds.maxY };
-    expect(petLoop(start, bounds, 0)).toEqual(start);
-    expect(petLoop(start, bounds, 1)).toEqual(start);
-    const positions = Array.from({ length: 101 }, (_, i) => petLoop(start, bounds, i / 100));
-    positions.forEach((point) => expect(point).toEqual(boundPet(point, bounds)));
-    expect(Math.min(...positions.map((p) => p.x))).toBeLessThan(start.x - 10);
-    expect(Math.min(...positions.map((p) => p.y))).toBeLessThan(start.y - 10);
-  });
-
-  const agents = [{ id: "a", status: "offline" }, { id: "b", status: "online" }] as Agent[];
-  const dm = (id: string, date: string) => ({ id, kind: "dm", name: `user:${id}`, lastReadAt: date }) as ChannelInfo;
-  it("uses the current or last-read DM, then an online agent, then the first agent", () => {
-    expect(sidebarPet(agents, [dm("a", "2026-01-01"), dm("b", "2026-02-01")], "a")?.id).toBe("a");
-    expect(sidebarPet(agents, [dm("a", "2026-01-01"), dm("b", "2026-02-01")], null)?.id).toBe("b");
-    expect(sidebarPet(agents, [], null)?.id).toBe("b");
-    expect(sidebarPet([{ ...agents[0], status: "busy" }, agents[1]], [], null)?.id).toBe("b");
-    expect(sidebarPet(agents.slice(0, 1), [], null)?.id).toBe("a");
-    expect(sidebarPet([], [], null)).toBeUndefined();
-  });
-
-  it("selects the DM agent or the last agent author, ignoring later human messages", () => {
-    const messages = [{ author: { kind: "agent", id: "a" } }, { author: { kind: "agent", id: "b" } }, { author: { kind: "user", id: "a" } }] as Message[];
-    expect(chatPet(agents, dm("a", ""), messages)?.id).toBe("a");
-    expect(chatPet(agents, { kind: "channel", name: "general" }, messages)?.id).toBe("b");
-    expect(chatPet(agents, { kind: "channel", name: "general" })).toBeUndefined();
   });
 });

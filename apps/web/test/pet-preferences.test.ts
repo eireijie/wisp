@@ -14,21 +14,6 @@ function device() {
   return { storage, media, root };
 }
 
-it("defaults roaming pets on and remembers turning them off on this device", async () => {
-  const { storage } = device();
-  const theme = await import("../src/theme.ts");
-  expect(theme.useRoamingPets()).toBe(true);
-  theme.setRoamingPets(false);
-  expect(theme.useAppearance().roamingPets).toBe(false);
-  expect(storage.get("warren.pets")).toBe("off");
-  vi.resetModules();
-  const reloaded = await import("../src/theme.ts");
-  expect(reloaded.useRoamingPets()).toBe(false);
-  reloaded.setRoamingPets(true);
-  expect(reloaded.useRoamingPets()).toBe(true);
-  expect(storage.has("warren.pets")).toBe(false);
-});
-
 it("stops JS motion for the setting, OS preference or root attribute independently", async () => {
   const { root, media } = device();
   const theme = await import("../src/theme.ts");
@@ -42,7 +27,5 @@ it("stops JS motion for the setting, OS preference or root attribute independent
   root.dataset.motion = "reduce";
   expect(theme.motionReduced()).toBe(true);
   delete root.dataset.motion;
-  expect(theme.motionReduced()).toBe(false);
-  theme.setRoamingPets(false);
   expect(theme.motionReduced()).toBe(false);
 });

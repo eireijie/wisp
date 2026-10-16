@@ -449,3 +449,14 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .wizard-in { animation: none; }
 }
+
+/* the agent's home in a DM: a pill at the top, where its ghost hops when you come say hi */
+.agent-pill:hover .ghost { animation: ghost-hop 520ms cubic-bezier(0.3, 0.7, 0.3, 1); }
+.agent-pill-arrow { display: inline-flex; max-width: 0; opacity: 0; margin-left: -6px; overflow: hidden; transition: max-width 200ms ease-out, opacity 200ms ease-out, margin 200ms ease-out; }
+.agent-pill:hover .agent-pill-arrow, .agent-pill:focus-visible .agent-pill-arrow, .agent-pill[aria-expanded="true"] .agent-pill-arrow { max-width: 18px; opacity: 1; margin-left: 0; }
+@keyframes ghost-hop { 0% { transform: translateY(0); } 35% { transform: translateY(-6px) rotate(-4deg); } 65% { transform: translateY(-2px) rotate(3deg); } 100% { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .agent-pill:hover .ghost { animation: none; }
+  .agent-pill-arrow { transition: none; }
+}
+:root[data-motion="reduce"] .agent-pill:hover .ghost { animation: none; }

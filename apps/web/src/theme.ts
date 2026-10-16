@@ -6,7 +6,6 @@ import { useSyncExternalStore } from "react";
  * - theme: the color theme; Mono (black and white) unless the person picks another
  * - text size: small, default or large (scales everything sized in rem)
  * - motion: "reduce" stills animations (ghosts, spinners stay), on top of the OS setting
- * - pets: roaming companions in the sidebar and chat, on by default
  * index.html sets these before first paint; this keeps them in sync.
  */
 export type TextSize = "small" | "default" | "large";
@@ -26,7 +25,6 @@ const MODE_KEY = "warren.mode";
 const THEME_KEY = "warren.theme";
 const TEXT_KEY = "warren.textSize";
 const MOTION_KEY = "warren.motion";
-const PETS_KEY = "warren.pets";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 
@@ -63,7 +61,6 @@ let mode = storedMode();
 let theme = storedTheme();
 let textSize: TextSize = ((v) => (v === "small" || v === "large" ? v : "default"))(read(TEXT_KEY));
 let reduceMotion = read(MOTION_KEY) === "reduce";
-let roamingPets = read(PETS_KEY) !== "off";
 const resolved = (): "light" | "dark" => (mode === "system" ? (media.matches ? "dark" : "light") : mode);
 
 function apply() {
@@ -111,16 +108,6 @@ export function setReduceMotion(on: boolean) {
   apply();
 }
 
-export function setRoamingPets(on: boolean) {
-  roamingPets = on;
-  write(PETS_KEY, on ? null : "off");
-  listeners.forEach((l) => l());
-}
-
-export function useRoamingPets() {
-  return useSyncExternalStore(subscribe, () => roamingPets, () => true);
-}
-
 const motionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
 motionMedia.addEventListener("change", () => listeners.forEach((l) => l()));
 // Also honor the root attribute when changed outside the settings page.
@@ -135,22 +122,20 @@ export function useMotionReduced() {
   return useSyncExternalStore(subscribe, motionReduced, () => true);
 }
 
-const snapshot = () => `${mode}:${resolved()}:${theme}:${textSize}:${reduceMotion ? 1 : 0}:${roamingPets ? 1 : 0}`;
+const snapshot = () => `${mode}:${resolved()}:${theme}:${textSize}:${reduceMotion ? 1 : 0}`;
 
 export function useAppearance() {
-  const [m, resolvedMode, t, size, motion, pets] = useSyncExternalStore(subscribe, snapshot).split(":") as [ModeChoice, "light" | "dark", ThemeId, TextSize, string, string];
+  const [m, resolvedMode, t, size, motion] = useSyncExternalStore(subscribe, snapshot).split(":") as [ModeChoice, "light" | "dark", ThemeId, TextSize, string];
   return {
     mode: m,
     resolvedMode,
     theme: t,
     textSize: size,
     reduceMotion: motion === "1",
-    roamingPets: pets === "1",
     setMode,
     setTheme,
     setTextSize,
     setReduceMotion,
-    setRoamingPets,
     toggleMode: () => setMode(resolvedMode === "dark" ? "light" : "dark"),
   };
 }
