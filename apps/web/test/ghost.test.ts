@@ -95,10 +95,9 @@ describe("soft ghost details", () => {
     expect(render(40, "working")).not.toContain("ghost-arm-left");
     expect(render(40, "waiting")).toContain("ghost-arm-left");
     expect(render(40, "waiting")).toContain("ghost-arm-right ghost-arm-raise");
-    // each arm is drawn twice (its body-colored fill, then its outline outside the body)
     const done = render(40, "done");
-    expect(done.match(/ghost-arm-left ghost-arm-(cheer|up)/g)).toHaveLength(2);
-    expect(done.match(/ghost-arm-right ghost-arm-(cheer|up)/g)).toHaveLength(2);
+    expect(done.match(/ghost-arm-left ghost-arm-(cheer|up)/g)).toHaveLength(1);
+    expect(done.match(/ghost-arm-right ghost-arm-(cheer|up)/g)).toHaveLength(1);
     expect(render(22)).not.toContain("ghost-arm-right");
   });
 });
