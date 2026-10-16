@@ -26,7 +26,12 @@ interface ShapeDef {
  * An arm, pointing right from the shoulder at 0,0: a soft taper into a rounded mitten. The
  * shoulder sits inside the body, which is drawn over it, so the arm grows out of the side.
  */
-const ARM = "M-7 -10 C1 -10 8 -7.5 13.5 -4 C18.5 -0.8 18.2 4.6 14 5.6 C9 6.8 1.5 7.5 -7 9 Z";
+const ARM = "M-8 -6.5 C-1 -7 5.5 -6 10 -3.8 C13.8 -2 13.6 3.3 10.2 4.1 C6 5.1 -1 5.8 -8 6.2 C-10 3 -10 -3.4 -8 -6.5 Z";
+
+/** Sparkles all around a ghost that just finished something: x, y and size, in its own units. */
+const SPARKLES: [number, number, number][] = [
+  [18, 30, 5], [100, 22, 6], [60, -4, 4.5], [8, 66, 4], [112, 60, 4.5], [32, 8, 3.5], [88, 2, 3.5], [104, 92, 3.5], [14, 96, 3],
+];
 
 const swap = (d: string, a: string, b: string) => d.replaceAll(a, "§").replaceAll(b, a).replaceAll("§", b);
 
@@ -142,6 +147,39 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
   const details = size >= 26; // drop tiny decorations at small sizes
   const grounded = size >= 28;
   const { x: [ex1, ex2], y: ey } = shape.eyes;
+  // arms: from the shoulders, just inside the body's sides
+  // halfway between the mouth and the neck, where a ghost would have shoulders
+  const shoulder = (side: -1 | 1) => ({ x: 60 + side * (shape.neck.half - 2.5), y: Math.round((shape.mouthY + shape.neck.y) / 2) });
+  const armClass = (side: -1 | 1) =>
+    cx(
+      "ghost-arm",
+      side === 1 ? "ghost-arm-right" : "ghost-arm-left",
+      mood === "done" && (animated ? "ghost-arm-cheer" : "ghost-arm-up"),
+      mood === "waiting" && side === 1 && "ghost-arm-raise",
+      animated && mood === "awake" && side === 1 && "ghost-arm-hi",
+    );
+  const armLayer = (outline: boolean) =>
+    details && mood !== "working"
+      ? ([-1, 1] as const).map((side) => (
+          <g key={side} className={mood === "waiting" && side === 1 && animated ? "ghost-raise" : undefined}>
+            <g transform={`translate(${shoulder(side).x} ${shoulder(side).y})`}>
+              <g className={armClass(side)}>
+                <g transform={`scale(${side} 1) rotate(28)`}>{outline ? (
+                    <path d={ARM} fill="none" stroke="black" strokeOpacity="0.12" strokeWidth="1.4" strokeLinejoin="round" />
+                  ) : (
+                    <>
+                      <path d={ARM} fill={`url(#a${uid})`} />
+                      {/* a touch of the body's glow, so it doesn't look darker than where it comes from */}
+                      <path d={ARM} fill="white" fillOpacity={asleep ? 0.04 : 0.1} />
+                    </>
+                  )}</g>
+              </g>
+            </g>
+          </g>
+        ))
+      : null;
+  // the raised right hand (rotated 28° − 85° from pointing out) holds the sign's pole
+  const signAt = { x: shoulder(1).x + 12 * Math.cos((-57 * Math.PI) / 180), y: shoulder(1).y + 12 * Math.sin((-57 * Math.PI) / 180) };
   const ripple = rippling ? <animate attributeName="d" dur={mood === "thinking" ? "1.4s" : "2.6s"} repeatCount="indefinite" values={`${shape.body[0]};${shape.body[1]};${shape.body[0]}`} calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1" /> : null;
 
   return (
@@ -172,7 +210,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
               so they read as part of it, not stuck on */}
           {(
             [
-              ["a", shape.neck.y - 2],
+              ["a", Math.round((shape.mouthY + shape.neck.y) / 2)],
               ["t", shape.neck.y + 6],
               ["w", shape.neck.y],
             ] as const
@@ -188,6 +226,11 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
             <stop offset="0.65" stopColor="white" stopOpacity="0.06" />
             <stop offset="1" stopColor="white" stopOpacity="0" />
           </radialGradient>
+          {/* everything but the body: arm outlines only show where the arm leaves it */}
+          <mask id={`m${uid}`} maskUnits="userSpaceOnUse" x="-60" y="-80" width="240" height="260">
+            <rect x="-60" y="-80" width="240" height="260" fill="white" />
+            <path d={shape.body[0]} fill="black" />
+          </mask>
           <clipPath id={`c${uid}`}>
             <path d={shape.body[0]}>{ripple}</path>
           </clipPath>
@@ -201,18 +244,6 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
               <g key={poke?.id ?? "rest"} className={animated && poke ? poke.spin ? "ghost-poke-spin" : "ghost-poke" : undefined}>
                 <g className={cx(touchable && !poke && mood === "awake" && activity === "active" && "ghost-greeting", mood === "listening" && "ghost-listening")}>
                   <g className={cx(motionClass, animated && mood === "waiting" && "ghost-waiting", animated && mood === "error" && "ghost-error")}>
-                    {/* arms grow out of the sides: drawn behind the body in its own colors, so there's no seam */}
-                    {details && mood !== "working" && [-1, 1].map((side) => mood === "waiting" && side === 1 ? null : (
-                      <g key={side} transform={`translate(${60 + side * (shape.neck.half - 4)} ${shape.neck.y - 2})`}>
-                        <g className={cx("ghost-arm", side === 1 ? "ghost-arm-right" : "ghost-arm-left", mood === "done" && "ghost-arm-cheer")}>
-                          <g transform={`scale(${side} 1) rotate(28)`}>
-                            <path d={ARM} fill={`url(#a${uid})`} />
-                            {/* the body's edge is shaded; so is the arm, so the two read as one surface */}
-                            <path d={ARM} fill="black" fillOpacity="0.09" stroke="black" strokeOpacity="0.12" strokeWidth="1.4" strokeLinejoin="round" />
-                          </g>
-                        </g>
-                      </g>
-                    ))}
                     <path d={shape.body[0]} fill={`url(#b${uid})`}>
                       {ripple}
                     </path>
@@ -224,6 +255,22 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                       {ripple}
                     </path>
 
+                    {/* the hand holding up the sign grips its pole, so the pole goes first */}
+                    {mood === "waiting" && details && (
+                      <g className={animated ? "ghost-raise" : undefined}>
+                        <g transform={`translate(${signAt.x} ${signAt.y})`}>
+                          <g className={animated ? "ghost-sign" : undefined}>
+                            <path d="M0 5 L1.5 -24" stroke="#817785" strokeWidth="3" strokeLinecap="round" />
+                            <rect x="-8.5" y="-46" width="20" height="23" rx="4" fill={MARK} />
+                            <path d="M-1.5 -39 C-1.5 -44 6.5 -44 5.5 -39 Q5.5 -37 1.5 -35 V-33" stroke={LAPTOP.shell} strokeWidth="2.4" fill="none" strokeLinecap="round" />
+                            <circle cx="1.5" cy="-29" r="1.3" fill={LAPTOP.shell} />
+                          </g>
+                        </g>
+                      </g>
+                    )}
+                    {/* arms grow out of the sides in the body's own colors; their outline shows only outside it, so there's no seam */}
+                    {armLayer(false)}
+                    <g mask={`url(#m${uid})`}>{armLayer(true)}</g>
                     <g ref={face}>
                       <g transform={mood === "listening" ? "translate(0 -2)" : mood === "working" && !happy ? "translate(0 3)" : undefined}>
                         {(look.cheeks || size >= 40) && !asleep && (
@@ -259,17 +306,6 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                         <ellipse cx={Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={`url(#t${uid})`} className={animated ? "ghost-type" : undefined} style={{ animationDelay: "-0.3s" }} />
                       </g>
                     )}
-                    {mood === "waiting" && details && (
-                      <g transform={`translate(${60 + shape.neck.half - 1} ${shape.neck.y})`}>
-                        <g className={animated ? "ghost-sign" : undefined}>
-                          <path d="M0 0 L16 -27" stroke="#817785" strokeWidth="3" strokeLinecap="round" />
-                          <rect x="6" y="-49" width="20" height="23" rx="4" fill={MARK} />
-                          <path d="M13 -42 C13 -47 21 -47 20 -42 Q20 -40 16 -38 V-36" stroke={LAPTOP.shell} strokeWidth="2.4" fill="none" strokeLinecap="round" />
-                          <circle cx="16" cy="-32" r="1.3" fill={LAPTOP.shell} />
-                        </g>
-                        <circle r="4.5" fill={`url(#w${uid})`} />
-                      </g>
-                    )}
                   </g>
                 </g>
               </g>
@@ -281,9 +317,9 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
         )}
         {mood === "done" && details && (
           <g fill={MARK}>
-            <path d={`M92 ${shape.top} l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2 Z`} className={animated ? "ghost-sparkles" : undefined} />
-            <path d={`M25 ${shape.top + 15} l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5 Z`} className={animated ? "ghost-sparkles" : undefined} style={{ animationDelay: "0.12s" }} />
-            <path d={`M49 ${shape.top - 12} l1.5 4.5 4.5 1.5 -4.5 1.5 -1.5 4.5 -1.5 -4.5 -4.5 -1.5 4.5 -1.5 Z`} className={animated ? "ghost-sparkles" : undefined} style={{ animationDelay: "0.24s" }} />
+            {SPARKLES.map(([x, y, r], i) => (
+              <path key={i} d={`M${x} ${y - r} L${x + r * 0.3} ${y - r * 0.3} L${x + r} ${y} L${x + r * 0.3} ${y + r * 0.3} L${x} ${y + r} L${x - r * 0.3} ${y + r * 0.3} L${x - r} ${y} L${x - r * 0.3} ${y - r * 0.3} Z`} className={animated ? "ghost-twinkle" : undefined} style={{ animationDelay: `${(i * 0.17) % 0.9}s` }} />
+            ))}
           </g>
         )}
 
