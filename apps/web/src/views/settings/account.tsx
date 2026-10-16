@@ -243,7 +243,7 @@ export function NotificationsPage() {
 // --- Appearance -------------------------------------------------------------------------------
 
 export function AppearancePage() {
-  const { mode, resolvedMode, theme, textSize, reduceMotion, setMode, setTheme, setTextSize, setReduceMotion } = useAppearance();
+  const { mode, resolvedMode, theme, textSize, reduceMotion, roamingPets, setMode, setTheme, setTextSize, setReduceMotion, setRoamingPets } = useAppearance();
   const modes: [ModeChoice, ReactNode][] = [
     ["system", <><SunMoon size={14} /> System</>],
     ["light", <><Sun size={14} /> Light</>],
@@ -305,6 +305,9 @@ export function AppearancePage() {
           </Row>
           <Row label="Reduce motion" hint="Keeps ghosts and transitions still. Your system's reduce-motion setting does this too.">
             <Toggle label="Reduce motion" on={reduceMotion} onChange={setReduceMotion} />
+          </Row>
+          <Row label="Roaming pets" hint="Let your agents wander around the sidebar and chat.">
+            <Toggle label="Roaming pets" on={roamingPets} onChange={setRoamingPets} />
           </Row>
         </Card>
       </Section>

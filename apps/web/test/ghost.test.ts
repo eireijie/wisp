@@ -77,3 +77,25 @@ describe("still ghosts", () => {
     expect(html).not.toMatch(/ghost-(float|bounce|spin|type|key|interactive)\b/);
   });
 });
+
+describe("soft ghost details", () => {
+  const look = { ...defaultAppearance("ghost"), eyes: "dots" as const, cheeks: false, hat: "none" as const };
+  const render = (size: number, mood: Parameters<typeof Ghost>[0]["mood"] = "awake") => renderToStaticMarkup(createElement(Ghost, { look, size, mood }));
+  it("gives dots glossy round eyes without cluttering tiny avatars", () => {
+    expect(render(40)).toContain('rx="3.9" ry="4.9"');
+    expect(render(40).match(/data-ghost-shine/g)).toHaveLength(2);
+    expect(render(22)).not.toContain("data-ghost-shine");
+    expect(render(40)).toContain('opacity="0.18"');
+    expect(render(22)).not.toContain('opacity="0.18"');
+    expect(render(40, "asleep")).not.toContain('opacity="0.18"');
+  });
+  it("keeps the laptop hands and sign hand clear and raises both arms to cheer", () => {
+    expect(render(40)).toContain("ghost-arm-right");
+    expect(render(40, "working")).not.toContain("ghost-arm-right");
+    expect(render(40, "working")).not.toContain("ghost-arm-left");
+    expect(render(40, "waiting")).toContain("ghost-arm-left");
+    expect(render(40, "waiting")).not.toContain("ghost-arm-right");
+    expect(render(40, "done").match(/ghost-arm-cheer/g)).toHaveLength(2);
+    expect(render(22)).not.toContain("ghost-arm-right");
+  });
+});

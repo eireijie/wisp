@@ -308,7 +308,15 @@ body {
 .ghost-alert { transform: scaleY(1); transition: transform 150ms ease-out; }
 @media (hover: hover) and (pointer: fine) {
   .ghost-interactive:hover .ghost-greeting { animation: ghost-wave 900ms ease-in-out 1.5s; }
+  .ghost-interactive:hover .ghost-squish { animation: ghost-squish 260ms ease-out; }
+  .ghost-interactive:hover .ghost-greeting .ghost-arm-right { animation: ghost-arm-wave 650ms ease-in-out infinite; }
 }
+.ghost-squish { transform-origin: 60px 100px; }
+.ghost-arm { transform-box: view-box !important; transform-origin: 0 0; }
+.ghost-arm-left.ghost-arm-cheer { transform: translateY(-5px) rotate(50deg); }
+.ghost-arm-right.ghost-arm-cheer { transform: translateY(-5px) rotate(-50deg); }
+@keyframes ghost-squish { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.06, 0.94); } 75% { transform: scale(0.98, 1.03); } }
+@keyframes ghost-arm-wave { 0%, 100% { transform: translateY(-3px) rotate(-35deg); } 50% { transform: translateY(-6px) rotate(-65deg); } }
 @keyframes ghost-poke {
   0%, 100% { transform: scale(1); }
   18% { transform: translateY(3px) scale(1.12, 0.84); }
@@ -413,7 +421,6 @@ body {
 .agent-harness-card:focus-visible, .agent-external-choice:focus-visible, .agent-invite-link:focus-visible, .agent-discover-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .agent-external-choice { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
 .agent-external-choice:hover:not(:disabled) { background: var(--hover); border-color: var(--input); }
-.ghost-face-tracking { transition: transform 150ms ease-out; }
 @media (max-height: 800px) {
   .agent-identity-row { margin-top: 32px; }
   .agent-identity-hint { margin-top: 32px; }
@@ -433,7 +440,7 @@ body {
   .agent-wizard-footer { padding: 20px 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ghost-face-tracking, .agent-harness-card { transition: none; }
+  .agent-harness-card { transition: none; }
 }
 
 /* setup: each screen eases in where the last one stood */

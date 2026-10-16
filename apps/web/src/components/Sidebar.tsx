@@ -6,9 +6,12 @@ import { useStore, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { logout } from "../App.tsx";
 import { isDismissed, useOnboarding } from "../onboarding.ts";
-import { useAppearance } from "../theme.ts";
+import { useAppearance, useRoamingPets } from "../theme.ts";
 import { ChannelBrowser, ChannelMenu, SectionDialog } from "./Channels.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
+import { RoamingPet } from "./RoamingPet.tsx";
+import { sidebarPet } from "../ghostRoam.ts";
+import { openDm } from "../openDm.ts";
 
 const COLLAPSE_KEY = "warren.sidebar.collapsed";
 const loadCollapsed = (): Record<string, boolean> => {
@@ -46,6 +49,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const isGuest = me.role === "guest";
 
   const active = route.view === "chat" ? route.channelId : null;
+  const pets = useRoamingPets();
+  const pet = sidebarPet(agents, channels, active);
   const joined = channels.filter((c) => c.kind === "channel" && c.joined);
   const dmFor = (agentId: string) => channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agentId}`));
   // what agents are waiting on a person for: approvals, and help on their computers
@@ -60,14 +65,6 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
     } catch {}
   };
-
-  async function openDm(agentId: string) {
-    const existing = dmFor(agentId);
-    if (existing) return go({ view: "chat", channelId: existing.id, threadId: null });
-    const ch = await api<{ id: string }>("POST", `/api/dm/${agentId}`);
-    await useStore.getState().refreshChannels();
-    go({ view: "chat", channelId: ch.id, threadId: null });
-  }
 
   // the "…" menu (rename, members, leave) sits beside the link, not inside it, and shows on hover
   const channelRow = (c: ChannelInfo) => (
@@ -276,6 +273,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         )}
 
       </div>
+
+      {!page && pets && pet && <div className="relative h-16 shrink-0"><RoamingPet agent={pet} size={36} /></div>}
 
       {!page && (
         <div className="shrink-0 px-2 py-2 flex items-center gap-1 safe-bottom">

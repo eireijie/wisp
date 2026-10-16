@@ -10,6 +10,9 @@ import { EffortSlider, effortName, prettyModel } from "../components/EffortSlide
 import { DiscussionCard, StartDiscussion } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { RoamingPet } from "../components/RoamingPet.tsx";
+import { chatPet } from "../ghostRoam.ts";
+import { useRoamingPets } from "../theme.ts";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
 
@@ -446,6 +449,9 @@ function ContextRing({ ctx }: { ctx: AgentContext }) {
 
 function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: string | null }) {
   const messages = useStore((s) => s.messages[channel.id]);
+  const agents = useStore((s) => s.agents);
+  const pets = useRoamingPets();
+  const pet = pets ? chatPet(agents, channel, messages) : undefined;
   const replyCounts = useStore((s) => s.replyCounts);
   const live = useStore((s) => s.live);
   const me = useStore((s) => s.me);
@@ -491,7 +497,7 @@ function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: st
     <div className="relative flex-1 min-h-0">
       <div
         ref={ref}
-        className="h-full overflow-y-auto pt-4 pb-2"
+        className={cx("h-full overflow-y-auto pt-4 pb-2", !!pet && "pr-[clamp(76px,24%,144px)]")}
         onScroll={(e) => {
           const el = e.currentTarget;
           const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -514,6 +520,7 @@ function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: st
           <StreamingItem key={r.runId} run={r} />
         ))}
       </div>
+      {pet && <RoamingPet key={channel.id} agent={pet} size={44} className="w-[clamp(76px,24%,144px)]" />}
       {!atBottom && (
         <button
           onClick={() => {
