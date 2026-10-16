@@ -32,6 +32,6 @@ npm run dist:win -w @warren/desktop
 npm run dist:linux -w @warren/desktop
 ```
 
-Each build first runs `npm run bundle -w @warren/desktop`, which builds the web app and stages Warren with its production dependencies in `build/warren-runtime` (better-sqlite3 13, whose Node-API prebuilds load in Electron). Builds are unsigned unless electron-builder finds a signing identity (`CSC_LINK` / `CSC_KEY_PASSWORD`, and `APPLE_ID` etc. for notarizing). Unsigned Mac builds open with right-click → Open the first time.
+Each build first runs `npm run bundle -w @warren/desktop`, which builds the web app and stages Warren with its production dependencies in `build/warren-runtime` (better-sqlite3 13, whose Node-API prebuilds load in Electron). Builds are signed ad hoc (scripts/after-sign.cjs) unless electron-builder finds a signing identity (`CSC_LINK` / `CSC_KEY_PASSWORD`, and `APPLE_ID` etc. for notarizing). Unsigned Mac builds open with right-click → Open the first time.
 
 Icons are drawn from the same ghost as the web app's icon by `swift apps/ios/scripts/icons.swift`.

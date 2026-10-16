@@ -52,7 +52,8 @@
       ],
       "category": "Office"
     },
-    "afterPack": "scripts/after-pack.cjs"
+    "afterPack": "scripts/after-pack.cjs",
+    "afterSign": "scripts/after-sign.cjs"
   },
   "devDependencies": {
     "electron": "44.7.2",
