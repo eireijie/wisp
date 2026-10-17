@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2, Users } from "lucide-react";
+import { ChevronLeft, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, CopyBlock, DeviceInstall, Empty, Field, IconButton, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
+import { Toggle } from "./settings/parts.tsx";
+import { AgentAvatar, Button, CopyBlock, DeviceInstall, Empty, Field, Input, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 interface NodeInfo {
   id: string;
@@ -50,27 +51,64 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
   return n.lastSeen ? "This device was connected before but is offline now." : "This device hasn't connected yet.";
 }
 
-/** Shown on a device that is not connected: the no-Terminal way first; a command (needing a token) is for removing and re-adding. */
+/** Shown on a device that is not connected: one line, with the how-to folded away until asked for. */
 function ConnectDevice({ node: n }: { node: NodeInfo }) {
+  const [open, setOpen] = useState(false);
   const line = notConnectedLine(n);
   if (!line) return null;
   return (
-    <div className="mt-3 ml-14 rounded-lg border border-line bg-panel p-3 space-y-2 text-sm">
-      <p className="font-medium">Connect this device</p>
-      <p className="text-muted">{line}</p>
-      <p className="text-xs">
-        <b>Easiest:</b>{" "}
-        <a className="font-medium underline" href="https://github.com/eireijie/warren/releases/latest" target="_blank" rel="noopener noreferrer">
-          Download the Warren app for Mac
-        </a>
-        . Open it, choose to join a server, and enter this address:
-      </p>
-      <CopyBlock text={location.origin} />
-      {isLocalOnlyHost(location.hostname) && <p className="text-xs text-muted">This address only works on this computer. On another computer, use this computer's network address instead.</p>}
-      <details className="text-xs">
-        <summary className="cursor-pointer text-muted">Connect with a command instead</summary>
-        <p className="mt-2 text-muted">The command needs a connection code, which is shown only once when a device is added. To get a new one, remove this device and add it again.</p>
-      </details>
+    <div className="mt-3 rounded-xl bg-hover/60 px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-3">
+        <p className="flex-1 text-muted">{n.lastSeen ? "Open Warren on this computer to bring it back." : "Start Warren on this computer to connect it."}</p>
+        <button className="shrink-0 text-xs font-medium text-ink hover:underline" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Hide" : "How?"}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-2 text-xs">
+          <p>
+            <a className="font-medium underline" href="https://github.com/eireijie/warren/releases/latest" target="_blank" rel="noopener noreferrer">
+              Get the Warren app for Mac
+            </a>
+            , choose to join a server, and enter:
+          </p>
+          <CopyBlock text={location.origin} />
+          {isLocalOnlyHost(location.hostname) && <p className="text-muted">This address only works on this computer. On another computer, use this computer's network address instead.</p>}
+          <p className="text-muted">Prefer a command? It needs a connection code, shown only when a device is added, so remove this device and add it again.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The device's tile: a server that lights up and pulses while it's connected. */
+function DeviceIcon({ online }: { online: boolean }) {
+  return (
+    <div className={cx("relative size-11 shrink-0 rounded-xl grid place-items-center transition-colors", online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
+      <Server size={19} />
+      <span className="absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-full bg-panel">
+        {online && <span className="absolute size-2.5 rounded-full motion-safe:animate-ping" style={{ background: "var(--status-online)", opacity: 0.6 }} />}
+        <span className="relative size-2.5 rounded-full" style={{ background: online ? "var(--status-online)" : "var(--status-idle)" }} />
+      </span>
+    </div>
+  );
+}
+
+/** Who lives on the device, as their ghosts. */
+function DeviceAgents({ handles, online }: { handles: string[]; online: boolean }) {
+  const all = useStore((s) => s.agents);
+  if (!handles.length) return <p className="mt-3 text-xs text-faint">No agents here yet.</p>;
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {handles.map((h) => {
+        const agent = all.find((a) => a.handle === h);
+        return (
+          <span key={h} className={cx("inline-flex items-center gap-1.5 rounded-full bg-hover py-0.5 pl-0.5 pr-2.5 text-xs", !online && "opacity-60")}>
+            {agent ? <AgentAvatar agent={agent} size={22} live={online} /> : <span className="size-[22px]" />}
+            {agent?.name ?? "@" + h}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -87,6 +125,21 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
     const t = setInterval(refresh, 5000);
     return () => clearInterval(t);
   }, []);
+
+  const update = async (n: NodeInfo) => {
+    try {
+      await api("POST", `/api/nodes/${n.id}/update`);
+    } catch (e) {
+      alert((e as Error).message);
+    }
+    refresh();
+  };
+  const remove = async (n: NodeInfo) => {
+    if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
+    await api("DELETE", `/api/nodes/${n.id}`);
+    refresh();
+  };
+  const online = nodes?.filter((n) => n.online).length ?? 0;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -111,79 +164,70 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
           </Empty>
         ) : (
           <div className="max-w-3xl p-4 md:p-8 space-y-3">
-            <p className="text-sm text-muted">A device is a computer running Warren. Helpers run on it. Add one for each computer you want helpers to use.</p>
-            {nodes?.map((n) => (
-              <div key={n.id} className="rounded-xl border border-line p-4">
-                <div className="flex items-center gap-4">
-                  <div className={cx("size-10 rounded-xl grid place-items-center", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
-                    <Server size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium flex flex-wrap items-center gap-2">
-                      {n.name}
-                      <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "Online" : "Offline"}</span>
-                      {n.paused && (
-                        <Pill tone="warn">
-                          <Pause size={11} /> Paused at the device
-                        </Pill>
-                      )}
-                      <span className="text-xs font-normal text-muted">{n.mine ? "Yours" : n.ownerName ? `${n.ownerName}'s` : ""}</span>
+            {nodes && (
+              <p className="text-sm text-muted" title="A device is a computer running Warren. Agents run on it.">
+                {online} of {nodes.length} online
+              </p>
+            )}
+            {nodes?.map((n) => {
+              const busy = n.update?.state === "updating" || n.update?.state === "restarting";
+              const behind = !!(hubCommit && n.version?.commit && n.version.commit !== hubCommit);
+              const canUpdate = isOwner && n.online;
+              const menu = [
+                ...(canUpdate && !busy ? [{ label: "Update Warren", icon: <Download size={15} />, onSelect: () => update(n) }] : []),
+                ...(n.mine || isOwner ? [{ label: "Remove device", icon: <Trash2 size={15} />, danger: true, onSelect: () => remove(n) }] : []),
+              ];
+              return (
+                <div key={n.id} className="rounded-2xl border border-line bg-panel p-4 transition-shadow hover:shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <DeviceIcon online={n.online} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium truncate">{n.name}</span>
+                        {n.paused && (
+                          <Pill tone="warn">
+                            <Pause size={11} /> Paused
+                          </Pill>
+                        )}
+                        {!n.mine && n.ownerName && <span className="text-xs text-muted">{n.ownerName}'s</span>}
+                      </div>
+                      <div className="text-xs text-muted truncate" title={n.version?.commit ? `Warren ${n.version.commit}${behind ? ` (hub runs ${hubCommit})` : ""}` : undefined}>
+                        {n.online ? "Online" : `Offline · ${connectionLine(n, timeAgo)}`}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted truncate">
-                      {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No helpers yet"}
-                      {` · ${connectionLine(n, timeAgo)}`}
-                      {n.version?.commit && (
-                        <>
-                          {" · "}Warren <code>{n.version.commit}</code>
-                          {hubCommit && n.version.commit !== hubCommit && <span title={`The hub runs ${hubCommit}`}> (hub: {hubCommit})</span>}
-                        </>
-                      )}
-                    </div>
+                    {canUpdate && (busy || behind) && (
+                      <Button variant="ghost" disabled={busy} title="Get the latest Warren on this device and restart it" onClick={() => update(n)}>
+                        <Download size={15} /> {busy ? "Updating…" : "Update"}
+                      </Button>
+                    )}
+                    {menu.length > 0 && (
+                      <Menu
+                        align="right"
+                        items={menu}
+                        trigger={(open, toggle) => (
+                          <button className={cx("p-1.5 rounded-md text-muted hover:bg-hover hover:text-ink", open && "bg-hover text-ink")} aria-label={`More for ${n.name}`} onClick={toggle}>
+                            <MoreHorizontal size={18} />
+                          </button>
+                        )}
+                      />
+                    )}
                   </div>
-                  {isOwner && n.online && (
-                    <Button
-                      title="Get the latest Warren on this device and restart it"
-                      aria-label="Update"
-                      disabled={n.update?.state === "updating" || n.update?.state === "restarting"}
-                      onClick={async () => {
-                        try {
-                          await api("POST", `/api/nodes/${n.id}/update`);
-                        } catch (e) {
-                          alert((e as Error).message);
-                        }
-                        refresh();
-                      }}
-                    >
-                      <Download size={15} /> <span className="hidden sm:inline">Update</span>
-                    </Button>
-                  )}
-                  {(n.mine || isOwner) && (
-                    <IconButton
-                      icon={<Trash2 size={16} />}
-                      label="Remove device"
-                      tone="danger"
-                      onClick={async () => {
-                        if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
-                        await api("DELETE", `/api/nodes/${n.id}`);
-                        refresh();
-                      }}
-                    />
+                  <DeviceAgents handles={n.agents} online={n.online} />
+                  {(n.mine || isOwner) && <ConnectDevice node={n} />}
+                  <DeviceAccess node={n} onChange={refresh} />
+                  {n.update?.message && (
+                    <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
+                      {n.update.state !== "idle" && (
+                        <span className="mr-2 align-middle">
+                          <Pill tone={n.update.state === "failed" ? "bad" : "info"}>{n.update.state === "failed" ? "Update failed" : n.update.state === "restarting" ? "Restarting" : "Updating"}</Pill>
+                        </span>
+                      )}
+                      {n.update.message}
+                    </p>
                   )}
                 </div>
-                {(n.mine || isOwner) && <ConnectDevice node={n} />}
-                <DeviceAccess node={n} onChange={refresh} />
-                {n.update?.message && (
-                  <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
-                    {n.update.state !== "idle" && (
-                      <span className="mr-2 align-middle">
-                        <Pill tone={n.update.state === "failed" ? "bad" : "info"}>{n.update.state === "failed" ? "Update failed" : n.update.state === "restarting" ? "Restarting" : "Updating"}</Pill>
-                      </span>
-                    )}
-                    {n.update.message}
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -199,77 +243,56 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
   );
 }
 
-/** Who can use the device: its own screen (only its owner, and only once it's on at the device) and whether others can add agents. */
-const ROLES: Record<DeviceRole, string> = { vms: "runs their computers (VMs)", screen: "lends them its own screen", headless: "runs them headless" };
+/** What the device does for agents. */
+const ROLES: Record<DeviceRole, string> = { vms: "Runs agents' VMs", screen: "Lends agents its screen", headless: "Runs agents headless" };
 
-function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+/** The device's own screen in two words; the full story goes in the tooltip. */
+function screenSummary(n: NodeInfo): { short: string; long: string } {
   const screen = n.capabilities?.screen;
+  if (!screen || !n.online) return { short: n.online ? "Screen not checked" : "Screen unknown", long: screenLine(n) };
+  if (screen.ok) return { short: "Screen on", long: n.mine ? "Only you can see it, and agents only while you lend it to them (Computers)." : `It's ${n.ownerName ?? "its owner"}'s alone.` };
+  if (screen.off) return { short: "Screen off", long: n.mine ? `Agents use VMs instead. To use it yourself from Warren, run "warren node screen on" on ${n.name}.` : "Its own screen is off." };
+  return { short: "No screen", long: `Its own screen can't be used: ${screen.detail}` };
+}
+
+/** One quiet row of settings: its job, its screen, and who else can use it. Explanations live in tooltips. */
+function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+  const screen = screenSummary(n);
+  const patch = async (body: object) => {
+    await api("PATCH", `/api/nodes/${n.id}`, body).catch((err) => alert((err as Error).message));
+    onChange();
+  };
   return (
-    <div className="mt-3 pl-14 space-y-1.5 text-xs text-muted">
-      <div className="flex items-center gap-2">
-        <Bot size={13} className="shrink-0" />
-        {n.mine ? (
-          <label className="flex items-center gap-2">
-            For agents, it
-            <select
-              aria-label={`What ${n.name} does for agents`}
-              value={n.role ?? ""}
-              onChange={async (e) => {
-                await api("PATCH", `/api/nodes/${n.id}`, { role: e.target.value || null }).catch((err) => alert((err as Error).message));
-                onChange();
-              }}
-              className="h-7 rounded-md border border-line bg-panel px-1.5 text-xs text-ink"
-            >
-              {!n.role && <option value="">Not chosen yet</option>}
-              {(Object.keys(ROLES) as DeviceRole[]).map((r) => (
-                <option key={r} value={r}>
-                  {ROLES[r]}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <span>For agents, it {n.role ? ROLES[n.role] : "has no job chosen yet"}.</span>
-        )}
-      </div>
-      <div className="flex items-start gap-2">
-        <Monitor size={13} className="mt-0.5 shrink-0" />
-        <span>
-          {!screen || !n.online
-            ? screenLine(n)
-            : screen.ok
-              ? n.mine
-                ? "Its own screen is on: only you can see it, and agents only while you lend it to them (Computers)."
-                : `Its own screen is ${n.ownerName ?? "its owner"}'s alone.`
-              : screen.off
-                ? n.mine
-                  ? <>Its own screen is off. Agents use VMs instead. To use it yourself from Warren, run <code>warren node screen on</code> on {n.name}.</>
-                  : "Its own screen is off."
-                : `Its own screen can't be used: ${screen.detail}`}
-        </span>
-      </div>
+    <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
       {n.mine ? (
-        <label className="flex items-start gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={n.shared}
-            onChange={async (e) => {
-              await api("PATCH", `/api/nodes/${n.id}`, { shared: e.target.checked }).catch((err) => alert((err as Error).message));
-              onChange();
-            }}
-          />
-          <span>
-            <span className="text-ink">Let others in the workspace add agents and VMs here</span>
-            <br />
-            Leave this off for a personal computer. Agents that run directly on it then only take requests from you.
-          </span>
+        <select
+          aria-label={`What ${n.name} does for agents`}
+          value={n.role ?? ""}
+          onChange={(e) => patch({ role: e.target.value || null })}
+          className={cx("h-7 rounded-md border bg-panel px-1.5 text-xs text-ink", n.role ? "border-line" : "border-accent")}
+        >
+          {!n.role && <option value="">Choose what it does…</option>}
+          {(Object.keys(ROLES) as DeviceRole[]).map((r) => (
+            <option key={r} value={r}>
+              {ROLES[r]}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span>{n.role ? ROLES[n.role] : "No job chosen yet"}</span>
+      )}
+      <span className="inline-flex items-center gap-1.5 cursor-help" title={screen.long}>
+        <Monitor size={13} /> {screen.short}
+      </span>
+      {n.mine ? (
+        <label className="inline-flex items-center gap-2 cursor-pointer" title="Off for a personal computer: agents that run directly on it then only take requests from you.">
+          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the workspace add agents and VMs here" />
+          Shared with workspace
         </label>
       ) : (
-        <div className="flex items-start gap-2">
-          {n.shared ? <Users size={13} className="mt-0.5 shrink-0" /> : <Lock size={13} className="mt-0.5 shrink-0" />}
-          <span>{n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}</span>
-        </div>
+        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
+          {n.shared ? <Users size={13} /> : <Lock size={13} />} {n.shared ? "Shared" : "Private"}
+        </span>
       )}
     </div>
   );
