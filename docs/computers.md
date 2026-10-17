@@ -33,13 +33,15 @@ Settings in the device's `~/.warren/node.json`: `"vmEngine": "container"`, `"doc
 
 ### Agents that run inside their VM
 
-Claude Code and Codex come with the VM, so an agent using them can run entirely inside its VM: its shell, files and browser all stay there, and it can't touch the device. That's the default for a new agent with a VM on its own device, and you can switch on its **Computer** tab (**Where it runs**). Inside its VM an agent has full access (the VM is its sandbox) unless it's set to read-only, so it can install what it needs and finish the job.
+Claude Code, Codex, Hermes and Kimi CLI come with the VM, so an agent using them can run entirely inside its VM: its shell, files and browser all stay there, and it can't touch the device. That's the default for a new agent with a VM on its own device, and you can switch on its **Computer** tab (**Where it runs**). Inside its VM an agent has full access (the VM is its sandbox) unless it's set to read-only, so it can install what it needs and finish the job.
 
-Sign the harness in once per VM: on the agent's **Computer** tab press **Sign in to Claude Code** (or Codex). A terminal opens on the VM's screen and you get control to finish signing in; the browser for it opens in the VM too. Agents that share a VM share that sign-in.
+Sign the harness in once per VM: on the agent's **Computer** tab press **Sign in to Claude Code** (or Codex, Hermes, Kimi CLI). A terminal opens on the VM's screen and you get control to finish signing in; the browser for it opens in the VM too. The terminal runs the harness's own sign-in: `claude`, `codex login`, `hermes setup` (pick a provider and model, or sign in to Nous) or `kimi login`. Agents that share a VM share that sign-in.
 
 Coding tasks work the same: the agent gets its own clone of the team's repo in the VM's shared folder, and its commits come back to the device's copy for reviews and merges.
 
-Harnesses that don't come with the VM (Hermes, Gemini CLI, OpenCode…) run directly on the device, where only the device's owner can ask them for things.
+Hermes and Kimi CLI run there over [ACP](adapters.md): Warren starts `hermes acp` or `kimi acp` inside the VM with the in-VM `warren-mcp` and the VM's browser tools. Hermes is installed from Nous Research's own installer, pinned to a release, in `/opt/hermes` (its settings and sessions live in `~/.hermes`, in the VM's home volume); Kimi CLI is the `@moonshot-ai/kimi-code` npm package (settings in `~/.kimi-code`). Both are installed in the image for Intel and ARM. Bringing in an existing Hermes profile copies its soul and notes; its provider keys stay on the device, so sign Hermes in on the VM once. Agents that were set up to run on the device before keep running there until you pick **Inside its computer**.
+
+Harnesses that don't come with the VM (Gemini CLI, OpenCode…) run directly on the device, where only the device's owner can ask them for things.
 
 ### Your own screen
 

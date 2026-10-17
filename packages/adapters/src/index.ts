@@ -17,7 +17,7 @@ export { AcpConnection, acpAdapter, acpUsage, acpMcpServers, acpModels, parseAcp
 export const adapters: Record<string, HarnessAdapter> = {
   [claudeCode.id]: claudeCode,
   [codex.id]: codex,
-  ...Object.fromEntries(HARNESSES.filter((h) => h.protocol === "acp").map((h) => [h.id, acpAdapter({ id: h.id, label: h.label, binary: h.binary, args: h.acpArgs ?? [] })])),
+  ...Object.fromEntries(HARNESSES.filter((h) => h.protocol === "acp").map((h) => [h.id, acpAdapter({ id: h.id, label: h.label, binary: h.binary, args: h.acpArgs ?? [], vm: { binary: h.binary, args: h.acpArgs ?? [] } })])),
 };
 
 /** A device's own harness settings in node.json: overrides for known ones, or new ACP agents ("acp:<name>"). */
@@ -35,7 +35,7 @@ export function deviceAdapters(declared: Record<string, DeviceHarness> = {}): Re
     if (known?.protocol === "native") continue; // their CLIs aren't ACP; configure them with harnessOptions
     if (!known && !id.startsWith("acp:")) continue;
     if (!h.command && !known) continue;
-    out[id] = acpAdapter({ id, label: h.label ?? known?.label ?? id.slice(4), binary: h.command ?? known!.binary, args: h.args ?? known?.acpArgs ?? [] });
+    out[id] = acpAdapter({ id, label: h.label ?? known?.label ?? id.slice(4), binary: h.command ?? known!.binary, args: h.args ?? known?.acpArgs ?? [], vm: known?.acpArgs ? { binary: known.binary, args: known.acpArgs } : undefined });
   }
   return out;
 }

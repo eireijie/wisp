@@ -71,6 +71,20 @@ describe("ACP adapter", () => {
     expect(events.some((e) => e.type === "status" && /warren-mcp/.test(e.text))).toBe(true);
   });
 
+  it("starts the copy that comes with a VM when a launcher takes it there, not the device's own command", async () => {
+    const { dir, env } = setup();
+    const adapter = acpAdapter({ id: "fake", label: "Fake", binary: "/devices/own/fake", args: ["--device-only"], vm: { binary: "fake-in-vm", args: ["acp"] } });
+    let started: { command: string; args: string[]; cwd: string } | undefined;
+    // stands in for the VM engine's exec: run the test agent here instead
+    const launch = (l: { command: string; args: string[]; cwd: string; env: Record<string, string> }) => {
+      started = l;
+      return { command: process.execPath, args: [FAKE], cwd: l.cwd, env: l.env };
+    };
+    const res = await adapter.run({ prompt: "hi", cwd: dir, env, launch, browser: { command: "warren-browser-mcp", args: [], env: {} } }, () => {});
+    expect(started).toMatchObject({ command: "fake-in-vm", args: ["acp"], cwd: dir });
+    expect(res.finalText).toMatch(/^Hello world/);
+  });
+
   it("reports a missing binary as an error", async () => {
     const adapter = acpAdapter({ id: "nope", label: "Nope", binary: "warren-no-such-binary", args: [] });
     await expect(adapter.run({ prompt: "x", cwd: os.tmpdir() }, () => {})).rejects.toThrow();
@@ -116,5 +130,8 @@ describe("ACP pieces", () => {
     expect(list["claude-code"].binary).toBe("claude");
     expect(list.junk).toBeUndefined();
     expect(list.hermes.label).toBe("Hermes");
+    // a device's own command for a known harness doesn't follow the agent into its VM
+    const moved = deviceAdapters({ kimi: { command: "/opt/homebrew/bin/kimi", args: ["--acp-old"] } });
+    expect(moved.kimi.binary).toBe("/opt/homebrew/bin/kimi");
   });
 });

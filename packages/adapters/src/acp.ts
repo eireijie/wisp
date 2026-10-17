@@ -259,8 +259,10 @@ function lastLine(s: string) {
  * An adapter for any harness that speaks ACP, started with `binary args...` (a device changes
  * these in its node.json `harnesses` section; see deviceAdapters).
  */
-export function acpAdapter(info: { id: string; label: string; binary: string; args: string[] }): HarnessAdapter {
-  const command = (_input?: RunInput): AcpCommand => ({ command: info.binary, args: info.args });
+export function acpAdapter(info: { id: string; label: string; binary: string; args: string[]; vm?: { binary: string; args: string[] } }): HarnessAdapter {
+  const command = (input?: RunInput): AcpCommand =>
+    // inside a VM the agent is the copy that comes with the image, not whatever this device's node.json points at
+    input?.launch && info.vm ? { command: info.vm.binary, args: info.vm.args } : { command: info.binary, args: info.args };
 
   return {
     id: info.id,
