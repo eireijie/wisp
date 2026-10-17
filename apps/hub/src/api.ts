@@ -40,6 +40,7 @@ import { registerUpdateApi } from "./updates.ts";
 import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
 import { registerVoiceApi } from "./api-voice.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
+import { registerBackgroundApi } from "./api-background.ts";
 import { activeDispatcher, registerOrchestrationApi } from "./orchestration.ts";
 import { agentPolicy } from "./policy.ts";
 
@@ -1675,6 +1676,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
   registerVoiceApi(app, hub, { need });
+  registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerOrchestrationApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
 

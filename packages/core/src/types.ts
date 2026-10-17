@@ -264,6 +264,50 @@ export interface Routine {
   createdAt: string;
 }
 
+/**
+ * An agent working in the background for one person: it wakes on its own, looks at what it can
+ * reach (connected apps, memory, tasks, conversations) and messages them only when something
+ * needs them. It decides when to look again; `everyMinutes` is the pace when it doesn't say.
+ */
+export interface BackgroundWork {
+  agentId: string;
+  userId: string;
+  enabled: boolean;
+  everyMinutes: number;
+  /** what the person most wants watched, in their words; empty = everything it can reach */
+  focus: string;
+  /** quiet hours in the person's timezone ("HH:MM"); no regular checks, and messages only if urgent */
+  quietStart: string;
+  quietEnd: string;
+  nextAt: string | null;
+  /** why the agent picked `nextAt` */
+  nextReason: string;
+  lastAt: string | null;
+  /** the agent's note to itself from its last check */
+  lastNote: string;
+  /** a check is running or waiting for the device right now */
+  checking: boolean;
+}
+
+/** Something a background check can look at: an app the agent is connected to, its computer, or a memory folder. */
+export interface BackgroundSource {
+  kind: "app" | "computer" | "memory";
+  name: string;
+  detail: string;
+}
+
+/** Something an agent said it would come back to at a set time ("8am tomorrow: remind Sam about the essay"). */
+export interface Followup {
+  id: string;
+  agentId: string;
+  /** the person it's for */
+  userId: string | null;
+  dueAt: string;
+  note: string;
+  status: "pending" | "done" | "cancelled";
+  createdAt: string;
+}
+
 /** A web page element, as a person would point at it: "the Export button on reports.example.com". */
 export interface PageElement {
   url: string;

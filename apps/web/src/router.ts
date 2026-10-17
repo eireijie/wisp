@@ -39,7 +39,7 @@ export type Route =
   | { view: "chats" }
   | { view: "you" };
 
-export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "routines", "permissions", "connect", "runs"] as const;
+export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "addons", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];

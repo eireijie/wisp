@@ -4,6 +4,7 @@ import { api } from "../../api.ts";
 import { useStore, usePrefs } from "../../store.ts";
 import { href } from "../../router.ts";
 import { THEMES, useAppearance, type ModeChoice } from "../../theme.ts";
+import { currentSubscription, disablePush, enablePush, pushSupported } from "../../push.ts";
 import { chime, enableNotifications, permission, setNotifyPrefs, show, useNotifyPrefs, type NotifyPrefs } from "../../notifications.ts";
 import { Button, Field, Input, Pill, UserAvatar, clockTime, cx, timeAgo } from "../../components/ui.tsx";
 import { Card, PageHeader, Row, SavedNote, Section, Segmented, Toggle, useSavedFlash } from "./parts.tsx";
@@ -186,8 +187,9 @@ export function NotificationsPage() {
   ];
   return (
     <>
-      <PageHeader title="Notifications">Get a desktop notification when something needs you. These settings are for this device and browser.</PageHeader>
-      <Section title="Desktop notifications">
+      <PageHeader title="Notifications">Get a notification when something needs you. These settings are for this device and browser.</PageHeader>
+      <PushSection />
+      <Section title="While Warren is open">
         <Card>
           <Row
             label={
@@ -237,6 +239,60 @@ export function NotificationsPage() {
         )}
       </Section>
     </>
+  );
+}
+
+/** Push: agents reach this device even while Warren is closed, like a text from an assistant. */
+function PushSection() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    void currentSubscription().then((s) => setOn(!!s), () => setOn(false));
+  }, []);
+  const change = async (want: boolean) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      if (want) {
+        const r = await enablePush();
+        if (r.ok) setOn(true);
+        else setNote(r.reason);
+      } else {
+        await disablePush();
+        setOn(false);
+      }
+    } catch (e) {
+      setNote((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const test = async () => {
+    const r = await api<{ sent: number }>("POST", "/api/push/test").catch(() => ({ sent: 0 }));
+    setNote(r.sent ? "Sent. It should arrive in a few seconds." : "Nothing was sent. Turn push off and on again.");
+  };
+  return (
+    <Section title="Push notifications" description="Agents reach you here even when Warren is closed: when one writes to you, or wants your OK before it sends something.">
+      <Card>
+        <Row
+          label={
+            <span className="inline-flex items-center gap-2">
+              <Smartphone size={15} /> Push to this device
+            </span>
+          }
+          hint={!pushSupported() ? (/iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add Warren to your Home Screen (Share → Add to Home Screen) and open it from there." : "This browser can't receive push notifications.") : on ? "On." : "Off. Your browser will ask for permission."}
+        >
+          {pushSupported() && on !== null && <Toggle label="Push to this device" on={on} disabled={busy} onChange={(v) => void change(v)} />}
+        </Row>
+      </Card>
+      {note && <p className="mt-2 text-sm text-muted">{note}</p>}
+      {on && (
+        <Button className="mt-3" onClick={() => void test()}>
+          Send a test push
+        </Button>
+      )}
+    </Section>
   );
 }
 

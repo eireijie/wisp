@@ -25,3 +25,26 @@ self.addEventListener("fetch", (e) => {
       .catch(() => caches.match(e.request).then((r) => r ?? (e.request.mode === "navigate" ? caches.match("/") : Response.error()))),
   );
 });
+
+// Push from the hub: an agent wrote to you or wants your OK. Payload: { title, body, tag, url }.
+self.addEventListener("push", (e) => {
+  let n = {};
+  try {
+    n = e.data ? e.data.json() : {};
+  } catch {
+    n = { body: e.data ? e.data.text() : "" };
+  }
+  e.waitUntil(self.registration.showNotification(n.title || "Warren", { body: n.body || "", tag: n.tag, icon: "/icon-192.png", badge: "/icon-192.png", data: { url: n.url || "/" } }));
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      const win = wins.find((w) => new URL(w.url).origin === self.location.origin);
+      if (win) return win.focus().then(() => win.navigate(url));
+      return self.clients.openWindow(url);
+    }),
+  );
+});

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
+import { Activity, BookOpen, Radar, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
 import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@warren/core";
 import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
@@ -13,6 +13,7 @@ import { Intro, SaveBar } from "./SettingsParts.tsx";
 import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
+import { BackgroundPanel } from "./AgentBackground.tsx";
 import { computerKindLabel, type DeviceInfo } from "../devices.ts";
 
 export type NodeInfo = DeviceInfo;
@@ -36,6 +37,7 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
       { id: "model", label: "Model", icon: <Cpu size={16} /> },
       { id: "device", label: "Device", icon: <Server size={16} /> },
       { id: "computer", label: "Computer", icon: <Monitor size={16} /> },
+      { id: "background", label: "Background", icon: <Radar size={16} /> },
       { id: "routines", label: "Routines", icon: <ListChecks size={16} /> },
     ],
   },
@@ -137,6 +139,9 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
           </Panel>
           <Panel show={active === "computer"}>
             <ComputerPanel agent={agent} nodes={nodes} />
+          </Panel>
+          <Panel show={active === "background"}>
+            <BackgroundPanel agent={agent} active={active === "background"} />
           </Panel>
           <Panel show={active === "routines"}>
             <RoutinesPanel agent={agent} active={active === "routines"} />

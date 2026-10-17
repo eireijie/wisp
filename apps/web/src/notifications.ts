@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { ClientEvent } from "@warren/core";
 import { api } from "./api.ts";
 import { go } from "./router.ts";
+import { pushOnHere } from "./push.ts";
 import type { useStore } from "./store.ts";
 
 /**
@@ -121,7 +122,8 @@ export function notifyOn(e: ClientEvent, before: State, after: State) {
     const m = e.message;
     const ch = after.channels.find((c) => c.id === m.channelId);
     const open = () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId });
-    if (ch?.kind === "dm" && prefs.dms) return show(agentName(m.author.id), m.body, open);
+    // with push on here, the hub's push notification covers DMs
+    if (ch?.kind === "dm") return prefs.dms && !pushOnHere() ? show(agentName(m.author.id), m.body, open) : undefined;
     if (m.threadId && prefs.replies) {
       const root = Object.values(after.messages)
         .flat()
@@ -130,7 +132,7 @@ export function notifyOn(e: ClientEvent, before: State, after: State) {
     }
     return;
   }
-  if (e.type === "approval" && prefs.approvals && e.approval.status === "pending" && !before.approvals[e.approval.id]) {
+  if (e.type === "approval" && prefs.approvals && !pushOnHere() && e.approval.status === "pending" && !before.approvals[e.approval.id]) {
     const a = e.approval;
     if (after.channels.some((c) => c.id === a.channelId && c.joined)) show(`${agentName(a.agentId)} wants your OK`, a.summary, () => go({ view: "chat", channelId: a.channelId, threadId: a.threadId }));
     return;
