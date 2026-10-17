@@ -247,3 +247,69 @@ describe("your own channel settings and pins", () => {
     expect((await channelNamed("general")).pinnedIds).toEqual([]);
   });
 });
+
+describe("editing and deleting messages", () => {
+  const runCount = () => (hub.store.db.prepare("SELECT COUNT(*) AS n FROM runs").get() as { n: number }).n;
+  let samToken: string;
+  beforeAll(async () => {
+    samToken = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
+  });
+
+  it("lets the author fix a message without asking agents again", async () => {
+    const ch = await channelNamed("general");
+    const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "teh plan" })).data;
+    const runs = runCount();
+    const edited = await api("PATCH", `/api/messages/${msg.id}`, { body: "@atlas the plan" });
+    expect(edited.status).toBe(200);
+    expect(edited.data).toMatchObject({ id: msg.id, body: "@atlas the plan" });
+    expect(edited.data.editedAt).toBeTruthy();
+    expect(runCount()).toBe(runs);
+    const listed = (await api("GET", `/api/channels/${ch.id}/messages`)).data.messages.find((m: any) => m.id === msg.id);
+    expect(listed.editedAt).toBe(edited.data.editedAt);
+    expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "  " })).status).toBe(400);
+  });
+
+  it("only lets the author edit, and the author or an owner delete", async () => {
+    const ch = await channelNamed("general");
+    const mine = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "owner's note" })).data;
+    const sams = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "sam's note" }, samToken)).data;
+    expect((await api("PATCH", `/api/messages/${mine.id}`, { body: "hijacked" }, samToken)).status).toBe(403);
+    expect((await api("DELETE", `/api/messages/${mine.id}`, undefined, samToken)).status).toBe(403);
+    // owners can tidy up, but can't put words in someone's mouth
+    expect((await api("PATCH", `/api/messages/${sams.id}`, { body: "edited by owner" })).status).toBe(403);
+    expect((await api("DELETE", `/api/messages/${sams.id}`)).data).toEqual({ ok: true, kept: false });
+    expect((await api("DELETE", `/api/messages/${mine.id}`)).data).toEqual({ ok: true, kept: false });
+    const ids = (await api("GET", `/api/channels/${ch.id}/messages`)).data.messages.map((m: any) => m.id);
+    expect(ids).not.toContain(mine.id);
+    expect(ids).not.toContain(sams.id);
+    expect((await api("DELETE", `/api/messages/${mine.id}`)).status).toBe(404);
+  });
+
+  it("keeps a deleted thread root while it has replies", async () => {
+    const ch = await channelNamed("general");
+    const root = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "release notes?" })).data;
+    const reply = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "on it", threadId: root.id }, samToken)).data;
+    await api("PUT", `/api/messages/${root.id}/pin`);
+    expect((await api("DELETE", `/api/messages/${root.id}`)).data).toEqual({ ok: true, kept: true });
+    const top = (await api("GET", `/api/channels/${ch.id}/messages`)).data;
+    const blank = top.messages.find((m: any) => m.id === root.id);
+    expect(blank).toMatchObject({ body: "", parts: [] });
+    expect(blank.deletedAt).toBeTruthy();
+    expect(top.replyCounts[root.id]).toBe(1);
+    expect((await channelNamed("general")).pinnedIds).not.toContain(root.id);
+    expect((await api("GET", `/api/channels/${ch.id}/messages?thread=${root.id}`)).data.messages.map((m: any) => m.body)).toEqual(["", "on it"]);
+    // can't edit or delete it twice
+    expect((await api("PATCH", `/api/messages/${root.id}`, { body: "back" })).status).toBe(404);
+    // once the last reply goes, so does the root
+    await api("DELETE", `/api/messages/${reply.id}`, undefined, samToken);
+    expect((await api("GET", `/api/channels/${ch.id}/messages`)).data.messages.some((m: any) => m.id === root.id)).toBe(false);
+  });
+
+  it("refuses in archived channels", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "frozen" })).data;
+    const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "last words" })).data;
+    await api("POST", `/api/channels/${ch.id}/archive`, { archived: true });
+    expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "new words" })).status).toBe(409);
+    expect((await api("DELETE", `/api/messages/${msg.id}`)).status).toBe(409);
+  });
+});

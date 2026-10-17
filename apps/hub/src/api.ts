@@ -685,6 +685,35 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { added: hub.react(msg.id, c.actor, body.emoji, body.on), reactions: store.reactions([msg.id])[msg.id] ?? [] };
   });
 
+  /** Fix your own message. Agents that were asked aren't asked again. */
+  app.patch("/api/messages/:id", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const msg = store.message((req.params as { id: string }).id);
+    const ch = msg && channelVisible(c, msg.channelId);
+    if (!msg || !ch || msg.deletedAt) return reply.code(404).send({ error: "message not found" });
+    if (msg.author.kind !== c.actor.kind || msg.author.id !== c.actor.id) return reply.code(403).send({ error: "you can only edit your own messages" });
+    if (ch.archivedAt) return reply.code(409).send({ error: `#${ch.name} is archived` });
+    const body = parse(z.object({ body: z.string().max(40_000) }), req.body, reply);
+    if (!body) return;
+    // a message with files can lose its text; one without has to keep some
+    if (!body.body.trim() && !msg.parts.some((p) => p.type === "file")) return reply.code(400).send({ error: "empty message; delete it instead" });
+    return hub.editMessage(msg, body.body);
+  });
+
+  /** Delete your own message, or anyone's as a workspace owner. A thread root with replies stays as "deleted" so the replies can still be read. */
+  app.delete("/api/messages/:id", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const msg = store.message((req.params as { id: string }).id);
+    const ch = msg && channelVisible(c, msg.channelId);
+    if (!msg || !ch || msg.deletedAt) return reply.code(404).send({ error: "message not found" });
+    const mine = msg.author.kind === c.actor.kind && msg.author.id === c.actor.id;
+    if (!mine && !(c.actor.kind === "user" && c.viewer.role === "owner")) return reply.code(403).send({ error: "you can only delete your own messages" });
+    if (ch.archivedAt) return reply.code(409).send({ error: `#${ch.name} is archived` });
+    return { ok: true, ...hub.removeMessage(msg) };
+  });
+
   /** One search box for everything you can see: channels, agents, messages and memory. */
   app.get("/api/search", async (req, reply) => {
     const c = need(req, reply);

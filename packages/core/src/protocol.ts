@@ -178,7 +178,9 @@ export type HubToNode = z.infer<typeof HubToNode>;
 /** hub -> browser clients */
 export type ClientEvent =
   | { type: "message"; message: import("./types.ts").Message }
-  /** a system notice that no longer applies (the "queued until its device reconnects" line once the run starts) */
+  /** an edited message, or a deleted thread root kept for its replies */
+  | { type: "message_updated"; message: import("./types.ts").Message }
+  /** a deleted message, or a system notice that no longer applies (the "queued until its device reconnects" line once the run starts) */
   | { type: "message_removed"; messageId: string; channelId: string; threadId: string | null }
   | { type: "agent_status"; agentId: string; status: "online" | "busy" | "offline" }
   | { type: "run_event"; runId: string; agentId: string; channelId: string; event: AgentEvent }

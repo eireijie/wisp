@@ -303,6 +303,13 @@ export const useStore = create<State>((set, get) => ({
         }));
         if (get().activeChannel === m.channelId && !mine) get().markRead(m.channelId);
       }
+    } else if (e.type === "message_updated") {
+      const m = e.message;
+      const patch = (list: Message[]) => (list.some((x) => x.id === m.id) ? list.map((x) => (x.id === m.id ? m : x)) : list);
+      set((s) => ({
+        messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [k, patch(v)])),
+        threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, patch(v)])),
+      }));
     } else if (e.type === "message_removed") {
       const drop = (list: Message[] | undefined) => list?.filter((m) => m.id !== e.messageId);
       set((s) => ({
