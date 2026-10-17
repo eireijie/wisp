@@ -1,0 +1,119 @@
+#cloud-config
+# Warren on a new Linux server (Ubuntu 24.04 or Debian 12/13), as its first-boot "user data".
+#
+# It installs Docker, runs the hub (ghcr.io/eireijie/warren) behind Caddy, and gets HTTPS without a
+# domain: a Let's Encrypt certificate for the server's own IP address (https://203.0.113.7), and one
+# for <ip-with-dashes>.sslip.io as a second address in case the first can't be issued. The address is
+# written to /opt/warren/url and to the login message.
+#
+# The desktop app's "Create one in your cloud account" sends this file when it creates a server, with
+# __WARREN_SETUP_KEY__ replaced by a random key: until the first account exists, only a request that
+# carries that key can make it, so nobody who finds the new server first can claim it. Pasted by hand
+# (for example into Hetzner's or DigitalOcean's "Cloud config" box) with the placeholder left as it
+# is, there's no key: open the address and make your account right away, as with any new hub.
+#
+# Data lives in /opt/warren/data (back it up). The hub image is pulled again every night.
+
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - curl
+
+write_files:
+  - path: /opt/warren/setup-key
+    permissions: "0600"
+    content: "__WARREN_SETUP_KEY__"
+
+  - path: /opt/warren/compose.yaml
+    content: |
+      services:
+        warren:
+          image: ghcr.io/eireijie/warren:latest
+          restart: unless-stopped
+          volumes:
+            - ./data:/data
+        caddy:
+          image: caddy:2
+          restart: unless-stopped
+          ports:
+            - "80:80"
+            - "443:443"
+            - "443:443/udp"
+          volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy-data:/data
+            - caddy-config:/config
+      volumes:
+        caddy-data:
+        caddy-config:
+
+  - path: /opt/warren/start.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # Writes the Caddyfile for this server's public IPv4 address, then starts Warren.
+      set -eu
+      cd /opt/warren
+
+      ip="${WARREN_IP:-}"
+      # the provider's metadata service (Hetzner, then DigitalOcean), else the address the server sends from
+      [ -n "$ip" ] || ip=$(curl -fsS --max-time 3 http://169.254.169.254/hetzner/v1/metadata/public-ipv4 2>/dev/null || true)
+      [ -n "$ip" ] || ip=$(curl -fsS --max-time 3 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || true)
+      [ -n "$ip" ] || ip=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
+      case "$ip" in
+        *[!0-9.]* | "") echo "Warren: couldn't find this server's public IPv4 address" >&2; exit 1 ;;
+      esac
+      sslip="$(echo "$ip" | tr . -).sslip.io"
+
+      key=$(cat setup-key 2>/dev/null || true)
+      guard=""
+      case "$key" in
+        "" | __WARREN_SETUP_KEY__) ;;
+        *) guard="
+      	@claim {
+      		method POST
+      		path /api/setup
+      		not header X-Warren-Setup-Key \"$key\"
+      	}
+      	respond @claim \"This Warren is being set up by the app that created it.\" 403" ;;
+      esac
+
+      cat > Caddyfile <<EOF
+      (warren) {$guard
+      	reverse_proxy warren:4747
+      }
+
+      # Let's Encrypt only certifies a bare IP address on its short-lived (six-day) profile; Caddy renews it.
+      https://$ip {
+      	tls {
+      		issuer acme {
+      			profile shortlived
+      		}
+      	}
+      	import warren
+      }
+
+      https://$sslip {
+      	import warren
+      }
+      EOF
+
+      echo "https://$ip" > url
+      echo "https://$sslip" >> url
+      printf '\nWarren: https://%s (also https://%s)\nData: /opt/warren/data   Logs: cd /opt/warren && docker compose logs\n\n' "$ip" "$sslip" > /etc/motd
+
+      docker compose pull
+      docker compose up -d
+      echo "Warren is starting at https://$ip"
+
+  - path: /etc/cron.daily/warren-update
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      # A hub in Docker can't update itself: get the newest image and restart on it if it changed.
+      cd /opt/warren && docker compose pull -q && docker compose up -d && docker image prune -f >/dev/null
+
+runcmd:
+  - [systemctl, enable, --now, docker]
+  - [/opt/warren/start.sh]

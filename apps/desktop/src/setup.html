@@ -82,6 +82,28 @@
   .checks .dot.wait { background: var(--faint); animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
   .back { margin-bottom: 12px; }
+  .choice.wide { grid-column: 1 / -1; }
+  a { color: inherit; }
+  .hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  ol.steps { margin: 0 0 12px; padding-left: 20px; color: var(--muted); }
+  select {
+    font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--input);
+    background: var(--panel); color: var(--ink); min-width: 200px;
+  }
+  .field { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
+  .field input, .field select { min-width: 0; width: 100%; font-size: 14px; }
+  .plans { display: grid; gap: 6px; margin: 4px 0 14px; }
+  .plan {
+    display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 10px; cursor: pointer;
+  }
+  .plan:has(input:checked) { border-color: var(--ink); }
+  .plan input { flex: none; min-width: 0; margin: 0; }
+  .plan .spec { flex: 1; }
+  .plan .spec small { display: block; color: var(--muted); font-size: 12.5px; }
+  .plan .price { font-weight: 600; white-space: nowrap; }
+  .tag { font-size: 11.5px; background: var(--chip); border-radius: 6px; padding: 1px 6px; margin-left: 6px; font-weight: 500; color: var(--muted); }
+  h3 { font-size: 14px; font-weight: 600; margin: 4px 0 8px; }
   @media (max-width: 520px) { .choices { grid-template-columns: 1fr; } }
   [hidden] { display: none !important; }
 </style>
@@ -106,6 +128,11 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
       <strong>Join a server</strong>
       <span>Connect to a Warren someone already runs, at home, on a VPS or over Tailscale.</span>
+    </button>
+    <button class="choice wide" id="pick-cloud">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg>
+      <strong>Create one in your cloud account</strong>
+      <span>A server of your own at Hetzner that keeps running when this computer is off. Hetzner bills you directly, from a few euros a month.</span>
     </button>
   </div>
 
@@ -141,6 +168,55 @@
     </section>
   </div>
 
+  <div id="cloud" hidden>
+    <button class="link back" data-back>← Back</button>
+    <section class="card" id="cloud-connect">
+      <h2>Create a server in your Hetzner account</h2>
+      <p>Warren sets up a server in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account and connects you to it. The server and its bill are yours: the Warren project never runs or pays for it.</p>
+      <ol class="steps">
+        <li>Sign in at <a href="https://console.hetzner.com" target="_blank">console.hetzner.com</a> (or sign up) and open a project.</li>
+        <li>Go to <strong>Security → API tokens</strong>, click <strong>Generate API token</strong>, and choose <strong>Read &amp; Write</strong>.</li>
+        <li>Paste it here.</li>
+      </ol>
+      <form id="cloud-token-form">
+        <div class="row">
+          <input id="cloud-token" type="password" placeholder="Hetzner API token" autocomplete="off" spellcheck="false" />
+          <button class="primary" type="submit" id="cloud-token-go">Continue</button>
+        </div>
+      </form>
+      <p class="hint">The token is only kept in this window while your server is created, and is never saved. Delete it in Hetzner afterwards if you like.</p>
+      <p class="error" id="cloud-token-error" hidden></p>
+    </section>
+
+    <section class="card" id="cloud-choose" hidden>
+      <h2>Choose your server</h2>
+      <label class="field">Location<select id="cloud-location"></select></label>
+      <div class="plans" id="cloud-plans" role="radiogroup" aria-label="Size"></div>
+      <p class="hint" id="cloud-billing"></p>
+      <h3 style="margin-top:16px">Your account</h3>
+      <form id="cloud-form">
+        <label class="field">Name<input id="cloud-name" autocomplete="name" required /></label>
+        <label class="field">Email<input id="cloud-email" type="email" autocomplete="email" required /></label>
+        <label class="field">Password<input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters" /></label>
+        <label class="check"><input type="checkbox" id="cloud-device" checked /><span>Register this computer as a device<small class="device-name"></small></span></label>
+        <div class="row"><button class="primary" type="submit" id="cloud-go">Create server</button></div>
+      </form>
+      <p class="error" id="cloud-error" hidden></p>
+    </section>
+
+    <section class="card" id="cloud-progress" hidden>
+      <h2 id="cloud-progress-title">Creating your server…</h2>
+      <p>This usually takes 3 to 5 minutes.</p>
+      <ul class="checks" id="cloud-checks"></ul>
+      <p class="error" id="cloud-fail" hidden></p>
+      <div class="row" id="cloud-fail-actions" hidden>
+        <button class="primary" id="cloud-delete">Delete the server</button>
+        <button id="cloud-keep">Keep it</button>
+      </div>
+      <p class="hint" id="cloud-fail-hint" hidden></p>
+    </section>
+  </div>
+
   <section id="starting" class="card center" hidden>
     <div class="spinner"></div>
     <h2 id="starting-title">Starting your server…</h2>
@@ -161,13 +237,13 @@
   const $ = (id) => document.getElementById(id);
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
   const setup = window.warrenSetup;
-  const SCREENS = ["welcome", "create", "join", "starting", "unreachable"];
+  const SCREENS = ["welcome", "create", "join", "cloud", "starting", "unreachable"];
   const show = (id) => SCREENS.forEach((s) => ($(s).hidden = s !== id));
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
   setup.check().then((c) => {
     document.querySelectorAll(".device-name").forEach((el) => (el.textContent = `${c.deviceName} shows up in Devices, and agents can run here. You can change this later from the menu bar.`));
-    $("create-device").checked = $("join-device").checked = c.device !== false;
+    $("create-device").checked = $("join-device").checked = $("cloud-device").checked = c.device !== false;
     if (c.hubUrl && !$("url").value) $("url").value = c.hubUrl.replace(/^https?:\/\//, "");
     if (state.step === "create" && c.problem && !state.problem) err("create-error", c.problem);
   });
@@ -240,6 +316,139 @@
     if (r && !r.ok) { show("create"); err("create-error", r.error); }
   };
   $("join-form").onsubmit = (e) => { e.preventDefault(); test(true); };
+
+  // ------------------------------------------------ create one in your cloud account
+  // The Hetzner token lives only in this variable, and goes when the window leaves this page.
+  let cloudToken = "";
+  let offer = null;
+  let failed = null;
+  const cloudCard = (id) => ["cloud-connect", "cloud-choose", "cloud-progress"].forEach((c) => ($(c).hidden = c !== id));
+  const money = (n) => new Intl.NumberFormat(undefined, { style: "currency", currency: offer.currency }).format(n);
+  const STEPS = [
+    ["create", "Creating the server in your Hetzner account"],
+    ["boot", "Starting it up"],
+    ["https", "Installing Warren and getting an HTTPS certificate"],
+    ["account", "Making your account"],
+  ];
+
+  $("pick-cloud").onclick = () => {
+    show("cloud");
+    cloudCard(offer ? "cloud-choose" : "cloud-connect");
+    $(offer ? "cloud-name" : "cloud-token").focus();
+  };
+
+  $("cloud-token-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const token = $("cloud-token").value.trim();
+    if (!token) return $("cloud-token").focus();
+    err("cloud-token-error", "");
+    $("cloud-token-go").disabled = true;
+    $("cloud-token-go").textContent = "Checking…";
+    const r = await setup.cloudPlans(token);
+    $("cloud-token-go").disabled = false;
+    $("cloud-token-go").textContent = "Continue";
+    if (!r.ok) return err("cloud-token-error", r.error);
+    if (!r.plans.length) return err("cloud-token-error", "Hetzner has no servers available for this project right now. Try again later.");
+    cloudToken = token;
+    $("cloud-token").value = "";
+    offer = r;
+    const sel = $("cloud-location");
+    sel.replaceChildren(...r.locations.map((l) => new Option(`${l.city}, ${l.country}`, l.name)));
+    sel.value = r.plans[0].location; // where the cheapest is
+    renderPlans();
+    cloudCard("cloud-choose");
+    $("cloud-name").focus();
+  };
+
+  $("cloud-location").onchange = renderPlans;
+
+  function renderPlans() {
+    const loc = $("cloud-location").value;
+    const here = offer.plans.filter((p) => p.location === loc);
+    const best = here.find((p) => p.memory >= 4) || here[0];
+    $("cloud-plans").replaceChildren(...here.map((p) => {
+      const row = document.createElement("label");
+      row.className = "plan";
+      const radio = Object.assign(document.createElement("input"), { type: "radio", name: "plan", value: p.type, checked: p === best });
+      radio.onchange = priceButton;
+      const spec = document.createElement("span");
+      spec.className = "spec";
+      spec.textContent = `${p.cores} vCPU · ${p.memory} GB memory · ${p.disk} GB disk`;
+      if (p === best) spec.append(Object.assign(document.createElement("span"), { className: "tag", textContent: "Recommended" }));
+      spec.append(Object.assign(document.createElement("small"), { textContent: `${p.type.toUpperCase()} · ${p.arch === "arm" ? "Arm" : "Intel/AMD"}` }));
+      const price = Object.assign(document.createElement("span"), { className: "price", textContent: `${money(p.monthly)}/mo` });
+      row.append(radio, spec, price);
+      return row;
+    }));
+    priceButton();
+  }
+
+  function chosen() {
+    const type = document.querySelector('input[name="plan"]:checked')?.value;
+    return offer.plans.find((p) => p.type === type && p.location === $("cloud-location").value);
+  }
+
+  function priceButton() {
+    const p = chosen();
+    if (!p) return;
+    $("cloud-go").textContent = `Create server for ${money(p.monthly)}/month`;
+    $("cloud-billing").textContent = `Hetzner's price, including the IPv4 address (${money(p.ipv4)}). They bill your account by the hour, up to this much a month, until you delete the server in their console. 4 GB runs Warren and a couple of agent computers; more memory runs more at once.`;
+  }
+
+  $("cloud-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const p = chosen();
+    if (!p) return err("cloud-error", "Pick a size.");
+    err("cloud-error", "");
+    failed = null;
+    $("cloud-fail").hidden = $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
+    $("cloud-progress-title").textContent = "Creating your server…";
+    cloudCard("cloud-progress");
+    document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
+    progress("create");
+    const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
+    const r = await setup.cloudCreate(cloudToken, { type: p.type, location: p.location, account, device: $("cloud-device").checked });
+    if (r.ok) {
+      cloudToken = "";
+      $("starting-title").textContent = `Opening ${new URL(r.url).host}…`;
+      return show("starting");
+    }
+    document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = false));
+    progress(current, true);
+    $("cloud-progress-title").textContent = "Your server isn't ready";
+    err("cloud-fail", r.error);
+    if (!r.server) {
+      // nothing was created: back to choosing, with the reason
+      cloudCard("cloud-choose");
+      return err("cloud-error", r.error);
+    }
+    failed = r.server;
+    $("cloud-fail-actions").hidden = false;
+    $("cloud-fail-hint").hidden = false;
+    $("cloud-fail-hint").textContent = `It's ${r.server.name} (${r.server.ip || "no address yet"}) in your Hetzner console, and Hetzner bills for it until it's deleted.` + (r.server.ip ? ` If it comes up later, join it at https://${r.server.ip}.` : "");
+  };
+
+  let current = "create";
+  setup.onCloudStep((step) => progress(step));
+  function progress(step, broken = false) {
+    current = step;
+    const at = STEPS.findIndex(([id]) => id === step);
+    $("cloud-checks").replaceChildren(...STEPS.map(([, label], i) => li(i < at ? "ok" : i === at ? (broken ? "bad" : "wait") : "no", label)));
+  }
+
+  $("cloud-delete").onclick = async () => {
+    if (!failed) return;
+    $("cloud-delete").disabled = true;
+    const r = await setup.cloudDelete(cloudToken, failed.id);
+    $("cloud-delete").disabled = false;
+    if (!r.ok) return err("cloud-fail", r.error);
+    failed = null;
+    $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
+    $("cloud-progress-title").textContent = "Server deleted";
+    err("cloud-fail", "");
+    $("cloud-checks").replaceChildren(li("ok", "Deleted from your Hetzner account. Nothing more is billed for it."));
+  };
+  $("cloud-keep").onclick = () => { $("cloud-fail-actions").hidden = true; };
   $("test").onclick = () => test(false);
 </script>
 </body>
