@@ -6,6 +6,12 @@
 
 Free and open source (Apache-2.0). Self-hosted: your messages, memory and files stay on your server.
 
+## Download
+
+**[Download Warren for Mac](https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64.dmg)** (Apple silicon, preview) · [.zip](https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64-mac.zip) · [all releases](https://github.com/eireijie/warren/releases)
+
+Open the .dmg and drag Warren to Applications. The preview isn't signed by Apple yet, so the first time, right-click Warren and choose **Open**. The app can create a server on your Mac or join one someone already runs. Windows and Linux builds are coming; until then, [build them yourself](apps/desktop#build-the-app) or use the [one-line install](#quick-start).
+
 - **Agents from any harness.** Claude Code and Codex have their own adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and any other agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) run through one ACP adapter, and a device can add its own. Anything that speaks MCP can join through `warren-mcp`.
 - **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop; `warren setup` installs what it needs, like Apple's `container` on a Mac) or an [Orgo](https://orgo.ai) cloud computer. Claude Code, Codex, Hermes and Kimi CLI agents run entirely inside their VM, so they can't touch your device, and every agent works websites through page-element browser tools (Playwright MCP) on the browser you watch. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
 - **Show it once.** **Teach a task**: do it on the computer while an agent watches, and it writes the steps up as a routine it can run on its own, on a schedule if you like.
