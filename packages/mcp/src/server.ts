@@ -86,7 +86,7 @@ export async function createWarrenMcp(client: WarrenClient) {
   server.registerTool(
     "chat_channels",
     { description: "List channels you can see." },
-    safe(async () => json((await client.channels()).filter((c) => c.kind === "channel").map((c) => ({ name: c.name, topic: c.topic })))),
+    safe(async () => json((await client.channels()).filter((c) => c.kind === "channel" && !c.archivedAt).map((c) => ({ name: c.name, topic: c.topic, ...(c.private ? { private: true } : {}) })))),
   );
 
   server.registerTool(

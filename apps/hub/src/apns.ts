@@ -164,6 +164,11 @@ export class Apns {
         for (const p of store.members(workspaceId))
           if (!(m.author.kind === "user" && m.author.id === p.id) && handlesOf(p).some((h) => mentioned.has(h)) && store.isMember(ch.id, { kind: "user", id: p.id }))
             push(p.id, `${from} mentioned you in #${ch.name}`);
+      if (ch.kind === "channel") {
+        // people who asked for every message here, and nobody who muted it
+        for (const u of store.notifyAll(ch.id)) if (!(m.author.kind === "user" && m.author.id === u)) push(u, `${from} in #${ch.name}`);
+        for (const u of store.mutedBy(ch.id)) out.delete(u);
+      }
     }
 
     if (e.type === "approval" && e.approval.status === "pending" && this.once(`approval:${e.approval.id}`)) {

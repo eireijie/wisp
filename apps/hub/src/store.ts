@@ -1,4 +1,4 @@
-import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup } from "@warren/core";
+import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -271,6 +271,7 @@ export class Store {
   }
 
   deleteAgent(agentId: string) {
+    this.clearDefaultAgent(agentId);
     this.db.prepare("DELETE FROM agents WHERE id = ?").run(agentId);
   }
 
@@ -610,32 +611,111 @@ export class Store {
   // --- channels -------------------------------------------------------------
 
   createChannel(workspaceId: string, name: string, kind: Channel["kind"] = "channel", topic = ""): Channel {
-    const c: Channel = { id: id("ch"), workspaceId, name, kind, topic, sectionId: null, createdAt: now() };
+    const c: Channel = { id: id("ch"), workspaceId, name, kind, topic, sectionId: null, private: false, archivedAt: null, settings: { ...DEFAULT_CHANNEL_SETTINGS }, createdAt: now() };
     this.db.prepare("INSERT INTO channels (id, workspace_id, name, kind, topic, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(c.id, workspaceId, name, kind, topic, c.createdAt);
     return c;
   }
 
+  private static CHANNEL_COLS = "id, workspace_id AS workspaceId, name, kind, topic, section_id AS sectionId, private, archived_at AS archivedAt, settings_json, created_at AS createdAt";
+
+  private toChannel(r: (Omit<Channel, "private" | "settings"> & { private: number; settings_json: string }) | undefined): Channel | undefined {
+    if (!r) return undefined;
+    const { settings_json, ...rest } = r;
+    let settings: Partial<ChannelSettings> = {};
+    try {
+      settings = JSON.parse(settings_json || "{}");
+    } catch {}
+    return { ...rest, private: !!r.private, settings: { ...DEFAULT_CHANNEL_SETTINGS, ...settings } };
+  }
+
   channel(channelId: string): Channel | undefined {
-    return this.db.prepare("SELECT id, workspace_id AS workspaceId, name, kind, topic, section_id AS sectionId, created_at AS createdAt FROM channels WHERE id = ?").get(channelId) as Channel | undefined;
+    return this.toChannel(this.db.prepare(`SELECT ${Store.CHANNEL_COLS} FROM channels WHERE id = ?`).get(channelId) as never);
   }
 
   channelByName(workspaceId: string, name: string): Channel | undefined {
-    return this.db.prepare("SELECT id, workspace_id AS workspaceId, name, kind, topic, section_id AS sectionId, created_at AS createdAt FROM channels WHERE workspace_id = ? AND name = ?").get(workspaceId, name) as
-      | Channel
-      | undefined;
+    return this.toChannel(this.db.prepare(`SELECT ${Store.CHANNEL_COLS} FROM channels WHERE workspace_id = ? AND name = ?`).get(workspaceId, name) as never);
   }
 
   channels(workspaceId: string): Channel[] {
-    return this.db.prepare("SELECT id, workspace_id AS workspaceId, name, kind, topic, section_id AS sectionId, created_at AS createdAt FROM channels WHERE workspace_id = ? ORDER BY kind, name").all(workspaceId) as Channel[];
+    return (this.db.prepare(`SELECT ${Store.CHANNEL_COLS} FROM channels WHERE workspace_id = ? ORDER BY kind, name`).all(workspaceId) as never[]).map((r) => this.toChannel(r)!);
   }
 
-  updateChannel(channelId: string, patch: { name?: string; topic?: string; sectionId?: string | null }) {
+  updateChannel(channelId: string, patch: { name?: string; topic?: string; sectionId?: string | null; private?: boolean; archivedAt?: string | null; settings?: Partial<ChannelSettings> }) {
     const cur = this.channel(channelId);
     if (!cur) return undefined;
     this.db
-      .prepare("UPDATE channels SET name = ?, topic = ?, section_id = ? WHERE id = ?")
-      .run(patch.name ?? cur.name, patch.topic ?? cur.topic, patch.sectionId !== undefined ? patch.sectionId : cur.sectionId, channelId);
+      .prepare("UPDATE channels SET name = ?, topic = ?, section_id = ?, private = ?, archived_at = ?, settings_json = ? WHERE id = ?")
+      .run(
+        patch.name ?? cur.name,
+        patch.topic ?? cur.topic,
+        patch.sectionId !== undefined ? patch.sectionId : cur.sectionId,
+        (patch.private ?? cur.private) ? 1 : 0,
+        patch.archivedAt !== undefined ? patch.archivedAt : cur.archivedAt,
+        JSON.stringify({ ...cur.settings, ...patch.settings }),
+        channelId,
+      );
     return this.channel(channelId);
+  }
+
+  /** Channels whose default agent is this one go back to "only @mentioned agents" (the agent is gone, or left). */
+  clearDefaultAgent(agentId: string, channelId?: string) {
+    const rows = this.db.prepare(`SELECT id, settings_json FROM channels WHERE settings_json LIKE ?${channelId ? " AND id = ?" : ""}`).all(`%${agentId}%`, ...(channelId ? [channelId] : [])) as { id: string; settings_json: string }[];
+    for (const r of rows) if (this.channel(r.id)?.settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
+  }
+
+  // --- one person's channel settings and pins -------------------------------
+
+  channelPrefs(userId: string): Record<string, { notify: ChannelNotify; starred: boolean }> {
+    const rows = this.db.prepare("SELECT channel_id, notify, starred FROM channel_prefs WHERE user_id = ?").all(userId) as { channel_id: string; notify: ChannelNotify; starred: number }[];
+    return Object.fromEntries(rows.map((r) => [r.channel_id, { notify: r.notify, starred: !!r.starred }]));
+  }
+
+  setChannelPrefs(userId: string, channelId: string, patch: { notify?: ChannelNotify; starred?: boolean }) {
+    const cur = this.channelPrefs(userId)[channelId] ?? { notify: "default" as const, starred: false };
+    this.db
+      .prepare("INSERT INTO channel_prefs (user_id, channel_id, notify, starred) VALUES (?, ?, ?, ?) ON CONFLICT (user_id, channel_id) DO UPDATE SET notify = excluded.notify, starred = excluded.starred")
+      .run(userId, channelId, patch.notify ?? cur.notify, (patch.starred ?? cur.starred) ? 1 : 0);
+  }
+
+  /** People who muted a channel. */
+  mutedBy(channelId: string): Set<string> {
+    return new Set((this.db.prepare("SELECT user_id FROM channel_prefs WHERE channel_id = ? AND notify = 'mute'").all(channelId) as { user_id: string }[]).map((r) => r.user_id));
+  }
+
+  /** People in a channel who want a notification for every message there. */
+  notifyAll(channelId: string): string[] {
+    return (
+      this.db
+        .prepare("SELECT p.user_id FROM channel_prefs p JOIN channel_members m ON m.channel_id = p.channel_id AND m.member_kind = 'user' AND m.member_id = p.user_id WHERE p.channel_id = ? AND p.notify = 'all'")
+        .all(channelId) as { user_id: string }[]
+    ).map((r) => r.user_id);
+  }
+
+  pin(channelId: string, messageId: string, by: Actor) {
+    this.db.prepare("INSERT OR IGNORE INTO pins (channel_id, message_id, pinned_by_kind, pinned_by_id, created_at) VALUES (?, ?, ?, ?, ?)").run(channelId, messageId, by.kind, by.id, now());
+  }
+
+  unpin(channelId: string, messageId: string) {
+    this.db.prepare("DELETE FROM pins WHERE channel_id = ? AND message_id = ?").run(channelId, messageId);
+  }
+
+  /** Pinned message ids per channel, newest pin first. */
+  pinnedIds(channelIds: string[]): Record<string, string[]> {
+    if (!channelIds.length) return {};
+    const rows = this.db
+      .prepare(`SELECT channel_id, message_id FROM pins WHERE channel_id IN (${channelIds.map(() => "?").join(",")}) ORDER BY created_at DESC`)
+      .all(...channelIds) as { channel_id: string; message_id: string }[];
+    const out: Record<string, string[]> = {};
+    for (const r of rows) (out[r.channel_id] ??= []).push(r.message_id);
+    return out;
+  }
+
+  pins(channelId: string): { message: Message; pinnedBy: Actor; pinnedAt: string }[] {
+    const rows = this.db.prepare("SELECT message_id, pinned_by_kind, pinned_by_id, created_at FROM pins WHERE channel_id = ? ORDER BY created_at DESC").all(channelId) as { message_id: string; pinned_by_kind: Actor["kind"]; pinned_by_id: string; created_at: string }[];
+    return rows.flatMap((r) => {
+      const message = this.message(r.message_id);
+      return message ? [{ message, pinnedBy: { kind: r.pinned_by_kind, id: r.pinned_by_id } as Actor, pinnedAt: r.created_at }] : [];
+    });
   }
 
   memberCounts(channelIds: string[]): Record<string, number> {

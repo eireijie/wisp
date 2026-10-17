@@ -261,7 +261,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   function channelVisible(c: Caller, channelId: string) {
     const ch = store.channel(channelId);
     if (!ch || ch.workspaceId !== c.workspaceId) return undefined;
-    if (ch.kind === "dm") {
+    if (ch.kind === "dm" || ch.private) {
       const members = store.channelMembers(ch.id);
       const isMember = members.some((m) => m.kind === c.actor.kind && m.id === c.actor.id);
       if (!isMember && c.viewer.role !== "owner") return undefined;
@@ -416,18 +416,52 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const ids = list.map((ch) => ch.id);
     const counts = store.memberCounts(ids);
     const reads = c.actor.kind === "user" ? store.readState(c.actor.id, ids) : {};
-    return list.map((ch) => ({ ...ch, joined: store.isMember(ch.id, c.actor), memberCount: counts[ch.id] ?? 0, unread: reads[ch.id]?.unread ?? 0, lastReadAt: reads[ch.id]?.lastReadAt ?? null }));
+    const prefs = c.actor.kind === "user" ? store.channelPrefs(c.actor.id) : {};
+    const pins = store.pinnedIds(ids);
+    return list.map((ch) => ({
+      ...ch,
+      joined: store.isMember(ch.id, c.actor),
+      memberCount: counts[ch.id] ?? 0,
+      unread: reads[ch.id]?.unread ?? 0,
+      lastReadAt: reads[ch.id]?.lastReadAt ?? null,
+      notify: prefs[ch.id]?.notify ?? "default",
+      starred: prefs[ch.id]?.starred ?? false,
+      pinnedIds: pins[ch.id] ?? [],
+    }));
   });
+
+  /**
+   * How agents behave in a channel. The default agent must be in the workspace; it's added to the
+   * channel so it shows up among the members it answers for.
+   */
+  const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000) }).partial();
+  const checkSettings = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined) =>
+    !settings?.defaultAgentId || store.agent(settings.defaultAgentId)?.workspaceId === c.workspaceId;
+  /** Channels that can't be archived, made private or deleted: where everyone lands, and a team's own. */
+  const protectedReason = (c: Caller, ch: { id: string; name: string }, what: string) => {
+    if (ch.name === "general") return `#general can't be ${what}: everyone in the workspace lands there`;
+    const team = store.teams(c.workspaceId).find((t) => t.channelId === ch.id);
+    return team ? `#${ch.name} is team ${team.name}'s channel; it can't be ${what} while the team uses it` : null;
+  };
 
   app.patch("/api/channels/:id", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
-    const body = parse(z.object({ name: CHANNEL_NAME, topic: z.string().max(250), sectionId: z.string().nullable() }).partial(), req.body, reply);
+    const body = parse(z.object({ name: CHANNEL_NAME, topic: z.string().max(250), sectionId: z.string().nullable(), private: z.boolean(), settings: CHANNEL_SETTINGS }).partial(), req.body, reply);
     if (!body) return;
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.name && body.name !== ch.name && store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
+    if (body.name && body.name !== ch.name && ch.name === "general") return reply.code(409).send({ error: "#general can't be renamed: everyone in the workspace lands there" });
+    if (!checkSettings(c, body.settings)) return reply.code(400).send({ error: "agent not found" });
+    if (body.private && !ch.private) {
+      const why = protectedReason(c, ch, "made private");
+      if (why) return reply.code(409).send({ error: why });
+      // making it private keeps you in it, so you don't lock yourself out
+      if (c.actor.kind === "user") store.addChannelMember(ch.id, c.actor);
+    }
+    if (body.settings?.defaultAgentId) store.addChannelMember(ch.id, { kind: "agent", id: body.settings.defaultAgentId });
     const updated = store.updateChannel(ch.id, body);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return updated;
@@ -475,7 +509,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         if (!exists) return reply.code(404).send({ error: p.kind === "user" ? "no such person in this workspace" : "agent not found" });
         const member: Actor = { kind: p.kind, id: p.memberId };
         if (method === "PUT") store.addChannelMember(ch.id, member);
-        else store.removeChannelMember(ch.id, member);
+        else {
+          store.removeChannelMember(ch.id, member);
+          // an agent that's no longer here stops answering here
+          if (member.kind === "agent") store.clearDefaultAgent(member.id, ch.id);
+        }
         hub.broadcast(c.workspaceId, { type: "channels_changed" });
         return channelMemberList(c.workspaceId, ch.id);
       },
@@ -488,9 +526,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
-    if (ch.name === "general") return reply.code(409).send({ error: "#general can't be deleted: everyone in the workspace lands there" });
-    const team = store.teams(c.workspaceId).find((t) => t.channelId === ch.id);
-    if (team) return reply.code(409).send({ error: `#${ch.name} is team ${team.name}'s channel; it can't be deleted while the team uses it` });
+    const why = protectedReason(c, ch, "deleted");
+    if (why) return reply.code(409).send({ error: why });
     // stop what's going on in it first, so nothing finishes into a channel that's gone
     for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
     for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);
@@ -518,6 +555,69 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return { ok: true };
   });
+
+  /** Archive a channel (read-only, out of everyone's sidebar, still searchable) or bring it back. */
+  app.post("/api/channels/:id/archive", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const ch = channelVisible(c, (req.params as { id: string }).id);
+    if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
+    const body = parse(z.object({ archived: z.boolean().default(true) }), req.body ?? {}, reply);
+    if (!body) return;
+    if (body.archived) {
+      const why = protectedReason(c, ch, "archived");
+      if (why) return reply.code(409).send({ error: why });
+      // nothing keeps working into a channel nobody's looking at
+      for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
+      for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);
+    }
+    const updated = store.updateChannel(ch.id, { archivedAt: body.archived ? (ch.archivedAt ?? new Date().toISOString()) : null });
+    hub.broadcast(c.workspaceId, { type: "channels_changed" });
+    return updated;
+  });
+
+  /** Your own settings for a channel: how much it notifies you, and whether it's starred. */
+  app.put("/api/channels/:id/prefs", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const ch = channelVisible(c, (req.params as { id: string }).id);
+    if (!ch) return reply.code(404).send({ error: "channel not found" });
+    const body = parse(z.object({ notify: z.enum(["all", "default", "mute"]), starred: z.boolean() }).partial(), req.body, reply);
+    if (!body) return;
+    store.setChannelPrefs(c.actor.id, ch.id, body);
+    return { ok: true, ...store.channelPrefs(c.actor.id)[ch.id] };
+  });
+
+  /** Pinned messages: the few things everyone in a channel should be able to find again. */
+  app.get("/api/channels/:id/pins", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const ch = channelVisible(c, (req.params as { id: string }).id);
+    if (!ch) return reply.code(404).send({ error: "channel not found" });
+    return store.pins(ch.id).map((p) => ({ ...p, message: store.withReactions([p.message])[0] }));
+  });
+
+  for (const method of ["PUT", "DELETE"] as const) {
+    app.route({
+      method,
+      url: "/api/messages/:id/pin",
+      handler: async (req, reply) => {
+        const c = need(req, reply);
+        if (!c) return;
+        const msg = store.message((req.params as { id: string }).id);
+        const ch = msg && channelVisible(c, msg.channelId);
+        if (!msg || !ch) return reply.code(404).send({ error: "message not found" });
+        if (c.viewer.role === "guest") return reply.code(403).send({ error: "guests can't pin messages" });
+        if (ch.archivedAt) return reply.code(409).send({ error: `#${ch.name} is archived` });
+        if (method === "PUT") {
+          if ((store.pinnedIds([ch.id])[ch.id]?.length ?? 0) >= 100) return reply.code(409).send({ error: "a channel can have 100 pins; unpin one first" });
+          store.pin(ch.id, msg.id, c.actor);
+        } else store.unpin(ch.id, msg.id);
+        hub.broadcast(c.workspaceId, { type: "channels_changed" });
+        return { ok: true, pinned: method === "PUT" };
+      },
+    });
+  }
 
   /** Remember how far you've read, so unread counts and the "new" divider follow you across devices. */
   app.post("/api/channels/:id/read", async (req, reply) => {
@@ -626,13 +726,30 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   app.post("/api/channels", async (req, reply) => {
     const c = need(req, reply, { notGuest: true });
     if (!c) return;
-    const body = parse(z.object({ name: CHANNEL_NAME, topic: z.string().max(250).default(""), sectionId: z.string().nullable().optional() }), req.body, reply);
+    const body = parse(
+      z.object({
+        name: CHANNEL_NAME,
+        topic: z.string().max(250).default(""),
+        sectionId: z.string().nullable().optional(),
+        private: z.boolean().default(false),
+        settings: CHANNEL_SETTINGS.optional(),
+        /** people and agents to add straight away */
+        members: z.array(z.object({ kind: z.enum(["user", "agent"]), id: z.string().min(1) })).max(200).default([]),
+      }),
+      req.body,
+      reply,
+    );
     if (!body) return;
     if (store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
+    if (!checkSettings(c, body.settings)) return reply.code(400).send({ error: "agent not found" });
+    const members = body.members.filter((m) => (m.kind === "user" ? !!store.role(c.workspaceId, m.id) : store.agent(m.id)?.workspaceId === c.workspaceId));
+    if (members.length !== body.members.length) return reply.code(400).send({ error: "someone to add isn't in this workspace" });
     const created = store.createChannel(c.workspaceId, body.name, "channel", body.topic);
-    const ch = body.sectionId ? store.updateChannel(created.id, { sectionId: body.sectionId })! : created;
+    const ch = store.updateChannel(created.id, { sectionId: body.sectionId ?? null, private: body.private, settings: body.settings ?? {} })!;
     store.addChannelMember(ch.id, c.actor);
+    for (const m of members) store.addChannelMember(ch.id, m as Actor);
+    if (ch.settings.defaultAgentId) store.addChannelMember(ch.id, { kind: "agent", id: ch.settings.defaultAgentId });
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return ch;
   });
@@ -660,6 +777,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
+    if (ch.archivedAt) return reply.code(409).send({ error: `#${ch.name} is archived; unarchive it to post here` });
     const body = parse(z.object({ body: z.string().max(40_000), voice: z.boolean().optional(), threadId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
     if (!body) return;
     const files = body.fileIds.map((fid) => store.file(fid)).filter((f) => f && f.workspaceId === c.workspaceId);

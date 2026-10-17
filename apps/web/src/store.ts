@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { Agent, AgentEvent, Approval, Channel, ClientEvent, Computer, Discussion, Message, LeadStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
+import type { Agent, AgentEvent, Approval, Channel, ChannelNotify, ClientEvent, Computer, Discussion, Message, LeadStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
@@ -31,8 +31,14 @@ export interface Member {
 export interface ChannelInfo extends Channel {
   joined: boolean;
   memberCount: number;
+  /** new top-level messages since you last read; always 0 for a channel you muted */
   unread: number;
   lastReadAt: string | null;
+  /** your own settings for it */
+  notify: ChannelNotify;
+  starred: boolean;
+  /** pinned messages, newest pin first */
+  pinnedIds: string[];
 }
 
 /** What an agent is doing right now, built from streamed run events. */
@@ -210,7 +216,7 @@ export const useStore = create<State>((set, get) => ({
     const { activeChannel, channels } = get();
     set({
       channels: list.map((c) =>
-        c.id === activeChannel || readTimers.has(c.id) ? { ...c, unread: 0, lastReadAt: channels.find((x) => x.id === c.id)?.lastReadAt ?? c.lastReadAt } : c,
+        c.id === activeChannel || readTimers.has(c.id) ? { ...c, unread: 0, lastReadAt: channels.find((x) => x.id === c.id)?.lastReadAt ?? c.lastReadAt } : c.notify === "mute" ? { ...c, unread: 0 } : c,
       ),
     });
   },
@@ -293,7 +299,7 @@ export const useStore = create<State>((set, get) => ({
         const mine = m.author.kind === "user" && (m.author.id === get().me?.user.id || m.author.id === "system");
         set((s) => ({
           messages: s.messages[m.channelId] ? { ...s.messages, [m.channelId]: dedupe([...s.messages[m.channelId], m]) } : s.messages,
-          channels: s.channels.map((c) => (c.id === m.channelId && !mine && s.activeChannel !== m.channelId ? { ...c, unread: c.unread + 1 } : c)),
+          channels: s.channels.map((c) => (c.id === m.channelId && !mine && s.activeChannel !== m.channelId && c.notify !== "mute" ? { ...c, unread: c.unread + 1 } : c)),
         }));
         if (get().activeChannel === m.channelId && !mine) get().markRead(m.channelId);
       }

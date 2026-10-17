@@ -24,11 +24,22 @@ export class Push {
   }
 
   /** Who a new message should reach by push, if anyone: people in a DM an agent wrote in, or whoever an approval asks. */
+  /**
+   * Who hears about an agent's message: in a DM, its person; in a channel, whoever it's answering
+   * (and anyone it asks for an OK), plus people who asked for every message there. Muting a
+   * channel silences it.
+   */
   recipients(msg: Message, channel: { workspaceId: string; kind: string }, onBehalfOf: string | null): string[] {
     if (msg.author.kind !== "agent") return [];
-    const asks = msg.parts.some((p) => p.type === "approval");
-    if (channel.kind === "dm") return this.hub.store.channelMembers(msg.channelId).filter((m) => m.kind === "user").map((m) => m.id);
-    return asks && onBehalfOf ? [onBehalfOf] : [];
+    const { store } = this.hub;
+    if (channel.kind === "dm") return store.channelMembers(msg.channelId).filter((m) => m.kind === "user").map((m) => m.id);
+    const muted = store.mutedBy(msg.channelId);
+    const to = new Set(store.notifyAll(msg.channelId));
+    if (onBehalfOf) to.add(onBehalfOf);
+    const out = [...to].filter((u) => !muted.has(u));
+    // asking for an OK gets through even a muted channel: the agent is stuck until someone answers
+    if (onBehalfOf && msg.parts.some((p) => p.type === "approval") && !out.includes(onBehalfOf)) out.push(onBehalfOf);
+    return out;
   }
 
   /** Called for every new message; sends in the background and never throws. */
