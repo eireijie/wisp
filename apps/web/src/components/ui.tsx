@@ -29,6 +29,31 @@ export function Button({ variant = "default", className, ...p }: ButtonHTMLAttri
   );
 }
 
+/**
+ * A small action with an icon. The label is always its accessible name and tooltip; from the md
+ * breakpoint up it also shows as text beside the icon, so nobody has to guess what an icon means.
+ * Pass `labelAlways` to show the text on phones too.
+ */
+export function IconButton({ icon, label, labelAlways, tone = "default", className, ...p }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & { icon: ReactNode; label: string; labelAlways?: boolean; tone?: "default" | "danger" }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      {...p}
+      className={cx(
+        "inline-flex items-center gap-1.5 h-8 min-w-8 justify-center rounded-md px-1.5 text-xs font-medium whitespace-nowrap text-muted transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
+        labelAlways ? "px-2" : "md:px-2",
+        tone === "danger" ? "hover:bg-hover hover:text-bad" : "hover:bg-hover hover:text-ink",
+        className,
+      )}
+    >
+      <span aria-hidden className="shrink-0 grid place-items-center">{icon}</span>
+      <span aria-hidden className={labelAlways ? undefined : "hidden md:inline"}>{label}</span>
+    </button>
+  );
+}
+
 export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...p} className={cx("h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;
 }

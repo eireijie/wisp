@@ -5,6 +5,8 @@ import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
+import { useSimple, Advanced } from "../experience.tsx";
+import { pathLabel } from "../components/AccessDialog.tsx";
 import { pushOnHere } from "../push.ts";
 import { Intro } from "./SettingsParts.tsx";
 import { Toggle } from "./settings/parts.tsx";
@@ -20,6 +22,21 @@ const PACES = [
 
 const CAPS = [6, 12, 24, 48, 96] as const;
 
+/** One plain sentence on what background work means, for the Simple view. */
+export function backgroundSummary({ name, scope, everyMinutes, dailyCap, enabled }: { name: string; scope: string; everyMinutes: number; dailyCap: number | null; enabled: boolean }): string {
+  const what = scope.trim().replace(/[.\s]+$/, "") || "everything it can reach";
+  const pace = PACES.find(([m]) => m === everyMinutes)?.[1] ?? `every ${everyMinutes} minutes`;
+  const limit = dailyCap ? `at most ${dailyCap} ${dailyCap === 1 ? "time" : "times"} a day` : "with no daily limit";
+  const head = enabled ? "While" : "If you turn this on, while";
+  return `${head} you're away, ${name} ${enabled ? "will" : "would"} check ${what} ${pace}, ${limit}, and ${enabled ? "" : "would "}message you when something needs you.`;
+}
+
+/** A memory folder as a person would name it: "agents/agt_x/" becomes "@handle". */
+const folderName = (path: string, agents: Agent[], members: { id: string; name: string }[]) => {
+  const p = path.replace(/\/+$/, "");
+  return pathLabel(p, agents, members) || p.split("/").pop() || p;
+};
+
 /** 38,400 → "38k", 2,100,000 → "2.1M" */
 const tokens = (n: number) => (n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
@@ -34,6 +51,10 @@ const at = (iso: string) => {
  * reach, and writes to you only when something needs you. You turn it on; it picks its pace.
  */
 export function BackgroundPanel({ agent, active }: { agent: Agent; active: boolean }) {
+  const simple = useSimple();
+  const agents = useStore((s) => s.agents);
+  const members = useStore((s) => s.members);
+  const timezone = useStore((s) => s.me?.user.timezone);
   const version = useStore((s) => s.backgroundVersion);
   const offline = useStore((s) => s.agents.find((a) => a.id === agent.id)?.status === "offline");
   const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null; sources: BackgroundSource[]; usage: BackgroundUsage; defaultDailyCap: number } | null>(null);
@@ -89,11 +110,16 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
         <p className="rounded-xl border border-line p-4 text-sm text-muted">{state.notAllowed}.</p>
       ) : (
         <>
+          {simple && <p className="text-sm">{backgroundSummary({ name: agent.name, scope: focus ?? b?.focus ?? "", everyMinutes: b?.everyMinutes ?? 60, dailyCap: b ? b.dailyCap : state.defaultDailyCap, enabled: on })}</p>}
           <div className="rounded-xl border border-line divide-y divide-line">
             <div className="px-4 py-3 flex items-center gap-3">
               <div className="flex-1">
                 <div className="font-medium">Work in the background for you</div>
-                <div className="text-xs text-muted">Each check is a run of {agent.name}, so it uses your harness's plan like any other message.</div>
+                <div className="text-xs text-muted">
+                  {simple
+                    ? "Each check uses your AI account like a normal message, so your AI provider may charge for each one. The daily limit counts checks, not money."
+                    : `Each check is a run of ${agent.name}, so it uses your harness's plan like any other message.`}
+                </div>
               </div>
               <Toggle label="Work in the background for you" on={on} onChange={(v) => void save({ enabled: v })} />
             </div>
@@ -110,7 +136,7 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                     )}
                   </div>
                   {b.lastNote && <div className="text-muted">Its note from last time: {b.lastNote}</div>}
-                  <UsageLine usage={state.usage} cap={b.dailyCap} />
+                  <UsageLine usage={state.usage} cap={b.dailyCap} simple={simple} />
                 </div>
                 <Button onClick={() => void checkNow()} disabled={b.checking}>
                   <RefreshCw size={14} /> Check now
@@ -133,6 +159,7 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                     {!PACES.some(([m]) => m === b.everyMinutes) && <option value={b.everyMinutes}>every {b.everyMinutes} minutes</option>}
                   </select>
                 </div>
+                <Advanced title="Model for checks" className="px-4 py-2.5">
                 <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
                   <div className="flex-1 min-w-56">
                     <div className="font-medium">Model for background checks</div>
@@ -165,6 +192,7 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                     </select>
                   </div>
                 </div>
+                </Advanced>
                 <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
                   <div className="flex-1 min-w-56">
                     <div className="font-medium">Most checks a day</div>
@@ -193,6 +221,18 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                   <input type="time" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.quietStart} onChange={(e) => e.target.value && void save({ quietStart: e.target.value })} aria-label="Quiet hours start" />
                   <span className="text-muted">to</span>
                   <input type="time" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.quietEnd} onChange={(e) => e.target.value && void save({ quietEnd: e.target.value })} aria-label="Quiet hours end" />
+                  <span className="text-xs text-muted">
+                    {timezone ? (
+                      `(${timezone})`
+                    ) : (
+                      <>
+                        UTC ·{" "}
+                        <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
+                          set your time zone
+                        </a>
+                      </>
+                    )}
+                  </span>
                 </div>
               </>
             )}
@@ -215,7 +255,7 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
               {state.sources.map((x) => (
                 <div key={`${x.kind}:${x.name}`} className="px-4 py-2 flex items-center gap-2.5">
                   {x.kind === "app" ? <AppWindow size={14} className="text-muted" /> : x.kind === "computer" ? <Monitor size={14} className="text-muted" /> : <FolderOpen size={14} className="text-muted" />}
-                  <span className="font-medium">{x.name}</span>
+                  <span className="font-medium">{x.kind === "memory" ? folderName(x.name, agents, members) : x.name}</span>
                   <span className="text-muted truncate">{x.kind === "memory" ? "memory" : x.detail}</span>
                 </div>
               ))}
@@ -267,7 +307,7 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
 }
 
 /** What the checks used, as far as the harness says: "Last check: 38k tokens · Today: 410k · This week: 2.1M". */
-function UsageLine({ usage, cap }: { usage: BackgroundUsage; cap: number | null }) {
+function UsageLine({ usage, cap, simple }: { usage: BackgroundUsage; cap: number | null; simple: boolean }) {
   const known = usage.lastTokens !== null || usage.todayTokens !== null || usage.weekTokens !== null;
   const parts = [
     usage.lastTokens !== null && `Last check: ${tokens(usage.lastTokens)} tokens`,
@@ -276,7 +316,7 @@ function UsageLine({ usage, cap }: { usage: BackgroundUsage; cap: number | null 
   ].filter(Boolean);
   return (
     <div className="text-xs text-muted">
-      {known ? parts.join(" · ") : "Token use: not reported by this harness."}
+      {known ? parts.join(" · ") : simple ? "Cost per check isn't reported." : "Token use: not reported by this harness."}
       {usage.checksToday > 0 && `${known ? " · " : " "}${usage.checksToday}${cap ? ` of ${cap}` : ""} ${usage.checksToday === 1 && !cap ? "check" : "checks"} today`}
     </div>
   );

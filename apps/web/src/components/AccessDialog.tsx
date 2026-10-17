@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Bot, Pin, RotateCcw, Users } from "lucide-react";
-import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
+import { Bot, Eye, Pencil, Pin, RotateCcw, Users } from "lucide-react";
+import { atLeast, type AccessRule, type Agent, type MemoryLevel, type Subject } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type Member } from "../store.ts";
+import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
 import { AgentAvatar, Modal, UserAvatar, cx } from "./ui.tsx";
 
 interface AccessInfo {
@@ -52,6 +53,36 @@ export function subjectLabel(s: Subject, agents: Pick<Agent, "id" | "handle">[],
   }
 }
 
+/** "you, Alex, Everyday Helper": a plain list, or the group in words when every person / helper is in it. */
+function audience(people: { name: string; me: boolean; ok: boolean }[], helpers: { name: string; ok: boolean }[]): string {
+  const parts: string[] = [];
+  if (people.length > 1 && people.every((p) => p.ok)) parts.push("everyone in the workspace");
+  else parts.push(...people.filter((p) => p.me && p.ok).map(() => "you"), ...people.filter((p) => !p.me && p.ok).map((p) => p.name));
+  if (helpers.length > 1 && helpers.every((h) => h.ok)) parts.push("all helpers");
+  else parts.push(...helpers.filter((h) => h.ok).map((h) => h.name));
+  return parts.join(", ") || "nobody";
+}
+
+/**
+ * The plain answer to "who can read this?" and "who can change this?", from the same effective
+ * levels the hub works out for every person and helper (rules here, inherited rules and defaults
+ * already applied). Reading needs "read" or more; changing needs "edit" or more.
+ */
+export function accessSummary(
+  info: { people: { id: string; name: string; level: MemoryLevel }[]; agents: { id: string; handle: string; level: MemoryLevel }[] },
+  opts: { myId?: string; agentName?: (id: string, handle: string) => string } = {},
+): { read: string; change: string } {
+  const who = (need: MemoryLevel) =>
+    audience(
+      info.people.map((p) => ({ name: p.name, me: p.id === opts.myId, ok: atLeast(p.level, need) })),
+      info.agents.map((a) => ({ name: opts.agentName?.(a.id, a.handle) ?? a.handle, ok: atLeast(a.level, need) })),
+    );
+  return { read: who("read"), change: who("edit") };
+}
+
+/** True for the Shared folder and anything in it. */
+export const isShared = (path: string) => path.toLowerCase().split("/")[0] === "shared";
+
 /** Every folder that holds at least one note, e.g. "Projects" and "Projects/web". */
 export function folderPaths(notes: { path: string }[]): string[] {
   const out = new Set<string>();
@@ -79,6 +110,9 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
     load();
   }, [load]);
 
+  const simple = useSimple();
+  const summary = info ? accessSummary(info, { myId, agentName: (id, handle) => agents.find((a) => a.id === id)?.name ?? `@${handle}` }) : null;
+  const noun = folder ? "folder" : "note";
   const canManage = info?.level === "manage";
   const direct = (s: Subject) => info?.rules.find((r) => key(r.subject) === key(s));
 
@@ -127,18 +161,48 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
   return (
     <Modal title={title} onClose={onClose} wide>
       <div className="space-y-5 text-sm">
-        <p className="text-muted">
-          {folder ? (
-            <>
-              Rules on <b className="text-ink">{pathLabel(path, agents, members)}/</b> apply to everything inside it.
-            </>
-          ) : (
-            <>
-              Only <b className="text-ink">{pathLabel(path, agents, members)}</b>.
-            </>
-          )}{" "}
-          A rule set here beats what's inherited, and a rule for one agent beats one for its role, its team or all agents.
-        </p>
+        {summary && (
+          <div className="rounded-xl border border-line px-4 py-3 space-y-2">
+            <p className="flex items-start gap-2">
+              <Eye size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden />
+              <span>
+                <b>Who can read this {noun}:</b> {summary.read}
+              </span>
+            </p>
+            <p className="flex items-start gap-2">
+              <Pencil size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden />
+              <span>
+                <b>Who can change this {noun}:</b> {summary.change}
+              </span>
+            </p>
+            {isShared(path) && <p className="text-xs text-muted">Shared is the common folder. By default everyone in the workspace and all helpers can use what is in it, so don't keep private things there.</p>}
+          </div>
+        )}
+        <Advanced title="How these rules work">
+          <p className="text-muted">
+            {folder ? (
+              <>
+                Rules on <b className="text-ink">{pathLabel(path, agents, members)}/</b> apply to everything inside it.
+              </>
+            ) : (
+              <>
+                Only <b className="text-ink">{pathLabel(path, agents, members)}</b>.
+              </>
+            )}{" "}
+            A rule set here beats what's inherited, and a rule for one agent beats one for its role, its team or all agents.
+          </p>
+          <SimpleOnly>
+            {info && (
+              <ul className="mt-2 space-y-1 text-xs text-muted">
+                {[...info.subjects.map((r) => ({ name: subjectLabel(r.subject, agents, members), hint: why(r.subject, r.level, r.via) })), ...info.agents.map((a) => ({ name: `@${a.handle}`, hint: why({ kind: "agent", id: a.id }, a.level, a.via) })), ...info.people.map((p) => ({ name: p.name, hint: p.role === "owner" ? "Owner · always manages everything" : why({ kind: "user", id: p.id }, p.level, p.via) }))].map((r, i) => (
+                  <li key={i}>
+                    <b className="text-ink">{r.name}:</b> {r.hint}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SimpleOnly>
+        </Advanced>
         {info && !canManage && <p className="rounded-lg bg-hover px-3 py-2 text-muted">You can see who has access. Only people who manage this {folder ? "folder" : "note"} can change it.</p>}
         {error && <p className="text-bad">{error}</p>}
         {!info ? (
@@ -153,7 +217,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={key(r.subject)}
                     avatar={<GroupIcon />}
                     name={subjectLabel(r.subject, agents, members)}
-                    hint={why(r.subject, r.level, r.via)}
+                    hint={simple ? "" : why(r.subject, r.level, r.via)}
                     level={r.level}
                     levels={["none", "read", "edit"]}
                     disabled={!canManage || busy === key(r.subject)}
@@ -172,7 +236,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={a.id}
                     avatar={<AgentAvatar agent={agent} size={28} badge={false} />}
                     name={`@${a.handle}`}
-                    hint={why(s, a.level, a.via)}
+                    hint={simple ? "" : why(s, a.level, a.via)}
                     level={a.level}
                     levels={["none", "read", "edit"]}
                     disabled={!canManage || busy === key(s)}
@@ -195,7 +259,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={key(r.subject)}
                     avatar={<GroupIcon />}
                     name={subjectLabel(r.subject, agents, members)}
-                    hint={why(r.subject, r.level, r.via)}
+                    hint={simple ? "" : why(r.subject, r.level, r.via)}
                     level={r.level}
                     levels={r.subject.kind === "guests" ? ["none", "read"] : ["none", "read", "edit", "manage"]}
                     disabled={!canManage || busy === key(r.subject)}
@@ -211,7 +275,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={p.id}
                     avatar={<UserAvatar name={p.name} size={28} />}
                     name={`${p.name}${p.id === myId ? " (you)" : ""}`}
-                    hint={p.role === "owner" ? "Owner · always manages everything" : why(s, p.level, p.via)}
+                    hint={simple ? "" : p.role === "owner" ? "Owner · always manages everything" : why(s, p.level, p.via)}
                     level={p.level}
                     levels={p.role === "guest" ? ["none", "read"] : ["none", "read", "edit", "manage"]}
                     disabled={!canManage || p.role === "owner" || busy === key(s)}
@@ -222,8 +286,11 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                 );
               })}
             </Section>
-            <p className="text-xs text-muted flex items-center gap-1.5">
-              <Pin size={12} className="shrink-0" /> <span>Load at startup: the agent gets {folder ? "these notes" : "this note"} in its prompt every time it works.</span>
+            <p className="text-xs text-muted flex items-start gap-1.5">
+              <Pin size={12} className="mt-0.5 shrink-0" />{" "}
+              <span>
+                <b>Always remind helpers of {folder ? "these notes" : "this note"}:</b> use the pin next to a helper. Helpers read {folder ? "them" : "it"} at the start of every chat. Keep {folder ? "them" : "it"} short; long notes make every reply slower and cost more.
+              </span>
             </p>
           </>
         )}
@@ -270,15 +337,15 @@ function Row(p: {
       {p.avatar}
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{p.name}</div>
-        <div className="text-xs leading-snug text-muted">{p.hint}</div>
+        {p.hint && <div className="text-xs leading-snug text-muted">{p.hint}</div>}
       </div>
       {p.onStartup && (
         <button
           onClick={() => p.onStartup!(!p.startup)}
           disabled={p.disabled || p.level === "none" || p.startupInherited}
           className={cx("p-1.5 rounded-md disabled:opacity-40", p.startup ? "text-accent-text bg-accent-soft" : "text-faint hover:text-ink hover:bg-hover")}
-          title={p.startupInherited ? "Loads at startup because of a rule for its team, role or all agents" : p.startup ? "Loads at startup (click to stop)" : "Load at startup"}
-          aria-label="Load at startup"
+          title={p.startupInherited ? "Always reminded of this note, because of a rule for its team, role or all agents" : p.startup ? "Always reminded of this note (click to stop)" : "Always remind this helper of this note"}
+          aria-label="Always remind this helper of this note"
           aria-pressed={p.startup}
         >
           <Pin size={14} />

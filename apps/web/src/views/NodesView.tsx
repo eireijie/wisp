@@ -3,7 +3,7 @@ import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2,
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, DeviceInstall, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
+import { Button, DeviceInstall, Empty, Field, IconButton, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 interface NodeInfo {
   id: string;
@@ -21,6 +21,22 @@ interface NodeInfo {
   /** the Warren version it runs; null for devices from before updates */
   version: { commit: string | null; date: string | null } | null;
   update: { state: "idle" | "updating" | "restarting" | "failed"; message: string } | null;
+}
+
+/** "Connected" while online; otherwise when it was last seen. Never both, so it can't contradict the pill. */
+export function connectionLine(n: { online: boolean; lastSeen: string | null }, ago: (iso: string) => string): string {
+  if (n.online) return "Connected";
+  return n.lastSeen ? `Last seen ${ago(n.lastSeen)}` : "Never connected";
+}
+
+/** What we can say about the device's own screen. Offline means unknown, whatever we saw last time. */
+export function screenLine(n: { online: boolean; capabilities: DeviceCapabilities | null }): string {
+  const last = n.capabilities?.screen;
+  if (n.online && last) return "";
+  if (n.online) return "Its screen: not checked yet.";
+  const base = "Its screen: unknown until it connects.";
+  if (!last) return base;
+  return `${base} (Last time: ${last.ok ? "on" : "off"}.)`;
 }
 
 export function NodesView({ onBack }: { onBack?: () => void }) {
@@ -59,6 +75,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
           </Empty>
         ) : (
           <div className="max-w-3xl p-4 md:p-8 space-y-3">
+            <p className="text-sm text-muted">A device is a computer running Warren. Helpers run on it. Add one for each computer you want helpers to use.</p>
             {nodes?.map((n) => (
               <div key={n.id} className="rounded-xl border border-line p-4">
                 <div className="flex items-center gap-4">
@@ -68,7 +85,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium flex flex-wrap items-center gap-2">
                       {n.name}
-                      <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "online" : "offline"}</span>
+                      <span className={cx("text-xs rounded-full px-2 py-0.5", n.online ? "bg-accent-soft text-accent-text" : "bg-hover text-muted")}>{n.online ? "Online" : "Offline"}</span>
                       {n.paused && (
                         <Pill tone="warn">
                           <Pause size={11} /> Paused at the device
@@ -77,8 +94,8 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                       <span className="text-xs font-normal text-muted">{n.mine ? "Yours" : n.ownerName ? `${n.ownerName}'s` : ""}</span>
                     </div>
                     <div className="text-xs text-muted truncate">
-                      {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No agents assigned"}
-                      {n.lastSeen && ` · last seen ${timeAgo(n.lastSeen)}`}
+                      {n.agents.length ? n.agents.map((h) => "@" + h).join(", ") : "No helpers yet"}
+                      {` · ${connectionLine(n, timeAgo)}`}
                       {n.version?.commit && (
                         <>
                           {" · "}Warren <code>{n.version.commit}</code>
@@ -104,17 +121,18 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                       <Download size={15} /> <span className="hidden sm:inline">Update</span>
                     </Button>
                   )}
-                  {(n.mine || isOwner) && <button
-                    className="p-2 rounded-md hover:bg-hover text-muted hover:text-bad"
-                    title="Remove device"
-                    onClick={async () => {
-                      if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
-                      await api("DELETE", `/api/nodes/${n.id}`);
-                      refresh();
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </button>}
+                  {(n.mine || isOwner) && (
+                    <IconButton
+                      icon={<Trash2 size={16} />}
+                      label="Remove device"
+                      tone="danger"
+                      onClick={async () => {
+                        if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
+                        await api("DELETE", `/api/nodes/${n.id}`);
+                        refresh();
+                      }}
+                    />
+                  )}
                 </div>
                 <DeviceAccess node={n} onChange={refresh} />
                 {n.update?.message && (
@@ -180,8 +198,8 @@ function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => v
       <div className="flex items-start gap-2">
         <Monitor size={13} className="mt-0.5 shrink-0" />
         <span>
-          {!screen
-            ? "Its screen: unknown until it connects."
+          {!screen || !n.online
+            ? screenLine(n)
             : screen.ok
               ? n.mine
                 ? "Its own screen is on: only you can see it, and agents only while you lend it to them (Computers)."

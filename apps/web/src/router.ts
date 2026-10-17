@@ -16,7 +16,8 @@ import { useEffect, useState } from "react";
  *   #/skills                         the skill shop: things agents can learn to do
  *   #/settings[/<page>]              your settings and the workspace's (see SETTINGS_PAGES)
  *   #/join/<code>                    accept an invite (signed out)
- *   #/welcome                        first-run onboarding
+ *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Warren is" and Simple or Advanced
+ *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
  *   #/                               the dashboard on desktops, the chats list on phones (App.tsx)
  *   #/chats                          channel list (phones; desktops go to the dashboard)
  *   #/you                            account menu (phones)
@@ -35,7 +36,8 @@ export type Route =
   | { view: "connectors" }
   | { view: "skills" }
   | { view: "settings"; page?: SettingsPage | null }
-  | { view: "welcome" }
+  | { view: "welcome"; intro?: boolean }
+  | { view: "help" }
   | { view: "chats" }
   | { view: "you" };
 
@@ -74,7 +76,9 @@ export function parseRoute(hash: string): Route {
     case "settings":
       return { view: "settings", page: SETTINGS_PAGES.find((p) => p === parts[1]) ?? null };
     case "welcome":
-      return { view: "welcome" };
+      return { view: "welcome", ...(parts[1] === "intro" ? { intro: true } : {}) };
+    case "help":
+      return { view: "help" };
     case "chats":
       return { view: "chats" };
     case "you":
@@ -113,7 +117,9 @@ export function href(r: Route): string {
     case "settings":
       return "#/settings" + (r.page ? `/${r.page}` : "");
     case "welcome":
-      return "#/welcome";
+      return r.intro ? "#/welcome/intro" : "#/welcome";
+    case "help":
+      return "#/help";
     case "chats":
       return "#/chats";
     case "you":

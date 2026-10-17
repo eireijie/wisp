@@ -14,6 +14,7 @@ import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, Sta
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
+import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
 import { computerKindLabel, type DeviceInfo } from "../devices.ts";
 
 export type NodeInfo = DeviceInfo;
@@ -27,7 +28,7 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
     items: [
       { id: "overview", label: "Overview", icon: <LayoutGrid size={16} /> },
       { id: "look", label: "Look", icon: <Ghost size={16} /> },
-      { id: "soul", label: "Soul", icon: <Sparkles size={16} /> },
+      { id: "soul", label: "Personality", icon: <Sparkles size={16} /> },
       { id: "instructions", label: "Instructions", icon: <ScrollText size={16} /> },
     ],
   },
@@ -48,7 +49,7 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
       { id: "connect", label: "Connect", icon: <Plug size={16} /> },
     ],
   },
-  { group: "Activity", items: [{ id: "runs", label: "Runs", icon: <Activity size={16} /> }] },
+  { group: "Activity", items: [{ id: "runs", label: "Activity", icon: <Activity size={16} /> }] },
 ];
 
 /**
@@ -125,34 +126,34 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
           <Panel show={active === "look"}>
             <LookPanel agent={agent} onDirty={markDirty("look")} active={active === "look"} />
           </Panel>
-          <Panel show={active === "soul"}>
+          <Panel show={active === "soul"} hint="How it talks and what it values.">
             <SoulPanel agent={agent} onDirty={markDirty("soul")} active={active === "soul"} />
           </Panel>
-          <Panel show={active === "instructions"}>
+          <Panel show={active === "instructions"} hint="Its job and how it should reply.">
             <InstructionsPanel agent={agent} onDirty={markDirty("instructions")} active={active === "instructions"} />
           </Panel>
-          <Panel show={active === "model"}>
+          <Panel show={active === "model"} hint="Which AI model it uses and how hard it thinks.">
             <ModelPanel agent={agent} onDirty={markDirty("model")} active={active === "model"} />
           </Panel>
-          <Panel show={active === "device"}>
+          <Panel show={active === "device"} hint="The computer that runs this helper.">
             <DevicePanel agent={agent} nodes={nodes} onDirty={markDirty("device")} active={active === "device"} />
           </Panel>
-          <Panel show={active === "computer"}>
+          <Panel show={active === "computer"} hint="Where it opens apps and websites. Optional.">
             <ComputerPanel agent={agent} nodes={nodes} />
           </Panel>
-          <Panel show={active === "background"}>
+          <Panel show={active === "background"} hint="What it does on its own while you're away.">
             <BackgroundPanel agent={agent} active={active === "background"} />
           </Panel>
-          <Panel show={active === "routines"}>
+          <Panel show={active === "routines"} hint="Jobs it does on a schedule.">
             <RoutinesPanel agent={agent} active={active === "routines"} />
           </Panel>
-          <Panel show={active === "permissions"}>
+          <Panel show={active === "permissions"} hint="What it may do without asking.">
             <PermissionsPanel agent={agent} nodes={nodes} onDirty={markDirty("permissions")} active={active === "permissions"} />
           </Panel>
-          <Panel show={active === "connect"}>
+          <Panel show={active === "connect"} hint="Connect an agent that already runs somewhere else.">
             <ConnectPanel agent={agent} nodes={nodes} />
           </Panel>
-          <Panel show={active === "runs"}>
+          <Panel show={active === "runs"} hint="Everything it has done lately, newest first.">
             <RunsPanel agent={agent} active={active === "runs"} />
           </Panel>
         </div>
@@ -161,9 +162,14 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
   );
 }
 
-function Panel({ show, children }: { show: boolean; children: ReactNode }) {
+function Panel({ show, hint, children }: { show: boolean; hint?: string; children: ReactNode }) {
   return (
     <div role="tabpanel" hidden={!show} className="max-w-4xl">
+      {hint && (
+        <SimpleOnly>
+          <p className="mb-3 text-sm text-muted">{hint}</p>
+        </SimpleOnly>
+      )}
       {children}
     </div>
   );
@@ -244,7 +250,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
 
   return (
     <div>
-      <Intro title="Soul">
+      <Intro title="Personality">
         <p>
           Who @{agent.handle} is: personality, voice, values and boundaries. It's read at the start of every conversation. Keep it short; every line should change how the agent behaves. What it should <i>do</i> goes in{" "}
           <a className="text-accent-text hover:underline" href={`#/agents/${agent.id}/instructions`}>
@@ -260,13 +266,13 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
           role="switch"
           aria-checked={!locked}
           className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "bg-accent")}
-          aria-label={`Let @${agent.handle} refine its own soul`}
+          aria-label={`Let @${agent.handle} refine its own personality`}
         >
           <span className={cx("absolute top-0.5 size-5 rounded-full bg-white shadow transition-all", locked ? "left-0.5" : "left-[22px]")} />
         </button>
         <div className="flex-1 min-w-0 text-sm">
           <div className="font-medium flex items-center gap-1.5">
-            {locked ? <Lock size={14} /> : <Unlock size={14} />} Let @{agent.handle} refine its own soul
+            {locked ? <Lock size={14} /> : <Unlock size={14} />} Let @{agent.handle} refine its own personality
           </div>
           <div className="text-muted">{locked ? "Locked: only people can change it." : "It can update this file as it learns who it is. Every change is kept in history."}</div>
         </div>
@@ -276,7 +282,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
         <p className="text-sm text-muted">Loading…</p>
       ) : saved === null && !draft ? (
         <div className="rounded-xl border border-dashed border-line p-6 text-center space-y-3">
-          <p className="text-sm text-muted">@{agent.handle} doesn't have a soul yet.</p>
+          <p className="text-sm text-muted">@{agent.handle} doesn't have a personality yet.</p>
           <Button variant="primary" onClick={() => setDraft(soulTemplate(agent.name, agent.handle))}>
             <Sparkles size={15} /> Start from a template
           </Button>
@@ -313,7 +319,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
           last && (
             <span className="inline-flex items-center gap-1.5">
               <GitCommitHorizontal size={14} />
-              {editedByAgent ? `@${agent.handle} last refined its soul` : `Last edited by ${last.author}`} {timeAgo(last.date)} ·{" "}
+              {editedByAgent ? `@${agent.handle} last refined its personality` : `Last edited by ${last.author}`} {timeAgo(last.date)} ·{" "}
               <a className="text-accent-text hover:underline" href={`#/vault/${path}`}>
                 history
               </a>
@@ -430,6 +436,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const headless = runsOnDevice(agent.harness);
+  const simple = useSimple();
 
   useEffect(() => {
     if (active) api("GET", `/api/agents/${agent.id}/models`).then(setInfo, () => setInfo({ device: null, catalog: null }));
@@ -481,6 +488,10 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       </div>
     );
 
+  const hLabel = HARNESS_LABELS[agent.harness];
+  const isAuto = !form.model && !form.effort && !form.fast;
+  const deviceGone = !agent.nodeId || !!(info?.device && !info.device.online);
+
   const why = !agent.nodeId
     ? "This agent isn't assigned to a device yet. Pick one under Device to see its models."
     : !info?.device
@@ -491,7 +502,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           : `${info.device.name} is offline. Start it to see the models it offers.`
         : null;
 
-  return (
+  const controls = (
     <div className="space-y-6">
       <section>
         <Intro compact title="Model">
@@ -582,6 +593,40 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           <Zap size={14} className={cx(form.fast && selected?.fast && "text-accent-text fill-accent")} /> Fast mode
         </label>
       </section>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {simple && (
+        <section className="rounded-xl border border-accent bg-accent-soft p-3 text-sm">
+          <div className="font-medium">{isAuto ? "Automatic (recommended)" : `Custom: ${form.model ? prettyModel(form.model) : "your own settings"}`}</div>
+          <p className="mt-0.5 text-muted">
+            {isAuto ? `Warren lets ${hLabel} pick the model and effort. That's right for most people.` : `You chose the model or effort yourself. Automatic lets ${hLabel} pick for you.`}
+          </p>
+          {!isAuto && (
+            <Button className="mt-2" onClick={() => (setForm({ model: "", effort: "", fast: false }), setCustom(false))}>
+              Back to automatic
+            </Button>
+          )}
+        </section>
+      )}
+      {simple && deviceGone ? (
+        <p className="text-sm text-muted">
+          {agent.nodeId ? (
+            `Connect ${info?.device?.name ?? "its device"} to see available models.`
+          ) : (
+            <>
+              <a className="text-accent-text hover:underline" href={`#/agents/${agent.id}/device`}>
+                Pick a device on the Device tab
+              </a>{" "}
+              to see available models.
+            </>
+          )}
+        </p>
+      ) : (
+        <Advanced title="Choose the model yourself">{controls}</Advanced>
+      )}
 
       {error && <p className="text-sm text-bad">{error}</p>}
       <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => (setForm(saved), setCustom(!!saved.model && !models.some((m) => m.id === saved.model)))} active={active} note="Changes apply from the next message." />
@@ -727,6 +772,14 @@ function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | und
   );
 }
 
+/** The effective reach of an access level in plain words (edit = the harness's workspace sandbox: its own folder). */
+export function accessScope(access: AccessLevel, name: string, handle: string, device: string | undefined): string {
+  if (!device) return "It has no device yet, so it can't touch any files.";
+  if (access === "read-only") return `Right now ${name} can read files on ${device} but can't change anything.`;
+  if (access === "edit") return `Right now ${name} can change files only in its own folder on ${device} (~/.warren/agents/${handle}). It can't change files anywhere else on ${device}.`;
+  return `Right now ${name} can run any command and change any file ${device}'s user can.`;
+}
+
 function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
@@ -771,6 +824,9 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
             <Choice key={a} selected={access === a} onClick={() => setAccess(a)} title={ACCESS[a].label} body={ACCESS[a].body} danger={a === "full"} />
           ))}
         </div>
+        <p role="status" className="mt-3 text-sm">
+          {accessScope(access, agent.name, agent.handle, nodes.find((n) => n.id === agent.nodeId)?.name)}
+        </p>
         {access === "full" && (
           <p className="mt-3 flex gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
             <ShieldAlert size={16} className="shrink-0 mt-0.5" />
@@ -817,7 +873,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
           <Row label="Its folder is shared with">
             {memory === null ? "…" : memory.sharedOut.length ? memory.sharedOut.map((r) => `${subjectLabel(r.subject, agents, members)} (${LEVEL_LABEL[r.level].toLowerCase()}${r.path !== `agents/${agent.id}` ? ` ${where(r)}` : ""})`).join(", ") : "No one else"}
           </Row>
-          <Row label="Soul">{agent.settings.soulLocked ? "Locked: only people can edit it" : "It can refine its own soul"}</Row>
+          <Row label="Personality">{agent.settings.soulLocked ? "Locked: only people can edit it" : "It can refine its own personality"}</Row>
           <Row label="Instructions">Only people can edit them</Row>
         </div>
       </section>
@@ -861,7 +917,32 @@ function problem(runs: RunRow[] | null): string | null {
 }
 
 const RUN_TONE: Record<string, "ok" | "bad" | "warn" | "info" | "neutral"> = { done: "ok", failed: "bad", running: "info", queued: "warn", cancelled: "neutral" };
-const runStatus = (s: string) => (s === "done" ? "succeeded" : s);
+
+/** A run's status in plain words. */
+export function runStatusLabel(status: string): string {
+  const known: Record<string, string> = { queued: "Waiting to start", running: "Working", done: "Done", failed: "Didn't finish", cancelled: "Stopped" };
+  return known[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+/** A readable name for a run, from the body of the message that woke the agent (null for background checks). */
+export function runTitle(trigger: string | null): string {
+  const text = (trigger ?? "").trim();
+  if (!text) return "Background check";
+  const body = text.replace(/^(?:@[\w.-]+\s*)+/, "");
+  const task = body.match(/^New task \*\*(.+?)\*\*/);
+  if (task) return `Task: ${task[1]}`;
+  const routine = body.match(/^Run the routine \*\*(.+?)\*\*/);
+  if (routine) return `Routine: ${routine[1]}`;
+  const learn = body.match(/^I just showed you how to \*\*(.+?)\*\*/);
+  if (learn) return `Learning: ${learn[1]}`;
+  const line = (body.split("\n").find((l) => l.trim()) ?? "")
+    .replace(/\*\*|`/g, "")
+    .replace(/(^|\s)_+|_+(?=\s|$)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!line) return "Message";
+  return line.length > 80 ? `${line.slice(0, 80).trimEnd()}…` : line;
+}
 
 function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: NodeInfo[]; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
@@ -997,19 +1078,19 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
 
       <section>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold">Soul</h3>
+          <h3 className="font-semibold">Personality</h3>
           <a className="text-sm text-accent-text hover:underline" href={`#/agents/${agent.id}/soul`}>
             Edit
           </a>
         </div>
-        <div className="rounded-xl border border-line p-4 text-sm text-muted whitespace-pre-line line-clamp-6">{soul === null ? "Loading…" : soul || "No soul yet. Give it a personality on the Soul page."}</div>
+        <div className="rounded-xl border border-line p-4 text-sm text-muted whitespace-pre-line line-clamp-6">{soul === null ? "Loading…" : soul || "No personality yet. Give it one on the Personality page."}</div>
       </section>
 
       <section>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold">Recent runs</h3>
+          <h3 className="font-semibold">Recent activity</h3>
           <a className="text-sm text-accent-text hover:underline" href={`#/agents/${agent.id}/runs`}>
-            All runs
+            All activity
           </a>
         </div>
         <RunList runs={runs} compact />
@@ -1017,7 +1098,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
 
       <section className="pt-6 border-t border-line space-y-2">
         <h3 className="font-semibold text-bad">Remove agent</h3>
-        <p className="text-sm text-muted">Removes @{agent.handle} from the workspace. Its memory notes and soul stay in the vault.</p>
+        <p className="text-sm text-muted">Removes @{agent.handle} from the workspace. Its memory notes and personality stay in the vault.</p>
         <Button
           variant="danger"
           onClick={async () => {
@@ -1043,7 +1124,7 @@ function RunsPanel({ agent, active }: { agent: FullAgent; active: boolean }) {
   }, [active, agent.id]);
   return (
     <div className="max-w-4xl">
-      <Intro title="Runs">
+      <Intro title="Activity">
         <p>Every time @{agent.handle} was woken up: where, by what, and how it went.</p>
       </Intro>
       <RunList runs={runs} />
@@ -1053,22 +1134,41 @@ function RunsPanel({ agent, active }: { agent: FullAgent; active: boolean }) {
 
 function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }) {
   if (!runs) return <p className="text-sm text-muted">Loading…</p>;
-  if (!runs.length) return <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No runs yet. @mention the agent in a channel to wake it up.</p>;
+  if (!runs.length) return <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Nothing yet. Message the agent to give it something to do.</p>;
   return (
     <div className="rounded-xl border border-line divide-y divide-line">
       {runs.map((r) => {
         const secs = r.finishedAt ? Math.max(0, Math.round((new Date(r.finishedAt).getTime() - new Date(r.createdAt).getTime()) / 1000)) : null;
+        const channel = r.channelKind === "dm" ? "DM" : `#${r.channelName ?? ""}`;
+        const why = r.hint || r.error;
         return (
-          <a key={r.id} href={`#/c/${r.channelId}${r.threadId ? `/t/${r.threadId}` : ""}`} className="px-4 py-2.5 flex items-center gap-3 hover:bg-hover text-sm">
-            <Pill tone={RUN_TONE[r.status] ?? "neutral"}>{runStatus(r.status)}</Pill>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate">{r.trigger ?? "—"}</span>
-              {!compact && r.error && <span className="block text-xs text-bad truncate">{r.error}</span>}
-            </span>
-            <span className="text-xs text-muted shrink-0 hidden sm:inline">{r.channelKind === "dm" ? "DM" : `#${r.channelName ?? ""}`}</span>
-            {secs !== null && <span className="text-xs text-faint shrink-0 tabular-nums w-10 text-right">{secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}m`}</span>}
-            <span className="text-xs text-faint shrink-0 w-16 text-right">{timeAgo(r.createdAt)}</span>
-          </a>
+          <div key={r.id} className="px-4 py-2.5 text-sm">
+            <div className="flex items-center gap-3">
+              <Pill tone={RUN_TONE[r.status] ?? "neutral"}>{runStatusLabel(r.status)}</Pill>
+              <span className="min-w-0 flex-1">
+                <a href={`#/c/${r.channelId}${r.threadId ? `/t/${r.threadId}` : ""}`} className="block truncate hover:underline">
+                  {runTitle(r.trigger)}
+                </a>
+                {!compact && why && <span className="block text-xs text-bad truncate">{why}</span>}
+              </span>
+              <span className="text-xs text-muted shrink-0 hidden sm:inline">{channel}</span>
+              {secs !== null && <span className="text-xs text-faint shrink-0 tabular-nums w-10 text-right">{secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}m`}</span>}
+              <span className="text-xs text-faint shrink-0 w-16 text-right">{timeAgo(r.createdAt)}</span>
+            </div>
+            {!compact && (
+              <details className="mt-1 text-xs text-muted">
+                <summary className="cursor-pointer select-none">Details</summary>
+                <div className="mt-1.5 space-y-1">
+                  <div>
+                    Run id: <span className="font-mono break-all">{r.id}</span>
+                  </div>
+                  <div>Channel: {channel}</div>
+                  {r.trigger && <div className="whitespace-pre-wrap break-words max-h-32 overflow-y-auto rounded-lg bg-hover px-2 py-1.5">{r.trigger}</div>}
+                  {r.error && <div className="text-bad break-words">Error: {r.error}</div>}
+                </div>
+              </details>
+            )}
+          </div>
         );
       })}
     </div>

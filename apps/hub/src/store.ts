@@ -751,6 +751,18 @@ export class Store {
     return msg;
   }
 
+  deleteMessage(messageId: string) {
+    this.db.prepare("DELETE FROM messages WHERE id = ?").run(messageId);
+  }
+
+  /** System notices (status lines) posted in a channel or thread since a moment, oldest first. */
+  systemNotices(channelId: string, threadId: string | null, since: string): Message[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM messages WHERE channel_id = ? AND author_id = 'system' AND created_at >= ? AND ${threadId ? "thread_id = ?" : "thread_id IS NULL"} ORDER BY created_at`)
+      .all(...(threadId ? [channelId, since, threadId] : [channelId, since])) as MessageRow[];
+    return rows.map(toMessage);
+  }
+
   message(messageId: string): Message | undefined {
     const r = this.db.prepare("SELECT * FROM messages WHERE id = ?").get(messageId) as MessageRow | undefined;
     return r && toMessage(r);
@@ -898,6 +910,11 @@ export class Store {
     this.db.prepare("UPDATE runs SET status = ?, error = ?, finished_at = ? WHERE id = ?").run(status, error ?? null, finished, runId);
   }
 
+  /** A run that never reached a device leaves no trace (a background check cancelled before it started). */
+  deleteQueuedRun(runId: string) {
+    return this.db.prepare("DELETE FROM runs WHERE id = ? AND status = 'queued'").run(runId).changes > 0;
+  }
+
   queuedRunsForNode(nodeId: string) {
     return this.db
       .prepare("SELECT r.id FROM runs r JOIN agents a ON a.id = r.agent_id WHERE a.node_id = ? AND r.status = 'queued' ORDER BY r.created_at")
@@ -907,14 +924,15 @@ export class Store {
   agentRuns(agentId: string, limit = 20) {
     return this.db
       .prepare(
-        `SELECT r.id, r.status, r.error, r.created_at AS createdAt, r.finished_at AS finishedAt, r.channel_id AS channelId, r.thread_id AS threadId,
+        `SELECT r.id, r.status, r.kind, r.error, r.created_at AS createdAt, r.finished_at AS finishedAt, r.channel_id AS channelId, r.thread_id AS threadId,
                 c.name AS channelName, c.kind AS channelKind, m.body AS trigger
          FROM runs r LEFT JOIN channels c ON c.id = r.channel_id LEFT JOIN messages m ON m.id = r.trigger_message_id
-         WHERE r.agent_id = ? ORDER BY r.created_at DESC LIMIT ?`,
+         WHERE r.agent_id = ? AND NOT (r.kind = 'background' AND r.status = 'queued') ORDER BY r.created_at DESC LIMIT ?`,
       )
       .all(agentId, limit) as {
       id: string;
       status: string;
+      kind: string;
       error: string | null;
       createdAt: string;
       finishedAt: string | null;
@@ -936,7 +954,7 @@ export class Store {
   /** Background checks for one person since `since`, newest first, with what each reported using. */
   backgroundRuns(agentId: string, userId: string, since: string) {
     const rows = this.db
-      .prepare("SELECT status, created_at AS createdAt, usage_json AS usage FROM runs WHERE agent_id = ? AND requested_by = ? AND kind = 'background' AND created_at >= ? ORDER BY created_at DESC")
+      .prepare("SELECT status, created_at AS createdAt, usage_json AS usage FROM runs WHERE agent_id = ? AND requested_by = ? AND kind = 'background' AND status != 'queued' AND created_at >= ? ORDER BY created_at DESC")
       .all(agentId, userId, since) as { status: string; createdAt: string; usage: string | null }[];
     return rows.map((r) => {
       const u = r.usage ? (JSON.parse(r.usage) as Omit<ContextUsage, "at">) : null;

@@ -4,7 +4,7 @@ import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
 import { api, getToken } from "../../api.ts";
 import { useStore } from "../../store.ts";
 import { href } from "../../router.ts";
-import { AgentAvatar, Button, CopyBlock, Field, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, useSavedFlash } from "./parts.tsx";
 
@@ -179,7 +179,7 @@ export function PeoplePage() {
                   <Menu
                     align="right"
                     trigger={(_o, t) => (
-                      <button onClick={t} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label={`More for ${m.name}`}>
+                      <button onClick={t} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label={`More for ${m.name}`} title={`More for ${m.name}`}>
                         <MoreHorizontal size={16} />
                       </button>
                     )}
@@ -320,7 +320,7 @@ export function AgentsPolicyPage() {
   if (!p) return <PageHeader title="Agents">{error ?? "Loading…"}</PageHeader>;
   return (
     <>
-      <PageHeader title="Agents">Rules every agent in the workspace follows, whatever harness it runs in.</PageHeader>
+      <PageHeader title="Agents">Rules every agent here follows, whichever AI tool runs it.</PageHeader>
       <OwnersOnly show={!isOwner} />
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
@@ -440,9 +440,7 @@ export function MemoryRules() {
                   </Pill>
                 )}
                 {isOwner && (
-                  <button onClick={() => api("DELETE", `/api/access/${r.id}`).then(refresh, (e) => setError((e as Error).message))} className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-bad" aria-label="Remove rule">
-                    <Trash2 size={15} />
-                  </button>
+                  <IconButton icon={<Trash2 size={15} />} label="Remove rule" tone="danger" onClick={() => api("DELETE", `/api/access/${r.id}`).then(refresh, (e) => setError((e as Error).message))} />
                 )}
               </div>
             ))}
@@ -598,7 +596,7 @@ export function ComputersPage() {
   return (
     <>
       <PageHeader title="Computers">
-        Agents' VMs, your own screen and cloud computers. Manage each one under{" "}
+        Computers agents can use: their own virtual computers, your screen, or cloud computers. Manage each one under{" "}
         <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
           Computers
         </a>{" "}
@@ -707,7 +705,7 @@ export function ConnectionsPage() {
   ];
   return (
     <>
-      <PageHeader title="Connections">Tokens agents use to reach this hub. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
+      <PageHeader title="Connections">Keys that let agents running somewhere else reach this hub. Most people never need these. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {groups.map(([title, description, items]) => (
         <Section key={title} title={title} description={description}>
@@ -754,13 +752,26 @@ export function ConnectionsPage() {
 
 // --- Data -------------------------------------------------------------------------------------
 
+type MemoryStorage = { path: string | null };
+
+/** True when `child` is the same as, or inside, `parent` (both absolute paths). */
+function isInside(child: string, parent: string) {
+  const norm = (p: string) => p.replace(/[\\/]+$/, "");
+  const c = norm(child);
+  const d = norm(parent);
+  return c === d || c.startsWith(d + "/") || c.startsWith(d + "\\");
+}
+
 export function DataPage() {
   const isOwner = useIsOwner();
   const [info, setInfo] = useState<{ dataDir: string; notes: number; messages: number; files: number; agents: number } | null>(null);
+  const [memoryPath, setMemoryPath] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (isOwner) api<typeof info>("GET", "/api/settings/data").then(setInfo, () => {});
+    if (!isOwner) return;
+    api<typeof info>("GET", "/api/settings/data").then(setInfo, () => {});
+    api<MemoryStorage>("GET", "/api/memory/storage").then((m) => setMemoryPath(m.path), () => {});
   }, [isOwner]);
   const download = async (path: string, name: string) => {
     setBusy(path);
@@ -779,30 +790,74 @@ export function DataPage() {
     }
   };
   const day = new Date().toISOString().slice(0, 10);
+  const host = location.hostname;
+  const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  const where = isLocal ? "this computer" : `the computer at ${host}`;
+  const memoryElsewhere = !!(info && memoryPath && !isInside(memoryPath, info.dataDir));
   return (
     <>
-      <PageHeader title="Data">Everything lives on this hub: the database, the memory vault (a git repository you can open in Obsidian), and uploaded files. Take a copy any time.</PageHeader>
-      {isOwner && info && (
-        <Section title="On this hub">
-          <Card>
-            <Row label="Where" hint="Back this folder up to keep everything.">
-              <code className="text-xs break-all">{info.dataDir}</code>
-            </Row>
-            <Row label="What" hint={`${info.notes} notes, ${info.messages} messages, ${info.files} files, ${info.agents} agents`} />
-          </Card>
-        </Section>
-      )}
-      <Section title="Export">
+      <PageHeader title="Data">Back up your workspace, or take a copy of your notes and conversations.</PageHeader>
+      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this workspace. Copy that folder and you have a full backup.">
+        {isOwner && info ? (
+          <>
+            <Card>
+              <Row label="Where the folder is" hint={`It is on ${where}: the computer that runs the Warren hub.`} />
+              <div className="px-4 pb-3.5">
+                <CopyBlock text={info.dataDir} />
+              </div>
+              <Row label="What is inside" hint={`${info.notes} notes, ${info.messages} messages, ${info.files} files and ${info.agents} agents.`} />
+            </Card>
+            <ul className="mt-3 list-disc pl-5 text-sm text-muted space-y-1">
+              <li><code className="text-xs">warren.db</code>: people, channels, messages, agents, tasks, routines and settings.</li>
+              <li><code className="text-xs">vault/</code>: your memory notes.</li>
+              <li><code className="text-xs">files/</code>: files people uploaded.</li>
+            </ul>
+            {memoryElsewhere && (
+              <div className="mt-3">
+                <p className="mb-1.5 text-sm">Your memory notes are kept in a different folder; back it up too:</p>
+                <CopyBlock text={memoryPath!} />
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask a workspace owner to back up the hub.</p>
+        )}
+      </Section>
+      <Section title="What is not in it">
+        <ul className="list-disc pl-5 text-sm text-muted space-y-1">
+          <li>Sign-ins for agent tools (like Claude Code or Codex). Those stay on each device.</li>
+          <li>Agents' own computers (VMs). They live on the device that runs them.</li>
+          <li>Settings saved only in this browser, like appearance and notifications.</li>
+          {isOwner && <li>The memory folder, if it was moved to a different place (shown above).</li>}
+        </ul>
+      </Section>
+      <Section title="How to back up">
+        <ol className="list-decimal pl-5 text-sm space-y-1">
+          <li>Quit Warren on {where} (or stop the hub there), so the copy is complete.</li>
+          <li>Copy the whole folder to a USB drive or a cloud folder.</li>
+          <li>Start Warren again.</li>
+        </ol>
+      </Section>
+      <Section title="How to restore">
+        <ol className="list-decimal pl-5 text-sm space-y-1">
+          <li>Install Warren on the computer, or keep the install you already have.</li>
+          <li>Quit Warren.</li>
+          <li>Put your copied folder back in the same place, replacing the folder there.</li>
+          <li>If your memory notes were in a separate folder, put that folder back too.</li>
+          <li>Start Warren again. Your devices reconnect by themselves when they are online.</li>
+        </ol>
+      </Section>
+      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore a workspace on their own. The folder backup does.">
         {error && <p className="mb-2 text-sm text-bad">{error}</p>}
         <Card>
           {isOwner && (
-            <Row label="Memory" hint="Every note as markdown, in its folders, as a .zip.">
+            <Row label="Download my notes (Markdown ZIP)" hint="Every memory note as a text file, in its folders. Opens in any text editor.">
               <Button disabled={!!busy} onClick={() => download("/api/export/vault.zip", `warren-memory-${day}.zip`)}>
                 <Download size={14} /> {busy === "/api/export/vault.zip" ? "Preparing…" : "Download"}
               </Button>
             </Row>
           )}
-          <Row label="Conversations" hint="Every channel and DM you can see, with who said what and when, as JSON.">
+          <Row label="Download conversations (JSON, for developers)" hint="Every channel and DM you can see. JSON is a data format for programs, not for reading.">
             <Button disabled={!!busy} onClick={() => download("/api/export/conversations.json", `warren-conversations-${day}.json`)}>
               <Download size={14} /> {busy === "/api/export/conversations.json" ? "Preparing…" : "Download"}
             </Button>

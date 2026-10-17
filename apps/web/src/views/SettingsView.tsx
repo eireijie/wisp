@@ -4,6 +4,7 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
 import { Button, Pill, cx } from "../components/ui.tsx";
+import { useSimple } from "../experience.tsx";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
@@ -12,12 +13,13 @@ import { MemoryPage } from "./settings/memory.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
-const NAV: { group: string; pages: { id: SettingsPage; label: string; icon: ReactNode; ownerOnly?: boolean; noGuests?: boolean }[] }[] = [
+type NavGroup = { group: string; hint?: string; pages: { id: SettingsPage; label: string; icon: ReactNode; ownerOnly?: boolean; noGuests?: boolean }[] };
+const NAV: NavGroup[] = [
   {
     group: "Account",
     pages: [
       { id: "profile", label: "Profile", icon: <User size={16} /> },
-      { id: "preferences", label: "Preferences", icon: <SlidersHorizontal size={16} /> },
+      { id: "preferences", label: "App behavior", icon: <SlidersHorizontal size={16} /> },
       { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
       { id: "voice", label: "Voice", icon: <Mic size={16} /> },
       { id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
@@ -40,6 +42,18 @@ const NAV: { group: string; pages: { id: SettingsPage; label: string; icon: Reac
   },
 ];
 
+/** Pages most people never need; in Simple they sit under "Advanced" at the bottom of the list. */
+const ADVANCED_PAGES: SettingsPage[] = ["runtimes", "connections"];
+
+/** The settings list for Simple or Advanced. Simple moves the technical pages to the end, still reachable. */
+export function settingsNav(simple: boolean, guest: boolean): NavGroup[] {
+  const groups = NAV.map((g) => ({ ...g, pages: g.pages.filter((p) => !(guest && p.noGuests)) }));
+  if (!simple) return groups;
+  const advanced = groups.flatMap((g) => g.pages.filter((p) => ADVANCED_PAGES.includes(p.id)));
+  const out = groups.map((g) => ({ ...g, pages: g.pages.filter((p) => !ADVANCED_PAGES.includes(p.id)) }));
+  return advanced.length ? [...out, { group: "Advanced", hint: "For setting up agent tools by hand.", pages: advanced }] : out;
+}
+
 const PAGES: Record<SettingsPage, () => ReactNode> = {
   profile: () => <ProfilePage />,
   preferences: () => <PreferencesPage />,
@@ -61,7 +75,8 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
 export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
   const guest = me.role === "guest";
-  const nav = NAV.map((g) => ({ ...g, pages: g.pages.filter((p) => !(guest && p.noGuests)) }));
+  const simple = useSimple();
+  const nav = settingsNav(simple, guest);
   // desktops open on Profile; phones show the list first
   const [wide, setWide] = useState(() => window.matchMedia("(min-width: 768px)").matches);
   useEffect(() => {
@@ -78,6 +93,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
       {nav.map((g) => (
         <div key={g.group}>
           <div className="px-2 mb-1 text-[11px] font-mono uppercase tracking-wider text-faint">{g.group}</div>
+          {g.hint && <p className="px-2 mb-1.5 text-xs text-muted">{g.hint}</p>}
           <div className="space-y-px">
             {g.pages.map((p) => (
               <a
@@ -101,10 +117,22 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
     <div className="flex-1 min-h-0 flex flex-col">
       <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         {(onBack || (!wide && current)) && (
-          <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={() => (current && !wide ? go({ view: "settings", page: null }) : onBack?.())} aria-label="Back">
-            <ChevronLeft size={22} />
+          <button
+            className="md:hidden h-9 pl-0.5 pr-2 -ml-1.5 rounded-md hover:bg-hover inline-flex items-center gap-0.5 text-sm text-muted hover:text-ink"
+            onClick={() => (current && !wide ? go({ view: "settings", page: null }) : onBack?.())}
+            aria-label={current && !wide ? "Back to all settings" : "Back"}
+          >
+            <ChevronLeft size={22} aria-hidden />
+            <span aria-hidden>Back</span>
           </button>
         )}
+        <a
+          href={href({ view: "dashboard" })}
+          className="hidden md:inline-flex shrink-0 h-8 pl-1 pr-2.5 -ml-1.5 mr-1 rounded-md items-center gap-1 text-sm text-muted hover:text-ink hover:bg-hover"
+        >
+          <ChevronLeft size={16} aria-hidden /> Back to Warren
+        </a>
+        <span aria-hidden className="hidden md:block h-5 w-px bg-line mr-2" />
         <h1 className="text-sm font-semibold uppercase tracking-wider truncate">
           Settings
           {label && <span className="text-muted font-normal normal-case tracking-normal"> / {label}</span>}

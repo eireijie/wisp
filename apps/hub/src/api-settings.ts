@@ -69,7 +69,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.put("/api/me/prefs", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    const body = parse(z.object({ sendWith: z.enum(["enter", "mod-enter"]), clock: z.enum(["auto", "12h", "24h"]), toolCalls: z.enum(["collapsed", "expanded", "hidden"]) }).partial(), req.body, reply);
+    const body = parse(z.object({ sendWith: z.enum(["enter", "mod-enter"]), clock: z.enum(["auto", "12h", "24h"]), toolCalls: z.enum(["collapsed", "expanded", "hidden"]), experience: z.enum(["simple", "advanced"]) }).partial(), req.body, reply);
     if (!body) return;
     return store.setPrefs(c.actor.id, { ...store.prefs(c.actor.id), ...body } as UserPrefs);
   });

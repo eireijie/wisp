@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BookOpen, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BookOpen, LifeBuoy, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { logout } from "../App.tsx";
 import { setupProgress, useDismissed, useOnboarding } from "../onboarding.ts";
+import { useSimple } from "../experience.tsx";
 import { useAppearance } from "../theme.ts";
 import { ChannelBrowser, ChannelMenu, SectionDialog } from "./Channels.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
@@ -46,6 +47,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const showGetStarted = route.view === "welcome" || !complete;
   const page = variant === "page";
   const isGuest = me.role === "guest";
+  const simple = useSimple();
 
   const active = route.view === "chat" ? route.channelId : null;
   const joined = channels.filter((c) => c.kind === "channel" && c.joined);
@@ -239,33 +241,38 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
 
         {!page && (
           <Group title="Workspace" collapsed={!!collapsed.workspace} onToggle={() => toggleGroup("workspace")}>
-            <Item href={href({ view: "tasks" })} active={route.view === "tasks"}>
+            <Item href={href({ view: "tasks" })} active={route.view === "tasks"} title="Work you handed to a helper">
               <ListTodo size={16} className="shrink-0" /> Tasks
             </Item>
-            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"}>
+            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"} title="Notes you and your helpers share">
               <BookOpen size={16} className="shrink-0" /> Memory
             </Item>
-            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
+            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"} title="Desktops helpers use">
               <Monitor size={16} className="shrink-0" /> Computers
               {working && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
             </Item>
-            <Item href={href({ view: "nodes" })} active={route.view === "nodes"}>
+            <Item href={href({ view: "nodes" })} active={route.view === "nodes"} title="Computers running Warren">
               <Server size={16} className="shrink-0" /> Devices
             </Item>
-            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"}>
+            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"} title="Your helpers">
               <Bot size={16} className="shrink-0" /> Agents
             </Item>
-            <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"}>
-              <Users size={16} className="shrink-0" /> Teams
+            {!simple && (
+              <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"} title="Groups of helpers that work together">
+                <Users size={16} className="shrink-0" /> Teams
+              </Item>
+            )}
+            <Item href={href({ view: "connectors" })} active={route.view === "connectors"} title="Gmail, Slack and other apps helpers can use">
+              <Plug size={16} className="shrink-0" /> Connected apps
             </Item>
-            <Item href={href({ view: "connectors" })} active={route.view === "connectors"}>
-              <Plug size={16} className="shrink-0" /> Connectors
-            </Item>
-            <Item href={href({ view: "skills" })} active={route.view === "skills"}>
+            <Item href={href({ view: "skills" })} active={route.view === "skills"} title="Things helpers know how to do">
               <Wand2 size={16} className="shrink-0" /> Skills
             </Item>
-            <Item href={href({ view: "about" })} active={route.view === "about"}>
+            <Item href={href({ view: "about" })} active={route.view === "about"} title="What helpers should know about you">
               <Brain size={16} className="shrink-0" /> About you
+            </Item>
+            <Item href={href({ view: "help" })} active={route.view === "help"} title="Answers, setup, and what words mean">
+              <LifeBuoy size={16} className="shrink-0" /> Help
             </Item>
           </Group>
         )}
@@ -285,7 +292,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
               )}
               items={[
                 { label: "Profile", icon: <CircleUser size={14} />, onSelect: () => go({ view: "settings", page: "profile" }) },
-                { label: "Preferences", icon: <SlidersHorizontal size={14} />, onSelect: () => go({ view: "settings", page: "preferences" }) },
+                { label: "App behavior", icon: <SlidersHorizontal size={14} />, onSelect: () => go({ view: "settings", page: "preferences" }) },
                 { label: "Notifications", icon: <Bell size={14} />, onSelect: () => go({ view: "settings", page: "notifications" }) },
                 { label: "Appearance", icon: <Palette size={14} />, onSelect: () => go({ view: "settings", page: "appearance" }) },
                 ...(mode !== "system" ? [{ label: "Match system light or dark", icon: <SunMoon size={14} />, onSelect: () => setMode("system") }] : []),
@@ -342,7 +349,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
-function Item({ href: to, onClick, active, unread, dot, count, page, agent, children }: { href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; page?: boolean; agent?: Agent; children: ReactNode }) {
+function Item({ href: to, onClick, active, unread, dot, count, page, agent, title, children }: { title?: string; href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; page?: boolean; agent?: Agent; children: ReactNode }) {
   const cls = cx(
     "mx-2 px-2 flex items-center gap-2.5 rounded-lg text-left w-[calc(100%-1rem)] transition-colors",
     page ? "h-11 text-[15px]" : "h-8 text-[13px] font-medium",
@@ -363,11 +370,11 @@ function Item({ href: to, onClick, active, unread, dot, count, page, agent, chil
   );
   const style = agent ? agentVar(agent) : undefined;
   return to ? (
-    <a href={to} className={cls} style={style} aria-current={active ? "page" : undefined}>
+    <a href={to} title={title} className={cls} style={style} aria-current={active ? "page" : undefined}>
       {inner}
     </a>
   ) : (
-    <button onClick={onClick} className={cls} style={style}>
+    <button onClick={onClick} title={title} className={cls} style={style}>
       {inner}
     </button>
   );

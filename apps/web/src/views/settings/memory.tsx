@@ -6,6 +6,7 @@ import { Button, CopyBlock, Input, Pill, timeAgo } from "../../components/ui.tsx
 import { obsidianLink, onHubMachine, type MemoryStorage } from "../../obsidian.ts";
 import { Card, OwnersOnly, PageHeader, Row, Section } from "./parts.tsx";
 import { MemoryRules } from "./workspace.tsx";
+import { Advanced, useSimple } from "../../experience.tsx";
 
 const Code = ({ children }: { children: ReactNode }) => <code className="rounded bg-code px-1 py-0.5 text-[12px] break-all">{children}</code>;
 
@@ -18,14 +19,26 @@ export function MemoryPage() {
     load();
   }, [load]);
 
+  const simple = useSimple();
   return (
     <>
       <PageHeader title="Memory">
-        Everything your agents and people remember is kept as plain markdown notes in one folder. Use <b>Obsidian</b> to read and write them; Warren keeps track of who changed what and who is allowed to see each note.
+        {simple ? (
+          <>Everything your helpers and people remember is kept as notes you can read and write in Warren. Warren keeps track of who changed what and who is allowed to see each note.</>
+        ) : (
+          <>
+            Everything your agents and people remember is kept as plain markdown notes in one folder. Use <b>Obsidian</b> to read and write them; Warren keeps track of who changed what and who is allowed to see each note.
+          </>
+        )}
       </PageHeader>
-      {storage && isOwner && <Location storage={storage} reload={load} />}
-      {storage && <ObsidianSteps storage={storage} reload={load} />}
+      {!simple && storage && isOwner && <Location storage={storage} reload={load} />}
       <MemoryRules />
+      {storage && (
+        <Advanced title="Use another notes app (Obsidian) and sync">
+          {simple && isOwner && <Location storage={storage} reload={load} />}
+          <ObsidianSteps storage={storage} reload={load} />
+        </Advanced>
+      )}
     </>
   );
 }

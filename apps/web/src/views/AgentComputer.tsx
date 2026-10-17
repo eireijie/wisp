@@ -8,6 +8,7 @@ import { computerKindLabel, type DeviceInfo } from "../devices.ts";
 import { AddComputer, ComputerMini } from "./ComputersView.tsx";
 import { Intro } from "./SettingsParts.tsx";
 import { Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { Advanced, useSimple } from "../experience.tsx";
 
 /** Harnesses Warren starts on a device (natively or over ACP), as opposed to ones that join through MCP. */
 export function runsOnDevice(harness: string) {
@@ -252,6 +253,34 @@ function Option({ icon, title, body, onClick, busy, disabled }: { icon: React.Re
 
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+/** Longest name the hub accepts for a routine. */
+const NAME_MAX = 80;
+
+/** A short routine name from what the person wants done: the first sentence, cut at a word. */
+export function routineName(name: string, result: string): string {
+  const given = name.trim();
+  if (given) return given.slice(0, NAME_MAX);
+  const first = (result.trim().split(/[.!?\n]/)[0] ?? "").replace(/\s+/g, " ").trim();
+  if (first.length <= 50) return first;
+  const cut = first.slice(0, 50);
+  return (cut.includes(" ") ? cut.slice(0, cut.lastIndexOf(" ")) : cut).trim() + "…";
+}
+
+/** The steps text saved with a routine: the goal first, then any steps the person wrote. */
+export function routineSteps(result: string, steps: string): string {
+  const goal = result.trim();
+  const body = steps.trim();
+  if (!goal) return steps;
+  return body ? `Goal: ${goal}\n\n${body}` : `Goal: ${goal}\n\nNo steps were written. Work out the steps yourself, and adapt if something looks different next time.`;
+}
+
+/** Why a new routine can't be saved yet (null = fine). The hub needs a name of 1 to 80 characters. */
+export function routineProblem(simple: boolean, name: string, result: string): string | null {
+  if (simple && !result.trim()) return "Say what should happen.";
+  if (!routineName(name, result)) return "Give the routine a name.";
+  return null;
+}
+
 /** Tasks the agent knows how to do again, learned by watching or written down, some on a schedule. */
 export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean }) {
   const version = useStore((s) => s.routinesVersion);
@@ -278,6 +307,7 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
   return (
     <div className="max-w-3xl space-y-5">
       <Intro title="Routines">
+        <p>A routine is something your helper does on a schedule, like dinner ideas every Monday.</p>
         <p>Things @{agent.handle} knows how to do again on its own. Teach one by doing the task once while it watches, or write the steps yourself. Routines can run on a schedule.</p>
       </Intro>
       <div className="flex flex-wrap gap-2">
@@ -344,8 +374,10 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
 }
 
 function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+  const simple = useSimple();
+  const [result, setResult] = useState("");
   const [name, setName] = useState("");
-  const [steps, setSteps] = useState("1. \n2. \n3. ");
+  const [steps, setSteps] = useState(simple ? "" : "1. \n2. \n3. ");
   const [schedule, setSchedule] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -354,20 +386,33 @@ function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void })
         className="space-y-4"
         onSubmit={async (e) => {
           e.preventDefault();
+          const problem = routineProblem(simple, name, result);
+          if (problem) return setError(problem);
           try {
-            await api("POST", "/api/routines", { agentId: agent.id, name, steps, schedule, timezone: TZ });
+            await api("POST", "/api/routines", { agentId: agent.id, name: routineName(name, result), steps: simple ? routineSteps(result, steps) : steps, schedule, timezone: TZ });
             onClose();
           } catch (err) {
             setError((err as Error).message);
           }
         }}
       >
-        <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Inbox zero" required />
+        {simple && (
+          <Field label="What should happen?">
+            <Textarea rows={3} value={result} onChange={(e) => setResult(e.target.value)} placeholder="Send me three dinner ideas with a shopping list" required />
+          </Field>
+        )}
+        <Field label="Name" hint={simple ? "Leave it empty and we will name it for you." : undefined}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={simple ? "Dinner ideas" : "Inbox zero"} required={!simple} />
         </Field>
-        <Field label="Steps" hint="Name buttons and fields by their labels, say what changes each time, and what done looks like.">
-          <Textarea rows={8} value={steps} onChange={(e) => setSteps(e.target.value)} />
-        </Field>
+        {simple ? (
+          <Field label="Steps (optional)" hint="Your helper works out the steps if you leave this empty.">
+            <Textarea rows={5} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="1. Look at what is in the fridge" />
+          </Field>
+        ) : (
+          <Field label="Steps" hint="Name buttons and fields by their labels, say what changes each time, and what done looks like.">
+            <Textarea rows={8} value={steps} onChange={(e) => setSteps(e.target.value)} />
+          </Field>
+        )}
         <ScheduleEditor value={schedule} onChange={setSchedule} />
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -430,8 +475,11 @@ function presetOf(cron: string | null): { preset: Preset; time: string; day: num
 
 /** Plain choices ("every weekday at 9:00") that write a cron schedule; custom cron for the rest. */
 function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const simple = useSimple();
   const init = presetOf(value);
   const [preset, setPreset] = useState<Preset>(init.preset);
+  // an existing custom schedule stays in plain view; a new one is typed under Advanced in Simple
+  const [startedCustom] = useState(init.preset === "custom");
   const [time, setTime] = useState(init.time);
   const [day, setDay] = useState(init.day);
   const [custom, setCustom] = useState(value ?? "0 9 * * 1-5");
@@ -441,31 +489,59 @@ function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (
   useEffect(() => {
     onChange(cron);
   }, [cron]);
+  const selectCls = "h-9 rounded-lg border border-line bg-panel px-2 text-sm";
+  // Simple keeps a custom schedule out of the list, but never hides one that is already set.
+  const customInput = (
+    <label className="flex flex-col gap-1 text-xs text-muted">
+      Custom schedule (cron)
+      <Input
+        className="w-48 font-mono"
+        value={custom}
+        onChange={(e) => {
+          setCustom(e.target.value);
+          setPreset("custom");
+        }}
+        placeholder="0 9 * * 1-5"
+      />
+    </label>
+  );
   return (
     <div className="space-y-2">
       <span className="text-sm font-medium">Schedule</span>
-      <div className="flex flex-wrap gap-2 items-center">
-        <select value={preset} onChange={(e) => setPreset(e.target.value as Preset)} className="h-9 rounded-lg border border-line bg-panel px-2 text-sm">
-          <option value="none">Only when someone runs it</option>
-          <option value="daily">Every day</option>
-          <option value="weekdays">Every weekday</option>
-          <option value="weekly">Every week</option>
-          <option value="hourly">Every hour</option>
-          <option value="custom">Custom (cron)</option>
-        </select>
-        {preset === "weekly" && (
-          <select value={day} onChange={(e) => setDay(Number(e.target.value))} className="h-9 rounded-lg border border-line bg-panel px-2 text-sm">
-            {DAYS.map((d, i) => (
-              <option key={d} value={i}>
-                on {d}
-              </option>
-            ))}
+      <div className="flex flex-wrap gap-2 items-end">
+        <label className="flex flex-col gap-1 text-xs text-muted">
+          How often
+          <select value={preset} onChange={(e) => setPreset(e.target.value as Preset)} className={selectCls}>
+            <option value="none">Only when someone runs it</option>
+            <option value="daily">Every day</option>
+            <option value="weekdays">Every weekday</option>
+            <option value="weekly">Every week</option>
+            <option value="hourly">Every hour</option>
+            {(!simple || preset === "custom") && <option value="custom">{simple ? "Custom schedule" : "Custom (cron)"}</option>}
           </select>
+        </label>
+        {preset === "weekly" && (
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            Day
+            <select value={day} onChange={(e) => setDay(Number(e.target.value))} className={selectCls}>
+              {DAYS.map((d, i) => (
+                <option key={d} value={i}>
+                  on {d}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
-        {["daily", "weekdays", "weekly"].includes(preset) && <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-9 rounded-lg border border-line bg-panel px-2 text-sm" />}
-        {preset === "custom" && <Input className="w-48 font-mono" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="0 9 * * 1-5" />}
+        {["daily", "weekdays", "weekly"].includes(preset) && (
+          <label className="flex flex-col gap-1 text-xs text-muted">
+            Time
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={selectCls} />
+          </label>
+        )}
+        {preset === "custom" && (!simple || startedCustom) && customInput}
       </div>
-      <p className="text-xs text-muted">{cron ? `${describeCron(cron)}, in ${TZ}.` : "Run it from here, or ask the agent in chat."}</p>
+      {simple && !startedCustom && <Advanced title="Custom schedule">{customInput}</Advanced>}
+      <p className="text-xs text-muted">{cron ? `${describeCron(cron)}, in ${TZ}.` : "Run it from here, or ask the helper in chat."}</p>
     </div>
   );
 }

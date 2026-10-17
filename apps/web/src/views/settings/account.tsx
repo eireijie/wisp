@@ -6,7 +6,7 @@ import { href } from "../../router.ts";
 import { THEMES, useAppearance, type ModeChoice } from "../../theme.ts";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "../../push.ts";
 import { chime, enableNotifications, permission, setNotifyPrefs, show, useNotifyPrefs, type NotifyPrefs } from "../../notifications.ts";
-import { Button, Field, Input, Pill, UserAvatar, clockTime, cx, timeAgo } from "../../components/ui.tsx";
+import { Button, Field, IconButton, Input, Pill, UserAvatar, clockTime, cx, timeAgo } from "../../components/ui.tsx";
 import { Card, PageHeader, Row, SavedNote, Section, Segmented, Toggle, useSavedFlash } from "./parts.tsx";
 
 const ZONES: string[] = (() => {
@@ -144,10 +144,25 @@ export function PreferencesPage() {
   const now = new Date();
   return (
     <>
-      <PageHeader title="Preferences">How Warren works for you, on every device you sign in on.</PageHeader>
+      <PageHeader title="App behavior">How Warren works for you, on every device you sign in on.</PageHeader>
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
       </div>
+      <Section title="How much to show" description="Simple keeps the advanced parts (teams, harness details, VM sizes, tokens, raw files) behind “Advanced” so the everyday ones stand out. Nothing is removed; you can switch any time.">
+        <Card>
+          <Row label="Experience" hint={prefs.experience === "simple" ? "The everyday parts first; advanced options a click away." : "Everything, all the time."}>
+            <Segmented
+              label="Experience"
+              value={prefs.experience}
+              onChange={(v) => set({ experience: v })}
+              options={[
+                ["simple", "Simple"],
+                ["advanced", "Advanced"],
+              ]}
+            />
+          </Row>
+        </Card>
+      </Section>
       <Section title="Messages">
         <Card>
           <Row label="Sending a message" hint={prefs.sendWith === "enter" ? "Shift + Enter starts a new line." : "Enter starts a new line, for longer messages."}>
@@ -197,78 +212,20 @@ export function PreferencesPage() {
 
 // --- Notifications ----------------------------------------------------------------------------
 
-export function NotificationsPage() {
-  const prefs = useNotifyPrefs();
-  const [perm, setPerm] = useState(permission());
-  const turnOn = async () => setPerm(await enableNotifications());
-  const toggle = (k: keyof NotifyPrefs) => (on: boolean) => setNotifyPrefs({ [k]: on });
-  const on = prefs.enabled && perm === "granted";
-  const events: [keyof NotifyPrefs, string, string][] = [
-    ["dms", "Direct messages", "An agent writes to you in a DM."],
-    ["replies", "Replies to you", "An agent answers in a thread you started."],
-    ["approvals", "Approvals", "An agent wants your OK before it does something."],
-    ["help", "Help on a computer", "An agent needs you to sign in, enter a code or check something on its screen."],
-    ["tasks", "Finished tasks", "A task you handed off is done, or couldn't be done."],
-  ];
-  return (
-    <>
-      <PageHeader title="Notifications">Get a notification when something needs you. These settings are for this device and browser.</PageHeader>
-      <PushSection />
-      <Section title="While Warren is open">
-        <Card>
-          <Row
-            label={
-              <span className="inline-flex items-center gap-2">
-                <Bell size={15} /> Notifications on this device
-              </span>
-            }
-            hint={
-              perm === "unsupported"
-                ? "This browser can't show notifications. On an iPhone, add Warren to your Home Screen first."
-                : perm === "denied"
-                  ? "Your browser is blocking them for this site. Allow notifications in the site's settings (the icon left of the address), then reload."
-                  : on
-                    ? "On."
-                    : "Off. Your browser will ask for permission."
-            }
-          >
-            {perm === "granted" ? <Toggle label="Notifications on this device" on={prefs.enabled} onChange={toggle("enabled")} /> : perm === "default" ? <Button onClick={turnOn}>Turn on</Button> : <Pill tone={perm === "denied" ? "bad" : "neutral"}>{perm === "denied" ? "Blocked" : "Not available"}</Pill>}
-          </Row>
-          {on && (
-            <Row label="Only when I'm away" hint="Stay quiet while Warren is the window you're using.">
-              <Toggle label="Only when I'm away" on={prefs.onlyAway} onChange={toggle("onlyAway")} />
-            </Row>
-          )}
-          {on && (
-            <Row label="Play a sound" hint="A short chime with each notification.">
-              <button type="button" onClick={chime} className="p-1.5 rounded-md text-muted hover:text-ink hover:bg-hover" aria-label="Play the sound">
-                <Volume2 size={15} />
-              </button>
-              <Toggle label="Play a sound" on={prefs.sound} onChange={toggle("sound")} />
-            </Row>
-          )}
-        </Card>
-      </Section>
-      <Section title="Tell me about" description={on ? undefined : "Turn notifications on to choose."}>
-        <Card className={cx(!on && "opacity-50 pointer-events-none")}>
-          {events.map(([k, label, hint]) => (
-            <Row key={k} label={label} hint={hint}>
-              <Toggle label={label} on={!!prefs[k]} onChange={toggle(k)} />
-            </Row>
-          ))}
-        </Card>
-        {on && (
-          <Button className="mt-3" onClick={() => show("Warren", "Notifications work on this device.", undefined, { test: true })}>
-            Send a test notification
-          </Button>
-        )}
-      </Section>
-    </>
-  );
+export type NotifyKey = "on" | "off" | "blocked" | "ask" | "unsupported";
+
+/** What notifications are doing on THIS device, in plain words. */
+export function notifyStatus(perm: NotificationPermission | "unsupported", enabled: boolean): { key: NotifyKey; label: string; hint: string } {
+  if (perm === "unsupported") return { key: "unsupported", label: "Not available in this browser", hint: "This browser can't show notifications. On an iPhone, add Warren to your Home Screen first (Share, then Add to Home Screen)." };
+  if (perm === "denied") return { key: "blocked", label: "Blocked by your browser", hint: "Your browser is blocking them for this site. Allow notifications in the site's settings (the icon left of the address), then reload." };
+  if (perm === "default") return { key: "ask", label: "Not asked yet", hint: "Your browser will ask for permission when you turn them on." };
+  return enabled ? { key: "on", label: "On", hint: "You'll get notifications on this device." } : { key: "off", label: "Off", hint: "Switched off on this device. Switch it on to get them." };
 }
 
-/** Push: agents reach this device even while Warren is closed, like a text from an assistant. */
-function PushSection() {
+const statusTone = { on: "ok", off: "neutral", blocked: "bad", ask: "warn", unsupported: "neutral" } as const;
+
+/** Push state for this device, shared by the main switch and the push section. */
+function usePush() {
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -297,8 +254,114 @@ function PushSection() {
     const r = await api<{ sent: number }>("POST", "/api/push/test").catch(() => ({ sent: 0 }));
     setNote(r.sent ? "Sent. It should arrive in a few seconds." : "Nothing was sent. Turn push off and on again.");
   };
+  return { on, busy, note, change, test };
+}
+
+export function NotificationsPage() {
+  const prefs = useNotifyPrefs();
+  const push = usePush();
+  const [perm, setPerm] = useState(permission());
+  const [starting, setStarting] = useState(false);
+  const [testNote, setTestNote] = useState<string | null>(null);
+  const status = notifyStatus(perm, prefs.enabled);
+  const on = status.key === "on";
+  const turnOn = async () => {
+    setStarting(true);
+    try {
+      const p = await enableNotifications();
+      setPerm(p);
+      // so they also arrive while Warren is closed; if that can't be done, say why but keep going
+      if (p === "granted" && pushSupported()) await push.change(true);
+    } finally {
+      setStarting(false);
+    }
+  };
+  const toggle = (k: keyof NotifyPrefs) => (v: boolean) => setNotifyPrefs({ [k]: v });
+  const sendTest = () => {
+    show("Warren", "Notifications work on this device.", undefined, { test: true });
+    setTestNote("Sent. You should see it now. If not, check your computer's notification settings.");
+  };
+  const events: [keyof NotifyPrefs, string, string][] = [
+    ["dms", "Direct messages", "An agent writes to you in a DM."],
+    ["replies", "Replies to you", "An agent answers in a thread you started."],
+    ["approvals", "Approvals", "An agent wants your OK before it does something."],
+    ["help", "Help on a computer", "An agent needs you to sign in, enter a code or check something on its screen."],
+    ["tasks", "Finished tasks", "A task you handed off is done, or couldn't be done."],
+  ];
   return (
-    <Section title="Push notifications" description="Agents reach you here even when Warren is closed: when one writes to you, or wants your OK before it sends something.">
+    <>
+      <PageHeader title="Notifications">Get a notification when something needs you. These settings are for this device and browser.</PageHeader>
+      <Section title="Notify me when a task finishes or needs me">
+        <Card>
+          <Row
+            label={
+              <span className="inline-flex items-center gap-2">
+                <Bell size={15} /> Notifications on this device
+              </span>
+            }
+            hint={status.hint}
+          >
+            <Pill tone={statusTone[status.key]}>{status.label}</Pill>
+            {status.key === "ask" && (
+              <Button variant="primary" disabled={starting} onClick={() => void turnOn()}>
+                {starting ? "Turning on…" : "Turn on notifications"}
+              </Button>
+            )}
+            {perm === "granted" && <Toggle label="Notifications on this device" on={prefs.enabled} onChange={toggle("enabled")} />}
+          </Row>
+          {perm === "granted" && (
+            <Row label="Send a test notification" hint="Check that it shows up on this device.">
+              <Button onClick={sendTest}>Send a test notification</Button>
+            </Row>
+          )}
+        </Card>
+        {testNote && perm === "granted" && (
+          <p role="status" className="mt-2 text-sm text-muted">
+            {testNote}
+          </p>
+        )}
+      </Section>
+      <Section title="While Warren is open" description="Shows a notification while Warren is open in a tab or window.">
+        <Card>
+          <Row label="Notifications while Warren is open" hint="Uses the main switch above.">
+            <Pill tone={on ? "ok" : "neutral"}>{on ? "On" : "Off"}</Pill>
+          </Row>
+          {on && (
+            <Row label="Only when I'm away" hint="Stay quiet while Warren is the window you're using.">
+              <Toggle label="Only when I'm away" on={prefs.onlyAway} onChange={toggle("onlyAway")} />
+            </Row>
+          )}
+          {on && (
+            <Row label="Play a sound" hint="A short chime with each notification.">
+              <IconButton icon={<Volume2 size={15} />} label="Play the sound" onClick={chime} />
+              <Toggle label="Play a sound" on={prefs.sound} onChange={toggle("sound")} />
+            </Row>
+          )}
+        </Card>
+      </Section>
+      <PushSection push={push} />
+      <Section title="Tell me about">
+        <p className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+          <Pill tone={on ? "ok" : "warn"}>{on ? "Active" : "Paused"}</Pill>
+          {on ? "You'll get these on this device." : "These are saved, but you won't get any until notifications are on."}
+        </p>
+        <Card>
+          {events.map(([k, label, hint]) => (
+            <Row key={k} label={label} hint={hint}>
+              <Toggle label={label} on={!!prefs[k]} onChange={toggle(k)} />
+            </Row>
+          ))}
+        </Card>
+      </Section>
+    </>
+  );
+}
+
+/** Push: agents reach this device even while Warren is closed, like a text from an assistant. */
+function PushSection({ push }: { push: ReturnType<typeof usePush> }) {
+  const { on, busy, note, change, test } = push;
+  return (
+    <Section title="Even when Warren is closed (push)" description="This device gets them like a text message, even with Warren closed: when an agent writes to you, or wants your OK before it sends something.">
       <Card>
         <Row
           label={
@@ -311,7 +374,7 @@ function PushSection() {
           {pushSupported() && on !== null && <Toggle label="Push to this device" on={on} disabled={busy} onChange={(v) => void change(v)} />}
         </Row>
       </Card>
-      {note && <p className="mt-2 text-sm text-muted">{note}</p>}
+      {note && <p role="status" className="mt-2 text-sm text-muted">{note}</p>}
       {on && (
         <Button className="mt-3" onClick={() => void test()}>
           Send a test push

@@ -1,8 +1,11 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import type { Agent, DeviceRole } from "@warren/core";
+import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import { useStore } from "./store.ts";
+import { agentReadiness, type DeviceInfo } from "./devices.ts";
+import type { Route } from "./router.ts";
 
 export interface OnboardingState {
   /** `mine`: you connected it; `role`: what it does for agents, once someone chose */
@@ -94,4 +97,106 @@ export function useOnboarding(pollMs?: number) {
   }, [refresh, pollMs]);
 
   return { state, error, refresh, done: stepsDone(state) };
+}
+
+/** Each setup step as a plain next thing to do, for "Continue setup" and Help. */
+export const NEXT_STEP: Record<StepId, string> = {
+  device: "Connect a computer to Warren",
+  role: "Choose what that computer does for helpers",
+  agent: "Make your first helper",
+  harness: "Choose the AI your helper uses",
+  hello: "Say hello to your helper",
+};
+
+/** The first setup step that hasn't happened yet, or null when setup is done. */
+export function nextStep(done: Record<StepId, boolean>): StepId | null {
+  return STEPS.find((s) => !done[s]) ?? null;
+}
+
+type AgentLike = Pick<Agent, "id" | "name" | "nodeId" | "harness">;
+
+/** The helper to talk about on Home and in Help: a ready one first, then one with a device, then any. */
+export function pickHelper<A extends AgentLike>(agents: A[], devices: DeviceInfo[] | null): A | null {
+  return agents.find((a) => agentReadiness(a, devices).ready) ?? agents.find((a) => a.nodeId) ?? agents[0] ?? null;
+}
+
+/**
+ * What Home should lead with: finish setup (no helper yet), a helper that is waiting on something
+ * (its problem, in plain words), or a ready helper to try. Only claims what the hub reports.
+ */
+export type HomeReadiness<A extends AgentLike = AgentLike> =
+  | { kind: "setup"; next: StepId }
+  | { kind: "waiting"; agent: A; problem: string; deviceName: string | null }
+  | { kind: "ready"; agent: A };
+
+export function homeReadiness<A extends AgentLike>(done: Record<StepId, boolean>, agents: A[], devices: DeviceInfo[] | null): HomeReadiness<A> {
+  const agent = pickHelper(agents, devices);
+  if (!agent) return { kind: "setup", next: nextStep(done) ?? "agent" };
+  const { ready, problem } = agentReadiness(agent, devices);
+  if (ready) return { kind: "ready", agent };
+  const deviceName = devices?.find((d) => d.id === agent.nodeId)?.name ?? null;
+  return { kind: "waiting", agent, problem: problem ?? "Not ready yet", deviceName };
+}
+
+export interface HelperCheck {
+  id: "helper" | "device" | "online" | "harness";
+  /** ok: fine; bad: needs fixing; unknown: the hub can't tell yet (never reported as broken) */
+  status: "ok" | "bad" | "unknown";
+  label: string;
+  /** one line on what to do, when it isn't ok */
+  fix: string | null;
+  to: Route | null;
+}
+
+/**
+ * "My helper isn't answering": the checks in order, from what the hub reports. Each failing one
+ * says what to do and where; later checks are unknown while an earlier one fails.
+ */
+export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | null): HelperCheck[] {
+  const agent = pickHelper(agents, devices);
+  const out: HelperCheck[] = [];
+  const unknown = (id: HelperCheck["id"], label: string): HelperCheck => ({ id, status: "unknown", label, fix: null, to: null });
+  if (!agent) {
+    out.push({ id: "helper", status: "bad", label: "You have a helper", fix: "Make one in setup. It takes a few minutes.", to: { view: "welcome" } });
+    out.push(unknown("device", "It has a device to work on"), unknown("online", "That device is on and connected"), unknown("harness", "Its AI is installed there"));
+    return out;
+  }
+  out.push({ id: "helper", status: "ok", label: `You have a helper: ${agent.name}`, fix: null, to: null });
+  // helpers that join from outside Warren don't need a device here
+  if (harnessInfo(agent.harness)?.protocol === "mcp") {
+    out.push({ id: "device", status: "ok", label: `${agent.name} runs outside Warren and needs no device here`, fix: null, to: null });
+    return out;
+  }
+  const agentRoute = (tab: "device" | "model"): Route => ({ view: "agents", agentId: agent.id, tab });
+  if (!agent.nodeId) {
+    out.push({ id: "device", status: "bad", label: `${agent.name} has a device to work on`, fix: `Pick the computer ${agent.name} should use.`, to: agentRoute("device") });
+    out.push(unknown("online", "That device is on and connected"), unknown("harness", "Its AI is installed there"));
+    return out;
+  }
+  const device = devices?.find((d) => d.id === agent.nodeId);
+  if (!device) {
+    out.push({ id: "device", status: devices ? "bad" : "unknown", label: `${agent.name} has a device to work on`, fix: devices ? `Its device was removed. Pick another for ${agent.name}.` : null, to: devices ? agentRoute("device") : null });
+    out.push(unknown("online", "That device is on and connected"), unknown("harness", "Its AI is installed there"));
+    return out;
+  }
+  out.push({ id: "device", status: "ok", label: `${agent.name} works on ${device.name}`, fix: null, to: null });
+  if (!device.online || device.paused) {
+    out.push({
+      id: "online",
+      status: "bad",
+      label: `${device.name} is on and connected`,
+      fix: device.paused ? `${device.name} is paused. Resume Warren on it.` : `Turn on ${device.name} and make sure Warren is running there.`,
+      to: { view: "nodes" },
+    });
+    out.push(unknown("harness", "Its AI is installed there"));
+    return out;
+  }
+  out.push({ id: "online", status: "ok", label: `${device.name} is on and connected`, fix: null, to: null });
+  const label = harnessLabel(agent.harness);
+  const reported = device.harnesses ?? [];
+  if (runsInVm(agent.harness)) out.push({ id: "harness", status: "ok", label: `${label} runs inside ${agent.name}'s computer`, fix: null, to: null });
+  else if (!reported.length) out.push(unknown("harness", `${label} is installed on ${device.name}`));
+  else if (reported.some((h) => h.id === agent.harness)) out.push({ id: "harness", status: "ok", label: `${label} is installed on ${device.name}`, fix: null, to: null });
+  else out.push({ id: "harness", status: "bad", label: `${label} is installed on ${device.name}`, fix: `Install ${label} on ${device.name}, or pick an AI that's already there.`, to: agentRoute("model") });
+  return out;
 }

@@ -4,8 +4,9 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
+import { useSimple } from "../experience.tsx";
 import { agentReadiness, useDevices } from "../devices.ts";
-import { SetupIncomplete } from "../components/AgentPanel.tsx";
+import { SetupIncomplete, setupNextStep } from "../components/AgentPanel.tsx";
 import { AgentAvatar, Button, Empty, HARNESS_LABELS, StatusChip, cx } from "../components/ui.tsx";
 
 import { CreateAgent } from "./CreateAgent.tsx";
@@ -18,6 +19,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   const [creating, setCreating] = useState(false);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const devices = useDevices();
+  const simple = useSimple();
   const [filter, setFilter] = useState<"all" | "online" | "offline">("all");
   useEffect(() => {
     api<NodeInfo[]>("GET", "/api/nodes").then(setNodes);
@@ -91,6 +93,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                             <SetupIncomplete problem={readiness.problem} />
                           </span>
                         )}
+                        {!readiness.ready && simple && <span className="block text-xs text-muted mt-1">{setupNextStep(a, devices)?.text}</span>}
                       </span>
                       {/* machine facts in mono, like Paperclip's adapter column */}
                       <span className="hidden @3xl:block w-48 min-w-0 leading-tight">

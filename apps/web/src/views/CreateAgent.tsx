@@ -37,6 +37,7 @@ import type { NodeInfo } from "./AgentSettings.tsx";
 import { computerKindLabel, usableDevices } from "../devices.ts";
 import { TEMPLATES, type AgentTemplate } from "../templates.ts";
 import { defaultComputer, resolveComputer, vmOnDevice, withComputer, type ComputerChoice } from "../agentComputer.ts";
+import { Advanced, useSimple } from "../experience.tsx";
 import {
   Button,
   Field,
@@ -48,7 +49,17 @@ import {
   cx,
 } from "../components/ui.tsx";
 
-function ComputerPicker({
+/** The jobs a person at home would give a helper; the rest are business roles. */
+export const EVERYDAY_TEMPLATES = ["chief", "inbox", "research"];
+
+export function splitTemplates<T extends { id: string }>(list: T[]): { everyday: T[]; business: T[] } {
+  return {
+    everyday: EVERYDAY_TEMPLATES.map((id) => list.find((t) => t.id === id)).filter((t): t is T => !!t),
+    business: list.filter((t) => !EVERYDAY_TEMPLATES.includes(t.id)),
+  };
+}
+
+export function ComputerPicker({
   value,
   onChange,
   node,
@@ -61,6 +72,7 @@ function ComputerPicker({
 }) {
   const computers = useStore((s) => s.computers);
   const agents = useStore((s) => s.agents);
+  const simple = useSimple();
   const screenExists = computers.some(
     (c) => c.kind === "device" && c.nodeId === node?.id,
   );
@@ -102,19 +114,27 @@ function ComputerPicker({
   };
   return (
     <div>
-      <div className="text-sm font-medium mb-1">Computer</div>
-      <p className="text-xs text-muted mb-2">
-        Where it works: it opens apps and websites there, and you can watch and
-        take over.
-      </p>
+      {simple ? (
+        <div className="text-sm font-medium mb-2">Where should it work?</div>
+      ) : (
+        <>
+          <div className="text-sm font-medium mb-1">Computer</div>
+          <p className="text-xs text-muted mb-2">
+            Where it works: it opens apps and websites there, and you can watch
+            and take over.
+          </p>
+        </>
+      )}
       <div className="grid sm:grid-cols-2 gap-2">
         {node &&
           opt(
             { kind: "vm" },
             <Monitor size={15} />,
-            `New VM on ${node.name}`,
+            simple ? `Its own desktop on ${node.name}` : `New VM on ${node.name}`,
             node.capabilities?.vm.ok
-              ? "Its own Linux desktop. Doesn't touch your screen."
+              ? simple
+                ? "It opens apps and websites there. Your screen stays yours."
+                : "Its own Linux desktop. Doesn't touch your screen."
               : (node.capabilities?.vm.detail ?? "Connect the device to check"),
             !node.capabilities?.vm.ok,
           )}
@@ -123,12 +143,14 @@ function ComputerPicker({
           opt(
             { kind: "screen" },
             <Lock size={15} />,
-            "Your own screen",
+            simple ? "My own screen" : "Your own screen",
             node.capabilities?.screen.off
               ? `Off. Turn it on at ${node.name}: warren node screen on`
               : node.capabilities?.screen.ok === false
                 ? node.capabilities.screen.detail
-                : "Only while you lend it, and only for things you ask.",
+                : simple
+                  ? "Only while you lend it."
+                  : "Only while you lend it, and only for things you ask.",
             node.capabilities?.screen.ok !== true,
           )}
         {computers.map((c) =>
@@ -155,24 +177,26 @@ function ComputerPicker({
         {opt(
           { kind: "later" },
           <Plus size={15} />,
-          "Choose later",
-          "Pick one on its Computer tab.",
+          simple ? "Decide later" : "Choose later",
+          simple ? "You can pick on its Computer tab." : "Pick one on its Computer tab.",
         )}
       </div>
-      <label className="mt-2 flex items-center gap-2 text-xs text-muted">
-        <input
-          type="checkbox"
-          checked={value.kind === "headless"}
-          onChange={(e) =>
-            onChange(
-              e.target.checked
-                ? { kind: "headless" }
-                : withComputer(defaultComputer(node, computers)),
-            )
-          }
-        />
-        Run it headless: no computer, so no apps or websites
-      </label>
+      <Advanced title="More options" className="mt-2">
+        <label className="mt-2 flex items-center gap-2 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={value.kind === "headless"}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? { kind: "headless" }
+                  : withComputer(defaultComputer(node, computers)),
+              )
+            }
+          />
+          Run it headless: no computer, so no apps or websites
+        </label>
+      </Advanced>
     </div>
   );
 }
@@ -192,6 +216,113 @@ const slug = (s: string) =>
     .replace(/-+$/, "")
     .slice(0, 32);
 
+/** The harnesses a beginner is shown first, in this order. */
+export const RECOMMENDED_HARNESSES = ["claude-code", "codex", "gemini"];
+
+/** Splits the catalog into the recommended few (in recommended order, only those present) and the rest. */
+export function splitHarnesses<T extends { id: string }>(list: T[]): { recommended: T[]; more: T[] } {
+  const recommended = RECOMMENDED_HARNESSES.flatMap((id) => list.filter((h) => h.id === id));
+  return { recommended, more: list.filter((h) => !RECOMMENDED_HARNESSES.includes(h.id)) };
+}
+
+type HarnessChoice = { id: string; label: string; blurb?: string; account?: string; signup?: string };
+
+function HarnessGrid({ list, harness, onPick, label }: { list: HarnessChoice[]; harness: string; onPick: (id: string) => void; label: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-2" role="group" aria-label={label}>
+      {list.map((h) => (
+        <button
+          type="button"
+          key={h.id}
+          aria-pressed={harness === h.id}
+          onClick={() => onPick(h.id)}
+          className={cx("agent-harness-card", harness === h.id && "selected")}
+        >
+          {harness === h.id && <Check size={14} className="agent-harness-check" />}
+          <HarnessLogo harness={h.id} size={24} />
+          <span className="text-sm font-medium">{h.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The body of the harness step. Simple mode asks "which AI do you use?" with a few explained cards. */
+export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harnesses: HarnessChoice[]; harness: string; onPick: (id: string) => void; invite: boolean; name: string }) {
+  const simple = useSimple();
+  if (!simple || invite) {
+    return (
+      <>
+        <div className="agent-wizard-hero compact">
+          <h1 tabIndex={-1}>Choose a harness</h1>
+          <p>How should {name} work?</p>
+        </div>
+        {invite && (
+          <p className="mb-5 text-sm text-muted">
+            Choose the harness your existing agent uses. You'll get an
+            invitation to connect its session.
+          </p>
+        )}
+        <HarnessGrid list={harnesses} harness={harness} onPick={onPick} label="Agent harness" />
+      </>
+    );
+  }
+  const { recommended, more } = splitHarnesses(harnesses);
+  const signups = recommended.filter((h) => h.signup && h.id !== "gemini");
+  return (
+    <>
+      <div className="agent-wizard-hero compact">
+        <h1 tabIndex={-1}>Which AI do you use?</h1>
+        <p>A harness is the AI program that does the work. You need an account with it; it may charge separately.</p>
+      </div>
+      <div className="grid grid-cols-1 gap-2" role="group" aria-label="Recommended harnesses">
+        {recommended.map((h) => (
+          <button
+            type="button"
+            key={h.id}
+            aria-pressed={harness === h.id}
+            onClick={() => onPick(h.id)}
+            className={cx("agent-harness-card", harness === h.id && "selected")}
+          >
+            {harness === h.id && <Check size={14} className="agent-harness-check" />}
+            <HarnessLogo harness={h.id} size={28} />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{h.label}</span>
+              {h.blurb && <span className="block text-xs text-muted">{h.blurb}</span>}
+              {h.account && <span className="block text-xs text-muted">{h.account}</span>}
+            </span>
+          </button>
+        ))}
+      </div>
+      <details className="mt-4 rounded-lg border border-line px-3 py-2 text-sm">
+        <summary className="cursor-pointer font-medium">I'm not sure</summary>
+        <div className="mt-2 space-y-2 text-muted">
+          <p>Pick the one you already pay for. If you don't have one, Claude Code or Codex are the usual choice.</p>
+          {signups.length > 0 && (
+            <p>
+              Get an account:{" "}
+              {signups.map((h, i) => (
+                <span key={h.id}>
+                  {i > 0 && ", "}
+                  <a href={h.signup} target="_blank" rel="noreferrer" className="text-accent-text hover:underline">
+                    {h.id === "codex" ? "ChatGPT (for Codex)" : "Claude (for Claude Code)"}
+                  </a>
+                </span>
+              ))}
+              .
+            </p>
+          )}
+        </div>
+      </details>
+      {more.length > 0 && (
+        <Advanced title="More harnesses" className="mt-4">
+          <HarnessGrid list={more} harness={harness} onPick={onPick} label="More harnesses" />
+        </Advanced>
+      )}
+    </>
+  );
+}
+
 export function CreateAgent({
   nodes,
   onClose,
@@ -202,6 +333,7 @@ export function CreateAgent({
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
+  const simple = useSimple();
   const [step, setStep] = useState<Step>("name");
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -265,6 +397,18 @@ export function CreateAgent({
   const selectedHarness = harnesses.find((h) => h.id === harness)!;
   const external = invite || selectedHarness.protocol === "mcp";
   const cleanName = name.trim();
+  const templateGroups = splitTemplates(TEMPLATES);
+  // Simple lists the everyday jobs, plus the chosen one so it is never hidden
+  const shownTemplates = !simple
+    ? TEMPLATES
+    : template && !templateGroups.everyday.some((t) => t.id === template.id)
+      ? [...templateGroups.everyday, template]
+      : templateGroups.everyday;
+  const pickTemplate = (id: string) => {
+    const t = TEMPLATES.find((t) => t.id === id) ?? null;
+    setTemplate(t);
+    setInstructions(t?.instructions ?? "");
+  };
   const finalHandle = handle || slug(cleanName);
   // every agent has its own colors: the ghost follows its handle until you shuffle
   const look = shuffled ?? defaultAppearance(finalHandle || "new-agent");
@@ -510,42 +654,13 @@ export function CreateAgent({
       {step === "harness" && (
         <>
           <div ref={bodyRef} className="agent-wizard-body">
-            <div className="agent-wizard-hero compact">
-              <h1 tabIndex={-1}>Choose a harness</h1>
-              <p>How should {cleanName} work?</p>
-            </div>
-            {invite && (
-              <p className="mb-5 text-sm text-muted">
-                Choose the harness your existing agent uses. You'll get an
-                invitation to connect its session.
-              </p>
-            )}
-            <div
-              className="grid grid-cols-2 gap-2"
-              role="group"
-              aria-label="Agent harness"
-            >
-              {harnesses.map((h) => (
-                <button
-                  type="button"
-                  key={h.id}
-                  aria-pressed={harness === h.id}
-                  onClick={() => setHarness(h.id)}
-                  className={cx(
-                    "agent-harness-card",
-                    harness === h.id && "selected",
-                  )}
-                >
-                  {harness === h.id && (
-                    <Check size={14} className="agent-harness-check" />
-                  )}
-                  <HarnessLogo harness={h.id} size={24} />
-                  <span className="text-sm font-medium">
-                    {h.label}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <HarnessStep
+              harnesses={harnesses}
+              harness={harness}
+              onPick={setHarness}
+              invite={invite}
+              name={cleanName}
+            />
           </div>
           {footer(
             () => move(invite ? "external" : "name"),
@@ -593,6 +708,7 @@ export function CreateAgent({
               disabled={busy || !!created}
               className="space-y-5 min-w-0"
             >
+              <Advanced title="Handle (how people @mention it)">
               <Field label="Handle" hint="How people and agents @mention it.">
                 <Input
                   value={handle}
@@ -603,12 +719,19 @@ export function CreateAgent({
                   placeholder={slug(cleanName)}
                   required
                 />
-                {taken && !created && (
+                {taken && !created && !simple && (
                   <span className="text-xs text-bad">
                     That handle is already in use.
                   </span>
                 )}
               </Field>
+              </Advanced>
+              {simple && taken && !created && (
+                <p role="alert" className="text-xs text-bad">
+                  That handle is already in use. Change the name, or open
+                  &ldquo;Handle&rdquo; above to pick another.
+                </p>
+              )}
               {external ? (
                 <div className="rounded-xl border border-line p-4 text-sm space-y-2">
                   <p className="font-medium">
@@ -636,7 +759,9 @@ export function CreateAgent({
                     label="Device"
                     hint={
                       usable.length
-                        ? "Where Warren starts its harness."
+                        ? simple
+                          ? "The computer that runs this helper."
+                          : "Where Warren starts its harness."
                         : "You can connect a device later under Devices."
                     }
                   >
@@ -684,23 +809,34 @@ export function CreateAgent({
                   <Field label="Starting role">
                     <select
                       value={template?.id ?? ""}
-                      onChange={(e) => {
-                        const t =
-                          TEMPLATES.find((t) => t.id === e.target.value) ??
-                          null;
-                        setTemplate(t);
-                        setInstructions(t?.instructions ?? "");
-                      }}
+                      onChange={(e) => pickTemplate(e.target.value)}
                       className="h-10 w-full rounded-lg border border-input bg-panel px-3 text-sm"
                     >
                       <option value="">Start from scratch</option>
-                      {TEMPLATES.map((t) => (
+                      {shownTemplates.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name}
                         </option>
                       ))}
                     </select>
                   </Field>
+                  {simple && (
+                    <Advanced title="Business roles">
+                      <select
+                        aria-label="Business role"
+                        value=""
+                        onChange={(e) => pickTemplate(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-input bg-panel px-3 text-sm"
+                      >
+                        <option value="">Pick a business role</option>
+                        {templateGroups.business.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Advanced>
+                  )}
                   {template && (
                     <p className="text-xs text-muted">{template.blurb}</p>
                   )}

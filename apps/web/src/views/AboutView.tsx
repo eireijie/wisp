@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Brain, Check, ChevronLeft, ExternalLink, Pencil, Pin, PinOff, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, Empty, Input, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { href } from "../router.ts";
+import { Button, Empty, IconButton, Input, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 type Kind = "preference" | "plan" | "did" | "detail";
 
@@ -48,6 +49,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [due, setDue] = useState("");
+  const [first, setFirst] = useState("");
 
   const load = useCallback(() => api<Profile>("GET", `/api/memory/profile?user=${encodeURIComponent(userId)}`).then(setProfile, (e) => setError(e.message)), [userId]);
   useEffect(() => {
@@ -105,6 +107,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
       </header>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-4 md:px-6 py-5 space-y-5">
+          <p className="text-base font-medium text-ink">{isMe ? "What helpers should know about you" : `What helpers should know about ${profile?.person.name ?? "them"}`}</p>
           <p className="text-sm text-muted">
             What agents have learned about {isMe ? "you" : profile?.person.name}. Every agent reads this before it works, so you don't have to repeat yourself. Fix or delete anything; it applies from the next message.{" "}
             {profile && (
@@ -113,6 +116,41 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
               </a>
             )}
           </p>
+
+          <p className="text-sm text-muted">
+            How Warren itself behaves (like which key sends a message) is in{" "}
+            <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "preferences" })}>
+              Settings → App behavior
+            </a>
+            . Your name and time zone are in{" "}
+            <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
+              Profile
+            </a>
+            . Everything here is saved as notes in{" "}
+            <a className="text-accent-text hover:underline" href={href({ view: "vault", path: null })}>
+              Memory
+            </a>
+            .
+          </p>
+
+          {profile && profile.items.length === 0 && canEdit && isMe && (
+            <form
+              className="rounded-xl border border-line p-4 space-y-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!first.trim()) return;
+                if (await remember({ kind: "preference", text: first.trim() })) setFirst("");
+              }}
+            >
+              <label htmlFor="about-first" className="block text-sm font-medium">
+                What would you like your helper to remember?
+              </label>
+              <Textarea id="about-first" rows={2} value={first} onChange={(e) => setFirst(e.target.value)} placeholder="I like short answers with an example" />
+              <Button variant="primary" disabled={!first.trim()}>
+                Remember this
+              </Button>
+            </form>
+          )}
 
           <div className="flex gap-1 overflow-x-auto" role="tablist">
             {TABS.map((t) => (
@@ -235,19 +273,11 @@ function ItemRow({ item, canEdit, onSave, onForget }: { item: Item; canEdit: boo
           {canEdit && (
             <div className="flex shrink-0 items-center">
               {item.kind === "plan" && (
-                <button onClick={() => onSave({ status: closed ? "active" : "done" })} className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-ink" title={closed ? "Reopen" : "Mark done"} aria-label={closed ? "Reopen plan" : "Mark plan done"}>
-                  {closed ? <RotateCcw size={15} /> : <Check size={15} />}
-                </button>
+                <IconButton onClick={() => onSave({ status: closed ? "active" : "done" })} icon={closed ? <RotateCcw size={15} /> : <Check size={15} />} label={closed ? "Reopen" : "Mark done"} />
               )}
-              <button onClick={() => onSave({ pinned: !item.pinned })} className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-ink" title={item.pinned ? "Unpin" : "Pin: always loaded first"} aria-label={item.pinned ? "Unpin" : "Pin"}>
-                {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}
-              </button>
-              <button onClick={() => setEditing(true)} className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-ink" title="Edit" aria-label="Edit">
-                <Pencil size={15} />
-              </button>
-              <button onClick={onForget} className="p-1.5 rounded-md hover:bg-hover text-muted hover:text-bad" title="Delete" aria-label="Delete">
-                <Trash2 size={15} />
-              </button>
+              <IconButton onClick={() => onSave({ pinned: !item.pinned })} icon={item.pinned ? <PinOff size={15} /> : <Pin size={15} />} label={item.pinned ? "Unpin" : "Pin"} title={item.pinned ? "Unpin" : "Pin: always loaded first"} />
+              <IconButton onClick={() => setEditing(true)} icon={<Pencil size={15} />} label="Edit" />
+              <IconButton onClick={onForget} icon={<Trash2 size={15} />} label="Delete" tone="danger" />
             </div>
           )}
         </div>

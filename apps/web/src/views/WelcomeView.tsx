@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, KeyRound, Laptop, Loader2, Monitor, Plus, Server, Smartphone, TerminalSquare, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, FileText, KeyRound, Laptop, Loader2, MessageSquareText, Monitor, Plus, Server, Smartphone, Sparkles, TerminalSquare, UtensilsCrossed, Users } from "lucide-react";
 import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
@@ -8,6 +8,7 @@ import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { STEPS, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
 import { useDesktopInfo } from "../desktop.ts";
+import { setExperience, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
@@ -23,14 +24,15 @@ import { AgentAvatar, Button, CopyBlock, DeviceInstall, cx } from "../components
 
 const LABELS: Record<StepId, string> = { device: "Device", role: "Its job", agent: "Agent", harness: "Harness", hello: "First task" };
 
-type Screen = StepId | "done";
+/** "intro" comes before step 1 and is not a numbered step: it only shows for a new account, or when asked for. */
+type Screen = StepId | "intro" | "done";
 
 /** The filled field Paperclip's setup uses: no outline until it's focused. */
 const FILLED = "h-11 w-full rounded-lg border border-transparent bg-chip px-3.5 text-[15px] outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^[^a-z]+/, "").replace(/-+$/, "").slice(0, 32);
 
-export function WelcomeView() {
+export function WelcomeView({ intro }: { intro?: boolean }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
   const { state, error, refresh, done } = useOnboarding(3000);
@@ -43,10 +45,14 @@ export function WelcomeView() {
   const [fresh, setFresh] = useState(false);
   const [name, setName] = useState("");
 
-  // open on the first thing that hasn't happened yet
+  // open on the first thing that hasn't happened yet, or on the intro when asked for
   useEffect(() => {
-    if (!screen && state) setScreen(STEPS.find((s) => !done[s]) ?? "done");
-  }, [state, screen, done]);
+    if (!screen && state) setScreen(intro ? "intro" : (STEPS.find((s) => !done[s]) ?? "done"));
+  }, [state, screen, done, intro]);
+  // already open and sent to #/welcome/intro (from Help): show it again
+  useEffect(() => {
+    if (intro) setScreen((s) => (s ? "intro" : s));
+  }, [intro]);
 
   const usable = usableDevices(devices ?? []);
   const device = usable.find((d) => d.id === deviceId) ?? pickDevice(usable);
@@ -64,6 +70,12 @@ export function WelcomeView() {
     go({ view: "chat", channelId, threadId: null });
   };
 
+  // the intro is done: drop "/intro" from the address so the same link works again later
+  const startSetup = () => {
+    if (intro) go({ view: "welcome" });
+    show(STEPS.find((s) => !done[s]) ?? "done");
+  };
+
   const hero = screen === "agent" || screen === "harness" || screen === "hello";
   const look = agent ? (agent.settings.appearance ?? defaultAppearance(agent.handle)) : defaultAppearance(slug(name) || "new-agent");
 
@@ -79,7 +91,7 @@ export function WelcomeView() {
       </header>
       <div ref={scroller} className="flex-1 min-h-0 overflow-y-auto flex flex-col">
         <div className="mx-auto my-auto w-[560px] max-w-full shrink-0 px-6 sm:px-10 pt-6 pb-12">
-          {screen && <Stepper current={screen} done={done} onJump={show} />}
+          {screen && screen !== "intro" && <Stepper current={screen} done={done} onJump={show} />}
           {error && (
             <div role="alert" className="mb-6 rounded-xl border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">
               {error}
@@ -98,6 +110,7 @@ export function WelcomeView() {
             </div>
           ) : (
             <div key={screen} className="wizard-in">
+              {screen === "intro" && <IntroScreen onContinue={startSetup} />}
               {screen === "device" && (
                 <DeviceScreen
                   usable={usable}
@@ -165,7 +178,7 @@ function pickDevice(ds: DeviceInfo[]): DeviceInfo | undefined {
 // --- the frame ------------------------------------------------------------------------------------
 
 /** Paperclip's progress strip: one segment per step, filled up to here. Finished ones take you back. */
-function Stepper({ current, done, onJump }: { current: Screen; done: Record<StepId, boolean>; onJump: (s: StepId) => void }) {
+function Stepper({ current, done, onJump }: { current: Exclude<Screen, "intro">; done: Record<StepId, boolean>; onJump: (s: StepId) => void }) {
   const at = current === "done" ? STEPS.length : STEPS.indexOf(current);
   return (
     <nav aria-label="Setup steps" className="mb-10">
@@ -273,6 +286,68 @@ function NoDevice({ onBack }: { onBack: () => void }) {
     <>
       <Heading title="Connect a device first">Agents live on one of your devices. Go back a step to connect it.</Heading>
       <Footer onBack={onBack} label="Continue" disabled onNext={() => {}} />
+    </>
+  );
+}
+
+// --- before step 1: what Warren is -----------------------------------------------------------------
+
+const EXAMPLES: { icon: ReactNode; text: string }[] = [
+  { icon: <UtensilsCrossed size={17} />, text: "Plan a week of dinners and a shopping list" },
+  { icon: <MessageSquareText size={17} />, text: "Draft a polite message to a landlord or a coworker" },
+  { icon: <FileText size={17} />, text: "Summarize a document" },
+];
+
+/** Plain words about what Warren is, and how much of it to show. Not a numbered step. */
+function IntroScreen({ onContinue }: { onContinue: () => void }) {
+  const picked = useStore((s) => s.me?.prefs?.experience);
+  const [choice, setChoice] = useState<Experience>(picked ?? "simple");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const next = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (choice !== picked) await setExperience(choice);
+      onContinue();
+    } catch {
+      setError("Couldn't save that. Check your connection and try again. You can also change it later in Settings.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Heading title="Welcome to Warren">
+        Warren is a place where you and AI helpers work together. You chat with them, they do the work on a computer you choose, and they remember what matters.
+      </Heading>
+      <ul className="grid sm:grid-cols-3 gap-2.5" aria-label="Things you can ask">
+        {EXAMPLES.map((e) => (
+          <li key={e.text} className="rounded-xl border border-line p-3.5 flex sm:flex-col gap-3 items-start">
+            <span className="size-8 shrink-0 rounded-lg bg-chip text-muted grid place-items-center">{e.icon}</span>
+            <span className="text-sm leading-snug">{e.text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 flex items-center justify-center gap-2 text-sm text-muted text-center">
+        <Sparkles size={14} className="shrink-0" /> You'll set up your first helper in the next few minutes, then you can ask things like these.
+      </p>
+      <div className="mt-9">
+        <h2 id="experience-q" className="mb-3 text-base font-semibold">How much do you want to see?</h2>
+        <div className="space-y-2.5" role="radiogroup" aria-labelledby="experience-q">
+          <Choice icon={<Sparkles size={18} />} title="Simple" badge="Recommended" selected={choice === "simple"} disabled={busy} onClick={() => setChoice("simple")} body="The everyday parts first. Advanced options stay a click away." />
+          <Choice icon={<TerminalSquare size={18} />} title="Advanced" selected={choice === "advanced"} disabled={busy} onClick={() => setChoice("advanced")} body="Everything: teams, harness details, VM sizes, tokens, raw files." />
+        </div>
+        <p className="mt-2 text-xs text-muted">You can change this any time in Settings.</p>
+      </div>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-bad">
+          {error}
+        </p>
+      )}
+      <Footer label="Continue" busy={busy} onNext={next} />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
+import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -20,9 +20,11 @@ import { NewTask, TasksView } from "./views/TasksView.tsx";
 import { DashboardView } from "./views/DashboardView.tsx";
 import { ConnectorsView } from "./views/ConnectorsView.tsx";
 import { SkillsView } from "./views/SkillsView.tsx";
+import { HelpView } from "./views/HelpView.tsx";
 import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
-import { useOnboarding } from "./onboarding.ts";
+import { setupProgress, useDismissed, useOnboarding } from "./onboarding.ts";
+import { useSimple } from "./experience.tsx";
 import { BuddyView } from "./views/BuddyView.tsx";
 import { useDesktopAgents } from "./desktop.ts";
 import { useHubUpdated } from "./hubUpdate.ts";
@@ -148,7 +150,9 @@ function Workspace() {
       case "settings":
         return <SettingsView page={route.page ?? null} onBack={phone ? toYou : undefined} />;
       case "welcome":
-        return <WelcomeView />;
+        return <WelcomeView intro={route.intro} />;
+      case "help":
+        return <HelpView onBack={phone ? toYou : undefined} />;
     }
   })();
   // conversations use the whole screen on phones; everything else keeps the tab bar
@@ -222,7 +226,7 @@ function TabBar({ route }: { route: Route }) {
       {tab(route.view === "agents", "Agents", <Bot size={22} />, href({ view: "agents", agentId: null }))}
       {tab(false, "Search", <Search size={22} />, () => setPalette(true))}
       {tab(route.view === "vault", "Memory", <BookOpen size={22} />, href({ view: "vault", path: null }))}
-      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about", "dashboard", "connectors", "skills", "tasks"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
+      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about", "dashboard", "connectors", "skills", "tasks", "help"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
     </nav>
   );
 }
@@ -251,15 +255,33 @@ function ChatsPage({ route }: { route: Route }) {
 function YouPage() {
   const me = useStore((s) => s.me)!;
   const { done } = useOnboarding();
-  const progress = Object.values(done).filter(Boolean).length;
-  const row = (icon: ReactNode, label: string, to: string, hint?: string) => (
-    <a href={to} className="flex items-center gap-3 px-4 h-14 border-b border-line last:border-0">
-      <span className="text-muted">{icon}</span>
-      <span className="flex-1 text-[15px]">{label}</span>
-      {hint && <span className="text-xs text-muted">{hint}</span>}
-      <ChevronRight size={16} className="text-faint" />
-    </a>
-  );
+  const dismissed = useDismissed();
+  const simple = useSimple();
+  const { progress, steps, complete } = setupProgress(done);
+  const isGuest = me.role === "guest";
+  const row = (icon: ReactNode, label: string, to: string | (() => void), hint?: string, desc?: string) => {
+    const cls = "w-full text-left flex items-center gap-3 px-4 min-h-14 py-2 border-b border-line last:border-0";
+    const inner = (
+      <>
+        <span className="text-muted">{icon}</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px]">{label}</span>
+          {desc && <span className="block text-xs text-muted">{desc}</span>}
+        </span>
+        {hint && <span className="text-xs text-muted tabular-nums">{hint}</span>}
+        <ChevronRight size={16} className="text-faint" />
+      </>
+    );
+    return typeof to === "string" ? (
+      <a href={to} className={cls}>
+        {inner}
+      </a>
+    ) : (
+      <button onClick={to} className={cls}>
+        {inner}
+      </button>
+    );
+  };
   return (
     <div className="flex-1 overflow-y-auto safe-top">
       <div className="p-4 space-y-5">
@@ -273,14 +295,17 @@ function YouPage() {
           </div>
         </div>
         <div className="rounded-2xl border border-line overflow-hidden">
-          {progress < Object.keys(done).length ? row(<Sparkles size={19} />, "Get started", href({ view: "welcome" }), `${progress}/${Object.keys(done).length}`) : null}
+          {!complete ? row(<Sparkles size={19} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`) : null}
           {row(<LayoutDashboard size={19} />, "Dashboard", href({ view: "dashboard" }))}
-          {row(<Brain size={19} />, "About you", href({ view: "about" }))}
-          {row(<Users size={19} />, "Teams", href({ view: "teams", teamId: null }))}
-          {row(<Monitor size={19} />, "Computers", href({ view: "computers", computerId: null }))}
-          {row(<Server size={19} />, "Devices", href({ view: "nodes" }))}
-          {row(<Plug size={19} />, "Connectors", href({ view: "connectors" }))}
-          {row(<Wand2 size={19} />, "Skills", href({ view: "skills" }))}
+          {row(<ListTodo size={19} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to a helper")}
+          {!isGuest && row(<SquarePen size={19} />, "New task", () => useStore.setState({ newTaskOpen: true }))}
+          {row(<Brain size={19} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you")}
+          {!simple && row(<Users size={19} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together")}
+          {row(<Monitor size={19} />, "Computers", href({ view: "computers", computerId: null }), undefined, "Desktops helpers use")}
+          {row(<Server size={19} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren")}
+          {row(<Plug size={19} />, "Connected apps", href({ view: "connectors" }), undefined, "Gmail, Slack and other apps helpers can use")}
+          {row(<Wand2 size={19} />, "Skills", href({ view: "skills" }), undefined, "Things helpers know how to do")}
+          {row(<LifeBuoy size={19} />, "Help", href({ view: "help" }), undefined, "Answers, setup, and what words mean")}
           {row(<Settings size={19} />, "Settings", href({ view: "settings" }))}
         </div>
         <ModePicker />

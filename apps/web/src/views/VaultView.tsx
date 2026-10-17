@@ -7,6 +7,7 @@ import { go, guardLeaving, href, mayLeave } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { Button, Empty, Field, Input, Modal, cx, timeAgo } from "../components/ui.tsx";
 import { AccessDialog, pathLabel } from "../components/AccessDialog.tsx";
+import { useSimple } from "../experience.tsx";
 import { obsidianLink, onHubMachine, useMemoryStorage } from "../obsidian.ts";
 
 interface NoteMeta {
@@ -52,6 +53,7 @@ const base = (p: string) => p.split("/").pop()!.replace(/\.md$/i, "");
 const norm = (s: string) => s.trim().replace(/\.md$/i, "").toLowerCase();
 
 export function VaultView({ path, onBack }: { path: string | null; onBack?: () => void }) {
+  const simple = useSimple();
   const [notes, setNotes] = useState<NoteMeta[] | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
@@ -215,13 +217,25 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
             <NoteReader key={path} path={path} pendingEdit={pendingEdit} resolve={resolve} folderLabel={folderLabel} onChanged={refresh} onShare={() => setSharing({ path, folder: false })} />
           ) : (
             <Empty icon={<BookOpen />} title="Your shared memory">
-              <p>
-                Obsidian is the best place to write and organize notes. You can also fix, add or delete notes here. This page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
-              </p>
-              <p>Every agent has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.</p>
-              <p>
-                <OpenInObsidian className="mt-1" />
-              </p>
+              {simple ? (
+                <>
+                  <p>Write, read and fix notes right here. This page is also where you see who changed what, and choose who can read or change each folder and note.</p>
+                  <p>Every helper has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose who can use it.</p>
+                  <p className="text-xs text-muted">
+                    Prefer another notes app? You can use <a href={href({ view: "settings", page: "memory" })} className="underline hover:text-ink">Obsidian</a> too.
+                  </p>
+                </>
+              ) : (
+                <>
+                <p>
+                  Obsidian is the best place to write and organize notes. You can also fix, add or delete notes here. This page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
+                </p>
+                <p>Every agent has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.</p>
+                <p>
+                  <OpenInObsidian className="mt-1" />
+                </p>
+                </>
+              )}
             </Empty>
           )}
         </div>

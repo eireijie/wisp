@@ -6,6 +6,7 @@ import { useStore } from "../store.ts";
 import { Button, Field, Input, Loader, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 import { AgentPicker, AgentStack, Group, CatalogIcon, IconTile, SearchBox, ShopHeader } from "../components/ShopParts.tsx";
 import { useDevices, type DeviceInfo } from "../devices.ts";
+import { Advanced, useSimple } from "../experience.tsx";
 
 const KIND_LABEL: Record<ConnectorKind, string> = { "mcp-stdio": "MCP · runs on the device", "mcp-http": "MCP · remote", secret: "Key" };
 
@@ -14,6 +15,69 @@ function worksWith(kind: ConnectorKind): string {
   if (kind === "mcp-http") return "Works with Claude Code and Codex. Not wired yet for ACP agents (Gemini, OpenCode, Hermes…).";
   if (kind === "mcp-stdio") return "Works with Claude Code, Codex, and ACP agents (Gemini, OpenCode, Hermes, Cursor…).";
   return "Set in the environment of every agent Warren runs: Claude Code, Codex and ACP agents.";
+}
+
+export interface ConnectSummary {
+  /** what the helpers will be able to do */
+  can: string;
+  /** who runs the server */
+  runBy: string;
+  /** a plain warning, only when the server isn't verified */
+  caution: string | null;
+}
+
+/** The host of a URL, or null if it isn't one. */
+function hostOf(url: string | undefined): string | null {
+  try {
+    return url ? new URL(url).host : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * "Before you connect": what helpers get and who runs the server, in plain words. Only says what
+ * the entry itself tells us (its name, kind, publisher, domain and trust label); never invents
+ * a list of permissions, since those are decided by the app and the account you sign in with.
+ */
+export function connectSummary(src: { builtIn: CatalogConnector } | { entry: MarketplaceEntry; install: MarketplaceInstall }): ConnectSummary {
+  if ("builtIn" in src) {
+    const c = src.builtIn;
+    const host = c.kind === "mcp-http" ? hostOf(c.url) : null;
+    return {
+      can: c.kind === "secret" ? `Your helpers get the key you enter, so they can use ${c.name} with it.` : `Your helpers will be able to use ${c.name} through this connection: read and act on what this app allows.`,
+      runBy:
+        c.kind === "secret"
+          ? "Warren keeps the key and gives it only to the helpers you pick."
+          : c.kind === "mcp-http"
+            ? `On Warren's list of well-known apps. It connects to ${host ?? "the app's own address"}, not to a server run by Warren.`
+            : "On Warren's list of well-known apps. It runs as a program on the helper's own computer.",
+      caution: null,
+    };
+  }
+  const { entry, install } = src;
+  const trust = trustLabel(entry);
+  const name = entry.name;
+  const who = entry.domain ? `${entry.publisher} (${entry.domain})` : entry.publisher;
+  const can = install.fields.length ? `Your helpers get the key you enter, so they can use ${name} with it.` : `Your helpers will be able to use ${name} through this connection: read and act on what this app allows.`;
+  if (trust.kind === "unverified") {
+    return { can, runBy: `Run by ${entry.publisher}, not by the app's maker or Warren.`, caution: "Nobody has confirmed who they are. Only connect if you trust them." };
+  }
+  if (trust.kind === "maker") {
+    return { can, runBy: `Made and run by ${trust.text.replace(/^Made by /, "")} (${entry.domain ?? entry.publisher}), not by Warren.`, caution: null };
+  }
+  return { can, runBy: `Run by ${who}, not by Warren. The registry confirmed who they are; that doesn't mean ${name}'s own maker endorses it.`, caution: null };
+}
+
+function BeforeYouConnect({ s }: { s: ConnectSummary }) {
+  return (
+    <section aria-label="Before you connect" className="rounded-lg border border-line p-3 space-y-1">
+      <h3 className="text-sm font-medium">Before you connect</h3>
+      <p className="text-xs text-muted">{s.can}</p>
+      <p className="text-xs text-muted">{s.runBy}</p>
+      {s.caution && <p className="text-xs text-warn">{s.caution}</p>}
+    </section>
+  );
 }
 
 /**
@@ -39,6 +103,7 @@ function agentNote(kind: ConnectorKind, command: string, devices: DeviceInfo[] |
   };
 }
 
+const ZAPIER_ID = "com.zapier/mcp";
 const CATEGORIES = ["All", ...new Set(CONNECTOR_CATALOG.map((c) => c.category))];
 
 /**
@@ -49,16 +114,19 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
   const canEdit = me.role !== "guest";
+  const simple = useSimple();
   const [list, setList] = useState<Connector[] | null>(null);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("All");
   const [form, setForm] = useState<{ entry?: CatalogConnector; existing?: Connector } | null>(null);
   const [adding, setAdding] = useState<MarketplaceEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"marketplace" | "catalog">("marketplace");
+  const [tab, setTab] = useState<"marketplace" | "catalog">(simple ? "catalog" : "marketplace");
   const [market, setMarket] = useState<{ q: string; entries: MarketplaceEntry[] | null; error: string | null }>({ q: "", entries: null, error: null });
   // coming back from a sign-in page: ?signin=ok (or why it didn't work)
   const [retry, setRetry] = useState(0);
+  // Zapier, remembered once the registry lists it, so Simple mode can recommend it above the tabs
+  const [zapier, setZapier] = useState<MarketplaceEntry | null>(null);
   const [signedIn] = useState(() => new URLSearchParams(location.search).get("signin"));
   useEffect(() => {
     if (signedIn) history.replaceState(null, "", location.pathname + location.hash);
@@ -71,7 +139,11 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
     const t = setTimeout(
       () =>
         api<{ entries: MarketplaceEntry[] }>("GET", `/api/marketplace?q=${encodeURIComponent(query)}`).then(
-          (r) => setMarket({ q: query, entries: r.entries, error: null }),
+          (r) => {
+            setMarket({ q: query, entries: r.entries, error: null });
+            const z = r.entries.find((e) => e.id === ZAPIER_ID);
+            if (z) setZapier(z);
+          },
           (e) => setMarket({ q: query, entries: [], error: (e as Error).message }),
         ),
       query ? 350 : 0,
@@ -121,10 +193,10 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <ShopHeader
-        title="Connectors"
+        title="Connected apps"
         onBack={onBack}
         action={
-          canEdit && (
+          canEdit && !simple && (
             <Button variant="primary" onClick={() => setForm({})}>
               <Plus size={16} /> <span className="hidden sm:inline">Add your own</span>
               <span className="sm:hidden">Add</span>
@@ -135,8 +207,8 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl px-4 md:px-6 py-5 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <p className="text-sm text-muted flex-1">Connect the apps you use, so agents can work in them and keep an eye on them for you. Search thousands of MCP servers, sign in, and pick which agents get each.</p>
-            <SearchBox value={q} onChange={setQ} placeholder="Search apps and MCP servers" />
+            <p className="text-sm text-muted flex-1">Apps your helpers can use for you, like Gmail or Slack. Each one asks you to sign in (a few ask for a key instead); your password never goes to a helper.</p>
+            <SearchBox value={q} onChange={setQ} placeholder={simple ? "Search apps" : "Search apps and MCP servers"} />
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
           {signedIn && <p className={cx("text-sm rounded-lg px-3 py-2", signedIn === "ok" ? "bg-ok/10 text-ok" : "bg-bad/10 text-bad")}>{signedIn === "ok" ? "Signed in. Agents use it from their next run." : `Sign-in didn't finish: ${signedIn}`}</p>}
@@ -149,7 +221,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
             {list === null ? (
               <Loader />
             ) : list.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-muted">Nothing connected yet. Pick one from the catalog below, or add your own.</div>
+              <div className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-muted">Nothing connected yet. Pick one from the catalog below{simple ? "." : ", or add your own."}</div>
             ) : connected.length === 0 ? (
               <p className="text-sm text-muted">No connected ones match "{q}".</p>
             ) : (
@@ -160,6 +232,18 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
               </div>
             )}
           </section>
+
+          {simple && zapier && (
+            <section aria-labelledby="recommended-h" className="space-y-2">
+              <h2 id="recommended-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Recommended for most people
+              </h2>
+              <p className="text-sm text-muted">One sign-in with Zapier connects Gmail, Google Calendar, Drive, Todoist and thousands more apps.</p>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                <MarketCard e={zapier} added={(list ?? []).some((c) => c.catalogId === `registry:${zapier.id}`)} canEdit={canEdit} onAdd={() => setAdding(zapier)} />
+              </div>
+            </section>
+          )}
 
           <div className="flex items-center gap-1 border-b border-line">
             {(
@@ -194,7 +278,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
               {market.entries === null ? (
                 <Loader />
               ) : market.entries.length === 0 ? (
-                !market.error && <p className="text-sm text-muted py-6 text-center">Nothing in the registry matches "{q}". You can still add your own.</p>
+                !market.error && <p className="text-sm text-muted py-6 text-center">Nothing in the registry matches "{q}".{simple ? "" : " You can still add your own."}</p>
               ) : (
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {market.entries.map((e) => (
@@ -220,7 +304,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
               </div>
             </div>
             {catalog.length === 0 ? (
-              <p className="text-sm text-muted py-6 text-center">Nothing in the catalog matches. You can still add your own.</p>
+              <p className="text-sm text-muted py-6 text-center">Nothing in the catalog matches.{simple ? "" : " You can still add your own."}</p>
             ) : (
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {catalog.map((c) => (
@@ -254,6 +338,15 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
               </div>
             )}
           </section>
+          )}
+
+          {simple && canEdit && (
+            <Advanced title="Add your own server">
+              <p className="text-sm text-muted mb-2">For an app that isn't listed. You'll need to know how its server is started or where it lives.</p>
+              <Button onClick={() => setForm({})}>
+                <Plus size={14} /> Add your own
+              </Button>
+            </Advanced>
           )}
         </div>
       </div>
@@ -333,7 +426,7 @@ function ConnectedRow({ c, agents, canEdit, onEdit, onToggle, onRemove, onSignIn
 type Row = { key: string; value: string; saved?: string; field?: CatalogField };
 
 /** Add from the catalog, add your own, or edit one. Asks for the values it needs and which agents get it. */
-function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, title: titleOverride }: { entry?: CatalogConnector; existing?: Connector; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void; top?: ReactNode; title?: string }) {
+function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, title: titleOverride, summary: summaryProp }: { entry?: CatalogConnector; existing?: Connector; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void; top?: ReactNode; title?: string; summary?: ConnectSummary }) {
   const [kind, setKind] = useState<ConnectorKind>(existing?.kind ?? entry?.kind ?? "mcp-stdio");
   const [name, setName] = useState(existing?.name ?? entry?.name ?? "");
   const [command, setCommand] = useState(existing?.command ?? entry?.command ?? "");
@@ -357,6 +450,7 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const custom = !entry;
+  const summary = summaryProp ?? (entry && !existing ? connectSummary({ builtIn: entry }) : null);
   const [showAdvanced, setShowAdvanced] = useState(custom);
   const devices = useDevices(10_000);
 
@@ -525,6 +619,7 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
           </p>
         ))}
 
+        {summary && <BeforeYouConnect s={summary} />}
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" onClick={onClose}>
@@ -644,5 +739,5 @@ function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: Marketpl
       )}
     </div>
   );
-  return <ConnectorForm key={i} entry={asCatalog} agents={agents} taken={taken} onClose={onClose} onSaved={onSaved} top={top} title={`Add ${entry.name}`} />;
+  return <ConnectorForm key={i} entry={asCatalog} agents={agents} taken={taken} onClose={onClose} onSaved={onSaved} top={top} title={`Add ${entry.name}`} summary={connectSummary({ entry, install })} />;
 }

@@ -16,6 +16,12 @@ export interface HarnessInfo {
   acpArgs?: string[];
   /** one line for the "add agent" picker */
   note: string;
+  /** a plain sentence for people who don't know the product: who makes it and what it is */
+  blurb?: string;
+  /** what sign-in or account it needs, in plain words */
+  account?: string;
+  /** where to get an account, for the harnesses Warren recommends */
+  signup?: string;
   /** how to sign it in on a device, when it needs that before it can run */
   login?: string;
   /**
@@ -27,18 +33,18 @@ export interface HarnessInfo {
 }
 
 export const HARNESSES: HarnessInfo[] = [
-  { id: "claude-code", label: "Claude Code", binary: "claude", protocol: "native", note: "Anthropic's coding agent", login: "claude (then /login)", install: { npm: "@anthropic-ai/claude-code" } },
-  { id: "codex", label: "Codex", binary: "codex", protocol: "native", note: "OpenAI's coding agent", login: "codex login", install: { npm: "@openai/codex" } },
-  { id: "hermes", label: "Hermes", binary: "hermes", protocol: "acp", acpArgs: ["acp"], note: "Nous Research's agent, with its own skills", login: "hermes setup", install: { command: "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash", docs: "https://github.com/NousResearch/hermes-agent" } },
-  { id: "gemini", label: "Gemini CLI", binary: "gemini", protocol: "acp", acpArgs: ["--acp"], note: "Google's agent", login: "gemini (then sign in)", install: { npm: "@google/gemini-cli" } },
-  { id: "opencode", label: "OpenCode", binary: "opencode", protocol: "acp", acpArgs: ["acp"], note: "Open-source agent for any model", login: "opencode auth login", install: { npm: "opencode-ai" } },
-  { id: "goose", label: "Goose", binary: "goose", protocol: "acp", acpArgs: ["acp"], note: "Block's open-source agent", login: "goose configure", install: { command: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash", docs: "https://block.github.io/goose/docs/getting-started/installation" } },
-  { id: "kimi", label: "Kimi CLI", binary: "kimi", protocol: "acp", acpArgs: ["acp"], note: "Moonshot's agent", login: "kimi login", install: { npm: "@moonshot-ai/kimi-code", docs: "https://github.com/MoonshotAI/kimi-code" } },
-  { id: "qwen", label: "Qwen Code", binary: "qwen", protocol: "acp", acpArgs: ["--acp"], note: "Alibaba's agent", login: "qwen (then sign in)", install: { npm: "@qwen-code/qwen-code" } },
-  { id: "cursor", label: "Cursor", binary: "cursor-agent", protocol: "acp", acpArgs: ["acp"], note: "Cursor's agent CLI", login: "cursor-agent login", install: { command: "curl https://cursor.com/install -fsS | bash", docs: "https://cursor.com/cli" } },
-  { id: "openclaw", label: "OpenClaw", binary: "openclaw", protocol: "acp", acpArgs: ["acp"], note: "Needs its gateway running", login: "openclaw onboard", install: { npm: "openclaw" } },
-  { id: "grok", label: "Grok", binary: "grok", protocol: "mcp", note: "Connects through warren-mcp" },
-  { id: "custom", label: "Custom", binary: "", protocol: "mcp", note: "Your own agent, through the API or MCP" },
+  { id: "claude-code", label: "Claude Code", binary: "claude", protocol: "native", note: "Anthropic's coding agent", blurb: "Made by Anthropic, the company behind Claude.", account: "Needs a Claude subscription (Pro or Max) or an Anthropic API key, signed in on the device.", signup: "https://claude.ai", login: "claude (then /login)", install: { npm: "@anthropic-ai/claude-code" } },
+  { id: "codex", label: "Codex", binary: "codex", protocol: "native", note: "OpenAI's coding agent", blurb: "Made by OpenAI, the company behind ChatGPT.", account: "Needs a ChatGPT account (Plus or higher) or an OpenAI API key, signed in on the device.", signup: "https://chatgpt.com", login: "codex login", install: { npm: "@openai/codex" } },
+  { id: "hermes", label: "Hermes", binary: "hermes", protocol: "acp", acpArgs: ["acp"], note: "Nous Research's agent, with its own skills", blurb: "Made by Nous Research. An open-source agent with its own skills.", account: "Use an account from an AI provider you choose; you set it up when you install Hermes.", login: "hermes setup", install: { command: "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash", docs: "https://github.com/NousResearch/hermes-agent" } },
+  { id: "gemini", label: "Gemini CLI", binary: "gemini", protocol: "acp", acpArgs: ["--acp"], note: "Google's agent", blurb: "Made by Google. Works with Gemini models.", account: "Sign in with a Google account. There is a free tier.", signup: "https://gemini.google.com", login: "gemini (then sign in)", install: { npm: "@google/gemini-cli" } },
+  { id: "opencode", label: "OpenCode", binary: "opencode", protocol: "acp", acpArgs: ["acp"], note: "Open-source agent for any model", blurb: "An open-source agent that works with many AI models.", account: "Use an account from an AI provider you choose.", login: "opencode auth login", install: { npm: "opencode-ai" } },
+  { id: "goose", label: "Goose", binary: "goose", protocol: "acp", acpArgs: ["acp"], note: "Block's open-source agent", blurb: "Made by Block. An open-source agent that works with many AI models.", account: "Use an account from an AI provider you choose.", login: "goose configure", install: { command: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash", docs: "https://block.github.io/goose/docs/getting-started/installation" } },
+  { id: "kimi", label: "Kimi CLI", binary: "kimi", protocol: "acp", acpArgs: ["acp"], note: "Moonshot's agent", blurb: "Made by Moonshot AI. Works with Kimi models.", account: "Needs a Moonshot (Kimi) account, signed in on the device.", login: "kimi login", install: { npm: "@moonshot-ai/kimi-code", docs: "https://github.com/MoonshotAI/kimi-code" } },
+  { id: "qwen", label: "Qwen Code", binary: "qwen", protocol: "acp", acpArgs: ["--acp"], note: "Alibaba's agent", blurb: "Made by Alibaba. Works with Qwen models.", account: "Sign in with the account Qwen Code asks for on the device.", login: "qwen (then sign in)", install: { npm: "@qwen-code/qwen-code" } },
+  { id: "cursor", label: "Cursor", binary: "cursor-agent", protocol: "acp", acpArgs: ["acp"], note: "Cursor's agent CLI", blurb: "Made by Cursor, the code editor company.", account: "Needs a Cursor account, signed in on the device.", login: "cursor-agent login", install: { command: "curl https://cursor.com/install -fsS | bash", docs: "https://cursor.com/cli" } },
+  { id: "openclaw", label: "OpenClaw", binary: "openclaw", protocol: "acp", acpArgs: ["acp"], note: "Needs its gateway running", blurb: "An open-source assistant that runs through its own gateway.", account: "Set up and sign in inside OpenClaw first; its gateway must be running.", login: "openclaw onboard", install: { npm: "openclaw" } },
+  { id: "grok", label: "Grok", binary: "grok", protocol: "mcp", note: "Connects through warren-mcp", blurb: "Made by xAI. Works with Grok models.", account: "Set up where it already runs. It connects to Warren through warren-mcp." },
+  { id: "custom", label: "Custom", binary: "", protocol: "mcp", note: "Your own agent, through the API or MCP", blurb: "Your own agent, or one Warren doesn't list.", account: "Set up where it already runs. It connects to Warren through the API or warren-mcp." },
 ];
 
 export const HARNESS_IDS = HARNESSES.map((h) => h.id);

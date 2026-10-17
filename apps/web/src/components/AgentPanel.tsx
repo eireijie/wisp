@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Activity, BookOpen, MessageSquare, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, X } from "lucide-react";
-import type { Agent } from "@warren/core";
+import { harnessLabel, type Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
-import { go, type AgentTab } from "../router.ts";
+import { go, href, type AgentTab } from "../router.ts";
+import { useSimple } from "../experience.tsx";
 import { openDm } from "../openDm.ts";
-import { agentReadiness, useDevices } from "../devices.ts";
+import { agentReadiness, useDevices, type DeviceInfo } from "../devices.ts";
 import { useComputerState } from "../views/ComputersView.tsx";
 import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
@@ -21,7 +22,7 @@ const ACCESS_LABEL = { "read-only": "Read only", edit: "Can edit files", full: "
 /** Every section of the agent's full page, so nothing is more than two clicks from the chat. */
 const SECTIONS: { id: AgentTab; label: string; body: string; icon: ReactNode }[] = [
   { id: "look", label: "Look", body: "Its ghost's shape and colors", icon: <GhostIcon size={16} /> },
-  { id: "soul", label: "Soul", body: "Personality and what it remembers about itself", icon: <Sparkles size={16} /> },
+  { id: "soul", label: "Personality", body: "How it talks and what it values", icon: <Sparkles size={16} /> },
   { id: "instructions", label: "Instructions", body: "How it should work", icon: <ScrollText size={16} /> },
   { id: "model", label: "Model", body: "Model, effort and fast mode", icon: <Cpu size={16} /> },
   { id: "device", label: "Device", body: "Where its harness runs", icon: <Server size={16} /> },
@@ -29,7 +30,7 @@ const SECTIONS: { id: AgentTab; label: string; body: string; icon: ReactNode }[]
   { id: "routines", label: "Routines", body: "Tasks it does on a schedule", icon: <ListChecks size={16} /> },
   { id: "permissions", label: "Permissions", body: "What it may do without asking", icon: <Shield size={16} /> },
   { id: "connect", label: "Connect", body: "Apps and connectors", icon: <Plug size={16} /> },
-  { id: "runs", label: "Runs", body: "Everything it's done lately", icon: <Activity size={16} /> },
+  { id: "runs", label: "Activity", body: "Everything it's done lately", icon: <Activity size={16} /> },
 ];
 
 /**
@@ -104,7 +105,10 @@ function RoleLabel({ agent }: { agent: Agent }) {
 function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
   const status = AGENT_STATUS[agent.status];
   const computer = useStore((s) => s.computers.find((c) => c.id === agent.computerId));
-  const readiness = agentReadiness(agent, useDevices());
+  const devices = useDevices();
+  const readiness = agentReadiness(agent, devices);
+  const simple = useSimple();
+  const next = simple ? setupNextStep(agent, devices) : null;
   const rows: [string, ReactNode][] = [
     ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>],
     ["Harness", HARNESS_LABELS[agent.harness]],
@@ -129,6 +133,14 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
       {!readiness.ready && (
         <p className="rounded-xl border border-line bg-panel px-3 py-2 text-xs text-muted">
           Setup incomplete: {readiness.problem}. Messages to {agent.name} will wait until that's fixed.
+          {next && (
+            <span className="mt-1 block">
+              What to do: {next.text}{" "}
+              <a href={next.href} className="text-accent-text underline">
+                {next.action}
+              </a>
+            </span>
+          )}
         </p>
       )}
       <Button className="w-full" onClick={() => void openDm(agent.id)}>
@@ -144,6 +156,17 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
       </div>
     </div>
   );
+}
+
+/** The one thing to do about an unfinished helper, in plain words. Mirrors agentReadiness's order of checks; null when ready. */
+export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "name">, devices: DeviceInfo[] | null): { text: string; href: string; action: string } | null {
+  if (agentReadiness(agent, devices).ready) return null;
+  if (!agent.nodeId) return { text: `Choose the computer that runs ${agent.name}.`, href: href({ view: "agents", agentId: agent.id, tab: "device" }), action: "Choose a device" };
+  const device = devices?.find((d) => d.id === agent.nodeId);
+  if (!device) return null;
+  if (!device.online) return { text: `Open Warren on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "nodes" }), action: "See devices" };
+  if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "nodes" }), action: "See devices" };
+  return { text: `Install ${harnessLabel(agent.harness)} on ${device.name}.`, href: href({ view: "settings", page: "runtimes" }), action: "Install it" };
 }
 
 /** "Setup incomplete · my-mac is offline": what's still missing before it can answer. */

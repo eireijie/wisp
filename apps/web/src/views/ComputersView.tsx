@@ -6,6 +6,7 @@ import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
+import { Advanced, useSimple } from "../experience.tsx";
 import { AgentAvatar, Button, Empty, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 /** How a computer is doing, in a word or two, for cards and headers. */
@@ -131,13 +132,31 @@ function ComputerCard({ computer: c, devices }: { computer: ComputerInfo; device
 
 type Kind = "vm" | "device" | "orgo";
 
+/** The Simple-mode question: what should the helper be able to do? */
+export type Capability = "chat" | "vm" | "device";
+
+/** Which kind of computer to create for an answer. "Answer questions only" creates nothing. */
+export function capabilityKind(c: Capability | null): Kind | null {
+  return c === "vm" || c === "device" ? c : null;
+}
+
+/** New VMs are medium unless someone opens the size choice (under Advanced in Simple mode). */
+export const DEFAULT_SIZE = "medium" as const;
+
+/** Whether the Orgo cloud option can be used yet: it needs an API key saved in Settings → Computers. */
+export function orgoStatus(orgo: { configured: boolean } | null): "checking" | "needs-key" | "ready" {
+  return orgo === null ? "checking" : orgo.configured ? "ready" : "needs-key";
+}
+
 /** Pick where a new computer lives. Used on the Computers page and an agent's Computer tab. */
 export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, defaultName }: { devices: DeviceInfo[]; onClose: () => void; onCreated: (c: ComputerInfo) => void; nodeId?: string | null; defaultName?: string }) {
+  const simple = useSimple();
   const [kind, setKind] = useState<Kind | null>(null);
+  const [capability, setCapability] = useState<Capability | null>(null);
   const usable = usableDevices(devices);
   const [nodeId, setNodeId] = useState(preferNode && usable.some((d) => d.id === preferNode) ? preferNode : (usable.find((d) => d.online)?.id ?? usable[0]?.id ?? ""));
   const [name, setName] = useState(defaultName ?? "");
-  const [size, setSize] = useState<"small" | "medium" | "large">("medium");
+  const [size, setSize] = useState<"small" | "medium" | "large">(DEFAULT_SIZE);
   const [orgo, setOrgo] = useState<{ configured: boolean } | null>(null);
   const [existing, setExisting] = useState("");
   const [busy, setBusy] = useState(false);
@@ -152,9 +171,11 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
   useEffect(() => {
     if (kind && !choices.some((d) => d.id === nodeId)) setNodeId(choices.find((d) => d.online)?.id ?? choices[0]?.id ?? "");
   }, [kind]);
+  const orgoState = orgoStatus(orgo);
   const SIZES = { small: { cpus: 1, memoryGb: 2, ram: 4, cpu: 1 }, medium: { cpus: 2, memoryGb: 4, ram: 8, cpu: 2 }, large: { cpus: 4, memoryGb: 8, ram: 16, cpu: 4 } };
 
   const create = async () => {
+    if (kind === "orgo" && orgoState !== "ready") return;
     setBusy(true);
     setError(null);
     try {
@@ -175,8 +196,8 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
     }
   };
 
-  const option = (k: Kind, icon: React.ReactNode, title: string, body: string, note?: string) => (
-    <button type="button" onClick={() => setKind(k)} className={cx("w-full text-left rounded-xl border p-3 flex gap-3", kind === k ? "border-accent bg-accent-soft" : "border-line hover:bg-hover")}>
+  const card = (selected: boolean, onPick: () => void, icon: React.ReactNode, title: string, body: string, note?: string, disabled?: boolean) => (
+    <button type="button" role="radio" aria-checked={selected} disabled={disabled} onClick={onPick} className={cx("w-full text-left rounded-xl border p-3 flex gap-3 disabled:opacity-60 disabled:cursor-not-allowed", selected ? "border-accent bg-accent-soft" : cx("border-line", !disabled && "hover:bg-hover"))}>
       <span className="size-9 shrink-0 rounded-lg bg-chip grid place-items-center text-muted">{icon}</span>
       <span className="min-w-0">
         <span className="block text-sm font-medium">{title}</span>
@@ -185,17 +206,80 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
       </span>
     </button>
   );
+  const option = (k: Kind, icon: React.ReactNode, title: string, body: string, note?: string, disabled?: boolean) => card(kind === k, () => (setCapability(null), setKind(k)), icon, title, body, note, disabled);
+  const pickCapability = (c: Capability) => {
+    setCapability(c);
+    setKind(capabilityKind(c));
+  };
+  const orgoOption = option(
+    "orgo",
+    <Cloud size={18} />,
+    "An Orgo cloud computer",
+    "A Linux desktop in the cloud from orgo.ai that keeps running when your devices are off.",
+    orgoState === "checking" ? "Checking your Orgo connection…" : undefined,
+    orgoState !== "ready",
+  );
+  const orgoNeedsKey = orgoState === "needs-key" && (
+    <p className="text-xs text-warn">
+      Add your Orgo API key in Settings → Computers first.{" "}
+      <a href={href({ view: "settings", page: "computers" })} onClick={onClose} className="underline text-accent-text">
+        Open Computers settings
+      </a>
+    </p>
+  );
+
+  const chatOnly = simple && capability === "chat";
+  const showSizing = kind === "orgo" || kind === "vm";
+  const sizeField = (
+    <Field label="Size">
+      <select value={size} onChange={(e) => setSize(e.target.value as typeof size)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
+        <option value="small">Small: 1 CPU, {kind === "vm" ? "2" : "4"} GB</option>
+        <option value="medium">Medium: 2 CPUs, {kind === "vm" ? "4" : "8"} GB</option>
+        <option value="large">Large: 4 CPUs, {kind === "vm" ? "8" : "16"} GB</option>
+      </select>
+    </Field>
+  );
 
   return (
     <Modal title="Add a computer" onClose={onClose} wide>
       <div className="space-y-4">
-        <div className="space-y-2">
-          {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.", vmAvailabilityNote(usable))}
-          {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask.")}
-          {option("orgo", <Cloud size={18} />, "An Orgo cloud computer", "A Linux desktop in the cloud from orgo.ai that keeps running when your devices are off.", orgo && !orgo.configured ? "Add your Orgo API key in Settings → Computers first." : undefined)}
-        </div>
+        {simple ? (
+          <div className="space-y-2">
+            <p id="cap-q" className="text-sm font-medium">What should the helper be able to do?</p>
+            <div role="radiogroup" aria-labelledby="cap-q" className="space-y-2">
+              {card(capability === "chat", () => pickCapability("chat"), <Hand size={18} />, "Answer questions only", "No desktop needed")}
+              {card(capability === "vm", () => pickCapability("vm"), <Monitor size={18} />, "Use apps in its own desktop", "A separate desktop with a web browser, a terminal and files. Your own computer stays untouched.", vmAvailabilityNote(usable))}
+              {mineOnly.length > 0 && card(capability === "device", () => pickCapability("device"), <Lock size={18} />, "Use apps on my screen", "Uses your real screen, apps and files while you watch. You lend it for a while, and it only does what you ask.")}
+            </div>
+            <Advanced title="Cloud computer (Orgo)">
+              <div role="radiogroup" aria-label="Cloud computer" className="space-y-2">
+                {orgoOption}
+                {orgoNeedsKey}
+              </div>
+            </Advanced>
+          </div>
+        ) : (
+          <div role="radiogroup" aria-label="Kind of computer" className="space-y-2">
+            {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.", vmAvailabilityNote(usable))}
+            {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask.")}
+            {orgoOption}
+            {orgoNeedsKey}
+          </div>
+        )}
 
-        {kind && kind !== "orgo" && (
+        {chatOnly && (
+          <div className="rounded-xl border border-line bg-bg p-3 text-sm space-y-1">
+            <p>The helper can chat, write and look things up without a desktop of its own. Nothing will be created.</p>
+            <p className="text-muted">
+              To set this, open your helper's page and choose Computer.{" "}
+              <a href={href({ view: "agents", agentId: null })} onClick={onClose} className="underline text-accent-text">
+                Open helpers
+              </a>
+            </p>
+          </div>
+        )}
+
+        {kind && kind !== "orgo" && !(simple && choices.length === 1) && (
           <Field label="Device" hint={choices.length ? undefined : "Connect a device first under Devices."}>
             <select value={nodeId} onChange={(e) => setNodeId(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
               {choices.map((d) => (
@@ -224,16 +308,13 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
             <Field label="Name">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "device" ? (device?.name ?? "") : kind === "vm" ? "Research desk" : "Cloud desk"} />
             </Field>
-            {kind !== "device" && !existing && (
-              <Field label="Size">
-                <select value={size} onChange={(e) => setSize(e.target.value as typeof size)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
-                  <option value="small">Small: 1 CPU, {kind === "vm" ? "2" : "4"} GB</option>
-                  <option value="medium">Medium: 2 CPUs, {kind === "vm" ? "4" : "8"} GB</option>
-                  <option value="large">Large: 4 CPUs, {kind === "vm" ? "8" : "16"} GB</option>
-                </select>
-              </Field>
-            )}
+            {!simple && kind !== "device" && !existing && sizeField}
           </div>
+        )}
+        {simple && showSizing && !existing && (
+          <Advanced title="Size and resources">
+            <div className="grid sm:grid-cols-2 gap-3">{sizeField}</div>
+          </Advanced>
         )}
         {kind === "orgo" && (
           <Field label="Or connect a computer you already have in Orgo" hint="Its ID (a UUID) from the Orgo dashboard. Leave empty to make a new one.">
@@ -244,11 +325,13 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {chatOnly ? "Close" : "Cancel"}
           </Button>
-          <Button variant="primary" disabled={!kind || busy || (kind !== "orgo" && !nodeId)} onClick={create}>
-            {busy && <Loader2 size={15} className="animate-spin" />} Add computer
-          </Button>
+          {!chatOnly && (
+            <Button variant="primary" disabled={!kind || busy || (kind !== "orgo" && !nodeId) || (kind === "orgo" && orgoState !== "ready")} onClick={create}>
+              {busy && <Loader2 size={15} className="animate-spin" />} Add computer
+            </Button>
+          )}
         </div>
       </div>
     </Modal>

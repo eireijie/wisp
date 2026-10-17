@@ -3,7 +3,8 @@ import { BookOpen, ChevronLeft, ChevronRight, Crown, GitBranch, GitMerge, Hash, 
 import { harnessLabel, type Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type DiscussionInfo, type TeamInfo } from "../store.ts";
-import { SlotEditor, TeamBuilder, createSlotAgents } from "../components/TeamBuilder.tsx";
+import { SlotEditor, TEAM_INTRO, TeamBuilder, createSlotAgents } from "../components/TeamBuilder.tsx";
+import { SimpleOnly, useSimple } from "../experience.tsx";
 import { useDevices } from "../devices.ts";
 import { blankSlot, slotProblem, type Slot } from "../teamSetup.ts";
 import { go, href, type TeamTab } from "../router.ts";
@@ -17,6 +18,7 @@ export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab:
   const teams = useStore((s) => s.teams);
   const canEdit = useStore((s) => s.me?.role !== "guest");
   const [creating, setCreating] = useState(false);
+  const simple = useSimple();
   const team = teams.find((t) => t.id === teamId);
   if (team) return <TeamDetail key={team.id} team={team} tab={tab ?? "members"} canEdit={canEdit} />;
 
@@ -37,11 +39,20 @@ export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab:
       </header>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl px-4 md:px-6 py-5 space-y-6">
+          <SimpleOnly>
+            <p className="text-sm text-muted">{TEAM_INTRO}</p>
+          </SimpleOnly>
           <WorkspaceLead />
           {teams.length === 0 ? (
             <Empty icon={<Users />} title="Put agents to work together">
-              <p>A team is a few agents with a role each, like a lead who hands out work, a backend, a frontend and a reviewer. Start from a template or build your own, and pick any agent for each role.</p>
-              <p>Agents that aren't on a team keep working on their own.</p>
+              {simple ? (
+                <p>Press New team to start from a template, like Research, or build your own. Helpers that aren't on a team keep working on their own.</p>
+              ) : (
+                <>
+                  <p>A team is a few agents with a role each, like a lead who hands out work, a backend, a frontend and a reviewer. Start from a template or build your own, and pick any agent for each role.</p>
+                  <p>Agents that aren't on a team keep working on their own.</p>
+                </>
+              )}
               {canEdit && (
                 <Button variant="primary" onClick={() => setCreating(true)}>
                   <Plus size={16} /> New team

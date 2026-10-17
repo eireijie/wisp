@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, ShieldQuestion, Users } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, ShieldQuestion, Users } from "lucide-react";
 import type { Actor, Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type LiveRun } from "../store.ts";
 import { go, href } from "../router.ts";
-import { AgentAvatar, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
+import { Advanced, useSimple } from "../experience.tsx";
+import { NEXT_STEP, homeReadiness, useOnboarding } from "../onboarding.ts";
+import { useDevices } from "../devices.ts";
+import { openDm as openHelperDm } from "../openDm.ts";
 
 /** The fields of a task the dashboard reads (GET /api/tasks). */
 interface TaskLite {
@@ -20,6 +24,10 @@ interface TaskLite {
 }
 
 const RECENT_MS = 60_000;
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", "Help me write a polite note to my landlord about a repair", "Summarize a document I'll paste in"];
 
 /**
  * A bit of everything: what each agent is doing, which teams are at work, where tasks stand,
@@ -48,6 +56,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
     };
   }, [version]);
 
+  const simple = useSimple();
   const isGuest = me.role === "guest";
   // a request to borrow a device is only the owner's to answer
   const pending = Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me?.user.id));
@@ -91,6 +100,14 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
 
   const counts = { open: 0, in_progress: 0, done: 0, failed: 0 };
   for (const t of tasks ?? []) counts[t.status]++;
+  // tasks this person handed off that haven't started or didn't finish
+  const mineToCheck = (tasks ?? []).filter((t) => t.from.kind === "user" && t.from.id === me.user.id && (t.status === "open" || t.status === "failed"));
+  // unread first, then most recently read
+  const recentChats = channels
+    .filter((c) => c.joined || c.kind === "dm")
+    .sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0) || (b.lastReadAt ?? "").localeCompare(a.lastReadAt ?? ""))
+    .slice(0, 5);
+  const chatName = (c: (typeof channels)[number]) => (c.kind === "dm" ? agentName(c.name.split(":").pop()!) : `#${c.name}`);
   const busyCount = agents.filter((a) => a.status === "busy").length;
   const onlineCount = agents.filter((a) => a.status !== "offline").length;
 
@@ -103,15 +120,17 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
           </button>
         )}
         <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Dashboard</h1>
-        {agents.length > 0 && (
+        {agents.length > 0 && !simple && (
           <span className="text-xs text-muted tabular-nums">
-            {busyCount} working · {onlineCount} online · {agents.length} agents
+            {busyCount} working · {onlineCount} online · {plural(agents.length, "agent")}
           </span>
         )}
       </header>
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 md:p-6 space-y-8 max-w-6xl">
+          {simple && !isGuest && <ReadinessCard />}
+
           {!isGuest && pending.length + helpNeeded.length > 0 && (
             <Section title="Waiting on you" count={pending.length + helpNeeded.length}>
               <div className="rounded-xl border border-accent/50 bg-panel divide-y divide-line overflow-hidden">
@@ -129,6 +148,42 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
 
+          {simple && !isGuest && recentChats.length > 0 && (
+            <Section title="Recent conversations">
+              <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
+                {recentChats.map((c) => (
+                  <Row key={c.id} to={href({ view: "chat", channelId: c.id, threadId: null })} icon={<MessageSquare size={16} className="text-muted" />}>
+                    <span className="font-medium">{chatName(c)}</span>
+                    {c.unread > 0 && <span className="text-accent-text"> · {c.unread} new</span>}
+                  </Row>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {simple && !isGuest && mineToCheck.length > 0 && (
+            <Section title="Tasks to check" count={mineToCheck.length}>
+              <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
+                {mineToCheck.map((t) => (
+                  <Row
+                    key={t.id}
+                    to={t.channelId ? href({ view: "chat", channelId: t.channelId, threadId: t.threadId }) : href({ view: "tasks" })}
+                    icon={<ListTodo size={16} className={t.status === "failed" ? "text-bad" : "text-muted"} />}
+                  >
+                    <span className="font-medium">{t.title}</span>
+                    <span className="text-muted">
+                      {" "}
+                      · {t.status === "failed" ? "didn't finish" : "not started"} · {timeAgo(t.updatedAt)}
+                    </span>
+                  </Row>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* the rest is for people who run teams of agents */}
+          <Advanced hide>
+            <div className="space-y-8">
           <Section title="Agents" count={agents.length} more={{ label: "All agents", to: href({ view: "agents", agentId: null }) }}>
             {agents.length === 0 ? (
               <Blank>
@@ -248,9 +303,87 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
               )}
             </Section>
           )}
+            </div>
+          </Advanced>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Simple mode's lead card: finish setup, see what a helper is waiting on, or try a first question. */
+function ReadinessCard() {
+  const agents = useStore((s) => s.agents);
+  const { done } = useOnboarding();
+  const devices = useDevices();
+  const [copied, setCopied] = useState(false);
+  // devices are null while loading; show a quiet placeholder instead of guessing a state
+  if (devices === null) return <div className="h-24 rounded-xl border border-line bg-chip animate-pulse" aria-hidden />;
+  const r = homeReadiness(done, agents, devices);
+
+  const box = "rounded-xl border border-line bg-accent-soft p-4 space-y-3";
+  if (r.kind === "setup") {
+    return (
+      <section className={box} aria-labelledby="ready-h">
+        <h2 id="ready-h" className="text-base font-semibold">
+          Your helper isn't ready yet
+        </h2>
+        <p className="text-sm text-muted">Next: {NEXT_STEP[r.next]}</p>
+        <Button variant="primary" onClick={() => go({ view: "welcome" })}>
+          Continue setup
+        </Button>
+      </section>
+    );
+  }
+  if (r.kind === "waiting") {
+    const noDevice = r.problem === "No device yet";
+    return (
+      <section className={box} aria-labelledby="ready-h">
+        <h2 id="ready-h" className="text-base font-semibold">
+          {r.deviceName ? `${r.agent.name} is waiting for ${r.deviceName}` : `${r.agent.name} isn't ready yet`}
+        </h2>
+        <p className="text-sm text-muted">{r.problem}</p>
+        <a
+          className="inline-flex items-center h-9 rounded-full px-4 text-sm font-medium bg-accent text-accent-ink hover:bg-accent/90 outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+          href={noDevice ? href({ view: "agents", agentId: r.agent.id, tab: "device" }) : href({ view: "nodes" })}
+        >
+          {noDevice ? "Choose a device" : "Open Devices"}
+        </a>
+      </section>
+    );
+  }
+  const agent = r.agent;
+  const tryPrompt = (text: string) => {
+    // the chat can't be prefilled yet, so the words go on the clipboard instead
+    navigator.clipboard?.writeText(text).then(
+      () => setCopied(true),
+      () => setCopied(false),
+    );
+    void openHelperDm(agent.id);
+  };
+  return (
+    <section className={box} aria-labelledby="ready-h">
+      <h2 id="ready-h" className="text-base font-semibold">
+        Try asking {agent.name}…
+      </h2>
+      <ul className="flex flex-col gap-2">
+        {EXAMPLE_PROMPTS.map((text) => (
+          <li key={text}>
+            <button
+              type="button"
+              onClick={() => tryPrompt(text)}
+              className="w-full text-left rounded-lg border border-line bg-panel px-3 py-2 text-sm hover:bg-hover outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+            >
+              {text}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted" role="status">
+        {copied ? "We copied it, paste it into the chat." : "Pick one and we'll open the chat and copy it for you to paste."}
+      </p>
+      <Button onClick={() => void openHelperDm(agent.id)}>Open chat</Button>
+    </section>
   );
 }
 

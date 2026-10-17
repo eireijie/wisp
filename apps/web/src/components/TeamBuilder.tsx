@@ -8,7 +8,38 @@ import { useDevices, type DeviceInfo } from "../devices.ts";
 import { freeHandle } from "../views/CreateAgent.tsx";
 import { computerNote, ownComputer, resolveComputer, vmOnDevice } from "../agentComputer.ts";
 import { NEW_AGENT_HARNESSES, blankSlot, deviceFor, harnessNote, slotProblem, slotsFor, withLead, type Slot } from "../teamSetup.ts";
+import { Advanced, SimpleOnly } from "../experience.tsx";
 import { Button, EmojiPicker, Field, Input, Modal, Popover, Textarea, cx } from "./ui.tsx";
+
+export const TEAM_INTRO = "A team is several helpers working on one thing, with a lead that hands out the pieces. Most people start with one helper; come back here when you want more.";
+
+/** Channel and folder names: lowercase letters, digits and single hyphens (the same rule the hub applies to a team name). */
+export function slugifyName(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+}
+
+/** What each template role adds to the team, in a few words. */
+export const ROLE_CONTRIBUTIONS: Record<string, string> = {
+  "lead & builder": "Splits up the work and builds what is left",
+  backend: "Builds the behind-the-scenes parts",
+  "frontend & design": "Builds the screens people see",
+  reviewer: "Checks the finished work",
+  "lead researcher": "Plans the question and writes the summary",
+  researcher: "Finds sources",
+  analyst: "Works through numbers and data",
+  "fact-checker": "Checks facts",
+  builder: "Does the work from start to finish",
+};
+
+/** One short line on what a helper in this role contributes, or `fallback` (or null) when the role isn't a known one. */
+export function roleContribution(role: string, fallback?: string): string | null {
+  return ROLE_CONTRIBUTIONS[role.trim().toLowerCase()] ?? (fallback?.trim() ? fallback.trim().split(/(?<=[.!?])\s/)[0] : null);
+}
+
+/** The short name to send: what the person typed in the identifier field, else made from the team name. */
+export function teamShortName(name: string, short: string, edited: boolean): string {
+  return edited ? slugifyName(short) : slugifyName(name);
+}
 
 const selectCls = "h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm";
 
@@ -31,6 +62,7 @@ export function SlotEditor({ slot, onChange, onRemove, agents, taken, canCreate,
           </button>
         )}
       </div>
+      {roleContribution(slot.role) && <p className="text-xs text-muted">{roleContribution(slot.role)}</p>}
       <Textarea rows={2} value={slot.notes} onChange={(e) => onChange({ notes: e.target.value })} placeholder="What it owns and what to send its way. The agent reads this." aria-label="What the role owns" maxLength={4000} />
       <div className="grid sm:grid-cols-2 gap-2">
         <select value={slot.pick} onChange={(e) => onChange({ pick: e.target.value })} className={selectCls} aria-label="Who fills this role">
@@ -94,6 +126,8 @@ export function TeamBuilder({ onClose }: { onClose: () => void }) {
   const devices = useDevices(10_000);
   const [templateId, setTemplateId] = useState("");
   const [f, setF] = useState({ name: "", emoji: "", description: "" });
+  const [short, setShort] = useState("");
+  const [shortEdited, setShortEdited] = useState(false);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +155,7 @@ export function TeamBuilder({ onClose }: { onClose: () => void }) {
       const lead = ready.find((s) => s.lead);
       const team = await api<TeamInfo>("POST", "/api/teams", {
         ...f,
-        name: f.name.trim(),
+        name: shortEdited && teamShortName(f.name, short, true) ? teamShortName(f.name, short, true) : f.name.trim(),
         leadId: lead ? who.get(lead.key) : undefined,
         members: ready.map((s) => ({ agentId: who.get(s.key)!, role: s.role.trim(), roleNotes: s.notes.trim() })),
       });
@@ -138,6 +172,9 @@ export function TeamBuilder({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="New team" onClose={onClose} wide>
       <form className="space-y-5" onSubmit={submit}>
+        <SimpleOnly>
+          <p className="text-sm text-muted">{TEAM_INTRO}</p>
+        </SimpleOnly>
         <div>
           <div className="text-sm font-medium mb-1.5">Start from</div>
           <div className="flex flex-wrap gap-1.5">
@@ -173,9 +210,20 @@ export function TeamBuilder({ onClose }: { onClose: () => void }) {
             </Popover>
           </Field>
           <div className="flex-1">
-            <Field label="Name" hint="Becomes the channel #team-name and the memory folder teams/name/.">
-              <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="web" required autoFocus />
+            <Field label="Name">
+              <Input value={f.name} onChange={(e) => {
+                  setF({ ...f, name: e.target.value });
+                  if (!shortEdited) setShort(slugifyName(e.target.value));
+                }} placeholder="web" required autoFocus />
             </Field>
+            <Advanced title="Channel and folder names" className="mt-2">
+              <Field label="Short name" hint={`Becomes the channel #team-${slugifyName(short) || "name"} and the memory folder teams/${slugifyName(short) || "name"}/.`}>
+                <Input value={short} onChange={(e) => {
+                    setShort(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, "-"));
+                    setShortEdited(true);
+                  }} placeholder="web" maxLength={40} />
+              </Field>
+            </Advanced>
           </div>
         </div>
         <Field label="What it's for" hint="Starts the team's brief, which every member reads before working.">

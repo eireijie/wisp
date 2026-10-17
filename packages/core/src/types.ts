@@ -24,6 +24,12 @@ export interface UserPrefs {
   clock?: "auto" | "12h" | "24h";
   /** the tools an agent used for a reply: a collapsed line, open, or not shown */
   toolCalls?: "collapsed" | "expanded" | "hidden";
+  /**
+   * How much of Warren to show. "simple" keeps advanced setup (teams, harness details, VM sizing,
+   * tokens, raw files) behind "Advanced" disclosures or out of the way; "advanced" shows everything.
+   * Chosen during onboarding; unset means advanced, so existing accounts see no change.
+   */
+  experience?: "simple" | "advanced";
 }
 
 /**

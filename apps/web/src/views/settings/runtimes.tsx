@@ -72,7 +72,7 @@ export function RuntimesPage() {
 
   return (
     <>
-      <PageHeader title="Agent runtimes">The agent tools (harnesses) Warren can run on each of your devices. Agents in a VM also get Claude Code, Codex, Hermes and Kimi CLI inside it.</PageHeader>
+      <PageHeader title="Agent runtimes">The AI tools (like Claude Code or Codex) each of your devices can run for agents. Most people set this up once. Agents on a virtual computer get Claude Code, Codex, Hermes and Kimi CLI built in.</PageHeader>
       {devices === null ? (
         <p className="text-sm text-muted">Loading devices…</p>
       ) : !device ? (
@@ -197,7 +197,7 @@ function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: Harne
       <Menu
         align="right"
         trigger={(_o, t) => (
-          <button onClick={t} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label={`More for ${h.label}`}>
+          <button onClick={t} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label={`More for ${h.label}`} title={`More for ${h.label}`}>
             <MoreHorizontal size={16} />
           </button>
         )}

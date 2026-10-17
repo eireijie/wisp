@@ -67,6 +67,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     hub.broadcast(c.workspaceId, { type: "background_changed", agentId: agent.id });
     // even in quiet hours: they just turned it on, so they expect to see it work
     if (body.enabled && !was?.enabled) hub.background.wake(agent.id, c.actor.id);
+    if (body.enabled === false && was?.enabled) hub.background.turnedOff(agent.id, c.actor.id);
     return { background: store.background(agent.id, c.actor.id) ?? b };
   });
 
