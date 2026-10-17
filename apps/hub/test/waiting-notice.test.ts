@@ -85,6 +85,27 @@ describe("a request made while the device is offline", () => {
     expect(events.filter((e) => e.type === "agent_status" && e.agentId === agentId).map((e) => (e as { status: string }).status)).toContain("online");
   }, 20_000);
 
+  it("takes down only the note for the message whose run started, not ones for later messages", async () => {
+    const dm = await owner.request("POST", `/api/dm/${agentId}`);
+    const agent = hub.store.agent(agentId)!;
+    const me = (await owner.request("GET", "/api/me")).user.id as string;
+    const internals = hub as unknown as {
+      postSystem(near: unknown, text: string): { id: string };
+      dropWaitingNotice(run: { channelId: string; threadId: string | null; triggerMessageId: string }, agent: unknown): void;
+    };
+    const say = (body: string) => hub.store.insertMessage({ channelId: dm.id, threadId: null, author: { kind: "user", id: me }, body, parts: [], hop: 0 });
+    const first = say("first?");
+    const firstNote = internals.postSystem(first, "@dot is offline. The request is queued until its device reconnects.");
+    await new Promise((r) => setTimeout(r, 5));
+    const second = say("second?");
+    const secondNote = internals.postSystem(second, "@dot is offline. The request is queued until its device reconnects.");
+    internals.dropWaitingNotice({ channelId: dm.id, threadId: null, triggerMessageId: first.id }, agent);
+    expect(hub.store.message(firstNote.id)).toBeUndefined();
+    expect(hub.store.message(secondNote.id)).toBeDefined();
+    internals.dropWaitingNotice({ channelId: dm.id, threadId: null, triggerMessageId: second.id }, agent);
+    expect(hub.store.message(secondNote.id)).toBeUndefined();
+  });
+
   it("posts no note at all when the device is already there", async () => {
     const dm = await owner.request("POST", `/api/dm/${agentId}`);
     const before = hub.store.messages(dm.id).length;

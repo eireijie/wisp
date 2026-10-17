@@ -250,9 +250,16 @@ export const useStore = create<State>((set, get) => ({
   async setPrefs(patch) {
     const me = get().me;
     if (!me) return;
+    const previous = me.prefs;
     set({ me: { ...me, prefs: { ...me.prefs, ...patch } } });
-    const prefs = await api<UserPrefs>("PUT", "/api/me/prefs", patch);
-    set((s) => (s.me ? { me: { ...s.me, prefs } } : {}));
+    try {
+      const prefs = await api<UserPrefs>("PUT", "/api/me/prefs", patch);
+      set((s) => (s.me ? { me: { ...s.me, prefs } } : {}));
+    } catch (e) {
+      // the hub didn't take it: show what's really saved
+      set((s) => (s.me ? { me: { ...s.me, prefs: previous } } : {}));
+      throw e;
+    }
   },
 
   setConnected(connected) {

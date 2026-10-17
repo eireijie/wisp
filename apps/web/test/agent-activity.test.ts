@@ -4,10 +4,10 @@ import { accessScope, runStatusLabel, runTitle } from "../src/views/AgentSetting
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, useMotionReduced: () => false }));
 
 describe("runTitle", () => {
-  it("names background checks", () => {
-    expect(runTitle(null)).toBe("Background check");
-    expect(runTitle("")).toBe("Background check");
-    expect(runTitle("  \n ")).toBe("Background check");
+  it("gives no title when there's no message (a hidden DM or a background check)", () => {
+    expect(runTitle(null)).toBe("");
+    expect(runTitle("")).toBe("");
+    expect(runTitle("  \n ")).toBe("");
   });
   it("reads known hub message shapes", () => {
     expect(runTitle("@helper New task **Write a note**\n\nPut it in the vault.")).toBe("Task: Write a note");
@@ -38,10 +38,11 @@ describe("runStatusLabel", () => {
 });
 
 describe("accessScope", () => {
-  it("states the reach per level", () => {
-    expect(accessScope("read-only", "Nova", "nova", "Mac")).toContain("can read files on Mac but can't change anything");
+  it("states what each level asks for, not a guarantee", () => {
+    expect(accessScope("read-only", "Nova", "nova", "Mac")).toBe("Nova asks before changing any file on Mac.");
     expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("~/.warren/agents/nova");
-    expect(accessScope("full", "Nova", "nova", "Mac")).toContain("any command");
+    expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("can't enforce this strictly");
+    expect(accessScope("full", "Nova", "nova", "Mac")).toContain("if Mac allows full access");
     expect(accessScope("full", "Nova", "nova", undefined)).toContain("no device yet");
   });
 });

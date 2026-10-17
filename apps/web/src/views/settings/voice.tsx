@@ -87,21 +87,24 @@ function Outcome({ result }: { result: Result }) {
 export function VoicePage() {
   const [settings, setSettings] = useState<VoiceSettings>(DEFAULT_VOICE);
   const [loaded, setLoaded] = useState(false);
+  // the settings as the hub has them (loaded or last saved): typing a key mustn't move its field into the folded section
+  const [saved, setSaved] = useState<VoiceSettings>(DEFAULT_VOICE);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const agents = useStore((s) => s.agents);
   const mic = useMicTest();
   const speakerTest = useSpeakerTest(settings.speak);
-  useEffect(() => { api<VoiceSettings>("GET", "/api/voice/settings").then((s) => { setSettings(s); setLoaded(true); }, (e) => setMessage(e.message)); }, []);
+  useEffect(() => { api<VoiceSettings>("GET", "/api/voice/settings").then((s) => { setSettings(s); setSaved(s); setLoaded(true); }, (e) => setMessage(e.message)); }, []);
   const save = async () => {
     setSaving(true); setMessage("");
-    try { setSettings(await api("PUT", "/api/voice/settings", settings)); setMessage("Saved. Your next call will use these settings."); }
+    try { const next = await api<VoiceSettings>("PUT", "/api/voice/settings", settings); setSettings(next); setSaved(next); setMessage("Saved. Your next call will use these settings."); }
     catch (e) { setMessage((e as Error).message); }
     finally { setSaving(false); }
   };
   const canListen = typeof window !== "undefined" && canRecognize();
-  const needOpenai = (settings.listen === "openai" || settings.speak === "openai") && !settings.openaiKey;
-  const needEleven = settings.speak === "elevenlabs" && !settings.elevenlabsKey;
+  // the engines come from the draft (picking OpenAI asks for its key right away); whether a key exists comes from the hub
+  const needOpenai = (settings.listen === "openai" || settings.speak === "openai") && !saved.openaiKey;
+  const needEleven = settings.speak === "elevenlabs" && !saved.elevenlabsKey;
   const openaiRow = <Row key="openai" label="OpenAI key" hint="Needed for OpenAI listening and voices. OpenAI bills you for it."><Input aria-label="OpenAI API key" type="password" autoComplete="off" disabled={!loaded} value={settings.openaiKey} onChange={(e) => setSettings({ ...settings, openaiKey: e.target.value })} /></Row>;
   const elevenRow = <Row key="eleven" label="ElevenLabs key" hint="Needed for ElevenLabs voices. ElevenLabs bills you for it."><Input aria-label="ElevenLabs API key" type="password" autoComplete="off" disabled={!loaded} value={settings.elevenlabsKey} onChange={(e) => setSettings({ ...settings, elevenlabsKey: e.target.value })} /></Row>;
   const neededRows = [needOpenai && openaiRow, needEleven && elevenRow].filter(Boolean);

@@ -517,7 +517,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             )}
           </p>
         </Intro>
-        {why && <p className="mb-2.5 max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
+        {why && !simple && <p className="mb-2.5 max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
         <div className="max-w-sm space-y-2">
           <select
             aria-label="Model"
@@ -611,6 +611,8 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           )}
         </section>
       )}
+      {/* in Simple the controls are folded, so why there are no models to pick sits by the Automatic card */}
+      {simple && !deviceGone && why && <p className="max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
       {simple && deviceGone ? (
         <p className="text-sm text-muted">
           {agent.nodeId ? (
@@ -775,9 +777,9 @@ function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | und
 /** The effective reach of an access level in plain words (edit = the harness's workspace sandbox: its own folder). */
 export function accessScope(access: AccessLevel, name: string, handle: string, device: string | undefined): string {
   if (!device) return "It has no device yet, so it can't touch any files.";
-  if (access === "read-only") return `Right now ${name} can read files on ${device} but can't change anything.`;
-  if (access === "edit") return `Right now ${name} can change files only in its own folder on ${device} (~/.warren/agents/${handle}). It can't change files anywhere else on ${device}.`;
-  return `Right now ${name} can run any command and change any file ${device}'s user can.`;
+  if (access === "read-only") return `${name} asks before changing any file on ${device}.`;
+  if (access === "edit") return `${name} may change files in its own working folder on ${device} (~/.warren/agents/${handle}) and asks before changing files elsewhere. Some harnesses can't enforce this strictly.`;
+  return `${name} may change files and run commands on ${device}, if ${device} allows full access (a device can refuse and drop it to Edit).`;
 }
 
 function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
@@ -906,6 +908,8 @@ interface RunRow {
   channelName: string | null;
   channelKind: string | null;
   trigger: string | null;
+  /** "background" for a check the agent made on its own; an empty trigger alone can also mean a DM the viewer can't see */
+  kind?: string | null;
   /** a failure in plain words, when the hub recognised it (the harness needs signing in on its device) */
   hint?: string | null;
 }
@@ -924,10 +928,10 @@ export function runStatusLabel(status: string): string {
   return known[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-/** A readable name for a run, from the body of the message that woke the agent (null for background checks). */
+/** A readable name for a run, from the body of the message that woke the agent ("" when there's no message to show). */
 export function runTitle(trigger: string | null): string {
   const text = (trigger ?? "").trim();
-  if (!text) return "Background check";
+  if (!text) return "";
   const body = text.replace(/^(?:@[\w.-]+\s*)+/, "");
   const task = body.match(/^New task \*\*(.+?)\*\*/);
   if (task) return `Task: ${task[1]}`;
@@ -1147,7 +1151,7 @@ function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }
               <Pill tone={RUN_TONE[r.status] ?? "neutral"}>{runStatusLabel(r.status)}</Pill>
               <span className="min-w-0 flex-1">
                 <a href={`#/c/${r.channelId}${r.threadId ? `/t/${r.threadId}` : ""}`} className="block truncate hover:underline">
-                  {runTitle(r.trigger)}
+                  {r.kind === "background" ? "Background check" : runTitle(r.trigger) || "Message"}
                 </a>
                 {!compact && why && <span className="block text-xs text-bad truncate">{why}</span>}
               </span>

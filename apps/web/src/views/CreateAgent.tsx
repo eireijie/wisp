@@ -174,6 +174,10 @@ export function ComputerPicker({
             }`,
           ),
         )}
+        {/* the device's job left it without a desktop; in Simple the switch for that is folded away, so show the choice here */}
+        {simple &&
+          value.kind === "headless" &&
+          opt({ kind: "headless" }, <Bot size={15} />, "No desktop (answers only)", "It can chat and use files, but can't open apps or websites.")}
         {opt(
           { kind: "later" },
           <Plus size={15} />,
@@ -268,6 +272,8 @@ export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harn
     );
   }
   const { recommended, more } = splitHarnesses(harnesses);
+  // the chosen one is listed too, so it stays visible when "More harnesses" folds up again
+  const shown = [...recommended, ...more.filter((h) => h.id === harness)];
   const signups = recommended.filter((h) => h.signup && h.id !== "gemini");
   return (
     <>
@@ -276,7 +282,7 @@ export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harn
         <p>A harness is the AI program that does the work. You need an account with it; it may charge separately.</p>
       </div>
       <div className="grid grid-cols-1 gap-2" role="group" aria-label="Recommended harnesses">
-        {recommended.map((h) => (
+        {shown.map((h) => (
           <button
             type="button"
             key={h.id}

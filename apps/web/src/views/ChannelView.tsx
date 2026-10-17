@@ -13,6 +13,7 @@ import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } fr
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
+import { takeDraft } from "../draft.ts";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
@@ -998,6 +999,16 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   // @mention autocomplete for the word under the cursor
   const word = text.slice(0, caret).match(/(?:^|\s)@([\w-]*)$/)?.[1];
   const suggestions = word !== undefined ? agents.filter((a) => a.handle.startsWith(word.toLowerCase()) || a.name.toLowerCase().startsWith(word.toLowerCase())).slice(0, 6) : [];
+
+  // words handed over from elsewhere (Home's "Try asking…") prefill the box once, ready to edit or send
+  useEffect(() => {
+    if (threadId) return;
+    const draft = takeDraft(channelId);
+    if (draft) {
+      setText(draft);
+      ta.current?.focus();
+    }
+  }, [channelId, threadId]);
 
   useEffect(() => {
     const el = ta.current;

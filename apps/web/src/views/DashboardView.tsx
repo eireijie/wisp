@@ -9,6 +9,7 @@ import { Advanced, useSimple } from "../experience.tsx";
 import { NEXT_STEP, homeReadiness, useOnboarding } from "../onboarding.ts";
 import { useDevices } from "../devices.ts";
 import { openDm as openHelperDm } from "../openDm.ts";
+import { setupNextStep } from "../components/AgentPanel.tsx";
 
 /** The fields of a task the dashboard reads (GET /api/tasks). */
 interface TaskLite {
@@ -148,7 +149,10 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
 
-          {simple && !isGuest && recentChats.length > 0 && (
+          {/* guests only see conversations here, so say so rather than leave the page blank */}
+          {simple && isGuest && recentChats.length === 0 && <Blank>Conversations you're invited to show up here.</Blank>}
+
+          {simple && recentChats.length > 0 && (
             <Section title="Recent conversations">
               <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
                 {recentChats.map((c) => (
@@ -316,7 +320,6 @@ function ReadinessCard() {
   const agents = useStore((s) => s.agents);
   const { done } = useOnboarding();
   const devices = useDevices();
-  const [copied, setCopied] = useState(false);
   // devices are null while loading; show a quiet placeholder instead of guessing a state
   if (devices === null) return <div className="h-24 rounded-xl border border-line bg-chip animate-pulse" aria-hidden />;
   const r = homeReadiness(done, agents, devices);
@@ -336,31 +339,25 @@ function ReadinessCard() {
     );
   }
   if (r.kind === "waiting") {
-    const noDevice = r.problem === "No device yet";
+    // the fix depends on what's missing: a device, the device coming back, or the harness on it
+    const next = setupNextStep(r.agent, devices);
+    const onDevice = next?.href === href({ view: "nodes" });
     return (
       <section className={box} aria-labelledby="ready-h">
         <h2 id="ready-h" className="text-base font-semibold">
-          {r.deviceName ? `${r.agent.name} is waiting for ${r.deviceName}` : `${r.agent.name} isn't ready yet`}
+          {onDevice && r.deviceName ? `${r.agent.name} is waiting for ${r.deviceName}` : `${r.agent.name} isn't ready yet`}
         </h2>
-        <p className="text-sm text-muted">{r.problem}</p>
+        <p className="text-sm text-muted">{next ? next.text : r.problem}</p>
         <a
           className="inline-flex items-center h-9 rounded-full px-4 text-sm font-medium bg-accent text-accent-ink hover:bg-accent/90 outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          href={noDevice ? href({ view: "agents", agentId: r.agent.id, tab: "device" }) : href({ view: "nodes" })}
+          href={next?.href ?? href({ view: "nodes" })}
         >
-          {noDevice ? "Choose a device" : "Open Devices"}
+          {next?.action ?? "See devices"}
         </a>
       </section>
     );
   }
   const agent = r.agent;
-  const tryPrompt = (text: string) => {
-    // the chat can't be prefilled yet, so the words go on the clipboard instead
-    navigator.clipboard?.writeText(text).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
-    void openHelperDm(agent.id);
-  };
   return (
     <section className={box} aria-labelledby="ready-h">
       <h2 id="ready-h" className="text-base font-semibold">
@@ -371,7 +368,7 @@ function ReadinessCard() {
           <li key={text}>
             <button
               type="button"
-              onClick={() => tryPrompt(text)}
+              onClick={() => void openHelperDm(agent.id, text)}
               className="w-full text-left rounded-lg border border-line bg-panel px-3 py-2 text-sm hover:bg-hover outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
             >
               {text}
@@ -379,9 +376,7 @@ function ReadinessCard() {
           </li>
         ))}
       </ul>
-      <p className="text-xs text-muted" role="status">
-        {copied ? "We copied it, paste it into the chat." : "Pick one and we'll open the chat and copy it for you to paste."}
-      </p>
+      <p className="text-xs text-muted">Pick one and it's ready in the chat. Change it if you like, then send.</p>
       <Button onClick={() => void openHelperDm(agent.id)}>Open chat</Button>
     </section>
   );
