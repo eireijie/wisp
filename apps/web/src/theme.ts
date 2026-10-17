@@ -110,10 +110,12 @@ export function setReduceMotion(on: boolean) {
 
 const motionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
 motionMedia.addEventListener("change", () => listeners.forEach((l) => l()));
+// Also honor the root attribute when changed outside the settings page.
+new MutationObserver(() => listeners.forEach((l) => l())).observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
 
 /** Animations should stay still: the person asked here, or their OS asks for less motion. */
 export function motionReduced(): boolean {
-  return reduceMotion || motionMedia.matches;
+  return reduceMotion || motionMedia.matches || document.documentElement.dataset.motion === "reduce";
 }
 
 export function useMotionReduced() {

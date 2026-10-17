@@ -9,6 +9,7 @@ import { isDismissed, useOnboarding } from "../onboarding.ts";
 import { useAppearance } from "../theme.ts";
 import { ChannelBrowser, ChannelMenu, SectionDialog } from "./Channels.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
+import { openDm } from "../openDm.ts";
 
 const COLLAPSE_KEY = "warren.sidebar.collapsed";
 const loadCollapsed = (): Record<string, boolean> => {
@@ -61,14 +62,6 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
     } catch {}
   };
-
-  async function openDm(agentId: string) {
-    const existing = dmFor(agentId);
-    if (existing) return go({ view: "chat", channelId: existing.id, threadId: null });
-    const ch = await api<{ id: string }>("POST", `/api/dm/${agentId}`);
-    await useStore.getState().refreshChannels();
-    go({ view: "chat", channelId: ch.id, threadId: null });
-  }
 
   // the "…" menu (rename, members, leave) sits beside the link, not inside it, and shows on hover
   const channelRow = (c: ChannelInfo) => (

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
@@ -10,6 +10,7 @@ import { EffortSlider, effortName, prettyModel } from "../components/EffortSlide
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
 
@@ -65,25 +66,22 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   return (
     <div className="flex-1 min-h-0 flex">
       <div className={cx("flex-1 min-w-0 flex flex-col", route.threadId && "hidden lg:flex")}>
-        <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
+        <header className={cx("shrink-0 px-4 md:px-6 flex items-center gap-2 safe-top", dmAgent ? "relative h-20" : "h-15 border-b border-line")}>
           {onBack && (
             <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back to chats">
               <ChevronLeft size={22} />
             </button>
           )}
           {dmAgent ? (
-            <button className="flex items-center gap-2.5 min-w-0 flex-1 text-left" onClick={() => setPanel(panel ? null : "details")} aria-expanded={!!panel} title={`About ${dmAgent.name}`}>
-              <AgentAvatar agent={dmAgent} size={30} live />
-              <div className="min-w-0">
-                <div className="font-semibold leading-tight flex items-center gap-1.5">
-                  {dmAgent.name} <StatusDot status={dmAgent.status} />
-                </div>
-                <div className="text-xs text-muted truncate">
-                  @{dmAgent.handle} · {HARNESS_LABELS[dmAgent.harness]}
-                  {dmAgent.model && ` · ${dmAgent.model}`}
+            <>
+              {/* the agent lives here, in the middle, and nowhere else in its DM */}
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
+                <div className="pointer-events-auto">
+                  <AgentPill agent={dmAgent} open={panel === "details"} onClick={() => setPanel(panel === "details" ? null : "details")} />
                 </div>
               </div>
-            </button>
+              <span className="flex-1" />
+            </>
           ) : (
             <div className="min-w-0 flex-1">
               <div className="font-semibold flex items-center gap-1 text-[15px]">
@@ -115,7 +113,9 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             </div>
           )}
         </header>
-        <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} />
+        <SoloAgent.Provider value={dmAgent?.id ?? null}>
+          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} />
+        </SoloAgent.Provider>
         <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} />
       </div>
       {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
@@ -444,6 +444,9 @@ function ContextRing({ ctx }: { ctx: AgentContext }) {
 
 // --- message list -------------------------------------------------------------------------------
 
+/** In a DM the agent lives in the pill at the top, so its messages don't repeat its ghost and name. */
+const SoloAgent = createContext<string | null>(null);
+
 function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: string | null }) {
   const messages = useStore((s) => s.messages[channel.id]);
   const replyCounts = useStore((s) => s.replyCounts);
@@ -534,10 +537,8 @@ function ChannelIntro({ channel }: { channel: ChannelInfo }) {
   if (channel.kind === "dm") {
     const a = names.agent(channel.name.split(":").pop()!);
     return (
-      <div className="px-5 pb-6 pt-2">
-        <AgentAvatar agent={a} size={64} live />
-        <h2 className="mt-3 text-xl font-semibold">{a?.name ?? "Agent"}</h2>
-        <p className="text-sm text-muted">This is the start of your conversation with @{a?.handle}. Messages here always go to {a?.name ?? "it"}; no @mention needed.</p>
+      <div className="px-5 pb-6 pt-6 text-center">
+        <p className="text-sm text-muted max-w-md mx-auto">This is the start of your conversation with @{a?.handle}. Messages here always go to {a?.name ?? "it"}; no @mention needed.</p>
       </div>
     );
   }
@@ -597,6 +598,9 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
   const agent = m.author.kind === "agent" ? names.agent(m.author.id) : undefined;
   const name = agent ? agent.name : (names.member(m.author.id)?.name ?? "Someone");
   const time = clockTime(m.createdAt, clock);
+  const solo = useContext(SoloAgent);
+  // the DM's own agent already lives in the pill above: no ghost or name on its messages
+  const home = !!agent && agent.id === solo;
 
   return (
     <div
@@ -610,7 +614,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
       }}
     >
       <div className="w-9 shrink-0 pt-0.5">
-        {grouped ? (
+        {grouped || home ? (
           <span className="hidden group-hover:block text-[10px] text-faint text-right leading-6">{time}</span>
         ) : agent ? (
           <button onClick={() => go({ view: "agents", agentId: agent.id, tab: "overview" })} aria-label={`Open ${agent.name}`}>
@@ -621,7 +625,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
         )}
       </div>
       <div className="min-w-0 flex-1">
-        {!grouped && (
+        {!grouped && !home && (
           <div className="flex items-baseline gap-2">
             {/* agents sign their messages in their own color */}
             <span className={cx("font-semibold text-[14.5px]", agent && "agent-ink")} style={agent ? agentVar(agent) : undefined}>
@@ -854,14 +858,13 @@ function StreamingItem({ run }: { run: LiveRun }) {
   const agent = names.agent(run.agentId);
   const html = useMemo(() => renderMarkdown(run.text, { handles, colors }), [run.text, handles, colors]);
   const computerId = agent?.computerId;
+  const home = useContext(SoloAgent) === run.agentId;
   return (
     <div className="px-3 md:px-5 pt-2.5 flex gap-3">
-      <div className="w-9 shrink-0 pt-0.5">
-        <AgentAvatar agent={agent} size={36} live />
-      </div>
+      <div className="w-9 shrink-0 pt-0.5">{!home && <AgentAvatar agent={agent} size={36} live />}</div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="font-semibold text-[14.5px]">{agent?.name ?? "Agent"}</span>
+          {!home && <span className="font-semibold text-[14.5px]">{agent?.name ?? "Agent"}</span>}
           <span className="text-xs text-faint">{run.text ? "writing…" : "working…"}</span>
         </div>
         {html && <div className="prose-w text-[15px] opacity-70" dangerouslySetInnerHTML={{ __html: html }} />}
@@ -1110,7 +1113,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
       <div className="min-h-6 pt-1 px-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {error && <span className="text-bad">{error}</span>}
         {working.map((r) => (
-          <AgentWorking key={r.runId} run={r} />
+          <AgentWorking key={r.runId} run={r} home={r.agentId === agentId} />
         ))}
       </div>
     </div>
@@ -1135,7 +1138,8 @@ function ToolButton({ label, onClick, disabled, active, children }: { label: str
 }
 
 /** "Nova: working · using memory_search · Stop" under the composer, like Buzz's agent status line. */
-function AgentWorking({ run }: { run: LiveRun }) {
+/** `home`: the DM's own agent, whose ghost is already in the pill at the top. */
+function AgentWorking({ run, home }: { run: LiveRun; home?: boolean }) {
   const names = useNames();
   const agents = useStore((s) => s.agents);
   const agent = names.agent(run.agentId);
@@ -1151,8 +1155,12 @@ function AgentWorking({ run }: { run: LiveRun }) {
     );
   return (
     <span className="inline-flex items-center gap-1.5 text-muted">
-      <AgentAvatar agent={agent} size={18} badge={false} live />
-      <span className="font-medium text-ink">{agent?.name ?? "Agent"}:</span>
+      {!home && (
+        <>
+          <AgentAvatar agent={agent} size={18} badge={false} live />
+          <span className="font-medium text-ink">{agent?.name ?? "Agent"}:</span>
+        </>
+      )}
       <span className="inline-flex items-center gap-1">
         <Loader2 size={11} className="animate-spin" />
         {doing ? doing.text : run.text ? "writing" : "thinking"}
