@@ -266,6 +266,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["approvals", "loan_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
+  ["messages", "edited_at", "TEXT"],
+  ["messages", "deleted_at", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {

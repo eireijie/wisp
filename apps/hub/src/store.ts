@@ -835,6 +835,21 @@ export class Store {
     this.db.prepare("DELETE FROM messages WHERE id = ?").run(messageId);
   }
 
+  editMessage(messageId: string, body: string): Message | undefined {
+    this.db.prepare("UPDATE messages SET body = ?, edited_at = ? WHERE id = ?").run(body, now(), messageId);
+    return this.message(messageId);
+  }
+
+  /** Empty a deleted thread root but keep the row, so its replies can still be opened. */
+  blankMessage(messageId: string): Message | undefined {
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE messages SET body = '', parts_json = '[]', deleted_at = ? WHERE id = ?").run(now(), messageId);
+      this.db.prepare("DELETE FROM reactions WHERE message_id = ?").run(messageId);
+      this.db.prepare("DELETE FROM pins WHERE message_id = ?").run(messageId);
+    })();
+    return this.message(messageId);
+  }
+
   /** System notices (status lines) posted in a channel or thread since a moment, oldest first. */
   systemNotices(channelId: string, threadId: string | null, since: string): Message[] {
     const rows = this.db
@@ -1433,6 +1448,8 @@ type MessageRow = {
   parts_json: string;
   hop: number;
   created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
 };
 
 function toMessage(r: MessageRow): Message {
@@ -1445,6 +1462,8 @@ function toMessage(r: MessageRow): Message {
     parts: JSON.parse(r.parts_json),
     hop: r.hop,
     createdAt: r.created_at,
+    ...(r.edited_at ? { editedAt: r.edited_at } : {}),
+    ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
   };
 }
 

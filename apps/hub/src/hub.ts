@@ -555,6 +555,39 @@ export class Hub {
     return added;
   }
 
+  /** Change a message's text. Agents aren't asked again: an edit fixes what was said, it isn't a new request. */
+  editMessage(msg: Message, body: string) {
+    const channel = this.store.channel(msg.channelId)!;
+    const updated = this.store.withReactions([this.store.editMessage(msg.id, body)!])[0];
+    this.broadcast(channel.workspaceId, { type: "message_updated", message: updated }, this.audience(channel.id));
+    return updated;
+  }
+
+  /**
+   * Delete a message. A thread root with replies is emptied instead of removed, so the replies stay
+   * reachable; it goes for good once its last reply is deleted.
+   */
+  removeMessage(msg: Message): { kept: boolean } {
+    const channel = this.store.channel(msg.channelId)!;
+    const only = this.audience(channel.id);
+    const pinned = this.store.pinnedIds([channel.id])[channel.id]?.includes(msg.id);
+    let kept = false;
+    if (!msg.threadId && (this.store.replyCounts([msg.id])[msg.id] ?? 0) > 0) {
+      this.broadcast(channel.workspaceId, { type: "message_updated", message: { ...this.store.blankMessage(msg.id)!, reactions: [] } }, only);
+      kept = true;
+    } else {
+      this.store.deleteMessage(msg.id);
+      this.broadcast(channel.workspaceId, { type: "message_removed", messageId: msg.id, channelId: msg.channelId, threadId: msg.threadId }, only);
+      const root = msg.threadId ? this.store.message(msg.threadId) : undefined;
+      if (root?.deletedAt && !this.store.replyCounts([root.id])[root.id]) {
+        this.store.deleteMessage(root.id);
+        this.broadcast(channel.workspaceId, { type: "message_removed", messageId: root.id, channelId: root.channelId, threadId: null }, only);
+      }
+    }
+    if (pinned) this.broadcast(channel.workspaceId, { type: "channels_changed" });
+    return { kept };
+  }
+
   /** The run an agent is working on right now, if any (its latest, when several are running). */
   currentRun(agentId: string) {
     const r = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 1").get(agentId) as { id: string } | undefined;

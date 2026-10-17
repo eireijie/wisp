@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, Bell, BellOff, BellRing, Pin, PinOff, Star, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
+import { Archive, Bell, BellOff, BellRing, Pin, PinOff, Star, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -669,6 +669,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
   const cards = useMemo(() => linkCards(m.body), [m.body]);
   // on a phone the actions open with a tap on the message, and close with a tap anywhere else
   const [touched, setTouched] = useState(false);
+  const [editing, setEditing] = useState(false);
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!touched) return;
@@ -737,7 +738,13 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
             )}
           </div>
         )}
-        {html && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />}
+        {m.deletedAt ? (
+          <div className="text-[15px] text-muted italic">This message was deleted.</div>
+        ) : editing ? (
+          <EditBox m={m} onDone={() => setEditing(false)} />
+        ) : (
+          html && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: m.editedAt ? withEditedMark(html, clockTime(m.editedAt, clock)) : html }} />
+        )}
         {cards.map((c) => (
           <a key={c.url} href={c.url} target="_blank" rel="noreferrer" className="mt-1.5 flex max-w-sm items-center gap-3 rounded-xl border border-line bg-panel px-3 py-2 hover:bg-hover">
             <span className="size-8 rounded-lg bg-chip grid place-items-center text-muted">{c.kind === "PR" ? <GitPullRequest size={16} /> : <CircleDot size={16} />}</span>
@@ -757,16 +764,89 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
           </button>
         )}
       </div>
-      <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} open={touched} onDone={() => setTouched(false)} />
+      {!m.deletedAt && !editing && <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} onEdit={() => setEditing(true)} open={touched} onDone={() => setTouched(false)} />}
+    </div>
+  );
+}
+
+/** "(edited)" at the end of the last paragraph, like Slack, rather than on a line of its own. */
+function withEditedMark(html: string, at: string) {
+  const mark = `<span class="text-[11px] text-faint" title="Edited ${at}"> (edited)</span>`;
+  const t = html.trimEnd();
+  return t.endsWith("</p>") ? t.slice(0, -4) + mark + "</p>" : t + mark;
+}
+
+/** Fix a sent message in place: Enter saves, Esc puts it back. Phones get buttons, since Enter is a newline there. */
+function EditBox({ m, onDone }: { m: Message; onDone: () => void }) {
+  const [text, setText] = useState(m.body);
+  const [busy, setBusy] = useState(false);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+  }, [text]);
+  useEffect(() => {
+    const el = ta.current;
+    el?.focus();
+    el?.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+  const save = async () => {
+    if (text === m.body) return onDone();
+    setBusy(true);
+    try {
+      await api("PATCH", `/api/messages/${m.id}`, { body: text });
+      onDone();
+    } catch (e) {
+      alert((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-1 rounded-xl border border-input bg-panel focus-within:border-accent/60">
+      <textarea
+        ref={ta}
+        rows={1}
+        value={text}
+        disabled={busy}
+        aria-label="Edit message"
+        className="block w-full resize-none bg-transparent px-3 py-2 text-[15px] outline-none"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") return (e.preventDefault(), onDone());
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) {
+            e.preventDefault();
+            void save();
+          }
+        }}
+      />
+      <div className="flex items-center justify-end gap-2 px-2 pb-2">
+        <span className="mr-auto pl-1 text-[11px] text-faint hidden [@media(pointer:fine)]:inline">Enter to save · Esc to cancel</span>
+        <Button variant="ghost" className="h-7" onClick={onDone} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="primary" className="h-7" onClick={() => void save()} disabled={busy}>
+          Save
+        </Button>
+      </div>
     </div>
   );
 }
 
 /** Buzz-style toolbar: quick reactions, picker, reply in thread, more. Shows on hover, on keyboard focus, and (`open`) after a tap on a phone. */
-function ActionBar({ m, onReply, open, onDone }: { m: Message; onReply?: () => void; open: boolean; onDone: () => void }) {
+function ActionBar({ m, onReply, onEdit, open, onDone }: { m: Message; onReply?: () => void; onEdit: () => void; open: boolean; onDone: () => void }) {
   const toggleReaction = useStore((s) => s.toggleReaction);
   const channel = useStore((s) => s.channels.find((c) => c.id === m.channelId));
   const canPin = useStore((s) => s.me?.role !== "guest") && channel?.kind === "channel" && !channel.archivedAt;
+  const mine = useStore((s) => m.author.kind === "user" && m.author.id === s.me?.user.id);
+  const owner = useStore((s) => s.me?.role === "owner");
+  const writable = !channel?.archivedAt;
+  const remove = () => {
+    onDone();
+    if (!confirm(mine ? "Delete this message? This can't be undone." : "Delete this message from someone else? This can't be undone.")) return;
+    void api("DELETE", `/api/messages/${m.id}`).catch((e) => alert((e as Error).message));
+  };
   const pinned = !!channel?.pinnedIds.includes(m.id);
   const [picker, setPicker] = useState(false);
   const react = (emoji: string) => {
@@ -810,6 +890,8 @@ function ActionBar({ m, onReply, open, onDone }: { m: Message; onReply?: () => v
         items={[
           { label: "Copy text", icon: <Copy size={14} />, onSelect: () => (navigator.clipboard?.writeText(m.body), onDone()) },
           ...(canPin ? [{ label: pinned ? "Unpin" : "Pin to channel", icon: pinned ? <PinOff size={14} /> : <Pin size={14} />, onSelect: () => (void api(pinned ? "DELETE" : "PUT", `/api/messages/${m.id}/pin`).catch((e) => alert((e as Error).message)), onDone()) }] : []),
+          ...(mine && writable ? [{ label: "Edit", icon: <Pencil size={14} />, onSelect: () => (onDone(), onEdit()) }] : []),
+          ...((mine || owner) && writable ? [{ label: "Delete", icon: <Trash2 size={14} />, danger: true, onSelect: remove }] : []),
         ]}
       />
     </div>

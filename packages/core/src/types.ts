@@ -229,6 +229,10 @@ export interface Message {
   hop: number; // how many agent-to-agent hops led to this message (loop guard)
   reactions?: Reaction[];
   createdAt: string;
+  /** set when its author changed the text */
+  editedAt?: string;
+  /** set when it was deleted but kept so its thread's replies stay reachable; body and parts are empty */
+  deletedAt?: string;
 }
 
 export type MessagePart =
