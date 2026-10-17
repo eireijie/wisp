@@ -15,7 +15,9 @@ import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
 import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
-import { computerKindLabel, type DeviceInfo } from "../devices.ts";
+import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "../devices.ts";
+import { setupNextStep } from "../components/AgentPanel.tsx";
+import { openDm } from "../openDm.ts";
 
 export type NodeInfo = DeviceInfo;
 
@@ -52,6 +54,19 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
   { group: "Activity", items: [{ id: "runs", label: "Activity", icon: <Activity size={16} /> }] },
 ];
 
+/** The nav groups for the mode. Simple keeps the everyday tabs on top and gathers the technical ones under "Advanced" (still one click away). */
+export function agentNav(simple: boolean): typeof NAV {
+  if (!simple) return NAV;
+  const all = new Map(NAV.flatMap((g) => g.items).map((i) => [i.id, i] as const));
+  const pick = (ids: AgentTab[]) => ids.map((id) => all.get(id)!);
+  return [
+    { group: "Agent", items: pick(["overview", "soul", "instructions"]) },
+    { group: "Runtime", items: pick(["device", "computer", "routines"]) },
+    { group: "Activity", items: pick(["runs"]) },
+    { group: "Advanced", items: pick(["model", "permissions", "connect", "background", "look"]) },
+  ];
+}
+
 /**
  * One agent's page: a breadcrumb header, a grouped secondary sidebar (chips on phones), and
  * the selected section. Editable sections stay mounted so drafts survive switching sections;
@@ -59,6 +74,7 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
  */
 export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: NodeInfo[]; tab: AgentTab | null }) {
   const channels = useStore((s) => s.channels);
+  const nav = agentNav(useSimple());
   const active = tab ?? "overview";
   const [dirty, setDirty] = useState<Partial<Record<AgentTab, boolean>>>({});
   const markDirty = useCallback((t: AgentTab) => (d: boolean) => setDirty((cur) => (cur[t] === d ? cur : { ...cur, [t]: d })), []);
@@ -108,11 +124,11 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
         </Button>
       </header>
       <nav className="md:hidden shrink-0 flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-line" aria-label="Agent sections">
-        {NAV.flatMap((g) => g.items).map((i) => link(i.id, i.label, i.icon, true))}
+        {nav.flatMap((g) => g.items).map((i) => link(i.id, i.label, i.icon, true))}
       </nav>
       <div className="flex-1 min-h-0 flex">
         <nav className="hidden md:block w-52 shrink-0 border-r border-line overflow-y-auto p-2 pt-4 space-y-4" aria-label="Agent sections">
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div key={g.group} className="space-y-px">
               <div className="px-2 pb-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70">{g.group}</div>
               {g.items.map((i) => link(i.id, i.label, i.icon))}
@@ -959,6 +975,8 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   const myTeams = teams.filter((t) => t.members.some((m) => m.agentId === agent.id));
   const bossOf = teams.filter((t) => t.reportsTo === agent.id);
   const device = nodes.find((n) => n.id === agent.nodeId);
+  const soulHtml = useMemo(() => (soul ? renderMarkdown(soul.slice(0, 1500), { stripFrontmatter: true }) : ""), [soul]);
+  const simple = useSimple();
 
   useEffect(() => {
     if (!active) return;
@@ -976,12 +994,27 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   };
 
   const computer = computers.find((c) => c.id === agent.computerId);
-  const cards: { label: string; value: ReactNode; to: AgentTab }[] = [
-    { label: "Model", value: agent.model ?? "Harness default", to: "model" },
-    { label: "Device", value: device ? `${device.name} · ${device.online ? "online" : "offline"}` : "None", to: "device" },
-    { label: "Computer", value: computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : <span className="text-warn">None yet</span>, to: "computer" },
-    { label: "Access", value: ACCESS[agent.settings.access ?? "edit"].label, to: "permissions" },
-  ];
+  type Card = { label: string; value: ReactNode; to: AgentTab };
+  const modelCard: Card = { label: "Model", value: agent.model ?? "Harness default", to: "model" };
+  const deviceCard: Card = { label: "Device", value: device ? `${device.name} · ${device.online ? "online" : "offline"}` : "None", to: "device" };
+  const computerCard: Card = { label: "Computer", value: computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : <span className="text-warn">None yet</span>, to: "computer" };
+  const accessCard: Card = { label: "Access", value: ACCESS[agent.settings.access ?? "edit"].label, to: "permissions" };
+  // Simple leads with where it runs; the model and access settings fold under "Technical details".
+  const cards: Card[] = simple ? [deviceCard, computerCard] : [modelCard, deviceCard, computerCard, accessCard];
+  const technicalCards: Card[] = [modelCard, { label: "Harness", value: HARNESS_LABELS[agent.harness], to: "device" }, accessCard];
+  const devices = useDevices();
+  const readiness = agentReadiness(agent, devices);
+  const next = simple ? setupNextStep(agent, devices) : null;
+  const cardGrid = (list: Card[]) => (
+    <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+      {list.map((c) => (
+        <a key={c.label} href={`#/agents/${agent.id}/${c.to}`} className="rounded-xl border border-line p-3 hover:bg-hover">
+          <div className="text-xs text-muted">{c.label}</div>
+          <div className="mt-0.5 text-sm font-medium truncate">{c.value}</div>
+        </a>
+      ))}
+    </section>
+  );
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -1071,14 +1104,34 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
         </section>
       )}
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        {cards.map((c) => (
-          <a key={c.label} href={`#/agents/${agent.id}/${c.to}`} className="rounded-xl border border-line p-3 hover:bg-hover">
-            <div className="text-xs text-muted">{c.label}</div>
-            <div className="mt-0.5 text-sm font-medium truncate">{c.value}</div>
-          </a>
-        ))}
-      </section>
+      {simple && (
+        <section className="rounded-xl border border-line p-4 space-y-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted">Status</span>
+            <StatusChip status={agent.status} />
+            {!readiness.ready && <Pill>Setup incomplete</Pill>}
+          </div>
+          {!readiness.ready && (
+            <p className="text-muted">
+              {readiness.problem}. Messages to {agent.name} will wait until that's fixed.
+              {next && (
+                <span className="mt-1 block">
+                  What to do: {next.text}{" "}
+                  <a href={next.href} className="text-accent-text underline">
+                    {next.action}
+                  </a>
+                </span>
+              )}
+            </p>
+          )}
+          <Button onClick={() => void openDm(agent.id)}>
+            <MessageSquare size={15} /> Send a test message
+          </Button>
+        </section>
+      )}
+
+      {cardGrid(cards)}
+      {simple && <Advanced title="Technical details">{cardGrid(technicalCards)}</Advanced>}
 
       <section>
         <div className="flex items-center justify-between mb-2">
@@ -1087,7 +1140,11 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
             Edit
           </a>
         </div>
-        <div className="rounded-xl border border-line p-4 text-sm text-muted whitespace-pre-line line-clamp-6">{soul === null ? "Loading…" : soul || "No personality yet. Give it one on the Personality page."}</div>
+        {soulHtml ? (
+          <div className="prose-w rounded-xl border border-line p-4 text-sm text-muted max-h-48 overflow-hidden" dangerouslySetInnerHTML={{ __html: soulHtml }} />
+        ) : (
+          <div className="rounded-xl border border-line p-4 text-sm text-muted">{soul === null ? "Loading…" : "No personality yet. Give it one on the Personality page."}</div>
+        )}
       </section>
 
       <section>

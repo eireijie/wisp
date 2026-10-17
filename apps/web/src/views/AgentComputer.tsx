@@ -4,7 +4,7 @@ import { describeCron, harnessInfo, harnessLabel, nextRun, runsInVm, type Agent,
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
-import { computerKindLabel, type DeviceInfo } from "../devices.ts";
+import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "../devices.ts";
 import { AddComputer, ComputerMini } from "./ComputersView.tsx";
 import { Intro } from "./SettingsParts.tsx";
 import { Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
@@ -281,10 +281,19 @@ export function routineProblem(simple: boolean, name: string, result: string): s
   return null;
 }
 
+/** What the agent's schedules are waiting for: its device's name (or "a device"), or null when the device is connected or unknown. */
+export function routinesWaitingFor(agent: Pick<Agent, "nodeId" | "harness">, devices: DeviceInfo[] | null): string | null {
+  if (agentReadiness(agent, devices).ready) return null;
+  if (!agent.nodeId) return "a device";
+  const device = devices?.find((d) => d.id === agent.nodeId);
+  return device && (!device.online || device.paused) ? device.name : null;
+}
+
 /** Tasks the agent knows how to do again, learned by watching or written down, some on a schedule. */
 export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean }) {
   const version = useStore((s) => s.routinesVersion);
   const [routines, setRoutines] = useState<Routine[] | null>(null);
+  const waitingFor = routinesWaitingFor(agent, useDevices());
   const [writing, setWriting] = useState(false);
   const [scheduling, setScheduling] = useState<Routine | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -325,6 +334,8 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
       ) : routines.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">No routines yet.</p>
       ) : (
+        <div className="space-y-2">
+        {waitingFor && <p className="text-xs text-muted">Schedules are saved. They run once {waitingFor} is connected.</p>}
         <div className="rounded-xl border border-line divide-y divide-line">
           {routines.map((r) => {
             const next = r.schedule && r.enabled && r.status === "ready" ? nextRun(r.schedule, r.timezone) : null;
@@ -339,6 +350,7 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
                   <div className="text-xs text-muted">
                     {r.schedule ? `${describeCron(r.schedule)}${r.timezone !== TZ ? ` (${r.timezone})` : ""}` : "When someone runs it"}
                     {next && ` · next ${next.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`}
+                    {next && waitingFor && ` · waiting for ${waitingFor}`}
                     {r.lastRunAt && ` · last requested ${timeAgo(r.lastRunAt)}`}
                     {r.lastCompletedAt && ` · last completed ${timeAgo(r.lastCompletedAt)}`}
                   </div>
@@ -365,6 +377,7 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
               </div>
             );
           })}
+        </div>
         </div>
       )}
       {writing && <WriteRoutine agent={agent} onClose={() => setWriting(false)} />}

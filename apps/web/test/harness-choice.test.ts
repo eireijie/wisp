@@ -54,9 +54,27 @@ describe("harness choice", () => {
       expect(html).toContain(h.blurb!.replace(/'/g, "&#x27;"));
     }
     expect(html).toContain("I&#x27;m not sure");
+    expect(html).toContain("Gemini CLI has a free tier");
+    expect(html).toContain("Google (for Gemini CLI)");
     expect(html).toContain("More harnesses");
     expect(html).not.toContain("Goose");
     expect(html).not.toContain("Choose a harness");
+  });
+
+  it("Simple says which recommended harnesses can use connected apps", () => {
+    goSimple();
+    const html = render();
+    expect(html).toContain("Can use connected apps like Gmail");
+    expect(html).toContain("Can&#x27;t use connected apps like Gmail yet");
+    expect(html.match(/Can use connected apps/g)).toHaveLength(2);
+    expect(html.match(/Can&#x27;t use connected apps/g)).toHaveLength(1);
+  });
+
+  it("Advanced cards show the blurb and account line", () => {
+    const html = render();
+    const h = HARNESSES.find((x) => x.id === "claude-code")!;
+    expect(html).toContain(h.blurb!.replace(/'/g, "&#x27;"));
+    expect(html).toContain(h.account!.replace(/'/g, "&#x27;"));
   });
 
   it("Simple still shows the full grid when inviting an existing agent", () => {

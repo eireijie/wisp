@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
+import { BookOpen, Bot, Home, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -128,7 +128,7 @@ function Workspace() {
       case "you":
         return <YouPage />;
       case "dashboard":
-        return <DashboardView onBack={phone ? toYou : undefined} />;
+        return <DashboardView />;
       case "connectors":
         return <ConnectorsView onBack={phone ? toYou : undefined} />;
       case "skills":
@@ -222,11 +222,11 @@ function TabBar({ route }: { route: Route }) {
   };
   return (
     <nav className="shrink-0 flex border-t border-line bg-panel safe-bottom" aria-label="Main">
+      {tab(route.view === "dashboard", "Home", <Home size={22} />, href({ view: "dashboard" }))}
       {tab(route.view === "chats" || route.view === "chat", "Chats", <MessageSquare size={22} />, href({ view: "chats" }), unread)}
       {tab(route.view === "agents", "Agents", <Bot size={22} />, href({ view: "agents", agentId: null }))}
       {tab(false, "Search", <Search size={22} />, () => setPalette(true))}
-      {tab(route.view === "vault", "Memory", <BookOpen size={22} />, href({ view: "vault", path: null }))}
-      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about", "dashboard", "connectors", "skills", "tasks", "help"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
+      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about", "vault", "connectors", "skills", "tasks", "help"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
     </nav>
   );
 }
@@ -299,6 +299,7 @@ function YouPage() {
           {row(<LayoutDashboard size={19} />, "Dashboard", href({ view: "dashboard" }))}
           {row(<ListTodo size={19} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to a helper")}
           {!isGuest && row(<SquarePen size={19} />, "New task", () => useStore.setState({ newTaskOpen: true }))}
+          {row(<BookOpen size={19} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share")}
           {row(<Brain size={19} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you")}
           {!simple && row(<Users size={19} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together")}
           {row(<Monitor size={19} />, "Computers", href({ view: "computers", computerId: null }), undefined, "Desktops helpers use")}

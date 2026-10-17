@@ -84,7 +84,8 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
                   <Input value={form.name} onChange={set("name")} autoComplete="name" required />
                 </Field>
                 <Field label="Workspace name">
-                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder="Warren" />
+                  <span className="block text-xs text-muted">A workspace is your own Warren: your helpers, notes and settings. Use any name, like 'Home'.</span>
+                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder="Home" />
                 </Field>
               </>
             )}

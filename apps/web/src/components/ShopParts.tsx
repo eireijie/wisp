@@ -114,13 +114,15 @@ export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; on
 }
 
 /** Pick which agents get something. `note` explains, per agent, a caveat (e.g. its harness isn't wired yet). */
-export function AgentPicker({ agents, value, onChange, note, disabled }: { agents: Agent[]; value: string[]; onChange: (ids: string[]) => void; note?: (a: Agent) => string | null; disabled?: boolean }) {
+export function AgentPicker({ agents, value, onChange, note, disabled, unavailable }: { agents: Agent[]; value: string[]; onChange: (ids: string[]) => void; note?: (a: Agent) => string | null; disabled?: boolean; unavailable?: (a: Agent) => boolean }) {
   if (!agents.length) return <p className="text-sm text-muted">No agents yet. Add one from the Agents page first.</p>;
-  const all = agents.every((a) => value.includes(a.id));
+  // agents that can't take part can't be picked; "all" means all of the rest
+  const pickable = unavailable ? agents.filter((a) => !unavailable(a)) : agents;
+  const all = pickable.length > 0 && pickable.every((a) => value.includes(a.id));
   return (
     <div className="space-y-1">
       <div className="flex justify-end">
-        <button type="button" className="text-xs text-muted hover:text-ink disabled:opacity-50" disabled={disabled} onClick={() => onChange(all ? [] : agents.map((a) => a.id))}>
+        <button type="button" className="text-xs text-muted hover:text-ink disabled:opacity-50" disabled={disabled || pickable.length === 0} onClick={() => onChange(all ? [] : pickable.map((a) => a.id))}>
           {all ? "Clear" : "Select all"}
         </button>
       </div>
@@ -128,9 +130,11 @@ export function AgentPicker({ agents, value, onChange, note, disabled }: { agent
         {agents.map((a) => {
           const on = value.includes(a.id);
           const n = note?.(a);
+          // can't be added, but a stale assignment can still be taken off
+          const blocked = !on && !!unavailable?.(a);
           return (
-            <label key={a.id} className={cx("flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-hover/60", disabled && "pointer-events-none opacity-60")}>
-              <input type="checkbox" checked={on} disabled={disabled} onChange={() => onChange(on ? value.filter((x) => x !== a.id) : [...value, a.id])} />
+            <label key={a.id} className={cx("flex items-center gap-3 px-3 py-2", blocked ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-hover/60", disabled && "pointer-events-none opacity-60")}>
+              <input type="checkbox" checked={on} disabled={disabled || blocked} onChange={() => onChange(on ? value.filter((x) => x !== a.id) : [...value, a.id])} />
               <AgentAvatar agent={a} size={24} />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm truncate">{a.name}</span>

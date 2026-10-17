@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Agent } from "@warren/core";
-import { setupProgress, stepsDone, type OnboardingState } from "../src/onboarding.ts";
+import { isLocalOnlyHost, setupProgress, stepsDone, type OnboardingState } from "../src/onboarding.ts";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 
@@ -20,5 +20,12 @@ describe("setupProgress", () => {
   it("counts finished steps and says when setup is complete", () => {
     expect(setupProgress(stepsDone(empty))).toEqual({ progress: 0, steps: 5, complete: false });
     expect(setupProgress({ device: true, role: true, agent: true, harness: true, hello: true })).toMatchObject({ progress: 5, complete: true });
+  });
+});
+
+describe("isLocalOnlyHost", () => {
+  it("flags addresses that only work on this computer", () => {
+    for (const h of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(isLocalOnlyHost(h)).toBe(true);
+    for (const h of ["warren.example.com", "192.168.1.20", ""]) expect(isLocalOnlyHost(h)).toBe(false);
   });
 });

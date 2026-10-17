@@ -229,7 +229,10 @@ export function splitHarnesses<T extends { id: string }>(list: T[]): { recommend
   return { recommended, more: list.filter((h) => !RECOMMENDED_HARNESSES.includes(h.id)) };
 }
 
-type HarnessChoice = { id: string; label: string; blurb?: string; account?: string; signup?: string };
+type HarnessChoice = { id: string; label: string; blurb?: string; account?: string; signup?: string; protocol?: string };
+
+/** ACP harnesses can't use HTTP MCP connectors (Gmail etc.); native ones can. */
+export const canUseConnectedApps = (h: { id: string; protocol?: string }) => h.protocol !== "acp" && !h.id.startsWith("acp:");
 
 function HarnessGrid({ list, harness, onPick, label }: { list: HarnessChoice[]; harness: string; onPick: (id: string) => void; label: string }) {
   return (
@@ -244,7 +247,11 @@ function HarnessGrid({ list, harness, onPick, label }: { list: HarnessChoice[]; 
         >
           {harness === h.id && <Check size={14} className="agent-harness-check" />}
           <HarnessLogo harness={h.id} size={24} />
-          <span className="text-sm font-medium">{h.label}</span>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">{h.label}</span>
+            {h.blurb && <span className="block text-xs text-muted">{h.blurb}</span>}
+            {h.account && <span className="block text-xs text-muted">{h.account}</span>}
+          </span>
         </button>
       ))}
     </div>
@@ -274,7 +281,7 @@ export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harn
   const { recommended, more } = splitHarnesses(harnesses);
   // the chosen one is listed too, so it stays visible when "More harnesses" folds up again
   const shown = [...recommended, ...more.filter((h) => h.id === harness)];
-  const signups = recommended.filter((h) => h.signup && h.id !== "gemini");
+  const signups = recommended.filter((h) => h.signup);
   return (
     <>
       <div className="agent-wizard-hero compact">
@@ -296,6 +303,9 @@ export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harn
               <span className="block text-sm font-medium">{h.label}</span>
               {h.blurb && <span className="block text-xs text-muted">{h.blurb}</span>}
               {h.account && <span className="block text-xs text-muted">{h.account}</span>}
+              <span className="block text-xs text-muted">
+                {canUseConnectedApps(h) ? "Can use connected apps like Gmail" : "Can't use connected apps like Gmail yet"}
+              </span>
             </span>
           </button>
         ))}
@@ -303,7 +313,7 @@ export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harn
       <details className="mt-4 rounded-lg border border-line px-3 py-2 text-sm">
         <summary className="cursor-pointer font-medium">I'm not sure</summary>
         <div className="mt-2 space-y-2 text-muted">
-          <p>Pick the one you already pay for. If you don't have one, Claude Code or Codex are the usual choice.</p>
+          <p>If you don't pay for any AI yet: Gemini CLI has a free tier (but can't use connected apps yet). Claude Code and Codex need a paid plan (Claude Pro, ChatGPT Plus) and can use connected apps. You install the one you pick on your device and sign in there once; Warren walks you through it on the Device step.</p>
           {signups.length > 0 && (
             <p>
               Get an account:{" "}
@@ -311,7 +321,7 @@ export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harn
                 <span key={h.id}>
                   {i > 0 && ", "}
                   <a href={h.signup} target="_blank" rel="noreferrer" className="text-accent-text hover:underline">
-                    {h.id === "codex" ? "ChatGPT (for Codex)" : "Claude (for Claude Code)"}
+                    {h.id === "codex" ? "ChatGPT (for Codex)" : h.id === "gemini" ? "Google (for Gemini CLI)" : "Claude (for Claude Code)"}
                   </a>
                 </span>
               ))}
@@ -489,6 +499,9 @@ export function CreateAgent({
     }
   };
 
+  const labels = simple
+    ? { name: "Name", harness: "Which AI", configure: "Where it works" }
+    : { name: "Identity", harness: "Harness", configure: "Workspace" };
   const progress =
     step === "external" || step === "discover" ? (
       <p className="agent-step-label">Bring your agent</p>
@@ -501,9 +514,9 @@ export function CreateAgent({
       >
         {(
           [
-            ["name", "Identity"],
-            ["harness", "Harness"],
-            ["configure", "Workspace"],
+            ["name", labels.name],
+            ["harness", labels.harness],
+            ["configure", labels.configure],
           ] as const
         ).map(([id, label], i) => (
           <span key={id} className="agent-step-stop">
@@ -529,7 +542,7 @@ export function CreateAgent({
           </span>
         ))}
         <span className="agent-step-label">
-          {step === "name" ? "Identity" : step === "harness" ? "Harness" : "Workspace"} · {["name", "harness", "configure"].indexOf(step) + 1} of 3
+          {labels[step as "name" | "harness" | "configure"]} · {["name", "harness", "configure"].indexOf(step) + 1} of 3
         </span>
       </nav>
     );
@@ -549,7 +562,7 @@ export function CreateAgent({
         {backLabel}
       </Button>
       {action}
-      {step === "name" && <p className="agent-footer-hint">Harness and workspace are next.</p>}
+      {step === "name" && <p className="agent-footer-hint">{simple ? "Which AI and where it works are next." : "Harness and workspace are next."}</p>}
     </div>
   );
   const primary = (label: string, action: () => void, disabled = false) => (
@@ -585,7 +598,7 @@ export function CreateAgent({
         >
           <div ref={bodyRef} className="agent-wizard-body agent-identity-step">
             <div className="agent-wizard-hero">
-              <h1 tabIndex={-1}>Who’s joining?</h1>
+              <h1 tabIndex={-1}>{simple ? "Name your helper" : "Who’s joining?"}</h1>
               <p>A name first. Their setup comes next.</p>
             </div>
             <div className="agent-identity-row">
@@ -634,6 +647,7 @@ export function CreateAgent({
               </div>
             </div>
             <p className="agent-identity-hint">You can change their name and look later.</p>
+            <Advanced title="Invite or discover an existing agent">
             <div className="agent-join-options">
               <h2>Already running somewhere?</h2>
               <button type="button" onClick={() => { setInvite(true); move(validName ? "harness" : "external"); }} className="agent-invite-link">
@@ -641,6 +655,7 @@ export function CreateAgent({
               </button>
               <button type="button" onClick={() => move("discover")} className="agent-discover-link">Discover on a connected device</button>
             </div>
+            </Advanced>
           </div>
           {footer(
             onClose,
@@ -651,7 +666,7 @@ export function CreateAgent({
               className="h-12! rounded-lg! px-5!"
               disabled={!validName}
             >
-              Next: choose harness <ArrowRight size={17} />
+              {simple ? "Next: which AI" : "Next: choose harness"} <ArrowRight size={17} />
             </Button>,
           )}
         </form>
@@ -671,7 +686,7 @@ export function CreateAgent({
           {footer(
             () => move(invite ? "external" : "name"),
             "Back",
-            primary("Next: workspace", () => move("configure")),
+            primary(simple ? "Next: where it works" : "Next: workspace", () => move("configure")),
           )}
         </>
       )}

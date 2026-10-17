@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
-import { SKILL_CATALOG, catalogSkill, type Agent, type CatalogSkill, type Skill } from "@warren/core";
+import { SKILL_CATALOG, catalogSkill, everydaySkills, type Agent, type CatalogSkill, type Skill } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { renderMarkdown } from "../markdown.ts";
@@ -78,6 +78,18 @@ export function skillFromGuide(g: { name: string; what: string; when: string; re
 
 export const skillMarkdownFromGuide = (g: Parameters<typeof skillFromGuide>[0]) => skillFromGuide(g).content;
 
+/**
+ * The plain-words version of a skill for Simple mode. A library entry (skill null) or an installed,
+ * unedited catalog skill uses the catalog's `plain` text; an edited or custom skill only gets a
+ * line made from its own description, since the catalog text no longer describes it.
+ */
+export function plainSkill(skill: Pick<Skill, "description" | "content" | "catalogId"> | null, entry: CatalogSkill | undefined): { does: string; needs: string | null; example: string | null } {
+  const description = skill?.description ?? entry?.description ?? "";
+  const same = !skill || (!!skill.catalogId && !!entry && skill.content === entry.content);
+  const plain = same ? entry?.plain : undefined;
+  return { does: plain?.does ?? whatItsFor(description), needs: plain?.needs ?? null, example: plain?.example ?? null };
+}
+
 /** What the detail panel shows: an installed skill, or a shop item not installed yet. */
 type Open = { skill: Skill } | { entry: CatalogSkill };
 
@@ -104,10 +116,18 @@ export function SkillsView({ onBack }: { onBack?: () => void }) {
     load();
   }, []);
 
+  const tags = useMemo(() => (simple ? ["All", ...TAGS.filter((t) => t === "everyday"), ...TAGS.filter((t) => t !== "All" && t !== "everyday")] : TAGS), [simple]);
   const needle = q.trim().toLowerCase();
   const match = (...s: string[]) => !needle || s.some((x) => x.toLowerCase().includes(needle));
   const byCatalog = useMemo(() => new Map((skills ?? []).filter((s) => s.catalogId).map((s) => [s.catalogId!, s])), [skills]);
   const shop = SKILL_CATALOG.filter((s) => (tag === "All" || s.tags.includes(tag)) && match(s.name, s.description, ...s.tags));
+  const everyday = simple && !needle && tag === "All";
+  const everydayIds = new Set(everydaySkills().map((s) => s.id));
+  const rest = everyday ? shop.filter((e) => !everydayIds.has(e.id)) : shop;
+  const card = (e: CatalogSkill) => {
+    const have = byCatalog.get(e.id);
+    return <LibraryCard key={e.id} e={e} have={have} agents={agents} simple={simple} canEdit={canEdit} onOpen={() => setOpen(have ? { skill: have } : { entry: e })} onInstall={() => (have ? setOpen({ skill: have }) : setInstalling(e))} />;
+  };
   const installed = (skills ?? []).filter((s) => match(s.name, s.description, ...s.tags));
 
   // keep the open panel in step with the latest data
@@ -160,7 +180,7 @@ export function SkillsView({ onBack }: { onBack?: () => void }) {
           {tab === "shop" ? (
             <>
               <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
-                {TAGS.map((t) => (
+                {tags.map((t) => (
                   <button key={t} onClick={() => setTag(t)} className={cx("h-7 px-2.5 rounded-full text-xs whitespace-nowrap border capitalize", tag === t ? "bg-accent text-accent-ink border-transparent" : "border-line text-muted hover:text-ink hover:bg-hover")}>
                     {t}
                   </button>
@@ -169,51 +189,21 @@ export function SkillsView({ onBack }: { onBack?: () => void }) {
               {shop.length === 0 ? (
                 <p className="text-sm text-muted py-8 text-center">No skills match. You can create your own.</p>
               ) : (
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {shop.map((e) => {
-                    const have = byCatalog.get(e.id);
-                    return (
-                      <div key={e.id} className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
-                        <button className="flex items-start gap-3 text-left" onClick={() => setOpen(have ? { skill: have } : { entry: e })}>
-                          <IconTile>
-                            <CatalogIcon name={e.icon} fallback={Wand2} />
-                          </IconTile>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-semibold">{e.name}</span>
-                            <span className="block text-sm text-muted mt-1 line-clamp-3">{simple ? whatItsFor(e.description) : e.description.replace(/^Use (when|for) /, (m) => (m === "Use for " ? "For " : "When "))}</span>
-                          </span>
-                        </button>
-                        <div className="flex flex-wrap gap-1">
-                          {e.tags.map((t) => (
-                            <span key={t} className="text-[11px] px-1.5 rounded bg-chip text-muted">
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-2 mt-auto">
-                          {simple ? <span className="text-xs text-muted">{helperLine(agents, have?.agentIds ?? [])}</span> : have ? <AgentStack agents={agents} ids={have.agentIds} max={4} /> : <span className="text-xs text-faint">Not installed</span>}
-                          <span className="flex-1" />
-                          <Button className="h-8" variant="ghost" onClick={() => setOpen(have ? { skill: have } : { entry: e })}>
-                            Read
-                          </Button>
-                          {canEdit && (
-                            <Button className="h-8" onClick={() => (have ? setOpen({ skill: have }) : setInstalling(e))}>
-                              {have ? (
-                                <>
-                                  <Check size={14} /> Installed
-                                </>
-                              ) : (
-                                <>
-                                  <Plus size={14} /> Install
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  {everyday && (
+                    <section className="space-y-2" aria-labelledby="skills-everyday">
+                      <h2 id="skills-everyday" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                        Everyday
+                      </h2>
+                      <p className="text-sm text-muted">You don't need a skill for ordinary requests. Just ask your helper. A skill helps when you want something done the same way every time.</p>
+                      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{everydaySkills().map(card)}</div>
+                    </section>
+                  )}
+                  <section className="space-y-2">
+                    {everyday && rest.length > 0 && <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">More skills</h2>}
+                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map(card)}</div>
+                  </section>
+                </>
               )}
             </>
           ) : skills === null ? (
@@ -292,6 +282,49 @@ export function SkillsView({ onBack }: { onBack?: () => void }) {
   );
 }
 
+function LibraryCard({ e, have, agents, simple, canEdit, onOpen, onInstall }: { e: CatalogSkill; have: Skill | undefined; agents: Agent[]; simple: boolean; canEdit: boolean; onOpen: () => void; onInstall: () => void }) {
+  return (
+    <div className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
+      <button className="flex items-start gap-3 text-left" onClick={onOpen}>
+        <IconTile>
+          <CatalogIcon name={e.icon} fallback={Wand2} />
+        </IconTile>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">{e.name}</span>
+          <span className="block text-sm text-muted mt-1 line-clamp-3">{simple ? (e.plain?.does ?? whatItsFor(e.description)) : e.description.replace(/^Use (when|for) /, (m) => (m === "Use for " ? "For " : "When "))}</span>
+        </span>
+      </button>
+      <div className="flex flex-wrap gap-1">
+        {e.tags.map((t) => (
+          <span key={t} className="text-[11px] px-1.5 rounded bg-chip text-muted">
+            {t}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 mt-auto">
+        {simple ? <span className="text-xs text-muted">{helperLine(agents, have?.agentIds ?? [])}</span> : have ? <AgentStack agents={agents} ids={have.agentIds} max={4} /> : <span className="text-xs text-faint">Not installed</span>}
+        <span className="flex-1" />
+        <Button className="h-8" variant="ghost" onClick={onOpen}>
+          Read
+        </Button>
+        {canEdit && (
+          <Button className="h-8" onClick={onInstall}>
+            {have ? (
+              <>
+                <Check size={14} /> Installed
+              </>
+            ) : (
+              <>
+                <Plus size={14} /> Install
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChanged }: { open: Open; agents: Agent[]; canEdit: boolean; onClose: () => void; onInstall: (e: CatalogSkill) => void; onEdit: (s: Skill) => void; onChanged: (id?: string) => void }) {
   const skill = "skill" in open ? open.skill : null;
   const entry = "entry" in open ? open.entry : catalogSkill(skill?.catalogId ?? "");
@@ -299,6 +332,7 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
   const description = skill?.description ?? entry!.description;
   const content = skill?.content ?? entry!.content;
   const html = useMemo(() => renderMarkdown(content), [content]);
+  const plain = plainSkill(skill, entry);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const simple = useSimple();
@@ -343,7 +377,7 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
     >
       <div className="space-y-5">
         <div className="space-y-2">
-          <p className="text-sm text-muted">{description}</p>
+          {!(simple && plain.does) && <p className="text-sm text-muted">{description}</p>}
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
             {skill ? <Pill tone={skill.source === "custom" ? "accent" : "neutral"}>{SOURCE[skill.source]}</Pill> : <Pill>In the library</Pill>}
             {skill && simple && <span>{helperLine(agents, skill.agentIds)}</span>}
@@ -380,6 +414,31 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
           </div>
         )}
 
+        {simple && plain.does && (
+          <section className="space-y-2" aria-label="In plain words">
+            <dl className="space-y-3 text-sm">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wider text-muted">What it does</dt>
+                <dd className="mt-1 text-ink">{plain.does}</dd>
+              </div>
+              {plain.needs && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted">What it needs</dt>
+                  <dd className="mt-1 text-ink">{plain.needs}</dd>
+                </div>
+              )}
+              {plain.example && (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Example</dt>
+                  <dd className="mt-1">
+                    <q className="text-ink">{plain.example}</q>
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </section>
+        )}
+
         {skill && <TryIt skill={skill} agents={agents} onClose={onClose} />}
 
         {skill && (
@@ -413,10 +472,12 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
         )}
         {error && <p className="text-sm text-bad">{error}</p>}
 
-        <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{simple ? "How your helper does it" : "SKILL.md"}</h3>
-          <div className="prose-w rounded-lg border border-line p-4 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
-        </section>
+        <Advanced title="Full instructions">
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{simple ? "How your helper does it" : "SKILL.md"}</h3>
+            <div className="prose-w rounded-lg border border-line p-4 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
+          </section>
+        </Advanced>
       </div>
     </Modal>
   );

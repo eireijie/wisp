@@ -200,3 +200,9 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
   else out.push({ id: "harness", status: "bad", label: `${label} is installed on ${device.name}`, fix: `Install ${label} on ${device.name}, or pick an AI that's already there.`, to: agentRoute("model") });
   return out;
 }
+
+/** True when the page is served from this computer only, so its address won't work from another computer. */
+export function isLocalOnlyHost(hostname: string): boolean {
+  const h = hostname.trim().toLowerCase();
+  return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+}

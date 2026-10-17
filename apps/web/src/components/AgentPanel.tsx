@@ -6,7 +6,7 @@ import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href, type AgentTab } from "../router.ts";
-import { useSimple } from "../experience.tsx";
+import { Advanced, useSimple } from "../experience.tsx";
 import { openDm } from "../openDm.ts";
 import { agentReadiness, useDevices, type DeviceInfo } from "../devices.ts";
 import { useComputerState } from "../views/ComputersView.tsx";
@@ -109,27 +109,35 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
   const readiness = agentReadiness(agent, devices);
   const simple = useSimple();
   const next = simple ? setupNextStep(agent, devices) : null;
-  const rows: [string, ReactNode][] = [
-    ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>],
-    ["Harness", HARNESS_LABELS[agent.harness]],
-    ["Model", agent.model ? `${prettyModel(agent.model)}${agent.settings.effort ? ` · ${effortName(agent.settings.effort)}` : ""}${agent.settings.fast ? " · Fast" : ""}` : "Default"],
-    ["Access", ACCESS_LABEL[agent.settings.access ?? "edit"]],
-    ["Computer", computer ? computer.name : agent.settings.headless ? "None (headless)" : "None yet"],
-    ...(agent.groups.length ? [["Teams", agent.groups.join(", ")] as [string, ReactNode]] : []),
-    ["Handle", `@${agent.handle}`],
-    ["Joined", timeAgo(agent.createdAt)],
-  ];
+  const device = devices?.find((d) => d.id === agent.nodeId);
+  type Row = [string, ReactNode];
+  const statusRow: Row = ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>];
+  const deviceRow: Row = ["Device", device ? device.name : "None yet"];
+  const computerRow: Row = ["Computer", computer ? computer.name : agent.settings.headless ? "None (headless)" : "None yet"];
+  const harnessRow: Row = ["Harness", HARNESS_LABELS[agent.harness]];
+  const modelRow: Row = ["Model", agent.model ? `${prettyModel(agent.model)}${agent.settings.effort ? ` · ${effortName(agent.settings.effort)}` : ""}${agent.settings.fast ? " · Fast" : ""}` : "Default"];
+  const accessRow: Row = ["Access", ACCESS_LABEL[agent.settings.access ?? "edit"]];
+  const tail: Row[] = [...(agent.groups.length ? [["Teams", agent.groups.join(", ")] as Row] : []), ["Handle", `@${agent.handle}`], ["Joined", timeAgo(agent.createdAt)]];
+  const technical: Row[] = [harnessRow, modelRow, accessRow];
+  const table = (list: Row[]) => (
+    <dl className="rounded-2xl bg-panel border border-line divide-y divide-line text-sm">
+      {list.map(([k, v]) => (
+        <div key={k} className="flex items-center gap-3 px-4 py-2.5">
+          <dt className="text-muted w-20 shrink-0">{k}</dt>
+          <dd className="min-w-0 flex-1 truncate text-right">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
   return (
     <div className="space-y-4">
       {agent.settings.roleNotes && <p className="text-sm text-muted whitespace-pre-wrap">{agent.settings.roleNotes}</p>}
-      <dl className="rounded-2xl bg-panel border border-line divide-y divide-line text-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex items-center gap-3 px-4 py-2.5">
-            <dt className="text-muted w-20 shrink-0">{k}</dt>
-            <dd className="min-w-0 flex-1 truncate text-right">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      {simple ? table([statusRow, deviceRow, computerRow, ...tail]) : table([statusRow, ...technical, deviceRow, computerRow, ...tail])}
+      {simple && (
+        <Advanced title="Technical details">
+          {table(technical)}
+        </Advanced>
+      )}
       {!readiness.ready && (
         <p className="rounded-xl border border-line bg-panel px-3 py-2 text-xs text-muted">
           Setup incomplete: {readiness.problem}. Messages to {agent.name} will wait until that's fixed.

@@ -5,9 +5,9 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, guardLeaving, href, mayLeave } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { Button, Empty, Field, Input, Modal, cx, timeAgo } from "../components/ui.tsx";
+import { Button, Empty, Field, Input, Menu, Modal, cx, timeAgo } from "../components/ui.tsx";
 import { AccessDialog, pathLabel } from "../components/AccessDialog.tsx";
-import { useSimple } from "../experience.tsx";
+import { Advanced, useSimple } from "../experience.tsx";
 import { obsidianLink, onHubMachine, useMemoryStorage } from "../obsidian.ts";
 
 interface NoteMeta {
@@ -158,7 +158,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         </Button>
         {!viewAs && (
           <Button variant="default" onClick={() => setCreating(path ? path.split("/").slice(0, -1).join("/") : meId ? personDir(meId) : "shared")} title="Write a new note here">
-            <FilePlus size={16} /> <span className="hidden sm:inline">New note</span>
+            <FilePlus size={16} /> <span>New note</span>
           </Button>
         )}
       </header>
@@ -344,6 +344,15 @@ function focusAtEnd(el: HTMLTextAreaElement | null) {
   el.setSelectionRange(el.value.length, el.value.length);
 }
 
+/** A friendly name for a folder you write into ("My notes"), or null when it has none. */
+function friendlyDir(dir: string, meId: string | undefined, agents: { id: string; name: string }[]): string | null {
+  const d = dir.replace(/^\/+|\/+$/g, "");
+  if (d === "shared") return "Shared with everyone";
+  if (meId && d === personDir(meId)) return "My notes";
+  const a = agents.find((x) => d === `agents/${x.id}`);
+  return a ? `${a.name}'s notes` : null;
+}
+
 function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShare }: { path: string; pendingEdit: React.MutableRefObject<string | null>; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onChanged: () => void; onShare: () => void }) {
   const [note, setNote] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -355,6 +364,9 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
   const [saving, setSaving] = useState(false);
   const agents = useStore((s) => s.agents);
   const memoryVersion = useStore((s) => s.memoryVersion);
+  const simple = useSimple();
+  const meId = useStore((s) => s.me?.user.id);
+  const storage = useMemoryStorage();
   const handles = useMemo(() => new Set(agents.map((a) => a.handle)), [agents]);
 
   useEffect(() => {
@@ -439,6 +451,16 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
   };
 
   const crumbs = path.split("/");
+  const dirName = friendlyDir(crumbs.slice(0, -1).join("/"), meId, agents);
+  // In Simple mode a folder with a friendly name replaces the whole raw path ("My notes / Title")
+  const shown: { key: number; text: string; last: boolean }[] =
+    simple && dirName
+      ? [{ key: 0, text: dirName, last: false }, { key: 1, text: base(crumbs[crumbs.length - 1]!), last: true }]
+      : crumbs.map((c, i) => ({ key: i, text: i === crumbs.length - 1 ? base(c) : folderLabel(c, crumbs[i - 1] ?? ""), last: i === crumbs.length - 1 }));
+  const openObsidian = () => {
+    if (storage?.path && onHubMachine()) window.location.href = obsidianLink(storage.path, path);
+    else go({ view: "settings", page: "memory" });
+  };
   return (
     <div className="h-full flex">
       <div className="flex-1 min-w-0 flex flex-col">
@@ -446,16 +468,16 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
         <div className="@container px-4 md:px-8 py-2 flex items-center gap-2 border-b border-line text-sm">
           {/* the note's name keeps its room: folders give way first (shrink-[100]); narrower rows drop the far folders, then the parent, then "edited by" */}
           <div className="flex-1 min-w-0 flex items-center gap-1 text-muted overflow-hidden whitespace-nowrap">
-            {crumbs.map((c, i) => {
-              const last = i === crumbs.length - 1;
-              const parent = i === crumbs.length - 2;
+            {shown.map((c, i) => {
+              const last = c.last;
+              const parent = i === shown.length - 2;
               const show = last ? "flex" : side ? "hidden" : parent ? "hidden @xl:flex" : "hidden @3xl:flex";
               // a chevron belongs to the crumb before it, so it shows only when that one does
               const chevron = i === 0 ? "hidden" : side ? "hidden" : last ? "hidden @xl:block" : parent ? "hidden @3xl:block" : "block";
               return (
-                <span key={i} className={cx("items-center gap-1 min-w-0", last ? "shrink" : "shrink-[100]", show)}>
+                <span key={c.key} className={cx("items-center gap-1 min-w-0", last ? "shrink" : "shrink-[100]", show)}>
                   <ChevronRight size={12} className={cx("text-faint shrink-0", chevron)} />
-                  <span className={cx("truncate", last && "text-ink font-medium")}>{last ? base(c) : folderLabel(c, crumbs[i - 1] ?? "")}</span>
+                  <span className={cx("truncate", last && "text-ink font-medium whitespace-normal break-words min-w-0 md:whitespace-nowrap md:truncate")}>{c.text}</span>
                 </span>
               );
             })}
@@ -477,14 +499,15 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
             </>
           ) : (
             <>
-              <OpenInObsidian note={path} className="h-8" />
+              <OpenInObsidian note={path} className="h-8 hidden md:inline-flex" />
               {canEdit && !viewing && (
                 <Button variant="ghost" className="h-8" onClick={() => setDraft(note.content)} title="Edit this note here">
-                  <Pencil size={15} /> <span className="hidden sm:inline">Edit</span>
+                  <Pencil size={15} /> <span>Edit</span>
                 </Button>
               )}
             </>
           )}
+          <div className="hidden md:flex items-center gap-2">
           <button onClick={() => setSide(side === "authors" ? null : "authors")} className={cx("p-1.5 rounded-md hover:bg-hover", side === "authors" ? "text-accent-text" : "text-muted")} title="Who wrote what">
             <UserPen size={16} />
           </button>
@@ -499,6 +522,24 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
               <Trash2 size={16} />
             </button>
           )}
+          </div>
+          <div className="md:hidden">
+            <Menu
+              align="right"
+              trigger={(_open, toggle) => (
+                <Button variant="ghost" className="h-8" onClick={toggle} aria-haspopup="menu">
+                  More
+                </Button>
+              )}
+              items={[
+                { label: side === "history" ? "Hide history" : "History", onSelect: () => setSide(side === "history" ? null : "history") },
+                { label: side === "authors" ? "Hide who wrote what" : "Who wrote what", onSelect: () => setSide(side === "authors" ? null : "authors") },
+                { label: "Who can see this note", onSelect: onShare },
+                { label: "Open in Obsidian", onSelect: openObsidian },
+                ...(canEdit && draft === null ? [{ label: "Delete", danger: true, onSelect: remove }] : []),
+              ]}
+            />
+          </div>
         </div>
         {viewing && (
           <div className="px-4 md:px-8 py-2 bg-accent-soft text-sm flex items-center gap-2">
@@ -568,9 +609,19 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
 
 function NewNote({ initial, folders, onClose, onCreated }: { initial: string; folders: string[]; onClose: () => void; onCreated: (p: string) => void }) {
   const agents = useStore((s) => s.agents);
+  const meId = useStore((s) => s.me?.user.id);
   const [dir, setDir] = useState(initial);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const simple = useSimple();
+  const choices = [
+    ...(meId ? [{ value: personDir(meId), label: "My notes" }] : []),
+    { value: "shared", label: "Shared with everyone" },
+    ...agents.map((a) => ({ value: `agents/${a.id}`, label: `${a.name}'s notes` })),
+  ];
+  const known = choices.some((c) => c.value === dir);
+  const [other, setOther] = useState(!known && !!dir);
+  const selectValue = other ? "__other" : known ? dir : "";
   const suggestions = [...new Set(["shared", ...agents.map((a) => `agents/${a.id}`), ...folders])];
   return (
     <Modal title="New note" onClose={onClose}>
@@ -590,14 +641,39 @@ function NewNote({ initial, folders, onClose, onCreated }: { initial: string; fo
           }
         }}
       >
-        <Field label="Folder" hint="Pick one or type a new name to make a folder.">
-          <Input value={dir} onChange={(e) => setDir(e.target.value)} list="vault-folders" placeholder="shared" />
-          <datalist id="vault-folders">
-            {suggestions.map((f) => (
-              <option key={f} value={f} />
+        <Field label="Where to keep it">
+          <select
+            value={selectValue}
+            onChange={(e) => {
+              if (e.target.value === "__other") setOther(true);
+              else {
+                setOther(false);
+                setDir(e.target.value);
+              }
+            }}
+            className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
+          >
+            {choices.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
             ))}
-          </datalist>
+            {!simple && <option value="__other">Other folder…</option>}
+            {simple && other && <option value="__other">{friendlyDir(dir, meId, agents) ?? dir}</option>}
+          </select>
         </Field>
+        {other && (
+          <Advanced title="Other folder…">
+            <Field label="Folder path" hint="Pick one or type a new name to make a folder.">
+              <Input value={dir} onChange={(e) => setDir(e.target.value)} list="vault-folders" placeholder="shared" />
+              <datalist id="vault-folders">
+                {suggestions.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </Field>
+          </Advanced>
+        )}
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meeting notes" required autoFocus />
         </Field>

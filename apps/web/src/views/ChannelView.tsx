@@ -981,6 +981,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   const [pick, setPick] = useState(0);
   const [emoji, setEmoji] = useState(false);
   const [caret, setCaret] = useState(0);
+  const [nobodyAsked, setNobodyAsked] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const working = Object.values(live).filter((r) => r.channelId === channelId);
@@ -995,6 +996,28 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
       channel && channel.kind !== "dm" && !threadId && text.trim() && !mentioned.length
       ? `Posting to #${channel.name}. @mention an agent to ask it.`
       : null;
+
+  // a "ask someone" shortcut for the hint line, in channels (not DMs or threads) that have agents
+  const canAsk = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !mentioned.length;
+  function ask() {
+    if (agents.length === 1) {
+      const m = `@${agents[0].handle}`;
+      if (!new RegExp(`^\\s*${m}(\\s|$)`).test(text)) setText(`${m} ${text}`);
+      requestAnimationFrame(() => {
+        const at = m.length + 1;
+        ta.current?.focus();
+        ta.current?.setSelectionRange(at, at);
+        setCaret(at);
+      });
+    } else {
+      // an "@" at the caret brings up the mention picker
+      insert(text && !/\s$/.test(text.slice(0, ta.current?.selectionStart ?? text.length)) ? " @" : "@");
+    }
+  }
+  useEffect(() => setNobodyAsked(false), [channelId]);
+  useEffect(() => {
+    if (mentioned.length) setNobodyAsked(false);
+  }, [mentioned.length]);
 
   // @mention autocomplete for the word under the cursor
   const word = text.slice(0, caret).match(/(?:^|\s)@([\w-]*)$/)?.[1];
@@ -1044,11 +1067,14 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
     if (!text.trim() && !files.length) return;
     const body = text;
     const attached = files;
+    const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !parseMentions(body).length;
+    setNobodyAsked(false);
     setText("");
     setFiles([]);
     setError(null);
     try {
       await api("POST", `/api/channels/${channelId}/messages`, { body, threadId, fileIds: attached.map((f) => f.id) });
+      setNobodyAsked(unasked);
     } catch (e) {
       // the message comes back as it was, attachments included (plus anything added meanwhile)
       setText(body);
@@ -1186,6 +1212,12 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
       <div className="min-h-6 pt-1 px-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {error && <span className="text-bad">{error}</span>}
         {!error && hint && <span className="text-muted">{hint}</span>}
+        {!error && canAsk && (
+          <button type="button" onClick={ask} className="text-accent-text hover:underline">
+            {agents.length === 1 ? `Ask ${agents[0].name}` : "Ask an agent"}
+          </button>
+        )}
+        {!error && nobodyAsked && !hint && <span className="text-muted">Nobody was asked. @mention a helper to get an answer.</span>}
         {working.map((r) => (
           <AgentWorking key={r.runId} run={r} home={r.agentId === agentId} />
         ))}

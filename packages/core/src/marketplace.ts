@@ -249,9 +249,24 @@ export function trustLabel(e: Pick<MarketplaceEntry, "id" | "name" | "publisher"
   };
 }
 
-/** Best first: makers, verified publishers, then the closest name match, then ones with nothing to fill in. */
+/**
+ * Best first. Relevance comes first: a name or id that has the search in it (spaces and dashes
+ * ignored) beats one that only mentions it in the description, and a whole-word match ("Gmail MCP")
+ * beats a substring ("Agmail"). Within a tier: makers, verified publishers, then the closest name
+ * match, then ones with nothing to fill in.
+ */
 export function rankMarketplace(entries: MarketplaceEntry[], q: string): MarketplaceEntry[] {
   const needle = q.trim().toLowerCase();
+  const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const wordNeedle = words(needle);
+  const flatNeedle = squash(needle);
+  const re = wordNeedle ? new RegExp(`(^| )${wordNeedle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) : null;
+  /** 2: whole word in the name or short id, 1: somewhere in the name or id, 0: not in either */
+  const tier = (e: MarketplaceEntry) => {
+    if (!re) return 0;
+    if (re.test(words(e.name)) || re.test(words(e.id.split("/").pop() ?? ""))) return 2;
+    return squash(e.name).includes(flatNeedle) || squash(e.id).includes(flatNeedle) ? 1 : 0;
+  };
   const score = (e: MarketplaceEntry) => {
     const n = e.name.toLowerCase();
     const short = (e.id.split("/").pop() ?? "").toLowerCase();
@@ -265,5 +280,5 @@ export function rankMarketplace(entries: MarketplaceEntry[], q: string): Marketp
     if (/^ai\.smithery\//.test(e.id)) s -= 5;
     return s;
   };
-  return entries.map((e) => [score(e), e] as const).sort((a, b) => b[0] - a[0] || a[1].name.localeCompare(b[1].name)).map(([, e]) => e);
+  return entries.map((e) => [tier(e), score(e), e] as const).sort((a, b) => b[0] - a[0] || b[1] - a[1] || a[2].name.localeCompare(b[2].name)).map(([, , e]) => e);
 }

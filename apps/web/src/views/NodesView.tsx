@@ -3,7 +3,7 @@ import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2,
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, DeviceInstall, Empty, Field, IconButton, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
+import { Button, CopyBlock, DeviceInstall, Empty, Field, IconButton, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 interface NodeInfo {
   id: string;
@@ -37,6 +37,42 @@ export function screenLine(n: { online: boolean; capabilities: DeviceCapabilitie
   const base = "Its screen: unknown until it connects.";
   if (!last) return base;
   return `${base} (Last time: ${last.ok ? "on" : "off"}.)`;
+}
+
+/** Opened on the computer running the hub itself, so the address only works there. */
+export function isLocalOnlyHost(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname) || hostname.endsWith(".localhost");
+}
+
+/** What to tell someone about a device that is not connected; null while it is connected. */
+export function notConnectedLine(n: { online: boolean; lastSeen: string | null }): string | null {
+  if (n.online) return null;
+  return n.lastSeen ? "This device was connected before but is offline now." : "This device hasn't connected yet.";
+}
+
+/** Shown on a device that is not connected: the no-Terminal way first; a command (needing a token) is for removing and re-adding. */
+function ConnectDevice({ node: n }: { node: NodeInfo }) {
+  const line = notConnectedLine(n);
+  if (!line) return null;
+  return (
+    <div className="mt-3 ml-14 rounded-lg border border-line bg-panel p-3 space-y-2 text-sm">
+      <p className="font-medium">Connect this device</p>
+      <p className="text-muted">{line}</p>
+      <p className="text-xs">
+        <b>Easiest:</b>{" "}
+        <a className="font-medium underline" href="https://github.com/eireijie/warren/releases/latest" target="_blank" rel="noopener noreferrer">
+          Download the Warren app for Mac
+        </a>
+        . Open it, choose to join a server, and enter this address:
+      </p>
+      <CopyBlock text={location.origin} />
+      {isLocalOnlyHost(location.hostname) && <p className="text-xs text-muted">This address only works on this computer. On another computer, use this computer's network address instead.</p>}
+      <details className="text-xs">
+        <summary className="cursor-pointer text-muted">Connect with a command instead</summary>
+        <p className="mt-2 text-muted">The command needs a connection code, which is shown only once when a device is added. To get a new one, remove this device and add it again.</p>
+      </details>
+    </div>
+  );
 }
 
 export function NodesView({ onBack }: { onBack?: () => void }) {
@@ -134,6 +170,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     />
                   )}
                 </div>
+                {(n.mine || isOwner) && <ConnectDevice node={n} />}
                 <DeviceAccess node={n} onChange={refresh} />
                 {n.update?.message && (
                   <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>

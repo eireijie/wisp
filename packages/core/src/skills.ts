@@ -52,15 +52,95 @@ export interface CatalogSkill {
   icon: string;
   tags: string[];
   content: string;
+  /** For people who don't want to read the instructions: plain words, no tool names or file paths. */
+  plain?: { does: string; needs: string; example: string };
 }
 
 export const SKILL_CATALOG: CatalogSkill[] = [
+  {
+    id: "meal-plan",
+    name: "Weekly meal plan and shopping list",
+    description: "Use when asked to plan meals or dinners for the week, or to make a shopping list.",
+    icon: "UtensilsCrossed",
+    tags: ["everyday", "home", "planning"],
+    plain: {
+      does: "Plans a week of meals that fit your household, then writes a shopping list sorted by store section.",
+      needs: "How many people, which days and meals, and any allergies, dislikes, budget or time limits. It asks if you leave something out.",
+      example: "Plan dinners for next week for two people, no fish.",
+    },
+    content: `# Weekly meal plan and shopping list
+
+1. **Ask only what you don't know**: how many people, which days and meals, allergies and dislikes, budget, and time limits on cooking.
+2. **Propose the plan** as a simple table: day, meal, and rough cooking time.
+3. **Write the shopping list** grouped by store section (produce, dairy, meat and fish, pantry, frozen), with quantities for the whole week.
+4. **Note pantry staples** (oil, salt, flour, spices) as "check you have these" instead of listing them as purchases.
+5. Offer to swap any meal.
+
+Rules:
+- Treat allergies and "no X" requests as strict. Never slip them in.
+- Reuse ingredients across meals to cut waste and cost.
+- Keep weeknight meals quick (about 30 minutes) unless told otherwise.
+- No medical or nutrition claims; if asked for a health diet, suggest checking with a professional.`,
+  },
+  {
+    id: "summarize-document",
+    name: "Summarize a document",
+    description: "Use when given a document, article or long message to summarize.",
+    icon: "FileText",
+    tags: ["everyday", "writing", "reading"],
+    plain: {
+      does: "Reads a document and gives you a short summary, the key points, and any dates, numbers and to-dos.",
+      needs: "The document, pasted in or attached, and what you need it for.",
+      example: "Summarize this contract and tell me any deadlines.",
+    },
+    content: `# Summarize a document
+
+1. **If it's unclear, ask what the summary is for** (a quick read, a decision, sharing with someone) and how long it should be.
+2. **Start with a summary** of 3-5 sentences.
+3. **Then the key points** as a short bulleted list.
+4. **Then the specifics**: dates and deadlines, amounts and numbers, and action items (who needs to do what).
+
+Rules:
+- Don't add facts that aren't in the document.
+- Say so when something is unclear, missing or contradictory, rather than guessing.
+- Keep to the length the person asked for.
+- Keep names, dates and numbers exact.`,
+  },
+  {
+    id: "polite-message",
+    name: "Draft a polite message",
+    description: "Use when asked to write or reword a message, email or note, such as a request, a reminder, a complaint or a thank-you.",
+    icon: "MessageSquare",
+    tags: ["everyday", "writing"],
+    plain: {
+      does: "Writes a short, polite message for you to send, plus a shorter and a warmer version.",
+      needs: "Who it is to, what you want from them, and the tone you would like. Nothing is sent for you.",
+      example: "Write a polite message to my landlord asking when the heating will be fixed.",
+    },
+    content: `# Draft a polite message
+
+1. **Work out the basics**: who it's to, what the person wants from it, and the tone (formal, friendly, firm). Ask only for what is missing.
+2. **Draft a short message**: a greeting, the point in the first two sentences, a clear ask (with a date if there is one), and thanks.
+3. **Offer two variants**: a shorter one and a warmer one.
+4. **Hand it back** for the person to read and send.
+
+Rules:
+- Never send it. The person sends it themselves.
+- Keep it honest; don't exaggerate or invent details.
+- Don't make promises the person didn't make.
+- Plain words, no filler.`,
+  },
   {
     id: "weekly-status-report",
     name: "Write a weekly status report",
     description: "Use when asked for a weekly update, status report or \"what happened this week\" for a team or project.",
     icon: "CalendarCheck",
     tags: ["writing", "reporting", "teams"],
+    plain: {
+      does: "Pulls together what got done, what is still in progress and what is stuck, and writes a short weekly update.",
+      needs: "Which project or team the update is for. Connect the tools the work happens in (like GitHub) if you want them included.",
+      example: "Write this week's status report for the website project.",
+    },
     content: `# Weekly status report
 
 ## Gather
@@ -100,6 +180,11 @@ Use this shape, and keep it under one screen:
     description: "Use when given a new GitHub issue (or a batch of them) to label, reproduce, prioritize and route.",
     icon: "Bug",
     tags: ["code", "github", "support"],
+    plain: {
+      does: "Reads a new GitHub issue, checks for duplicates, tries to reproduce it, and suggests a label, priority and owner.",
+      needs: "GitHub connected under Connected apps (or the GitHub command-line tool signed in on the helper's device), and the issue to look at.",
+      example: "Triage the newest issues in our app repository.",
+    },
     content: `# Triage a GitHub issue
 
 Needs: the GitHub connector, or the \`gh\` CLI signed in.
@@ -120,6 +205,11 @@ Never promise dates. Be kind to reporters; thank them for detail.`,
     description: "Use when asked to research a question, market, technology or company and come back with a written brief.",
     icon: "Telescope",
     tags: ["research", "writing"],
+    plain: {
+      does: "Researches a question across several sources and writes a one or two page brief with the bottom line first.",
+      needs: "The question, and what decision it will help with. Earlier notes your helper saved are used if they exist.",
+      example: "Research which project tools small design teams use and write me a brief.",
+    },
     content: `# Research brief
 
 1. **Pin the question.** Restate it in one sentence and say what decision it feeds. If that's unclear and matters, ask once.
@@ -154,6 +244,11 @@ Keep it to a page or two. Save it to the vault (shared/research/<topic>.md) and 
     description: "Use when asked to review a pull request or a branch's changes before merging.",
     icon: "GitPullRequest",
     tags: ["code", "github", "review"],
+    plain: {
+      does: "Reads the changes in a pull request, runs the tests if it can, and leaves clear comments marked as must fix or small suggestion.",
+      needs: "The pull request or branch to review, and GitHub connected under Connected apps if it is not pasted in.",
+      example: "Review pull request 128 before we merge it.",
+    },
     content: `# Review a pull request
 
 1. **Understand the intent**: read the description and linked issue. If you can't tell what it's meant to do, ask before reviewing.
@@ -174,7 +269,12 @@ Don't rewrite the author's style to yours. Praise what's genuinely good, briefly
     name: "Summarize a meeting transcript",
     description: "Use when given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.",
     icon: "NotebookPen",
-    tags: ["writing", "meetings"],
+    tags: ["writing", "meetings", "everyday"],
+    plain: {
+      does: "Turns a meeting transcript or rough notes into a short summary with decisions, action items and open questions.",
+      needs: "The transcript or notes, pasted in or attached.",
+      example: "Summarize this meeting transcript and list who needs to do what.",
+    },
     content: `# Meeting summary
 
 From a transcript, produce notes someone who missed the meeting can act on.
@@ -210,6 +310,11 @@ Rules:
     description: "Use when asked to answer a customer email, ticket or review. Drafts for a person to send unless told otherwise.",
     icon: "Mail",
     tags: ["support", "writing"],
+    plain: {
+      does: "Drafts a warm, short reply to a customer email, ticket or review, and leaves it for you to send.",
+      needs: "The customer message. Order or account details help if the answer depends on them.",
+      example: "Draft a reply to this customer who says their order arrived damaged.",
+    },
     content: `# Draft a customer reply
 
 1. **Read the whole thread** and any account history you can see. Work out what they actually want (a fix, a refund, an answer, to be heard).
@@ -230,6 +335,11 @@ Never include internal notes, other customers' data, or secrets in a reply.`,
     description: "Use when asked to fill in and submit a web form (applications, registrations, orders, government or vendor portals).",
     icon: "ClipboardList",
     tags: ["browser", "computer"],
+    plain: {
+      does: "Fills in a form on a website step by step, checks every answer, and stops to ask you before submitting.",
+      needs: "All the details the form needs, and a device or computer the helper can use. You enter passwords, card numbers and codes yourself.",
+      example: "Fill in the vendor registration form on this site using the details I gave you.",
+    },
     content: `# Fill a web form carefully
 
 1. **Collect the data first.** List every field the form will need, and where each value comes from (the request, the vault, a file). Ask for anything missing *before* starting, in one message.
@@ -247,6 +357,11 @@ If anything looks off (a different site than expected, unexpected charges, a fie
     description: "Use when given a messy CSV or spreadsheet to clean: duplicates, inconsistent formats, blanks, bad headers.",
     icon: "Sheet",
     tags: ["data", "spreadsheets"],
+    plain: {
+      does: "Cleans up a messy spreadsheet on a copy: fixes headers and formats, removes duplicates, and lists every change.",
+      needs: "The spreadsheet or CSV file, attached. Your original is never changed.",
+      example: "Clean up this customer list and remove the duplicates.",
+    },
     content: `# Spreadsheet cleanup
 
 1. **Never edit the original.** Work on a copy (name-clean.csv / a new tab).
@@ -269,6 +384,11 @@ Use a script (Python/pandas or similar) for anything over a few hundred rows so 
     description: "Use when asked to write release notes or a changelog for a version, from commits, PRs and tags.",
     icon: "Rocket",
     tags: ["code", "writing", "github"],
+    plain: {
+      does: "Turns a list of code changes into release notes that describe what users can now do or what is fixed.",
+      needs: "Access to the project's change history (GitHub connected under Connected apps), and which versions to cover.",
+      example: "Write release notes for version 2.4 from the changes since 2.3.",
+    },
     content: `# Release notes from commits
 
 1. **Find the range**: the last release tag to the new one (\`git describe --tags --abbrev=0\`, \`git log <prev>..<new> --oneline\`). Include merged PR titles and descriptions where you can.
@@ -295,7 +415,12 @@ Post a draft for review; don't publish or tag without being asked.`,
     name: "Daily inbox digest",
     description: "Use for a daily (or on-demand) digest of new email, messages and notifications: what needs a reply, what can wait.",
     icon: "Inbox",
-    tags: ["email", "routine", "productivity"],
+    tags: ["email", "routine", "productivity", "everyday"],
+    plain: {
+      does: "Reads your new email and messages and sorts them into what needs you today, what can wait, and what to ignore. It never sends or deletes anything.",
+      needs: "Your email connected under Connected apps, or a computer where your mail app is signed in.",
+      example: "Give me a digest of my inbox since yesterday.",
+    },
     content: `# Daily inbox digest
 
 Needs read access to the inbox (an email connector, or the computer with the mail app signed in). Read only: never send, archive or delete unless asked.
@@ -325,6 +450,11 @@ Keep it scannable. Save the date of this digest to the vault so the next one sta
     description: "Use when asked to compare tools, vendors or service providers and recommend one.",
     icon: "Scale",
     tags: ["research", "purchasing"],
+    plain: {
+      does: "Compares tools or providers against your needs, with prices and risks, and recommends one.",
+      needs: "What you need it for, your budget and your must-haves. It does not sign up for anything.",
+      example: "Compare three invoicing tools for a five person business and recommend one.",
+    },
     content: `# Compare vendors
 
 1. **Get the requirements**: must-haves, nice-to-haves, budget, team size, deadline, what we use today. Ask once if key ones are missing.
@@ -354,6 +484,11 @@ Never sign up, start trials or contact sales without asking first.`,
     description: "Use when given bank or card transactions to categorize into the chart of accounts, flagging anything unclear.",
     icon: "Calculator",
     tags: ["finance", "data", "spreadsheets"],
+    plain: {
+      does: "Sorts bank or card transactions into your accounting categories and flags the ones it is unsure about. It moves no money.",
+      needs: "The transactions as a file, and your list of categories if you have one.",
+      example: "Categorize this month's card transactions and flag anything unclear.",
+    },
     content: `# Categorize transactions
 
 1. **Get the chart of accounts** (the categories in use) and last period's categorized file, if any; follow how things were categorized before. Check the vault for a "vendors → category" note.
@@ -371,6 +506,11 @@ This is bookkeeping prep, not tax or financial advice; say so if asked for advic
     description: "Use for a periodic check on competitors: pricing, launches, changelogs, hiring and news.",
     icon: "Radar",
     tags: ["research", "routine", "marketing"],
+    plain: {
+      does: "Checks competitors' public pages for changes in pricing, launches and news, and reports only what changed.",
+      needs: "The list of competitors to watch. It looks at public pages only.",
+      example: "Check what our competitors changed this week.",
+    },
     content: `# Competitor watch
 
 1. Read the list of competitors and what we track from the vault (shared/competitors.md). If there's none, ask for the list and create it.
@@ -392,6 +532,11 @@ Update the snapshot note so next time compares against today. Stay on public pag
     description: "Use when asked to document how to do something: a guide, runbook or README section.",
     icon: "FileText",
     tags: ["writing", "docs"],
+    plain: {
+      does: "Writes a clear step-by-step guide for how to do something, with a troubleshooting section.",
+      needs: "Who the guide is for and the task it covers. Trying the steps itself is only possible if the helper has a device.",
+      example: "Write a guide for new staff on how to set up their work laptop.",
+    },
     content: `# Write a how-to doc
 
 1. **Who and what**: who's reading (new teammate, customer, on-call engineer) and the one task they're trying to finish.
@@ -406,6 +551,9 @@ Update the snapshot note so next time compares against today. Stay on public pag
 5. Save it in the vault where the team looks for docs, and link related notes with [[wikilinks]].`,
   },
 ];
+
+/** Library skills for ordinary life (meals, summaries, messages), shown first for beginners. */
+export const everydaySkills = (): CatalogSkill[] => SKILL_CATALOG.filter((s) => s.tags.includes("everyday"));
 
 export function catalogSkill(id: string): CatalogSkill | undefined {
   return SKILL_CATALOG.find((s) => s.id === id);

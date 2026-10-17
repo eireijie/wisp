@@ -4,7 +4,7 @@ import { harnessInfo, type Actor, type Agent } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go } from "../router.ts";
-import { useDevices } from "../devices.ts";
+import { agentReadiness, useDevices } from "../devices.ts";
 import { AgentAvatar, Button, Field, Input, Loader, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 export interface TaskRow {
@@ -451,6 +451,17 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const picked = agents.find((a) => a.id === to);
+  const devices = useDevices();
+  const solo = agents.length === 1 ? agents[0]! : null;
+  // who ends up with it, when that is a single agent (not a team)
+  const taker = solo ?? (to === "auto" ? lead : picked);
+  const readiness = taker ? agentReadiness(taker, devices) : { ready: true, problem: null };
+  const takerDevice = taker?.nodeId ? devices?.find((d) => d.id === taker.nodeId) : undefined;
+  const waitNote = !readiness.ready && taker?.nodeId && takerDevice && (!takerDevice.online || takerDevice.paused)
+    ? `It'll wait until ${takerDevice.name} is connected.`
+    : !readiness.ready && taker && !taker.nodeId
+      ? "It'll wait until this agent has a device."
+      : null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -482,6 +493,9 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
           <Field label="Details (optional)" hint="Links, what done looks like, anything it shouldn't do.">
             <Textarea rows={4} value={brief} onChange={(e) => setBrief(e.target.value)} />
           </Field>
+          {solo ? (
+            <p className="text-sm">{solo.name} will do this.</p>
+          ) : (
           <div>
             <div className="text-sm font-medium mb-1.5">Who takes it?</div>
             <Chip selected={to === "auto"} onClick={() => setTo("auto")}>
@@ -517,6 +531,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
                       : ""}
             </p>
           </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink cursor-pointer">
               <Paperclip size={15} /> Attach files
@@ -532,12 +547,17 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
             ))}
           </div>
           {error && <p className="text-sm text-bad">{error}</p>}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {waitNote && (
+              <p className="text-xs text-warn mr-auto flex gap-1.5 items-center">
+                <WifiOff size={13} className="shrink-0" /> {waitNote}
+              </p>
+            )}
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
             <Button variant="primary" disabled={busy || !title.trim()}>
-              {busy && <Loader2 size={15} className="animate-spin" />} {to === "auto" ? `Send to ${lead.name}` : "Hand it off"}
+              {busy && <Loader2 size={15} className="animate-spin" />} {solo || to === "auto" ? `Send to ${(solo ?? lead).name}` : "Hand it off"}
             </Button>
           </div>
         </form>

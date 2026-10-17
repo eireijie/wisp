@@ -6,9 +6,9 @@ import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { STEPS, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
+import { STEPS, isLocalOnlyHost, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
 import { useDesktopInfo } from "../desktop.ts";
-import { setExperience, type Experience } from "../experience.tsx";
+import { Advanced, setExperience, useSimple, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
@@ -400,16 +400,22 @@ function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
     <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
       <p className="text-sm font-medium">Easiest: download Warren for Mac</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <a className="font-medium underline" href={DMG}>Download for Apple silicon</a>
+        <a className="font-medium underline" href={DMG}>Download for this Mac</a>
         <a className="text-muted underline" href="https://github.com/eireijie/warren/releases" target="_blank" rel="noreferrer">All releases</a>
       </div>
+      <p className="text-xs text-muted">Apple silicon means a Mac from 2020 on with an M1, M2, M3 or M4 chip; older Intel Macs aren't supported yet.</p>
       <p className="text-sm text-muted">Then open it and choose “Join a server” with this address:</p>
+      <p className="text-xs text-muted">A server is just this Warren; the address below is where it lives.</p>
       <CopyBlock text={hub} />
+      {typeof window !== "undefined" && isLocalOnlyHost(window.location.hostname) && (
+        <p className="text-xs text-muted">This address only works on this computer. On another computer, use this Mac's network address instead (shown in Settings → Updates &amp; about if available; otherwise ask the person who set Warren up).</p>
+      )}
     </div>
   );
 }
 
 function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]; device: DeviceInfo | undefined; onPick: (id: string) => void; onNext: (id: string) => void }) {
+  const simple = useSimple();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState(guessName);
   const [created, setCreated] = useState<{ id: string; name: string; token: string } | null>(null);
@@ -458,7 +464,17 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
   if (adding || !usable.length)
     return (
       <>
-        <Heading title="Where will your agents live?">A computer that can stay on: this one, a home server, a desktop. It connects out to Warren, so it works behind routers and firewalls.</Heading>
+        {simple ? (
+          <>
+            <Heading title="Where will your helpers live?">A computer that can stay on, like this one. Warren runs there so your helpers can work.</Heading>
+            <Advanced title="How it connects" className="-mt-6 mb-6 text-center">
+              <p className="text-sm text-muted">It connects out to Warren, so it works behind routers and firewalls.</p>
+              {onHub() && <p className="mt-2 text-sm text-muted">Running Warren on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
+            </Advanced>
+          </>
+        ) : (
+          <Heading title="Where will your agents live?">A computer that can stay on: this one, a home server, a desktop. It connects out to Warren, so it works behind routers and firewalls.</Heading>
+        )}
         <label className="block space-y-2">
           <span className="text-sm font-medium">Name this device</span>
           <input
@@ -474,7 +490,7 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
             }}
           />
         </label>
-        {onHub() && <p className="mt-3 text-sm text-muted">Running Warren on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
+        {!simple && onHub() && <p className="mt-3 text-sm text-muted">Running Warren on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
         {error && <p className="mt-3 text-sm text-bad">{error}</p>}
         <Footer onBack={usable.length ? () => setAdding(false) : undefined} label="Continue" busy={busy} disabled={!name.trim()} onNext={create} />
       </>

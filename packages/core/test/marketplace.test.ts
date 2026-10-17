@@ -64,4 +64,25 @@ describe("rankMarketplace", () => {
     const none = entry({ name: "io.github.domdomegg/gmail-mcp", title: "Gmail", ...remote("https://x.example/mcp") });
     expect(rankMarketplace([none, third, maker], "gmail").map((e) => e.id)).toEqual([maker.id, third.id, none.id]);
   });
+
+  it("ranks a name match above a verified listing that only mentions the app in its description", () => {
+    const mention = entry({ name: "com.example/mail-tools", title: "Mail tools", description: "Works with gmail and more", ...remote("https://mcp.example.com/mcp") });
+    const named = entry({ name: "io.github.someone/gmail-mcp", title: "Gmail", ...remote("https://x.example/mcp") });
+    expect(mention.verified).toBe(true);
+    expect(named.verified).toBe(false);
+    expect(rankMarketplace([mention, named], "gmail").map((e) => e.id)).toEqual([named.id, mention.id]);
+  });
+
+  it("ranks a whole-word name match above a substring match, even a verified one", () => {
+    const sub = entry({ name: "dev.shveik/agmail", title: "Agmail", ...remote("https://agmail.shveik.dev/mcp") });
+    const word = entry({ name: "io.github.x/gmail-tools", title: "Gmail tools", ...remote("https://x.example/mcp") });
+    expect(sub.verified).toBe(true);
+    expect(rankMarketplace([sub, word], "gmail").map((e) => e.id)).toEqual([word.id, sub.id]);
+  });
+
+  it("matches across spaces and dashes", () => {
+    const hit = entry({ name: "io.github.x/google-calendar", title: "Calendar helper", ...remote("https://x.example/mcp") });
+    const miss = entry({ name: "com.example/other", title: "Other", description: "google calendar too", ...remote("https://mcp.example.com/mcp") });
+    expect(rankMarketplace([miss, hit], "google calendar")[0].id).toBe(hit.id);
+  });
 });

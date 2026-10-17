@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Brain, Check, ChevronLeft, ExternalLink, Pencil, Pin, PinOff, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Brain, Check, ChevronLeft, ExternalLink, Pencil, Pin, PinOff, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
@@ -49,7 +49,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [due, setDue] = useState("");
-  const [first, setFirst] = useState("");
+  const [addKind, setAddKind] = useState<Kind>("preference");
 
   const load = useCallback(() => api<Profile>("GET", `/api/memory/profile?user=${encodeURIComponent(userId)}`).then(setProfile, (e) => setError(e.message)), [userId]);
   useEffect(() => {
@@ -133,20 +133,39 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
             .
           </p>
 
-          {profile && profile.items.length === 0 && canEdit && isMe && (
+          {canEdit && (
             <form
-              className="rounded-xl border border-line p-4 space-y-2"
+              className="flex flex-wrap gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!first.trim()) return;
-                if (await remember({ kind: "preference", text: first.trim() })) setFirst("");
+                if (!draft.trim()) return;
+                if (await remember({ kind: addKind, text: draft.trim(), ...(addKind === "plan" && due ? { due } : {}) })) {
+                  setDraft("");
+                  setDue("");
+                }
               }}
             >
-              <label htmlFor="about-first" className="block text-sm font-medium">
-                What would you like your helper to remember?
-              </label>
-              <Textarea id="about-first" rows={2} value={first} onChange={(e) => setFirst(e.target.value)} placeholder="I like short answers with an example" />
-              <Button variant="primary" disabled={!first.trim()}>
+              <Input
+                className="flex-1 min-w-48"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={isMe ? "What would you like your helper to remember? e.g. I like short answers with an example" : TABS.find((t) => t.kind === addKind)!.add}
+                aria-label="What would you like your helper to remember?"
+              />
+              <select
+                value={addKind}
+                onChange={(e) => setAddKind(e.target.value as Kind)}
+                aria-label="Category"
+                className="h-9 rounded-lg border border-line bg-panel px-2 text-sm"
+              >
+                {TABS.map((t) => (
+                  <option key={t.kind} value={t.kind}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              {addKind === "plan" && <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-40" aria-label="Due date" />}
+              <Button variant="primary" disabled={!draft.trim()}>
                 Remember this
               </Button>
             </form>
@@ -158,7 +177,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
                 key={t.kind}
                 role="tab"
                 aria-selected={tab === t.kind}
-                onClick={() => setTab(t.kind)}
+                onClick={() => { setTab(t.kind); setAddKind(t.kind); }}
                 className={cx("h-8 px-3 rounded-lg text-sm whitespace-nowrap", tab === t.kind ? "bg-hover text-ink font-medium" : "text-muted hover:text-ink")}
               >
                 {t.label}
@@ -167,25 +186,6 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
             ))}
           </div>
 
-          {canEdit && (
-            <form
-              className="flex gap-2"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!draft.trim()) return;
-                if (await remember({ kind: tab, text: draft.trim(), ...(tab === "plan" && due ? { due } : {}) })) {
-                  setDraft("");
-                  setDue("");
-                }
-              }}
-            >
-              <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={current.add} aria-label={`Add to ${current.label}`} />
-              {tab === "plan" && <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-40" aria-label="Due date" />}
-              <Button variant="primary" disabled={!draft.trim()}>
-                <Plus size={15} /> Add
-              </Button>
-            </form>
-          )}
           {error && <p className="text-sm text-bad">{error}</p>}
 
           {!profile ? (

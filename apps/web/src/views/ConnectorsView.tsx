@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BadgeCheck, ExternalLink, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, Server, ShieldQuestion, Trash2 } from "lucide-react";
-import { CONNECTOR_CATALOG, catalogConnector, harnessInfo, isMasked, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
+import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, everydayAppFor, everydayFirst, harnessSupportsConnectors, isMasked, type EverydayApp, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Button, Field, Input, Loader, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
@@ -90,21 +90,39 @@ function missingOn(a: Agent, command: string, devices: DeviceInfo[] | null): Dev
   return bin && d?.capabilities?.commands && d.capabilities.commands[bin] === false ? d : null;
 }
 
-/** Why a connector won't reach this agent, if it won't. */
+/** Why a connector won't reach this agent, if it won't (or may not start). */
 function agentNote(kind: ConnectorKind, command: string, devices: DeviceInfo[] | null) {
   return (a: Agent) => {
-    const h = harnessInfo(a.harness);
-    const protocol = h?.protocol ?? (a.harness.startsWith("acp:") ? "acp" : "mcp");
-    if (protocol === "mcp") return "joins through warren-mcp; add it there";
-    if (protocol === "acp" && kind === "mcp-http") return "not wired yet for this harness";
+    const why = connectorUnsupportedReason(a.harness, kind);
+    if (why) return why;
     const device = kind === "mcp-stdio" ? missingOn(a, command, devices) : null;
     if (device) return `${device.name} doesn't have ${command.trim().split(/\s+/)[0]}`;
     return null;
   };
 }
 
+/** True when there are agents but none that would get this connector could use it. */
+export function connectBlocked(agents: Pick<Agent, "id" | "harness">[], agentIds: string[], kind: ConnectorKind): boolean {
+  if (!agents.length) return false;
+  const chosen = agentIds.length ? agents.filter((a) => agentIds.includes(a.id)) : agents;
+  return !chosen.some((a) => harnessSupportsConnectors(a.harness, kind));
+}
+
+/** The catalog as listed: Simple shows everyday apps first. */
+export function catalogFor(simple: boolean, category: string, list: CatalogConnector[] = CONNECTOR_CATALOG): CatalogConnector[] {
+  const inCat = list.filter((c) => category === "All" || c.category === category);
+  return simple ? everydayFirst(inCat) : inCat;
+}
+
+/** The registry results with the recommended option first (Zapier, for apps that go through it). */
+export function recommendedFirst(entries: MarketplaceEntry[], zapier: MarketplaceEntry | null, app: EverydayApp | null): MarketplaceEntry[] {
+  if (!app || app.catalogId || !zapier) return entries;
+  return [zapier, ...entries.filter((e) => e.id !== zapier.id)];
+}
+
 const ZAPIER_ID = "com.zapier/mcp";
 const CATEGORIES = ["All", ...new Set(CONNECTOR_CATALOG.map((c) => c.category))];
+const SIMPLE_CATEGORIES = ["All", ...new Set(everydayFirst(CONNECTOR_CATALOG).map((c) => c.category))];
 
 /**
  * Connectors: MCP servers agents can call (on their device, or remote) and keys they need for
@@ -177,7 +195,40 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
   const needle = q.trim().toLowerCase();
   const match = (...s: (string | null | undefined)[]) => !needle || s.some((x) => x?.toLowerCase().includes(needle));
   const connected = (list ?? []).filter((c) => match(c.name, c.url, c.command, catalogConnector(c.catalogId ?? "")?.description));
-  const catalog = CONNECTOR_CATALOG.filter((c) => (category === "All" || c.category === category) && match(c.name, c.description, c.category));
+  const catalog = catalogFor(simple, category).filter((c) => match(c.name, c.description, c.category));
+  const everyday = q.trim() ? everydayAppFor(q) : null;
+  const builtInFor = everyday?.catalogId ? catalogConnector(everyday.catalogId) : undefined;
+  const marketCard = (e: MarketplaceEntry) => <MarketCard key={e.id} e={e} added={(list ?? []).some((c) => c.catalogId === `registry:${e.id}`)} canEdit={canEdit} onAdd={() => setAdding(e)} />;
+  const catalogCard = (c: CatalogConnector, label = "Built in") => <CatalogCard key={c.id} c={c} label={label} added={countFor(c.id) > 0} canEdit={canEdit} onAdd={() => setForm({ entry: c })} />;
+  const registryGrid = (entries: MarketplaceEntry[], lead?: ReactNode) => (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">
+        {q.trim() ? (
+          <>Results from the MCP Registry. Servers whose publisher is verified come first. "Made by" means the app's own company publishes it; "Verified publisher" only means the registry confirmed who published it.</>
+        ) : (
+          <>Popular servers from the MCP Registry. Search to find any of its thousands more. Zapier connects thousands more apps, like Gmail, Google Calendar, Drive and Todoist, with one sign-in.</>
+        )}
+      </p>
+      {market.error && (
+        <p className="text-sm text-bad flex items-center gap-2">
+          {market.error}
+          <Button className="h-7" onClick={() => setRetry((n) => n + 1)}>
+            Try again
+          </Button>
+        </p>
+      )}
+      {market.entries === null ? (
+        <Loader />
+      ) : entries.length === 0 && !lead ? (
+        !market.error && <p className="text-sm text-muted py-6 text-center">Nothing in the registry matches "{q}".{simple ? "" : " You can still add your own."}</p>
+      ) : (
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {lead}
+          {entries.map(marketCard)}
+        </div>
+      )}
+    </div>
+  );
   const countFor = (id: string) => (list ?? []).filter((c) => c.catalogId === id).length;
 
   async function act(p: Promise<unknown>) {
@@ -233,70 +284,68 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
             )}
           </section>
 
-          {simple && zapier && (
+          {simple && everyday && (
+            <>
+              <section aria-labelledby="recommended-h" className="space-y-2">
+                <h2 id="recommended-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Recommended way to connect {everyday.name}
+                </h2>
+                <p className="text-sm text-muted">{everyday.does}</p>
+                <p className="text-sm text-muted">Needs: {everyday.account}</p>
+                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{builtInFor ? catalogCard(builtInFor) : zapier ? marketCard(zapier) : <Loader />}</div>
+              </section>
+              <section aria-labelledby="other-ways-h" className="space-y-2">
+                <h2 id="other-ways-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                  Other ways
+                </h2>
+                <Advanced title="Other servers from the registry">{registryGrid((market.entries ?? []).filter((e) => e.id !== ZAPIER_ID))}</Advanced>
+              </section>
+            </>
+          )}
+          {simple && !everyday && zapier && (
             <section aria-labelledby="recommended-h" className="space-y-2">
               <h2 id="recommended-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
                 Recommended for most people
               </h2>
               <p className="text-sm text-muted">One sign-in with Zapier connects Gmail, Google Calendar, Drive, Todoist and thousands more apps.</p>
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                <MarketCard e={zapier} added={(list ?? []).some((c) => c.catalogId === `registry:${zapier.id}`)} canEdit={canEdit} onAdd={() => setAdding(zapier)} />
-              </div>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{marketCard(zapier)}</div>
             </section>
           )}
 
-          <div className="flex items-center gap-1 border-b border-line">
-            {(
-              [
-                ["marketplace", "Marketplace"],
-                ["catalog", "Warren's catalog"],
-              ] as const
-            ).map(([id, label]) => (
-              <button key={id} onClick={() => setTab(id)} className={cx("h-9 px-3 -mb-px border-b-2 text-sm", tab === id ? "border-accent text-ink font-medium" : "border-transparent text-muted hover:text-ink")}>
-                {label}
-              </button>
-            ))}
-          </div>
+          {!(simple && everyday) && (
+            <div className="flex items-center gap-1 border-b border-line">
+              {(
+                [
+                  ["marketplace", "Marketplace"],
+                  ["catalog", "Warren's catalog"],
+                ] as const
+              ).map(([id, label]) => (
+                <button key={id} onClick={() => setTab(id)} className={cx("h-9 px-3 -mb-px border-b-2 text-sm", tab === id ? "border-accent text-ink font-medium" : "border-transparent text-muted hover:text-ink")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {tab === "marketplace" && (
+          {!(simple && everyday) && tab === "marketplace" && (
             <section aria-label="Marketplace" className="space-y-3">
-              <p className="text-xs text-muted">
-                {q.trim() ? (
-                  <>Results from the MCP Registry. Servers whose publisher is verified come first. "Made by" means the app's own company publishes it; "Verified publisher" only means the registry confirmed who published it.</>
-                ) : (
-                  <>Popular servers from the MCP Registry. Search to find any of its thousands more. Zapier connects thousands more apps, like Gmail, Google Calendar, Drive and Todoist, with one sign-in.</>
-                )}
-              </p>
-              {market.error && (
-                <p className="text-sm text-bad flex items-center gap-2">
-                  {market.error}
-                  <Button className="h-7" onClick={() => setRetry((n) => n + 1)}>
-                    Try again
-                  </Button>
+              {everyday && (
+                <p className="text-sm">
+                  Recommended for {everyday.name}: {builtInFor ? "Warren's built-in connector." : "Zapier, which connects it with one sign-in."}
                 </p>
               )}
-              {market.entries === null ? (
-                <Loader />
-              ) : market.entries.length === 0 ? (
-                !market.error && <p className="text-sm text-muted py-6 text-center">Nothing in the registry matches "{q}".{simple ? "" : " You can still add your own."}</p>
-              ) : (
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {market.entries.map((e) => (
-                    <MarketCard key={e.id} e={e} added={(list ?? []).some((c) => c.catalogId === `registry:${e.id}`)} canEdit={canEdit} onAdd={() => setAdding(e)} />
-                  ))}
-                </div>
-              )}
+              {registryGrid(recommendedFirst(market.entries ?? [], zapier, everyday), builtInFor ? catalogCard(builtInFor) : undefined)}
             </section>
           )}
 
-          {tab === "catalog" && (
+          {!(simple && everyday) && tab === "catalog" && (
           <section aria-labelledby="catalog-h">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
               <h2 id="catalog-h" className="text-xs text-muted flex-1">
                 Ones Warren knows well, with what each needs.
               </h2>
               <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
-                {CATEGORIES.map((cat) => (
+                {(simple ? SIMPLE_CATEGORIES : CATEGORIES).map((cat) => (
                   <button key={cat} onClick={() => setCategory(cat)} className={cx("h-7 px-2.5 rounded-full text-xs whitespace-nowrap border", category === cat ? "bg-accent text-accent-ink border-transparent" : "border-line text-muted hover:text-ink hover:bg-hover")}>
                     {cat}
                   </button>
@@ -306,36 +355,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
             {catalog.length === 0 ? (
               <p className="text-sm text-muted py-6 text-center">Nothing in the catalog matches.{simple ? "" : " You can still add your own."}</p>
             ) : (
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {catalog.map((c) => (
-                  <div key={c.id} className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
-                    <div className="flex items-start gap-3">
-                      <IconTile>
-                        <CatalogIcon name={c.icon} />
-                      </IconTile>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold truncate">{c.name}</div>
-                        <div className="text-[11px] text-muted">Built in · {KIND_LABEL[c.kind]}</div>
-                      </div>
-                      {countFor(c.id) > 0 && <Pill tone="ok">Added</Pill>}
-                    </div>
-                    <p className="text-sm text-muted flex-1">{c.description}</p>
-                    <div className="flex items-center gap-2">
-                      {c.docs && (
-                        <a href={c.docs} target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-ink inline-flex items-center gap-1">
-                          Docs <ExternalLink size={11} />
-                        </a>
-                      )}
-                      <span className="flex-1" />
-                      {canEdit && (
-                        <Button className="h-8" onClick={() => setForm({ entry: c })}>
-                          <Plus size={14} /> Add
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{catalog.map((c) => catalogCard(c))}</div>
             )}
           </section>
           )}
@@ -361,6 +381,37 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
           onSaved={afterSave}
         />
       )}
+    </div>
+  );
+}
+
+function CatalogCard({ c, label, added, canEdit, onAdd }: { c: CatalogConnector; label: string; added: boolean; canEdit: boolean; onAdd: () => void }) {
+  return (
+    <div className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
+      <div className="flex items-start gap-3">
+        <IconTile>
+          <CatalogIcon name={c.icon} />
+        </IconTile>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold truncate">{c.name}</div>
+          <div className="text-[11px] text-muted">{label} · {KIND_LABEL[c.kind]}</div>
+        </div>
+        {added && <Pill tone="ok">Added</Pill>}
+      </div>
+      <p className="text-sm text-muted flex-1">{c.description}</p>
+      <div className="flex items-center gap-2">
+        {c.docs && (
+          <a href={c.docs} target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-ink inline-flex items-center gap-1">
+            Docs <ExternalLink size={11} />
+          </a>
+        )}
+        <span className="flex-1" />
+        {canEdit && (
+          <Button className="h-8" onClick={onAdd}>
+            <Plus size={14} /> Add
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -446,7 +497,15 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
     const all = [...fromFields, ...extra];
     return all.length || entry ? all : [{ key: "", value: "" }];
   });
-  const [agentIds, setAgentIds] = useState<string[]>(existing?.agentIds ?? (agents.length === 1 ? [agents[0].id] : []));
+  const [agentIds, setAgentIds] = useState<string[]>(existing?.agentIds ?? (agents.length === 1 && harnessSupportsConnectors(agents[0].harness, existing?.kind ?? entry?.kind ?? "mcp-stdio") ? [agents[0].id] : []));
+  // a different kind (custom form) can rule out agents that were ticked
+  useEffect(() => {
+    if (existing) return;
+    setAgentIds((ids) => {
+      const keep = ids.filter((id) => { const a = agents.find((x) => x.id === id); return !a || harnessSupportsConnectors(a.harness, kind); });
+      return keep.length === ids.length ? ids : keep;
+    });
+  }, [kind]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const custom = !entry;
@@ -454,6 +513,7 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
   const [showAdvanced, setShowAdvanced] = useState(custom);
   const devices = useDevices(10_000);
 
+  const blocked = !existing && connectBlocked(agents, agentIds, kind);
   const nameTaken = taken.includes(name.trim().toLowerCase());
   const missing = rows.filter((r) => r.field && !r.field.optional && !r.value.trim() && !r.saved).map((r) => r.field!.label);
   // asked of each chosen agent's device before connecting, so a connector that can't start is caught here, not in a failed run
@@ -610,9 +670,11 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
         )}
 
         <Group label="Which agents get it">
-          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} />
+          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} unavailable={(a) => !harnessSupportsConnectors(a.harness, kind)} />
         </Group>
-        <p className="text-xs text-muted">{worksWith(kind)}</p>
+        <Advanced hide>
+          <p className="text-xs text-muted">{worksWith(kind)}</p>
+        </Advanced>
         {cantStart.map((w) => (
           <p key={w} role="alert" className="text-sm text-warn rounded-lg border border-warn/40 bg-warn/10 px-3 py-2">
             {w} You can still connect it; it starts working once the command is there.
@@ -621,11 +683,16 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
 
         {summary && <BeforeYouConnect s={summary} />}
         {error && <p className="text-sm text-bad">{error}</p>}
+        {blocked && (
+          <p role="status" className="text-sm text-warn">
+            {CONNECTOR_HELP}
+          </p>
+        )}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={busy || !name.trim() || nameTaken || missing.length > 0} title={missing.length ? `Needs: ${missing.join(", ")}` : undefined}>
+          <Button variant="primary" disabled={busy || !name.trim() || nameTaken || missing.length > 0 || blocked} title={blocked ? CONNECTOR_HELP : missing.length ? `Needs: ${missing.join(", ")}` : undefined}>
             {existing ? "Save" : kind === "mcp-http" && !rows.length ? "Connect and sign in" : "Connect"}
           </Button>
         </div>

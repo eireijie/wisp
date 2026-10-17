@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, ShieldQuestion, Users } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, Plus, ShieldQuestion, Users } from "lucide-react";
 import type { Actor, Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type LiveRun } from "../store.ts";
@@ -7,7 +7,7 @@ import { go, href } from "../router.ts";
 import { AgentAvatar, Button, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
 import { NEXT_STEP, homeReadiness, useOnboarding } from "../onboarding.ts";
-import { useDevices } from "../devices.ts";
+import { agentReadiness, useDevices } from "../devices.ts";
 import { openDm as openHelperDm } from "../openDm.ts";
 import { setupNextStep } from "../components/AgentPanel.tsx";
 
@@ -126,11 +126,17 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             {busyCount} working · {onlineCount} online · {plural(agents.length, "agent")}
           </span>
         )}
+        {/* phones have no sidebar button for this, so start a task from here */}
+        {!isGuest && agents.length > 0 && (
+          <Button variant="primary" className="md:hidden" onClick={() => useStore.setState({ newTaskOpen: true })}>
+            <Plus size={16} /> New task
+          </Button>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 md:p-6 space-y-8 max-w-6xl">
-          {simple && !isGuest && <ReadinessCard />}
+          {!isGuest && <ReadinessCard advanced={!simple} />}
 
           {!isGuest && pending.length + helpNeeded.length > 0 && (
             <Section title="Waiting on you" count={pending.length + helpNeeded.length}>
@@ -316,13 +322,21 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
 }
 
 /** Simple mode's lead card: finish setup, see what a helper is waiting on, or try a first question. */
-function ReadinessCard() {
+function ReadinessCard({ advanced }: { advanced?: boolean }) {
   const agents = useStore((s) => s.agents);
   const { done } = useOnboarding();
   const devices = useDevices();
   // devices are null while loading; show a quiet placeholder instead of guessing a state
-  if (devices === null) return <div className="h-24 rounded-xl border border-line bg-chip animate-pulse" aria-hidden />;
-  const r = homeReadiness(done, agents, devices);
+  if (devices === null) return advanced ? null : <div className="h-24 rounded-xl border border-line bg-chip animate-pulse" aria-hidden />;
+  let r: ReturnType<typeof homeReadiness<Agent>> = homeReadiness(done, agents, devices);
+  if (advanced) {
+    // Advanced only needs this when something is wrong: setup unfinished, or any helper not ready
+    if (r.kind === "ready") {
+      const bad = agents.map((agent) => ({ agent, ...agentReadiness(agent, devices) })).find((x) => !x.ready);
+      if (!bad) return null;
+      r = { kind: "waiting", agent: bad.agent, problem: bad.problem ?? "Not ready yet", deviceName: devices.find((d) => d.id === bad.agent.nodeId)?.name ?? null };
+    }
+  }
 
   const box = "rounded-xl border border-line bg-accent-soft p-4 space-y-3";
   if (r.kind === "setup") {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONNECTOR_CATALOG, type MarketplaceEntry, type MarketplaceInstall } from "@warren/core";
-import { connectSummary } from "../src/views/ConnectorsView.tsx";
+import { CONNECTOR_CATALOG, everydayAppFor, type MarketplaceEntry, type MarketplaceInstall } from "@warren/core";
+import { connectBlocked, catalogFor, connectSummary, recommendedFirst } from "../src/views/ConnectorsView.tsx";
 
 vi.mock("../src/api.ts", () => ({ api: vi.fn() }));
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
@@ -37,5 +37,46 @@ describe("connectSummary", () => {
     expect(connectSummary({ builtIn: stdio }).runBy).toContain("own computer");
     expect(connectSummary({ builtIn: secret }).can).toContain("key");
     expect(connectSummary({ builtIn: http }).caution).toBeNull();
+  });
+});
+
+describe("connectBlocked", () => {
+  const gem = { id: "g", harness: "acp:gemini" };
+  const cod = { id: "c", harness: "codex" };
+  it("blocks when the only checked agent can't use a remote connector", () => {
+    expect(connectBlocked([gem], ["g"], "mcp-http")).toBe(true);
+  });
+  it("allows a supported agent, and an ACP agent for a local server", () => {
+    expect(connectBlocked([cod], ["c"], "mcp-http")).toBe(false);
+    expect(connectBlocked([gem], ["g"], "mcp-stdio")).toBe(false);
+  });
+  it("with nothing checked, depends on whether any agent can use it", () => {
+    expect(connectBlocked([gem, cod], [], "mcp-http")).toBe(false);
+    expect(connectBlocked([gem], [], "mcp-http")).toBe(true);
+    expect(connectBlocked([], [], "mcp-http")).toBe(false);
+  });
+});
+
+describe("recommendedFirst", () => {
+  const z = entry({});
+  const other = entry({ id: "io.x/y", name: "Other" });
+  it("puts Zapier first for an app that goes through it", () => {
+    expect(recommendedFirst([other, z], z, everydayAppFor("gmail")).map((e) => e.id)).toEqual([z.id, "io.x/y"]);
+    expect(recommendedFirst([other], z, everydayAppFor("gmail")).map((e) => e.id)).toEqual([z.id, "io.x/y"]);
+  });
+  it("leaves the order for built-in apps and no match", () => {
+    expect(recommendedFirst([other, z], z, everydayAppFor("slack"))).toEqual([other, z]);
+    expect(recommendedFirst([other, z], z, null)).toEqual([other, z]);
+  });
+});
+
+describe("catalogFor", () => {
+  it("lists everyday apps first in Simple", () => {
+    const ids = catalogFor(true, "All").map((c) => c.id);
+    expect(ids.slice(0, 3)).toEqual(["slack", "notion", "gdrive"]);
+    expect(ids.indexOf("github")).toBeGreaterThan(2);
+  });
+  it("keeps the catalog order in Advanced", () => {
+    expect(catalogFor(false, "All").map((c) => c.id)).toEqual(CONNECTOR_CATALOG.map((c) => c.id));
   });
 });

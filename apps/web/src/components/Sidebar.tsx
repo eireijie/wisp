@@ -274,6 +274,9 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
             <Item href={href({ view: "help" })} active={route.view === "help"} title="Answers, setup, and what words mean">
               <LifeBuoy size={16} className="shrink-0" /> Help
             </Item>
+            <Item href={href({ view: "settings", page: "general" })} active={route.view === "settings"} title="Workspace, people and app settings">
+              <Settings size={16} className="shrink-0" /> Settings
+            </Item>
           </Group>
         )}
 

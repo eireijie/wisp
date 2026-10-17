@@ -37,7 +37,8 @@ const GLOSSARY: [string, string, { label: string; to: string }?][] = [
   ["Routine", "A job a helper does on its own, on a schedule or when something happens."],
   ["Team", "A group of helpers that work on something together.", { label: "Open Teams", to: href({ view: "teams", teamId: null }) }],
   ["Connected app", "A service you link to Warren, like Gmail, so helpers can use it for you."],
-  ["Token", "A unit AI services use to measure and charge for work. More text means more tokens."],
+  ["Connection code (token)", "A one-time code that links a computer to this Warren. It's shown once when you add a device."],
+  ["AI tokens", "How AI services measure and charge for work: more text, more tokens."],
 ];
 
 const linkClass = "text-accent-text hover:underline rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40";

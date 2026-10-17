@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { connectionLine, screenLine } from "../src/views/NodesView.tsx";
+import { connectionLine, isLocalOnlyHost, notConnectedLine, screenLine } from "../src/views/NodesView.tsx";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 
@@ -31,5 +31,17 @@ describe("screenLine", () => {
   });
   it("says not checked yet when online but nothing reported", () => {
     expect(screenLine({ online: true, capabilities: null })).toBe("Its screen: not checked yet.");
+  });
+});
+
+describe("notConnectedLine", () => {
+  it("distinguishes never connected from offline", () => {
+    expect(notConnectedLine({ online: false, lastSeen: null })).toBe("This device hasn't connected yet.");
+    expect(notConnectedLine({ online: false, lastSeen: "x" })).toBe("This device was connected before but is offline now.");
+    expect(notConnectedLine({ online: true, lastSeen: "x" })).toBeNull();
+  });
+  it("knows local-only hosts", () => {
+    expect(isLocalOnlyHost("localhost")).toBe(true);
+    expect(isLocalOnlyHost("warren.example.com")).toBe(false);
   });
 });
