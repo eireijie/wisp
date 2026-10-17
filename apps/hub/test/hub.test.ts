@@ -5,6 +5,7 @@ import path from "node:path";
 import WebSocket from "ws";
 import type { HubToNode, Message, NodeToHub } from "@warren/core";
 import Database from "better-sqlite3";
+import { fileName, limitParam } from "../src/api.ts";
 import { buildHub } from "../src/app.ts";
 import { openDb } from "../src/db.ts";
 import type { Hub } from "../src/hub.ts";
@@ -41,10 +42,11 @@ async function clientSocket(sessionToken: string): Promise<{ events: any[]; clos
   return { events, close: () => ws.close() };
 }
 
-/** A scripted fake node: answers every run with `reply(prompt)`; a reply starting with "FAIL:" fails the run with the rest as the error. */
+/** A scripted fake node: answers every run with `reply(prompt)`; a reply starting with "FAIL:" fails the run with the rest as the error, and "HOLD:" leaves the run open (`held`) for the test to finish. */
 class FakeNode {
   ws!: WebSocket;
   runs: HubToNode[] = [];
+  held: string[] = [];
   constructor(
     readonly token: string,
     readonly reply: (prompt: string, agentId: string) => string,
@@ -65,6 +67,10 @@ class FakeNode {
         if (msg.type === "run") {
           this.runs.push(msg);
           const text = this.reply(msg.run.prompt, msg.run.agentId);
+          if (text.startsWith("HOLD:")) {
+            this.held.push(msg.run.runId);
+            return;
+          }
           if (text.startsWith("FAIL:")) {
             this.send({ type: "run_failed", runId: msg.run.runId, error: text.slice(5) });
             return;
@@ -119,6 +125,7 @@ beforeAll(async () => {
 
   node = new FakeNode(nodeToken, (prompt, agentId) => {
     const last = prompt.split("\n").pop()!;
+    if (last.includes("hold on")) return "HOLD:";
     if (agentId === atlas.id && last.includes("ask nova")) return "@nova can you check the build?";
     if (agentId === atlas.id && last.includes("loop")) return "@nova loop";
     if (agentId === nova.id && last.includes("loop")) return "@atlas loop";
@@ -563,6 +570,27 @@ describe("discussions", () => {
     const thread = await channelMessagesIn(started.data.channelId, started.data.threadId);
     const notices = thread.flatMap((m) => m.parts.filter((p) => p.type === "notice").map((p) => (p as { text: string }).text));
     expect(notices).toEqual(["Round 1 of 2", "Round 2 of 2", "@atlas is writing up the decision", `Decision saved to ${done.decisionPath}`]);
+  });
+
+  it("goes on without a participant whose device is offline, and stops when nobody is there", async () => {
+    const notices = async (d: { channelId: string; threadId: string }) => (await channelMessagesIn(d.channelId, d.threadId)).flatMap((m) => m.parts.filter((p) => p.type === "notice").map((p) => (p as { text: string }).text));
+    // no device at all: as offline as it gets
+    const dozy = (await api("POST", "/api/agents", { handle: "dozy", name: "Dozy", harness: "codex" })).data;
+    const d = (await api<any>("POST", "/api/discussions", { topic: "Lunch", participants: ["@nova", "@dozy"], moderator: "@dozy", rounds: 1 })).data;
+    const done = await waitFor(async () => {
+      const x = (await api<any>("GET", `/api/discussions/${d.id}`)).data;
+      return x.status === "done" ? x : undefined;
+    }, 6000);
+    expect(done.moderatorId).toBe(nova.id);
+    expect(await notices(d)).toEqual(["Round 1 of 1 (@dozy is offline and sits this round out)", "@nova is writing up the decision instead of @dozy, who is offline", `Decision saved to ${done.decisionPath}`]);
+    expect(runsFor(d.threadId).every((r) => r.type === "run" && r.run.agentId === nova.id)).toBe(true);
+
+    const dozier = (await api("POST", "/api/agents", { handle: "dozier", name: "Dozier", harness: "codex" })).data;
+    const nobody = (await api<any>("POST", "/api/discussions", { topic: "Naps", participants: ["@dozy", "@dozier"] })).data;
+    expect(nobody.status).toBe("cancelled");
+    expect(await notices(nobody)).toEqual(["@dozy, @dozier are offline, so the discussion stopped before round 1. Start it again when they're back."]);
+    await api("DELETE", `/api/agents/${dozy.id}`);
+    await api("DELETE", `/api/agents/${dozier.id}`);
   });
 
   it("can be stopped, and needs two agents", async () => {
@@ -1024,6 +1052,38 @@ describe("runs that go wrong", () => {
     } finally {
       hub.buildPrompt = original;
     }
+  });
+
+  it("ignores a device's late run_done after the run was cancelled", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "late" })).data.id;
+    const n = node.held.length;
+    await api("POST", `/api/channels/${ch}/messages`, { body: "@nova hold on" });
+    const runId = await waitFor(async () => node.held[n]);
+    expect((await api("POST", `/api/runs/${runId}/cancel`)).data).toEqual({ ok: true });
+    node.send({ type: "run_done", runId, finalText: "too late" });
+    node.send({ type: "run_failed", runId, error: "also too late" });
+    await new Promise((r) => setTimeout(r, 200));
+    expect((await api<any[]>("GET", `/api/agents/${nova.id}/runs`)).data.find((r) => r.id === runId)).toMatchObject({ status: "cancelled" });
+    const texts = (await channelMessagesIn(ch)).flatMap((m) => [m.body, ...m.parts.map((p) => ("text" in p ? p.text : ""))]);
+    expect(texts.join("\n")).not.toMatch(/too late/);
+    expect((await api<any[]>("GET", "/api/agents")).data.find((a) => a.id === nova.id).status).toBe("online");
+  });
+
+  it("answers a bad limit or file name with the usual default, not a 500", async () => {
+    expect(limitParam("abc", 20, 100)).toBe(20);
+    expect(limitParam("-3", 20, 100)).toBe(20);
+    expect(limitParam("7.9", 20, 100)).toBe(7);
+    expect(limitParam("999", 20, 100)).toBe(100);
+    expect((await api("GET", `/api/channels/${general}/messages?limit=abc`)).status).toBe(200);
+    expect((await api("GET", "/api/vault/search?q=plan&limit=abc")).status).toBe(200);
+    expect((await api("GET", "/api/vault/changes?limit=NaN")).status).toBe(200);
+    expect((await api("GET", `/api/agents/${nova.id}/runs?limit=`)).status).toBe(200);
+    expect(fileName("%E0%A4%A")).toBe("%E0%A4%A");
+    expect(fileName("a%2Fb%20c.txt")).toBe("a_b c.txt");
+    expect(fileName(undefined)).toBe("file");
+    const res = await fetch(base + "/api/files", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream", "x-filename": "%E0%A4%A" }, body: "odd name" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).name).toBe("%E0%A4%A");
   });
 
   it("keeps an agent's finished tasks when it's removed, and fails the unfinished ones", async () => {

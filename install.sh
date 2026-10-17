@@ -19,13 +19,15 @@ WARREN_REPO="${WARREN_REPO:-https://github.com/eireijie/warren.git}"
 DIR="${WARREN_DIR:-$HOME/warren}"
 MODE="" HUB="" TOKEN="" NAME="" YES="" SERVICE=1
 
+# an option that takes a value, given without one ("--hub" at the end), is a mistake worth a message, not "unbound variable"
+value() { [ -n "$2" ] || { printf '\033[31m%s\033[0m\n' "$1 needs a value, for example: $1 $3" >&2; exit 1; }; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --hub-server) MODE=hub ;;
-    --hub) HUB="$2"; MODE=device; shift ;;
-    --token) TOKEN="$2"; shift ;;
-    --name) NAME="$2"; shift ;;
-    --dir) DIR="$2"; shift ;;
+    --hub) value "$1" "${2:-}" "http://my-server:4747"; HUB="$2"; MODE=device; shift ;;
+    --token) value "$1" "${2:-}" "wr_node_…"; TOKEN="$2"; shift ;;
+    --name) value "$1" "${2:-}" "my-laptop"; NAME="$2"; shift ;;
+    --dir) value "$1" "${2:-}" "~/warren"; DIR="$2"; shift ;;
     --yes|-y) YES=1 ;;
     --no-service) SERVICE="" ;;
     -h|--help) sed -n '2,15p' "$0" 2>/dev/null || true; exit 0 ;;

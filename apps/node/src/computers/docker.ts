@@ -386,8 +386,22 @@ export class DockerVm implements Driver {
    * cancelled run can be stopped there (stopping `exec` alone leaves the process running).
    */
   launcher(runId: string) {
-    const pidFile = `/tmp/warren-run-${runId.replace(/[^\w-]/g, "")}.pid`;
-    return (l: { command: string; args: string[]; cwd: string; env: Record<string, string> }) => ({
+    const safe = runId.replace(/[^\w-]/g, "");
+    const pidFile = `/tmp/warren-run-${safe}.pid`;
+    return async (l: { command: string; args: string[]; cwd: string; env: Record<string, string>; files?: { path: string; content: string }[] }) => {
+      // files the harness needs (its MCP config) go into the VM, and the arguments point at them there
+      let args = l.args;
+      for (const f of l.files ?? []) {
+        const inVm = `/tmp/warren-run-${safe}/${path.basename(f.path)}`;
+        await this.writeFile(inVm, f.content, "600");
+        args = args.map((a) => a.split(f.path).join(inVm));
+      }
+      return this.exec(l, args, pidFile);
+    };
+  }
+
+  private exec(l: { command: string; cwd: string; env: Record<string, string> }, args: string[], pidFile: string) {
+    return {
       command: this.bin,
       args: [
         "exec",
@@ -409,12 +423,12 @@ export class DockerVm implements Driver {
         `echo $$ > ${pidFile}; exec "$@"`,
         "sh",
         l.command,
-        ...l.args,
+        ...args,
       ],
       // the engine runs here; it only needs a folder that exists
       cwd: this.filesDir,
       env: {},
-    });
+    };
   }
 
   /** Stop what a run started inside the VM. */

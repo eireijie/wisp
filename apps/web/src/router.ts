@@ -123,7 +123,27 @@ export function href(r: Route): string {
   }
 }
 
+/** Views with unsaved work register one of these; `go()` asks before leaving. Returns the question, or null when it's fine to go. */
+type LeaveGuard = () => string | null;
+const guards = new Set<LeaveGuard>();
+
+/** Ask before navigating away while `why()` returns a question (an unsaved note, say). Returns the unregister function. */
+export function guardLeaving(why: LeaveGuard): () => void {
+  guards.add(why);
+  return () => void guards.delete(why);
+}
+
+/** Is it fine to leave the current view? Asks the person when something would be lost. */
+export function mayLeave(): boolean {
+  for (const why of guards) {
+    const q = why();
+    if (q && !confirm(q)) return false;
+  }
+  return true;
+}
+
 export function go(r: Route) {
+  if (!mayLeave()) return;
   location.hash = href(r);
 }
 

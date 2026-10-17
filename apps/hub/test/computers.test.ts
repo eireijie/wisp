@@ -3,8 +3,9 @@ import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import type { ComputerSpec, DeviceCapabilities, KeyCombo, Message } from "@warren/core";
+import { vncAuthResponse } from "../src/vnc-relay.ts";
 import type { HarnessAdapter, RunInput } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
 import { ComputerHost } from "../../node/src/computers/index.ts";
@@ -79,6 +80,8 @@ let agentApi: WarrenClient;
 let nodeId: string;
 let agentId: string;
 let rfb: net.Server;
+/** a fake Orgo websockify: wants the password as ?token=, then again as VNC authentication, then echoes */
+let websockify: WebSocketServer;
 let nodeDir: string;
 let member: WarrenClient;
 const orgoCalls: { method: string; url: string; body: any }[] = [];
@@ -109,6 +112,41 @@ beforeAll(async () => {
   await new Promise<void>((r) => rfb.listen(0, "127.0.0.1", r));
   rfbPort = (rfb.address() as net.AddressInfo).port;
 
+  websockify = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+  await new Promise<void>((r) => websockify.once("listening", r));
+  websockify.on("connection", (s, req) => {
+    if (new URL(req.url ?? "/", "http://x").searchParams.get("token") !== "pw/1") return s.close(4401, "bad token");
+    const challenge = Buffer.from("0123456789abcdef");
+    let step = 0;
+    let got = Buffer.alloc(0);
+    s.send("RFB 003.008\n");
+    s.on("message", (d) => {
+      got = Buffer.concat([got, Buffer.from(d as Buffer)]);
+      if (step === 0 && got.length >= 12) {
+        got = got.subarray(12);
+        step = 1;
+        s.send(Buffer.from([1, 2])); // one security type: VNC authentication
+      }
+      if (step === 1 && got.length >= 1) {
+        if (got[0] !== 2) return s.close(4400, "not vnc auth");
+        got = got.subarray(1);
+        step = 2;
+        s.send(challenge);
+      }
+      if (step === 2 && got.length >= 16) {
+        const ok = got.subarray(0, 16).equals(vncAuthResponse(challenge, "pw/1"));
+        got = got.subarray(16);
+        step = 3;
+        s.send(Buffer.from([0, 0, 0, ok ? 0 : 1]));
+        if (!ok) return s.close(4403, "wrong password");
+      }
+      if (step === 3 && got.length) {
+        s.send(got);
+        got = Buffer.alloc(0);
+      }
+    });
+  });
+
   // existing agents on the "device"
   home = path.join(dir, "home");
   await fs.mkdir(path.join(home, ".hermes", "memories"), { recursive: true });
@@ -119,6 +157,7 @@ beforeAll(async () => {
 
   const built = await buildHub({ dataDir: path.join(dir, "hub") });
   hub = built.hub;
+  hub.orgoWs = `ws://127.0.0.1:${(websockify.address() as net.AddressInfo).port}`;
   hub.fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const u = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
@@ -154,6 +193,7 @@ afterAll(async () => {
   daemon?.stop();
   await close();
   rfb?.close();
+  websockify?.close();
   await fs.rm(dir, { recursive: true, force: true });
 });
 
@@ -482,10 +522,23 @@ describe("Orgo", () => {
     await scoutApi.computer({ action: "key", keys: "Enter" });
     expect(orgoCalls.at(-1)!.body).toEqual({ key: "Return" });
 
+    // the live view goes through the hub, which signs in to the screen itself: neither the API key nor the VNC password reaches browsers
     const view = await owner.request("POST", `/api/computers/${cloud.id}/view`);
-    expect(view).toEqual({ transport: "vnc", direct: true, url: "wss://www.orgo.ai/desktops/inst-1/ws/websockify?token=pw%2F1" });
-    // the API key never reaches browsers
+    expect(view).toMatchObject({ transport: "vnc", direct: false, url: expect.stringMatching(new RegExp(`^/ws/computers/${cloud.id}/vnc\\?ticket=`)) });
+    expect(JSON.stringify(view)).not.toContain("pw");
     expect(JSON.stringify(await owner.request("GET", "/api/computers"))).not.toContain("sk_good");
+    const ws = new WebSocket(url.replace("http", "ws") + view.url);
+    const frames: Buffer[] = [];
+    ws.on("message", (d) => frames.push(Buffer.from(d as Buffer)));
+    const next = (n: number) => waitFor(() => (frames.length >= n ? frames[n - 1] : undefined));
+    expect((await next(1)).toString()).toBe("RFB 003.008\n");
+    ws.send("RFB 003.008\n");
+    expect([...(await next(2))]).toEqual([1, 1]); // no password asked of the browser
+    ws.send(Buffer.from([1]));
+    expect([...(await next(3))]).toEqual([0, 0, 0, 0]);
+    ws.send(Buffer.from("ping"));
+    expect((await next(4)).toString()).toBe("ping"); // through to the screen and back
+    ws.close();
 
     await owner.request("DELETE", `/api/computers/${cloud.id}`);
     expect(orgoCalls.at(-1)).toMatchObject({ method: "DELETE" });

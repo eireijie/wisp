@@ -35,3 +35,19 @@ describe("installers", () => {
     expect(text).toMatch(/^\$Repo = if \(\$env:WARREN_REPO\) \{ \$env:WARREN_REPO \} else \{ "https:\/\/[^"]+" \}$/m);
   });
 });
+
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+describe("install.sh", () => {
+  it.skipIf(process.platform === "win32")("says what's missing for an option given without its value, instead of dying", async () => {
+    const script = fileURLToPath(new URL("../../../install.sh", import.meta.url));
+    const run = (args: string[]) => new Promise<{ code: number; stderr: string }>((resolve) => execFile("bash", [script, ...args], (err, _stdout, stderr) => resolve({ code: (err as { code?: number } | null)?.code ?? 0, stderr })));
+    const hub = await run(["--hub"]);
+    expect(hub.code).toBe(1);
+    expect(hub.stderr).toContain("--hub needs a value, for example: --hub http://my-server:4747");
+    const token = await run(["--hub", "http://h:4747", "--token"]);
+    expect(token.code).toBe(1);
+    expect(token.stderr).toContain("--token needs a value");
+  });
+});

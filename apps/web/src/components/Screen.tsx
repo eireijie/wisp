@@ -148,8 +148,8 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
       if (view.transport === "vnc") {
         const { default: RFB } = await import("@novnc/novnc");
         if (disposed || !holder.current) return;
-        const password = view.direct ? (new URL(view.url).searchParams.get("token") ?? undefined) : undefined;
-        const r = new RFB(holder.current, wsUrl, { wsProtocols: [], credentials: password ? { password } : undefined });
+        // no password here: the hub's relay signs in to the screen for us (a cloud computer's password stays on the hub)
+        const r = new RFB(holder.current, wsUrl, { wsProtocols: [] });
         r.scaleViewport = true;
         r.resizeSession = false;
         r.viewOnly = !controlRef.current;
@@ -163,7 +163,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
           setState(e.detail?.clean ? "closed" : "error");
           if (!e.detail?.clean) setError("The connection to the screen dropped.");
         });
-        r.addEventListener("credentialsrequired", () => password && r.sendCredentials({ password }));
+        r.addEventListener("credentialsrequired", () => !disposed && (setState("error"), setError("The screen asked for a password Warren doesn't have.")));
         r.addEventListener("securityfailure", (e: any) => !disposed && (setState("error"), setError(`The screen refused the connection: ${e.detail?.reason ?? "security failure"}`)));
         rfb.current = r;
       } else {

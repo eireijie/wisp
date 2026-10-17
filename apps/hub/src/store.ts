@@ -853,12 +853,12 @@ export class Store {
     return (this.db.prepare(sql + " ORDER BY created_at DESC LIMIT 100").all(...params) as DiscussionRow[]).map(toDiscussion);
   }
 
-  updateDiscussion(discussionId: string, patch: Partial<Pick<Discussion, "round" | "status" | "decisionPath">>) {
+  updateDiscussion(discussionId: string, patch: Partial<Pick<Discussion, "round" | "status" | "decisionPath" | "moderatorId">>) {
     const cur = this.discussion(discussionId);
     if (!cur) return undefined;
     this.db
-      .prepare("UPDATE discussions SET round = ?, status = ?, decision_path = ?, updated_at = ? WHERE id = ?")
-      .run(patch.round ?? cur.round, patch.status ?? cur.status, patch.decisionPath !== undefined ? patch.decisionPath : cur.decisionPath, now(), discussionId);
+      .prepare("UPDATE discussions SET round = ?, status = ?, decision_path = ?, moderator_id = ?, updated_at = ? WHERE id = ?")
+      .run(patch.round ?? cur.round, patch.status ?? cur.status, patch.decisionPath !== undefined ? patch.decisionPath : cur.decisionPath, patch.moderatorId ?? cur.moderatorId, now(), discussionId);
     return this.discussion(discussionId);
   }
 

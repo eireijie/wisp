@@ -286,15 +286,14 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
   });
 
-  /** How to watch it live: a one-time link for the hub's relay, or Orgo's own address. */
+  /** How to watch it live: a one-time link for the hub's relay (through the device, or to Orgo with the hub signing in). */
   app.post("/api/computers/:id/view", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
     try {
-      if (comp.kind === "orgo") return { transport: "vnc", url: await computers.orgoVnc(comp), direct: true };
-      if (!computers.online(comp)) return reply.code(503).send({ error: `${comp.name} is offline: its device isn't connected` });
+      if (!computers.online(comp)) return reply.code(503).send({ error: comp.kind === "orgo" ? "add an Orgo API key in Settings → Computers first" : `${comp.name} is offline: its device isn't connected` });
       const transport = computers.transport(comp);
       return { transport, url: `/ws/computers/${comp.id}/${transport}?ticket=${computers.ticket(comp, c.actor.id)}`, direct: false };
     } catch (err) {

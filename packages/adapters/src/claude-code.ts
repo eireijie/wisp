@@ -3,24 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, AgentEvent, HarnessCatalog } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
-import { commandVersion, launched, runJsonl } from "./process.ts";
+import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";
 
 const PERMISSION_MODE: Record<AccessLevel, string> = { "read-only": "plan", edit: "acceptEdits", full: "bypassPermissions" };
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
-/**
- * CLI arguments for one run. Soul and instructions travel in the prompt rather than
- * --append-system-prompt: a resumed session replays its original system prompt, so
- * edits would never reach an ongoing conversation. Exported for tests.
- */
-export function claudeArgs(input: RunInput): string[] {
-  const args = ["-p", "--output-format", "stream-json", "--verbose"];
-  if (input.sessionId) args.push("--resume", input.sessionId);
-  if (input.model) args.push("--model", input.model);
-  if (input.effort) args.push("--effort", input.effort);
-  args.push("--permission-mode", PERMISSION_MODE[input.access ?? "edit"]);
-  // Claude Code's fast mode is a setting (what /fast toggles); --settings layers it on for this run
-  if (input.fast) args.push("--settings", JSON.stringify({ fastMode: true }));
+/** The MCP servers a run gets (Warren's tools, its computer's browser, its connectors), as Claude Code's config, or null without any. Exported for tests. */
+export function claudeMcpConfig(input: RunInput): { mcpServers: Record<string, unknown> } | null {
   const servers: Record<string, unknown> = {};
   if (input.mcp) servers.warren = { type: "stdio", ...input.mcp };
   if (input.browser) servers.browser = { type: "stdio", ...input.browser };
@@ -29,9 +18,28 @@ export function claudeArgs(input: RunInput): string[] {
     if (c.kind === "mcp-stdio") servers[c.name] = { type: "stdio", command: c.command, args: c.args ?? [], env: c.env ?? {} };
     else if (c.kind === "mcp-http") servers[c.name] = { type: /\/sse\/?$/.test(c.url ?? "") ? "sse" : "http", url: c.url, headers: c.headers ?? {} };
   }
-  if (Object.keys(servers).length) {
-    args.push("--mcp-config", JSON.stringify({ mcpServers: servers }));
-    args.push("--allowedTools", Object.keys(servers).map((n) => `mcp__${n}`).join(","));
+  return Object.keys(servers).length ? { mcpServers: servers } : null;
+}
+
+/**
+ * CLI arguments for one run. Soul and instructions travel in the prompt rather than
+ * --append-system-prompt: a resumed session replays its original system prompt, so
+ * edits would never reach an ongoing conversation. The MCP config holds the agent's token
+ * and connector secrets, so a run passes it as a private file (`mcpConfigFile`) rather than
+ * inline, where `ps` would show it. Exported for tests.
+ */
+export function claudeArgs(input: RunInput, opts: { mcpConfigFile?: string } = {}): string[] {
+  const args = ["-p", "--output-format", "stream-json", "--verbose"];
+  if (input.sessionId) args.push("--resume", input.sessionId);
+  if (input.model) args.push("--model", input.model);
+  if (input.effort) args.push("--effort", input.effort);
+  args.push("--permission-mode", PERMISSION_MODE[input.access ?? "edit"]);
+  // Claude Code's fast mode is a setting (what /fast toggles); --settings layers it on for this run
+  if (input.fast) args.push("--settings", JSON.stringify({ fastMode: true }));
+  const mcp = claudeMcpConfig(input);
+  if (mcp) {
+    args.push("--mcp-config", opts.mcpConfigFile ?? JSON.stringify(mcp));
+    args.push("--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
   }
   return args;
 }
@@ -72,8 +80,6 @@ export const claudeCode: HarnessAdapter = {
   },
 
   async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {
-    const args = claudeArgs(input);
-
     let finalText = "";
     let sessionId: string | null = input.sessionId ?? null;
     let error: string | null = null;
@@ -81,19 +87,27 @@ export const claudeCode: HarnessAdapter = {
     let lastAssistant: any = null;
     let result: any = null;
 
-    const l = launched(input, this.binary, args, claudeEnv(input));
-    const proc = await runJsonl(l.command, l.args, { cwd: l.cwd, env: l.env, stdin: input.prompt, signal: input.signal }, (m) => {
-      for (const e of parseClaudeLine(m, toolNames)) {
-        if (e.type === "session") sessionId = e.id;
-        onEvent(e);
-      }
-      if (m.type === "assistant" && m.message?.usage) lastAssistant = m;
-      if (m.type === "result") {
-        result = m;
-        if (typeof m.result === "string") finalText = m.result;
-        if (m.is_error) error = typeof m.result === "string" ? m.result : (m.subtype ?? "error");
-      }
-    });
+    const files = new RunFiles("warren-claude-");
+    let proc;
+    try {
+      const mcp = claudeMcpConfig(input);
+      const mcpFile = mcp ? await files.add("mcp.json", JSON.stringify(mcp)) : undefined;
+      const l = await launched(input, this.binary, claudeArgs(input, { mcpConfigFile: mcpFile?.path }), claudeEnv(input), files.list);
+      proc = await runJsonl(l.command, l.args, { cwd: l.cwd, env: l.env, stdin: input.prompt, signal: input.signal }, (m) => {
+        for (const e of parseClaudeLine(m, toolNames)) {
+          if (e.type === "session") sessionId = e.id;
+          onEvent(e);
+        }
+        if (m.type === "assistant" && m.message?.usage) lastAssistant = m;
+        if (m.type === "result") {
+          result = m;
+          if (typeof m.result === "string") finalText = m.result;
+          if (m.is_error) error = typeof m.result === "string" ? m.result : (m.subtype ?? "error");
+        }
+      });
+    } finally {
+      await files.cleanup();
+    }
 
     if (input.signal?.aborted) throw new Error("cancelled");
     const usage = claudeUsage(lastAssistant, result);

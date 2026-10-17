@@ -198,7 +198,7 @@ function AccessControl({ agent, ctx, canEdit }: { agent: Agent; ctx: AgentContex
           className={cx("h-8 px-2 rounded-lg inline-flex items-center gap-1.5 text-[13px] font-medium", a === "full" ? "text-accent-text" : "text-muted", canEdit && "hover:bg-hover", open && "bg-hover")}
         >
           {a === "full" ? <ShieldAlert size={15} /> : a === "read-only" ? <Eye size={15} /> : <Shield size={15} />}
-          <span className="hidden sm:inline">{ACCESS[a].label}</span>
+          <span className="hidden @lg:inline">{ACCESS[a].label}</span>
         </button>
       )}
     >
@@ -254,8 +254,8 @@ function ModelControl({ agent, ctx, catalog, canEdit }: { agent: Agent; ctx: Age
           className={cx("h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] min-w-0", canEdit && "hover:bg-hover", open && "bg-hover")}
         >
           {ctx.fast && ctx.fastAvailable && <Zap size={13} className="text-accent-text fill-accent shrink-0" />}
-          <span className="font-medium truncate max-w-32 sm:max-w-none">{label}</span>
-          {ctx.effort && <span className="text-muted whitespace-nowrap">{effortName(ctx.effort)}</span>}
+          <span className="font-medium truncate max-w-24 @sm:max-w-32 @md:max-w-44 @lg:max-w-none">{label}</span>
+          {ctx.effort && <span className="text-muted whitespace-nowrap hidden @sm:inline">{effortName(ctx.effort)}</span>}
           {canEdit && <ChevronDown size={14} className="text-faint shrink-0" />}
         </button>
       )}
@@ -571,6 +571,17 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
   const colors = useHandleColors();
   const html = useMemo(() => (m.body ? renderMarkdown(m.body, { handles, colors }) : ""), [m.body, handles, colors]);
   const cards = useMemo(() => linkCards(m.body), [m.body]);
+  // on a phone the actions open with a tap on the message, and close with a tap anywhere else
+  const [touched, setTouched] = useState(false);
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!touched) return;
+    const away = (e: PointerEvent) => {
+      if (!row.current?.contains(e.target as Node)) setTouched(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [touched]);
 
   if (m.author.id === "system")
     return (
@@ -588,7 +599,16 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
   const time = clockTime(m.createdAt, clock);
 
   return (
-    <div className={cx("group relative px-3 md:px-5 flex gap-3 hover:bg-hover/70", grouped ? "py-0.5" : "pt-2.5 pb-0.5")}>
+    <div
+      ref={row}
+      className={cx("group relative px-3 md:px-5 flex gap-3 hover:bg-hover/70", grouped ? "py-0.5" : "pt-2.5 pb-0.5", touched && "bg-hover/70")}
+      onClick={(e) => {
+        // phones have no hover: a tap on the message shows its actions (buttons and links in it still do their own thing)
+        if (!window.matchMedia("(hover: none)").matches) return;
+        if ((e.target as HTMLElement).closest("button, a, input, textarea, summary")) return;
+        setTouched((t) => !t);
+      }}
+    >
       <div className="w-9 shrink-0 pt-0.5">
         {grouped ? (
           <span className="hidden group-hover:block text-[10px] text-faint text-right leading-6">{time}</span>
@@ -631,19 +651,23 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
           </button>
         )}
       </div>
-      <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} />
+      <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} open={touched} onDone={() => setTouched(false)} />
     </div>
   );
 }
 
-/** Buzz-style hover toolbar: quick reactions, picker, reply in thread, more. */
-function ActionBar({ m, onReply }: { m: Message; onReply?: () => void }) {
+/** Buzz-style toolbar: quick reactions, picker, reply in thread, more. Shows on hover, on keyboard focus, and (`open`) after a tap on a phone. */
+function ActionBar({ m, onReply, open, onDone }: { m: Message; onReply?: () => void; open: boolean; onDone: () => void }) {
   const toggleReaction = useStore((s) => s.toggleReaction);
   const [picker, setPicker] = useState(false);
+  const react = (emoji: string) => {
+    toggleReaction(m.id, emoji);
+    onDone();
+  };
   return (
-    <div className={cx("absolute right-4 -top-3.5 z-10 items-center rounded-lg border border-line bg-panel shadow-panel p-0.5", picker ? "flex" : "hidden group-hover:flex")}>
+    <div className={cx("absolute right-4 -top-3.5 z-10 items-center rounded-lg border border-line bg-panel shadow-panel p-0.5", picker || open ? "flex" : "hidden group-hover:flex group-focus-within:flex")}>
       {QUICK_REACTIONS.map((e) => (
-        <button key={e} onClick={() => toggleReaction(m.id, e)} className="size-7 rounded-md hover:bg-hover text-[15px] leading-none" aria-label={`React ${e}`}>
+        <button key={e} onClick={() => react(e)} className="size-7 rounded-md hover:bg-hover text-[15px] leading-none" aria-label={`React ${e}`}>
           {e}
         </button>
       ))}
@@ -656,14 +680,14 @@ function ActionBar({ m, onReply }: { m: Message; onReply?: () => void }) {
             <EmojiPicker
               onPick={(e) => {
                 setPicker(false);
-                toggleReaction(m.id, e);
+                react(e);
               }}
             />
           </div>
         )}
       </div>
       {onReply && (
-        <button onClick={onReply} className="size-7 rounded-md hover:bg-hover grid place-items-center text-muted" aria-label="Reply in thread" title="Reply in thread">
+        <button onClick={() => (onDone(), onReply())} className="size-7 rounded-md hover:bg-hover grid place-items-center text-muted" aria-label="Reply in thread" title="Reply in thread">
           <MessageSquare size={15} />
         </button>
       )}
@@ -674,7 +698,7 @@ function ActionBar({ m, onReply }: { m: Message; onReply?: () => void }) {
             <MoreHorizontal size={15} />
           </button>
         )}
-        items={[{ label: "Copy text", icon: <Copy size={14} />, onSelect: () => navigator.clipboard?.writeText(m.body) }]}
+        items={[{ label: "Copy text", icon: <Copy size={14} />, onSelect: () => (navigator.clipboard?.writeText(m.body), onDone()) }]}
       />
     </div>
   );
@@ -944,14 +968,16 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   async function send() {
     if (!text.trim() && !files.length) return;
     const body = text;
-    const ids = files.map((f) => f.id);
+    const attached = files;
     setText("");
     setFiles([]);
     setError(null);
     try {
-      await api("POST", `/api/channels/${channelId}/messages`, { body, threadId, fileIds: ids });
+      await api("POST", `/api/channels/${channelId}/messages`, { body, threadId, fileIds: attached.map((f) => f.id) });
     } catch (e) {
+      // the message comes back as it was, attachments included (plus anything added meanwhile)
       setText(body);
+      setFiles((cur) => [...attached, ...cur.filter((f) => !attached.some((a) => a.id === f.id))]);
       setError((e as Error).message);
     }
   }
@@ -972,7 +998,8 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   }
 
   return (
-    <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom">
+    // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
+    <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom @container">
       <div className="relative rounded-2xl border border-line bg-bg focus-within:border-input" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
         {suggestions.length > 0 && (
           <div className="absolute bottom-full mb-2 left-0 w-72 rounded-xl border border-line bg-panel shadow-panel py-1 z-10" role="listbox">
@@ -1033,7 +1060,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           }}
           className="block w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[15px] outline-none placeholder:text-faint"
         />
-        <div className="flex items-center gap-0.5 px-2 pb-2">
+        <div className="flex items-center gap-0.5 px-2 pb-2 min-w-0">
           <Popover
             className="w-56 p-1.5"
             trigger={(open, toggle) => (

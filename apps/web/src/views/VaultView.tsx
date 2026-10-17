@@ -3,7 +3,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Eye, FilePlus, Folder, FolderPlus,
 import type { AccessRule, MemoryLevel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { go } from "../router.ts";
+import { go, guardLeaving, mayLeave } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { Button, Empty, Field, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 import { AccessDialog, folderPaths, pathLabel } from "../components/AccessDialog.tsx";
@@ -145,10 +145,10 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
             </select>
           </label>
         )}
-        <Button variant={activity ? "primary" : "ghost"} onClick={() => (setActivity(!activity), setGraph(false))} title="Who changed what, newest first">
+        <Button variant={activity ? "primary" : "ghost"} onClick={() => mayLeave() && (setActivity(!activity), setGraph(false))} title="Who changed what, newest first">
           <History size={16} /> <span className="hidden lg:inline">Activity</span>
         </Button>
-        <Button variant={graph ? "primary" : "ghost"} onClick={() => (setGraph(!graph), setActivity(false))} title="Graph view">
+        <Button variant={graph ? "primary" : "ghost"} onClick={() => mayLeave() && (setGraph(!graph), setActivity(false))} title="Graph view">
           <Network size={16} /> <span className="hidden sm:inline">Graph</span>
         </Button>
         <Button variant="ghost" onClick={() => api("POST", "/api/vault/sync").then(refresh)} title="Pick up changes made in Obsidian or on disk">
@@ -363,7 +363,22 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
     if (side === "authors") api<BlameBlock[]>("GET", `/api/vault/blame?path=${encodeURIComponent(path)}`).then(setBlame);
   }, [side, path, note]);
 
-  const dirty = note && draft !== note.content;
+  const dirty = !!note && draft !== note.content;
+
+  // edits aren't lost to a stray click: leaving the note (a tree item, a link, Graph, the tab) asks first
+  useEffect(() => {
+    if (!dirty) return;
+    const unguard = guardLeaving(() => `${base(path)} has unsaved changes. Leave without saving them?`);
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => {
+      unguard();
+      window.removeEventListener("beforeunload", beforeUnload);
+    };
+  }, [dirty, path]);
 
   const save = useCallback(async () => {
     if (!note || draft === note.content) return;
@@ -417,16 +432,25 @@ function NoteEditor({ path, resolve, onChanged, folderLabel, onCreate, onShare }
   return (
     <div className="h-full flex">
       <div className="flex-1 min-w-0 flex flex-col">
-        <div className="px-4 md:px-8 py-2 flex items-center gap-2 border-b border-line text-sm">
-          <div className="flex-1 min-w-0 flex items-center gap-1 text-muted truncate">
-            {crumbs.map((c, i) => (
-              <span key={i} className={cx("flex items-center gap-1 truncate", i < crumbs.length - 1 && side && "hidden")}>
-                {i > 0 && <ChevronRight size={12} className="text-faint" />}
-                <span className={cx(i === crumbs.length - 1 && "text-ink font-medium")}>{i === crumbs.length - 1 ? base(c) : folderLabel(c, crumbs[i - 1] ?? "")}</span>
-              </span>
-            ))}
+        {/* @container: how much of the path shows depends on this row's own width (the tree and side panel take theirs), not the window's */}
+        <div className="@container px-4 md:px-8 py-2 flex items-center gap-2 border-b border-line text-sm">
+          {/* the note's name keeps its room: folders give way first (shrink-[100]); narrower rows drop the far folders, then the parent, then "edited by" */}
+          <div className="flex-1 min-w-0 flex items-center gap-1 text-muted overflow-hidden whitespace-nowrap">
+            {crumbs.map((c, i) => {
+              const last = i === crumbs.length - 1;
+              const parent = i === crumbs.length - 2;
+              const show = last ? "flex" : side ? "hidden" : parent ? "hidden @xl:flex" : "hidden @3xl:flex";
+              // a chevron belongs to the crumb before it, so it shows only when that one does
+              const chevron = i === 0 ? "hidden" : side ? "hidden" : last ? "hidden @xl:block" : parent ? "hidden @3xl:block" : "block";
+              return (
+                <span key={i} className={cx("items-center gap-1 min-w-0", last ? "shrink" : "shrink-[100]", show)}>
+                  <ChevronRight size={12} className={cx("text-faint shrink-0", chevron)} />
+                  <span className={cx("truncate", last && "text-ink font-medium")}>{last ? base(c) : folderLabel(c, crumbs[i - 1] ?? "")}</span>
+                </span>
+              );
+            })}
             {note.editedBy && !side && (
-              <span className="hidden lg:inline ml-2 text-xs text-faint truncate" title={note.editedAt ? new Date(note.editedAt).toLocaleString() : undefined}>
+              <span className="hidden @2xl:block ml-2 text-xs text-faint min-w-0 shrink-[100] truncate" title={note.editedAt ? new Date(note.editedAt).toLocaleString() : undefined}>
                 edited by {note.editedBy}
                 {note.editedAt ? ` · ${timeAgo(note.editedAt)}` : ""}
               </span>

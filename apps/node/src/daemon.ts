@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { CONNECTOR_CATALOG, HubToNode, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
 import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
-import { WarrenClient } from "@warren/sdk";
+import { WarrenClient, WarrenError } from "@warren/sdk";
 import { runUpdate, version } from "@warren/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
 import { VM_HOME, type DockerVm } from "./computers/docker.ts";
@@ -75,6 +75,8 @@ export class NodeDaemon {
   private local: { shareScreen: boolean; paused: boolean };
   /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
   private outbox: NodeToHub[] = [];
+  /** when the hub replaced this connection with another one using the same token */
+  private replaced: number[] = [];
 
   constructor(
     private cfg: NodeConfig,
@@ -82,6 +84,7 @@ export class NodeDaemon {
     registry?: Record<string, HarnessAdapter>,
     computers?: ComputerHost,
   ) {
+    this.cfg = cfg = { ...cfg, hub: normalizeHubUrl(cfg.hub) };
     fs.mkdirSync(cfg.dir, { recursive: true });
     this.sessions = readJson(this.sessionsFile, {});
     this.agentTokens = readJson(this.tokensFile, {});
@@ -141,6 +144,7 @@ export class NodeDaemon {
 
   start() {
     this.stopped = false;
+    this.replaced = [];
     fs.watchFile(this.configFile, { interval: 1000 }, this.onLocalChange);
     if (this.local.paused) this.log("paused: no agent runs or computer use until `warren node resume`");
     this.connect();
@@ -198,6 +202,15 @@ export class NodeDaemon {
         this.log("hub rejected the node token. Create a new node in Warren and run `warren node start` again.");
         this.stopped = true;
         return;
+      }
+      // another daemon with this token took our place; if it keeps happening the two would replace each other forever
+      if (code === 4000) {
+        this.replaced = [...this.replaced.filter((t) => Date.now() - t < 60_000), Date.now()];
+        if (this.replaced.length >= 2) {
+          this.log("another `warren node start` is running with this device's token (the installed service, perhaps: `warren service status`). This one stops, so the two don't keep replacing each other.");
+          this.stopped = true;
+          return;
+        }
       }
       this.log(`disconnected (${code}${reason.length ? ` ${reason}` : ""}); retrying in ${Math.round(this.backoff / 1000)}s`);
       setTimeout(() => this.connect(), this.backoff);
@@ -405,6 +418,8 @@ export class NodeDaemon {
       connectors = connectors.filter((c) => !missing.includes(c));
     }
 
+    // did the harness get going (text, a tool call)? A resumed session that failed after that isn't rerun from scratch
+    let progressed = false;
     const attempt = async (sessionId: string | null) =>
       adapter.run(
         {
@@ -428,7 +443,10 @@ export class NodeDaemon {
           if (e.type === "session") {
             this.sessions[sessionKey] = e.id;
             writeJson(this.sessionsFile, this.sessions);
-          } else this.send({ type: "run_event", runId: run.runId, event: e });
+          } else {
+            if (e.type === "text" || e.type === "tool_call" || e.type === "tool_result") progressed = true;
+            this.send({ type: "run_event", runId: run.runId, event: e });
+          }
         },
       );
 
@@ -438,9 +456,11 @@ export class NodeDaemon {
       try {
         result = await attempt(resumeId);
       } catch (err) {
-        // a stale/expired harness session should not break the conversation
-        if (!resumeId || abort.signal.aborted) throw err;
-        this.log(`@${agent.handle}: resume failed (${(err as Error).message}); starting a fresh session`);
+        // a stale/expired harness session should not break the conversation: when resuming failed
+        // before anything happened, start fresh. A failure after real work (a crash, quota) is just
+        // a failure; doing the whole prompt again would double the cost and redo what it did.
+        if (!resumeId || abort.signal.aborted || progressed) throw err;
+        this.log(`@${agent.handle}: resume failed before it got going (${(err as Error).message}); starting a fresh session`);
         delete this.sessions[sessionKey];
         result = await attempt(null);
       }
@@ -512,7 +532,8 @@ export class NodeDaemon {
 
   /**
    * The harness gets warren-mcp with a token for its agent alone, so whatever the agent runs can't
-   * act as this device or its other agents. Hubs from before agent tokens get the device's token.
+   * act as this device or its other agents. Only a hub from before agent tokens (it has no such
+   * endpoint) gets the device's token; when the hub merely can't answer, the run fails instead.
    */
   private async mcpSpec(agentId: string): Promise<McpServerSpec> {
     const token = await this.harnessToken(agentId);
@@ -541,7 +562,10 @@ export class NodeDaemon {
   private async harnessToken(agentId: string): Promise<string | null> {
     const known = this.agentTokens[agentId];
     if (known && (await this.tokenWorks(known))) return known;
-    const r = await this.api.request<{ token: string }>("POST", `/api/node/agents/${agentId}/token`).catch(() => null);
+    const r = await this.api.request<{ token: string }>("POST", `/api/node/agents/${agentId}/token`).catch((err) => {
+      if (err instanceof WarrenError && err.status === 404) return null; // an older hub
+      throw new Error(`the hub couldn't give this agent a token (${(err as Error).message}); try again in a moment`);
+    });
     if (!r?.token) return null;
     this.agentTokens[agentId] = r.token;
     writeJson(this.tokensFile, this.agentTokens, 0o600);
@@ -553,6 +577,22 @@ export class NodeDaemon {
     const res = await fetch(`${this.cfg.hub.replace(/\/+$/, "")}/api/computers/mine`, { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
     return !!res && res.status !== 401;
   }
+}
+
+/**
+ * The hub's address as people type it ("my-server:4747", "https://warren.example.com/",
+ * "ws://..."), as the http(s) URL the daemon needs. Throws, with a hint, for something that isn't an address.
+ */
+export function normalizeHubUrl(raw: string): string {
+  let s = (raw ?? "").trim().replace(/\/+$/, "");
+  if (/^wss?:\/\//i.test(s)) s = s.replace(/^ws/i, "http");
+  if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
+  let u: URL | null = null;
+  try {
+    u = new URL(s);
+  } catch {}
+  if (!u || !/^https?:$/.test(u.protocol) || !u.hostname) throw new Error(`"${raw}" isn't a hub address. It should look like http://my-server:4747 (what you open in the browser).`);
+  return u.toString().replace(/\/+$/, "");
 }
 
 /** Is `cmd` on this process's PATH (as the harness would find it)? A path to a file counts when it exists. */
