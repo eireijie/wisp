@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Cloud, Hand, HandMetal, Laptop, Loader2, Lock, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cloud, Eye, Hand, Info, Laptop, Loader2, Lock, Minimize2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
 import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
@@ -348,6 +348,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   const [error, setError] = useState<string | null>(null);
   const [pickTeach, setPickTeach] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [info, setInfo] = useState(false);
   const screen = useRef<LiveScreenHandle>(null);
   const touched = useRef(0);
   const mine = c.controller?.id === me.user.id;
@@ -370,97 +371,109 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
     }
   };
 
+  // leaving the desk gives the computer back, so agents aren't stuck waiting on a closed view
+  const leave = () => {
+    if (mine) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
+    go({ view: "computers", computerId: null });
+  };
+
   // teaching needs control
   useEffect(() => {
     if (teacher && c.online && !c.controller) control(true);
   }, [teacher?.id, c.online]);
 
+  const canControl = canEdit && c.online && !c.paused;
+  const lead = on[0];
+  const darkBtn = "inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50";
+
+  // The computer opens as its desk: the screen big on a dark backdrop, like the full-screen view.
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <header className="min-h-15 shrink-0 px-4 md:px-6 py-2 flex flex-wrap items-center gap-2 border-b border-line safe-top">
-        <a href={href({ view: "computers", computerId: null })} className="text-sm text-muted hover:text-ink">
-          Computers
-        </a>
-        <ChevronRight size={14} className="text-faint" />
-        <span className="flex items-center gap-2 min-w-44 flex-1">
-          <Icon size={16} className="text-muted shrink-0" />
-          <span className="font-semibold truncate">{c.name}</span>
-          {state.working ? <WorkingBadge text={c.activity?.text ?? "Working"} /> : <Pill tone={state.tone}>{state.label}</Pill>}
-        </span>
-        {canEdit && c.online && !c.paused && !teacher && (
-          <>
-            {mine ? (
-              <Button variant="primary" disabled={busy} onClick={() => control(false)}>
-                <HandMetal size={15} /> Hand back
-              </Button>
-            ) : (
-              <Button disabled={busy || (!!c.controller && !mine)} onClick={() => control(true)}>
+    <div className="flex-1 min-h-0 flex flex-col bg-[#141312] text-white safe-top safe-bottom">
+      <header className="shrink-0 relative flex flex-wrap items-center gap-2 px-3 md:px-5 pt-3 pb-3 min-h-14">
+        {lead ? <AgentAvatar agent={lead} size={26} live /> : <Icon size={18} className="text-white/70 shrink-0" />}
+        <span className="font-medium truncate">{c.name}</span>
+        {!mine && (state.working ? <WorkingBadge text={c.activity?.text ?? "Working"} /> : <Pill tone={state.tone}>{state.label}</Pill>)}
+        {mine && !teacher && (
+          <div className="md:absolute md:left-1/2 md:top-3 md:-translate-x-1/2 inline-flex items-center gap-2 rounded-full bg-info text-white pl-3.5 pr-1 h-9 text-sm font-medium shadow-panel" role="status">
+            <Hand size={15} /> You are in control
+            <button disabled={busy} onClick={() => control(false)} className="h-7 px-3 rounded-full bg-white/20 hover:bg-white/30 text-xs font-medium">
+              Hand back
+            </button>
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          {canControl && !teacher && (
+            <button onClick={() => setPickTeach(true)} className={cx(darkBtn, "border border-white/20")} title="Do a task once while an agent watches; it saves it as a routine">
+              <Video size={15} /> Teach a task
+            </button>
+          )}
+          <button onClick={() => setInfo((v) => !v)} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", info && "bg-white/15")} aria-label="Details" title="Details">
+            <Info size={18} />
+          </button>
+          {canEdit && (
+            <Menu
+              align="right"
+              trigger={(_o, t) => (
+                <button onClick={t} className="size-9 rounded-full grid place-items-center hover:bg-white/10" aria-label="More">
+                  <MoreHorizontal size={18} />
+                </button>
+              )}
+              items={[
+                { label: "Rename", onSelect: () => setRenaming(true) },
+                ...(c.kind !== "device" ? [{ label: c.status === "stopped" ? "Start" : "Stop", icon: c.status === "stopped" ? <Play size={14} /> : <Power size={14} />, onSelect: () => api("POST", `/api/computers/${c.id}/${c.status === "stopped" ? "start" : "stop"}`).catch((e) => setError(e.message)) }] : []),
+                ...(canRemove ? ["divider" as const] : []),
+                ...(canRemove ? [{
+                  label: c.kind === "device" ? "Stop sharing this screen" : "Delete computer",
+                  icon: <Trash2 size={14} />,
+                  danger: true,
+                  onSelect: async () => {
+                    const what = c.kind === "vm" ? "Its VM and everything on it are deleted." : c.kind === "orgo" ? "The Orgo computer is deleted too." : "Agents won't be able to use this device's screen.";
+                    if (!confirm(`Remove ${c.name}? ${what}`)) return;
+                    await api("DELETE", `/api/computers/${c.id}`);
+                    go({ view: "computers", computerId: null });
+                  },
+                }] : []),
+              ]}
+            />
+          )}
+          <button onClick={leave} className="size-9 rounded-full grid place-items-center hover:bg-white/10" aria-label="Back to computers" title="Back to computers">
+            <Minimize2 size={18} />
+          </button>
+        </div>
+      </header>
+
+      <div className="text-ink">
+        {teacher && <TeachBar agent={teacher} computer={c} screen={screen} />}
+
+        {!teacher && c.help && (
+          <div className="shrink-0 mx-3 md:mx-5 mb-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 flex flex-wrap items-center gap-3">
+            {agents.find((a) => a.id === c.help!.agentId) && <AgentAvatar agent={agents.find((a) => a.id === c.help!.agentId)} size={28} badge={false} />}
+            <div className="min-w-0 flex-1 text-sm">
+              <span className="font-medium">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you: </span>
+              {c.help.request}
+              <span className="text-muted"> · {timeAgo(c.help.at)}</span>
+            </div>
+            {canEdit && !mine && (
+              <Button variant="primary" onClick={() => control(true)} disabled={busy}>
                 <Hand size={15} /> Take control
               </Button>
             )}
-            <Button variant="ghost" onClick={() => setPickTeach(true)} title="Do a task once while an agent watches; it saves it as a routine">
-              <Video size={15} /> <span className="hidden sm:inline">Teach a task</span>
-            </Button>
-          </>
-        )}
-        {canEdit && (
-          <Menu
-            align="right"
-            trigger={(_o, t) => (
-              <button onClick={t} className="p-2 rounded-md hover:bg-hover text-muted" aria-label="More">
-                <MoreHorizontal size={16} />
-              </button>
-            )}
-            items={[
-              { label: "Rename", onSelect: () => setRenaming(true) },
-              ...(c.kind !== "device" ? [{ label: c.status === "stopped" ? "Start" : "Stop", icon: c.status === "stopped" ? <Play size={14} /> : <Power size={14} />, onSelect: () => api("POST", `/api/computers/${c.id}/${c.status === "stopped" ? "start" : "stop"}`).catch((e) => setError(e.message)) }] : []),
-              ...(canRemove ? ["divider" as const] : []),
-              ...(canRemove ? [{
-                label: c.kind === "device" ? "Stop sharing this screen" : "Delete computer",
-                icon: <Trash2 size={14} />,
-                danger: true,
-                onSelect: async () => {
-                  const what = c.kind === "vm" ? "Its VM and everything on it are deleted." : c.kind === "orgo" ? "The Orgo computer is deleted too." : "Agents won't be able to use this device's screen.";
-                  if (!confirm(`Remove ${c.name}? ${what}`)) return;
-                  await api("DELETE", `/api/computers/${c.id}`);
-                  go({ view: "computers", computerId: null });
-                },
-              }] : []),
-            ]}
-          />
-        )}
-      </header>
-
-      {teacher && <TeachBar agent={teacher} computer={c} screen={screen} />}
-
-      {!teacher && c.help && (
-        <div className="shrink-0 mx-3 md:mx-5 mt-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 flex flex-wrap items-center gap-3">
-          {agents.find((a) => a.id === c.help!.agentId) && <AgentAvatar agent={agents.find((a) => a.id === c.help!.agentId)} size={28} badge={false} />}
-          <div className="min-w-0 flex-1 text-sm">
-            <span className="font-medium">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you: </span>
-            {c.help.request}
-            <span className="text-muted"> · {timeAgo(c.help.at)}</span>
+            {mine && <span className="text-xs text-muted">When you're done, press Hand back and @{agents.find((a) => a.id === c.help!.agentId)?.handle} picks up from there.</span>}
           </div>
-          {canEdit && !mine && (
-            <Button variant="primary" onClick={() => control(true)} disabled={busy}>
-              <Hand size={15} /> Take control
-            </Button>
-          )}
-          {mine && <span className="text-xs text-muted">When you're done, press Hand back and @{agents.find((a) => a.id === c.help!.agentId)?.handle} picks up from there.</span>}
-        </div>
-      )}
-      {activeLoan(c) && canEdit && <LoanBanner computer={c} />}
-      {error && <p className="shrink-0 mx-3 md:mx-5 mt-2 text-sm text-bad">{error}</p>}
-      {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 md:mx-5 mt-2 text-sm text-bad">{c.statusText}</p>}
+        )}
+        {activeLoan(c) && canEdit && <LoanBanner computer={c} />}
+      </div>
+      {error && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{error}</p>}
+      {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{c.statusText}</p>}
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-3 md:p-5">
-        <div className="flex-1 min-h-[40vh] lg:min-h-0">
+      <div className="flex-1 min-h-0 flex gap-4 px-3 md:px-5">
+        <div className="flex-1 min-h-0 min-w-0">
           <LiveScreen
             ref={screen}
             computer={c}
             control={mine}
             onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined}
-            onTakeControl={canEdit && c.online && !c.paused && !c.controller && !teacher ? () => void control(true) : undefined}
+            onTakeControl={canControl && !c.controller && !teacher ? () => void control(true) : undefined}
             onActivity={() => {
               // VNC input skips the hub, so say now and then that you're still using it
               if (Date.now() - touched.current < 15_000) return;
@@ -469,38 +482,65 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             }}
           />
         </div>
-        <aside className="lg:w-72 shrink-0 space-y-4 text-sm">
-          {c.kind === "device" && <LendPanel computer={c} />}
-          <section className="rounded-xl border border-line p-3 space-y-1.5">
-            <div className="text-xs text-muted">{computerKindLabel(c, devices)}</div>
-            <p className="text-muted text-xs">
-              {mine
-                ? "You're in control: your mouse and keyboard go to this computer, and agents wait until you hand it back."
-                : c.controller
-                  ? "Someone has control; agents are waiting."
-                  : c.kind === "device"
-                    ? "Take control to use it from here. Agents use it only while you lend it."
-                    : "Agents use it on their own. Take control to use it yourself; they pause until you hand it back."}
-            </p>
-          </section>
-          <section className="space-y-2">
-            <h3 className="font-semibold text-sm">Agents on this computer</h3>
-            {on.length ? (
-              on.map((a) => (
-                <a key={a.id} href={href({ view: "agents", agentId: a.id, tab: "computer" })} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover">
-                  <AgentAvatar agent={a} size={26} live />
-                  <span className="min-w-0 flex-1 truncate">
-                    {a.name} <span className="text-muted">@{a.handle}</span>
-                  </span>
-                  {a.status === "busy" && <Loader2 size={13} className="animate-spin text-muted" />}
-                </a>
-              ))
-            ) : (
-              <p className="text-xs text-muted">None yet. Give an agent this computer on its page (Agents → Computer). Agents that share a computer share its files, browser and sign-ins.</p>
-            )}
-          </section>
-          <ActivityLog computer={c} />
-        </aside>
+        {info && (
+          <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-72 shrink-0 overflow-y-auto space-y-4 text-sm bg-bg text-ink rounded-t-2xl lg:rounded-2xl p-4 shadow-panel">
+            <div className="flex items-center lg:hidden">
+              <h3 className="font-semibold">Details</h3>
+              <button onClick={() => setInfo(false)} className="ml-auto p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close details">
+                <X size={16} />
+              </button>
+            </div>
+            {c.kind === "device" && <LendPanel computer={c} />}
+            <section className="rounded-xl border border-line p-3 space-y-1.5">
+              <div className="text-xs text-muted">{computerKindLabel(c, devices)}</div>
+              <p className="text-muted text-xs">
+                {mine
+                  ? "You're in control: your mouse and keyboard go to this computer, and agents wait until you hand it back."
+                  : c.controller
+                    ? "Someone has control; agents are waiting."
+                    : c.kind === "device"
+                      ? "Take control to use it from here. Agents use it only while you lend it."
+                      : "Agents use it on their own. Take control to use it yourself; they pause until you hand it back."}
+              </p>
+            </section>
+            <section className="space-y-2">
+              <h3 className="font-semibold text-sm">Agents on this computer</h3>
+              {on.length ? (
+                on.map((a) => (
+                  <a key={a.id} href={href({ view: "agents", agentId: a.id, tab: "computer" })} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover">
+                    <AgentAvatar agent={a} size={26} live />
+                    <span className="min-w-0 flex-1 truncate">
+                      {a.name} <span className="text-muted">@{a.handle}</span>
+                    </span>
+                    {a.status === "busy" && <Loader2 size={13} className="animate-spin text-muted" />}
+                  </a>
+                ))
+              ) : (
+                <p className="text-xs text-muted">None yet. Give an agent this computer on its page (Agents → Computer). Agents that share a computer share its files, browser and sign-ins.</p>
+              )}
+            </section>
+            <ActivityLog computer={c} />
+          </aside>
+        )}
+      </div>
+
+      <div className="shrink-0 py-3 px-3 text-center text-sm text-white/70 min-h-11">
+        {teacher ? (
+          `${teacher.name} is watching. Do the task, then press Done.`
+        ) : c.help ? (
+          <span>
+            <span className="font-medium text-white">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you.</span>
+            {mine ? " Hand back when you're done." : " Click the screen to take control."}
+          </span>
+        ) : mine ? (
+          "Agents get it back when you hand it back or stop using it."
+        ) : c.controller ? (
+          state.label
+        ) : canControl ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Eye size={14} /> Watching · click the screen to take control
+          </span>
+        ) : null}
       </div>
 
       {pickTeach && (
@@ -554,7 +594,7 @@ function LoanBanner({ computer: c }: { computer: ComputerInfo }) {
     }
   };
   return (
-    <div className="shrink-0 mx-3 md:mx-5 mt-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-2.5 flex flex-wrap items-center gap-3">
+    <div className="shrink-0 mx-3 md:mx-5 mb-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-2.5 flex flex-wrap items-center gap-3">
       {agent && <AgentAvatar agent={agent} size={26} badge={false} />}
       <div className="min-w-0 flex-1 text-sm">
         <span className="font-medium">Lent to @{agent?.handle ?? "an agent"}</span> {lendLabel(loan.until)}
@@ -725,7 +765,7 @@ function TeachBar({ agent, computer, screen }: { agent: Agent; computer: Compute
   };
 
   return (
-    <div className="shrink-0 mx-3 md:mx-5 mt-3 rounded-xl border border-line bg-bg px-3 py-2.5 space-y-2">
+    <div className="shrink-0 mx-3 md:mx-5 mb-3 rounded-xl border border-line bg-bg px-3 py-2.5 space-y-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <AgentAvatar agent={agent} size={28} badge={false} live />
         <div className="min-w-48 flex-1">

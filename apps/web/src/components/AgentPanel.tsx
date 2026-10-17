@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, MessageSquare, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, X } from "lucide-react";
+import { Activity, BookOpen, MessageSquare, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
 import { harnessLabel, type Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
@@ -346,7 +346,12 @@ function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; com
             </button>
           </div>
         )}
-        <button onClick={close} className="ml-auto size-9 rounded-full hover:bg-white/10 grid place-items-center" aria-label="Exit full screen" title="Exit full screen">
+        {canControl && !someoneElse && (
+          <button onClick={() => go({ view: "computers", computerId: c.id, teach: agent.id })} className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-white/20 text-sm font-medium hover:bg-white/10" title={`Do a task once while ${agent.name} watches; it saves it as a routine`}>
+            <Video size={15} /> Teach a task
+          </button>
+        )}
+        <button onClick={close} className={cx(!(canControl && !someoneElse) && "ml-auto", "size-9 rounded-full hover:bg-white/10 grid place-items-center")} aria-label="Exit full screen" title="Exit full screen">
           <Minimize2 size={18} />
         </button>
       </div>
