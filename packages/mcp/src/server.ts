@@ -44,7 +44,7 @@ export async function createWarrenMcp(client: WarrenClient) {
   const server = new McpServer(
     { name: "warren", version: "0.0.1" },
     {
-      instructions: `You are @${self.handle} in the Warren workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. When you learn something lasting about a person (a preference, a plan, something they did, a small detail), save it with memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
+      instructions: `You are @${self.handle} in the Warren workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
     },
   );
 
@@ -192,22 +192,17 @@ export async function createWarrenMcp(client: WarrenClient) {
   server.registerTool(
     "memory_write",
     {
-      description: "Create or overwrite a markdown note (Obsidian style: use [[wikilinks]] and #tags). Write to 'me/...' for private memory or 'shared/...' for everyone. Every write is versioned.",
+      description:
+        "Create or overwrite a markdown note (Obsidian style: use [[wikilinks]] and #tags). Write to 'me/...' for private memory or 'shared/...' for everyone; follow me/skills/memory/SKILL.md for folders, header and links. Every write is versioned. The reply lists similar notes to merge into and names you could link.",
       inputSchema: { path: z.string(), content: z.string(), message: z.string().optional().describe("short change description") },
     },
-    safe(async ({ path: p, content, message }) => {
-      await client.writeNote(vaultPath(p), content, message);
-      return text(`Saved ${vaultPath(p)}.`);
-    }),
+    safe(async ({ path: p, content, message }) => text(`Saved ${vaultPath(p)}.${saveHints(await client.writeNote(vaultPath(p), content, message))}`)),
   );
 
   server.registerTool(
     "memory_append",
     { description: "Append text to a note, creating it if needed. Good for logs and journals.", inputSchema: { path: z.string(), text: z.string() } },
-    safe(async ({ path: p, text: t }) => {
-      await client.appendNote(vaultPath(p), t);
-      return text(`Appended to ${vaultPath(p)}.`);
-    }),
+    safe(async ({ path: p, text: t }) => text(`Appended to ${vaultPath(p)}.${saveHints(await client.appendNote(vaultPath(p), t))}`)),
   );
 
   server.registerTool(
@@ -584,4 +579,12 @@ function guessMime(p: string): string {
   const ext = path.extname(p).toLowerCase();
   const map: Record<string, string> = { ".txt": "text/plain", ".md": "text/markdown", ".json": "application/json", ".csv": "text/csv", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf" };
   return map[ext] ?? "application/octet-stream";
+}
+
+/** The hints after a save, in a few short lines ("" when there are none). */
+export function saveHints(r: { similar?: { path: string; title: string }[]; links?: string[] } | null | undefined): string {
+  const out: string[] = [];
+  if (r?.similar?.length) out.push(`Similar notes (if it's the same idea, merge into one and delete the other):\n${r.similar.map((s) => `- ${s.path} (${s.title})`).join("\n")}`);
+  if (r?.links?.length) out.push(`Mentions you could link: ${r.links.join(", ")}`);
+  return out.length ? `\n${out.join("\n")}` : "";
 }

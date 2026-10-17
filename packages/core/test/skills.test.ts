@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SKILL_CATALOG, everydaySkills } from "../src/index.ts";
+import { BUILTIN_SKILLS, MEMORY_SKILL, SKILL_CATALOG, catalogSkill, everydaySkills } from "../src/index.ts";
 
 const banned = ["memory_search", "vault", "SKILL.md", "Markdown", "`"];
 
@@ -29,5 +29,15 @@ describe("skill catalog plain-language text", () => {
 
   it("writes new skill descriptions as 'Use when'", () => {
     for (const s of SKILL_CATALOG.slice(0, 3)) expect(s.description.startsWith("Use when")).toBe(true);
+  });
+});
+
+describe("built-in memory skill", () => {
+  it("teaches how to file memory, and isn't in the shop", () => {
+    expect(BUILTIN_SKILLS.map((s) => s.id)).toEqual(["memory"]);
+    for (const must of ["memory_search", "memory_remember", "memory_write", "people/", "projects/", "topics/", "journal/YYYY-MM-DD", "type:", "source:", "related:", "[[note-name]]", "hub note", "secrets"]) expect(MEMORY_SKILL.content, must).toContain(must);
+    expect(MEMORY_SKILL.description).toMatch(/^Use /);
+    expect(catalogSkill("memory")).toBeUndefined();
+    expect(SKILL_CATALOG.some((s) => s.id === "memory")).toBe(false);
   });
 });

@@ -558,3 +558,71 @@ export const everydaySkills = (): CatalogSkill[] => SKILL_CATALOG.filter((s) => 
 export function catalogSkill(id: string): CatalogSkill | undefined {
   return SKILL_CATALOG.find((s) => s.id === id);
 }
+
+/**
+ * Skills every agent always has, on every harness. They aren't in the shop or the skills table:
+ * the hub writes them into each agent's folder (`skills/<id>/SKILL.md`) and puts them back if
+ * they go missing, so they can't be removed.
+ */
+export const MEMORY_SKILL: CatalogSkill = {
+  id: "memory",
+  name: "Keep memory tidy and linked",
+  description: "Use whenever you save, update or look up something in memory (memory_write, memory_append, memory_remember).",
+  icon: "BrainCircuit",
+  tags: ["memory", "built-in"],
+  content: `# Keep memory tidy and linked
+
+Memory is a shared second brain: markdown notes that link to each other with \`[[wikilinks]]\`, so people and agents can find things later and see how they connect. A note nobody can find, or a second copy of a note that already exists, makes it worse. Follow these steps every time you save something.
+
+## 1. Search first
+- memory_search for the person, project or topic before writing. Open the closest matches with memory_read.
+- If a note on the same idea exists, **update it** (memory_read, then memory_write the whole note with your change) instead of making a near-duplicate.
+- When a save comes back with "Similar notes", read them and merge if it's the same idea.
+
+## 2. Facts about people: memory_remember
+- Something lasting about a person you work with (a preference, a plan, something they did, a detail about them): use **memory_remember**, one fact per call. It files it in their profile for you.
+- Everything else (projects, topics, decisions, research, logs, people outside the workspace): use **memory_write**, or **memory_append** for logs and journals.
+
+## 3. One idea per note, with a clear title
+- One project, decision, topic or person per note. Split notes that cover several things.
+- Start with a \`# Title\` that says what it is ("Acme pricing decision", not "Notes").
+- File names are short, lowercase, with dashes: \`acme-pricing.md\`.
+
+## 4. Where notes go
+Use the same folders inside \`me/\` (private), \`shared/\` (everyone) and team folders:
+
+| Folder | For |
+|---|---|
+| \`people/\` | one hub note per person outside the workspace (a customer, a contact) |
+| \`projects/\` | one hub note per project, plus notes about it |
+| \`topics/\` | subjects and reference material |
+| \`journal/YYYY-MM-DD.md\` | what happened that day (memory_append) |
+
+Decisions go next to what they decide (\`projects/acme-pricing-decision.md\`). Put things people should see in \`shared/\` or the team's folder; keep \`me/\` for your own working notes.
+
+## 5. A small header
+Start each note with front matter:
+
+\`\`\`
+---
+type: decision        # person, project, topic, decision, journal or reference
+source: "#general, 2026-10-17"   # where it came from: a channel, a link, a file
+related: ["[[acme]]", "[[pricing]]"]
+---
+\`\`\`
+
+Warren fills in \`type\`, \`created\` and \`updated\` if you leave them out, but never changes what you wrote.
+
+## 6. Link it
+- Link to at least one existing note with \`[[note-name]]\` (the file name without .md).
+- Always link the hub note for the person, project or topic it's about. If that hub note doesn't exist yet, create it: a title, one or two lines on what it is, and links to its notes.
+- When a save comes back with "Mentions you could link", add the links that fit.
+
+## 7. Never save secrets
+No passwords, API keys, tokens, card numbers or one-time codes, not even in your private folder. Write where the secret lives instead ("the API key is in the GitHub connector").`,
+};
+
+export const BUILTIN_SKILLS: CatalogSkill[] = [MEMORY_SKILL];
+
+/** Slugs built-in skills use in agents' folders; the workspace's own skills can't take them. */
+export const BUILTIN_SKILL_SLUGS = BUILTIN_SKILLS.map((s) => s.id);
