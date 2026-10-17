@@ -236,6 +236,10 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["tasks", "parent_id", "TEXT"],
   ["runs", "kind", "TEXT"],
   ["background", "focus", "TEXT NOT NULL DEFAULT ''"],
+  ["background", "model", "TEXT"],
+  ["background", "effort", "TEXT"],
+  // NULL means no limit, so existing rows get the default of 24 from the column itself
+  ["background", "daily_cap", "INTEGER DEFAULT 24"],
 ];
 
 export function openDb(file: string): Database.Database {

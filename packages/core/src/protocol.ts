@@ -24,6 +24,12 @@ export const AgentEvent = z.discriminatedUnion("type", [
     contextUsed: z.number().int().nonnegative().optional(),
     /** usable context window for that model */
     contextWindow: z.number().int().positive().optional(),
+    /** tokens the whole run read, cached ones included (what a bill counts); only where the harness reports it */
+    inputTokens: z.number().int().nonnegative().optional(),
+    /** tokens the whole run wrote, reasoning included */
+    outputTokens: z.number().int().nonnegative().optional(),
+    /** the part of `inputTokens` that came from the harness's cache */
+    cachedInputTokens: z.number().int().nonnegative().optional(),
   }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEvent>;
@@ -96,6 +102,12 @@ export const RunRequest = z.object({
   threadId: z.string().nullable(),
   prompt: z.string(),
   hop: z.number().int(),
+  /** start a new harness session instead of continuing this conversation's (background checks) */
+  fresh: z.boolean().optional(),
+  /** run on this model instead of the agent's own (background checks) */
+  model: z.string().max(200).optional(),
+  /** and with this reasoning effort */
+  effort: z.string().max(32).optional(),
   workspace: RunWorkspace.optional(),
   /** the agent's computer when this device runs it (a VM shares a folder with the agent) */
   computer: ComputerSpec.optional(),

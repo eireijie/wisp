@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, ConnectorSpec, HarnessCatalog, ModelOption } from "@warren/core";
+import type { AccessLevel, AgentEvent, ConnectorSpec, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
 import { commandVersion, launched, spawnCommand, stopProcess } from "./process.ts";
 
@@ -330,8 +330,8 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
         const res = await conn.request("session/prompt", { sessionId, prompt: [{ type: "text", text: input.prompt }] });
         if (input.signal?.aborted || res?.stopReason === "cancelled") throw new Error("cancelled");
         if (res?.stopReason === "refusal" && !text.trim()) throw new Error(`${info.label} refused the request`);
-        const usage = res?.usage;
-        if (usage && (usage.totalTokens || usage.inputTokens)) onEvent({ type: "usage", model: input.model ?? undefined, effort: input.effort ?? null, contextUsed: usage.totalTokens ?? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) });
+        const usage = acpUsage(res?.usage, input);
+        if (usage) onEvent(usage);
         return { finalText: text.trim(), sessionId };
       } catch (err) {
         if (input.signal?.aborted) throw new Error("cancelled");
@@ -384,4 +384,22 @@ export function acpModels(session: Json): Pick<HarnessCatalog, "models" | "effor
   }
   const efforts = flat(effortOpt).map((o) => String(o.value ?? o.id));
   return { models: models.slice(0, 200), efforts, defaultModel, defaultEffort: effortOpt?.currentValue ?? undefined };
+}
+
+/**
+ * The `usage` ACP agents may return with the end of a prompt (ACP's token usage fields). Agents
+ * that don't send it give nothing. Exported for tests.
+ */
+export function acpUsage(usage: any, input: { model?: string | null; effort?: string | null } = {}): Extract<AgentEvent, { type: "usage" }> | null {
+  if (!usage || !(usage.totalTokens || usage.inputTokens || usage.outputTokens)) return null;
+  const n = (v: unknown) => (typeof v === "number" && v >= 0 ? v : undefined);
+  const inputTokens = n(usage.inputTokens);
+  const outputTokens = n(usage.outputTokens);
+  return {
+    type: "usage",
+    model: input.model ?? undefined,
+    effort: input.effort ?? null,
+    contextUsed: n(usage.totalTokens) ?? (inputTokens ?? 0) + (outputTokens ?? 0),
+    ...(inputTokens !== undefined || outputTokens !== undefined ? { inputTokens: inputTokens ?? 0, outputTokens: (outputTokens ?? 0) + (n(usage.thoughtTokens) ?? 0), cachedInputTokens: n(usage.cachedReadTokens) } : {}),
+  };
 }

@@ -3,10 +3,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { HarnessAdapter, RunInput } from "@warren/adapters";
+import type { AgentEvent } from "@warren/core";
 import { WarrenClient } from "@warren/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
-import { afterQuietHours, inQuietHours, parseWhen } from "../src/background.ts";
+import { afterQuietHours, inQuietHours, parseWhen, startOfDay } from "../src/background.ts";
 import type { Hub } from "../src/hub.ts";
 
 let dir: string;
@@ -19,16 +20,19 @@ let me: string;
 const calls: RunInput[] = [];
 const pushed: { endpoint: string; payload: any }[] = [];
 /** what the fake harness does on a background check */
+let reportUsage: Extract<AgentEvent, { type: "usage" }> | null = null;
 let onCheck: (agent: WarrenClient, input: RunInput) => Promise<string> = async () => "nothing new";
 
 const fake: HarnessAdapter = {
   id: "custom",
   label: "Fake",
   binary: "true",
-  async run(input) {
+  async run(input, onEvent) {
     calls.push(input);
+    onEvent({ type: "session", id: `sess-${calls.length}` });
     const agent = new WarrenClient({ url: input.mcp!.env.WARREN_URL, token: input.mcp!.env.WARREN_TOKEN });
     const finalText = input.prompt.includes("## Working in the background") ? await onCheck(agent, input) : "hi";
+    if (reportUsage && input.prompt.includes("## Working in the background")) onEvent(reportUsage);
     return { finalText, sessionId: `sess-${calls.length}` };
   },
 };
@@ -170,7 +174,117 @@ describe("background work", () => {
   });
 });
 
+describe("what a check costs", () => {
+  const settle = async (run: () => string | null) => {
+    const n = calls.length;
+    expect(run()).toBeTruthy();
+    await waitFor(() => calls.length > n || undefined);
+    await idle();
+    return calls.at(-1)!;
+  };
+  const wake = () => hub.background.wake(agentId, me);
+
+  it("starts every check in a new session and leaves the conversation's alone", async () => {
+    onCheck = async () => "ok";
+    await owner.send(dm().id, "what's up?");
+    await waitFor(() => calls.filter((c) => !c.prompt.includes("## Working in the background")).length > 1 || undefined);
+    await idle();
+    const dmRun = [...calls].reverse().find((c) => !c.prompt.includes("## Working in the background"))!;
+    const dmSession = `sess-${calls.indexOf(dmRun) + 1}`;
+    const first = await settle(wake);
+    const second = await settle(wake);
+    expect(first.sessionId).toBeNull();
+    expect(second.sessionId).toBeNull();
+    // the next message in the DM carries on from where the DM was, not from a check
+    await owner.send(dm().id, "thanks");
+    const n = calls.length;
+    await waitFor(() => calls.length > n || undefined);
+    expect(calls.at(-1)!.prompt).not.toContain("## Working in the background");
+    expect(calls.at(-1)!.sessionId).toBe(dmSession);
+    await idle();
+  });
+
+  it("runs checks on the model picked for them, and everything else on the agent's own", async () => {
+    onCheck = async () => "ok";
+    await owner.request("PUT", `/api/agents/${agentId}/background`, { model: "haiku", effort: "low" });
+    expect((await owner.request("GET", `/api/agents/${agentId}/background`)).background).toMatchObject({ model: "haiku", effort: "low" });
+    const check = await settle(wake);
+    expect(check.model).toBe("haiku");
+    expect(check.effort).toBe("low");
+    expect(check.fast).toBe(false);
+    await owner.send(dm().id, "and now?");
+    const n = calls.length;
+    await waitFor(() => calls.length > n || undefined);
+    expect(calls.at(-1)!.model ?? null).toBeNull();
+    await idle();
+    // blank = the agent's own again
+    await owner.request("PUT", `/api/agents/${agentId}/background`, { model: "", effort: null });
+    expect((await settle(wake)).model ?? null).toBeNull();
+  });
+
+  it("records the tokens a check used and totals them for the day and week", async () => {
+    onCheck = async () => "ok";
+    reportUsage = { type: "usage", model: "haiku", contextUsed: 9000, contextWindow: 200000, inputTokens: 30_000, outputTokens: 8_000, cachedInputTokens: 25_000 };
+    await settle(wake);
+    const { usage } = await owner.request("GET", `/api/agents/${agentId}/background`);
+    expect(usage.lastTokens).toBe(38_000);
+    expect(usage.todayTokens).toBeGreaterThanOrEqual(38_000);
+    expect(usage.weekTokens).toBeGreaterThanOrEqual(usage.todayTokens);
+    // the context-window numbers still land beside the token counts
+    const run = hub.store.db.prepare("SELECT usage_json FROM runs WHERE kind = 'background' ORDER BY created_at DESC LIMIT 1").get() as { usage_json: string };
+    expect(JSON.parse(run.usage_json)).toMatchObject({ contextUsed: 9000, contextWindow: 200000, inputTokens: 30_000 });
+    // a harness that reports no tokens leaves the last check unknown, not zero
+    reportUsage = { type: "usage", model: "haiku", contextUsed: 500 };
+    await settle(wake);
+    expect((await owner.request("GET", `/api/agents/${agentId}/background`)).usage.lastTokens).toBeNull();
+    reportUsage = null;
+  });
+
+  it("holds regular checks once the day's are used up, but still does follow-ups", async () => {
+    onCheck = async () => "ok";
+    const today = hub.store.backgroundRuns(agentId, me, startOfDay(new Date(), "UTC").toISOString()).length;
+    hub.store.setBackground(agentId, me, { enabled: true, quietStart: "00:00", quietEnd: "00:00", nextAt: null, nextReason: "", dailyCap: today });
+    const n = calls.length;
+    hub.background.tick(new Date());
+    expect(calls.length).toBe(n);
+    const held = hub.store.background(agentId, me)!;
+    expect(held.nextReason).toBe("daily limit reached");
+    expect(held.nextAt).toBe(startOfDay(new Date(), "UTC", 1).toISOString());
+    expect((await owner.request("GET", `/api/agents/${agentId}/background`)).usage).toMatchObject({ capReached: true, checksToday: today });
+
+    // raising the limit lets the waiting check go
+    await owner.request("PUT", `/api/agents/${agentId}/background`, { dailyCap: today + 10 });
+    expect(hub.store.background(agentId, me)!.nextAt).toBeNull();
+    hub.background.tick(new Date());
+    await waitFor(() => calls.length > n || undefined);
+    await idle();
+
+    // a follow-up the agent set is not a regular check, so it runs with the limit reached
+    hub.store.setBackground(agentId, me, { dailyCap: hub.store.backgroundRuns(agentId, me, startOfDay(new Date(), "UTC").toISOString()).length });
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    await agent.setFollowup({ inMinutes: 20, note: "tell Sam the essay is due" });
+    const m = calls.length;
+    hub.background.tick(new Date(Date.now() + 21 * 60_000));
+    await waitFor(() => calls.length > m || undefined);
+    expect(calls.at(-1)!.prompt).toContain("tell Sam the essay is due");
+    await idle();
+
+    // no limit at all
+    await owner.request("PUT", `/api/agents/${agentId}/background`, { dailyCap: null });
+    expect(hub.store.background(agentId, me)!.dailyCap).toBeNull();
+    expect((await owner.request("GET", `/api/agents/${agentId}/background`)).usage.capReached).toBe(false);
+    hub.store.setBackground(agentId, me, { enabled: false, quietStart: "22:00", quietEnd: "07:00" });
+  });
+});
+
 describe("times", () => {
+  it("finds the start of the day on the person's clock", () => {
+    expect(startOfDay(new Date("2026-10-15T03:00:00Z"), "America/New_York").toISOString()).toBe("2026-10-14T04:00:00.000Z");
+    expect(startOfDay(new Date("2026-10-15T03:00:00Z"), "America/New_York", 1).toISOString()).toBe("2026-10-15T04:00:00.000Z");
+    expect(startOfDay(new Date("2026-10-15T12:00:00Z"), "UTC", 1).toISOString()).toBe("2026-10-16T00:00:00.000Z");
+  });
+
+
   it("reads a follow-up time on the person's clock", () => {
     expect(parseWhen("2026-10-15 08:00", "America/New_York")!.toISOString()).toBe("2026-10-15T12:00:00.000Z");
     expect(parseWhen("2026-01-15T08:30", "America/New_York")!.toISOString()).toBe("2026-01-15T13:30:00.000Z");

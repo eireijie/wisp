@@ -68,7 +68,7 @@ describe("model, effort and access flags", () => {
   });
 });
 
-import { claudeUsage, codexDefaults, codexUsageFromRollout } from "../src/index.ts";
+import { acpUsage, claudeUsage, codexDefaults, codexTokens, codexUsageFromRollout } from "../src/index.ts";
 
 describe("context usage", () => {
   it("reads the real context from a Codex session file", () => {
@@ -91,6 +91,58 @@ describe("context usage", () => {
     const result = { type: "result", modelUsage: { "claude-sonnet-5-5": { contextWindow: 1000000, inputTokens: 999 } } };
     expect(claudeUsage(last, result)).toEqual({ type: "usage", model: "claude-sonnet-5-5", contextUsed: 21112, contextWindow: 1000000 });
     expect(claudeUsage(null, null)).toBeNull();
+  });
+});
+
+describe("token usage", () => {
+  it("takes Claude Code's run total from the final result, cache reads included", () => {
+    // the shape of a stream-json `result` line
+    const result = {
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      num_turns: 4,
+      result: "Inbox quiet.",
+      usage: { input_tokens: 21, cache_creation_input_tokens: 2400, cache_read_input_tokens: 61000, output_tokens: 1350, service_tier: "standard" },
+      modelUsage: { "claude-haiku-4-5": { inputTokens: 21, outputTokens: 1350, cacheReadInputTokens: 61000, cacheCreationInputTokens: 2400, contextWindow: 200000 } },
+    };
+    const last = { type: "assistant", message: { model: "claude-haiku-4-5", usage: { input_tokens: 5, cache_read_input_tokens: 20000, cache_creation_input_tokens: 100, output_tokens: 300 } } };
+    expect(claudeUsage(last, result)).toEqual({
+      type: "usage",
+      model: "claude-haiku-4-5",
+      contextUsed: 20405,
+      contextWindow: 200000,
+      inputTokens: 63421,
+      outputTokens: 1350,
+      cachedInputTokens: 61000,
+    });
+    // a result with no usage still gives the context numbers
+    expect(claudeUsage(last, { type: "result", modelUsage: {} })).not.toHaveProperty("inputTokens");
+  });
+
+  it("reads a Codex turn's counts, where input already includes the cached part", () => {
+    const line = { type: "turn.completed", usage: { input_tokens: 24763, cached_input_tokens: 24448, output_tokens: 122, reasoning_output_tokens: 64 } };
+    expect(codexTokens(line)).toEqual({ inputTokens: 24763, outputTokens: 186, cachedInputTokens: 24448 });
+    expect(codexTokens({ type: "turn.completed", usage: { input_tokens: 10, output_tokens: 2 } })).toEqual({ inputTokens: 10, outputTokens: 2, cachedInputTokens: 0 });
+    expect(codexTokens({ type: "turn.completed" })).toBeNull();
+    expect(codexTokens({ type: "item.completed", usage: { input_tokens: 1 } })).toBeNull();
+  });
+
+  it("reads the usage an ACP agent returns with the end of a prompt, if it sends any", () => {
+    const res = { stopReason: "end_turn", usage: { totalTokens: 9200, inputTokens: 8000, outputTokens: 900, thoughtTokens: 300, cachedReadTokens: 6500 } };
+    expect(acpUsage(res.usage, { model: "gemini-3-pro", effort: null })).toEqual({
+      type: "usage",
+      model: "gemini-3-pro",
+      effort: null,
+      contextUsed: 9200,
+      inputTokens: 8000,
+      outputTokens: 1200,
+      cachedInputTokens: 6500,
+    });
+    expect(acpUsage(undefined)).toBeNull();
+    expect(acpUsage({})).toBeNull();
+    // only a total: context stays known, token counts stay unknown
+    expect(acpUsage({ totalTokens: 500 })).toEqual({ type: "usage", model: undefined, effort: null, contextUsed: 500 });
   });
 });
 

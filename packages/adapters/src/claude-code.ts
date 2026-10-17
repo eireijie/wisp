@@ -120,19 +120,24 @@ export const claudeCode: HarnessAdapter = {
 
 /**
  * Context in use = the last model call's full prompt (fresh + cached tokens) plus its output.
- * The window comes from the final result's per-model usage. Exported for tests.
+ * The window comes from the final result's per-model usage. The final result's `usage` is the
+ * sum over every model call in the run, which is what the run cost. Exported for tests.
  */
 export function claudeUsage(lastAssistant: any, result: any): Extract<AgentEvent, { type: "usage" }> | null {
   const u = lastAssistant?.message?.usage;
   const model: string | undefined = lastAssistant?.message?.model;
   const perModel = result?.modelUsage ?? {};
   const entry = (model && perModel[model]) ?? Object.values(perModel)[0];
-  if (!u && !entry) return null;
+  const total = result?.usage;
+  if (!u && !entry && !total) return null;
+  const cached = total ? (total.cache_read_input_tokens ?? 0) : 0;
   return {
     type: "usage",
     model: model ?? (Object.keys(perModel)[0] || undefined),
     contextUsed: u ? (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.output_tokens ?? 0) : undefined,
     contextWindow: (entry as any)?.contextWindow ?? undefined,
+    // fresh, cache-written and cache-read input all count as read
+    ...(total ? { inputTokens: (total.input_tokens ?? 0) + (total.cache_creation_input_tokens ?? 0) + cached, outputTokens: total.output_tokens ?? 0, cachedInputTokens: cached } : {}),
   };
 }
 

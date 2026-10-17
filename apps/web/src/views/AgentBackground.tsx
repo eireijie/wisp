@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppWindow, BellRing, Clock, FolderOpen, Monitor, Moon, RefreshCw, X } from "lucide-react";
-import type { Agent, BackgroundSource, BackgroundWork, Followup } from "@warren/core";
+import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, Followup, HarnessCatalog } from "@warren/core";
+import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
@@ -17,6 +18,11 @@ const PACES = [
   [240, "every 4 hours"],
 ] as const;
 
+const CAPS = [6, 12, 24, 48, 96] as const;
+
+/** 38,400 → "38k", 2,100,000 → "2.1M" */
+const tokens = (n: number) => (n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
 const at = (iso: string) => {
   const d = new Date(iso);
   const today = d.toDateString() === new Date().toDateString();
@@ -30,15 +36,20 @@ const at = (iso: string) => {
 export function BackgroundPanel({ agent, active }: { agent: Agent; active: boolean }) {
   const version = useStore((s) => s.backgroundVersion);
   const offline = useStore((s) => s.agents.find((a) => a.id === agent.id)?.status === "offline");
-  const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null; sources: BackgroundSource[] } | null>(null);
+  const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null; sources: BackgroundSource[]; usage: BackgroundUsage; defaultDailyCap: number } | null>(null);
+  const [catalog, setCatalog] = useState<HarnessCatalog | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = () => api<NonNullable<typeof state>>("GET", `/api/agents/${agent.id}/background`).then(setState, (e) => setError((e as Error).message));
   useEffect(() => {
     if (active) void load();
   }, [active, agent.id, version]);
+  // the same models the agent's Model tab offers
+  useEffect(() => {
+    if (active) api<{ catalog: HarnessCatalog | null }>("GET", `/api/agents/${agent.id}/models`).then((r) => setCatalog(r.catalog), () => setCatalog(null));
+  }, [active, agent.id, agent.nodeId]);
 
-  const save = async (patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd">>) => {
+  const save = async (patch: Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd" | "model" | "effort" | "dailyCap">>) => {
     setError(null);
     try {
       await api("PUT", `/api/agents/${agent.id}/background`, patch);
@@ -58,6 +69,9 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
   };
 
   const b = state?.background;
+  const models = catalog?.models ?? [];
+  const chosen = models.find((m) => m.id === (b?.model ?? agent.model));
+  const efforts = chosen?.efforts ?? catalog?.efforts ?? [];
   const apps = state?.sources.filter((x) => x.kind === "app") ?? [];
   const on = !!b?.enabled;
   return (
@@ -96,6 +110,7 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                     )}
                   </div>
                   {b.lastNote && <div className="text-muted">Its note from last time: {b.lastNote}</div>}
+                  <UsageLine usage={state.usage} cap={b.dailyCap} />
                 </div>
                 <Button onClick={() => void checkNow()} disabled={b.checking}>
                   <RefreshCw size={14} /> Check now
@@ -116,6 +131,56 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                       </option>
                     ))}
                     {!PACES.some(([m]) => m === b.everyMinutes) && <option value={b.everyMinutes}>every {b.everyMinutes} minutes</option>}
+                  </select>
+                </div>
+                <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex-1 min-w-56">
+                    <div className="font-medium">Model for background checks</div>
+                    <div className="text-xs text-muted">
+                      Looking around is usually fine on a smaller, faster model, which costs a lot less over a day of checks. It can still do real work in the same check: write the draft, find the answer. Leave it on {agent.name}'s own model if you'd rather.
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label="Model for background checks"
+                      className="h-8 rounded-lg border border-line bg-panel px-2 max-w-52"
+                      value={b.model ?? ""}
+                      onChange={(e) => void save({ model: e.target.value || null, effort: null })}
+                    >
+                      <option value="">{agent.model ? `${agent.name}'s own (${prettyModel(models.find((m) => m.id === agent.model)?.label ?? agent.model)})` : `${agent.name}'s own model`}</option>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {prettyModel(m.label)}
+                        </option>
+                      ))}
+                      {b.model && !models.some((m) => m.id === b.model) && <option value={b.model}>{b.model}</option>}
+                    </select>
+                    <select aria-label="Reasoning effort for background checks" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.effort ?? ""} onChange={(e) => void save({ effort: e.target.value || null })}>
+                      <option value="">Default effort</option>
+                      {efforts.map((x) => (
+                        <option key={x} value={x}>
+                          {effortName(x)} effort
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex-1 min-w-56">
+                    <div className="font-medium">Most checks a day</div>
+                    <div className="text-xs text-muted">
+                      {state.usage.capReached ? "Reached for today: regular checks resume tomorrow." : "After that, regular checks wait until tomorrow."} Follow-ups you asked for still happen.
+                    </div>
+                  </div>
+                  <select aria-label="Most checks a day" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.dailyCap ?? ""} onChange={(e) => void save({ dailyCap: e.target.value ? Number(e.target.value) : null })}>
+                    {[...new Set<number>([...CAPS, ...(b.dailyCap ? [b.dailyCap] : [])])]
+                      .sort((x, y) => x - y)
+                      .map((n) => (
+                        <option key={n} value={n}>
+                          {n} a day
+                        </option>
+                      ))}
+                    <option value="">No limit</option>
                   </select>
                 </div>
                 <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
@@ -197,6 +262,22 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** What the checks used, as far as the harness says: "Last check: 38k tokens · Today: 410k · This week: 2.1M". */
+function UsageLine({ usage, cap }: { usage: BackgroundUsage; cap: number | null }) {
+  const known = usage.lastTokens !== null || usage.todayTokens !== null || usage.weekTokens !== null;
+  const parts = [
+    usage.lastTokens !== null && `Last check: ${tokens(usage.lastTokens)} tokens`,
+    usage.todayTokens !== null && `Today: ${tokens(usage.todayTokens)}`,
+    usage.weekTokens !== null && `This week: ${tokens(usage.weekTokens)}`,
+  ].filter(Boolean);
+  return (
+    <div className="text-xs text-muted">
+      {known ? parts.join(" · ") : "Token use: not reported by this harness."}
+      {usage.checksToday > 0 && `${known ? " · " : " "}${usage.checksToday}${cap ? ` of ${cap}` : ""} ${usage.checksToday === 1 && !cap ? "check" : "checks"} today`}
     </div>
   );
 }

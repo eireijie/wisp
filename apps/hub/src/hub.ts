@@ -493,9 +493,11 @@ export class Hub {
         const computer: ComputerSpec | undefined = c?.kind === "vm" && c.nodeId === agent.nodeId ? this.computers.spec(c) : undefined;
         const inComputer = this.runsInComputer(agent);
         const connectors = this.connectors.specsFor(agent.id);
+        // every background check starts a new session (the watch notes carry what it needs), on the model the person picked for checks
+        const bg = run.kind === "background" && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(bg?.effort ? { effort: bg.effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}) },
         });
       },
       // the prompt couldn't be built (a vault read failed, say): say so like any other failure

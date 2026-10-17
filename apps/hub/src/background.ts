@@ -1,8 +1,10 @@
-import { CONNECTOR_CATALOG, zonedParts, type BackgroundSource, type Followup } from "@warren/core";
+import { CONNECTOR_CATALOG, zonedParts, type BackgroundSource, type BackgroundUsage, type Followup } from "@warren/core";
 import type { Hub } from "./hub.ts";
 
 /** The device sees background checks as their own conversation, so they don't mix into the DM's. */
 export const BACKGROUND_THREAD = "background";
+/** Regular checks a day, per agent and person, until they pick another number. */
+export const DEFAULT_DAILY_CAP = 24;
 const MIN_MINUTES = 10;
 const MAX_MINUTES = 24 * 60;
 
@@ -26,6 +28,16 @@ export function afterQuietHours(at: Date, timeZone: string, start: string, end: 
   let t = new Date(Math.ceil(at.getTime() / 60_000) * 60_000);
   for (let i = 0; i < 24 * 60 && inQuietHours(t, timeZone, start, end); i += 5) t = new Date(t.getTime() + 5 * 60_000);
   return t;
+}
+
+/** The calendar day `at` falls on, on the person's clock, as "YYYY-MM-DD". */
+const dayOf = (at: Date, timeZone: string) => at.toLocaleDateString("en-CA", { timeZone });
+
+/** Midnight at the start of `at`'s day on the person's clock; `plusDays` = 1 gives the start of tomorrow. */
+export function startOfDay(at: Date, timeZone: string, plusDays = 0): Date {
+  const [y, m, d] = dayOf(at, timeZone).split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d + plusDays));
+  return parseWhen(`${day.toISOString().slice(0, 10)} 00:00`, timeZone) ?? day;
 }
 
 /**
@@ -78,8 +90,39 @@ export class Background {
         store.setBackground(b.agentId, b.userId, { nextAt: afterQuietHours(at, tz, b.quietStart, b.quietEnd).toISOString(), nextReason: "after quiet hours" });
         continue;
       }
+      // a regular check waits for tomorrow once today's are used up; follow-ups above never wait
+      if (this.capReached(b.agentId, b.userId, b.dailyCap, at)) {
+        store.setBackground(b.agentId, b.userId, { nextAt: startOfDay(at, tz, 1).toISOString(), nextReason: "daily limit reached" });
+        continue;
+      }
       this.wake(b.agentId, b.userId, [], at);
     }
+  }
+
+  /** Checks started today (any kind) on the person's clock. */
+  private checksToday(agentId: string, userId: string, at: Date) {
+    return this.hub.store.backgroundRuns(agentId, userId, startOfDay(at, this.timezone(userId)).toISOString()).length;
+  }
+
+  private capReached(agentId: string, userId: string, cap: number | null, at: Date) {
+    return cap !== null && this.checksToday(agentId, userId, at) >= cap;
+  }
+
+  /** What this person's checks used, from the token counts the harness reported. */
+  usage(agentId: string, userId: string, at = new Date()): BackgroundUsage {
+    const tz = this.timezone(userId);
+    const today = startOfDay(at, tz).toISOString();
+    const runs = this.hub.store.backgroundRuns(agentId, userId, new Date(at.getTime() - 7 * 86_400_000).toISOString());
+    const sum = (list: typeof runs) => (list.some((r) => r.tokens !== null) ? list.reduce((n, r) => n + (r.tokens ?? 0), 0) : null);
+    const todays = runs.filter((r) => r.createdAt >= today);
+    const finished = runs.find((r) => r.status === "done" || r.status === "failed");
+    return {
+      lastTokens: finished?.tokens ?? null,
+      todayTokens: sum(todays),
+      weekTokens: sum(runs),
+      checksToday: todays.length,
+      capReached: this.capReached(agentId, userId, this.hub.store.background(agentId, userId)?.dailyCap ?? null, at),
+    };
   }
 
   private ownerOf(agentId: string) {
