@@ -191,7 +191,9 @@ export type ClientEvent =
   | { type: "approval"; approval: import("./types.ts").Approval }
   | { type: "routines_changed" }
   | { type: "background_changed"; agentId: string }
-  | { type: "tasks_changed" };
+  | { type: "tasks_changed" }
+  /** notes were changed outside Warren (Obsidian, a git pull or push) */
+  | { type: "memory_changed" };
 
 /**
  * Tunnel bytes travel as binary WebSocket frames: one byte with the tunnel id's length, the id,

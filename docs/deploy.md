@@ -25,10 +25,40 @@ Data is stored in `/data` in the container (`./data` with the compose file):
 | Path | Contents |
 | --- | --- |
 | `data/warren.db` | SQLite: users, channels, messages, agents, tasks |
-| `data/vault/` | The memory vault: a git repository of markdown files |
+| `data/vault/` | The memory vault: a git repository of markdown files (unless you [chose another folder](#memory-and-obsidian)) |
 | `data/files/` | Uploaded files, stored by content hash |
 
-Back up the whole folder. The vault is also a normal git repo, so you can `git clone` it to another machine or push it to a private remote.
+Back up the whole folder, and the memory folder too if you moved it. The vault is a normal git repo, so you can also back it up with `git`, or use it from another computer with [Obsidian](#memory-and-obsidian).
+
+## Memory and Obsidian
+
+Memory is a folder of markdown notes in a git repository. Obsidian is where people browse and edit it; Warren's Memory page is for search, Activity and permissions.
+
+**Choosing the folder.** The default is `<data>/vault`. Set `WARREN_VAULT_DIR=/path/to/folder` (or, as an owner, **Settings → Memory → Use a different folder**, which takes effect after a restart) to keep memory somewhere else, such as an existing Obsidian vault.
+
+- A folder that isn't a git repo gets `git init` and its notes are committed ("Start tracking this folder"). A folder that already is one keeps its history. `.obsidian/` and `.trash/` are added to `.gitignore` and are never committed, indexed or modified. Links (symlinks) are not followed.
+- Warren refuses `/`, your home folder, and any folder that contains its own data directory.
+- When the folder changes, an earlier vault is carried over once on the next start: an empty folder gets a full copy including git history; a folder that already has notes only gets the files it doesn't have (never overwriting, and without the old `.git`). The earlier folder is never touched or deleted. Settings → Memory says where it is.
+- In Docker, point `WARREN_VAULT_DIR` at a path inside a volume you mount (for example `-v ~/Obsidian/Warren:/vault -e WARREN_VAULT_DIR=/vault`), and run the container as a user that can write to it.
+
+**Edits on the same machine.** Warren watches the folder (with a 30 second re-scan as a backup), commits outside edits as "Edited in Obsidian", and re-indexes only what changed. Settings → Memory and **Refresh** in Memory also trigger a scan.
+
+**Syncing from another computer.** The hub serves the vault's git repository over HTTP at `/git/vault.git`, using git's own `git http-backend` (so `git` must be installed on the hub, as it already must be). People create a token in **Settings → Memory** and use it as the password (any user name). Then:
+
+```bash
+git clone "https://warren:TOKEN@your-hub.example.com/git/vault.git" "Warren memory"
+```
+
+Open that folder in Obsidian and install the community **Git** plugin to pull and push on a schedule. Use https (or a private network such as Tailscale) when the hub isn't on your own network; the token is sent with every request.
+
+How it's kept safe:
+
+- Every request needs a sync token (stored hashed; revoke it in Settings). A normal sign-in token doesn't work here, and a sync token doesn't work for the API.
+- A clone includes all history and git can't hide single folders. So only people who can read every note that has ever existed may clone or pull: owners always, members unless a rule (or another person's private folder) hides something from them, never guests. This is checked on every request, so a rule that hides a note cuts that person off from syncing.
+- Reads are served from a separate bare repository that borrows the vault's objects; the vault folder itself is never exposed.
+- A push is first received into a throwaway repository (fast-forward only, objects checked with `fsck`, no deletes, only the vault's branch). Every changed file is then checked against the person's edit rights, and hidden paths (like `.obsidian`), symlinks and submodules are refused. Only then is it fast-forwarded into the vault, while nothing else changes the vault. If the check fails, the push is rejected with a reason and nothing is applied.
+- Pushed commits keep the git author the person's computer gave them, but Activity, history and "who wrote what" show their Warren name.
+- Warren commits outside edits before judging a push, so if you edited the vault on the hub's machine at the same moment, the plugin asks you to pull first.
 
 ## Proxmox (LXC)
 
@@ -192,6 +222,7 @@ A phone stops getting pushes when you sign out of the app (or end that sign-in i
 | `PORT` | `4747` | HTTP port |
 | `HOST` | `0.0.0.0` | Bind address |
 | `WARREN_DATA_DIR` | `./data` | Database, vault and files |
+| `WARREN_VAULT_DIR` | `<data>/vault` | Folder for the memory vault, e.g. an existing Obsidian vault. Overrides the choice in Settings → Memory. In Docker it must be inside a mounted volume |
 | `WARREN_WEB_DIR` | `apps/web/dist` | Built web app to serve |
 | `WARREN_APNS_KEY_ID` | | iOS push: your APNs key's 10-character Key ID |
 | `WARREN_APNS_TEAM_ID` | | iOS push: your Apple developer Team ID |

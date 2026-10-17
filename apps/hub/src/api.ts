@@ -40,6 +40,8 @@ import { HARNESS, registerComputerApi } from "./api-computers.ts";
 import { registerUpdateApi } from "./updates.ts";
 import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
 import { registerVoiceApi } from "./api-voice.ts";
+import { registerMemoryStorageApi } from "./api-memory.ts";
+import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
@@ -119,7 +121,16 @@ export function limitParam(raw: unknown, fallback: number, max: number): number 
   return Number.isFinite(n) && n >= 1 ? Math.min(n, max) : fallback;
 }
 
-export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: string; dataDir: string }) {
+export interface RegisterOptions {
+  filesDir: string;
+  dataDir: string;
+  /** where memory was opened from at startup, and what happened to an earlier vault */
+  vault: { location: VaultLocation; moved: MoveResult | null };
+  /** stop the hub so whatever keeps it running starts it again */
+  restart: () => void;
+}
+
+export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOptions) {
   const { store, vault } = hub;
   const db = store.db;
 
@@ -308,7 +319,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     store.addChannelMember(general.id, { kind: "user", id: user.id });
     await vault.write(
       "shared/Welcome.md",
-      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; backlinks and the graph update automatically.\n- Every change is a git commit, so nothing is ever lost.\n`,
+      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; Obsidian shows backlinks and a graph of them.\n- Every change is a git commit, so nothing is ever lost.\n`,
       { name: user.name, email: user.email },
       "Create welcome note",
     );
@@ -1431,29 +1442,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     return { content: await vault.readAt(p, q.rev ?? "") };
   });
 
-  app.get("/api/vault/graph", async (req, reply) => {
-    const c = need(req, reply);
-    if (!c) return;
-    const notes = vault.list(readable(c));
-    const byKey = new Map<string, string>();
-    for (const n of notes) {
-      byKey.set(n.path.replace(/\.md$/i, "").toLowerCase(), n.path);
-      const base = n.path.split("/").pop()!.replace(/\.md$/i, "").toLowerCase();
-      if (!byKey.has(base)) byKey.set(base, n.path);
-    }
-    const edges: { source: string; target: string }[] = [];
-    for (const n of notes) for (const l of n.links) {
-      const t = byKey.get(l);
-      if (t && t !== n.path) edges.push({ source: n.path, target: t });
-    }
-    return { nodes: notes.map((n) => ({ id: n.path, title: n.title })), edges };
-  });
-
   /** Pick up edits made outside Warren (Obsidian, git pull). */
   app.post("/api/vault/sync", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return { notes: await vault.syncFromDisk(commitAuthor(c)) };
+    // edits found on disk are credited to Obsidian, not to whoever pressed the button
+    const changed = await vault.syncFromDisk();
+    return { notes: vault.list().length, changed };
   });
 
   /** Who last changed each line of a note. */
@@ -1723,6 +1718,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
 
   registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf, channelVisible });
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
+  registerMemoryStorageApi(app, hub, { need, parse, dataDir: opts.dataDir, started: opts.vault, restart: opts.restart });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });

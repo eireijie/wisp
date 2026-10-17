@@ -3,7 +3,8 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { Vault, parseNote } from "../src/index.ts";
+import { execFileSync } from "node:child_process";
+import { OUTSIDE_AUTHOR, Vault, parseNote } from "../src/index.ts";
 
 const me = { name: "Tester", email: "t@example.com" };
 let dir: string;
@@ -100,5 +101,130 @@ describe("Vault", () => {
     expect((await vault.read("agents/a/log")).content).toBe("first\nsecond\n");
     await vault.move("agents/a/log", "agents/a/archive/log", me);
     expect(vault.list().map((n) => n.path)).toEqual(["agents/a/archive/log.md"]);
+  });
+});
+
+const gitOut = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+const put = async (root: string, rel: string, text: string) => {
+  await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
+  await fs.writeFile(path.join(root, rel), text);
+};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function until(fn: () => boolean, ms = 5000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error("timed out");
+    await sleep(25);
+  }
+}
+
+describe("an existing Obsidian vault", () => {
+  it("is adopted in place: notes indexed, settings and trash left alone and out of git", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "warren-obsidian-"));
+    try {
+      await put(root, ".obsidian/app.json", '{"theme":"mine"}');
+      await put(root, ".obsidian/plugins/thing/README.md", "# plugin readme");
+      await put(root, ".trash/old.md", "# thrown away");
+      await put(root, "Daily/2026-01-01.md", "# New year\nlinks to [[Ideas]]");
+      await put(root, "Ideas.md", "# Ideas\nunicornlantern");
+      await put(root, "Attachments/pic.png", "not really a png");
+      const v = new Vault(root, new Database(":memory:"));
+      await v.init();
+
+      expect(v.list().map((n) => n.path)).toEqual(["Daily/2026-01-01.md", "Ideas.md"]);
+      expect(v.backlinks("Ideas.md")).toEqual(["Daily/2026-01-01.md"]);
+      expect(v.search("unicornlantern")).toHaveLength(1);
+      // Obsidian's own folder is exactly as it was, and git never saw it
+      expect(await fs.readFile(path.join(root, ".obsidian/app.json"), "utf8")).toBe('{"theme":"mine"}');
+      const tracked = gitOut(root, "ls-files").split("\n");
+      expect(tracked).toEqual(expect.arrayContaining(["Daily/2026-01-01.md", "Ideas.md", "Attachments/pic.png", ".gitignore"]));
+      expect(tracked.some((f) => f.startsWith(".obsidian") || f.startsWith(".trash"))).toBe(false);
+      expect(gitOut(root, "log", "-1", "--format=%s")).toBe("Start tracking this folder");
+      // starting again changes nothing
+      const head = gitOut(root, "rev-parse", "HEAD");
+      await new Vault(root, new Database(":memory:")).init();
+      expect(gitOut(root, "rev-parse", "HEAD")).toBe(head);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the history of a folder that is already a git repository", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "warren-obsidian-"));
+    try {
+      gitOut(root, "init", "-q");
+      await put(root, "note.md", "# Mine");
+      await put(root, ".gitignore", "secret/");
+      gitOut(root, "add", "-A");
+      gitOut(root, "-c", "user.name=Me", "-c", "user.email=me@example.com", "commit", "-q", "-m", "my own commit");
+      const v = new Vault(root, new Database(":memory:"));
+      await v.init();
+      expect(gitOut(root, "log", "--format=%s")).toBe("Keep Obsidian settings and trash out of memory\nmy own commit");
+      expect(await fs.readFile(path.join(root, ".gitignore"), "utf8")).toBe("secret/\n.obsidian/\n.trash/\n");
+      expect((await v.history("note.md"))[0].author).toBe("Me");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("edits made outside Warren", () => {
+  it("are committed as 'Edited in Obsidian', indexed, and never confused with Warren's own saves", async () => {
+    await vault.write("shared/ours.md", "# Ours\n", me);
+    const stop = vault.watch({ debounceMs: 30, intervalMs: 600_000 });
+    try {
+      await put(dir, "Notes/outside.md", "# Outside\nmarmotbrigade");
+      await until(() => vault.search("marmotbrigade").length > 0);
+      const first = (await vault.changes(1))[0];
+      expect(first).toMatchObject({ author: OUTSIDE_AUTHOR.name, files: [{ path: "Notes/outside.md", change: "added" }] });
+
+      // Warren's own save while the watcher is running: exactly one commit, by Warren's author
+      const count = () => Number(gitOut(dir, "rev-list", "--count", "HEAD"));
+      const before = count();
+      await vault.write("shared/ours.md", "# Ours\nedited", me);
+      await sleep(400);
+      expect(count()).toBe(before + 1);
+      expect(gitOut(dir, "log", "-1", "--format=%an")).toBe("Tester");
+
+      // edit and delete on disk
+      await put(dir, "Notes/outside.md", "# Outside\nlemurcouncil");
+      await until(() => vault.search("lemurcouncil").length > 0);
+      expect(vault.search("marmotbrigade")).toHaveLength(0);
+      await fs.rm(path.join(dir, "Notes/outside.md"));
+      await until(() => vault.search("lemurcouncil").length === 0);
+      expect(vault.list().map((n) => n.path)).not.toContain("Notes/outside.md");
+    } finally {
+      stop();
+    }
+  });
+
+  it("are left alone while Warren is saving that very note", async () => {
+    const saving = vault.write("shared/race.md", "# Race\n", me);
+    // an outside sync that runs while the save is in flight must not commit it as an outside edit
+    const sync = vault.syncFromDisk();
+    await Promise.all([saving, sync]);
+    expect(gitOut(dir, "log", "-1", "--format=%an", "--", "shared/race.md")).toBe("Tester");
+  });
+
+  it("notices a git pull or checkout made on the machine, and skips Obsidian's hidden folders", async () => {
+    await vault.write("shared/a.md", "# A\nbefore", me);
+    const first = gitOut(dir, "rev-parse", "HEAD");
+    await vault.write("shared/a.md", "# A\nrabbitwarren", me);
+    gitOut(dir, "-c", "advice.detachedHead=false", "checkout", "-q", first, "--", "shared/a.md");
+    await put(dir, ".obsidian/workspace.json", "{}");
+    await put(dir, ".trash/gone.md", "# gone");
+    await vault.syncFromDisk();
+    expect(vault.search("rabbitwarren")).toHaveLength(0);
+    expect(vault.list().map((n) => n.path)).not.toContain(".trash/gone.md");
+    expect(gitOut(dir, "ls-files")).not.toMatch(/\.obsidian|\.trash/);
+  });
+
+  it("credits pushed commits to the person in Activity, history and blame", async () => {
+    await vault.write("shared/p.md", "# P\n", me);
+    const hash = gitOut(dir, "rev-parse", "HEAD");
+    vault.attribute([hash], "Sam");
+    expect((await vault.changes(1))[0].author).toBe("Sam");
+    expect((await vault.history("shared/p.md"))[0].author).toBe("Sam");
+    expect((await vault.blame("shared/p.md"))[0].author).toBe("Sam");
   });
 });

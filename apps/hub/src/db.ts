@@ -204,6 +204,10 @@ CREATE TABLE IF NOT EXISTS connector_auth (
   required INTEGER NOT NULL DEFAULT 1, redirect_url TEXT, client_json TEXT, tokens_json TEXT, expires_at TEXT,
   verifier TEXT, state TEXT, signed_in_by TEXT, error TEXT, updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS vault_tokens (
+  id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, last_used TEXT
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL

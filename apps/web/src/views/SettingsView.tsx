@@ -5,9 +5,10 @@ import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
 import { Button, Pill, cx } from "../components/ui.tsx";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
-import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, MemoryAccessPage, PeoplePage } from "./settings/workspace.tsx";
+import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
 import { VoicePage } from "./settings/voice.tsx";
+import { MemoryPage } from "./settings/memory.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
@@ -30,7 +31,7 @@ const NAV: { group: string; pages: { id: SettingsPage; label: string; icon: Reac
       { id: "people", label: "People", icon: <Users size={16} /> },
       { id: "agents", label: "Agents", icon: <Bot size={16} />, noGuests: true },
       { id: "runtimes", label: "Agent runtimes", icon: <Cpu size={16} />, noGuests: true },
-      { id: "memory", label: "Memory access", icon: <Shield size={16} /> },
+      { id: "memory", label: "Memory", icon: <Shield size={16} /> },
       { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
       { id: "connections", label: "Connections", icon: <Link2 size={16} />, noGuests: true },
       { id: "data", label: "Data & export", icon: <Database size={16} /> },
@@ -50,7 +51,7 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,
-  memory: () => <MemoryAccessPage />,
+  memory: () => <MemoryPage />,
   computers: () => <ComputersPage />,
   connections: () => <ConnectionsPage />,
   data: () => <DataPage />,

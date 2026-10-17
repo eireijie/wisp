@@ -281,11 +281,10 @@ describe("memory access rules", () => {
     expect(seen).not.toContain("Projects/secret/keys.md");
     // read, not edit
     expect((await api("PUT", "/api/vault/note", { path: "Projects/launch.md", content: "x" }, nodeToken, as(atlas))).status).toBe(403);
-    // hidden notes stay out of search, ⌘K and the graph too
+    // hidden notes stay out of search and ⌘K too
     const hits = (await api<any[]>("GET", "/api/vault/search?q=zebra", undefined, nodeToken, as(atlas))).data.map((h) => h.path);
     expect(hits).toEqual(["Projects/launch.md"]);
     expect((await api<any>("GET", "/api/search?q=zebra", undefined, nodeToken, as(atlas))).data.notes.map((h: any) => h.path)).toEqual(["Projects/launch.md"]);
-    expect((await api<any>("GET", "/api/vault/graph", undefined, nodeToken, as(atlas))).data.nodes.map((n: any) => n.id)).not.toContain("Projects/secret/keys.md");
     // one agent can be allowed back in
     await rule("Projects/secret", { kind: "agent", id: nova.id }, "edit");
     expect(await paths(nova)).toContain("Projects/secret/keys.md");

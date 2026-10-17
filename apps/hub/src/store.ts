@@ -442,6 +442,27 @@ export class Store {
     else this.db.prepare("INSERT OR REPLACE INTO workspace_settings (workspace_id, key, value, updated_at) VALUES (?, ?, ?, ?)").run(workspaceId, key, value, now());
   }
 
+  // --- memory sync tokens (Obsidian's Git plugin) -----------------------------
+
+  addVaultToken(row: { id: string; hash: string; userId: string; workspaceId: string; label: string }) {
+    this.db.prepare("INSERT INTO vault_tokens (id, hash, user_id, workspace_id, label, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(row.id, row.hash, row.userId, row.workspaceId, row.label, now());
+  }
+
+  vaultTokens(userId: string): { id: string; label: string; createdAt: string; lastUsed: string | null }[] {
+    return this.db.prepare("SELECT id, label, created_at AS createdAt, last_used AS lastUsed FROM vault_tokens WHERE user_id = ? ORDER BY created_at").all(userId) as { id: string; label: string; createdAt: string; lastUsed: string | null }[];
+  }
+
+  /** Whose memory-sync token this is; also notes that it was just used. */
+  useVaultToken(hash: string): { userId: string; workspaceId: string } | undefined {
+    const r = this.db.prepare("SELECT id, user_id AS userId, workspace_id AS workspaceId FROM vault_tokens WHERE hash = ?").get(hash) as { id: string; userId: string; workspaceId: string } | undefined;
+    if (r) this.db.prepare("UPDATE vault_tokens SET last_used = ? WHERE id = ?").run(now(), r.id);
+    return r && { userId: r.userId, workspaceId: r.workspaceId };
+  }
+
+  removeVaultToken(userId: string, tokenId: string): boolean {
+    return this.db.prepare("DELETE FROM vault_tokens WHERE id = ? AND user_id = ?").run(tokenId, userId).changes > 0;
+  }
+
   /** Rows to agents, with `groups` filled from the teams they're on. */
   private toAgents(rows: (AgentRow | undefined)[]): (Agent & { instructions: string })[] {
     const list = rows.filter((r): r is AgentRow => !!r);
