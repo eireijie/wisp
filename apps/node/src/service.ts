@@ -162,20 +162,38 @@ export function uninstallService(kind: ServiceKind, dir: string) {
   return s;
 }
 
-export function serviceStatus(kind: ServiceKind, dir: string): { installed: boolean; running: boolean; name: string; log: string } {
+/**
+ * Whether this process is the service itself (or the keeper's child it runs), not a second copy
+ * started by hand. Services installed before WARREN_SERVICE existed don't set it, so this also
+ * matches the service's own process id, and on macOS the job label launchd hands its jobs.
+ */
+export function isService(status: { name: string; pid?: number }): boolean {
+  if (process.env.WARREN_SERVICE) return true;
+  if (status.pid && (status.pid === process.pid || status.pid === process.ppid)) return true;
+  return process.platform === "darwin" && process.env.XPC_SERVICE_NAME === status.name;
+}
+
+export function serviceStatus(kind: ServiceKind, dir: string): { installed: boolean; running: boolean; name: string; log: string; pid?: number } {
   const s = spec(kind, dir);
   const base = { name: s.name, log: s.log };
   if (process.platform === "darwin") {
     const installed = fs.existsSync(path.join(os.homedir(), "Library/LaunchAgents", `${s.name}.plist`));
     let running = false;
+    let pid: number | undefined;
     try {
-      running = /state = running/.test(run("launchctl", ["print", `gui/${process.getuid!()}/${s.name}`], true));
+      const out = run("launchctl", ["print", `gui/${process.getuid!()}/${s.name}`], true);
+      running = /state = running/.test(out);
+      pid = Number(out.match(/^\s*pid = (\d+)/m)?.[1]) || undefined;
     } catch {}
-    return { ...base, installed, running };
+    return { ...base, installed, running, pid };
   }
   if (process.platform === "linux") {
     const { file, ctl } = linux(s);
-    return { ...base, installed: fs.existsSync(file), running: attempt("systemctl", ctl("is-active", "--quiet", s.name)) };
+    let pid: number | undefined;
+    try {
+      pid = Number(run("systemctl", ctl("show", "--property", "MainPID", "--value", s.name), true).trim()) || undefined;
+    } catch {}
+    return { ...base, installed: fs.existsSync(file), running: attempt("systemctl", ctl("is-active", "--quiet", s.name)), pid };
   }
   if (process.platform === "win32") {
     let state = "";

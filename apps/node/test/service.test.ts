@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
 import { REPO_ROOT } from "@warren/update";
-import { spec, systemdUnit } from "../src/service.ts";
+import { isService, spec, systemdUnit } from "../src/service.ts";
 
 describe("warren service", () => {
   it("runs a device with this terminal's PATH, from the Warren folder", () => {
@@ -33,5 +33,19 @@ describe("warren service", () => {
 describe("one daemon per device", () => {
   it("marks the service's own daemon, so `warren node start` by hand can tell it's already running", () => {
     expect(spec("node", "/home/sam/.warren").env.WARREN_SERVICE).toBe("1");
+  });
+
+  it("knows it's the service even when an older install doesn't say so", () => {
+    const saved = process.env.WARREN_SERVICE;
+    delete process.env.WARREN_SERVICE;
+    try {
+      expect(isService({ name: "ai.warren.node", pid: process.pid })).toBe(true);
+      // the keeper is the service's process; the daemon is its child
+      expect(isService({ name: "ai.warren.node", pid: process.ppid })).toBe(true);
+      expect(isService({ name: "ai.warren.node", pid: 999_999_999 })).toBe(false);
+      expect(isService({ name: "ai.warren.node" })).toBe(process.platform === "darwin" && process.env.XPC_SERVICE_NAME === "ai.warren.node");
+    } finally {
+      if (saved !== undefined) process.env.WARREN_SERVICE = saved;
+    }
   });
 });

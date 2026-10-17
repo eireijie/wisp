@@ -10,7 +10,7 @@ import { deviceAdapters } from "@warren/adapters";
 import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { discoverAgents } from "./discover.ts";
-import { installService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
+import { installService, isService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
 import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
@@ -107,7 +107,7 @@ if (values.help || !cmd) {
   const kept = underKeeper();
   // two daemons with one token would take turns replacing each other on the hub
   const service = process.env.WARREN_SERVICE ? null : serviceStatus("node", dir);
-  if (service?.running) {
+  if (service?.running && !isService(service)) {
     console.error(`This device is already connected by its service (${service.name}), so there's nothing to start. To run it in this terminal instead: warren service uninstall node`);
     process.exit(1);
   }
