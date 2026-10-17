@@ -12,7 +12,7 @@ const LOCAL_HUB = `http://localhost:${PORT}`;
 const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
 
-/** @type {{ mode?: "local" | "remote", hubUrl?: string, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
+/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
@@ -43,6 +43,14 @@ const buddy = require("./buddy.cjs")({
 });
 
 const logDir = app.getPath("logs");
+const updater = require("./updater.cjs").createUpdater({
+  app,
+  shell,
+  notify: (title, body) => notify(title, body),
+  refresh: () => refresh(),
+  log: (line) => fs.appendFile(path.join(logDir, "updates.log"), `${new Date().toISOString()} ${line}\n`, () => {}),
+  enabled: () => config.autoUpdate !== false,
+});
 const hub = new engine.Child("hub", logDir, () => refresh());
 const device = new engine.Child("device", logDir, () => refresh());
 
@@ -372,6 +380,8 @@ function trayMenu() {
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
     { label: "Create or Join Another Server…", click: () => showSetup() },
+    ...updater.menu(),
+    { label: "Update Automatically", type: "checkbox", checked: config.autoUpdate !== false, click: (i) => ((config.autoUpdate = i.checked), save()) },
     { label: "Show Logs", click: () => shell.openPath(logDir) },
     { type: "separator" },
     { label: "Quit Warren", accelerator: "CmdOrCtrl+Q", click: () => app.quit() },
@@ -388,7 +398,7 @@ function appMenu() {
   const mac = process.platform === "darwin";
   return Menu.buildFromTemplate([
     ...(mac
-      ? [{ label: "Warren", submenu: [{ role: "about" }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
+      ? [{ label: "Warren", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => updater.check() }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
       : []),
     { label: "File", submenu: [{ label: "Create or Join Another Server…", click: () => showSetup() }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
     { role: "editMenu" },
@@ -408,7 +418,7 @@ function appMenu() {
       ],
     },
     { role: "windowMenu" },
-    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal("https://github.com/eireijie/warren") }, { label: "Show Logs", click: () => shell.openPath(logDir) }] },
+    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal("https://github.com/eireijie/warren") }, ...(mac ? [] : [{ label: "Check for Updates…", click: () => updater.check() }]), { label: "Show Logs", click: () => shell.openPath(logDir) }] },
   ]);
 }
 
@@ -495,12 +505,15 @@ app.whenReady().then(() => {
   buddy.ready();
   createWindow();
   connect();
+  updater.start();
 });
 
 app.on("activate", () => showWindow());
 app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", () => {
   quitting = true;
+  updater.stop();
+  updater.installOnQuit();
   buddy.destroy();
   hub.stop();
   device.stop();

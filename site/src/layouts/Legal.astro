@@ -1,0 +1,39 @@
+---
+import Base from "./Base.astro";
+import { LAST_UPDATED_LEGAL } from "../lib/site";
+
+interface Props {
+  title: string;
+  description: string;
+  current: "privacy" | "terms";
+}
+const { title, description, current } = Astro.props;
+---
+
+<Base title={title} description={description} current={current}>
+  <div class="wrap">
+    <article class="prose legal sheet">
+      <h1>{title}</h1>
+      <p class="updated">Last updated: {LAST_UPDATED_LEGAL}</p>
+      <slot />
+    </article>
+  </div>
+</Base>
+
+<style>
+  .legal {
+    margin: 40px auto 0;
+    padding: 40px 44px;
+  }
+  .updated {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  @media (max-width: 600px) {
+    .legal {
+      margin-top: 24px;
+      padding: 26px 18px;
+      border-radius: var(--radius);
+    }
+  }
+</style>

@@ -1,0 +1,152 @@
+---
+import Base from "./Base.astro";
+import { DOC_ORDER, REPO } from "../lib/site";
+
+interface Props {
+  title: string;
+  description: string;
+  /** the open doc's slug; none on the docs index */
+  slug?: string;
+  /** the open doc's section headings, for "On this page" */
+  headings?: { depth: number; slug: string; text: string }[];
+  /** the markdown file on GitHub, for "Edit on GitHub" */
+  sourcePath?: string;
+}
+const { title, description, slug, headings = [], sourcePath } = Astro.props;
+const sections = headings.filter((h) => h.depth === 2);
+---
+
+<Base title={title} description={description} current="docs">
+  <div class="wrap docs">
+    <aside class="side" aria-label="Docs">
+      <nav aria-label="Docs pages">
+        <p class="side-title"><a href="/docs/" aria-current={slug ? undefined : "page"}>Docs</a></p>
+        <ul>
+          {
+            DOC_ORDER.map((d) => (
+              <li>
+                <a href={`/docs/${d.slug}/`} aria-current={d.slug === slug ? "page" : undefined}>
+                  {d.title}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+      {
+        sections.length > 0 && (
+          <nav aria-label="On this page" class="toc">
+            <p class="side-title">On this page</p>
+            <ul>
+              {sections.map((h) => (
+                <li>
+                  <a href={`#${h.slug}`}>{h.text}</a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )
+      }
+    </aside>
+    <article class="prose doc">
+      <slot />
+      {
+        sourcePath && (
+          <p class="edit">
+            <a href={`${REPO}/blob/main/${sourcePath}`} rel="noopener">
+              Edit this page on GitHub
+            </a>
+          </p>
+        )
+      }
+    </article>
+  </div>
+</Base>
+
+<style>
+  .docs {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 48px;
+    padding-top: 40px;
+    align-items: start;
+  }
+  .side {
+    position: sticky;
+    top: 88px;
+    max-height: calc(100vh - 110px);
+    overflow-y: auto;
+    font-size: 0.95rem;
+  }
+  .side ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 24px;
+  }
+  .side-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .side-title a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .side a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 8px;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .side ul a:hover {
+    color: var(--ink);
+    background: var(--chip);
+  }
+  .side a[aria-current="page"] {
+    color: var(--ink);
+    background: var(--accent-soft);
+    font-weight: 600;
+  }
+  .toc a {
+    font-size: 0.9rem;
+    padding: 3px 10px;
+  }
+  .doc {
+    background: var(--panel);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--sheet-shadow);
+    padding: 36px 40px;
+  }
+  .edit {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 0.95rem;
+  }
+  @media (max-width: 860px) {
+    .docs {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 20px;
+      padding-top: 24px;
+    }
+    .side {
+      position: static;
+      max-height: none;
+    }
+    .side ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 0;
+    }
+    .toc {
+      display: none;
+    }
+    .doc {
+      padding: 24px 18px;
+      border-radius: var(--radius);
+    }
+  }
+</style>

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="40dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="32dp">
+
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:contentDescription="@null"
+            android:src="@mipmap/ic_launcher" />
+
+        <TextView
+            style="@style/Title"
+            android:layout_marginTop="16dp"
+            android:text="Connect to Warren" />
+
+        <TextView
+            style="@style/Body"
+            android:layout_marginTop="8dp"
+            android:text="Warren runs on your computer. Pair this phone with it to chat with your agents and watch their computers from your phone." />
+
+        <LinearLayout
+            android:id="@+id/steps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:orientation="vertical">
+
+            <TextView style="@style/StepTitle" android:text="1  Open Warren on your computer" />
+            <TextView style="@style/StepText" android:text="Go to Settings → Mobile and click Start pairing." />
+            <TextView style="@style/StepTitle" android:text="2  Scan the QR code" />
+            <TextView style="@style/StepText" android:text="Your phone needs to be on the same Wi-Fi, unless your Warren is set up to be reached from anywhere." />
+            <TextView style="@style/StepTitle" android:text="3  Check the code" />
+            <TextView style="@style/StepText" android:text="Confirm on your computer that both show the same six digits." />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/error"
+            style="@style/Body"
+            android:layout_marginTop="20dp"
+            android:textColor="@color/bad"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/scan"
+            style="@style/Primary"
+            android:layout_marginTop="24dp"
+            android:text="Scan QR code" />
+
+        <Button
+            android:id="@+id/paste"
+            style="@style/Quiet"
+            android:layout_marginTop="4dp"
+            android:text="Paste a pairing link instead" />
+
+        <LinearLayout
+            android:id="@+id/connecting"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:indeterminateTint="@color/ink" />
+
+            <TextView
+                style="@style/Body"
+                android:layout_marginStart="12dp"
+                android:text="Finding your computer…" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/codeBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView style="@style/StepTitle" android:layout_marginTop="0dp" android:text="Check the code" />
+
+            <TextView
+                android:id="@+id/code"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.2"
+                android:textColor="@color/ink"
+                android:textSize="44sp"
+                android:textStyle="bold" />
+
+            <TextView
+                style="@style/Body"
+                android:layout_marginTop="12dp"
+                android:text="Make sure your computer shows the same six digits, then click “Yes, pair it” there." />
+
+            <TextView
+                android:id="@+id/waiting"
+                style="@style/StepText"
+                android:layout_marginTop="16dp" />
+
+            <Button
+                android:id="@+id/cancel"
+                style="@style/Quiet"
+                android:layout_gravity="start"
+                android:layout_marginTop="8dp"
+                android:text="Cancel" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/StepText"
+            android:layout_marginTop="32dp"
+            android:text="Don't have Warren on a computer yet? Get it free at github.com/eireijie/warren." />
+    </LinearLayout>
+</ScrollView>

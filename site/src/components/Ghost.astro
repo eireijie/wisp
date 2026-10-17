@@ -1,0 +1,57 @@
+---
+/**
+ * Warren's ghost, the same classic shape the app and its icon use: a two-color body that
+ * glows softly in its own color. Decorative unless given a label.
+ */
+interface Props {
+  color?: string;
+  color2?: string;
+  size?: number;
+  label?: string;
+  class?: string;
+  /** "awake" (round eyes), "happy" (smiling eyes) or "working" (focused, half-closed eyes) */
+  mood?: "awake" | "happy" | "working";
+}
+const { color = "#f4f1ff", color2 = "#c9c2ff", size = 48, label, class: className = "", mood = "awake" } = Astro.props;
+const id = `g${Math.random().toString(36).slice(2, 9)}`;
+const BODY =
+  "M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z";
+---
+
+<svg
+  class:list={["ghost-glow", className]}
+  style={`--glow:${color2}`}
+  width={size}
+  height={size}
+  viewBox="24 14 72 94"
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+  focusable="false"
+>
+  <defs>
+    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color={color} />
+      <stop offset="1" stop-color={color2} />
+    </linearGradient>
+  </defs>
+  <path d={BODY} fill={`url(#${id})`} />
+  {
+    mood === "happy" ? (
+      <g fill="none" stroke="#1d1d1f" stroke-width="3.4" stroke-linecap="round">
+        <path d="M45.5 55 Q50 50 54.5 55" />
+        <path d="M65.5 55 Q70 50 74.5 55" />
+      </g>
+    ) : mood === "working" ? (
+      <g fill="#1d1d1f">
+        <rect x="45.5" y="52" width="9" height="4.4" rx="2.2" />
+        <rect x="65.5" y="52" width="9" height="4.4" rx="2.2" />
+      </g>
+    ) : (
+      <g fill="#1d1d1f">
+        <circle cx="50" cy="54" r="4.6" />
+        <circle cx="70" cy="54" r="4.6" />
+      </g>
+    )
+  }
+</svg>

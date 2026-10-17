@@ -45,6 +45,7 @@ import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
+import { registerPairingApi } from "./pairing.ts";
 import { agentPolicy } from "./policy.ts";
 
 export interface Caller {
@@ -1860,6 +1861,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
+  registerPairingApi(app, hub, { need, parse });
 
   // --- websockets -------------------------------------------------------------
 

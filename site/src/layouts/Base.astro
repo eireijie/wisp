@@ -1,0 +1,218 @@
+---
+import "../styles/global.css";
+import Ghost from "../components/Ghost.astro";
+import { REPO } from "../lib/site";
+
+interface Props {
+  title: string;
+  description: string;
+  /** which header link is the current page */
+  current?: "home" | "download" | "docs" | "privacy" | "terms";
+}
+const { title, description, current } = Astro.props;
+const fullTitle = current === "home" ? title : `${title} · Warren`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const nav = [
+  { href: "/download/", label: "Download", key: "download" },
+  { href: "/docs/", label: "Docs", key: "docs" },
+] as const;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#f5f4fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e0d14" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={new URL("/icon-512.png", Astro.site)} />
+    <meta name="twitter:card" content="summary" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap bar">
+        <a class="brand" href="/" aria-label="Warren home" aria-current={current === "home" ? "page" : undefined}>
+          <span class="tile"><Ghost size={22} color="#ffffff" color2="#d9d4ff" /></span>
+          <span>Warren</span>
+        </a>
+        <nav aria-label="Main">
+          <ul>
+            {
+              nav.map((item) => (
+                <li>
+                  <a href={item.href} aria-current={current === item.key ? "page" : undefined}>
+                    {item.label}
+                  </a>
+                </li>
+              ))
+            }
+            <li>
+              <a href={REPO} rel="noopener">GitHub</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap foot">
+        <div class="foot-brand">
+          <span class="tile"><Ghost size={20} color="#ffffff" color2="#d9d4ff" /></span>
+          <p>
+            <strong>Warren</strong> is free and open source under the{" "}
+            <a href={`${REPO}/blob/main/LICENSE`} rel="noopener">Apache-2.0 license</a>.
+          </p>
+        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/download/">Download</a></li>
+            <li><a href="/docs/">Docs</a></li>
+            <li><a href={REPO} rel="noopener">GitHub</a></li>
+            <li><a href="/privacy/" aria-current={current === "privacy" ? "page" : undefined}>Privacy</a></li>
+            <li><a href="/terms/" aria-current={current === "terms" ? "page" : undefined}>Terms</a></li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
+
+    <script>
+      // Copy buttons on commands. The only script on the site; everything works without it.
+      for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+        if (!navigator.clipboard) continue;
+        button.hidden = false;
+        button.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy ?? "");
+            button.textContent = "Copied";
+          } catch {
+            button.textContent = "Select it";
+          }
+          setTimeout(() => (button.textContent = "Copy"), 1600);
+        });
+      }
+    </script>
+
+    <style>
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: color-mix(in oklab, var(--app) 82%, transparent);
+        backdrop-filter: saturate(1.4) blur(14px);
+        -webkit-backdrop-filter: saturate(1.4) blur(14px);
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 64px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        text-decoration: none;
+        font-family: var(--font-head);
+        font-weight: 700;
+        font-size: 1.3rem;
+        letter-spacing: -0.02em;
+      }
+      /* the ghost on a dark tile, like the app icon, so it reads in light and dark mode */
+      .tile {
+        display: inline-grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: #141414;
+        box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
+      }
+      .site-footer .tile {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+      }
+      nav ul {
+        list-style: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+      }
+      .bar nav a {
+        display: inline-block;
+        padding: 8px 12px;
+        border-radius: 10px;
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.97rem;
+        text-decoration: none;
+      }
+      .bar nav a:hover {
+        color: var(--ink);
+        background: var(--chip);
+      }
+      .bar nav a[aria-current="page"] {
+        color: var(--ink);
+        background: var(--accent-soft);
+      }
+      @media (max-width: 400px) {
+        .bar nav a {
+          padding: 8px 9px;
+        }
+        .brand {
+          font-size: 1.15rem;
+        }
+      }
+      .site-footer {
+        margin-top: 96px;
+        border-top: 1px solid var(--line);
+        padding: 32px 0 48px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px 32px;
+      }
+      .foot-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .foot-brand p {
+        margin: 0;
+      }
+      .site-footer nav a {
+        color: var(--muted);
+        padding: 4px 8px;
+        border-radius: 8px;
+      }
+      .site-footer nav a:hover {
+        color: var(--ink);
+      }
+    </style>
+  </body>
+</html>

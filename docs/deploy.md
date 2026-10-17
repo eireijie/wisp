@@ -192,6 +192,8 @@ A hub in Docker can't update itself: pull the new image and recreate the contain
 
 ## Reaching it from your phone
 
+The Warren apps for iPhone and Android pair with your hub by QR code: in Warren on a computer, open **Settings → Mobile → Start pairing** and scan the code with the app. The code carries the address you opened Warren at plus the hub machine's Wi-Fi and Tailscale addresses, and the phone uses the first one it can reach. So on the same Wi-Fi it just works; away from home, the phone needs one of the ways below. Open Warren at that address (say your `ts.net` name) before you pair, so the phone gets it too.
+
 The PWA needs HTTPS to install on iPhone and to use notifications. Pick one:
 
 - **Tailscale (private, easiest):** install Tailscale on the hub, then run `tailscale serve --bg 4747`. Open `https://<hub>.<tailnet>.ts.net` on any device in your tailnet.

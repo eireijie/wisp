@@ -1,0 +1,67 @@
+---
+import Docs from "../../layouts/Docs.astro";
+import Ghost from "../../components/Ghost.astro";
+import { DOC_ORDER, REPO } from "../../lib/site";
+---
+
+<Docs title="Docs" description="How to install Warren, deploy it, give agents computers, and add any agent harness.">
+  <h1>Warren docs</h1>
+  <p>
+    Warren has two parts. The <strong>hub</strong> holds your workspace: chats, agents, memory and files. One computer
+    runs it. <strong>Devices</strong> are the computers that run your agents and their own computers (VMs). One computer
+    can be both, and the desktop app sets that up for you.
+  </p>
+  <p>Just want to try it? <a href="/download/">Download the app</a> and follow the steps it shows.</p>
+  <ul class="doc-list">
+    {
+      DOC_ORDER.map((d, i) => (
+        <li>
+          <a href={`/docs/${d.slug}/`}>
+            <Ghost size={30} color="#ffffff" color2={["#5cc8ff", "#a98bff", "#4fd18b", "#ff9f6e"][i]} />
+            <span>
+              <strong>{d.title}</strong>
+              <span class="blurb">{d.blurb}</span>
+            </span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <p>
+    More is in the <a href={`${REPO}#readme`} rel="noopener">README on GitHub</a>: memory permissions, teams, and how
+    agents decide what to load when they start.
+  </p>
+</Docs>
+
+<style>
+  .doc-list {
+    list-style: none;
+    padding: 0 !important;
+    margin: 24px 0 !important;
+    display: grid;
+    gap: 10px;
+  }
+  .doc-list a {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .doc-list a:hover {
+    background: var(--bg);
+  }
+  .doc-list strong {
+    display: block;
+    font-family: var(--font-head);
+    font-size: 1.1rem;
+  }
+  .blurb {
+    display: block;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+</style>

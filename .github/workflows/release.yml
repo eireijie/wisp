@@ -1,6 +1,8 @@
 name: Release
 # Push a tag like v0.2.0 to publish a GitHub release with notes generated from the merged pull
 # requests and commits since the last one. The hub image for the tag is published by hub-image.yml.
+# Not marked latest: "latest" is the newest app release (desktop-v*), so the website's
+# releases/latest/download links always find the app downloads.
 on:
   push:
     tags: ["v*"]
@@ -11,6 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+      - run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag --latest=false
         env:
           GH_TOKEN: ${{ github.token }}

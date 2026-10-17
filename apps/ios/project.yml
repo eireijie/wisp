@@ -29,13 +29,18 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Warren connects to the Warren hub on your own network.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Warren connects to Warren on your computer over your own network.
+        INFOPLIST_KEY_NSCameraUsageDescription: Warren uses the camera to scan the pairing code on your computer.
         CODE_SIGN_STYLE: Automatic
         # push notifications; Xcode switches this to production when you archive for TestFlight / the App Store
         CODE_SIGN_ENTITLEMENTS: Warren/Warren.entitlements
     info:
       path: Warren/Info.plist
       properties:
+        # pairing QR codes are warren://pair links, so the Camera app opens them in Warren
+        CFBundleURLTypes:
+          - CFBundleURLName: ai.warren.pair
+            CFBundleURLSchemes: [warren]
         # self-hosted hubs are often plain http on a home network or a Tailscale address
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

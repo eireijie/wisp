@@ -1,0 +1,119 @@
+---
+import Legal from "../layouts/Legal.astro";
+import { CONTACT_EMAIL, REPO } from "../lib/site";
+---
+
+<Legal
+  title="Privacy policy"
+  description="Warren is self-hosted. The apps talk only to your own Warren, and the project collects no analytics or personal data."
+  current="privacy"
+>
+  <div class="note">
+    <p><strong>The short version.</strong></p>
+    <ul>
+      <li>Warren runs on your own computer or server, which we call your <em>hub</em>. We don't run a Warren cloud.</li>
+      <li>The Warren apps (desktop, iPhone, Android) talk only to the hub you connect them to.</li>
+      <li>The Warren project collects no analytics, no tracking data and no personal information. None of it reaches us.</li>
+      <li>Your AI agents send what they work on to the AI services you choose to set up, such as Anthropic or OpenAI.</li>
+    </ul>
+  </div>
+
+  <h2>Who this covers</h2>
+  <p>
+    This policy covers Warren, the free and open-source software made by the Warren project, including the desktop app,
+    the phone apps, the web app and this website. In this policy, "we" means the people who make Warren. "You" means
+    anyone who uses it.
+  </p>
+
+  <h2>Warren is self-hosted</h2>
+  <p>
+    When you use Warren, everything lives on a hub: a computer or server that you, or someone you trust, runs. Your
+    messages, your agents, the memory vault, your files and your account (your name, email address and a scrambled form
+    of your password) are stored on that hub and nowhere else. We can't see any of it, and we have no way to get it.
+  </p>
+  <p>
+    If you join a Warren that someone else runs, like your company or a friend, that person runs the hub and decides how
+    your information there is kept. Ask them about it.
+  </p>
+
+  <h2>What the apps do</h2>
+  <ul>
+    <li>
+      <strong>They only talk to your hub.</strong> The desktop, iPhone and Android apps connect to the hub address you
+      give them, and nothing else, except for the push notification services described below.
+    </li>
+    <li>
+      <strong>No analytics, ads or trackers.</strong> The apps contain no analytics tools, advertising tools or crash
+      reporters that send data to us or anyone else.
+    </li>
+    <li>
+      <strong>Sign-in stays on your device.</strong> The phone apps keep the sign-in for your hub in your phone's secure
+      storage (the Keychain on iPhone, the app's private storage on Android). Removing the app removes it.
+    </li>
+    <li>
+      <strong>The camera is only for pairing.</strong> To pair your phone, you scan a QR code shown in Warren on your
+      computer (<strong>Settings → Mobile</strong>). The app uses the camera only for that, and doesn't save or send any
+      pictures. On Android, the code is read by the scanner built into Google Play services on your phone. The code
+      holds your hub's address and a one-time pairing secret.
+    </li>
+  </ul>
+
+  <h2>Push notifications</h2>
+  <p>
+    If you turn on notifications in the iPhone or iPad app, your hub sends them through Apple's push service. (The
+    Android app doesn't have notifications yet.) The hub uses push keys that belong to whoever runs the hub, not to us. Your
+    phone gives your hub a push token, which your hub keeps. A notification's text, such as the start of a message,
+    passes through Apple on its way to your phone, under Apple's privacy policy. You can turn notifications
+    off at any time in the app or in your phone's settings.
+  </p>
+
+  <h2>AI services you choose</h2>
+  <p>
+    Your agents are AI tools such as Claude Code, Codex, Hermes or Gemini CLI. To do their work, they send what you ask
+    them, and the information they need for it (for example messages, notes, files or what's on their computer), to the
+    AI service they're set up with, using the account or key you give them. That data goes straight from your computers
+    to that service, under that service's own privacy policy. It doesn't go through us. Choose services you trust, and
+    read their policies.
+  </p>
+  <p>
+    The same goes for apps you connect to Warren, like your email, calendar or Notion: your hub talks to them directly,
+    and their own policies apply.
+  </p>
+
+  <h2>This website</h2>
+  <p>
+    This website is a set of plain pages. It doesn't use cookies, analytics or trackers, and it doesn't load anything
+    from other companies. Like any website, the company that hosts it (Cloudflare) may briefly keep standard technical
+    logs, such as IP addresses, to keep the site running and safe. Downloads come from GitHub, under{" "}
+    <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener"
+      >GitHub's privacy statement</a
+    >.
+  </p>
+
+  <h2>Children</h2>
+  <p>
+    Warren isn't made for children under 13, and we don't knowingly collect information from anyone, including children.
+  </p>
+
+  <h2>Your choices</h2>
+  <p>
+    Because your information lives on your hub, you control it there. The person who runs a hub can see, change, export
+    and delete what's stored on it, including your account. To remove everything from a phone or computer, remove the
+    Warren app. Since we don't hold any of your data, there's nothing for us to hand over or delete, but we're happy to
+    answer questions.
+  </p>
+
+  <h2>Open source</h2>
+  <p>
+    Warren's code is public, so anyone can check what it does. You can read it on <a href={REPO} rel="noopener">GitHub</a>.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    If this policy changes, we'll update this page and the date at the top. If a change matters, we'll also mention it in
+    Warren's release notes.
+  </p>
+
+  <h2>Contact</h2>
+  <p>Questions about privacy? Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+</Legal>

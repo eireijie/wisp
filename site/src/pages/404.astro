@@ -1,0 +1,27 @@
+---
+import Base from "../layouts/Base.astro";
+import Ghost from "../components/Ghost.astro";
+---
+
+<Base title="Page not found" description="This page doesn't exist.">
+  <div class="wrap lost">
+    <Ghost size={88} color="#ffffff" color2="#c9c2ff" class="float" />
+    <h1>Nothing here but us ghosts</h1>
+    <p>That page doesn't exist, or it moved.</p>
+    <a class="btn btn-primary" href="/">Go to the home page</a>
+  </div>
+</Base>
+
+<style>
+  .lost {
+    text-align: center;
+    padding-top: 80px;
+  }
+  .lost h1 {
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    margin-top: 20px;
+  }
+  .lost p {
+    color: var(--muted);
+  }
+</style>

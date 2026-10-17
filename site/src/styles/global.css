@@ -1,0 +1,418 @@
+/*
+ * Warren's website. The colors are Warren's own "Moonlight" look: grays with a faint night-blue
+ * tint (hue 280), night ink by day and moonlight at night, ghosts that glow in their own color.
+ * Figtree for reading, Bricolage Grotesque for headings, both served from this site (no font CDN).
+ */
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/bricolage-grotesque";
+
+:root {
+  --gc: 0.014;
+  --gh: 280;
+  --app: oklch(0.968 calc(var(--gc) * 0.8) var(--gh));
+  --panel: oklch(1 0 0);
+  --bg: oklch(0.977 calc(var(--gc) * 0.6) var(--gh));
+  --ink: oklch(0.2 calc(var(--gc) * 3) var(--gh));
+  --muted: oklch(0.46 calc(var(--gc) * 3) var(--gh));
+  --faint: oklch(0.62 calc(var(--gc) * 2.5) var(--gh));
+  --line: oklch(0.915 calc(var(--gc) * 1.2) var(--gh));
+  --chip: oklch(0.945 calc(var(--gc) * 1.6) var(--gh));
+  --code: oklch(0.96 calc(var(--gc) * 1.2) var(--gh));
+  --accent: oklch(0.36 0.11 278);
+  --accent-ink: oklch(0.985 0.01 280);
+  --accent-text: oklch(0.45 0.15 278);
+  --accent-soft: oklch(0.55 0.15 278 / 0.1);
+  --ring: oklch(0.55 0.15 278);
+  --ok: #15803d;
+  --warn: #b45309;
+  --shadow: 0 1px 2px oklch(0.25 0.03 280 / 0.06), 0 12px 32px -8px oklch(0.25 0.03 280 / 0.14);
+  --sheet-shadow: 0 1px 2px oklch(0.25 0.03 280 / 0.05), 0 4px 18px -6px oklch(0.25 0.03 280 / 0.1);
+  --ghost-glow: 0.3;
+  --sky: radial-gradient(1200px 500px at 70% -10%, oklch(0.9 0.05 285 / 0.55), transparent 70%);
+
+  --font-sans: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "Bricolage Grotesque Variable", "Bricolage Grotesque", var(--font-sans);
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --radius: 14px;
+  --radius-lg: 22px;
+  --wrap: 1120px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app: oklch(0.145 calc(var(--gc) * 2) var(--gh));
+    --panel: oklch(0.18 calc(var(--gc) * 2) var(--gh));
+    --bg: oklch(0.205 calc(var(--gc) * 2) var(--gh));
+    --ink: oklch(0.955 calc(var(--gc) * 0.8) var(--gh));
+    --muted: oklch(0.76 calc(var(--gc) * 2.2) var(--gh));
+    --faint: oklch(0.62 calc(var(--gc) * 2.5) var(--gh));
+    --line: oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.12);
+    --chip: oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.09);
+    --code: oklch(0.215 calc(var(--gc) * 2) var(--gh));
+    --accent: oklch(0.92 0.045 285);
+    --accent-ink: oklch(0.2 0.045 280);
+    --accent-text: oklch(0.85 0.08 285);
+    --accent-soft: oklch(0.82 0.1 285 / 0.13);
+    --ring: oklch(0.8 0.1 285);
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.35), 0 16px 40px -10px oklch(0 0 0 / 0.6);
+    --sheet-shadow: 0 0 0 1px oklch(0.85 calc(var(--gc) * 3) var(--gh) / 0.08), 0 18px 50px -20px oklch(0 0 0 / 0.7);
+    --ghost-glow: 0.55;
+    --sky: radial-gradient(1200px 500px at 70% -10%, oklch(0.32 0.08 285 / 0.55), transparent 70%);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 80px;
+}
+
+body {
+  margin: 0;
+  background: var(--app);
+  background-image: var(--sky);
+  background-repeat: no-repeat;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-head);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5em;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0 0 1em;
+  text-wrap: pretty;
+}
+
+a {
+  color: var(--accent-text);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 100;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 8px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+.skip:focus {
+  top: 12px;
+}
+
+/* --- buttons ---------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow);
+}
+.btn-quiet {
+  background: var(--panel);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.btn-quiet:hover {
+  background: var(--bg);
+}
+.btn small {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* --- small pieces ---------------------------------------------------------------------- */
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  padding: 4px 12px;
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+
+.sheet {
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--sheet-shadow);
+}
+
+.chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.note {
+  border-left: 3px solid var(--ring);
+  background: var(--accent-soft);
+  padding: 12px 16px;
+  border-radius: 0 10px 10px 0;
+  color: var(--ink);
+}
+
+.ghost-glow {
+  filter: drop-shadow(0 0 10px color-mix(in oklab, var(--glow, #b9b4ff) calc(var(--ghost-glow) * 100%), transparent));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .float {
+    animation: float 4.5s ease-in-out infinite;
+  }
+  .float.slow {
+    animation-duration: 6s;
+    animation-delay: -1.5s;
+  }
+  .float.slower {
+    animation-duration: 5.2s;
+    animation-delay: -3s;
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* --- a command you can copy ------------------------------------------------------------- */
+.cmd {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--code);
+  overflow: hidden;
+  margin: 8px 0 16px;
+}
+.cmd code {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.cmd button {
+  flex: none;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0 14px;
+  cursor: pointer;
+  min-width: 64px;
+}
+.cmd button:hover {
+  color: var(--ink);
+  background: var(--chip);
+}
+
+/* --- page heads used by the inner pages ----------------------------------------------- */
+.page-head {
+  padding: 56px 0 28px;
+}
+.page-head h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+.page-head p {
+  color: var(--muted);
+  font-size: 1.15rem;
+  max-width: 640px;
+}
+
+/* --- long-form text (docs, privacy, terms) ---------------------------------------------- */
+.prose {
+  max-width: 760px;
+  min-width: 0;
+}
+.prose h1 {
+  font-size: clamp(1.9rem, 4.5vw, 2.6rem);
+}
+.prose h2 {
+  font-size: 1.55rem;
+  margin-top: 2.2em;
+  padding-top: 0.2em;
+}
+.prose h3 {
+  font-size: 1.2rem;
+  margin-top: 1.8em;
+}
+.prose ul,
+.prose ol {
+  padding-left: 1.3em;
+  margin: 0 0 1em;
+}
+.prose li {
+  margin: 0.3em 0;
+}
+.prose li > ul,
+.prose li > ol {
+  margin: 0.3em 0;
+}
+.prose :not(pre) > code {
+  background: var(--chip);
+  padding: 0.12em 0.38em;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.prose pre {
+  background: var(--code) !important;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  line-height: 1.5;
+  font-size: 0.84rem;
+  margin: 0 0 1.2em;
+}
+.prose pre code {
+  font-size: inherit;
+}
+.prose blockquote {
+  margin: 0 0 1em;
+  border-left: 3px solid var(--ring);
+  padding: 4px 16px;
+  color: var(--muted);
+}
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2em 0;
+}
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 0 1.2em;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 34rem; /* on a phone the table scrolls in its wrapper instead of squeezing */
+  font-size: 0.92rem;
+}
+.prose th,
+.prose td {
+  text-align: left;
+  vertical-align: top;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.prose tr:last-child td {
+  border-bottom: 0;
+}
+.prose th {
+  background: var(--bg);
+  font-weight: 650;
+}
+.prose td code {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+/* Shiki's two themes: light by default, dark when the OS is dark */
+@media (prefers-color-scheme: dark) {
+  .astro-code,
+  .astro-code span {
+    color: var(--shiki-dark) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+  }
+}

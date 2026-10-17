@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, User, Users } from "lucide-react";
+import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -10,6 +10,7 @@ import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage
 import { RuntimesPage } from "./settings/runtimes.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
+import { MobilePage } from "./settings/mobile.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
@@ -24,6 +25,7 @@ const NAV: NavGroup[] = [
       { id: "voice", label: "Voice", icon: <Mic size={16} /> },
       { id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
       { id: "security", label: "Security", icon: <Lock size={16} /> },
+      { id: "mobile", label: "Mobile", icon: <Smartphone size={16} /> },
     ],
   },
   {
@@ -61,6 +63,7 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   voice: () => <VoicePage />,
   appearance: () => <AppearancePage />,
   security: () => <SecurityPage />,
+  mobile: () => <MobilePage />,
   general: () => <GeneralPage />,
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,

@@ -50,15 +50,19 @@ final class Store {
 
   // MARK: signing in and out
 
-  func signIn(hub: URL, email: String, password: String) async throws {
-    struct Login: Encodable { var email: String; var password: String }
-    struct Token: Decodable { var token: String }
-    let t: Token = try await API(base: hub).post("/api/auth/login", Login(email: email, password: password))
+  /** A pairing link that opened the app (from the Camera app); the pairing screen picks it up. */
+  var pendingPair: PairLink?
+
+  /** Signed in by pairing with Warren on a computer (Settings → Mobile). */
+  func adopt(hub: URL, token: String) {
+    socket?.cancel(with: .goingAway, reason: nil)
+    socket = nil
     Session.hub = hub
-    Session.token = t.token
-    api = API(base: hub, token: t.token)
+    Session.token = token
+    api = API(base: hub, token: token)
     phase = .loading
-    await load()
+    // not tied to the pairing screen's task, which ends as soon as that screen goes away
+    Task { await load() }
   }
 
   func signOut() {
