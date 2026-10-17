@@ -15,6 +15,25 @@ const KEY = "lead";
 const LEGACY_KEY = "orchestration";
 
 
+const isRemote = (repo: string) => /^(https?|ssh|git|file):\/\/|^[\w.-]+@[\w.-]+:/.test(repo);
+
+/**
+ * What only the assignee needs to know about a task message: the task id, where to code, and how to
+ * report back. People never see this, so it isn't in the message body. Starts with a blank line, or
+ * is empty when the message isn't a task for this agent.
+ */
+export function taskInstructions(store: Store, agentId: string, trigger: { parts: { type: string; taskId?: string }[] }): string {
+  const taskId = trigger.parts.find((p) => p.type === "task")?.taskId;
+  const task = taskId ? store.task(taskId) : undefined;
+  if (!task || task.toAgentId !== agentId) return "";
+  const team = task.teamId ? store.team(task.teamId) : undefined;
+  const code =
+    task.branch && team?.repo && !task.reviewOf
+      ? `\n\nCode: you'll work in your own checkout of \`${team.repo}\` on branch \`${task.branch}\` (from \`${team.baseBranch}\`). Commit your work on that branch${isRemote(team.repo) ? " and push it" : ""}.`
+      : "";
+  return `\n\nThis is task \`${task.id}\`.${code}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`;
+}
+
 /**
  * The run that was working a task failed: the task fails with the reason, and whoever handed it
  * out hears about it in the task's thread. An agent that handed it out (the dispatcher, a lead) is

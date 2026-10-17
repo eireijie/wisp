@@ -4,7 +4,7 @@ import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
-import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
+import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
 import { AgentAvatar, Button, Empty, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
@@ -190,7 +190,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
     <Modal title="Add a computer" onClose={onClose} wide>
       <div className="space-y-4">
         <div className="space-y-2">
-          {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.", usable.some((d) => d.capabilities?.vm.ok) ? undefined : "None of your devices can run VMs yet: install Docker on one.")}
+          {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.", vmAvailabilityNote(usable))}
           {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask.")}
           {option("orgo", <Cloud size={18} />, "An Orgo cloud computer", "A Linux desktop in the cloud from orgo.ai that keeps running when your devices are off.", orgo && !orgo.configured ? "Add your Orgo API key in Settings → Computers first." : undefined)}
         </div>

@@ -39,11 +39,26 @@ export function isDismissed(): boolean {
   }
 }
 
+/** Lets the sidebar react the moment "Do this later" is clicked. */
+const useDismissStore = create<{ dismissed: boolean }>(() => ({ dismissed: isDismissed() }));
+
+export function useDismissed(): boolean {
+  return useDismissStore((s) => s.dismissed);
+}
+
 export function setDismissed(v: boolean) {
   try {
     if (v) localStorage.setItem(DISMISS_KEY, "1");
     else localStorage.removeItem(DISMISS_KEY);
   } catch {}
+  useDismissStore.setState({ dismissed: v });
+}
+
+/** How far along setup is. A skipped but unfinished setup stays visible in the sidebar as "Finish setup". */
+export function setupProgress(done: Record<StepId, boolean>) {
+  const steps = STEPS.length;
+  const progress = STEPS.filter((id) => done[id]).length;
+  return { progress, steps, complete: progress >= steps };
 }
 
 const useOnboardingStore = create<{ state: OnboardingState | null; error: string | null; refresh: () => Promise<void> }>((set) => ({

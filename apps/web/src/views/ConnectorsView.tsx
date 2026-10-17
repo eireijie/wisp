@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BadgeCheck, ExternalLink, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, Server, Trash2 } from "lucide-react";
-import { CONNECTOR_CATALOG, catalogConnector, harnessInfo, isMasked, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, type MarketplaceEntry, type MarketplaceInstall } from "@warren/core";
+import { BadgeCheck, ExternalLink, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, Server, ShieldQuestion, Trash2 } from "lucide-react";
+import { CONNECTOR_CATALOG, catalogConnector, harnessInfo, isMasked, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Button, Field, Input, Loader, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
@@ -178,9 +178,9 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
             <section aria-label="Marketplace" className="space-y-3">
               <p className="text-xs text-muted">
                 {q.trim() ? (
-                  <>Results from the official MCP Registry. Official ones (from the company that makes the app) come first.</>
+                  <>Results from the MCP Registry. Servers whose publisher is verified come first. "Made by" means the app's own company publishes it; "Verified publisher" only means the registry confirmed who published it.</>
                 ) : (
-                  <>Popular official servers. Search to find any of the thousands in the MCP Registry. Zapier connects thousands more apps, like Gmail, Google Calendar, Drive and Todoist, with one sign-in.</>
+                  <>Popular servers from the MCP Registry. Search to find any of its thousands more. Zapier connects thousands more apps, like Gmail, Google Calendar, Drive and Todoist, with one sign-in.</>
                 )}
               </p>
               {market.error && (
@@ -231,7 +231,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
                       </IconTile>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold truncate">{c.name}</div>
-                        <div className="text-[11px] text-muted">{KIND_LABEL[c.kind]}</div>
+                        <div className="text-[11px] text-muted">Built in · {KIND_LABEL[c.kind]}</div>
                       </div>
                       {countFor(c.id) > 0 && <Pill tone="ok">Added</Pill>}
                     </div>
@@ -540,6 +540,17 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
 }
 
 
+/** Who stands behind a registry listing: icon + short text, with the full explanation on hover and for screen readers. */
+function TrustBadge({ t }: { t: TrustLabel }) {
+  const Icon = t.kind === "unverified" ? ShieldQuestion : BadgeCheck;
+  return (
+    <span title={t.explanation} aria-label={`${t.text}. ${t.explanation}`} className={cx("mt-0.5 inline-flex items-center gap-1 text-[11px]", t.kind === "unverified" ? "text-muted" : "text-accent-text")}>
+      <Icon size={12} className="shrink-0" aria-hidden />
+      {t.text}
+    </span>
+  );
+}
+
 /** A registry server's logo, or its first letter. */
 function MarketIcon({ e }: { e: MarketplaceEntry }) {
   const [broken, setBroken] = useState(false);
@@ -561,12 +572,9 @@ function MarketCard({ e, added, canEdit, onAdd }: { e: MarketplaceEntry; added: 
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold truncate flex items-center gap-1">
             {e.name}
-            {e.verified && <BadgeCheck size={14} className="text-accent-text shrink-0" aria-label="Official" />}
           </div>
-          <div className="text-[11px] text-muted truncate">
-            {e.verified ? "Official · " : ""}
-            {e.publisher}
-          </div>
+          <div className="text-[11px] text-muted truncate">Published by {e.publisher}</div>
+          <TrustBadge t={trustLabel(e)} />
         </div>
         {added && <Pill tone="ok">Added</Pill>}
       </div>
@@ -593,6 +601,7 @@ function MarketCard({ e, added, canEdit, onAdd }: { e: MarketplaceEntry; added: 
 function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: MarketplaceEntry; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void }) {
   const [i, setI] = useState(0);
   const install = entry.installs[i];
+  const trust = trustLabel(entry);
   const asCatalog: CatalogConnector = {
     id: `registry:${entry.id}`,
     name: entry.name,
@@ -614,13 +623,14 @@ function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: Marketpl
         <MarketIcon e={entry} />
         <div className="text-sm text-muted min-w-0">
           <div className="text-ink font-medium flex items-center gap-1">
-            {entry.verified ? "Official" : "From"} · {entry.publisher}
-            {entry.verified && <BadgeCheck size={14} className="text-accent-text" />}
+            {entry.name}
           </div>
+          <div className="text-xs">Published by {entry.publisher}</div>
+          <TrustBadge t={trust} />
           {entry.description}
           {install.kind === "mcp-http" && !install.fields.length && <div className="mt-1 text-xs">If it asks you to sign in, Warren takes you to its sign-in page next. Agents never see your password.</div>}
           {install.needs && <div className="mt-1 text-xs">Needs: {install.needs}.</div>}
-          {!entry.verified && <div className="mt-1 text-xs">Not from the app's maker: only add servers you trust, since agents send them data.</div>}
+          {trust.kind === "unverified" && <div className="mt-1 text-xs">{trust.explanation}</div>}
         </div>
       </div>
       {entry.installs.length > 1 && (

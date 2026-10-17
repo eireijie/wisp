@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, FilePlus, Folder, Pencil, Trash2, GitCommitHorizontal, History, RefreshCw, ScanEye, Search, UserPen, Users, X, PanelLeft } from "lucide-react";
-import type { AccessRule, MemoryLevel } from "@warren/core";
+import { personDir, type AccessRule, type MemoryLevel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, guardLeaving, href, mayLeave } from "../router.ts";
@@ -62,6 +62,9 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   // owners can look at memory the way one agent sees it
   const [viewAs, setViewAs] = useState<string | null>(null);
   const [ruled, setRuled] = useState<Set<string>>(new Set());
+  // a note just created here opens straight into editing; NoteReader remounts per path, so the intent lives here
+  const pendingEdit = useRef<string | null>(null);
+  const meId = useStore((s) => s.me?.user.id);
   const agents = useStore((s) => s.agents);
   const isOwner = useStore((s) => s.me?.role === "owner");
   // notes changed in Obsidian (or pushed from another computer): reload the list
@@ -152,7 +155,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
           <RefreshCw size={16} /> <span className="hidden sm:inline">Refresh</span>
         </Button>
         {!viewAs && (
-          <Button variant="default" onClick={() => setCreating(path ? path.split("/").slice(0, -1).join("/") : "shared")} title="Write a new note here">
+          <Button variant="default" onClick={() => setCreating(path ? path.split("/").slice(0, -1).join("/") : meId ? personDir(meId) : "shared")} title="Write a new note here">
             <FilePlus size={16} /> <span className="hidden sm:inline">New note</span>
           </Button>
         )}
@@ -209,7 +212,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
           {activity ? (
             <ActivityFeed onOpen={(p) => (setActivity(false), openPath(p))} />
           ) : path ? (
-            <NoteReader key={path} path={path} resolve={resolve} folderLabel={folderLabel} onChanged={refresh} onShare={() => setSharing({ path, folder: false })} />
+            <NoteReader key={path} path={path} pendingEdit={pendingEdit} resolve={resolve} folderLabel={folderLabel} onChanged={refresh} onShare={() => setSharing({ path, folder: false })} />
           ) : (
             <Empty icon={<BookOpen />} title="Your shared memory">
               <p>
@@ -232,6 +235,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
           onCreated={async (p) => {
             setCreating(null);
             await refresh();
+            pendingEdit.current = p;
             openPath(p);
           }}
         />
@@ -318,7 +322,15 @@ function TreeItem({ node, depth, parent, ...rest }: TreeProps & { node: TreeNode
 }
 
 /** A note: read here, with a plain editor for quick fixes (Obsidian is the better place to write). History, who wrote what and who can see it. */
-function NoteReader({ path, resolve, folderLabel, onChanged, onShare }: { path: string; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onChanged: () => void; onShare: () => void }) {
+/** Focus the note body with the caret after the last character, once when it appears. */
+function focusAtEnd(el: HTMLTextAreaElement | null) {
+  if (!el || el.dataset.focused) return;
+  el.dataset.focused = "1";
+  el.focus();
+  el.setSelectionRange(el.value.length, el.value.length);
+}
+
+function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShare }: { path: string; pendingEdit: React.MutableRefObject<string | null>; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onChanged: () => void; onShare: () => void }) {
   const [note, setNote] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"history" | "authors" | null>(null);
@@ -333,8 +345,21 @@ function NoteReader({ path, resolve, folderLabel, onChanged, onShare }: { path: 
 
   useEffect(() => {
     setError(null);
-    api<Note>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`).then(setNote, (e) => setError(e.message));
-  }, [path, memoryVersion]);
+    api<Note>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`).then(
+      (n) => {
+        setNote(n);
+        // a note we just created: start editing once, with the draft from what was saved
+        if (pendingEdit.current === path) {
+          pendingEdit.current = null;
+          if (n.access === "edit" || n.access === "manage") setDraft((d) => d ?? n.content);
+        }
+      },
+      (e) => {
+        if (pendingEdit.current === path) pendingEdit.current = null;
+        setError(e.message);
+      },
+    );
+  }, [path, memoryVersion, pendingEdit]);
 
   useEffect(() => {
     if (side === "history") api<Commit[]>("GET", `/api/vault/history?path=${encodeURIComponent(path)}`).then(setHistory);
@@ -473,7 +498,7 @@ function NoteReader({ path, resolve, folderLabel, onChanged, onShare }: { path: 
         )}
         <div className="flex-1 overflow-y-auto">
           {draft !== null ? (
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck autoFocus aria-label="Note text" className="w-full h-full resize-none bg-transparent px-4 md:px-8 py-6 font-mono text-[14px] leading-relaxed outline-none" />
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck ref={focusAtEnd} aria-label="Note text" className="w-full h-full resize-none bg-transparent px-4 md:px-8 py-6 font-mono text-[14px] leading-relaxed outline-none" />
           ) : (
             <div onClick={onClick} className="prose-w max-w-3xl px-4 md:px-8 py-6 text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
           )}
@@ -560,7 +585,7 @@ function NewNote({ initial, folders, onClose, onCreated }: { initial: string; fo
           </datalist>
         </Field>
         <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meeting notes" required />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meeting notes" required autoFocus />
         </Field>
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end">

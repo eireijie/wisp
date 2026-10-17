@@ -1112,16 +1112,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     let branch = o.branch ?? null;
     if (!branch && team?.repo && !o.reviewOf) branch = `warren/${o.target.handle}/${branchSlug(o.title)}-${task.id.slice(-5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
     if (branch) store.setTaskBranch(task.id, branch);
-    const code =
-      branch && team?.repo && !o.reviewOf
-        ? `\n\nCode: you'll work in your own checkout of \`${team.repo}\` on branch \`${branch}\` (from \`${team.baseBranch}\`). Commit your work on that branch${isRemote(team.repo) ? " and push it" : ""}.`
-        : "";
     const files = (o.fileIds ?? []).map((f) => store.file(f)).filter((f) => f && f.workspaceId === o.workspaceId);
     const msg = hub.postMessage({
       channelId: o.channelId,
       author: o.author,
-      body: `@${o.target.handle} New task **${task.title}** (\`${task.id}\`)\n\n${task.brief}${code}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`,
-      parts: files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })),
+      body: `@${o.target.handle} New task **${task.title}**\n\n${task.brief}`,
+      parts: [{ type: "task" as const, taskId: task.id }, ...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name }))],
       hop: o.hop,
       replyInThread: true,
       onBehalfOf: o.onBehalfOf,
@@ -1248,6 +1244,27 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       });
     }
     if (body.status === "done") requestReview(updated, requesterOf(c));
+    return updated;
+  });
+
+  /** Stop a task: cancels the assignee's queued or running work on it and marks it failed. Only this task, not its subtasks. */
+  app.post("/api/tasks/:id/cancel", async (req, reply) => {
+    const c = need(req, reply, { notGuest: true });
+    if (!c) return;
+    const task = store.task((req.params as { id: string }).id);
+    if (!task || task.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "task not found" });
+    if (c.actor.kind === "agent" && c.actor.id !== task.from.id) return reply.code(403).send({ error: "not your task" });
+    if (task.status === "done" || task.status === "failed") return reply.code(409).send({ error: "task already finished" });
+    if (task.toAgentId && task.channelId && task.threadId) {
+      const runs = db.prepare("SELECT id FROM runs WHERE agent_id = ? AND channel_id = ? AND thread_id = ? AND status IN ('queued', 'running')").all(task.toAgentId, task.channelId, task.threadId) as { id: string }[];
+      for (const r of runs) hub.cancelRun(r.id);
+    }
+    const name = c.actor.kind === "agent" ? `@${store.agent(c.actor.id)?.handle ?? "agent"}` : (store.user(c.actor.id)?.name ?? "someone");
+    const updated = store.updateTask(task.id, "failed", `Cancelled by ${name}.`)!;
+    hub.broadcast(c.workspaceId, { type: "tasks_changed" });
+    if (task.channelId) {
+      hub.postMessage({ channelId: task.channelId, threadId: task.threadId, author: { kind: "user", id: "system" }, body: `Task **${task.title}** was cancelled by ${name}.`, hop: 1, route: false });
+    }
     return updated;
   });
 

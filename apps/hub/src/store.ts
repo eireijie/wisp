@@ -426,6 +426,11 @@ export class Store {
     return this.routine(routineId);
   }
 
+  /** A run of the routine finished successfully (lastRunAt is only when it was asked for). */
+  routineCompleted(routineId: string, at = now()) {
+    this.db.prepare("UPDATE routines SET last_completed_at = ? WHERE id = ?").run(at, routineId);
+  }
+
   deleteRoutine(routineId: string) {
     this.db.prepare("DELETE FROM routines WHERE id = ?").run(routineId);
   }
@@ -1259,6 +1264,7 @@ type RoutineRow = {
   created_by_kind: "user" | "agent";
   created_by_id: string;
   last_run_at: string | null;
+  last_completed_at: string | null;
   created_at: string;
 };
 
@@ -1276,6 +1282,7 @@ function toRoutine(r: RoutineRow): Routine {
     status: r.status,
     createdBy: { kind: r.created_by_kind, id: r.created_by_id },
     lastRunAt: r.last_run_at,
+    lastCompletedAt: r.last_completed_at,
     createdAt: r.created_at,
   };
 }

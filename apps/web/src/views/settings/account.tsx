@@ -28,15 +28,32 @@ export function ProfilePage() {
   const [saved, flash] = useSavedFlash();
   const dirty = f.name !== me.user.name || f.email !== me.user.email || f.preferredName !== (me.user.preferredName ?? "") || f.timezone !== (me.user.timezone ?? "");
 
+  const patchMe = async (patch: Record<string, unknown>) => {
+    const user = await api<typeof me.user>("PATCH", "/api/me", patch);
+    useStore.setState((s) => (s.me ? { me: { ...s.me, user } } : {}));
+    useStore.getState().load();
+    flash();
+    return user;
+  };
+  const applyDetected = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await patchMe({ timezone: HERE });
+      setF((p) => ({ ...p, timezone: HERE }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const user = await api<typeof me.user>("PATCH", "/api/me", { name: f.name, email: f.email, preferredName: f.preferredName.trim() || null, timezone: f.timezone || null });
-      useStore.setState((s) => (s.me ? { me: { ...s.me, user } } : {}));
-      useStore.getState().load();
-      flash();
+      await patchMe({ name: f.name, email: f.email, preferredName: f.preferredName.trim() || null, timezone: f.timezone || null });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -64,6 +81,14 @@ export function ProfilePage() {
         <Field label="Email" hint="You sign in with it.">
           <Input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
         </Field>
+        {!me.user.timezone && !f.timezone && HERE !== "UTC" && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-panel px-3 py-2 text-sm">
+            <span>Your time zone isn't set, so agents see UTC.</span>
+            <button type="button" disabled={busy} className="shrink-0 text-accent-text hover:underline disabled:opacity-50" onClick={applyDetected}>
+              Use {HERE.replace(/_/g, " ")} (detected)
+            </button>
+          </div>
+        )}
         <Field
           label="Time zone"
           hint={

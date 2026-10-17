@@ -309,7 +309,8 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
                   <div className="text-xs text-muted">
                     {r.schedule ? `${describeCron(r.schedule)}${r.timezone !== TZ ? ` (${r.timezone})` : ""}` : "When someone runs it"}
                     {next && ` · next ${next.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`}
-                    {r.lastRunAt && ` · last ran ${timeAgo(r.lastRunAt)}`}
+                    {r.lastRunAt && ` · last requested ${timeAgo(r.lastRunAt)}`}
+                    {r.lastCompletedAt && ` · last completed ${timeAgo(r.lastCompletedAt)}`}
                   </div>
                 </div>
                 <a className="text-sm text-accent-text hover:underline" href={href({ view: "vault", path: r.notePath })}>

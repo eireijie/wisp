@@ -1,15 +1,16 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
-import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
+import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
-import { go, type Route } from "../router.ts";
+import { go, href, type Route } from "../router.ts";
+import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
 import { ChannelSettings, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
-import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
@@ -591,6 +592,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
         {m.parts.map((p, i) => (p.type === "status" || p.type === "notice") && <span key={i}>{p.text}</span>)}
         {m.body && <span>{m.body.replace(/\*\*/g, "")}</span>}
         {m.parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
+        {m.parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
         <span className="h-px flex-1 bg-line" />
       </div>
     );
@@ -754,6 +756,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
       {parts.map((p, i) => p.type === "computer" && <ComputerPart key={`c${i}`} computerId={p.computerId} request={p.request} />)}
       {parts.map((p) => p.type === "approval" && <ApprovalCard key={p.approvalId} id={p.approvalId} />)}
       {parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
+      {parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
       {files.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-2">
@@ -914,6 +917,54 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
   );
 }
 
+// --- task hand-off card -------------------------------------------------------------------------
+
+const taskCache = new Map<string, Promise<TaskRow[]>>();
+
+function taskState(t: TaskRow): { label: string; tone: "neutral" | "info" | "ok" | "bad" } {
+  if (t.status === "done") return { label: "Done", tone: "ok" };
+  if (t.status === "failed") return t.result?.startsWith("Cancelled") ? { label: "Cancelled", tone: "neutral" } : { label: "Failed", tone: "bad" };
+  if (t.status === "in_progress") return { label: "Working", tone: "info" };
+  return { label: "To do", tone: "neutral" };
+}
+
+/** A hand-off message's task: title, who has it, where it stands, and a way into Tasks. */
+function TaskChip({ id }: { id: string }) {
+  const version = useStore((s) => s.tasksVersion);
+  const agents = useStore((s) => s.agents);
+  const [task, setTask] = useState<TaskRow | null>(null);
+  useEffect(() => {
+    const key = String(version);
+    let p = taskCache.get(key);
+    if (!p) {
+      taskCache.clear();
+      taskCache.set(key, (p = api<TaskRow[]>("GET", "/api/tasks").catch(() => [])));
+    }
+    let live = true;
+    p.then((list) => live && setTask(list.find((t) => t.id === id) ?? null));
+    return () => {
+      live = false;
+    };
+  }, [id, version]);
+  if (!task) return null;
+  const agent = task.toAgentId ? agents.find((a) => a.id === task.toAgentId) : undefined;
+  const st = taskState(task);
+  return (
+    <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-panel pl-3 pr-1 h-8 text-xs">
+      <span className="font-medium truncate">{task.title}</span>
+      {agent && (
+        <span className="text-muted inline-flex items-center gap-1 shrink-0">
+          <AgentAvatar agent={agent} size={16} badge={false} /> {agent.name}
+        </span>
+      )}
+      <Pill tone={st.tone}>{st.label}</Pill>
+      <a href={href({ view: "tasks" })} className="shrink-0 rounded-full px-2 h-6 inline-flex items-center text-accent-text hover:bg-hover">
+        Open in Tasks
+      </a>
+    </div>
+  );
+}
+
 // --- composer -----------------------------------------------------------------------------------
 
 function Composer({ channelId, threadId, agentId, placeholder }: { channelId: string; threadId?: string; agentId?: string; placeholder: string }) {
@@ -932,6 +983,17 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const working = Object.values(live).filter((r) => r.channelId === channelId);
+  const channel = useStore((s) => s.channels.find((c) => c.id === channelId));
+
+  // a quiet line about where this will land: no mention in a channel, or an offline agent that was asked
+  const mentioned = text.trim() ? parseMentions(text).map((h) => agents.find((a) => a.handle === h)).filter((a): a is Agent => !!a) : [];
+  const offline = mentioned.find((a) => a.status === "offline") ?? (channel?.kind === "dm" && text.trim() ? dmAgent?.status === "offline" ? dmAgent : undefined : undefined);
+  const hint = offline
+    ? `${offline.name} is offline; it will answer when its device reconnects.`
+    : // in a thread, a plain reply can go back to the agent that started it, so only say this at the top level
+      channel && channel.kind !== "dm" && !threadId && text.trim() && !mentioned.length
+      ? `Posting to #${channel.name}. @mention an agent to ask it.`
+      : null;
 
   // @mention autocomplete for the word under the cursor
   const word = text.slice(0, caret).match(/(?:^|\s)@([\w-]*)$/)?.[1];
@@ -1112,6 +1174,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
       </div>
       <div className="min-h-6 pt-1 px-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {error && <span className="text-bad">{error}</span>}
+        {!error && hint && <span className="text-muted">{hint}</span>}
         {working.map((r) => (
           <AgentWorking key={r.runId} run={r} home={r.agentId === agentId} />
         ))}

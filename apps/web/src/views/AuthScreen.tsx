@@ -39,6 +39,11 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
         : joining
           ? await api<{ token: string }>("POST", "/api/invites/accept", { code, name: form.name, email: form.email, password: form.password })
           : await api<{ token: string }>("POST", "/api/auth/login", { email: form.email, password: form.password });
+      if (needsSetup || joining) {
+        // New account: start it on this device's time zone so agents and routines don't fall back to UTC. Best-effort.
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (timezone) await api("PATCH", "/api/me", { timezone }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
+      }
       if (needsSetup) location.hash = "#/welcome";
       else if (joining) location.hash = "#/";
       onAuthed(r.token);

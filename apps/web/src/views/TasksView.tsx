@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, Hand, Loader2, Paperclip, Plus, Sparkles, X } from "lucide-react";
-import type { Actor, Agent } from "@warren/core";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, Hand, Loader2, Paperclip, Plus, Sparkles, WifiOff, X } from "lucide-react";
+import { harnessInfo, type Actor, type Agent } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go } from "../router.ts";
+import { useDevices } from "../devices.ts";
 import { AgentAvatar, Button, Field, Input, Loader, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 export interface TaskRow {
@@ -25,14 +26,19 @@ export interface TaskRow {
   updatedAt: string;
 }
 
-type State = "todo" | "working" | "waiting" | "done" | "failed";
+type State = "todo" | "working" | "blocked" | "needsYou" | "done" | "failed" | "cancelled";
 const STATE: Record<State, { label: string; tone: "neutral" | "ok" | "warn" | "bad" | "info" | "accent" }> = {
   todo: { label: "To do", tone: "neutral" },
   working: { label: "Working", tone: "info" },
-  waiting: { label: "Needs you", tone: "accent" },
+  blocked: { label: "Waiting for a device", tone: "warn" },
+  needsYou: { label: "Needs you", tone: "accent" },
   done: { label: "Done", tone: "ok" },
   failed: { label: "Failed", tone: "bad" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
+const isCancelled = (t: TaskRow) => t.status === "failed" && !!t.result?.startsWith("Cancelled");
+const isClosed = (t: TaskRow) => t.status === "done" || t.status === "failed";
+const cancellable = (s: State) => s === "todo" || s === "blocked" || s === "working";
 
 /**
  * Tasks: work that's been planned and handed out. A task nobody assigned goes to the lead, who
@@ -74,15 +80,20 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
 
 /** Tasks need someone to hand them to. */
 function NoAgents() {
+  /** this also shows inside the New task dialog; leave it before navigating */
+  const to = (view: Parameters<typeof go>[0]) => {
+    useStore.setState({ newTaskOpen: false });
+    go(view);
+  };
   return (
     <div className="mx-auto max-w-xl px-4 py-12 md:py-16 text-center space-y-3">
       <h2 className="text-lg font-semibold">Add an agent to hand work to</h2>
       <p className="text-sm text-muted">Tasks are how you give agents work and follow it from the plan to the pieces to done. Add an agent first, or set up a whole team in one go.</p>
       <div className="flex justify-center gap-2">
-        <Button variant="primary" onClick={() => go({ view: "agents", agentId: null })}>
+        <Button variant="primary" onClick={() => to({ view: "agents", agentId: null })}>
           Add an agent
         </Button>
-        <Button onClick={() => go({ view: "teams", teamId: null })}>Set up a team</Button>
+        <Button onClick={() => to({ view: "teams", teamId: null })}>Set up a team</Button>
       </div>
     </div>
   );
@@ -96,29 +107,47 @@ function Board({ leadId }: { leadId: string | null }) {
   const approvals = useStore((s) => s.approvals);
   const computers = useStore((s) => s.computers);
   const version = useStore((s) => s.tasksVersion);
+  const devices = useDevices();
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [who, setWho] = useState("");
   const [mine, setMine] = useState(false);
 
+  const refetch = () => api<TaskRow[]>("GET", "/api/tasks").then(setTasks, () => setTasks((t) => t ?? []));
   useEffect(() => {
-    api<TaskRow[]>("GET", "/api/tasks").then(setTasks, () => setTasks([]));
+    refetch();
   }, [version]);
 
   const waitingOn = (t: TaskRow) => {
-    if (t.status === "done" || t.status === "failed") return null;
+    if (isClosed(t)) return null;
     const inThread = (x: { channelId: string; threadId: string | null }) => x.channelId === t.channelId && (x.threadId === t.threadId || (!!t.threadId && x.threadId === null));
     const approval = Object.values(approvals).find((a) => a.status === "pending" && a.agentId === t.toAgentId && inThread(a));
     if (approval) return `Wants your OK: ${approval.summary}`;
     const help = computers.find((c) => c.help && c.help.agentId === t.toAgentId && inThread(c.help));
     return help ? `Needs you on ${help.name}: ${help.help!.request}` : null;
   };
+  /** the device an agent runs on, if we know it */
+  const deviceOf = (a: Agent | undefined) => (a?.nodeId ? devices?.find((d) => d.id === a.nodeId) : undefined);
   const stateOf = (t: TaskRow): State => {
     if (t.status === "done") return "done";
+    if (isCancelled(t)) return "cancelled";
     if (t.status === "failed") return "failed";
-    if (waitingOn(t)) return "waiting";
-    const busy = agents.find((a) => a.id === t.toAgentId)?.status === "busy";
-    return t.status === "in_progress" || (busy && t.status === "open") ? "working" : "todo";
+    if (waitingOn(t)) return "needsYou";
+    const agent = agents.find((a) => a.id === t.toAgentId);
+    // agents that connect on their own (mcp) have no device to wait for
+    if (agent && harnessInfo(agent.harness)?.protocol !== "mcp") {
+      const dev = deviceOf(agent);
+      const unreachable = !agent.nodeId || (devices ? !dev || !dev.online || !!dev.paused : agent.status === "offline");
+      if (unreachable) return "blocked";
+    }
+    return t.status === "in_progress" || agent?.status === "busy" ? "working" : "todo";
   };
+  const stateLabel = (t: TaskRow) => {
+    const s = stateOf(t);
+    if (s !== "blocked") return STATE[s].label;
+    const name = deviceOf(agents.find((a) => a.id === t.toAgentId))?.name;
+    return name ? `Waiting for ${name}` : "Waiting for a device";
+  };
+  const deviceName = (t: TaskRow) => deviceOf(agents.find((a) => a.id === t.toAgentId))?.name ?? null;
 
   // the tree: subtasks (and reviews) hang under the task they're a piece of
   const { roots, children } = useMemo(() => {
@@ -141,12 +170,14 @@ function Board({ leadId }: { leadId: string | null }) {
     return who.startsWith("team:") ? tree.some((x) => x.teamId === who.slice(5)) : tree.some((x) => x.toAgentId === who);
   };
   const shown = roots.filter(matches);
-  const open = shown.filter((t) => t.status !== "done" && t.status !== "failed");
-  const closed = shown.filter((t) => t.status === "done" || t.status === "failed").slice(0, 20);
+  const open = shown.filter((t) => !isClosed(t));
+  const inProgress = open.filter((t) => ["working", "needsYou"].includes(stateOf(t)));
+  const toDo = open.filter((t) => !inProgress.includes(t));
+  const closed = shown.filter(isClosed).slice(0, 20);
   const needsYou = shown.flatMap(all).map((t) => ({ t, note: waitingOn(t) })).filter((x) => x.note);
 
   const fromName = (a: Actor) => (a.kind === "agent" ? `@${agents.find((x) => x.id === a.id)?.handle ?? "agent"}` : a.id === me.user.id ? "you" : (members.find((m) => m.id === a.id)?.name ?? "someone"));
-  const ctx: CardCtx = { agents, leadId, children, stateOf, waitingOn, fromName };
+  const ctx: CardCtx = { agents, leadId, children, stateOf, stateLabel, deviceName, waitingOn, fromName, canCancel: me.role !== "guest", refetch };
 
   if (!tasks) return <Loader />;
   return (
@@ -193,31 +224,39 @@ function Board({ leadId }: { leadId: string | null }) {
         </section>
       )}
 
-      <section>
-        <SectionTitle title="In progress" count={open.length} />
-        {open.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted">
-            {roots.length === 0 ? (
-              <>
-                Nothing yet. Start a task and {agents.find((a) => a.id === leadId)?.name ?? "the lead"} plans it and hands the pieces out.{" "}
-                {me.role !== "guest" && (
-                  <button className="text-accent-text hover:underline" onClick={() => useStore.setState({ newTaskOpen: true })}>
-                    New task
-                  </button>
-                )}
-              </>
-            ) : (
-              "Nothing in progress here."
-            )}
-          </div>
-        ) : (
+      {roots.length === 0 && (
+        <div className="rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted">
+          Nothing yet. Start a task and {agents.find((a) => a.id === leadId)?.name ?? "the lead"} plans it and hands the pieces out.{" "}
+          {me.role !== "guest" && (
+            <button className="text-accent-text hover:underline" onClick={() => useStore.setState({ newTaskOpen: true })}>
+              New task
+            </button>
+          )}
+        </div>
+      )}
+      {open.length === 0 && roots.length > 0 && closed.length === 0 && <div className="rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted">Nothing here.</div>}
+
+      {inProgress.length > 0 && (
+        <section>
+          <SectionTitle title="In progress" count={inProgress.length} />
           <div className="space-y-3">
-            {open.map((t) => (
+            {inProgress.map((t) => (
               <TaskCard key={t.id} task={t} ctx={ctx} defaultOpen />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
+
+      {toDo.length > 0 && (
+        <section>
+          <SectionTitle title="To do" count={toDo.length} />
+          <div className="space-y-3">
+            {toDo.map((t) => (
+              <TaskCard key={t.id} task={t} ctx={ctx} defaultOpen />
+            ))}
+          </div>
+        </section>
+      )}
 
       {closed.length > 0 && (
         <section>
@@ -238,6 +277,10 @@ interface CardCtx {
   leadId: string | null;
   children: Map<string, TaskRow[]>;
   stateOf: (t: TaskRow) => State;
+  stateLabel: (t: TaskRow) => string;
+  deviceName: (t: TaskRow) => string | null;
+  canCancel: boolean;
+  refetch: () => void;
   waitingOn: (t: TaskRow) => string | null;
   fromName: (a: Actor) => string;
 }
@@ -255,9 +298,43 @@ function SectionTitle({ title, count }: { title: string; count: number }) {
 function StateIcon({ state }: { state: State }) {
   if (state === "done") return <Check size={15} className="text-ok shrink-0" />;
   if (state === "working") return <Loader2 size={14} className="animate-spin text-muted shrink-0" />;
-  if (state === "waiting") return <Hand size={14} className="text-accent-text shrink-0" />;
+  if (state === "blocked") return <WifiOff size={14} className="text-warn shrink-0" />;
+  if (state === "cancelled") return <X size={15} className="text-faint shrink-0" />;
+  if (state === "needsYou") return <Hand size={14} className="text-accent-text shrink-0" />;
   if (state === "failed") return <X size={15} className="text-bad shrink-0" />;
   return <CircleDot size={14} className="text-faint shrink-0" />;
+}
+
+/** A quiet "Cancel task" button. Sits beside, never inside, the row's open button. */
+function CancelButton({ task: t, ctx, agentName, compact }: { task: TaskRow; ctx: CardCtx; agentName: string; compact?: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancel = async () => {
+    if (!window.confirm(`Cancel this task? ${agentName} won't work on it.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/tasks/${t.id}/cancel`);
+      ctx.refetch();
+    } catch (err) {
+      setError((err as Error).message);
+      ctx.refetch();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" onClick={cancel} disabled={busy} className={cx("text-xs text-muted hover:text-bad disabled:opacity-50 shrink-0", compact && "px-2")}>
+        {busy ? "Cancelling…" : "Cancel task"}
+      </button>
+      {error && (
+        <span role="alert" className="text-xs text-bad">
+          {error}
+        </span>
+      )}
+    </>
+  );
 }
 
 /** A top-level task: who has it, how far its subtasks are, and the subtasks themselves. */
@@ -269,20 +346,32 @@ function TaskCard({ task: t, ctx, defaultOpen }: { task: TaskRow; ctx: CardCtx; 
   const done = subs.filter((s) => s.status === "done").length;
   const note = ctx.waitingOn(t);
   return (
-    <article className={cx("rounded-xl border bg-panel", state === "waiting" ? "border-accent/50" : "border-line")}>
+    <article className={cx("rounded-xl border bg-panel", state === "needsYou" ? "border-accent/50" : "border-line")}>
       <div className="p-3.5 space-y-2.5">
         <div className="flex items-start gap-2">
           <button onClick={() => openTask(t)} className="min-w-0 flex-1 text-left text-sm font-medium leading-snug hover:underline">
             {t.title}
           </button>
-          <Pill tone={STATE[state].tone}>{STATE[state].label}</Pill>
+          <Pill tone={STATE[state].tone}>{ctx.stateLabel(t)}</Pill>
         </div>
         {note && (
           <p className="text-xs text-accent-text flex gap-1.5">
             <Hand size={13} className="shrink-0 mt-px" /> <span className="line-clamp-2">{note}</span>
           </p>
         )}
-        {t.status === "done" && t.result && <p className="text-xs text-muted line-clamp-2">{t.result}</p>}
+        {state === "blocked" && (
+          <p className="text-xs text-warn flex gap-1.5">
+            <WifiOff size={13} className="shrink-0 mt-px" />
+            <span>
+              {agent?.name ?? "The agent"} is offline.{" "}
+              {ctx.deviceName(t) ? `It starts when ${ctx.deviceName(t)} reconnects.` : "It starts once it has a device."}{" "}
+              <a href="#/nodes" className="underline hover:text-ink">
+                Devices
+              </a>
+            </span>
+          </p>
+        )}
+        {(t.status === "done" || state === "cancelled") && t.result && <p className="text-xs text-muted line-clamp-2">{t.result}</p>}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted">
           <span className="flex items-center gap-1.5 min-w-0">
             {agent && <AgentAvatar agent={agent} size={20} badge={false} />}
@@ -293,6 +382,7 @@ function TaskCard({ task: t, ctx, defaultOpen }: { task: TaskRow; ctx: CardCtx; 
           </span>
           <span>from {ctx.fromName(t.from)}</span>
           <span>{timeAgo(t.updatedAt)}</span>
+          {ctx.canCancel && cancellable(state) && <CancelButton task={t} ctx={ctx} agentName={agent?.name ?? "The agent"} />}
           {subs.length > 0 && (
             <button onClick={() => setOpen(!open)} aria-expanded={open} className="ml-auto flex items-center gap-2 hover:text-ink">
               <span className="h-1.5 w-20 rounded-full bg-chip overflow-hidden" aria-hidden>
@@ -323,8 +413,8 @@ function SubtaskRow({ task: t, ctx, depth }: { task: TaskRow; ctx: CardCtx; dept
   const subs = ctx.children.get(t.id) ?? [];
   return (
     <>
-      <li>
-        <button onClick={() => openTask(t)} className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 hover:bg-hover" style={{ paddingLeft: `${14 + depth * 20}px` }}>
+      <li className="flex items-center hover:bg-hover pr-3.5">
+        <button onClick={() => openTask(t)} className="min-w-0 flex-1 text-left flex items-center gap-2.5 px-3.5 py-2" style={{ paddingLeft: `${14 + depth * 20}px` }}>
           <StateIcon state={state} />
           <span className="min-w-0 flex-1 truncate text-sm">
             {t.reviewOf ? <span className="text-muted">Review · </span> : null}
@@ -337,8 +427,9 @@ function SubtaskRow({ task: t, ctx, depth }: { task: TaskRow; ctx: CardCtx; dept
               {agent?.settings.role ? ` · ${agent.settings.role}` : ""}
             </span>
           </span>
-          <span className="w-20 text-right text-xs text-muted shrink-0">{STATE[state].label}</span>
+          <span className="w-28 text-right text-xs text-muted shrink-0 truncate">{ctx.stateLabel(t)}</span>
         </button>
+        {ctx.canCancel && cancellable(state) && <CancelButton task={t} ctx={ctx} agentName={agent?.name ?? "The agent"} compact />}
       </li>
       {subs.map((s) => (
         <SubtaskRow key={s.id} task={s} ctx={ctx} depth={depth + 1} />

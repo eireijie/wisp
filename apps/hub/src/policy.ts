@@ -5,10 +5,10 @@ import type { Hub } from "./hub.ts";
  * about before doing, how far agents may ping each other, and defaults for new agents and computers.
  */
 
-/** Things agents ask about before doing them, unless someone asked for exactly that. */
+/** Things agents ask about before doing them on their own initiative; a person asking for exactly that needs no extra OK. All are on by default; owners can turn any off. */
 export const ASK_BEFORE = ["send", "spend", "delete", "post", "signup", "share"] as const;
 export type AskBefore = (typeof ASK_BEFORE)[number];
-export const ASK_BEFORE_DEFAULT: AskBefore[] = ["send", "spend", "delete", "post"];
+export const ASK_BEFORE_DEFAULT: readonly AskBefore[] = ASK_BEFORE;
 
 /** How each rule reads in an agent's prompt. */
 export const ASK_BEFORE_TEXT: Record<AskBefore, string> = {
@@ -25,9 +25,9 @@ export function agentPolicy(hub: Hub, workspaceId: string) {
   const askBefore = (() => {
     try {
       const v = JSON.parse(get("agents.askBefore") ?? "null");
-      return Array.isArray(v) ? (v.filter((x) => (ASK_BEFORE as readonly string[]).includes(x)) as AskBefore[]) : ASK_BEFORE_DEFAULT;
+      return Array.isArray(v) ? (v.filter((x) => (ASK_BEFORE as readonly string[]).includes(x)) as AskBefore[]) : [...ASK_BEFORE_DEFAULT];
     } catch {
-      return ASK_BEFORE_DEFAULT;
+      return [...ASK_BEFORE_DEFAULT];
     }
   })();
   const num = (k: string, d: number, min: number, max: number) => Math.min(max, Math.max(min, Number(get(k)) || d));

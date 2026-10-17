@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "./store.ts";
 
 export interface BuddySettings {
@@ -33,4 +33,28 @@ export function useDesktopAgents() {
     window.warrenDesktop?.buddy.agents(agents.map(({ id, name }) => ({ id, name })), leadId);
   }, [agents, leadId]);
   useEffect(() => () => window.warrenDesktop?.buddy.agents([], null), []);
+}
+
+export type DesktopInfo = { version: string; platform: string; device: boolean };
+
+/** undefined: not in the desktop app (or not asked yet); otherwise what the Warren app says about this computer. */
+export function useDesktopInfo(): { inDesktop: boolean; info: DesktopInfo | null; connect: () => Promise<void> } {
+  const desktop = typeof window !== "undefined" ? window.warrenDesktop : undefined;
+  const [info, setInfo] = useState<DesktopInfo | null>(null);
+  useEffect(() => {
+    if (!desktop) return;
+    let live = true;
+    const read = () => desktop.info().then((i) => live && setInfo(i)).catch(() => {});
+    read();
+    const t = setInterval(read, 3000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [desktop]);
+  const connect = async () => {
+    await desktop?.connectDevice();
+    await desktop?.info().then(setInfo).catch(() => {});
+  };
+  return { inDesktop: !!desktop, info, connect };
 }

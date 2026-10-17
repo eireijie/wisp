@@ -93,6 +93,24 @@ export class Routines {
   }
 
   /**
+   * A run ended successfully: if it was a request to run a routine, record the completion time.
+   * Teaching messages also carry a routine part but must not count, and the routine may already be
+   * "ready" by then (the agent saves steps mid-run), so run requests are told apart by their body,
+   * which run() writes as "@handle Run the routine **name**".
+   */
+  runFinished(run: { triggerMessageId: string }) {
+    const msg = this.hub.store.message(run.triggerMessageId);
+    if (!msg || !/^@\S+ Run the routine\b/.test(msg.body)) return;
+    for (const part of msg.parts) {
+      if (part.type !== "routine") continue;
+      const r = this.hub.store.routine(part.routineId);
+      if (!r) continue;
+      this.hub.store.routineCompleted(r.id);
+      this.hub.broadcast(r.workspaceId, { type: "routines_changed" });
+    }
+  }
+
+  /**
    * A person showed the agent how to do something. The recording becomes a note, the routine
    * starts as "learning", and the agent is asked to turn the recording into steps it can follow.
    */

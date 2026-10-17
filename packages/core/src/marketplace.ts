@@ -4,7 +4,7 @@ import type { CatalogField, ConnectorKind } from "./connectors.ts";
  * The connector marketplace: MCP servers from the official MCP Registry
  * (registry.modelcontextprotocol.io), turned into connectors Warren can add. The registry is open
  * and large (tens of thousands of servers), so the hub searches it live, drops what can't work
- * here (paid-per-call settlement, unknown package types), and ranks official ones first.
+ * here (paid-per-call settlement, unknown package types), and ranks verified publishers first.
  */
 
 /** One way to add a marketplace server: a remote URL, or a package the device runs. */
@@ -29,6 +29,10 @@ export interface MarketplaceEntry {
   description: string;
   /** who published it: a domain for official servers, a GitHub owner, or a host like Smithery */
   publisher: string;
+  /** the publisher's brand, e.g. "notion" for com.notion/mcp or the GitHub org for io.github.<org>/… */
+  brand: string;
+  /** the domain the registry proved the publisher owns (notion.com), when it is one */
+  domain: string | null;
   /** the publisher's domain owns the server's address (com.notion → mcp.notion.com) */
   verified: boolean;
   version: string;
@@ -192,6 +196,8 @@ export function marketplaceEntry(s: RegistryServer, status = "active"): Marketpl
     name: nice,
     description: (s.description ?? "").trim(),
     publisher: publisherOf(s.name),
+    brand: ghOrg ?? brand,
+    domain,
     verified,
     version: s.version ?? "",
     website: s.websiteUrl ?? null,
@@ -201,7 +207,49 @@ export function marketplaceEntry(s: RegistryServer, status = "active"): Marketpl
   };
 }
 
-/** Best first: official ones, then the closest name match, then ones with nothing to fill in. */
+export interface TrustLabel {
+  /** maker: the app's own company publishes it. verified: publisher identity proven, app maker unknown. */
+  kind: "maker" | "verified" | "unverified";
+  text: string;
+  explanation: string;
+}
+
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+const titleCase = (s: string) => s.replace(/(^|[-_.\s])(\w)/g, (_m, p: string, c: string) => p.replace(/[-_.]/g, " ") + c.toUpperCase());
+
+/**
+ * What to tell a person about who stands behind a registry listing, from real fields only.
+ * "Verified" means the publisher's identity was proven (they own the domain), not that the app
+ * named in the listing is theirs: so "maker" needs the publisher's brand to be the app itself
+ * (name, or the app the person asked for), and anything unclear stays "verified".
+ */
+export function trustLabel(e: Pick<MarketplaceEntry, "id" | "name" | "publisher" | "brand" | "domain" | "verified">, appName?: string): TrustLabel {
+  if (!e.verified) {
+    return {
+      kind: "unverified",
+      text: "Not verified",
+      explanation: `The registry hasn't confirmed who ${e.publisher} is. Only add servers you trust, since agents send them data.`,
+    };
+  }
+  const brand = squash(e.brand);
+  const named = (s: string) => brand.length >= 3 && squash(s).includes(brand);
+  const forApp = appName ? named(appName) : named(e.name) || named(e.id.split("/").pop() ?? "");
+  const owns = e.domain ?? e.publisher;
+  if (forApp) {
+    return {
+      kind: "maker",
+      text: `Made by ${titleCase(e.brand)}`,
+      explanation: `Published by ${e.publisher}, which the registry confirmed owns ${owns}, and the app is theirs.`,
+    };
+  }
+  return {
+    kind: "verified",
+    text: "Verified publisher",
+    explanation: `The registry confirmed this publisher owns ${owns}. That doesn't mean the app's maker made or endorses it.`,
+  };
+}
+
+/** Best first: makers, verified publishers, then the closest name match, then ones with nothing to fill in. */
 export function rankMarketplace(entries: MarketplaceEntry[], q: string): MarketplaceEntry[] {
   const needle = q.trim().toLowerCase();
   const score = (e: MarketplaceEntry) => {
@@ -209,6 +257,7 @@ export function rankMarketplace(entries: MarketplaceEntry[], q: string): Marketp
     const short = (e.id.split("/").pop() ?? "").toLowerCase();
     let s = 0;
     if (e.verified) s += 100;
+    if (trustLabel(e).kind === "maker") s += 30;
     if (needle && (n === needle || short === needle || e.publisher.toLowerCase().split(".")[0] === needle)) s += 50;
     else if (needle && n.startsWith(needle)) s += 20;
     if (e.installs[0]?.kind === "mcp-http") s += 10;

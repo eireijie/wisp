@@ -5,7 +5,7 @@ import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { logout } from "../App.tsx";
-import { isDismissed, useOnboarding } from "../onboarding.ts";
+import { setupProgress, useDismissed, useOnboarding } from "../onboarding.ts";
 import { useAppearance } from "../theme.ts";
 import { ChannelBrowser, ChannelMenu, SectionDialog } from "./Channels.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
@@ -40,9 +40,10 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const { done } = useOnboarding();
   const { resolvedMode, mode, toggleMode, setMode } = useAppearance();
-  const progress = Object.values(done).filter(Boolean).length;
-  const steps = Object.keys(done).length;
-  const showGetStarted = route.view === "welcome" || (progress < steps && !isDismissed());
+  const dismissed = useDismissed();
+  const { progress, steps, complete } = setupProgress(done);
+  // after "Do this later" an unfinished setup stays reachable, just quieter
+  const showGetStarted = route.view === "welcome" || !complete;
   const page = variant === "page";
   const isGuest = me.role === "guest";
 
@@ -111,9 +112,9 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
             </Item>
             {showGetStarted && (
               <Item href={href({ view: "welcome" })} active={route.view === "welcome"}>
-                <Sparkles size={16} className="shrink-0" /> Get started
+                <Sparkles size={16} className="shrink-0" /> {dismissed && !complete ? "Finish setup" : "Get started"}
                 <span className="ml-auto text-[11px] text-muted tabular-nums">
-                  {progress}/{steps}
+                  {dismissed && !complete ? `${progress} of ${steps}` : `${progress}/${steps}`}
                 </span>
               </Item>
             )}

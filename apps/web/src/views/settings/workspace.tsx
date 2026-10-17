@@ -326,7 +326,7 @@ export function AgentsPolicyPage() {
         <SavedNote shown={saved} />
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
-      <Section title="Ask before" description="When nobody asked for exactly this, the agent asks for an OK first (Approve / Deny in the conversation) and waits.">
+      <Section title="Ask before" description="Checked actions need your OK (Approve / Deny in the conversation). If you ask Nova to email Sam, it just does it. If it decides on its own to email someone, it asks first.">
         <Card>
           {ASK.map(([k, label, hint]) => (
             <label key={k} className={cx("px-4 py-3 flex items-start gap-3", isOwner && "cursor-pointer")}>

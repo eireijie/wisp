@@ -7,6 +7,7 @@ import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { STEPS, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
+import { useDesktopInfo } from "../desktop.ts";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
@@ -72,7 +73,7 @@ export function WelcomeView() {
         <div className="h-14 px-4 md:px-6 flex items-center gap-3">
           <span className="text-sm font-medium text-muted truncate">Set up {me.workspace.name}</span>
           <button onClick={() => leave()} className="ml-auto text-sm text-muted hover:text-ink">
-            {screen === "done" ? "Close" : "Skip setup"}
+            {screen === "done" ? "Close" : "Do this later"}
           </button>
         </div>
       </header>
@@ -289,6 +290,50 @@ function guessName(): string {
 /** Device names like "yug-mac" read as one word, so they don't break at the hyphen. */
 const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
+const DMG = "https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64.dmg";
+
+/** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
+function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
+  const { inDesktop, info, connect } = useDesktopInfo();
+  const [busy, setBusy] = useState(false);
+  const hub = location.origin;
+  if (inDesktop)
+    return (
+      <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
+        <p className="text-sm font-medium">This Mac is being connected automatically</p>
+        <p className="text-sm text-muted">
+          {connected ? `${name} is connected.` : info?.device ? "Connected to Warren. It can take a few seconds to show up here." : "The Warren app has not connected this Mac yet."}
+        </p>
+        {!connected && !info?.device && (
+          <Button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await connect();
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Connect this Mac
+          </Button>
+        )}
+      </div>
+    );
+  return (
+    <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
+      <p className="text-sm font-medium">Easiest: download Warren for Mac</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <a className="font-medium underline" href={DMG}>Download for Apple silicon</a>
+        <a className="text-muted underline" href="https://github.com/eireijie/warren/releases" target="_blank" rel="noreferrer">All releases</a>
+      </div>
+      <p className="text-sm text-muted">Then open it and choose “Join a server” with this address:</p>
+      <CopyBlock text={hub} />
+    </div>
+  );
+}
+
 function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]; device: DeviceInfo | undefined; onPick: (id: string) => void; onNext: (id: string) => void }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState(guessName);
@@ -300,9 +345,16 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
     const live = usable.find((d) => d.id === created.id && d.online);
     return (
       <>
-        <Heading title={`Connect ${created.name}`}>On {created.name}, run this once. It installs Warren if it isn't there yet and keeps the device connected.</Heading>
+        <Heading title={`Connect ${created.name}`}>Warren needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
         <div className="space-y-5">
-          <DeviceInstall token={created.token} name={created.name} />
+          <EasiestWay name={created.name} connected={!!live} />
+          <details className="rounded-xl border border-line p-4">
+            <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
+            <div className="mt-3 space-y-3">
+              <DeviceInstall token={created.token} name={created.name} />
+              <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
+            </div>
+          </details>
           <p className="text-xs text-muted">
             The token is shown once and saved on the device.
             {onHub() && " If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from."}

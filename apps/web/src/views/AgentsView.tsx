@@ -4,6 +4,8 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
+import { agentReadiness, useDevices } from "../devices.ts";
+import { SetupIncomplete } from "../components/AgentPanel.tsx";
 import { AgentAvatar, Button, Empty, HARNESS_LABELS, StatusChip, cx } from "../components/ui.tsx";
 
 import { CreateAgent } from "./CreateAgent.tsx";
@@ -15,6 +17,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   const me = useStore((s) => s.me);
   const [creating, setCreating] = useState(false);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
+  const devices = useDevices();
   const [filter, setFilter] = useState<"all" | "online" | "offline">("all");
   useEffect(() => {
     api<NodeInfo[]>("GET", "/api/nodes").then(setNodes);
@@ -74,6 +77,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
             <div className="divide-y divide-line">
               {shown.map((a) => {
                 const device = nodes.find((n) => n.id === a.nodeId);
+                const readiness = agentReadiness(a, devices);
                 const computer = computers.find((c) => c.id === a.computerId)?.name ?? (a.settings.headless ? "headless" : "no computer");
                 return (
                   <div key={a.id} className="group flex items-center gap-3 px-2 py-3 hover:bg-hover/60">
@@ -82,6 +86,11 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                       <span className="min-w-0 flex-1 @3xl:flex-none @3xl:w-56">
                         <span className={cx("block text-sm truncate", a.status === "offline" && "text-muted")}>{a.name}</span>
                         <span className="block text-xs text-muted truncate mt-0.5">{["@" + a.handle, ...a.groups.slice(0, 2)].join(" · ")}</span>
+                        {!readiness.ready && (
+                          <span className="mt-1 block">
+                            <SetupIncomplete problem={readiness.problem} />
+                          </span>
+                        )}
                       </span>
                       {/* machine facts in mono, like Paperclip's adapter column */}
                       <span className="hidden @3xl:block w-48 min-w-0 leading-tight">

@@ -715,6 +715,11 @@ export function CreateAgent({
                 </div>
               </details>
             </fieldset>
+            {!external && node && !node.online && (
+              <p role="status" className="rounded-xl border border-line bg-panel px-3 py-2 text-sm text-warn">
+                {node.name} is offline. You can create {cleanName || "this agent"} now, but it can&apos;t answer until {node.name} reconnects.
+              </p>
+            )}
             {error && (
               <p role="alert" className="text-sm text-bad">
                 {error}

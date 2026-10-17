@@ -14,7 +14,7 @@ import type { Vault } from "@warren/vault";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
-import { failTaskOfRun, leadSection } from "./lead.ts";
+import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import type { Store } from "./store.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -359,6 +359,7 @@ export class Hub {
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
     } else if ("finalText" in result) {
       store.setRunStatus(run.id, "done");
+      this.routines.runFinished(run);
       body = result.finalText.trim() || live.text.trim();
       if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
     } else {
@@ -452,8 +453,8 @@ export class Hub {
         continue;
       }
       const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop, requestedBy });
-      if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a node yet. The request is queued.`);
-      else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its node reconnects.`);
+      if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a device yet. The request is queued.`);
+      else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its device reconnects.`);
       else if (this.isNodePaused(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)}'s device is paused. The request is queued until it's resumed there.`);
       this.dispatchRun(runId);
     }
@@ -733,7 +734,7 @@ export class Hub {
       discussion ? `\n${discussion}` : "",
       background,
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
-      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${trigger.body}`,
+      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${trigger.body}${taskInstructions(store, agent.id, trigger)}`,
     ]
       .filter(Boolean)
       .join("\n");

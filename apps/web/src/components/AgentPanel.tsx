@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, X } from "lucide-react";
+import { Activity, BookOpen, MessageSquare, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, X } from "lucide-react";
 import type { Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, type AgentTab } from "../router.ts";
+import { openDm } from "../openDm.ts";
+import { agentReadiness, useDevices } from "../devices.ts";
 import { useComputerState } from "../views/ComputersView.tsx";
 import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
@@ -102,8 +104,9 @@ function RoleLabel({ agent }: { agent: Agent }) {
 function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
   const status = AGENT_STATUS[agent.status];
   const computer = useStore((s) => s.computers.find((c) => c.id === agent.computerId));
+  const readiness = agentReadiness(agent, useDevices());
   const rows: [string, ReactNode][] = [
-    ["Status", <span className="capitalize">{status.label}</span>],
+    ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>],
     ["Harness", HARNESS_LABELS[agent.harness]],
     ["Model", agent.model ? `${prettyModel(agent.model)}${agent.settings.effort ? ` · ${effortName(agent.settings.effort)}` : ""}${agent.settings.fast ? " · Fast" : ""}` : "Default"],
     ["Access", ACCESS_LABEL[agent.settings.access ?? "edit"]],
@@ -123,6 +126,14 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
           </div>
         ))}
       </dl>
+      {!readiness.ready && (
+        <p className="rounded-xl border border-line bg-panel px-3 py-2 text-xs text-muted">
+          Setup incomplete: {readiness.problem}. Messages to {agent.name} will wait until that's fixed.
+        </p>
+      )}
+      <Button className="w-full" onClick={() => void openDm(agent.id)}>
+        <MessageSquare size={15} /> Send a test message
+      </Button>
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={onCall}>
           <Phone size={15} /> Call
@@ -133,6 +144,11 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
       </div>
     </div>
   );
+}
+
+/** "Setup incomplete · my-mac is offline": what's still missing before it can answer. */
+export function SetupIncomplete({ problem }: { problem: string | null }) {
+  return <Pill tone="warn">{problem ? `Setup incomplete · ${problem}` : "Setup incomplete"}</Pill>;
 }
 
 function SettingsTab({ agent }: { agent: Agent }) {

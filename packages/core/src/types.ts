@@ -218,7 +218,9 @@ export type MessagePart =
   /** an agent wants a person's OK before it does something */
   | { type: "approval"; approvalId: string }
   /** a routine was taught, changed or run */
-  | { type: "routine"; routineId: string };
+  | { type: "routine"; routineId: string }
+  /** this message hands out a task: people see a task card; the assignee gets its id and how to report back */
+  | { type: "task"; taskId: string };
 
 /** An agent asking a person's OK before it acts ("Send these 3 intros?"). */
 export interface Approval {
@@ -260,7 +262,10 @@ export interface Routine {
   /** "learning" while the agent studies a recording; then "ready" */
   status: "learning" | "ready";
   createdBy: Actor;
+  /** when it was last asked to run (by a person or the schedule); the run may still be queued */
   lastRunAt: string | null;
+  /** when a run it asked for last finished with a result; null until one has */
+  lastCompletedAt: string | null;
   createdAt: string;
 }
 

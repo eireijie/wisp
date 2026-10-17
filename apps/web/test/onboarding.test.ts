@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Agent } from "@warren/core";
-import { stepsDone, type OnboardingState } from "../src/onboarding.ts";
+import { setupProgress, stepsDone, type OnboardingState } from "../src/onboarding.ts";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 
@@ -13,5 +13,12 @@ describe("setup progress", () => {
     expect(stepsDone(offline)).toMatchObject({ device: false, role: false });
     const set = { ...empty, devices: [{ id: "n", name: "box", online: true, mine: true, role: "vms" as const }], agents: [{ id: "a" } as Agent] };
     expect(stepsDone(set)).toEqual({ device: true, role: true, agent: true, harness: true, hello: false });
+  });
+});
+
+describe("setupProgress", () => {
+  it("counts finished steps and says when setup is complete", () => {
+    expect(setupProgress(stepsDone(empty))).toEqual({ progress: 0, steps: 5, complete: false });
+    expect(setupProgress({ device: true, role: true, agent: true, harness: true, hello: true })).toMatchObject({ progress: 5, complete: true });
   });
 });
