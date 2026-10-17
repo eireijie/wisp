@@ -89,10 +89,11 @@ describe("soft ghost details", () => {
     expect(render(22)).not.toContain('opacity="0.18"');
     expect(render(40, "asleep")).not.toContain('opacity="0.18"');
   });
-  it("keeps the laptop hands clear, holds the sign up with the right hand and raises both arms to cheer", () => {
+  it("reaches its hands onto the laptop, holds the sign up with the right hand and raises both arms to cheer", () => {
     expect(render(40)).toContain("ghost-arm-right");
-    expect(render(40, "working")).not.toContain("ghost-arm-right");
-    expect(render(40, "working")).not.toContain("ghost-arm-left");
+    // working, the arms reach down onto the keys, where their hands tap
+    expect(render(40, "working")).toContain("ghost-arm-right");
+    expect(render(40, "working").match(/ghost-type/g)).toHaveLength(2);
     expect(render(40, "waiting")).toContain("ghost-arm-left");
     expect(render(40, "waiting")).toContain("ghost-arm-right ghost-arm-raise");
     const done = render(40, "done");

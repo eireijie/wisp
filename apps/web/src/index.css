@@ -317,16 +317,16 @@ body {
 .ghost-arm-right.ghost-arm-hi { animation: ghost-hi 5s ease-in-out infinite; }
 /* done: both hands pump up and down */
 .ghost-arm-left.ghost-arm-cheer { animation: ghost-cheer-left 520ms ease-in-out infinite alternate; }
-.ghost-arm-right.ghost-arm-cheer { animation: ghost-cheer-right 520ms ease-in-out infinite alternate; animation-delay: -260ms; }
-.ghost-arm-left.ghost-arm-up { transform: translateY(-3px) rotate(80deg); }
-.ghost-arm-right.ghost-arm-up { transform: translateY(-3px) rotate(-80deg); }
+.ghost-arm-right.ghost-arm-cheer { animation: ghost-cheer-right 520ms ease-in-out infinite alternate; }
+.ghost-arm-left.ghost-arm-up { transform: rotate(100deg); }
+.ghost-arm-right.ghost-arm-up { transform: rotate(-100deg); }
 /* needs you: the right hand holds the sign up, lifting it now and then */
 .ghost-arm-right.ghost-arm-raise { transform: rotate(-85deg); }
 .ghost-raise { animation: ghost-raise 1.8s ease-in-out infinite; }
 .ghost-twinkle { pointer-events: none; transform-box: fill-box; transform-origin: center; animation: ghost-twinkle 1.1s ease-in-out infinite; }
-@keyframes ghost-hi { 0%, 46%, 100% { transform: rotate(0); } 8% { transform: translateY(-2px) rotate(-92deg); } 15% { transform: translateY(-2px) rotate(-62deg); } 22% { transform: translateY(-2px) rotate(-92deg); } 29% { transform: translateY(-2px) rotate(-62deg); } 36% { transform: translateY(-2px) rotate(-88deg); } }
-@keyframes ghost-cheer-left { from { transform: translateY(-1px) rotate(35deg); } to { transform: translateY(-4px) rotate(100deg); } }
-@keyframes ghost-cheer-right { from { transform: translateY(-1px) rotate(-35deg); } to { transform: translateY(-4px) rotate(-100deg); } }
+@keyframes ghost-hi { 0%, 46%, 100% { transform: rotate(0); } 8% { transform: rotate(-100deg); } 15% { transform: rotate(-70deg); } 22% { transform: rotate(-100deg); } 29% { transform: rotate(-70deg); } 36% { transform: rotate(-96deg); } }
+@keyframes ghost-cheer-left { from { transform: rotate(70deg); } to { transform: translateY(-3px) rotate(118deg); } }
+@keyframes ghost-cheer-right { from { transform: rotate(-70deg); } to { transform: translateY(-3px) rotate(-118deg); } }
 @keyframes ghost-raise { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes ghost-twinkle { 0%, 100% { opacity: 0.15; transform: scale(0.55) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
 @keyframes ghost-squish { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.06, 0.94); } 75% { transform: scale(0.98, 1.03); } }

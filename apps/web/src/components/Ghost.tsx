@@ -26,7 +26,10 @@ interface ShapeDef {
  * An arm, pointing right from the shoulder at 0,0: a soft taper into a rounded mitten. The
  * shoulder sits inside the body, which is drawn over it, so the arm grows out of the side.
  */
-const ARM = "M-8 -6.5 C-1 -7 5.5 -6 10 -3.8 C13.8 -2 13.6 3.3 10.2 4.1 C6 5.1 -1 5.8 -8 6.2 C-10 3 -10 -3.4 -8 -6.5 Z";
+const ARM = "M-12 -12 C0 -12 10 -8 18 -5 C23.5 -3 27.5 -1 27 2.6 C26.4 6 22 6.6 17.5 6 C9 5 0 9 -12 12 Z";
+/** how far the arm reaches from its shoulder, and how it hangs at rest (degrees below straight out) */
+const ARM_REACH = 25;
+const ARM_REST = 35;
 
 /** Sparkles all around a ghost that just finished something: x, y and size, in its own units. */
 const SPARKLES: [number, number, number][] = [
@@ -147,9 +150,16 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
   const details = size >= 26; // drop tiny decorations at small sizes
   const grounded = size >= 28;
   const { x: [ex1, ex2], y: ey } = shape.eyes;
-  // arms: from the shoulders, just inside the body's sides
-  // halfway between the mouth and the neck, where a ghost would have shoulders
-  const shoulder = (side: -1 | 1) => ({ x: 60 + side * (shape.neck.half - 2.5), y: Math.round((shape.mouthY + shape.neck.y) / 2) });
+  // arms: from the shoulders, just inside the body's sides at mouth height, long and tapering like the body's own edge
+  const shoulder = (side: -1 | 1) => ({ x: 60 + side * (shape.neck.half - 4), y: shape.mouthY });
+  // where a hand ends up, pointing `deg` (0 = straight out, positive = down) from its shoulder
+  const handAt = (side: -1 | 1, deg: number) => ({ x: shoulder(side).x + side * ARM_REACH * Math.cos((deg * Math.PI) / 180), y: shoulder(side).y + ARM_REACH * Math.sin((deg * Math.PI) / 180) });
+  // working: each hand reaches down onto its side of the keyboard
+  const keyAt = (side: -1 | 1) => ({ x: 60 + side * 13, y: shape.neck.y + 9 });
+  const reach = (side: -1 | 1) => {
+    const s0 = shoulder(side), k = keyAt(side);
+    return (Math.atan2(k.y - s0.y, side * (k.x - s0.x)) * 180) / Math.PI;
+  };
   const armClass = (side: -1 | 1) =>
     cx(
       "ghost-arm",
@@ -158,21 +168,36 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
       mood === "waiting" && side === 1 && "ghost-arm-raise",
       animated && mood === "awake" && side === 1 && "ghost-arm-hi",
     );
-  const hands = details && mood !== "working";
+  const hands = details;
+  // how far each arm turns from resting, when it holds a pose (working); moving poses are CSS
+  const turn = (side: -1 | 1) => (mood === "working" ? side * (reach(side) - ARM_REST) : 0);
   const arms = () =>
     ([-1, 1] as const).map((side) => (
       <g key={side} className={mood === "waiting" && side === 1 && animated ? "ghost-raise" : undefined}>
+        {/* the body's own colors, undoing the arm's turn, so the arm is exactly the color of the body behind it */}
+        <linearGradient
+          id={`arm${side}${uid}`}
+          gradientUnits="userSpaceOnUse"
+          x1="0"
+          y1={shape.top}
+          x2="0"
+          y2={shape.ground - 6}
+          gradientTransform={`rotate(${-ARM_REST}) scale(${side} 1) rotate(${-turn(side)}) translate(${-shoulder(side).x} ${-shoulder(side).y})`}
+        >
+          <stop offset="0.08" stopColor={top} />
+          <stop offset="0.95" stopColor={bottom} />
+        </linearGradient>
         <g transform={`translate(${shoulder(side).x} ${shoulder(side).y})`}>
           <g className={armClass(side)}>
-            <g transform={`scale(${side} 1) rotate(28)`}>
-              <path d={ARM} fill={`url(#a${uid})`} />
+            <g transform={`rotate(${turn(side)}) scale(${side} 1) rotate(${ARM_REST})`}>
+              <path d={ARM} fill={`url(#arm${side}${uid})`} />
             </g>
           </g>
         </g>
       </g>
     ));
-  // the raised right hand (rotated 28° − 85° from pointing out) holds the sign's pole
-  const signAt = { x: shoulder(1).x + 12 * Math.cos((-57 * Math.PI) / 180), y: shoulder(1).y + 12 * Math.sin((-57 * Math.PI) / 180) };
+  // the raised right hand (resting 35° down, lifted 85°) holds the sign's pole
+  const signAt = handAt(1, ARM_REST - 85);
   const ripple = rippling ? <animate attributeName="d" dur={mood === "thinking" ? "1.4s" : "2.6s"} repeatCount="indefinite" values={`${shape.body[0]};${shape.body[1]};${shape.body[0]}`} calcMode="spline" keySplines="0.45 0 0.55 1;0.45 0 0.55 1" /> : null;
 
   return (
@@ -203,9 +228,8 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
               so they read as part of it, not stuck on */}
           {(
             [
-              ["a", Math.round((shape.mouthY + shape.neck.y) / 2)],
-              ["t", shape.neck.y + 6],
-              ["w", shape.neck.y],
+              ["a", shape.mouthY],
+              ["u", 0],
             ] as const
           ).map(([k, at]) => (
             <linearGradient key={k} id={`${k}${uid}`} gradientUnits="userSpaceOnUse" x1="0" y1={shape.top - at} x2="0" y2={shape.ground - 6 - at}>
@@ -222,7 +246,7 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
           {/* one soft shape from the body and hands: blurred together and cut sharp again, so the shoulders
               flow into the arms; then the shading at the edge, all the way around */}
           <filter id={`g${uid}`} filterUnits="userSpaceOnUse" x="-40" y="-60" width="200" height="200" colorInterpolationFilters="sRGB">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="blur" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
             <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo" />
             <feComposite in="SourceGraphic" in2="goo" operator="atop" result="shape" />
             <feMorphology in="goo" operator="erode" radius="3" result="inner" />
@@ -265,10 +289,11 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                     {/* the body and its hands are one shape: drawn together, melted into each other at the
                         shoulders, with the rim and glow running around all of it */}
                     <g filter={hands ? `url(#g${uid})` : undefined}>
+                      {/* arms behind, so only what leaves the body shows; the filter fills in the shoulders */}
+                      {hands && arms()}
                       <path d={shape.body[0]} fill={`url(#b${uid})`}>
                         {ripple}
                       </path>
-                      {hands && arms()}
                       <path d={shape.body[0]} fill={`url(#l${uid})`}>
                         {ripple}
                       </path>
@@ -310,10 +335,13 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                         <rect x="-20" y="-1" width="40" height="17" rx="1.5" fill={LAPTOP.screen} />
                         <path d="M-27 23 H27 L23 27 H-23 Z" fill={LAPTOP.shell} />
                         {[0, 1, 2].map((i) => <path key={i} d={`M${-13 + i * 10} 7 h6`} stroke={LAPTOP.shell} strokeWidth="2" className={animated ? "ghost-key" : undefined} style={{ animationDelay: `${i * 0.2}s` }} />)}
-                        <ellipse cx={-Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={`url(#t${uid})`} className={animated ? "ghost-type" : undefined} />
-                        <ellipse cx={Math.min(21, shape.neck.half - 5)} cy="-2" rx="5" ry="3" fill={`url(#t${uid})`} className={animated ? "ghost-type" : undefined} style={{ animationDelay: "-0.3s" }} />
                       </g>
                     )}
+                    {/* the ends of its arms, resting on the keys over the laptop's edge */}
+                    {mood === "working" && details &&
+                      ([-1, 1] as const).map((side) => (
+                        <ellipse key={side} cx={keyAt(side).x} cy={keyAt(side).y} rx="6.5" ry="4.5" fill={`url(#u${uid})`} className={animated ? "ghost-type" : undefined} style={side === 1 ? { animationDelay: "-0.3s" } : undefined} />
+                      ))}
                   </g>
                 </g>
               </g>
