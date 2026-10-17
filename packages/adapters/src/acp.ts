@@ -1,10 +1,10 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, ConnectorSpec, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
-import { commandVersion, launched } from "./process.ts";
+import { commandVersion, launched, spawnCommand } from "./process.ts";
 
 /**
  * Agent Client Protocol (https://agentclientprotocol.com): JSON-RPC 2.0 over stdio, one JSON
@@ -269,7 +269,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
     async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {
       const cmd = command(input);
       const l = launched(input, cmd.command, cmd.args, input.env);
-      const child = spawn(l.command, l.args, { cwd: l.cwd, env: { ...process.env, ...l.env }, stdio: ["pipe", "pipe", "pipe"] });
+      const child = spawnCommand(l.command, l.args, { cwd: l.cwd, env: { ...process.env, ...l.env }, stdio: ["pipe", "pipe", "pipe"] });
       const tools = new Map<string, string>();
       let text = "";
       let prompting = false;
@@ -353,7 +353,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
       if (version === null) return base;
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-acp-"));
       const cmd = command();
-      const child = spawn(cmd.command, cmd.args, { cwd: dir, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
+      const child = spawnCommand(cmd.command, cmd.args, { cwd: dir, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
       const conn = new AcpConnection(child, () => {}, async () => ({ outcome: { outcome: "cancelled" } }));
       try {
         await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } }, 20_000);

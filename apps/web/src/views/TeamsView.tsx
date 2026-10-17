@@ -396,7 +396,7 @@ interface TaskRow {
   id: string;
   title: string;
   status: "open" | "in_progress" | "done" | "failed";
-  toAgentId: string;
+  toAgentId: string | null;
   branch: string | null;
   reviewOf: string | null;
   mergedAt: string | null;

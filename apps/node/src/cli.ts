@@ -83,7 +83,8 @@ if (values.help || !cmd) {
   for (const a of Object.values(deviceAdapters(saved.harnesses))) {
     let version = "not found";
     try {
-      version = execFileSync(a.binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }).trim().split("\n")[0];
+      // through the shell on Windows, where npm installs harnesses as .cmd shims
+      version = execFileSync(a.binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000, shell: process.platform === "win32" }).trim().split("\n")[0];
     } catch {}
     const how = HARNESSES.find((h) => h.id === a.id)?.protocol === "native" ? "" : " (ACP)";
     console.log(`  ${(a.label + how).padEnd(20)} ${a.binary.padEnd(14)} ${version}`);
@@ -110,13 +111,16 @@ if (values.help || !cmd) {
     if (!kept) return console.log("[warren] Warren was updated; restart `warren node start` to use the new version");
     console.log("[warren] Warren was updated; restarting once no agent is running");
     await daemon.idle();
-    daemon.stop();
+    await daemon.stop();
     process.exit(RESTART_CODE);
   });
+  // runs in flight get a moment to tell the hub they were stopped, so nothing stays "busy" forever
+  let stopping = false;
   for (const sig of ["SIGINT", "SIGTERM"] as const)
     process.on(sig, () => {
-      daemon.stop();
-      process.exit(0);
+      if (stopping) process.exit(0);
+      stopping = true;
+      void daemon.stop().finally(() => process.exit(0));
     });
 } else if (cmd === "node" && (sub === "screen" || sub === "pause" || sub === "resume")) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};

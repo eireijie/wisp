@@ -91,7 +91,11 @@ if ($Mode -eq "hub") {
   Write-Host "Open it in a browser to create your workspace. For HTTPS and phones, see $Dir\docs\deploy.md."
 } elseif ($Mode -eq "device") {
   Bold "Checking this device"
+  # like install.sh: setup's advice (a VM engine, harnesses) is optional, so a non-zero exit code
+  # from it must not stop the install before the device is connected
+  $eap = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
   if ($Yes) { warren setup --yes } else { warren setup }
+  $ErrorActionPreference = $eap; $global:LASTEXITCODE = 0
   $connect = @("--hub", $Hub, "--token", $Token)
   if ($Name) { $connect += @("--name", $Name) }
   if ($NoService) { Write-Host "Connect with: warren node start $($connect -join ' ')" }

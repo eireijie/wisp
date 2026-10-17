@@ -132,7 +132,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     return { principal: p, workspaceId: p.workspaceId, actor: { kind: "agent", id: agent.id }, viewer: hub.access.agentViewer(agent) };
   }
 
-  function need(req: FastifyRequest, reply: FastifyReply, opts: { owner?: boolean; user?: boolean; member?: boolean } = {}): Caller | null {
+  /**
+   * The caller, or a 401/403. `user`: people only; `member`: people who aren't guests; `owner`:
+   * workspace owners; `notGuest`: people who aren't guests, and agents (which act for a member).
+   */
+  function need(req: FastifyRequest, reply: FastifyReply, opts: { owner?: boolean; user?: boolean; member?: boolean; notGuest?: boolean } = {}): Caller | null {
     const c = caller(req);
     if (!c || (c.actor.kind === "agent" && !c.actor.id)) {
       reply.code(401).send({ error: "unauthorized" });
@@ -142,8 +146,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       reply.code(403).send({ error: "users only" });
       return null;
     }
-    if (opts.member && c.viewer.role === "guest") {
-      reply.code(403).send({ error: "guests can't change agents or devices" });
+    if ((opts.member || opts.notGuest) && c.actor.kind === "user" && c.viewer.role === "guest") {
+      reply.code(403).send({ error: opts.member ? "guests can't change agents or devices" : "guests can look around, but can't give agents work" });
       return null;
     }
     if (opts.owner && c.viewer.role !== "owner") {
@@ -577,11 +581,21 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const limit = Math.min(Number((req.query as { limit?: string }).limit ?? 20) || 20, 100);
-    return store.agentRuns(agent.id, limit).map((r) => ({ ...r, trigger: r.trigger?.slice(0, 280) ?? null }));
+    // runs in a DM the caller isn't part of show as runs, but not where or what was said
+    return store.agentRuns(agent.id, limit).map((r) => {
+      const hidden = !channelVisible(c, r.channelId);
+      return {
+        ...r,
+        channelName: hidden ? null : r.channelName,
+        trigger: hidden ? null : (r.trigger?.slice(0, 280) ?? null),
+        // a failure in plain words when it's a known one (the harness needs signing in on its device)
+        hint: r.status === "failed" && r.error ? (hub.explainFailure(agent, r.error) !== r.error ? hub.explainFailure(agent, r.error) : null) : null,
+      };
+    });
   });
 
   app.post("/api/channels", async (req, reply) => {
-    const c = need(req, reply);
+    const c = need(req, reply, { notGuest: true });
     if (!c) return;
     const body = parse(z.object({ name: CHANNEL_NAME, topic: z.string().max(250).default(""), sectionId: z.string().nullable().optional() }), req.body, reply);
     if (!body) return;
@@ -638,9 +652,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   });
 
   app.post("/api/runs/:id/cancel", async (req, reply) => {
-    const c = need(req, reply, { user: true });
+    const c = need(req, reply, { member: true });
     if (!c) return;
-    return { ok: hub.cancelRun((req.params as { id: string }).id) };
+    const run = store.run((req.params as { id: string }).id);
+    if (!run || store.agent(run.agentId)?.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "run not found" });
+    return { ok: hub.cancelRun(run.id) };
   });
 
   // --- agents & nodes ---------------------------------------------------------
@@ -725,9 +741,19 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    // an agent on someone's own device is theirs to remove, like it's theirs to change
+    const owner = deviceOwnerOf(agent);
+    if (owner && owner !== c.actor.id) {
+      const name = store.user(owner)?.name ?? "its owner";
+      return reply.code(403).send({ error: `@${agent.handle} runs directly on ${name}'s device, so only ${name} can remove it` });
+    }
+    for (const r of store.activeRuns(agent.id)) hub.cancelRun(r.id);
+    // work it never finished fails; finished tasks stay, with nobody assigned
+    for (const t of store.tasks(c.workspaceId).filter((t) => t.toAgentId === agent.id && (t.status === "open" || t.status === "in_progress"))) store.updateTask(t.id, "failed", `@${agent.handle} was removed before finishing this.`);
     revokeSubjectTokens(db, "agent", agent.id);
     store.removeRulesFor(c.workspaceId, { kind: "agent", id: agent.id });
     store.deleteAgent(agent.id);
+    hub.broadcast(c.workspaceId, { type: "tasks_changed" });
     return { ok: true };
   });
 
@@ -1079,7 +1105,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
 
   /** Delegate work to an agent. Posts a message so the agent wakes up and everyone can follow along. */
   app.post("/api/tasks", async (req, reply) => {
-    const c = need(req, reply);
+    const c = need(req, reply, { notGuest: true });
     if (!c) return;
     const body = parse(
       z.object({ to: z.string().default("auto"), title: z.string().min(1).max(200), brief: z.string().max(20_000), channelId: z.string().optional(), fileIds: z.array(z.string()).default([]), parentTaskId: z.string().optional() }),
@@ -1150,7 +1176,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     const reviewer = reviewerId ? store.agent(reviewerId) : undefined;
     if (!reviewer) return;
     if (store.tasks(task.workspaceId).some((t) => t.reviewOf === task.id && (t.status === "open" || t.status === "in_progress"))) return;
-    const author = store.agent(task.toAgentId)!;
+    const author = task.toAgentId ? store.agent(task.toAgentId) : undefined;
+    if (!author) return;
     delegate({
       workspaceId: task.workspaceId,
       author: { kind: "agent", id: author.id },
@@ -1168,7 +1195,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   }
 
   app.patch("/api/tasks/:id", async (req, reply) => {
-    const c = need(req, reply);
+    const c = need(req, reply, { notGuest: true });
     if (!c) return;
     const task = store.task((req.params as { id: string }).id);
     if (!task || task.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "task not found" });
@@ -1216,7 +1243,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       const role = team.members.find((m) => m.agentId === me)?.role ?? "";
       if (team.leadId !== me && !/review/i.test(role) && !teamChain(team, store.teams(c.workspaceId)).includes(me)) return reply.code(403).send({ error: "only the team lead, a reviewer, or whoever the team reports to can merge" });
     } else if (c.viewer.role === "guest") return reply.code(403).send({ error: "guests can't merge" });
-    const r = await hub.requestMerge(c.actor.kind === "agent" ? c.actor.id : task.toAgentId, { repo: team.repo, branch: task.branch, base: team.baseBranch });
+    const via = c.actor.kind === "agent" ? c.actor.id : (task.toAgentId ?? team.leadId);
+    if (!via) return reply.code(409).send({ error: "nobody's device has this repo anymore: the agent that did the work was removed" });
+    const r = await hub.requestMerge(via, { repo: team.repo, branch: task.branch, base: team.baseBranch });
     if (!r.ok) return reply.code(409).send({ error: r.output });
     store.markTaskMerged(task.id);
     if (task.channelId) hub.postMessage({ channelId: task.channelId, threadId: task.threadId, author: c.actor, body: `Merged \`${task.branch}\` into \`${team.baseBranch}\`.`, parts: [{ type: "notice", text: r.output }], route: false });
@@ -1658,7 +1687,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   app.get("/api/files", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
-    return store.files(c.workspaceId, (req.query as { channel?: string }).channel);
+    const channel = (req.query as { channel?: string }).channel;
+    if (channel && !channelVisible(c, channel)) return reply.code(404).send({ error: "channel not found" });
+    // files shared in a DM stay between the people in it
+    return store.files(c.workspaceId, channel).filter((f) => !f.channelId || channelVisible(c, f.channelId));
   });
 
   app.get("/api/files/:id", async (req, reply) => {
@@ -1672,7 +1704,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     return reply.send(fs.createReadStream(path.join(opts.filesDir, f.sha256.slice(0, 2), f.sha256)));
   });
 
-  registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf });
+  registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf, channelVisible });
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
   registerVoiceApi(app, hub, { need });

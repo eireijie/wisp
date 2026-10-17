@@ -17,6 +17,8 @@ interface Helpers {
   agentView(a: NonNullable<ReturnType<Hub["store"]["agent"]>>): unknown;
   /** the person a caller works for */
   requesterOf(c: Caller): string | null;
+  /** the channel, when the caller may see it (DMs only for their members and owners) */
+  channelVisible(c: Caller, channelId: string): unknown;
 }
 
 const NAME = z.string().trim().min(1).max(80);
@@ -63,7 +65,7 @@ const WARREN = { name: "Warren", email: "warren@localhost" };
  */
 export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   const { store, vault, computers } = hub;
-  const { need, parse } = h;
+  const { need, parse, channelVisible } = h;
 
   const fail = (reply: FastifyReply, err: unknown) => {
     if (err instanceof ComputerError) return reply.code(err.status).send({ error: err.message });
@@ -415,22 +417,25 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!where) return reply.code(409).send({ error: "nobody to ask: this workspace has no owner" });
     const approval = store.createApproval({ workspaceId: c.workspaceId, agentId: c.actor.id, ...where, ...body });
     hub.postMessage({ ...where, author: c.actor, body: `Can I go ahead? ${body.summary}`, parts: [{ type: "approval", approvalId: approval.id }], route: false });
-    hub.broadcast(c.workspaceId, { type: "approval", approval });
+    hub.broadcast(c.workspaceId, { type: "approval", approval }, hub.audience(approval.channelId));
     return approval;
   });
+
+  /** An approval is part of the conversation it was asked in: only people who can see that see it. */
+  const canSeeApproval = (c: Caller, a: { workspaceId: string; channelId: string }) => a.workspaceId === c.workspaceId && !!channelVisible(c, a.channelId);
 
   app.get("/api/approvals", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
     const status = (req.query as { status?: string }).status;
-    return store.approvals(c.workspaceId, status === "pending" || status === "approved" || status === "denied" ? status : undefined);
+    return store.approvals(c.workspaceId, status === "pending" || status === "approved" || status === "denied" ? status : undefined).filter((a) => canSeeApproval(c, a));
   });
 
   app.get("/api/approvals/:id", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
-    if (!a || a.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "not found" });
+    if (!a || !canSeeApproval(c, a)) return reply.code(404).send({ error: "not found" });
     return a;
   });
 
@@ -438,12 +443,12 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { member: true });
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
-    if (!a || a.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "not found" });
+    if (!a || !canSeeApproval(c, a)) return reply.code(404).send({ error: "not found" });
     const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default("") }), req.body, reply);
     if (!body) return;
     if (a.status !== "pending") return reply.code(409).send({ error: `already ${a.status}` });
     const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
-    hub.broadcast(c.workspaceId, { type: "approval", approval: decided });
+    hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
     const agent = store.agent(a.agentId);
     if (agent && store.channel(a.channelId)) {
       const verdict = body.approve ? `Approved: go ahead with "${a.summary}".` : `Don't do "${a.summary}".`;

@@ -12,6 +12,8 @@ export const AgentEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("tool_call"), name: z.string(), input: z.unknown() }),
   z.object({ type: z.literal("tool_result"), name: z.string(), output: z.unknown() }),
   z.object({ type: z.literal("status"), text: z.string() }),
+  /** something people should know about the run, kept with the reply ("connector X didn't start") */
+  z.object({ type: z.literal("notice"), text: z.string().max(2000) }),
   z.object({ type: z.literal("error"), message: z.string() }),
   /** what a run actually used: reported by the harness once the reply is done */
   z.object({

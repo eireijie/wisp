@@ -190,6 +190,11 @@ export class Store {
     return r && { ...r, shared: !!r.shared };
   }
 
+  /** Who the device belongs to; null once its owner left the workspace. */
+  setNodeOwner(nodeId: string, ownerId: string | null) {
+    this.db.prepare("UPDATE nodes SET owner_id = ? WHERE id = ?").run(ownerId, nodeId);
+  }
+
   setNodeShared(nodeId: string, shared: boolean) {
     this.db.prepare("UPDATE nodes SET shared = ? WHERE id = ?").run(shared ? 1 : 0, nodeId);
   }
@@ -905,6 +910,11 @@ export class Store {
     return r ? { ...JSON.parse(r.usage_json), at: r.at } : null;
   }
 
+  /** Runs that haven't ended yet (queued or running). */
+  activeRuns(agentId: string) {
+    return this.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running') ORDER BY created_at").all(agentId) as { id: string }[];
+  }
+
   activeRunCount(agentId: string): number {
     return (this.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE agent_id = ? AND status = 'running'").get(agentId) as { n: number }).n;
   }
@@ -1294,7 +1304,7 @@ type TaskRow = {
   workspace_id: string;
   from_kind: "user" | "agent";
   from_id: string;
-  to_agent_id: string;
+  to_agent_id: string | null;
   title: string;
   brief: string;
   status: string;
@@ -1358,6 +1368,7 @@ function toTask(r: TaskRow) {
     id: r.id,
     workspaceId: r.workspace_id,
     from: { kind: r.from_kind, id: r.from_id } as Actor,
+    /** who does it; null once that agent was removed (finished tasks outlive their agent) */
     toAgentId: r.to_agent_id,
     title: r.title,
     brief: r.brief,

@@ -116,7 +116,7 @@ export function primeTasks() {
 export function notifyOn(e: ClientEvent, before: State, after: State) {
   if (!prefs.enabled || !after.me) return;
   const me = after.me.user.id;
-  const agentName = (id: string) => after.agents.find((a) => a.id === id)?.name ?? "An agent";
+  const agentName = (id: string | null) => after.agents.find((a) => a.id === id)?.name ?? "An agent";
 
   if (e.type === "message" && e.message.author.kind === "agent" && e.message.body.trim()) {
     const m = e.message;
@@ -143,7 +143,7 @@ export function notifyOn(e: ClientEvent, before: State, after: State) {
     return;
   }
   if (e.type === "tasks_changed" && prefs.tasks) {
-    void api<{ id: string; title: string; status: string; from: { kind: string; id: string }; toAgentId: string; channelId: string | null; threadId: string | null; result: string | null }[]>("GET", "/api/tasks").then(
+    void api<{ id: string; title: string; status: string; from: { kind: string; id: string }; toAgentId: string | null; channelId: string | null; threadId: string | null; result: string | null }[]>("GET", "/api/tasks").then(
       (tasks) => {
         for (const t of tasks) {
           const was = taskStatus.get(t.id);

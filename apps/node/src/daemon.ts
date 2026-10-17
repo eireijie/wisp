@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { HubToNode, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
+import { CONNECTOR_CATALOG, HubToNode, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
 import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
 import { runUpdate, version } from "@warren/update";
@@ -73,6 +73,8 @@ export class NodeDaemon {
   private vmTools = new Map<string, string>();
   /** shareScreen and paused, as last read from node.json (people change them there with the CLI) */
   private local: { shareScreen: boolean; paused: boolean };
+  /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
+  private outbox: NodeToHub[] = [];
 
   constructor(
     private cfg: NodeConfig,
@@ -133,6 +135,7 @@ export class NodeDaemon {
     const caps = await this.computers.capabilities();
     if (!this.local.shareScreen && caps.screen.ok) caps.screen = { ok: false, off: true, detail: "Off. Only someone at this device can turn it on: `warren node screen on`" };
     caps.paused = this.local.paused;
+    caps.commands = this.commandsHere();
     this.send({ type: "capabilities", capabilities: caps });
   }
 
@@ -143,13 +146,19 @@ export class NodeDaemon {
     this.connect();
   }
 
-  stop() {
+  /**
+   * Stop: cancel every run, wait (up to `wait` ms) for each to tell the hub it was stopped, then
+   * hang up. Without the wait a Ctrl-C would leave the agents "busy" on the hub.
+   */
+  async stop(wait = 5000) {
     this.stopped = true;
     fs.unwatchFile(this.configFile, this.onLocalChange);
     for (const a of this.aborts.values()) a.abort();
     this.computers.stopAll();
     for (const t of this.tunnels.values()) t.close();
     this.tunnels.clear();
+    const end = Date.now() + wait;
+    while (this.aborts.size && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
     this.ws?.close();
   }
 
@@ -198,7 +207,27 @@ export class NodeDaemon {
   }
 
   private send(m: NodeToHub) {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
+    if (this.ws?.readyState === WebSocket.OPEN) return this.ws.send(JSON.stringify(m));
+    // a run's outcome must reach the hub, or the agent stays "busy" there; everything else is a snapshot the hub asks for again
+    if (m.type === "run_done" || m.type === "run_failed") {
+      this.outbox.push(m);
+      if (this.outbox.length > 200) this.outbox.shift();
+      this.log(`hub is away; will report ${m.runId} when it's back`);
+    }
+  }
+
+  /** The hub is back: deliver what finished while it was away. */
+  private flushOutbox() {
+    const queued = this.outbox.splice(0);
+    for (const m of queued) this.send(m);
+    if (queued.length) this.log(`reported ${queued.length} run${queued.length === 1 ? "" : "s"} that finished while the hub was away`);
+  }
+
+  /** Which of the commands connectors need are on this device's PATH. */
+  private commandsHere(): Record<string, boolean> {
+    const wanted = new Set(["node", "npx", "uv", "uvx", "docker", "python3"]);
+    for (const c of CONNECTOR_CATALOG) if (c.command) wanted.add(c.command);
+    return Object.fromEntries([...wanted].map((cmd) => [cmd, commandExists(cmd)]));
   }
 
   private async onMessage(msg: HubToNode) {
@@ -206,6 +235,7 @@ export class NodeDaemon {
       const agents = await this.api.request<Agent[]>("GET", "/api/node/agents").catch(() => [] as Agent[]);
       this.log(`connected to ${this.cfg.hub} as "${this.cfg.name}" hosting ${agents.map((a) => "@" + a.handle).join(", ") || "no agents yet"}`);
       this.send({ type: "hello", nodeName: this.cfg.name, agents: agents.map((a) => a.id), version: await version() });
+      this.flushOutbox();
       await this.sendCapabilities();
       // agents work on VMs: have the image here before the first one is needed
       if (!this.local.paused && !this.cfg.noPrepare) void this.computers.prepareImage(() => void this.sendCapabilities());
@@ -297,6 +327,9 @@ export class NodeDaemon {
   }
 
   private async execute(run: RunRequest) {
+    // `warren node pause` while this run waited its turn behind another: it doesn't start either
+    if (this.local.paused) return this.send({ type: "run_failed", runId: run.runId, error: `${this.cfg.name} is paused; ask again once someone resumes it there` });
+    if (this.stopped) return this.send({ type: "run_failed", runId: run.runId, error: `${this.cfg.name} was stopped before this run started` });
     const agents = await this.api.request<Agent[]>("GET", "/api/node/agents").catch(() => [] as Agent[]);
     const agent = agents.find((a) => a.id === run.agentId);
     if (!agent) return this.send({ type: "run_failed", runId: run.runId, error: "agent is not assigned to this node" });
@@ -360,6 +393,18 @@ export class NodeDaemon {
     // stopping the engine's `exec` doesn't stop what it started in the VM
     if (inside) abort.signal.addEventListener("abort", () => void vm!.stopRun(run.runId), { once: true });
 
+    // a connector whose command isn't here can't start; say so rather than let the harness fail quietly (inside a VM the VM has its own tools)
+    let connectors = run.connectors ?? [];
+    if (!inside) {
+      const missing = connectors.filter((c) => c.kind === "mcp-stdio" && c.command && !commandExists(c.command));
+      for (const c of missing) {
+        const text = `Connector ${c.name} didn't start: "${c.command}" isn't installed on ${this.cfg.name}.`;
+        this.log(`@${agent.handle}: ${text}`);
+        this.send({ type: "run_event", runId: run.runId, event: { type: "notice", text } });
+      }
+      connectors = connectors.filter((c) => !missing.includes(c));
+    }
+
     const attempt = async (sessionId: string | null) =>
       adapter.run(
         {
@@ -373,8 +418,8 @@ export class NodeDaemon {
           mcp,
           browser,
           // MCP connectors go to the harness's own config; secrets go in its environment
-          connectors: run.connectors?.filter((c) => c.kind !== "secret"),
-          env: Object.assign({}, ...(run.connectors ?? []).filter((c) => c.kind === "secret").map((c) => c.env ?? {})),
+          connectors: connectors.filter((c: ConnectorSpec) => c.kind !== "secret"),
+          env: Object.assign({}, ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {})),
           launch: inside ? vm!.launcher(run.runId) : undefined,
           signal: abort.signal,
           options: this.cfg.harnessOptions?.[agent.harness],
@@ -508,6 +553,15 @@ export class NodeDaemon {
     const res = await fetch(`${this.cfg.hub.replace(/\/+$/, "")}/api/computers/mine`, { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
     return !!res && res.status !== 401;
   }
+}
+
+/** Is `cmd` on this process's PATH (as the harness would find it)? A path to a file counts when it exists. */
+export function commandExists(cmd: string): boolean {
+  if (!cmd) return false;
+  if (cmd.includes("/") || cmd.includes("\\")) return fs.existsSync(cmd);
+  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  const exts = process.platform === "win32" ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").concat("") : [""];
+  return dirs.some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, cmd + ext))));
 }
 
 function readJson<T>(file: string, fallback: T): T {

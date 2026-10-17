@@ -5,6 +5,7 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Button, Field, Input, Loader, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 import { AgentPicker, AgentStack, Group, CatalogIcon, IconTile, SearchBox, ShopHeader } from "../components/ShopParts.tsx";
+import { useDevices, type DeviceInfo } from "../devices.ts";
 
 const KIND_LABEL: Record<ConnectorKind, string> = { "mcp-stdio": "MCP · runs on the device", "mcp-http": "MCP · remote", secret: "Key" };
 
@@ -15,13 +16,25 @@ function worksWith(kind: ConnectorKind): string {
   return "Set in the environment of every agent Warren runs: Claude Code, Codex and ACP agents.";
 }
 
+/**
+ * The device an agent runs on doesn't have the command this connector needs (as the device last
+ * reported), so the connector won't start there. Null when it does, or when nobody knows yet.
+ */
+function missingOn(a: Agent, command: string, devices: DeviceInfo[] | null): DeviceInfo | null {
+  const bin = command.trim().split(/\s+/)[0];
+  const d = devices?.find((d) => d.id === a.nodeId);
+  return bin && d?.capabilities?.commands && d.capabilities.commands[bin] === false ? d : null;
+}
+
 /** Why a connector won't reach this agent, if it won't. */
-function agentNote(kind: ConnectorKind) {
+function agentNote(kind: ConnectorKind, command: string, devices: DeviceInfo[] | null) {
   return (a: Agent) => {
     const h = harnessInfo(a.harness);
     const protocol = h?.protocol ?? (a.harness.startsWith("acp:") ? "acp" : "mcp");
     if (protocol === "mcp") return "joins through warren-mcp; add it there";
     if (protocol === "acp" && kind === "mcp-http") return "not wired yet for this harness";
+    const device = kind === "mcp-stdio" ? missingOn(a, command, devices) : null;
+    if (device) return `${device.name} doesn't have ${command.trim().split(/\s+/)[0]}`;
     return null;
   };
 }
@@ -248,9 +261,16 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved }: { e
   const [error, setError] = useState<string | null>(null);
   const custom = !entry;
   const [showAdvanced, setShowAdvanced] = useState(custom);
+  const devices = useDevices(10_000);
 
   const nameTaken = taken.includes(name.trim().toLowerCase());
   const missing = rows.filter((r) => r.field && !r.field.optional && !r.value.trim() && !r.saved).map((r) => r.field!.label);
+  // asked of each chosen agent's device before connecting, so a connector that can't start is caught here, not in a failed run
+  const cantStart = kind === "mcp-stdio" ? agentIds.flatMap((id) => {
+    const a = agents.find((x) => x.id === id);
+    const d = a && missingOn(a, command, devices);
+    return a && d ? [`${a.name}'s device ${d.name} doesn't have "${command.trim().split(/\s+/)[0]}". ${entry?.needs ? `Needs: ${entry.needs}.` : "Install it there first."}`] : [];
+  }) : [];
 
   const lines = (s: string) =>
     s
@@ -399,9 +419,14 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved }: { e
         )}
 
         <Group label="Which agents get it">
-          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind)} />
+          <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} />
         </Group>
         <p className="text-xs text-muted">{worksWith(kind)}</p>
+        {cantStart.map((w) => (
+          <p key={w} role="alert" className="text-sm text-warn rounded-lg border border-warn/40 bg-warn/10 px-3 py-2">
+            {w} You can still connect it; it starts working once the command is there.
+          </p>
+        ))}
 
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">

@@ -10,7 +10,8 @@ import { OrchestrationChecklist } from "../components/Orchestration.tsx";
 export interface TaskRow {
   id: string;
   from: Actor;
-  toAgentId: string;
+  /** null once that agent was removed */
+  toAgentId: string | null;
   title: string;
   brief: string;
   status: "open" | "in_progress" | "done" | "failed";
