@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
+import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -611,6 +611,26 @@ export class Hub {
     return lines.join("\n");
   }
 
+  /** How an agent borrows a person's device when a task needs one, and what it has on loan now. */
+  borrowSection(agentId: string): string {
+    const agent = this.store.agent(agentId);
+    if (!agent || agent.settings.headless) return "";
+    const loans = this.store
+      .loanedComputers()
+      .filter((c) => c.workspaceId === agent.workspaceId && activeLoan(c)?.agentId === agentId)
+      .map((c) => `"${c.name}" until ${new Date(activeLoan(c)!.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}`);
+    const devices = this.computers.borrowable(agent.workspaceId, agentId).filter((d) => d.available);
+    if (!loans.length && !devices.length) return "";
+    return [
+      `\n## Borrowing a person's device`,
+      `Your own computer is your default: every computer_* tool acts on it. Only when a task needs an app or file that lives on a person's own device (say, the POS app on the shop PC), ask for its screen with device_request, say why, and end your turn; its owner decides how long you get and you'll be woken with the answer. Once you have it, add computer: "<device name>" to a computer_* tool to act on the device; leave it out to act on your own computer. Stay on what you asked for: it's their personal computer. Call device_return the moment you're done. The loan also ends when its time runs out or the owner takes it back, and you'll be told.`,
+      loans.length ? `You're borrowing right now: ${loans.join(", ")}.` : "",
+      devices.length ? `Devices you could ask for (device_list has the latest): ${devices.map((d) => `"${d.name}" (${d.owner}'s)`).join(", ")}.` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   /** A message as an agent reads it in its history; an approval card shows the draft it was about and the answer. */
   historyLine(m: Message): string {
     const part = m.parts.find((p) => p.type === "approval");
@@ -701,6 +721,7 @@ export class Hub {
       background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
       localTime,
       this.computerSection(agent.id),
+      this.borrowSection(agent.id),
       skills ? `\n${skills}` : "",
       connectors ? `\n${connectors}` : "",
       routines ? `\n${routines}` : "",

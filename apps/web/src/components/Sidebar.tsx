@@ -49,7 +49,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const joined = channels.filter((c) => c.kind === "channel" && c.joined);
   const dmFor = (agentId: string) => channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agentId}`));
   // what agents are waiting on a person for: approvals, and help on their computers
-  const pending = Object.values(approvals).filter((a) => a.status === "pending");
+  // a request to borrow a device is only the owner's to answer
+  const pending = Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me?.user.id));
   const helpNeeded = computers.filter((c) => c.help);
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Cloud, Hand, HandMetal, Laptop, Loader2, Lock, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
-import { lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
+import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -18,6 +18,8 @@ export function computerState(c: ComputerInfo, meId: string | undefined, agents:
   const recent = c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000;
   const busy = agents.some((a) => c.agents.includes(a.id) && a.status === "busy");
   if (recent || (busy && c.activity)) return { label: "Working", tone: "warn", working: true };
+  const loan = activeLoan(c);
+  if (loan) return { label: `Lent to @${agents.find((a) => a.id === loan.agentId)?.handle ?? "an agent"}`, tone: "accent", working: false };
   return { label: c.status === "stopped" ? "Stopped" : "Ready", tone: "ok", working: false };
 }
 
@@ -364,6 +366,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
           {mine && <span className="text-xs text-muted">When you're done, press Hand back and @{agents.find((a) => a.id === c.help!.agentId)?.handle} picks up from there.</span>}
         </div>
       )}
+      {activeLoan(c) && canEdit && <LoanBanner computer={c} />}
       {error && <p className="shrink-0 mx-3 md:mx-5 mt-2 text-sm text-bad">{error}</p>}
       {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 md:mx-5 mt-2 text-sm text-bad">{c.statusText}</p>}
 
@@ -436,6 +439,48 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
         </Modal>
       )}
       {renaming && <RenameComputer computer={c} onClose={() => setRenaming(false)} />}
+    </div>
+  );
+}
+
+/** "Lent to @hermes until 3:40 PM · Take back": an agent is borrowing this screen. */
+function LoanBanner({ computer: c }: { computer: ComputerInfo }) {
+  const agents = useStore((s) => s.agents);
+  const loan = activeLoan(c);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [, tick] = useState(0);
+  // the banner goes away the moment the time is up
+  useEffect(() => {
+    if (!loan) return;
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, new Date(loan.until).getTime() - Date.now()) + 100);
+    return () => clearTimeout(t);
+  }, [loan?.until]);
+  if (!loan) return null;
+  const agent = agents.find((a) => a.id === loan.agentId);
+  const takeBack = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/computers/${c.id}/loan/end`);
+      await useStore.getState().refreshComputers();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="shrink-0 mx-3 md:mx-5 mt-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-2.5 flex flex-wrap items-center gap-3">
+      {agent && <AgentAvatar agent={agent} size={26} badge={false} />}
+      <div className="min-w-0 flex-1 text-sm">
+        <span className="font-medium">Lent to @{agent?.handle ?? "an agent"}</span> {lendLabel(loan.until)}
+        <span className="text-muted"> · it uses your screen only until then</span>
+        {error && <span className="text-bad"> · {error}</span>}
+      </div>
+      <Button disabled={busy} onClick={takeBack}>
+        Take back
+      </Button>
     </div>
   );
 }

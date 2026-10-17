@@ -240,6 +240,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["background", "effort", "TEXT"],
   // NULL means no limit, so existing rows get the default of 24 from the column itself
   ["background", "daily_cap", "INTEGER DEFAULT 24"],
+  ["approvals", "loan_json", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {

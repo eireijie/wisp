@@ -243,6 +243,8 @@ export interface Approval {
   note: string;
   createdAt: string;
   decidedAt: string | null;
+  /** set when the agent is asking to borrow a device's screen: only that device's owner can decide, and picks how long */
+  loan?: import("./computers.ts").DeviceLoanRequest | null;
 }
 
 /**

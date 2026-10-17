@@ -51,7 +51,8 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
   }, [version]);
 
   const isGuest = me.role === "guest";
-  const pending = Object.values(approvals).filter((a) => a.status === "pending");
+  // a request to borrow a device is only the owner's to answer
+  const pending = Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me?.user.id));
   const helpNeeded = computers.filter((c) => c.help);
   const working = (tasks ?? []).filter((t) => t.status === "in_progress");
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Agent";
