@@ -213,7 +213,7 @@ describe("computers", () => {
     // people need control before they can type
     await expect(owner.request("POST", `/api/computers/${vm.id}/act`, { action: { action: "type", text: "hi" } })).rejects.toThrow(/take control/);
     await owner.request("POST", `/api/computers/${vm.id}/control`, { take: true });
-    await expect(agentApi.computer({ action: "click", x: 1, y: 1 })).rejects.toThrow(/Me has taken control/);
+    await expect(agentApi.computer({ action: "click", x: 1, y: 1 })).rejects.toThrow(/Me is using/);
     await owner.request("POST", `/api/computers/${vm.id}/act`, { action: { action: "type", text: "secret" } });
     expect(did.at(-1)).toMatchObject({ op: "type", args: ["secret"] });
     // screenshots still work, so the agent can see what's happening
@@ -225,6 +225,36 @@ describe("computers", () => {
     expect(calls.at(-1)!.prompt).toContain("@nova Signed in.");
     expect((await owner.request("GET", `/api/computers/${vm.id}`)).help).toBeNull();
     await agentApi.computer({ action: "click", x: 1, y: 1 });
+  });
+
+  it("drops a help request once the agent is working again without it", async () => {
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    // someone skips the request and messages the agent instead
+    await agentApi.computerHelp("Enter the 2FA code for me.");
+    await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).help);
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    await owner.send(general.id, "@nova never mind, skip that site");
+    await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).help === null);
+
+    // or the agent goes ahead on the computer by itself
+    await agentApi.computerHelp("Accept the cookie banner?");
+    await waitFor(async () => (await owner.request("GET", `/api/computers/${vm.id}`)).help);
+    await agentApi.computer({ action: "click", x: 1, y: 1 });
+    expect((await owner.request("GET", `/api/computers/${vm.id}`)).help).toBeNull();
+  });
+
+  it("lets an agent take its computer back from a person who stopped using it", async () => {
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await owner.request("POST", `/api/computers/${vm.id}/control`, { take: true });
+    await expect(agentApi.computer({ action: "click", x: 1, y: 1 })).rejects.toThrow(/is using/);
+    // taking it again while you have it only says you're still there
+    await owner.request("POST", `/api/computers/${vm.id}/control`, { take: true });
+    expect((await owner.request("GET", `/api/computers/${vm.id}`)).controller).toMatchObject({ kind: "user" });
+
+    // half a minute without touching it, and the agent that needs it gets it back
+    (hub.computers as any).control.get(vm.id).touched -= 31_000;
+    await agentApi.computer({ action: "click", x: 1, y: 1 });
+    expect((await owner.request("GET", `/api/computers/${vm.id}`)).controller).toBeNull();
   });
 
   it("serves the screen as an image", async () => {

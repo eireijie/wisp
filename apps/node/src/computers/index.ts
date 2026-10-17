@@ -259,6 +259,7 @@ function desktopDriver(allowShell?: boolean): Driver {
  * Node is upgraded, and the permission has to be given again then.
  */
 function macPermissionTarget(): string {
+  if (process.versions.electron) return "Warren (the desktop app runs this device)";
   const node = fs.realpathSync(process.execPath);
   const term = process.env.TERM_PROGRAM;
   const app = term === "Apple_Terminal" ? "Terminal" : term === "iTerm.app" ? "iTerm" : term === "vscode" ? "your editor (VS Code, Cursor…)" : term ?? "your terminal app";

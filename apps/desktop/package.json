@@ -1,0 +1,64 @@
+{
+  "name": "@warren/desktop",
+  "productName": "Warren",
+  "version": "0.0.1",
+  "description": "Warren for Mac, Windows and Linux: the workspace in its own window, a hub on this computer, and this computer as a device for agents.",
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "bundle": "node scripts/bundle-warren.mjs",
+    "dist": "npm run bundle && electron-builder --dir",
+    "dist:mac": "npm run bundle && electron-builder --mac",
+    "dist:win": "npm run bundle && electron-builder --win",
+    "dist:linux": "npm run bundle && electron-builder --linux"
+  },
+  "build": {
+    "appId": "ai.warren.desktop",
+    "productName": "Warren",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/trayTemplate*.png",
+      "!**/node_modules/**"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Warren uses your microphone when you call an agent."
+      }
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    },
+    "afterPack": "scripts/after-pack.cjs",
+    "afterSign": "scripts/after-sign.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "Warren contributors",
+  "homepage": "https://github.com/eireijie/warren"
+}

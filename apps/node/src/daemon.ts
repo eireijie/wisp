@@ -471,10 +471,12 @@ export class NodeDaemon {
    */
   private async mcpSpec(agentId: string): Promise<McpServerSpec> {
     const token = await this.harnessToken(agentId);
+    // in the desktop app this "node" is the app itself, which runs scripts only when told to
+    const asNode: Record<string, string> = process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {};
     return {
       command: process.execPath,
       args: [MCP_BIN],
-      env: token ? { WARREN_URL: this.cfg.hub, WARREN_TOKEN: token } : { WARREN_URL: this.cfg.hub, WARREN_TOKEN: this.cfg.token, WARREN_AGENT: agentId },
+      env: token ? { ...asNode, WARREN_URL: this.cfg.hub, WARREN_TOKEN: token } : { ...asNode, WARREN_URL: this.cfg.hub, WARREN_TOKEN: this.cfg.token, WARREN_AGENT: agentId },
     };
   }
 

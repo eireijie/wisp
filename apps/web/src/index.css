@@ -291,6 +291,37 @@ body {
 .ghost-halo { animation: ghost-halo 2.4s ease-in-out infinite; transform-origin: center; }
 .ghost-spin { animation: ghost-spin 0.9s linear infinite; transform-origin: center; }
 .ghost-glow { filter: drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 7px var(--glow)); animation: ghost-glow 2.8s ease-in-out infinite; }
+.ghost-glow-still { animation: none; }
+.ghost-poke, .ghost-poke-spin, .ghost-startle, .ghost-greeting, .ghost-waiting, .ghost-error { transform-origin: 60px 85px; }
+.ghost-poke { animation: ghost-poke 800ms ease-out; }
+.ghost-poke-spin { animation: ghost-poke-spin 800ms ease-out; }
+.ghost-startle { animation: ghost-startle 600ms ease-out; }
+.ghost-heart { pointer-events: none; transform-box: fill-box; transform-origin: center; animation: ghost-heart 800ms ease-out both; }
+.ghost-waiting { animation: ghost-nudge 4.5s ease-in-out infinite; }
+.ghost-error { animation: ghost-wobble 2.5s ease-in-out infinite; }
+.ghost-drowsy { transform: scaleY(0.45); transition: transform 4s ease-in; }
+.ghost-alert { transform: scaleY(1); transition: transform 150ms ease-out; }
+@media (hover: hover) and (pointer: fine) {
+  .ghost-interactive:hover .ghost-greeting { animation: ghost-wave 900ms ease-in-out 1.5s; }
+}
+@keyframes ghost-poke {
+  0%, 100% { transform: scale(1); }
+  18% { transform: translateY(3px) scale(1.12, 0.84); }
+  42% { transform: translateY(-7px) scale(0.94, 1.07); }
+  68% { transform: translateY(1px) scale(1.03, 0.97); }
+}
+@keyframes ghost-poke-spin {
+  0% { transform: rotate(0) scale(1); }
+  18% { transform: rotate(-12deg) scale(1.15, 0.82); }
+  75% { transform: translateY(-6px) rotate(365deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes ghost-wave { 0%, 100% { transform: rotate(0); } 25%, 65% { transform: rotate(-9deg); } 45%, 82% { transform: rotate(7deg); } }
+@keyframes ghost-startle { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px) scale(0.97, 1.04); } 65% { transform: translateY(1px); } }
+@keyframes ghost-heart { 0% { opacity: 0; transform: translateY(3px) scale(0.65); } 20% { opacity: 1; transform: translateY(-1px) scale(1); } 100% { opacity: 0; transform: translateY(-18px) scale(1.08); } }
+@keyframes ghost-nudge { 0%, 72%, 100% { transform: rotate(0); } 80%, 92% { transform: rotate(-4deg); } 86% { transform: rotate(4deg); } }
+@keyframes ghost-wobble { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+.ghost[data-animate="false"] *, :root[data-motion="reduce"] .ghost * { animation: none !important; transition: none !important; }
 
 @keyframes ghost-float { 0%, 100% { transform: translateY(1.5px); } 50% { transform: translateY(-4px); } }
 @keyframes ghost-bounce {
@@ -306,6 +337,84 @@ body {
 @keyframes ghost-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes ghost-glow { 0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 5px var(--glow)); } 50% { filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 10px var(--glow)); } }
 
+/* --- ghost arms --------------------------------------------------------------------------------
+ * Each moving arm part is one element: <path class="ga-arm ga-{mood} ga-{l|r}" style="--ga-f: …">.
+ * --ga-f is the shoulder frame (static, per shape and side); the pose is two animatable angles:
+ *   --ga-a  the arm's angle (0 = straight out, 90 = straight down)
+ *   --ga-w  a small wiggle on top (waves, taps, breathing)
+ * Both rotate about the pivot, which is the frame's origin, so transform-origin is 0 0 in the
+ * frame. The rule needs `.ghost` in front to beat `.ghost svg g { transform-box: fill-box }`.
+ * Each class below sets the still pose; animations only move away from it, so turning
+ * animation off (reduced motion, animate={false}) leaves every mood in its still pose.
+ */
+@property --ga-a { syntax: "<angle>"; inherits: false; initial-value: 52deg; }
+@property --ga-w { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+.ghost .ga-arm {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  transform: var(--ga-f) rotate(calc(var(--ga-a) + var(--ga-w)));
+}
+
+/* Hi: arms low and a little out; every 5s the right one lifts and waves, and hovering waves now */
+.ga-arm.ga-awake { --ga-a: 52deg; }
+.ga-arm.ga-awake.ga-l { animation: ga-breathe 4s ease-in-out infinite; }
+.ga-arm.ga-awake.ga-r { animation: ga-hi-wave 5s ease-in-out infinite; }
+.ghost:hover .ga-arm.ga-awake.ga-r { animation: ga-raise 0.28s ease-out forwards, ga-wiggle 0.6s ease-in-out 0.28s infinite; }
+
+/* Done: both arms up in a V, pumping in time with the hop */
+.ga-arm.ga-done { --ga-a: -52deg; animation: ga-cheer 1.1s ease-in-out infinite; }
+.ghost .ga-hop { transform-box: view-box; transform-origin: 60px var(--ga-ground, 110px); animation: ga-hop 1.1s ease-in-out infinite; }
+.ga-sparkle { transform-box: fill-box; transform-origin: center; animation: ga-twinkle 1.4s ease-in-out infinite; }
+
+/* Needs your OK: the right hand lifts its sign up and down; the left rests */
+.ga-arm.ga-waiting.ga-l { --ga-a: 52deg; animation: ga-breathe 4s ease-in-out infinite; }
+.ga-arm.ga-waiting.ga-r { --ga-a: -30deg; animation: ga-sign 1.5s ease-in-out infinite; }
+
+/* Working: hands on the keyboard, tapping in turn */
+.ga-arm.ga-working { --ga-a: 120deg; animation: ga-tap 0.46s ease-in-out infinite; }
+.ga-arm.ga-working.ga-r { animation-delay: -0.23s; }
+.ga-key { animation: ga-key 0.9s steps(1) infinite; }
+
+/* Listening, thinking, error: arms just rest */
+.ga-arm.ga-rest { --ga-a: 52deg; animation: ga-breathe 4s ease-in-out infinite; }
+
+/* Asleep: tucked at the sides, rising and falling with its breath */
+.ga-arm.ga-asleep { --ga-a: 80deg; animation: ga-breathe-slow 5s ease-in-out infinite; }
+
+@keyframes ga-hi-wave {
+  0%, 54% { --ga-a: 52deg; }
+  62% { --ga-a: -62deg; }
+  67% { --ga-a: -36deg; }
+  72% { --ga-a: -72deg; }
+  77% { --ga-a: -38deg; }
+  82% { --ga-a: -72deg; }
+  88% { --ga-a: -52deg; }
+  97%, 100% { --ga-a: 52deg; }
+}
+@keyframes ga-raise { from { --ga-a: 52deg; } to { --ga-a: -56deg; } }
+@keyframes ga-wiggle { 0%, 100% { --ga-w: 0deg; } 25% { --ga-w: -16deg; } 75% { --ga-w: 16deg; } }
+@keyframes ga-breathe { 0%, 100% { --ga-w: 0deg; } 50% { --ga-w: 3deg; } }
+@keyframes ga-breathe-slow { 0%, 100% { --ga-w: 0deg; } 50% { --ga-w: -3deg; } }
+@keyframes ga-cheer { 0%, 100% { --ga-a: -36deg; } 50% { --ga-a: -76deg; } }
+@keyframes ga-hop {
+  0%, 100% { transform: translateY(0) scale(1.05, 0.95); }
+  18%, 82% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(0.98, 1.03); }
+}
+@keyframes ga-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+  40% { opacity: 1; transform: scale(1) rotate(25deg); }
+  70% { opacity: 0.8; transform: scale(0.7) rotate(40deg); }
+}
+@keyframes ga-sign { 0%, 100% { --ga-a: -22deg; } 50% { --ga-a: -40deg; } }
+@keyframes ga-tap { 0%, 100% { --ga-w: 0deg; } 50% { --ga-w: -9deg; } }
+@keyframes ga-key { 0%, 100% { stroke: #a6e8d4; } 50% { stroke: #ffffff; stroke-opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ga-arm, .ghost .ga-hop, .ga-sparkle, .ga-key { animation: none !important; }
+}
+
 /* the shadow under a ghost shrinks as it rises, in step with its motion */
 .ghost-ground { fill: var(--ghost-shadow); transform-origin: center; }
 .ghost-ground-float { animation: ghost-ground-float 3.2s ease-in-out infinite; }
@@ -317,7 +426,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ghost *, .ghost { animation: none !important; }
+  .ghost *, .ghost { animation: none !important; transition: none !important; }
 }
 
 /* The add-agent side panel: identity, harness, then workspace. It uses the current theme's colors. */

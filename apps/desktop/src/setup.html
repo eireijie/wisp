@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+<title>Warren</title>
+<style>
+  :root {
+    --app: #f7f7f7; --panel: #fff; --ink: #1b1b1b; --muted: #777; --faint: #a3a3a3; --line: #ebebeb;
+    --input: #dadada; --chip: #f1f1f1; --accent: #1f1f1f; --accent-ink: #fcfcfc; --bad: #c9372c; --ok: #16a34a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --app: #1f1f1f; --panel: #141414; --ink: #f4f4f4; --muted: #a8a8a8; --faint: #777; --line: rgb(255 255 255 / 0.09);
+      --input: rgb(255 255 255 / 0.14); --chip: rgb(255 255 255 / 0.075); --accent: #f4f4f4; --accent-ink: #141414; --bad: #ff7a6b; --ok: #34d06f;
+      --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.4);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--app); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    display: grid; place-items: center; padding: 24px; -webkit-font-smoothing: antialiased;
+  }
+  main { width: 100%; max-width: 560px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  header svg { width: 40px; height: 40px; flex: none; }
+  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+    padding: 18px 18px 16px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+  .card p { margin: 0 0 12px; color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 550; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+    border: 1px solid var(--input); background: var(--panel); color: var(--ink);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.link { border: 0; background: none; padding: 0; color: var(--muted); text-decoration: underline; font-weight: 450; }
+  input {
+    font: inherit; flex: 1; min-width: 200px; padding: 7px 10px; border-radius: 8px;
+    border: 1px solid var(--input); background: var(--panel); color: var(--ink); outline: none;
+  }
+  input:focus { border-color: var(--ink); }
+  .checks { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; }
+  .checks li { display: flex; gap: 8px; align-items: baseline; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(-1px); }
+  .dot.ok { background: var(--ok); } .dot.no { background: var(--faint); }
+  code {
+    font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--chip);
+    padding: 8px 10px; border-radius: 8px; display: block; margin: 8px 0 12px; user-select: all; word-break: break-all;
+  }
+  .error { color: var(--bad); margin: 10px 0 0; }
+  pre {
+    font: 11.5px ui-monospace, Menlo, monospace; background: var(--chip); border-radius: 8px; padding: 10px;
+    max-height: 200px; overflow: auto; white-space: pre-wrap; color: var(--muted);
+  }
+  .center { text-align: center; padding: 40px 0; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--ink); animation: spin 0.9s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .float { animation: float 3.2s ease-in-out infinite; }
+  @keyframes float { 50% { transform: translateY(-3px); } }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .choice { text-align: left; padding: 18px; border-radius: 14px; display: grid; gap: 6px; align-content: start; font-weight: 450; box-shadow: var(--shadow); border-color: var(--line); }
+  .choice:hover { border-color: var(--ink); }
+  .choice strong { font-size: 15px; font-weight: 600; }
+  .choice span { color: var(--muted); }
+  .choice svg { width: 22px; height: 22px; margin-bottom: 4px; }
+  label.check { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); margin: 2px 0 14px; cursor: pointer; }
+  label.check input { flex: none; min-width: 0; margin: 3px 0 0; }
+  label.check small { display: block; color: var(--muted); font-size: 13px; }
+  .checks .dot.bad { background: var(--bad); }
+  .checks .dot.wait { background: var(--faint); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .back { margin-bottom: 12px; }
+  @media (max-width: 520px) { .choices { grid-template-columns: 1fr; } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg class="float" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#111"/><g transform="translate(40 30) scale(3.6)"><path fill="#f5f5f5" d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z"/><circle cx="50" cy="57" r="6" fill="#111"/><circle cx="70" cy="57" r="6" fill="#111"/></g></svg>
+    <div>
+      <h1 id="title">Welcome to Warren</h1>
+      <p id="subtitle">Where you and your agents work together.</p>
+    </div>
+  </header>
+
+  <div id="welcome" class="choices" hidden>
+    <button class="choice" id="pick-create">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 8v4M10 10h4"/></svg>
+      <strong>Create a server</strong>
+      <span>Start a new Warren on this computer. Others join it with its address.</span>
+    </button>
+    <button class="choice" id="pick-join">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
+      <strong>Join a server</strong>
+      <span>Connect to a Warren someone already runs, at home, on a VPS or over Tailscale.</span>
+    </button>
+  </div>
+
+  <div id="create" hidden>
+    <button class="link back" data-back>← Back</button>
+    <section class="card">
+      <h2>Create a server on this computer</h2>
+      <p>Warren runs here and keeps going from the menu bar after you close the window. Your messages, memory and files stay on this computer. Next you'll make the first account.</p>
+      <label class="check"><input type="checkbox" id="create-device" checked /><span>Register this computer as a device<small class="device-name"></small></span></label>
+      <div class="row"><button class="primary" id="create-go">Create server</button></div>
+      <p class="error" id="create-error" hidden></p>
+      <pre id="log" hidden></pre>
+    </section>
+  </div>
+
+  <div id="join" hidden>
+    <button class="link back" data-back>← Back</button>
+    <section class="card">
+      <h2>Join a server</h2>
+      <p>Enter the address of the Warren you're joining. Whoever runs it can copy it from their Warren menu.</p>
+      <form id="join-form">
+        <div class="row" style="margin-bottom:12px">
+          <input id="url" placeholder="warren.example.com or 192.168.1.20:4747" autocomplete="url" spellcheck="false" autofocus />
+        </div>
+        <label class="check"><input type="checkbox" id="join-device" checked /><span>Register this computer as a device<small class="device-name"></small></span></label>
+        <ul class="checks" id="checks" hidden></ul>
+        <div class="row">
+          <button class="primary" type="submit" id="join-go">Test and join</button>
+          <button type="button" id="test">Test only</button>
+        </div>
+      </form>
+      <p class="error" id="join-error" hidden></p>
+    </section>
+  </div>
+
+  <section id="starting" class="card center" hidden>
+    <div class="spinner"></div>
+    <h2 id="starting-title">Starting your server…</h2>
+    <p>The first start can take a minute.</p>
+  </section>
+
+  <section id="unreachable" class="card" hidden>
+    <h2>Can't reach your Warren</h2>
+    <p id="unreachable-detail"></p>
+    <div class="row">
+      <button class="primary" id="retry">Try again</button>
+      <button id="switch">Create or join another</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
+  const setup = window.warrenSetup;
+  const SCREENS = ["welcome", "create", "join", "starting", "unreachable"];
+  const show = (id) => SCREENS.forEach((s) => ($(s).hidden = s !== id));
+  const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
+
+  setup.check().then((c) => {
+    document.querySelectorAll(".device-name").forEach((el) => (el.textContent = `${c.deviceName} shows up in Devices, and agents can run here. You can change this later from the menu bar.`));
+    $("create-device").checked = $("join-device").checked = c.device !== false;
+    if (c.hubUrl && !$("url").value) $("url").value = c.hubUrl.replace(/^https?:\/\//, "");
+    if (state.step === "create" && c.problem && !state.problem) err("create-error", c.problem);
+  });
+
+  function checks(list, pending) {
+    const ul = $("checks");
+    ul.hidden = !list.length && !pending;
+    ul.replaceChildren(
+      ...list.map((c) => li(c.ok ? "ok" : "bad", c.label)),
+      ...(pending ? [li("wait", pending)] : []),
+    );
+  }
+  function li(kind, text) {
+    const el = document.createElement("li");
+    const dot = document.createElement("span");
+    dot.className = `dot ${kind}`;
+    const t = document.createElement("span");
+    t.textContent = text;
+    el.append(dot, t);
+    return el;
+  }
+
+  async function test(join) {
+    const url = $("url").value.trim();
+    if (!url) return $("url").focus();
+    $("join-go").disabled = $("test").disabled = $("url").disabled = true;
+    err("join-error", "");
+    checks([], "Testing the connection…");
+    const r = join ? await setup.join(url, { device: $("join-device").checked }) : await setup.test(url);
+    checks(r.checks || []);
+    $("join-go").disabled = $("test").disabled = $("url").disabled = false;
+    if (!r.ok) return err("join-error", r.error);
+    if (r.url) $("url").value = r.url;
+    if (join) {
+      $("starting-title").textContent = `Joining ${new URL(r.url).host}…`;
+      show("starting");
+    }
+  }
+
+  function goWelcome() {
+    $("title").textContent = "Welcome to Warren";
+    $("subtitle").textContent = "Where you and your agents work together. Create a server, or join one.";
+    show("welcome");
+  }
+
+  if (state.step === "starting") {
+    show("starting");
+    $("subtitle").textContent = "Getting your workspace ready.";
+  } else if (state.step === "unreachable") {
+    show("unreachable");
+    $("title").textContent = "Warren";
+    $("subtitle").textContent = "";
+    $("unreachable-detail").textContent = `Nothing answered at ${state.hubUrl}${state.error ? ` (${state.error})` : ""}. Check that it's running and that this computer can reach it.`;
+  } else if (state.step === "create") {
+    show("create");
+    err("create-error", state.problem);
+    if (state.log) { $("log").hidden = false; $("log").textContent = state.log; }
+  } else goWelcome();
+
+  $("pick-create").onclick = () => show("create");
+  $("pick-join").onclick = () => { show("join"); $("url").focus(); };
+  document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = goWelcome));
+  $("retry").onclick = () => { show("starting"); setup.retry(); };
+  $("switch").onclick = goWelcome;
+  $("create-go").onclick = async () => {
+    err("create-error", "");
+    $("starting-title").textContent = "Starting your server…";
+    show("starting");
+    const r = await setup.create({ device: $("create-device").checked });
+    if (r && !r.ok) { show("create"); err("create-error", r.error); }
+  };
+  $("join-form").onsubmit = (e) => { e.preventDefault(); test(true); };
+  $("test").onclick = () => test(false);
+</script>
+</body>
+</html>

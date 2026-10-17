@@ -100,7 +100,17 @@ export function installService(kind: ServiceKind, dir: string): Spec {
     const domain = `gui/${process.getuid!()}`;
     attempt("launchctl", ["bootout", `${domain}/${s.name}`]);
     fs.writeFileSync(file, launchdPlist(s));
-    run("launchctl", ["bootstrap", domain, file]);
+    // bootout returns before launchd lets go of the old job; bootstrapping too soon fails with
+    // "5: Input/output error", so give it a few seconds before reporting the failure
+    for (let tries = 1; ; tries++) {
+      try {
+        run("launchctl", ["bootstrap", domain, file], true);
+        break;
+      } catch (e) {
+        if (tries === 10) throw e;
+        execFileSync("sleep", ["0.5"]);
+      }
+    }
   } else if (process.platform === "linux") {
     if (!attempt("systemctl", ["--version"])) throw new Error("This system doesn't use systemd. Run it in a terminal instead, or with your own service manager.");
     const { system, file, ctl } = linux(s);

@@ -170,6 +170,21 @@ The PWA needs HTTPS to install on iPhone and to use notifications. Pick one:
 
 On iPhone: open the URL in Safari → Share → **Add to Home Screen**.
 
+## Push notifications for the iOS app
+
+Warren's iPhone app can tell you about agent replies, @mentions, approval requests and agents that need you on their computer while it's closed. That goes through Apple's push service (APNs), and **you bring your own Apple developer account**: a hub only sends pushes to apps signed by the same team as its key. It's optional; without a key everything else works and the app just doesn't notify while closed.
+
+1. In [Apple Developer → Certificates, IDs & Profiles → Keys](https://developer.apple.com/account/resources/authkeys/list), click **+**, tick **Apple Push Notifications service (APNs)**, and download the `.p8` file (Apple lets you download it once). Note its **Key ID** and your **Team ID** (top right of the page).
+2. Build the app with that team (see [apps/ios/README.md](../apps/ios/README.md)). If you change the bundle ID from `ai.warren.ios`, the app tells the hub its own, so nothing else changes.
+3. Give the hub the key, either way:
+   - **Environment variables** (they win if set): `WARREN_APNS_KEY_ID`, `WARREN_APNS_TEAM_ID`, and `WARREN_APNS_KEY_FILE=/path/to/AuthKey_XXXXXXXXXX.p8` (or the file's contents in `WARREN_APNS_KEY`, with `\n` for newlines, handy in Docker). Restart the hub.
+   - **Or as an owner, from the API:** `PUT /api/settings/push` with `{"keyId": "...", "teamId": "...", "key": "<contents of the .p8>"}`. `GET` shows what's set (never the key) and `DELETE` removes it.
+4. On the phone, the app asks for permission the first time you send a message (or tap **You → Notifications → Turn on**). Send yourself a test with `POST /api/me/push/test`.
+
+One key covers both of Apple's push servers: builds run from Xcode get development tokens and builds from TestFlight or the App Store get production ones, and the app tells the hub which it has. The hub keeps an HTTP/2 connection open to `api.push.apple.com` (or `api.sandbox.push.apple.com`), so it needs outbound HTTPS to Apple; nothing has to reach the hub from outside.
+
+A phone stops getting pushes when you sign out of the app (or end that sign-in in Settings), or when Apple says the app was deleted. The app's badge is your unread count.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -178,6 +193,11 @@ On iPhone: open the URL in Safari → Share → **Add to Home Screen**.
 | `HOST` | `0.0.0.0` | Bind address |
 | `WARREN_DATA_DIR` | `./data` | Database, vault and files |
 | `WARREN_WEB_DIR` | `apps/web/dist` | Built web app to serve |
+| `WARREN_APNS_KEY_ID` | | iOS push: your APNs key's 10-character Key ID |
+| `WARREN_APNS_TEAM_ID` | | iOS push: your Apple developer Team ID |
+| `WARREN_APNS_KEY_FILE` | | iOS push: path to the `.p8` key file (or put its contents in `WARREN_APNS_KEY`) |
+| `WARREN_APNS_TOPIC` | `ai.warren.ios` | iOS push: the app's bundle ID, if you changed it |
+| `WARREN_APNS_ENV` | `production` | iOS push: `sandbox` for builds run from Xcode |
 
 Device daemon (`warren node start`): `--hub`, `--token`, `--name`, `--dir` (default `~/.warren`), `--allow-full-access`. Settings are saved to `~/.warren/node.json`. At the device: `warren node screen on|off` offers its own screen to you (off by default), and `warren node pause` / `warren node resume` stop and restart everything Warren does there.
 

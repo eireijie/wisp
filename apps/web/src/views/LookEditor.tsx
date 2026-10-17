@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Moon, Brain, RotateCcw, Shuffle, Sun } from "lucide-react";
+import { Moon, Brain, RotateCcw, Shuffle, Sun, Laptop, Sparkles, CircleHelp, CircleAlert } from "lucide-react";
 import type { Agent } from "@warren/core";
 import { GHOST_ACCESSORIES, GHOST_PALETTES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { Ghost, type GhostMood } from "../components/Ghost.tsx";
 import { Button, cx } from "../components/ui.tsx";
+import { VoicePicker } from "../voice/VoicePicker.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
 
 const LABELS: Record<string, string> = {
@@ -54,10 +55,17 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
   const fallback = useMemo(() => defaultAppearance(agent.handle), [agent.handle]);
   const saved = agent.settings.appearance ?? fallback;
   const [look, setLook] = useState<GhostAppearance>(saved);
+  const [voice, setVoice] = useState(agent.settings.voice ?? {});
+  const [speakingLevel, setSpeakingLevel] = useState<number | undefined>();
   const [mood, setMood] = useState<GhostMood>("awake");
+  useEffect(() => {
+    if (mood !== "done") return;
+    const timer = setTimeout(() => setMood("awake"), 1200);
+    return () => clearTimeout(timer);
+  }, [mood]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dirty = JSON.stringify(look) !== JSON.stringify(saved);
+  const dirty = JSON.stringify(look) !== JSON.stringify(saved) || JSON.stringify(voice) !== JSON.stringify(agent.settings.voice ?? {});
   useEffect(() => {
     onDirty(dirty);
   }, [dirty, onDirty]);
@@ -68,7 +76,7 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
     setSaving(true);
     setError(null);
     try {
-      await api("PATCH", `/api/agents/${agent.id}`, { settings: { appearance: look } });
+      await api("PATCH", `/api/agents/${agent.id}`, { settings: { appearance: look, voice } });
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
@@ -88,14 +96,18 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
         <div className="lg:sticky lg:top-0 space-y-3">
           <div className="rounded-2xl border border-line bg-bg overflow-hidden">
             <div className="h-64 grid place-items-center">
-              <Ghost look={look} size={190} mood={mood} wave label={`${agent.name}'s ghost`} />
+              <Ghost look={look} size={190} mood={mood} speakingLevel={speakingLevel} interactive wave label={`${agent.name}'s ghost`} />
             </div>
           </div>
-          <div className="flex rounded-xl border border-line p-0.5" role="radiogroup" aria-label="Preview mood">
+          <div className="grid grid-cols-2 gap-0.5 rounded-xl border border-line p-0.5" role="radiogroup" aria-label="Preview mood">
             {(
               [
                 ["awake", "Awake", <Sun key="s" size={14} />],
-                ["thinking", "Working", <Brain key="b" size={14} />],
+                ["thinking", "Thinking", <Brain key="b" size={14} />],
+                ["working", "Working", <Laptop key="l" size={14} />],
+                ["done", "Done", <Sparkles key="d" size={14} />],
+                ["waiting", "Waiting", <CircleHelp key="w" size={14} />],
+                ["error", "Error", <CircleAlert key="e" size={14} />],
                 ["asleep", "Offline", <Moon key="m" size={14} />],
               ] as const
             ).map(([m, label, icon]) => (
@@ -116,6 +128,7 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
 
         {/* controls */}
         <div className="space-y-7 min-w-0">
+          <VoicePicker agent={agent} value={voice} onChange={setVoice} onLevel={setSpeakingLevel} />
           <Group title="Shape">
             <Tiles>
               {GHOST_SHAPES.map((v) => (
@@ -211,7 +224,7 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
       </div>
 
       {error && <p className="mt-3 text-sm text-bad">{error}</p>}
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => setLook(saved)} active={active} note={agent.settings.appearance ? "Looking good." : "Using its original ghost."} />
+      <SaveBar dirty={dirty} saving={saving} onSave={save} onDiscard={() => { setLook(saved); setVoice(agent.settings.voice ?? {}); }} active={active} note={agent.settings.appearance ? "Looking good." : "Using its original ghost."} />
     </div>
   );
 }

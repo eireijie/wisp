@@ -1,0 +1,164 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ClientEvent } from "@warren/core";
+import { VoiceCall } from "../src/voice/call.ts";
+import { spokenReply, isSpeechEcho, voiceIndex } from "../src/voice/text.ts";
+import type { ListenCallbacks } from "../src/voice/providers.ts";
+import { href, parseRoute } from "../src/router.ts";
+
+afterEach(() => vi.useRealTimers());
+function fixture() {
+  vi.useFakeTimers();
+  let cb!: ListenCallbacks;
+  const listener = { start: vi.fn(async () => {}), stop: vi.fn() };
+  let finish = () => {};
+  const speaker = { speak: vi.fn(() => new Promise<void>((resolve) => { finish = resolve; })), cancel: vi.fn(() => finish()) };
+  const send = vi.fn(async (_text: string) => {}), update = vi.fn();
+  const call = new VoiceCall({ agentId: "ghost", channelId: "dm", cloudListening: false, listener: (callbacks) => { cb = callbacks; return listener; }, speaker, send, update });
+  return { call, listener, speaker, send, update, cb };
+}
+const reply = (id = "reply", body = "Hello there. How can I help?\n\nFull details."): ClientEvent => ({ type: "message", message: { id, channelId: "dm", threadId: null, author: { kind: "agent", id: "ghost" }, body, parts: [], hop: 1, createdAt: new Date().toISOString() } });
+
+describe("spoken excerpts", () => {
+  it("skips code, tables and links and reads at most two sentences from the first prose paragraph", () => {
+    expect(spokenReply('```ts\nconsole.log("no")\n```\n\n| A | B |\n|---|---|\n\n**Done.** All ready! Third sentence.\n\nAnother paragraph.')).toBe("Done. All ready!");
+    expect(spokenReply('See [the link](https://example.com) and https://example.com.\n\nDetails')).not.toContain("http");
+    expect(spokenReply('~~~python\nprint("secret")')).toBe("");
+    expect(spokenReply("word ".repeat(200)).length).toBeLessThanOrEqual(480);
+  });
+  it("recognizes speaker echo without suppressing new words", () => {
+    expect(isSpeechEcho("Hello, there", "Hello there. How can I help?")).toBe(true);
+    expect(isSpeechEcho("Wait, change the title", "Hello there.")).toBe(false);
+    expect(voiceIndex("atlas", 10)).toBe(voiceIndex("atlas", 10));
+  });
+});
+
+describe("call lifecycle", () => {
+  it("offers help after four seconds without starting the call clock, then accepts permission", async () => {
+    const { call, listener } = fixture();
+    let allow!: () => void;
+    listener.start.mockImplementationOnce(() => new Promise<void>((resolve) => { allow = resolve; }));
+    const starting = call.start();
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(call.state).toMatchObject({ ready: false, needsMic: false, startedAt: null });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(call.state).toMatchObject({ ready: false, needsMic: true, startedAt: null });
+    allow(); await starting;
+    expect(call.state).toMatchObject({ ready: true, needsMic: false, startedAt: Date.now() });
+    const startedAt = call.state.startedAt;
+    await call.mute(true); await vi.advanceTimersByTimeAsync(1000); await call.mute(false);
+    expect(call.state.startedAt).toBe(startedAt);
+    call.stop(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it("retries stalled capture and ignores permission arriving from the old attempt", async () => {
+    const { call, listener } = fixture();
+    let first!: () => void, second!: () => void;
+    listener.start.mockImplementationOnce(() => new Promise<void>((resolve) => { first = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { second = resolve; }));
+    const starting = call.start();
+    await vi.advanceTimersByTimeAsync(4000);
+    const retry = call.start();
+    expect(listener.stop).toHaveBeenCalledOnce();
+    first(); await starting;
+    expect(call.state).toMatchObject({ ready: false, needsMic: false, startedAt: null });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(call.state.needsMic).toBe(true);
+    call.stop(); second(); await retry;
+    expect(call.state.ready).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("offers the same retry state immediately on denied microphone access", async () => {
+    const { call, listener } = fixture();
+    listener.start.mockRejectedValueOnce(new Error("Microphone access was denied."));
+    await call.start();
+    expect(call.state).toMatchObject({ ready: false, needsMic: true, startedAt: null, error: "Microphone access was denied." });
+    expect(vi.getTimerCount()).toBe(0);
+    await call.start();
+    expect(call.state).toMatchObject({ ready: true, needsMic: false, error: "" });
+    call.stop();
+  });
+  it("sends complete turns once, speaks only fresh replies from this DM, and keeps listening", async () => {
+    const { call, cb, send, listener, speaker } = fixture();
+    await call.start();
+    call.event(reply("old"));
+    expect(speaker.speak).not.toHaveBeenCalled();
+    cb.partial("Hello"); cb.final("Hello there");
+    expect(send).toHaveBeenCalledExactlyOnceWith("Hello there");
+    const other = reply();
+    if (other.type === "message") other.message.threadId = "thread";
+    call.event(other);
+    expect(speaker.speak).not.toHaveBeenCalled();
+    call.event(reply()); call.event(reply());
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    expect(speaker.speak.mock.calls[0][0]).toBe("Hello there. How can I help?");
+    expect(listener.stop).not.toHaveBeenCalled();
+    expect(call.state.waiting).toBe(false);
+    call.stop();
+  });
+  it("cuts off speech on a real interruption, but filters its own echo", async () => {
+    const { call, cb, speaker, send } = fixture();
+    await call.start(); cb.final("Hi"); call.event(reply());
+    const cancels = speaker.cancel.mock.calls.length;
+    cb.partial("Hello there"); cb.final("Hello there");
+    expect(speaker.cancel).toHaveBeenCalledTimes(cancels);
+    expect(send).toHaveBeenCalledTimes(1);
+    cb.partial("Wait, change the title");
+    expect(speaker.cancel).toHaveBeenCalledTimes(cancels + 1);
+    expect(call.state.speaking).toBe(false);
+    cb.final("Wait, change the title");
+    expect(send).toHaveBeenCalledTimes(2);
+    call.stop();
+  });
+  it("mutes capture and ignores late callbacks; hang-up clears timers and output", async () => {
+    const { call, cb, send, listener, speaker, update } = fixture();
+    await call.start(); cb.final("Do some work");
+    await call.mute(true);
+    cb.partial("private"); cb.final("private");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(listener.stop).toHaveBeenCalledTimes(1);
+    await call.mute(false);
+    expect(listener.start).toHaveBeenCalledTimes(2);
+    call.stop(); const updates = update.mock.calls.length;
+    cb.final("late"); call.event(reply());
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(speaker.speak).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(updates);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("fills once and offers a callback after twenty seconds without ending the agent's work", async () => {
+    const { call, cb, speaker } = fixture();
+    await call.start(); cb.final("Work");
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(speaker.speak.mock.calls[0][0]).toBe("On it…");
+    await vi.advanceTimersByTimeAsync(17_500);
+    expect(speaker.speak.mock.calls[1][0]).toContain("ping you");
+    expect(call.state.longWork).toBe(true);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(speaker.speak).toHaveBeenCalledTimes(2);
+    call.stop();
+  });
+  it("surfaces send and recognition failures and allows retry", async () => {
+    const { call, cb, listener, send } = fixture();
+    listener.start.mockImplementationOnce(async () => cb.error("Denied"));
+    await call.start(); expect(call.state.ready).toBe(false);
+    await call.start(); expect(call.state.ready).toBe(true);
+    send.mockRejectedValueOnce(new Error("Offline"));
+    cb.final("Work"); await Promise.resolve();
+    expect(call.state.error).toContain("Offline");
+    expect(call.state.waiting).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    call.stop();
+  });
+  it("pauses capture on connection loss", async () => {
+    const { call, listener, speaker } = fixture();
+    await call.start(); call.disconnect();
+    expect(listener.stop).toHaveBeenCalled(); expect(speaker.cancel).toHaveBeenCalled();
+    expect(call.state.ready).toBe(false);
+    call.stop();
+  });
+});
+
+it("opens a buddy call in the existing chat route", () => {
+  const route = { view: "chat" as const, channelId: "dm", threadId: null, call: true };
+  expect(parseRoute(href(route))).toEqual(route);
+  expect(parseRoute("#/settings/voice")).toEqual({ view: "settings", page: "voice" });
+});

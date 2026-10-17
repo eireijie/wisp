@@ -23,9 +23,16 @@ import { SkillsView } from "./views/SkillsView.tsx";
 import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
+import { BuddyView } from "./views/BuddyView.tsx";
+import { useDesktopAgents } from "./desktop.ts";
 
 export function App() {
   const [authed, setAuthed] = useState(() => !!getToken());
+  const route = useRoute();
+  useEffect(() => {
+    if (!authed && route.view !== "buddy") window.warrenDesktop?.buddy.agents([], null);
+  }, [authed, route.view]);
+  if (route.view === "buddy") return <BuddyView />;
   if (!authed)
     return (
       <AuthScreen
@@ -51,6 +58,17 @@ function useIsPhone() {
   return phone;
 }
 
+/** Unread messages on the app icon: the Dock in Warren's desktop app, or the installed PWA's badge. */
+function useUnreadBadge() {
+  const unread = useStore((s) => s.channels.reduce((n, c) => n + (c.unread || 0), 0));
+  useEffect(() => {
+    const desktop = (window as { warrenDesktop?: { setBadge(n: number): void } }).warrenDesktop;
+    if (desktop) return desktop.setBadge(unread);
+    const nav = navigator as Navigator & { setAppBadge?(n: number): Promise<void>; clearAppBadge?(): Promise<void> };
+    (unread ? nav.setAppBadge?.(unread) : nav.clearAppBadge?.())?.catch(() => {});
+  }, [unread]);
+}
+
 function Workspace() {
   const me = useStore((s) => s.me);
   const load = useStore((s) => s.load);
@@ -70,6 +88,8 @@ function Workspace() {
   useEffect(() => {
     if (userId) primeTasks();
   }, [userId]);
+  useUnreadBadge();
+  useDesktopAgents();
 
   // the phone-only pages have desktop equivalents, and the bare root is the chats list on phones
   useEffect(() => {

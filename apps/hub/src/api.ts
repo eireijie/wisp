@@ -38,6 +38,7 @@ import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
 import { registerUpdateApi } from "./updates.ts";
 import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
+import { registerVoiceApi } from "./api-voice.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { activeDispatcher, registerOrchestrationApi } from "./orchestration.ts";
@@ -81,6 +82,7 @@ const SETTINGS = z
     soulLocked: z.boolean(),
     fast: z.boolean(),
     appearance: APPEARANCE,
+    voice: z.object({ device: z.string().max(300).optional(), openai: z.string().max(100).optional(), elevenlabs: z.string().max(100).optional() }).strict(),
     headless: z.boolean(),
     anyoneCanAsk: z.boolean(),
     runIn: z.enum(["computer", "device"]),
@@ -615,7 +617,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
-    const body = parse(z.object({ body: z.string().max(40_000), threadId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
+    const body = parse(z.object({ body: z.string().max(40_000), voice: z.boolean().optional(), threadId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
     if (!body) return;
     const files = body.fileIds.map((fid) => store.file(fid)).filter((f) => f && f.workspaceId === c.workspaceId);
     if (!body.body.trim() && !files.length) return reply.code(400).send({ error: "empty message" });
@@ -632,7 +634,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       hop = (running?.hop ?? 0) + 1;
     }
     store.addChannelMember(ch.id, c.actor);
-    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, parts: files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), hop, onBehalfOf: requesterOf(c) });
+    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
   });
 
   app.post("/api/runs/:id/cancel", async (req, reply) => {
@@ -1673,6 +1675,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf });
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
+  registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerOrchestrationApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });

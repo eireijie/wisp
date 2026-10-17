@@ -21,7 +21,7 @@ export function computerState(c: ComputerInfo, meId: string | undefined, agents:
   return { label: c.status === "stopped" ? "Stopped" : "Ready", tone: "ok", working: false };
 }
 
-function useComputerState(c: ComputerInfo) {
+export function useComputerState(c: ComputerInfo) {
   const me = useStore((s) => s.me);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
@@ -264,6 +264,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   const [pickTeach, setPickTeach] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const screen = useRef<LiveScreenHandle>(null);
+  const touched = useRef(0);
   const mine = c.controller?.id === me.user.id;
   const canEdit = me.role !== "guest";
   const device = devices?.find((d) => d.id === c.nodeId);
@@ -368,7 +369,19 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
 
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-3 md:p-5">
         <div className="flex-1 min-h-[40vh] lg:min-h-0">
-          <LiveScreen ref={screen} computer={c} control={mine} onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined} />
+          <LiveScreen
+            ref={screen}
+            computer={c}
+            control={mine}
+            onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined}
+            onTakeControl={canEdit && c.online && !c.paused && !c.controller && !teacher ? () => void control(true) : undefined}
+            onActivity={() => {
+              // VNC input skips the hub, so say now and then that you're still using it
+              if (Date.now() - touched.current < 15_000) return;
+              touched.current = Date.now();
+              void api("POST", `/api/computers/${c.id}/control`, { take: true }).catch(() => {});
+            }}
+          />
         </div>
         <aside className="lg:w-72 shrink-0 space-y-4 text-sm">
           {c.kind === "device" && <LendPanel computer={c} />}

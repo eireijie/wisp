@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { HARNESSES, type Agent } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { Ghost, type GhostMood } from "./Ghost.tsx";
+import { useStore } from "../store.ts";
+import { agentMood } from "../ghostMood.ts";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -45,7 +47,7 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
   );
 }
 
-export function Modal({ title, onClose, children, wide, drawer = false, className, contentClassName, label }: { title: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; drawer?: boolean; className?: string; contentClassName?: string; label?: string }) {
+export function Modal({ title, onClose, children, wide, drawer = false, headerless = false, className, contentClassName, label }: { title: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; drawer?: boolean; headerless?: boolean; className?: string; contentClassName?: string; label?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -62,17 +64,18 @@ export function Modal({ title, onClose, children, wide, drawer = false, classNam
     };
     window.addEventListener("keydown", k);
     ref.current?.querySelector<HTMLElement>("input, textarea, select")?.focus();
+    if (headerless) ref.current?.focus();
     return () => { window.removeEventListener("keydown", k); previous?.focus(); };
   }, []);
   return (
     <div className={drawer ? "fixed inset-0 z-50 flex justify-end" : "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "w-full bg-panel border border-line rounded-t-2xl sm:rounded-2xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+        {!headerless && <div className="flex items-center justify-between px-5 pt-4 pb-2">
           {typeof title === "string" ? <h2 className="text-base font-semibold">{title}</h2> : <div className="text-base font-semibold">{title}</div>}
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close">
             <X size={18} />
           </button>
-        </div>
+        </div>}
         <div className={cx("px-5 pb-5", contentClassName)}>{children}</div>
       </div>
     </div>
@@ -107,8 +110,8 @@ export const agentVar = (agent: AgentLike | undefined) => ({ "--agent": agentCol
 
 /**
  * An agent's ghost. With `live`, the ghost shows the agent's status (dozing and gray when
- * offline, focused while it works) and animates; elsewhere (e.g. message lists) it stays still
- * so a long conversation doesn't become a wall of motion. `badge` adds a status dot.
+ * offline, focused while it works) and animates; elsewhere it only reacts to a poke or hover.
+ * `badge` adds a status dot. Tiny avatars skip interaction entirely.
  */
 export function AgentAvatar({
   agent,
@@ -116,18 +119,31 @@ export function AgentAvatar({
   badge = false,
   live = false,
   animate,
+  interactive = size >= 24,
 }: {
-  agent: (Pick<Agent, "harness" | "name"> & { handle?: string; id?: string; status?: Agent["status"]; settings?: Agent["settings"] }) | undefined;
+  agent: (Pick<Agent, "harness" | "name"> & { handle?: string; id?: string; status?: Agent["status"]; computerId?: string | null; settings?: Agent["settings"] }) | undefined;
   size?: number;
   badge?: boolean;
   live?: boolean;
   animate?: boolean;
+  interactive?: boolean;
 }) {
   const look = agent?.settings?.appearance ?? defaultAppearance(agent?.handle ?? agent?.name ?? "agent");
-  const mood: GhostMood = !live ? "awake" : agent?.status === "offline" ? "asleep" : agent?.status === "busy" ? "thinking" : "awake";
+  const baseMood = useStore((s) => live ? agentMood(agent, s.approvals, s.computers) : "awake");
+  const previous = useRef({ id: agent?.id, status: agent?.status });
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    const finished = live && baseMood === "awake" && previous.current.id === agent?.id && previous.current.status === "busy" && agent?.status === "online";
+    previous.current = { id: agent?.id, status: agent?.status };
+    setDone(finished);
+    if (!finished) return;
+    const timer = setTimeout(() => setDone(false), 1200);
+    return () => clearTimeout(timer);
+  }, [agent?.id, agent?.status, live, baseMood]);
+  const mood: GhostMood = done && baseMood === "awake" ? "done" : baseMood;
   return (
     <span className="relative inline-block shrink-0" style={{ width: size, height: size }}>
-      <Ghost look={look} size={size} mood={mood} animate={animate ?? live} label={agent?.name ?? "agent"} />
+      <Ghost key={agent?.id} look={look} size={size} mood={mood} animate={animate ?? (live || interactive)} ambient={live} interactive={interactive} label={agent?.name ?? "agent"} />
       {badge && agent?.status && <StatusDot status={agent.status} className="absolute bottom-0 right-0 ring-2 ring-panel" />}
     </span>
   );

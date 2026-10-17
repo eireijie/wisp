@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 /**
  * Hash routes:
+ *   #/buddy                          desktop ghost (no workspace chrome)
  *   #/c/<channelId>[/t/<threadId>]   chat
  *   #/dashboard                      a bit of everything: agents, teams, tasks
  *   #/vault[/<path>]                 memory vault
@@ -21,7 +22,8 @@ import { useEffect, useState } from "react";
  *   #/you                            account menu (phones)
  */
 export type Route =
-  | { view: "chat"; channelId: string | null; threadId: string | null }
+  | { view: "buddy" }
+  | { view: "chat"; channelId: string | null; threadId: string | null; call?: boolean }
   | { view: "dashboard" }
   | { view: "vault"; path: string | null }
   | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
@@ -39,7 +41,7 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "addons", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "addons", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["chart", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
@@ -47,6 +49,8 @@ export type TeamTab = (typeof TEAM_TABS)[number];
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   switch (parts[0]) {
+    case "buddy":
+      return { view: "buddy" };
     case "dashboard":
       return { view: "dashboard" };
     case "connectors":
@@ -76,7 +80,7 @@ export function parseRoute(hash: string): Route {
     case "you":
       return { view: "you" };
     case "c":
-      return { view: "chat", channelId: parts[1] ?? null, threadId: parts[2] === "t" ? (parts[3] ?? null) : null };
+      return { view: "chat", channelId: parts[1] ?? null, threadId: parts[2] === "t" ? (parts[3] ?? null) : null, ...(parts[2] === "call" ? { call: true } : {}) };
     default:
       return { view: "chat", channelId: null, threadId: null };
   }
@@ -84,6 +88,8 @@ export function parseRoute(hash: string): Route {
 
 export function href(r: Route): string {
   switch (r.view) {
+    case "buddy":
+      return "#/buddy";
     case "dashboard":
       return "#/dashboard";
     case "connectors":
@@ -113,7 +119,7 @@ export function href(r: Route): string {
     case "you":
       return "#/you";
     case "chat":
-      return r.channelId ? `#/c/${r.channelId}${r.threadId ? `/t/${r.threadId}` : ""}` : "#/";
+      return r.channelId ? `#/c/${r.channelId}${r.call ? "/call" : r.threadId ? `/t/${r.threadId}` : ""}` : "#/";
   }
 }
 

@@ -294,7 +294,7 @@ export function TeamChart({ team, canEdit }: { team: TeamInfo; canEdit: boolean 
                   style={{ left: p.x, top: p.y, width: W, height: H }}
                   onPointerDown={(e) => startMove(e, m.agentId)}
                 >
-                  <AgentAvatar agent={a} size={36} badge={false} />
+                  <AgentAvatar agent={a} size={36} badge={false} live />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1 font-medium truncate">
                       {team.leadId === m.agentId && <Crown size={13} className="text-accent-text shrink-0" aria-label="Lead" />}
@@ -369,7 +369,7 @@ export function TeamChart({ team, canEdit }: { team: TeamInfo; canEdit: boolean 
 
       {drag?.kind === "add" && drag.moved && (
         <div className="fixed z-50 pointer-events-none -translate-x-1/2 -translate-y-1/2 rounded-xl border border-accent bg-panel shadow-panel px-3 flex items-center gap-2.5 opacity-90" style={{ left: drag.client.x, top: drag.client.y, width: W, height: H }}>
-          <AgentAvatar agent={agent(drag.agentId)} size={36} badge={false} />
+          <AgentAvatar agent={agent(drag.agentId)} size={36} badge={false} live />
           <span className="font-medium truncate">{agent(drag.agentId)?.name}</span>
         </div>
       )}
@@ -385,7 +385,7 @@ function AgentCard({ agent, on, canEdit, onPointerDown, onAdd, onSelect }: { age
       onClick={on ? onSelect : undefined}
     >
       {!on && canEdit && <GripVertical size={14} className="text-faint shrink-0" />}
-      <AgentAvatar agent={agent} size={30} badge={false} />
+      <AgentAvatar agent={agent} size={30} badge={false} live />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium truncate">{agent.name}</div>
         <div className="text-xs text-muted truncate">@{agent.handle}</div>
@@ -445,7 +445,7 @@ function Inspector({
         <ArrowLeft size={13} /> All agents
       </button>
       <div className="flex items-center gap-3">
-        <AgentAvatar agent={agent} size={44} />
+        <AgentAvatar agent={agent} size={44} live />
         <div className="min-w-0">
           <div className="font-semibold truncate flex items-center gap-1.5">
             {agent?.name}
