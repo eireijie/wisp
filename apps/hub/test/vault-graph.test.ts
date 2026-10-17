@@ -69,6 +69,8 @@ describe("memory graph", () => {
     expect(node("Projects/Launch.md").kind).toBe("other");
     expect(node(`agents/${atlas.id}/Plan.md`).kind).toBe("agents");
     expect(node("ghost:nowhere")).toMatchObject({ path: null, kind: "ghost", title: "nowhere", inbound: 1 });
+    // skills and souls are machinery, not knowledge
+    expect(g.nodes.some((n: any) => /(SKILL|SOUL)\.md$/.test(n.id))).toBe(false);
     // attachments aren't notes
     expect(g.nodes.some((n: any) => n.id.includes("diagram"))).toBe(false);
   });

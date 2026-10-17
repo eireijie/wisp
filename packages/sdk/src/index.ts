@@ -81,10 +81,10 @@ export class WarrenClient {
     return this.request<{ path: string; content: string; backlinks: string[] }>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`);
   }
   writeNote(path: string, content: string, message?: string) {
-    return this.request("PUT", "/api/vault/note", { path, content, message });
+    return this.request<SavedNote>("PUT", "/api/vault/note", { path, content, message });
   }
   appendNote(path: string, text: string) {
-    return this.request("POST", "/api/vault/append", { path, text });
+    return this.request<SavedNote>("POST", "/api/vault/append", { path, text });
   }
   search(q: string, limit = 10) {
     return this.request<{ path: string; title: string; snippet: string }[]>("GET", `/api/vault/search?q=${encodeURIComponent(q)}&limit=${limit}`);
@@ -197,4 +197,11 @@ function safeJson(t: string) {
   } catch {
     return { error: t };
   }
+}
+
+/** What the hub says after an agent saves a note: hints only (similar notes to merge into, names it could link). */
+export interface SavedNote {
+  path: string;
+  similar?: { path: string; title: string }[];
+  links?: string[];
 }

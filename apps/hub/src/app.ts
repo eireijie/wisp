@@ -32,6 +32,7 @@ export async function buildHub(opts: HubOptions) {
   const store = new Store(db);
   const hub = new Hub(store, vault);
   await hub.ensureTeams();
+  await hub.ensureBuiltinSkills(undefined, true);
   hub.routines.start();
   hub.background.start();
   // edits made in Obsidian on this machine show up in Warren
