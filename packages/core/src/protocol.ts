@@ -184,7 +184,7 @@ export type ClientEvent =
   | { type: "sections_changed" }
   | { type: "channels_changed" }
   | { type: "teams_changed" }
-  | { type: "orchestration_changed" }
+  | { type: "lead_changed" }
   | { type: "discussion"; discussion: import("./types.ts").Discussion }
   | { type: "computer"; computer: import("./computers.ts").Computer }
   | { type: "computer_removed"; computerId: string }

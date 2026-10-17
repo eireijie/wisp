@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, Mic, Monitor, Phone, AtSign, Brain, MessagesSquare, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
+import { ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import type { AccessLevel, Agent, HarnessCatalog, Message, MessagePart, Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -7,7 +7,7 @@ import { go, type Route } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { ChannelSettings, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
-import { DiscussionCard, StartDiscussion } from "../components/Discussion.tsx";
+import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
@@ -925,7 +925,6 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   const [error, setError] = useState<string | null>(null);
   const [pick, setPick] = useState(0);
   const [emoji, setEmoji] = useState(false);
-  const [discussing, setDiscussing] = useState(false);
   const [caret, setCaret] = useState(0);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -1074,7 +1073,6 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
                 <ComposerMenuItem icon={<Paperclip size={15} />} label="Attach files" onClick={() => (close(), fileInput.current?.click())} />
                 <ComposerMenuItem icon={<AtSign size={15} />} label="Mention an agent" onClick={() => (close(), insert(text && !/\s$/.test(text.slice(0, ta.current?.selectionStart ?? text.length)) ? " @" : "@"))} />
                 <ComposerMenuItem icon={<Smile size={15} />} label="Emoji" onClick={() => (close(), setEmoji(true))} />
-                {!dmAgent && !threadId && canEdit && <ComposerMenuItem icon={<MessagesSquare size={15} />} label="Start a discussion" onClick={() => (close(), setDiscussing(true))} />}
               </div>
             )}
           </Popover>
@@ -1115,7 +1113,6 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           <AgentWorking key={r.runId} run={r} />
         ))}
       </div>
-      {discussing && <StartDiscussion channelId={channelId} onClose={() => setDiscussing(false)} />}
     </div>
   );
 }

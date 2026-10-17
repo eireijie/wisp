@@ -34,3 +34,26 @@ export function wouldLoop(team: Pick<Team, "members">, agentId: string, managerI
   }
   return false;
 }
+
+/** Someone who could review a piece of work: where they run, what the team calls them. */
+export interface ReviewerCandidate {
+  agentId: string;
+  harness: string;
+  /** their role on the team, if any */
+  role: string;
+  /** the team's lead (or the workspace's) */
+  lead: boolean;
+}
+
+/**
+ * Who reviews a builder's work. Never the builder. A teammate whose role is reviewing comes first,
+ * then anyone on a different harness (a different lab sees different things), then the lead.
+ * Null when nobody but the builder is around.
+ */
+export function pickReviewer(builder: { agentId: string; harness: string }, candidates: ReviewerCandidate[]): string | null {
+  const score = (c: ReviewerCandidate) => (/review/i.test(c.role) ? 4 : 0) + (c.harness !== builder.harness ? 2 : 0) + (c.lead ? 1 : 0);
+  const others = candidates.filter((c) => c.agentId !== builder.agentId);
+  let best: ReviewerCandidate | undefined;
+  for (const c of others) if (!best || score(c) > score(best)) best = c;
+  return best?.agentId ?? null;
+}

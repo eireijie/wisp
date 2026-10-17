@@ -21,6 +21,7 @@ import {
   specificity,
   startupRules,
   subjectKey,
+  pickReviewer,
   teamChain,
   wouldLoop,
   type AccessRule,
@@ -41,7 +42,7 @@ import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
 import { registerVoiceApi } from "./api-voice.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
-import { activeDispatcher, registerOrchestrationApi } from "./orchestration.ts";
+import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { agentPolicy } from "./policy.ts";
 
 export interface Caller {
@@ -1137,16 +1138,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
       const working = store.taskByThread(running.threadId);
       if (working && working.toAgentId === c.actor.id && (working.status === "open" || working.status === "in_progress")) parent = working;
     }
-    const dispatcherAgent = activeDispatcher(store, c.workspaceId);
-    // "auto": whoever should hand work out (a boss, else a team lead); "team:<name>": that team's lead
+    // "auto": the workspace's lead, who splits it up; "team:<name>": that team's lead
     const teamTo = body.to.startsWith("team:") ? store.teams(c.workspaceId).find((t) => t.name === body.to.slice(5).toLowerCase()) : undefined;
     if (body.to.startsWith("team:") && !teamTo?.leadId) return reply.code(404).send({ error: teamTo ? `team ${teamTo.name} has no lead yet` : "team not found" });
-    const target = body.to === "auto" ? dispatcher(c.workspaceId) : teamTo ? store.agent(teamTo.leadId!) : (store.agentByHandle(c.workspaceId, body.to.replace(/^@/, "")) ?? store.agent(body.to));
+    const target = body.to === "auto" ? workspaceLead(store, c.workspaceId) : teamTo ? store.agent(teamTo.leadId!) : (store.agentByHandle(c.workspaceId, body.to.replace(/^@/, "")) ?? store.agent(body.to));
     if (!target || target.workspaceId !== c.workspaceId) return reply.code(404).send({ error: body.to === "auto" ? "add an agent first" : "agent not found" });
     if (body.to === "auto")
-      body.brief = dispatcherAgent
-        ? `${body.brief}\n\n(You're the dispatcher: plan this, break it into pieces and hand each to the agent whose role fits with task_delegate; they become subtasks of this task. Mark this task done when the pieces are in.)`
-        : `${body.brief}\n\n(You were picked to route this: do it yourself if it's yours, or hand it to the agent who should with task_delegate and say who.)`;
+      body.brief =
+        store.agents(c.workspaceId).length > 1
+          ? `${body.brief}\n\n(You're the lead: plan this, break it into pieces and hand each to the agent whose role fits with task_delegate; they become subtasks of this task. Mark this task done when the pieces are in.)`
+          : `${body.brief}\n\n(You're the only agent so far, so this one's yours to do.)`;
     const forTeam = teamTo;
     // an agent handing work to its own team (as lead, teammate or boss) does it in the team's channel
     const teams = store.teams(c.workspaceId);
@@ -1169,26 +1170,24 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   });
 
   /**
-   * Who gets a task nobody assigned: with the Orchestration addon on, its dispatcher. Otherwise the
-   * agent teams report to, else a team lead, else an agent that sounds like a chief, else the first.
+   * When coding work is done, someone other than the builder gets a review task for the branch:
+   * the team's reviewer, else a teammate on another harness, else the lead.
    */
-  function dispatcher(workspaceId: string) {
-    const picked = activeDispatcher(store, workspaceId);
-    if (picked) return picked;
-    const teams = store.teams(workspaceId);
-    const agents = store.agents(workspaceId);
-    const boss = teams.map((t) => t.reportsTo).find((id) => id && !teams.some((x) => x.members.some((m) => m.agentId === id) && x.reportsTo));
-    const lead = teams.find((t) => t.leadId)?.leadId;
-    const chief = agents.find((a) => /chief|boss|lead|manager/i.test(`${a.handle} ${a.name}`));
-    return store.agent(boss ?? lead ?? chief?.id ?? agents[0]?.id ?? "");
-  }
-
-  /** When coding work is done, the team's reviewer (or else its lead) gets a review task for the branch. */
   function requestReview(task: NonNullable<ReturnType<typeof store.task>>, onBehalfOf: string | null) {
     if (!task.branch || task.reviewOf || !task.teamId || !task.channelId || task.mergedAt) return;
     const team = store.team(task.teamId);
     if (!team?.repo) return;
-    const reviewerId = team.members.find((m) => /review/i.test(m.role) && m.agentId !== task.toAgentId)?.agentId ?? (team.leadId && team.leadId !== task.toAgentId ? team.leadId : null);
+    const builder = task.toAgentId ? store.agent(task.toAgentId) : undefined;
+    if (!builder) return;
+    const roles = new Map(team.members.map((m) => [m.agentId, m.role]));
+    const candidates = (ids: (string | null | undefined)[]) =>
+      [...new Set(ids.filter((id): id is string => !!id))]
+        .map((id) => store.agent(id))
+        .filter((a): a is NonNullable<typeof a> => !!a && a.workspaceId === task.workspaceId)
+        .map((a) => ({ agentId: a.id, harness: a.harness, role: roles.get(a.id) ?? "", lead: a.id === team.leadId }));
+    // the workspace's lead only steps in when nobody on the team can
+    const me = { agentId: builder.id, harness: builder.harness };
+    const reviewerId = pickReviewer(me, candidates([...team.members.map((m) => m.agentId), team.leadId])) ?? pickReviewer(me, candidates([workspaceLead(store, task.workspaceId)?.id]));
     const reviewer = reviewerId ? store.agent(reviewerId) : undefined;
     if (!reviewer) return;
     if (store.tasks(task.workspaceId).some((t) => t.reviewOf === task.id && (t.status === "open" || t.status === "in_progress"))) return;
@@ -1243,7 +1242,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
 
   /**
    * Merge a task's branch into the team's base branch, on a device that has the repo. People,
-   * the team lead, its reviewers and whoever it reports to can merge. Works on a review task too.
+   * the team lead, whoever is reviewing it and whoever the team reports to can merge (never the one who built it). Works on a review task too.
    */
   app.post("/api/tasks/:id/merge", async (req, reply) => {
     const c = need(req, reply);
@@ -1257,7 +1256,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
     if (c.actor.kind === "agent") {
       const me = c.actor.id;
       const role = team.members.find((m) => m.agentId === me)?.role ?? "";
-      if (team.leadId !== me && !/review/i.test(role) && !teamChain(team, store.teams(c.workspaceId)).includes(me)) return reply.code(403).send({ error: "only the team lead, a reviewer, or whoever the team reports to can merge" });
+      if (me === task.toAgentId) return reply.code(403).send({ error: "work gets merged by someone other than whoever built it" });
+      const reviewing = store.tasks(c.workspaceId).some((t) => t.reviewOf === task!.id && t.toAgentId === me);
+      if (team.leadId !== me && !reviewing && !/review/i.test(role) && !teamChain(team, store.teams(c.workspaceId)).includes(me)) return reply.code(403).send({ error: "only the team lead, a reviewer, or whoever the team reports to can merge" });
     } else if (c.viewer.role === "guest") return reply.code(403).send({ error: "guests can't merge" });
     const via = c.actor.kind === "agent" ? c.actor.id : (task.toAgentId ?? team.leadId);
     if (!via) return reply.code(409).send({ error: "nobody's device has this repo anymore: the agent that did the work was removed" });
@@ -1725,7 +1726,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: { filesDir: st
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
   registerVoiceApi(app, hub, { need });
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
-  registerOrchestrationApi(app, hub, { need, parse });
+  registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
 
   // --- websockets -------------------------------------------------------------

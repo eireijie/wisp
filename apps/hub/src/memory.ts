@@ -151,7 +151,7 @@ export class AgentMemory {
             ? `Code: the team works in the git repo ${t.repo} (base branch ${t.baseBranch}). Coding tasks handed out in the team channel get their own branch, and runs for them happen in a checkout of it.${leads || /review/i.test(me.role) ? " When a branch is reviewed and good, merge it with branch_merge." : ""}`
             : "",
           leads
-            ? `As the lead: break work into tasks for ${reports.length ? "the agents who report to you" : "your teammates"} with task_delegate, review what comes back, and keep the brief and ${t.folder}/decisions/ current. To talk something through with the team first, use discussion_start.`
+            ? `As the lead: break work into tasks for ${reports.length ? "the agents who report to you" : "your teammates"} with task_delegate, review what comes back, and keep the brief and ${t.folder}/decisions/ current.`
             : reports.length
               ? `Hand work to the agents who report to you with task_delegate and check what comes back; report your own results to ${boss ? this.handle(boss) : "the lead"}. Put what the team should know in ${t.folder}/.`
               : `Put what the team should know in ${t.folder}/, and what everyone should know in shared/. Notes you add there show your name.`,

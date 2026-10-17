@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, Hand, Loader2, Paperclip, Plus, Sparkles, Workflow, X } from "lucide-react";
-import type { Actor, Agent, OrchestrationStatus } from "@warren/core";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, Hand, Loader2, Paperclip, Plus, Sparkles, X } from "lucide-react";
+import type { Actor, Agent } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go } from "../router.ts";
 import { AgentAvatar, Button, Field, Input, Loader, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
-import { OrchestrationChecklist } from "../components/Orchestration.tsx";
 
 export interface TaskRow {
   id: string;
@@ -36,16 +35,16 @@ const STATE: Record<State, { label: string; tone: "neutral" | "ok" | "warn" | "b
 };
 
 /**
- * Tasks is the Orchestration addon's home. Off: what it is and where to turn it on. On but not set
- * up: the checklist. Ready: the board, where a dispatcher's tasks show the subtasks it handed out.
+ * Tasks: work that's been planned and handed out. A task nobody assigned goes to the lead, who
+ * splits it up; the pieces show up under it as subtasks.
  */
 export function TasksView({ onBack }: { onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
-  const status = useStore((s) => s.orchestration);
+  const status = useStore((s) => s.lead);
   const agents = useStore((s) => s.agents);
-  const dispatcher = agents.find((a) => a.id === status?.dispatcherId);
+  const lead = agents.find((a) => a.id === status?.lead);
   useEffect(() => {
-    useStore.getState().refreshOrchestration();
+    useStore.getState().refreshLead();
   }, []);
 
   return (
@@ -57,55 +56,39 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
           </button>
         )}
         <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Tasks</h1>
-        {status?.ready && dispatcher && (
-          <a href="#/settings/addons" className="hidden sm:flex items-center gap-1.5 text-xs text-muted hover:text-ink mr-1" title="The dispatcher takes every task nobody assigned">
-            <Crown size={13} /> Dispatcher <AgentAvatar agent={dispatcher} size={18} badge={false} /> <span className="text-ink">{dispatcher.name}</span>
+        {lead && (
+          <a href="#/teams" className="hidden sm:flex items-center gap-1.5 text-xs text-muted hover:text-ink mr-1" title="The lead takes every task nobody assigned">
+            <Crown size={13} /> Lead <AgentAvatar agent={lead} size={18} badge={false} /> <span className="text-ink">{lead.name}</span>
           </a>
         )}
-        {status?.ready && me.role !== "guest" && (
+        {me.role !== "guest" && agents.length > 0 && (
           <Button variant="primary" onClick={() => useStore.setState({ newTaskOpen: true })}>
             <Plus size={16} /> New task
           </Button>
         )}
       </header>
-      <div className="flex-1 overflow-y-auto">{!status ? <Loader /> : !status.ready ? <SetUp status={status} /> : <Board dispatcherId={status.dispatcherId!} />}</div>
+      <div className="flex-1 overflow-y-auto">{agents.length === 0 ? <NoAgents /> : <Board leadId={status?.lead ?? null} />}</div>
     </div>
   );
 }
 
-/** What Tasks needs before it works: the addon turned on and set up. Also shown in New task. */
-function SetUp({ status, compact }: { status: OrchestrationStatus; compact?: boolean }) {
-  const owner = useStore((s) => s.me)?.role === "owner";
+/** Tasks need someone to hand them to. */
+function NoAgents() {
   return (
-    <div className={cx("mx-auto max-w-xl", compact ? "space-y-4" : "px-4 py-12 md:py-16 space-y-6")}>
-      <div className={cx("space-y-2", !compact && "text-center")}>
-        {!compact && (
-          <span className="mx-auto grid place-items-center size-11 rounded-xl bg-accent-soft text-accent-text">
-            <Workflow size={22} />
-          </span>
-        )}
-        <h2 className={cx("font-semibold", compact ? "text-sm" : "text-lg")}>{status.enabled ? "Finish setting up Orchestration" : "Tasks is an addon"}</h2>
-        <p className="text-sm text-muted">
-          Tasks lets a lead agent, the dispatcher, take work and hand it out to agents with roles, so you can follow a job from the plan to the pieces to done.{" "}
-          {status.enabled ? "A few steps are left:" : owner ? "Turn it on in Settings → Addons." : "An owner can turn it on in Settings → Addons."} Agents still hand each other work in chat either way.
-        </p>
+    <div className="mx-auto max-w-xl px-4 py-12 md:py-16 text-center space-y-3">
+      <h2 className="text-lg font-semibold">Add an agent to hand work to</h2>
+      <p className="text-sm text-muted">Tasks are how you give agents work and follow it from the plan to the pieces to done. Add an agent first, or set up a whole team in one go.</p>
+      <div className="flex justify-center gap-2">
+        <Button variant="primary" onClick={() => go({ view: "agents", agentId: null })}>
+          Add an agent
+        </Button>
+        <Button onClick={() => go({ view: "teams", teamId: null })}>Set up a team</Button>
       </div>
-      {status.enabled ? (
-        <OrchestrationChecklist status={status} onNavigate={compact ? () => useStore.setState({ newTaskOpen: false }) : undefined} />
-      ) : (
-        owner && (
-          <div className={cx("flex", !compact && "justify-center")}>
-            <Button variant="primary" onClick={() => (useStore.setState({ newTaskOpen: false }), go({ view: "settings", page: "addons" }))}>
-              Set it up in Addons <ChevronRight size={15} />
-            </Button>
-          </div>
-        )
-      )}
     </div>
   );
 }
 
-function Board({ dispatcherId }: { dispatcherId: string }) {
+function Board({ leadId }: { leadId: string | null }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
   const teams = useStore((s) => s.teams);
@@ -163,7 +146,7 @@ function Board({ dispatcherId }: { dispatcherId: string }) {
   const needsYou = shown.flatMap(all).map((t) => ({ t, note: waitingOn(t) })).filter((x) => x.note);
 
   const fromName = (a: Actor) => (a.kind === "agent" ? `@${agents.find((x) => x.id === a.id)?.handle ?? "agent"}` : a.id === me.user.id ? "you" : (members.find((m) => m.id === a.id)?.name ?? "someone"));
-  const ctx: CardCtx = { agents, dispatcherId, children, stateOf, waitingOn, fromName };
+  const ctx: CardCtx = { agents, leadId, children, stateOf, waitingOn, fromName };
 
   if (!tasks) return <Loader />;
   return (
@@ -216,7 +199,7 @@ function Board({ dispatcherId }: { dispatcherId: string }) {
           <div className="rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted">
             {roots.length === 0 ? (
               <>
-                Nothing yet. Start a task and {agents.find((a) => a.id === dispatcherId)?.name ?? "the dispatcher"} plans it and hands the pieces out.{" "}
+                Nothing yet. Start a task and {agents.find((a) => a.id === leadId)?.name ?? "the lead"} plans it and hands the pieces out.{" "}
                 {me.role !== "guest" && (
                   <button className="text-accent-text hover:underline" onClick={() => useStore.setState({ newTaskOpen: true })}>
                     New task
@@ -252,7 +235,7 @@ function Board({ dispatcherId }: { dispatcherId: string }) {
 
 interface CardCtx {
   agents: Agent[];
-  dispatcherId: string;
+  leadId: string | null;
   children: Map<string, TaskRow[]>;
   stateOf: (t: TaskRow) => State;
   waitingOn: (t: TaskRow) => string | null;
@@ -305,7 +288,7 @@ function TaskCard({ task: t, ctx, defaultOpen }: { task: TaskRow; ctx: CardCtx; 
             {agent && <AgentAvatar agent={agent} size={20} badge={false} />}
             <span className="truncate">
               {agent?.name ?? "an agent"}
-              {t.toAgentId === ctx.dispatcherId ? " · dispatcher" : agent?.settings.role ? ` · ${agent.settings.role}` : ""}
+              {t.toAgentId === ctx.leadId ? " · lead" : agent?.settings.role ? ` · ${agent.settings.role}` : ""}
             </span>
           </span>
           <span>from {ctx.fromName(t.from)}</span>
@@ -364,15 +347,12 @@ function SubtaskRow({ task: t, ctx, depth }: { task: TaskRow; ctx: CardCtx; dept
   );
 }
 
-/**
- * Start a task. With Orchestration set up it goes to the dispatcher to plan by default, or straight
- * to an agent or a team's lead. Without it, explains the addon instead (the sidebar opens this).
- */
+/** Start a task. It goes to the lead to plan by default, or straight to an agent or a team's lead. */
 export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo?: string }) {
   const agents = useStore((s) => s.agents);
   const teams = useStore((s) => s.teams);
-  const status = useStore((s) => s.orchestration);
-  const dispatcher = agents.find((a) => a.id === status?.dispatcherId);
+  const status = useStore((s) => s.lead);
+  const lead = agents.find((a) => a.id === status?.lead);
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
   const [to, setTo] = useState(defaultTo ?? "auto");
@@ -401,10 +381,8 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
 
   return (
     <Modal title="New task" onClose={onClose} wide>
-      {!status ? (
-        <Loader />
-      ) : !status.ready || !dispatcher ? (
-        <SetUp status={status} compact />
+      {!lead ? (
+        <NoAgents />
       ) : (
         <form className="space-y-4" onSubmit={submit}>
           <Field label="What needs doing?">
@@ -416,12 +394,12 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
           <div>
             <div className="text-sm font-medium mb-1.5">Who takes it?</div>
             <Chip selected={to === "auto"} onClick={() => setTo("auto")}>
-              <AgentAvatar agent={dispatcher} size={18} badge={false} /> Let {dispatcher.name} plan it <Sparkles size={13} className="text-muted" />
+              <AgentAvatar agent={lead} size={18} badge={false} /> Let {lead.name} plan it <Sparkles size={13} className="text-muted" />
             </Chip>
             <div className="mt-3 mb-1.5 text-xs text-muted">or hand it straight to…</div>
             <div className="flex flex-wrap gap-1.5">
               {agents
-                .filter((a) => a.id !== dispatcher.id)
+                .filter((a) => a.id !== lead.id)
                 .map((a) => (
                   <Chip key={a.id} selected={to === a.id} onClick={() => setTo(a.id)}>
                     <AgentAvatar agent={a} size={18} badge={false} /> {a.name}
@@ -438,7 +416,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
             </div>
             <p className="mt-2 text-xs text-muted">
               {to === "auto"
-                ? `${dispatcher.name} breaks it into pieces and hands each to the agent whose role fits. You'll see them as subtasks.`
+                ? `${lead.name} breaks it into pieces and hands each to the agent whose role fits. You'll see them as subtasks.`
                 : to.startsWith("team:")
                   ? "The team's lead takes it and splits it up as needed."
                   : picked?.status === "offline"
@@ -468,7 +446,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
               Cancel
             </Button>
             <Button variant="primary" disabled={busy || !title.trim()}>
-              {busy && <Loader2 size={15} className="animate-spin" />} {to === "auto" ? `Send to ${dispatcher.name}` : "Hand it off"}
+              {busy && <Loader2 size={15} className="animate-spin" />} {to === "auto" ? `Send to ${lead.name}` : "Hand it off"}
             </Button>
           </div>
         </form>
