@@ -89,16 +89,14 @@ describe("soft ghost details", () => {
     expect(render(22)).not.toContain('opacity="0.18"');
     expect(render(40, "asleep")).not.toContain('opacity="0.18"');
   });
-  it("reaches its hands onto the laptop, holds the sign up with the right hand and raises both arms to cheer", () => {
-    expect(render(40)).toContain("ghost-arm-right");
-    // working, the arms reach down onto the keys, where their hands tap
-    expect(render(40, "working")).toContain("ghost-arm-right");
-    expect(render(40, "working").match(/ghost-type/g)).toHaveLength(2);
-    expect(render(40, "waiting")).toContain("ghost-arm-left");
-    expect(render(40, "waiting")).toContain("ghost-arm-right ghost-arm-raise");
+  it("grows one-piece arms that pose with its mood, and none at tiny sizes", () => {
+    expect(render(40)).toContain("ga-arm ga-awake ga-r");
+    expect(render(40, "working")).toContain("ga-arm ga-working ga-l");
+    expect(render(40, "working")).toContain("ga-key");
+    expect(render(40, "waiting")).toContain("ga-arm ga-waiting ga-r");
     const done = render(40, "done");
-    expect(done.match(/ghost-arm-left ghost-arm-(cheer|up)/g)).toHaveLength(1);
-    expect(done.match(/ghost-arm-right ghost-arm-(cheer|up)/g)).toHaveLength(1);
-    expect(render(22)).not.toContain("ghost-arm-right");
+    expect(done).toContain("ga-arm ga-done ga-l");
+    expect(done).toContain("ga-arm ga-done ga-r");
+    expect(render(22)).not.toContain("ga-arm");
   });
 });

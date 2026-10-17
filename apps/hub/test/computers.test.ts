@@ -489,7 +489,8 @@ describe("borrowing a device", () => {
     expect(pending.loan).toMatchObject({ deviceName: "box", reason: "Enter today's sales in the POS app" });
 
     // nobody else can say yes: not another member, not the agent, not another agent
-    await expect(member.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 60 })).rejects.toThrow(/Only Me can lend/);
+    // the card is in the owner's DM, so another member doesn't even see it
+    await expect(member.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 60 })).rejects.toThrow(/not found/);
     await expect(agentApi.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true })).rejects.toThrow();
     await expect(kai.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true })).rejects.toThrow();
     expect((await screenOf())?.config.loan).toBeUndefined();
@@ -526,7 +527,7 @@ describe("borrowing a device", () => {
 
     // the owner can take control (the agent waits), and hand back; the loan goes on
     await owner.request("POST", `/api/computers/${screen.id}/control`, { take: true });
-    await expect(agentApi.computer({ action: "click", x: 1, y: 1, space: { width: 1280, height: 800 } }, "box")).rejects.toThrow(/taken control/);
+    await expect(agentApi.computer({ action: "click", x: 1, y: 1, space: { width: 1280, height: 800 } }, "box")).rejects.toThrow(/is using box right now/);
     await owner.request("POST", `/api/computers/${screen.id}/control`, { take: false });
     await agentApi.computer({ action: "screenshot" }, "box");
 
