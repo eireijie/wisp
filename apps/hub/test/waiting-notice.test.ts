@@ -67,11 +67,11 @@ afterAll(async () => {
 });
 
 describe("a request made while the device is offline", () => {
-  it("loses its 'queued until its node reconnects' note once the device takes it", async () => {
+  it("loses its 'queued until its device reconnects' note once the device takes it", async () => {
     const dm = await owner.request("POST", `/api/dm/${agentId}`);
     expect((await owner.agents()).find((a) => a.id === agentId)?.status).toBe("offline");
     await owner.send(dm.id, "are you there?");
-    const notice = await waitFor(() => hub.store.messages(dm.id).find((m) => m.author.id === "system" && m.parts.some((p) => p.type === "status" && p.text === "@dot is offline. The request is queued until its node reconnects.")));
+    const notice = await waitFor(() => hub.store.messages(dm.id).find((m) => m.author.id === "system" && m.parts.some((p) => p.type === "status" && p.text === "@dot is offline. The request is queued until its device reconnects.")));
 
     // the device connects: the queued run goes out and the note no longer applies
     daemon = new NodeDaemon({ hub: url, token: nodeToken, name: "box", dir: path.join(dir, "node") }, () => {}, { custom: fake });
