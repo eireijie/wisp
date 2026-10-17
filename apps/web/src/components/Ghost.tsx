@@ -199,14 +199,6 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                     {arms?.arms}
                     {arms?.over}
 
-                    {details && mood !== "working" && [-1, 1].map((side) => mood === "waiting" && side === 1 ? null : (
-                      <g key={side} transform={`translate(${60 + side * (shape.neck.half + 1)} ${shape.neck.y})`}>
-                        <g className={cx("ghost-arm", side === 1 ? "ghost-arm-right" : "ghost-arm-left", mood === "done" && "ghost-arm-cheer")}>
-                          <ellipse cx={side * 2} cy="0" rx="6" ry="4.5" fill={top} stroke="black" strokeOpacity="0.1" strokeWidth="1.2" />
-                          <ellipse cx={side * 2} cy="-1.4" rx="4" ry="1.5" fill="white" opacity="0.2" />
-                        </g>
-                      </g>
-                    ))}
                     <g ref={face}>
                       <g transform={mood === "listening" ? "translate(0 -2)" : mood === "working" && !happy ? "translate(0 3)" : undefined}>
                         {(look.cheeks || size >= 40) && !asleep && (
