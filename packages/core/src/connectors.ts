@@ -24,6 +24,8 @@ export interface Connector {
   /** variables and secrets; `{{KEY}}` in args, url and headers is replaced with these */
   env: Record<string, string>;
   enabled: boolean;
+  /** remote servers people sign in to (OAuth): whether someone has; null when it doesn't ask */
+  auth?: { required: boolean; signedIn: boolean; error: string | null } | null;
   agentIds: string[];
   createdBy: string | null;
   createdAt: string;

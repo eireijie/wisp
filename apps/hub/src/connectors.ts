@@ -1,6 +1,7 @@
 import { catalogConnector, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type Skill, type SkillSource } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
+import { ConnectorAuth } from "./connector-auth.ts";
 
 /**
  * Connectors (MCP servers and secrets agents can use) and skills (SKILL.md instructions agents
@@ -39,7 +40,32 @@ export interface ConnectorInput {
 const literalHeader = (v: string) => !/\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(v);
 
 export class ConnectorStore {
-  constructor(readonly db: Db) {}
+  /** sign-ins to remote MCP servers */
+  readonly auth: ConnectorAuth;
+
+  constructor(readonly db: Db) {
+    this.auth = new ConnectorAuth(db);
+  }
+
+  /** A remote connector's address with its values filled in, as agents reach it. */
+  serverUrl(connectorId: string): string | null {
+    const r = this.row(connectorId);
+    return r?.kind === "mcp-http" && r.url ? fillTemplate(r.url, JSON.parse(r.env_json)) : null;
+  }
+
+  /** The headers a remote connector sends, values filled in (no sign-in token). */
+  serverHeaders(connectorId: string): Record<string, string> {
+    const r = this.row(connectorId);
+    if (!r) return {};
+    const env = JSON.parse(r.env_json) as Record<string, string>;
+    return Object.fromEntries(Object.entries(JSON.parse(r.headers_json) as Record<string, string>).map(([k, v]) => [k, fillTemplate(v, env)]).filter(([, v]) => !/\{\{/.test(v)));
+  }
+
+  /** Before a run: refresh sign-ins to the agent's remote connectors that are about to expire. */
+  async prepare(agentId: string) {
+    const ids = (this.db.prepare("SELECT c.id FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id JOIN connector_auth ca ON ca.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 AND c.kind = 'mcp-http' AND ca.tokens_json IS NOT NULL").all(agentId) as { id: string }[]).map((r) => r.id);
+    await Promise.all(ids.map((cid) => this.auth.fresh(cid, this.serverUrl(cid)!).catch(() => {})));
+  }
 
   private agentIds(connectorId: string): string[] {
     return (this.db.prepare("SELECT agent_id FROM agent_connectors WHERE connector_id = ? ORDER BY agent_id").all(connectorId) as { agent_id: string }[]).map((r) => r.agent_id);
@@ -67,6 +93,7 @@ export class ConnectorStore {
       // values a catalog entry says aren't secret (a folder, a team ID, a URL) are shown as they are
       env: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, plain.has(k) ? v : maskSecret(v)])),
       enabled: !!r.enabled,
+      auth: r.kind === "mcp-http" ? this.auth.status(r.id) : null,
       agentIds: this.agentIds(r.id),
       createdBy: r.created_by,
       createdAt: r.created_at,
@@ -173,6 +200,9 @@ export class ConnectorStore {
             // a header whose only value was optional and left empty isn't sent
             .filter(([, v]) => !/\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(v) && v.replace(/^Bearer\s*/i, "").trim() !== ""),
         );
+        // signed in: the access token goes along, unless someone set their own Authorization header
+        const token = this.auth.accessToken(r.id);
+        if (token && !Object.keys(headers).some((k) => k.toLowerCase() === "authorization")) headers.Authorization = `Bearer ${token}`;
         return { name, kind: r.kind, url: fillTemplate(r.url ?? "", env), headers };
       }
       return { name, kind: r.kind, env };

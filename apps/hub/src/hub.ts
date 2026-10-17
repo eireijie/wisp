@@ -7,6 +7,7 @@ import { Apns } from "./apns.ts";
 import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
 import { Push } from "./push.ts";
+import { Marketplace } from "./marketplace.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
@@ -54,6 +55,7 @@ export class Hub {
   readonly routines: Routines;
   readonly background: Background;
   readonly push: Push;
+  readonly marketplace: Marketplace;
   readonly updates: Updates;
   readonly connectors: ConnectorStore;
   readonly skills: SkillStore;
@@ -77,6 +79,7 @@ export class Hub {
     this.routines = new Routines(this);
     this.background = new Background(this);
     this.push = new Push(this);
+    this.marketplace = new Marketplace(this);
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
@@ -479,7 +482,9 @@ export class Hub {
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
     if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } }, this.audience(run.channelId));
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
-      (prompt) => {
+      async (prompt) => {
+        // sign-ins to remote connectors that are about to expire are refreshed first
+        await this.connectors.prepare(agent.id).catch(() => {});
         // looked up after the prompt so a task handed out in this same tick is linked to its thread by now
         const workspace = this.workspaceFor(run);
         // a task the agent starts on is being worked on
