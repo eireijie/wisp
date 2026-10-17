@@ -17,7 +17,9 @@ export function parseNote(path: string, raw: string): ParsedNote {
     body = raw.slice(fm[0].length);
   }
   const links = new Set<string>();
-  for (const m of body.matchAll(/!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g)) {
+  // a [[link]] shown as code (`[[Note name]]` in a how-to) isn't a link
+  const prose = body.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
+  for (const m of prose.matchAll(/!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g)) {
     links.add(normalizeTarget(m[1]));
   }
   const tags = new Set<string>();
@@ -46,7 +48,8 @@ function parseFrontmatter(src: string): ParsedNote["frontmatter"] {
     if (value === "") {
       out[key] = [];
       listKey = key;
-    } else if (value.startsWith("[") && value.endsWith("]")) {
+    } else if (value.startsWith("[") && value.endsWith("]") && !/^\[\[[^\]]*\]\]$/.test(value)) {
+      // a list, but not a single [[link]]
       out[key] = value.slice(1, -1).split(",").map((s) => unquote(s.trim())).filter(Boolean);
       listKey = null;
     } else {

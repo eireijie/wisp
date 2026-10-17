@@ -41,6 +41,14 @@
   --status-working: #2563eb;
   --status-paused: #f59e0b;
   --status-error: #dc2626;
+  /* memory folders, in the graph and beside note names: one hue each, the same in every theme */
+  --kind-shared: #0f9d76;
+  --kind-people: #2f6fe0;
+  --kind-agents: #d9622b;
+  --kind-teams: #9b51e0;
+  --kind-groups: #c58a06;
+  --kind-other: #6b7a88;
+  --kind-ghost: oklch(0.75 0 0);
   color-scheme: light;
 }
 
@@ -64,6 +72,13 @@
   --info: #60a5fa;
   --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.4);
   --ghost-shadow: oklch(0 0 0 / 0.42);
+  --kind-shared: #3ccf9f;
+  --kind-people: #6aa2ff;
+  --kind-agents: #ff8a52;
+  --kind-teams: #c08cff;
+  --kind-groups: #f2c14b;
+  --kind-other: #97a6b4;
+  --kind-ghost: oklch(0.45 0 0);
   color-scheme: dark;
 }
 

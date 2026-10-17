@@ -24,6 +24,13 @@ describe("parseNote", () => {
     expect(n.links.sort()).toEqual(["beta", "img.png"]);
     expect(n.tags.sort()).toEqual(["todo", "x", "y"]);
   });
+
+  it("reads a [[link]] property as a link, and ignores links shown as code", () => {
+    const n = parseNote("shared/a.md", "---\nowner: [[Maya Chen]]\npeople: [\"[[A]]\", \"[[B]]\"]\n---\nSee [[Real]], not `[[Example]]` or\n```\n[[Fenced]]\n```\n");
+    expect(n.frontmatter.owner).toBe("[[Maya Chen]]");
+    expect(n.frontmatter.people).toEqual(["[[A]]", "[[B]]"]);
+    expect(n.links).toEqual(["real"]);
+  });
 });
 
 describe("Vault", () => {

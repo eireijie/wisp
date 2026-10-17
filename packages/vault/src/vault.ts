@@ -94,6 +94,9 @@ export class Vault {
       CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(path UNINDEXED, title, body);
       CREATE TABLE IF NOT EXISTS vault_authors (hash TEXT PRIMARY KEY, name TEXT NOT NULL);
     `);
+    // front matter `type:` (person, project, decision…), added after the first release
+    const cols = this.db.prepare("PRAGMA table_info(vault_notes)").all() as { name: string }[];
+    if (!cols.some((c) => c.name === "type")) this.db.exec("ALTER TABLE vault_notes ADD COLUMN type TEXT");
     try {
       await fs.access(path.join(this.root, ".git"));
     } catch {
@@ -215,6 +218,43 @@ export class Vault {
     const keys = [normalizeTarget(p), normalizeTarget(basename(p))];
     const rows = this.db.prepare("SELECT DISTINCT src FROM vault_links WHERE target IN (?, ?) ORDER BY src").all(...keys) as { src: string }[];
     return rows.map((r) => r.src).filter((s) => s !== p && (!allow || allow(s)));
+  }
+
+  /**
+   * The link graph of the notes `allow` accepts: a node per note and an edge per resolved
+   * [[link]] between two of them. Links resolve among those notes only, the way the Memory page
+   * does, so a hidden note never shows up; links that resolve to nothing become ghost nodes.
+   */
+  graph(allow?: (path: string) => boolean): VaultGraph {
+    const rows = (this.db.prepare("SELECT path, title, tags, updated_at, type FROM vault_notes ORDER BY path").all() as (Row & { type: string | null })[]).filter((r) => !allow || allow(r.path));
+    const paths = rows.map((r) => r.path);
+    const resolveIn = linkResolver(paths);
+    const linkRows = this.db.prepare("SELECT src, target FROM vault_links").all() as { src: string; target: string }[];
+    const visible = new Set(paths);
+    const edges = new Map<string, GraphEdge>();
+    const ghosts = new Map<string, GraphNode>();
+    for (const l of linkRows) {
+      if (!visible.has(l.src)) continue;
+      // attachments (![[photo.png]]) aren't notes
+      if (/\.(png|jpe?g|gif|svg|webp|pdf|mp[34]|mov|wav|canvas)$/i.test(l.target)) continue;
+      let to = resolveIn(l.target, l.src);
+      if (!to) {
+        to = `ghost:${l.target}`;
+        if (!ghosts.has(to)) ghosts.set(to, { id: to, path: null, title: l.target.split("/").pop()!, kind: "ghost", type: null, tags: [], updatedAt: null, links: 0, inbound: 0 });
+      }
+      if (to !== l.src) edges.set(`${l.src}\n${to}`, { source: l.src, target: to });
+    }
+    const nodes: GraphNode[] = rows.map((r) => ({ id: r.path, path: r.path, title: r.title, kind: folderKind(r.path), type: r.type, tags: JSON.parse(r.tags), updatedAt: r.updated_at, links: 0, inbound: 0 }));
+    const byId = new Map([...nodes, ...ghosts.values()].map((n) => [n.id, n]));
+    const neighbours = new Map<string, Set<string>>();
+    const near = (a: string, b: string) => neighbours.set(a, (neighbours.get(a) ?? new Set()).add(b));
+    for (const e of edges.values()) {
+      near(e.source, e.target);
+      near(e.target, e.source);
+      byId.get(e.target)!.inbound++;
+    }
+    for (const [id, set] of neighbours) byId.get(id)!.links = set.size;
+    return { nodes: [...nodes, ...ghosts.values()], edges: [...edges.values()] };
   }
 
   /** Resolve a wikilink target to a note path, preferring the same scope folder. */
@@ -526,7 +566,8 @@ export class Vault {
     const parsed = parseNote(p, raw);
     const tx = this.db.transaction(() => {
       this.unindexRows(p);
-      this.db.prepare("INSERT INTO vault_notes (path, title, tags, updated_at) VALUES (?, ?, ?, ?)").run(p, parsed.title, JSON.stringify(parsed.tags), Math.round(updatedAt));
+      const type = typeof parsed.frontmatter.type === "string" ? parsed.frontmatter.type.trim().toLowerCase() || null : null;
+      this.db.prepare("INSERT INTO vault_notes (path, title, tags, updated_at, type) VALUES (?, ?, ?, ?, ?)").run(p, parsed.title, JSON.stringify(parsed.tags), Math.round(updatedAt), type);
       const ins = this.db.prepare("INSERT INTO vault_links (src, target) VALUES (?, ?)");
       for (const l of parsed.links) ins.run(p, l);
       this.db.prepare("INSERT INTO vault_fts (path, title, body) VALUES (?, ?, ?)").run(p, parsed.title, parsed.body);
@@ -605,6 +646,60 @@ export class VaultError extends Error {
 }
 
 type Row = { path: string; title: string; tags: string; updated_at: number };
+
+/** The built-in top folders a note lives under, or "other" for folders people made. */
+export type FolderKind = "people" | "agents" | "teams" | "groups" | "shared" | "other";
+export interface GraphNode {
+  /** the note's path, or "ghost:<target>" for a link to a note that doesn't exist (or that you can't see) */
+  id: string;
+  path: string | null;
+  title: string;
+  kind: FolderKind | "ghost";
+  /** front matter `type:` (person, project, topic, decision, journal, reference), lowercased */
+  type: string | null;
+  tags: string[];
+  updatedAt: number | null;
+  /** how many notes it's linked with, either way */
+  links: number;
+  /** how many notes link to it */
+  inbound: number;
+}
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+export interface VaultGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+const KINDS = new Set(["people", "agents", "teams", "groups", "shared"]);
+export function folderKind(p: string): FolderKind {
+  const top = p.split("/")[0]!.toLowerCase();
+  return p.includes("/") && KINDS.has(top) ? (top as FolderKind) : "other";
+}
+
+/**
+ * Obsidian-style link resolution among `paths`: the exact path, then a note with that name,
+ * preferring one in the linking note's own scope (`shared/`, or `agents/<id>/`, `people/<id>/`…).
+ */
+export function linkResolver(paths: string[]): (target: string, from?: string | null) => string | null {
+  const exact = new Map<string, string>();
+  const byName = new Map<string, string[]>();
+  for (const p of paths) {
+    exact.set(normalizeTarget(p), p);
+    const k = normalizeTarget(basename(p));
+    byName.set(k, [...(byName.get(k) ?? []), p]);
+  }
+  return (target, from) => {
+    const t = normalizeTarget(target);
+    const hit = exact.get(t);
+    if (hit) return hit;
+    const named = byName.get(t) ?? [];
+    const scope = from?.split("/").slice(0, from.startsWith("shared/") ? 1 : 2).join("/");
+    return (scope && named.find((p) => p.startsWith(scope + "/"))) || named[0] || null;
+  };
+}
 
 /** A note's vault path: forward slashes, no leading slash, ending in .md. */
 export function notePath(rel: string): string {

@@ -319,7 +319,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     store.addChannelMember(general.id, { kind: "user", id: user.id });
     await vault.write(
       "shared/Welcome.md",
-      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; Obsidian shows backlinks and a graph of them.\n- Every change is a git commit, so nothing is ever lost.\n`,
+      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; each note lists what links to it, and **Graph** on the Memory page shows how everything connects.\n- Every change is a git commit, so nothing is ever lost.\n`,
       { name: user.name, email: user.email },
       "Create welcome note",
     );
@@ -1380,6 +1380,17 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!viewer) return;
     const check = hub.access.checker(c.workspaceId, viewer);
     return vault.list((p) => atLeast(check(p).level, "read"));
+  });
+
+  /** How notes link to each other, for the Memory graph: only notes this caller (or `?as=`) can read. */
+  app.get("/api/vault/graph", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const as = (req.query as { as?: string }).as;
+    const viewer = as ? viewAs(c, as, reply) : c.viewer;
+    if (!viewer) return;
+    const check = hub.access.checker(c.workspaceId, viewer);
+    return vault.graph((p) => atLeast(check(p).level, "read"));
   });
 
   app.get("/api/vault/note", async (req, reply) => {
