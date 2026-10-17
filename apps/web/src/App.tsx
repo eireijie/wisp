@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users } from "lucide-react";
+import { BookOpen, Bot, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -25,6 +25,7 @@ import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { useOnboarding } from "./onboarding.ts";
 import { BuddyView } from "./views/BuddyView.tsx";
 import { useDesktopAgents } from "./desktop.ts";
+import { useHubUpdated } from "./hubUpdate.ts";
 
 export function App() {
   const [authed, setAuthed] = useState(() => !!getToken());
@@ -161,11 +162,31 @@ function Workspace() {
         </aside>
       )}
       <div className="flex-1 min-w-0 flex flex-col">
+        <UpdatedBanner />
         <main className="flex-1 min-h-0 flex flex-col bg-panel overflow-hidden">{page}</main>
         {showTabs && <TabBar route={route} />}
       </div>
       <CommandPalette />
       {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
+    </div>
+  );
+}
+
+/** The hub was updated while this window was open: offer the new version instead of running the old one. */
+function UpdatedBanner() {
+  const updated = useHubUpdated();
+  const [later, setLater] = useState(false);
+  if (!updated || later) return null;
+  return (
+    <div role="status" className="shrink-0 flex items-center gap-3 px-4 py-2 border-b border-line bg-accent/10 text-sm safe-top">
+      <RefreshCw size={15} className="text-accent-text shrink-0" />
+      <span className="flex-1 min-w-0">Warren was updated. Reload to get the new version.</span>
+      <button className="h-7 px-3 rounded-lg bg-accent text-accent-ink text-xs font-medium shrink-0" onClick={() => location.reload()}>
+        Reload
+      </button>
+      <button className="text-muted hover:text-ink shrink-0" onClick={() => setLater(true)} aria-label="Not now" title="Not now">
+        <X size={15} />
+      </button>
     </div>
   );
 }
