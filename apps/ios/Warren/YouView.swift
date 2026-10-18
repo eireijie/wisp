@@ -52,8 +52,6 @@ struct YouView: View {
               }
             }
           }
-        } footer: {
-          Text("Add agents, devices and memory in Warren on your computer, or in Safari.")
         }
         Section {
           NavigationLink {

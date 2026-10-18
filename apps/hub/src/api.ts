@@ -876,6 +876,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
     await vault.write(soulPath(agent.id), body.soul ?? soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
+    hub.broadcast(c.workspaceId, { type: "agents_changed" });
     return agentView(agent);
   });
 
@@ -910,7 +911,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.nodeId !== undefined && body.nodeId !== agent.nodeId) db.prepare("DELETE FROM tokens WHERE kind = 'agent' AND subject_id = ? AND label LIKE 'harness:%'").run(agent.id);
     // giving an agent a computer means it isn't headless anymore
     if (body.computerId) body.settings = { ...body.settings, headless: false };
-    return agentView(store.updateAgent(agent.id, body)!);
+    const updated = store.updateAgent(agent.id, body)!;
+    hub.broadcast(c.workspaceId, { type: "agents_changed" });
+    return agentView(updated);
   });
 
   app.delete("/api/agents/:id", async (req, reply) => {
@@ -931,6 +934,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     store.removeRulesFor(c.workspaceId, { kind: "agent", id: agent.id });
     store.deleteAgent(agent.id);
     hub.broadcast(c.workspaceId, { type: "tasks_changed" });
+    hub.broadcast(c.workspaceId, { type: "agents_changed" });
     return { ok: true };
   });
 

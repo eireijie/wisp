@@ -45,3 +45,19 @@ targets:
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
+  WarrenTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [WarrenTests]
+    dependencies:
+      - target: Warren
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Warren:
+    build:
+      targets:
+        Warren: all
+    test:
+      targets: [WarrenTests]

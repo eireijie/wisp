@@ -5,6 +5,7 @@ import Security
 struct API {
   var base: URL
   var token: String?
+  var session: URLSession = .shared
 
   struct Failure: LocalizedError {
     var status: Int
@@ -23,6 +24,20 @@ struct API {
   @discardableResult
   func post<B: Encodable>(_ path: String, _ body: B) async throws -> Data {
     try await raw("POST", path, body: body)
+  }
+
+  func patch<T: Decodable, B: Encodable>(_ path: String, _ body: B) async throws -> T {
+    try await send("PATCH", path, body: body)
+  }
+
+  @discardableResult
+  func put<B: Encodable>(_ path: String, _ body: B) async throws -> Data {
+    try await raw("PUT", path, body: body)
+  }
+
+  @discardableResult
+  func delete(_ path: String) async throws -> Data {
+    try await raw("DELETE", path, body: Optional<Empty>.none)
   }
 
   func send<T: Decodable, B: Encodable>(_ method: String, _ path: String, query: [String: String] = [:], body: B?) async throws -> T {
@@ -51,14 +66,14 @@ struct API {
     }
     let data: Data, resp: URLResponse
     do {
-      (data, resp) = try await URLSession.shared.data(for: req)
+      (data, resp) = try await session.data(for: req)
     } catch let e as URLError where e.code != .cancelled {
       throw Failure(status: 0, message: "Couldn't reach Warren at \(base.host() ?? base.absoluteString). \(e.localizedDescription)")
     }
     let http = resp as! HTTPURLResponse
     guard (200..<300).contains(http.statusCode) else {
       let msg = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
-      throw Failure(status: http.statusCode, message: msg.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "Warren said \(http.statusCode)")
+      throw Failure(status: http.statusCode, message: msg ?? "Warren said \(http.statusCode)")
     }
     return (data, http)
   }

@@ -11,6 +11,9 @@ struct ChannelView: View {
   @State private var error: String?
   @State private var loadingEarlier = false
   @State private var noEarlier = false
+  @Environment(\.dismiss) private var dismiss
+
+  private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
 
   private var list: [Message] { store.messages[channel.id] ?? [] }
 
@@ -49,25 +52,43 @@ struct ChannelView: View {
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
-      Composer(placeholder: placeholder) { text in
-        try await store.send(text, in: channel.id)
+      if current.archivedAt != nil {
+        Text("#\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
+      } else {
+        Composer(placeholder: placeholder) { text in
+          try await store.send(text, in: channel.id)
+        }
       }
     }
     .toolbar(.hidden, for: .tabBar)
-    .navigationTitle(store.title(of: channel))
+    .navigationTitle(store.title(of: current))
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      if let agent = store.dmAgent(channel) {
-        ToolbarItem(placement: .principal) {
-          HStack(spacing: 8) {
-            AgentAvatar(agent: agent, size: 24, showStatus: false)
-            VStack(alignment: .leading, spacing: 0) {
-              Text(agent.name).font(.subheadline.weight(.semibold))
-              Text(statusLine(agent)).font(.caption2).foregroundStyle(.secondary)
+      ToolbarItem(placement: .principal) {
+        if let agent = store.dmAgent(current) {
+          NavigationLink {
+            AgentPage(agent: agent)
+          } label: {
+            HStack(spacing: 8) {
+              AgentAvatar(agent: agent, size: 24, showStatus: false)
+              VStack(alignment: .leading, spacing: 0) {
+                Text(agent.name).font(.subheadline.weight(.semibold))
+                Text(statusLine(agent)).font(.caption2).foregroundStyle(.secondary)
+              }
             }
-          }
+          }.buttonStyle(.plain)
+        } else {
+          NavigationLink {
+            ChannelDetails(channel: current)
+          } label: {
+            Label(current.name, systemImage: current.private == true ? "lock" : "number").font(.subheadline.weight(.semibold))
+          }.buttonStyle(.plain)
         }
       }
+    }
+    .onChange(of: store.channels) { old, new in
+      if old.contains(where: { $0.id == channel.id }) && !new.contains(where: { $0.id == channel.id }) { dismiss() }
+      if old.first(where: { $0.id == channel.id })?.joined == true && new.first(where: { $0.id == channel.id })?.joined == false { dismiss() }
     }
     .overlay(alignment: .top) {
       if let error {
@@ -83,8 +104,8 @@ struct ChannelView: View {
   }
 
   private var placeholder: String {
-    if let agent = store.dmAgent(channel) { return "Message \(agent.name)" }
-    return "Message #\(channel.name)"
+    if let agent = store.dmAgent(current) { return "Message \(agent.name)" }
+    return "Message #\(current.name)"
   }
 
   private func statusLine(_ a: Agent) -> String {
@@ -131,7 +152,11 @@ struct ThreadView: View {
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
-      Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+      if store.channels.first(where: { $0.id == ref.channelId })?.archivedAt != nil {
+        Text("This channel is archived").font(.footnote).foregroundStyle(.secondary).padding()
+      } else {
+        Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+      }
     }
     .toolbar(.hidden, for: .tabBar)
     .navigationTitle("Thread")
@@ -179,7 +204,7 @@ struct EmptyChannel: View {
   var body: some View {
     VStack(spacing: 10) {
       if let a = store.dmAgent(channel) {
-        AgentAvatar(agent: a, size: 64, showStatus: false)
+        AgentAvatar(agent: a, size: 64, showStatus: false, interactive: true)
         Text("This is the start of your chat with \(a.name).").font(.subheadline).foregroundStyle(.secondary)
       } else {
         Text("#\(channel.name)").font(.title3.bold())

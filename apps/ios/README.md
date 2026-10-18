@@ -2,12 +2,12 @@
 
 A native SwiftUI app for your Warren hub:
 
-- **Chats**: your agents' DMs and channels with unread counts, live replies, threads, and what each agent is doing while it works ("Reading the vault…").
-- **Agents**: every agent as its ghost, in its own colors, with its status. Tap one to chat.
+- **Chats**: laid out like Warren's sidebar (agents, starred, your sections), with your agents' DMs and channels with unread counts, live replies, threads, and what each agent is doing while it works ("Reading the vault…").
+- **Agents**: every agent as its animated ghost, in the same look as on the computer, with its mood. Add agents, open an agent's page to rename it, change its look, personality, instructions, model or device, or remove it.
 - **Computers**: watch any agent's computer live, **Take control** to tap and type on it, and **Hand back**.
 - **Inbox**: approve or decline what agents ask your OK for, and see which agents need you on their computer.
 
-It connects by **pairing with Warren on your computer**: open **Settings → Mobile → Start pairing** there, scan the QR code with the app (or with the Camera app, which opens Warren), check that both screens show the same six digits, and confirm on the computer. The phone gets a sign-in of its own, kept in the Keychain, which shows under **Settings → Security → Sign-ins** and can be signed out there. There's no address or password to type. Setting up agents, devices and memory still happens in Warren on a computer or in Safari.
+It connects by **pairing with Warren on your computer**: open **Settings → Mobile → Start pairing** there, scan the QR code with the app (or with the Camera app, which opens Warren), check that both screens show the same six digits, and confirm on the computer. The phone gets a sign-in of its own, kept in the Keychain, which shows under **Settings → Security → Sign-ins** and can be signed out there. There's no address or password to type. Create, edit, archive and delete channels and sections from the **+** menu and a channel's details. Devices, memory, tasks, routines and skills still happen in Warren on a computer or in Safari.
 
 The QR code is a `warren://pair` link with the pairing's one-time secret and the addresses the phone might reach the hub at (the address the page was opened at, then the computer's Wi-Fi and Tailscale addresses); the app tries them in order. On a device without a camera (like the Simulator), click **Copy pairing link** on the computer and choose **Paste a pairing link instead**. In the Simulator you can also open it directly: `xcrun simctl openurl booted 'warren://pair?...'`.
 

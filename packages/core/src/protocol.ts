@@ -187,6 +187,7 @@ export type ClientEvent =
   | { type: "reactions"; messageId: string; channelId: string; threadId: string | null; reactions: import("./types.ts").Reaction[] }
   | { type: "sections_changed" }
   | { type: "channels_changed" }
+  | { type: "agents_changed" }
   | { type: "teams_changed" }
   | { type: "lead_changed" }
   | { type: "discussion"; discussion: import("./types.ts").Discussion }

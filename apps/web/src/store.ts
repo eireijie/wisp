@@ -321,6 +321,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => applyReactions(s, e.messageId, e.reactions));
     } else if (e.type === "channels_changed") {
       get().refreshChannels();
+    } else if (e.type === "agents_changed") {
+      get().refreshAgents();
     } else if (e.type === "sections_changed") {
       get().refreshSections();
     } else if (e.type === "teams_changed") {

@@ -14,7 +14,17 @@ final class Store {
   var role: String = "member"
   var workspace: Workspace?
   var channels: [Channel] = []
-  var agents: [Agent] = []
+  var sections: [ChannelSection] = []
+  var nodes: [AgentNode] = []
+  var teams: [WorkspaceTeam] = []
+  var simple = false
+  var syncError: String?
+  var channelVersion = 0
+  var memoryVersion = 0
+  var agents: [Agent] = [] {
+    didSet { recordCompletions(previous: oldValue) }
+  }
+  private var completedUntil: [String: Date] = [:]
   var members: [Member] = []
   var computers: [Computer] = []
   var approvals: [Approval] = []
@@ -40,8 +50,8 @@ final class Store {
   private var socketGeneration = 0
   private var retry = 0
 
-  init() {
-    if let hub = Session.hub, let token = Session.token {
+  init(loadSession: Bool = true) {
+    if loadSession, let hub = Session.hub, let token = Session.token {
       api = API(base: hub, token: token)
       phase = .loading
       Task { await load() }
@@ -73,6 +83,7 @@ final class Store {
     socket = nil
     api = nil
     me = nil
+    sections = []; nodes = []; teams = []; syncError = nil
     channels = []; agents = []; members = []; computers = []; approvals = []
     messages = [:]; threads = [:]; activity = [:]; activityChannel = [:]
     route = nil
@@ -89,13 +100,13 @@ final class Store {
       let me: Me = try await api.get("/api/me")
       self.me = me.user
       self.role = me.role ?? "member"
+      self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
       async let ch: [Channel] = api.get("/api/channels")
       async let ag: [Agent] = api.get("/api/agents")
-      async let mem: [Member] = api.get("/api/members")
       channels = try await ch
       agents = try await ag
-      members = (try? await mem) ?? []
+      try await refreshManagement()
       phase = .ready
       connect()
       await refreshComputers()
@@ -105,11 +116,16 @@ final class Store {
       signOut()
     } catch {
       if phase != .ready { phase = .failed(error.localizedDescription) }
+      else { syncError = error.localizedDescription }
     }
   }
 
   func refreshChannels() async {
-    if let list: [Channel] = try? await api?.get("/api/channels") { channels = list }
+    do {
+      channels = try await connection().get("/api/channels")
+    } catch {
+      if !Task.isCancelled { syncError = error.localizedDescription }
+    }
   }
 
   func refreshComputers() async {
@@ -141,6 +157,42 @@ final class Store {
     return !older.isEmpty
   }
 
+  /** Offline wins, then approval requests and failures, then current work. */
+  func mood(for agent: Agent?) -> GhostMood {
+    guard let agent else { return .awake }
+    let computer = computers.first { $0.id == agent.computerId }
+    if agent.status == .offline || computer?.paused == true || computer?.status == "offline" { return .asleep }
+    if approvals.contains(where: { $0.agentId == agent.id && $0.status == "pending" }) { return .waiting }
+    if computer?.status == "error" { return .error }
+    if agent.status == .busy { return .working }
+    if let until = completedUntil[agent.id], until > Date() { return .done }
+    return .awake
+  }
+
+  private func recordCompletions(previous: [Agent]) {
+    let statuses = Dictionary(uniqueKeysWithValues: previous.map { ($0.id, $0.status) })
+    completedUntil = completedUntil.filter { id, _ in agents.contains { $0.id == id && $0.status == .online } }
+    for agent in agents where agent.status == .online && statuses[agent.id] == .busy {
+      let until = Date().addingTimeInterval(4)
+      completedUntil[agent.id] = until
+      Task { [weak self] in
+        try? await Task.sleep(for: .seconds(4))
+        guard let self, completedUntil[agent.id] == until else { return }
+        completedUntil[agent.id] = nil
+      }
+    }
+  }
+
+  /** The hub merges settings, so only send the appearance being edited. */
+  func saveLook(_ look: GhostLook, for agent: Agent) async throws {
+    guard let api else { throw API.Failure(status: 0, message: "Connect to Warren to save this look.") }
+    struct Settings: Encodable { var appearance: GhostLook }
+    struct Body: Encodable { var settings: Settings }
+    let updated: Agent = try await api.send("PATCH", "/api/agents/\(agent.id)", body: Body(settings: Settings(appearance: look.resolved)))
+    if let i = agents.firstIndex(where: { $0.id == updated.id }) { agents[i] = updated }
+    else { agents.append(updated) }
+  }
+
   // MARK: actions
 
   func send(_ text: String, in channelId: String, thread: String? = nil) async throws {
@@ -151,12 +203,11 @@ final class Store {
   }
 
   func markRead(_ channelId: String) {
-    guard let i = channels.firstIndex(where: { $0.id == channelId }) else { return }
-    let had = channels[i].unread ?? 0
-    channels[i].unread = 0
-    guard had > 0 else { return }
-    struct Body: Encodable { var at: String }
-    Task { try? await api?.post("/api/channels/\(channelId)/read", Body(at: Wire.now())) }
+    guard channels.contains(where: { $0.id == channelId }) else { return }
+    Task {
+      do { try await readChannel(channelId) }
+      catch { syncError = error.localizedDescription }
+    }
   }
 
   /** The DM with an agent, made on first use. */
@@ -234,7 +285,7 @@ final class Store {
   func title(of ch: Channel) -> String { ch.isDM ? dmAgent(ch)?.name ?? "Direct message" : ch.name }
 
   var pendingApprovals: [Approval] { approvals.filter { $0.status == "pending" } }
-  var unreadTotal: Int { channels.reduce(0) { $0 + ($1.unread ?? 0) } }
+  var unreadTotal: Int { channels.reduce(0) { $0 + $1.badge } }
   /** agents waiting on you: asking for an OK, or for help on their computer */
   var needsYouCount: Int { pendingApprovals.count + computers.filter { $0.help != nil }.count }
 
@@ -287,6 +338,15 @@ final class Store {
     connect()
     Task {
       await refreshChannels()
+      do {
+        // Simple/Advanced and role can change on the computer while the phone sleeps
+        let me: Me = try await connection().get("/api/me")
+        simple = me.prefs?.experience == "simple"
+        role = me.role ?? "member"
+        try await refreshAgents()
+        try await refreshManagement()
+        syncError = nil
+      } catch { syncError = error.localizedDescription }
       if let open = openChannel { try? await loadMessages(open) }
       await refreshComputers()
       await refreshApprovals()
@@ -307,13 +367,18 @@ final class Store {
   private struct RemovedEvent: Decodable { var computerId: String }
   private struct ApprovalEvent: Decodable { var approval: Approval }
 
-  private func handle(_ data: Data) {
+  func handle(_ data: Data) {
     guard let env = try? Wire.decoder.decode(Envelope.self, from: data) else { return }
     let d = Wire.decoder
     switch env.type {
     case "ready":
       connected = true
       retry = 0
+      Task {
+        do { try await refreshAgents(); try await refreshManagement() }
+        catch { syncError = error.localizedDescription }
+        await refreshChannels()
+      }
     case "message":
       guard let e = try? d.decode(MessageEvent.self, from: data) else { return }
       insert(e.message)
@@ -323,12 +388,16 @@ final class Store {
       }
       let mine = e.message.author == Actor(kind: .user, id: me?.id ?? "") || e.message.author.id == "system"
       if !mine, let i = channels.firstIndex(where: { $0.id == e.message.channelId }) {
-        if openChannel == e.message.channelId { markRead(e.message.channelId) } else if e.message.threadId == nil { channels[i].unread = (channels[i].unread ?? 0) + 1 }
+        if openChannel == e.message.channelId { markRead(e.message.channelId) } else if e.message.threadId == nil && !channels[i].isMuted { channels[i].unread = (channels[i].unread ?? 0) + 1 }
       } else if !channels.contains(where: { $0.id == e.message.channelId }) {
         Task { await refreshChannels() }
       }
     case "agent_status":
-      guard let e = try? d.decode(StatusEvent.self, from: data), let i = agents.firstIndex(where: { $0.id == e.agentId }) else { return }
+      guard let e = try? d.decode(StatusEvent.self, from: data) else { return }
+      guard let i = agents.firstIndex(where: { $0.id == e.agentId }) else {
+        Task { do { try await refreshAgents() } catch { syncError = error.localizedDescription } }
+        return
+      }
       agents[i].status = e.status
       if e.status != .busy {
         activity[e.agentId] = nil
@@ -347,7 +416,16 @@ final class Store {
       guard let e = try? d.decode(ReactionsEvent.self, from: data) else { return }
       update(e.messageId, channel: e.channelId, thread: e.threadId) { $0.reactions = e.reactions }
     case "channels_changed":
+      channelVersion += 1
       Task { await refreshChannels() }
+    case "sections_changed":
+      Task { do { try await refreshSections() } catch { syncError = error.localizedDescription } }
+    case "agent_created", "agent_updated", "agent_removed", "agents_changed", "tasks_changed":
+      Task { do { try await refreshAgents() } catch { syncError = error.localizedDescription } }
+    case "teams_changed":
+      Task { do { try await refreshManagement() } catch { syncError = error.localizedDescription } }
+    case "memory_changed":
+      memoryVersion += 1
     case "computer":
       if let e = try? d.decode(ComputerEvent.self, from: data) { upsert(e.computer) }
     case "computer_removed":

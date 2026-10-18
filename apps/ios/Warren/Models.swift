@@ -22,6 +22,8 @@ struct Workspace: Codable, Hashable {
 }
 
 struct Me: Codable {
+  struct Prefs: Codable { var experience: String? }
+  var prefs: Prefs?
   var kind: String
   var user: User?
   var role: String?
@@ -42,12 +44,25 @@ struct GhostLook: Codable, Hashable {
   var eyes: String?
   var mouth: String?
   var cheeks: Bool?
+  var shape: String?
+  var glow: Bool?
+  var hat: String?
+  var accessory: String?
+  var motion: String?
 }
 
 struct Agent: Codable, Identifiable, Hashable {
   struct Settings: Codable, Hashable {
     var appearance: GhostLook?
     var description: String?
+    var effort: String?
+    var fast: Bool?
+    var soulLocked: Bool?
+    var anyoneCanAsk: Bool?
+    var role: String?
+    var roleNotes: String?
+    var runIn: String?
+    var headless: Bool?
   }
   enum Status: String, Codable { case online, busy, offline }
 
@@ -61,6 +76,7 @@ struct Agent: Codable, Identifiable, Hashable {
   var groups: [String]?
   var settings: Settings?
   var status: Status
+  var instructions: String?
 }
 
 struct Channel: Codable, Identifiable, Hashable {
@@ -75,7 +91,21 @@ struct Channel: Codable, Identifiable, Hashable {
   var lastReadAt: String?
   var createdAt: String
 
+  struct Settings: Codable, Hashable {
+    var defaultAgentId: String?
+    var replyInThread: Bool?
+    var instructions: String?
+  }
+  var `private`: Bool?
+  var archivedAt: String?
+  var settings: Settings?
+  var notify: String?
+  var starred: Bool?
+  var pinnedIds: [String]?
+
   var isDM: Bool { kind == "dm" }
+  var isMuted: Bool { notify == "mute" }
+  var badge: Int { isMuted || archivedAt != nil || joined == false ? 0 : unread ?? 0 }
 }
 
 struct Reaction: Codable, Hashable {
@@ -139,6 +169,7 @@ struct Computer: Codable, Identifiable, Hashable {
   var nodeId: String?
   var status: String // ready | starting | stopped | offline | error
   var statusText: String
+  var paused: Bool?
   var controller: Controller?
   var help: Help?
 
