@@ -208,6 +208,17 @@ CREATE TABLE IF NOT EXISTS vault_tokens (
   id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   workspace_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, last_used TEXT
 );
+CREATE TABLE IF NOT EXISTS channel_prefs (
+  user_id TEXT NOT NULL, channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  notify TEXT NOT NULL DEFAULT 'default', starred INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, channel_id)
+);
+CREATE TABLE IF NOT EXISTS pins (
+  channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  pinned_by_kind TEXT NOT NULL, pinned_by_id TEXT NOT NULL, created_at TEXT NOT NULL,
+  PRIMARY KEY (channel_id, message_id)
+);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL
@@ -219,6 +230,9 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["agents", "settings_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["nodes", "catalog_json", "TEXT NOT NULL DEFAULT '[]'"],
   ["channels", "section_id", "TEXT"],
+  ["channels", "private", "INTEGER NOT NULL DEFAULT 0"],
+  ["channels", "archived_at", "TEXT"],
+  ["channels", "settings_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["runs", "usage_json", "TEXT"],
   ["runs", "discussion_id", "TEXT"],
   ["runs", "phase", "TEXT"],
@@ -252,6 +266,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["approvals", "loan_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
+  ["messages", "edited_at", "TEXT"],
+  ["messages", "deleted_at", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {

@@ -122,3 +122,194 @@ describe("deleting channels", () => {
     expect(res.data.error).toMatch(/team web/);
   });
 });
+
+describe("who answers in a channel", () => {
+  const post = async (channelId: string, body: string, threadId?: string, token = owner) => (await api("POST", `/api/channels/${channelId}/messages`, { body, threadId }, token)).data;
+  let nova: any;
+  beforeAll(async () => {
+    nova = (await api("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom" })).data;
+  });
+
+  it("only wakes @mentioned agents until the channel has a default agent", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "support" })).data;
+    expect(ch.settings).toEqual({ defaultAgentId: null, replyInThread: false, instructions: "" });
+    expect(hub.targets(await post(ch.id, "anyone around?"), ch.workspaceId)).toEqual([]);
+
+    const set = await api("PATCH", `/api/channels/${ch.id}`, { settings: { defaultAgentId: atlas.id, instructions: "Keep it short." } });
+    expect(set.status).toBe(200);
+    expect(set.data.settings).toEqual({ defaultAgentId: atlas.id, replyInThread: false, instructions: "Keep it short." });
+    // the default agent joins the channel it answers in
+    expect((await api<any[]>("GET", `/api/channels/${ch.id}/members`)).data.some((m) => m.id === atlas.id)).toBe(true);
+
+    expect(hub.targets(await post(ch.id, "anyone around?"), ch.workspaceId)).toEqual([atlas.id]);
+    // an @mention of someone else goes to them instead
+    expect(hub.targets(await post(ch.id, "@nova can you look?"), ch.workspaceId)).toEqual([nova.id]);
+
+    // and the agent hears the channel's notes
+    const msg = await post(ch.id, "@atlas hi");
+    const prompt = await hub.buildPrompt(atlas.id, ch.id, null, msg.id);
+    expect(prompt).toContain("## This channel");
+    expect(prompt).toContain("Keep it short.");
+
+    // removing the agent from the channel stops it answering there
+    await api("DELETE", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
+    expect((await channelNamed("support")).settings.defaultAgentId).toBeNull();
+  });
+
+  it("rejects an agent from somewhere else", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "elsewhere" })).data;
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { defaultAgentId: "agt_nope" } })).status).toBe(400);
+  });
+
+  it("sends a plain reply in a thread to the agent already in it", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "threads" })).data;
+    const root = await post(ch.id, "@nova draft the release notes");
+    // nobody answered yet: the agent asked at the start hears the follow-up
+    expect(hub.targets(await post(ch.id, "and keep them short", root.id), ch.workspaceId)).toEqual([nova.id]);
+    // once another agent speaks there, it's that one
+    hub.postMessage({ channelId: ch.id, threadId: root.id, author: { kind: "agent", id: atlas.id }, body: "I'll take it", route: false });
+    expect(hub.targets(await post(ch.id, "thanks, go ahead", root.id), ch.workspaceId)).toEqual([atlas.id]);
+  });
+
+  it("creates a channel with members, a default agent and threaded replies", async () => {
+    const res = await api("POST", "/api/channels", { name: "ops-team", private: true, settings: { defaultAgentId: nova.id, replyInThread: true }, members: [{ kind: "user", id: sam.id }] });
+    expect(res.status).toBe(200);
+    expect(res.data.private).toBe(true);
+    const members = (await api<any[]>("GET", `/api/channels/${res.data.id}/members`)).data.map((m) => m.name);
+    expect(members).toEqual(["Sam", "Yug", "Nova"]);
+    expect((await api("POST", "/api/channels", { name: "ops-team-2", members: [{ kind: "agent", id: "agt_nope" }] })).status).toBe(400);
+  });
+});
+
+describe("private channels", () => {
+  it("are only seen by their members (and owners)", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "secret", private: true })).data;
+    const samToken = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
+    const visible = async (token: string) => (await api<any[]>("GET", "/api/channels", undefined, token)).data.some((c) => c.id === ch.id);
+    expect(await visible(owner)).toBe(true);
+    expect(await visible(samToken)).toBe(false);
+    expect((await api("GET", `/api/channels/${ch.id}/messages`, undefined, samToken)).status).toBe(404);
+    expect((await api("POST", `/api/channels/${ch.id}/join`, undefined, samToken)).status).toBe(404);
+    await api("PUT", `/api/channels/${ch.id}/members/user/${sam.id}`);
+    expect(await visible(samToken)).toBe(true);
+  });
+
+  it("can't be #general or a team's channel", async () => {
+    const general = await channelNamed("general");
+    expect((await api("PATCH", `/api/channels/${general.id}`, { private: true })).status).toBe(409);
+    expect((await api("PATCH", `/api/channels/${general.id}`, { name: "everyone" })).status).toBe(409);
+  });
+});
+
+describe("archiving channels", () => {
+  it("makes a channel read-only and brings it back", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "old-launch", settings: { defaultAgentId: atlas.id } })).data;
+    const archived = await api("POST", `/api/channels/${ch.id}/archive`, { archived: true });
+    expect(archived.status).toBe(200);
+    expect(archived.data.archivedAt).toBeTruthy();
+    expect((await api("POST", `/api/channels/${ch.id}/messages`, { body: "hello?" })).status).toBe(409);
+    // still listed, so it can be found and brought back
+    expect((await channelNamed("old-launch")).archivedAt).toBeTruthy();
+    const back = await api("POST", `/api/channels/${ch.id}/archive`, { archived: false });
+    expect(back.data.archivedAt).toBeNull();
+    expect((await api("POST", `/api/channels/${ch.id}/messages`, { body: "hello again" })).status).toBe(200);
+  });
+
+  it("keeps #general and guests out", async () => {
+    const general = await channelNamed("general");
+    expect((await api("POST", `/api/channels/${general.id}/archive`, {})).status).toBe(409);
+    const ch = await channelNamed("launch");
+    expect((await api("POST", `/api/channels/${ch.id}/archive`, {}, guest)).status).toBe(403);
+  });
+});
+
+describe("your own channel settings and pins", () => {
+  it("stars and mutes a channel just for you", async () => {
+    const ch = await channelNamed("general");
+    expect(ch).toMatchObject({ notify: "default", starred: false, pinnedIds: [] });
+    expect((await api("PUT", `/api/channels/${ch.id}/prefs`, { starred: true, notify: "mute" })).status).toBe(200);
+    expect(await channelNamed("general")).toMatchObject({ notify: "mute", starred: true });
+    expect((await api("PUT", `/api/channels/${ch.id}/prefs`, { notify: "loud" })).status).toBe(400);
+    expect(hub.push.recipients({ author: { kind: "agent", id: atlas.id }, channelId: ch.id, parts: [] } as any, { workspaceId: ch.workspaceId, kind: "channel" }, me.id)).toEqual([]);
+    await api("PUT", `/api/channels/${ch.id}/prefs`, { notify: "default" });
+    expect(hub.push.recipients({ author: { kind: "agent", id: atlas.id }, channelId: ch.id, parts: [] } as any, { workspaceId: ch.workspaceId, kind: "channel" }, me.id)).toEqual([me.id]);
+  });
+
+  it("pins and unpins messages", async () => {
+    const ch = await channelNamed("general");
+    const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "The launch doc is in shared/launch.md" })).data;
+    expect((await api("PUT", `/api/messages/${msg.id}/pin`)).data).toEqual({ ok: true, pinned: true });
+    expect((await channelNamed("general")).pinnedIds).toEqual([msg.id]);
+    const pins = (await api<any[]>("GET", `/api/channels/${ch.id}/pins`)).data;
+    expect(pins.map((p) => p.message.body)).toEqual(["The launch doc is in shared/launch.md"]);
+    expect((await api("PUT", `/api/messages/${msg.id}/pin`, undefined, guest)).status).toBe(403);
+    await api("DELETE", `/api/messages/${msg.id}/pin`);
+    expect((await channelNamed("general")).pinnedIds).toEqual([]);
+  });
+});
+
+describe("editing and deleting messages", () => {
+  const runCount = () => (hub.store.db.prepare("SELECT COUNT(*) AS n FROM runs").get() as { n: number }).n;
+  let samToken: string;
+  beforeAll(async () => {
+    samToken = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
+  });
+
+  it("lets the author fix a message without asking agents again", async () => {
+    const ch = await channelNamed("general");
+    const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "teh plan" })).data;
+    const runs = runCount();
+    const edited = await api("PATCH", `/api/messages/${msg.id}`, { body: "@atlas the plan" });
+    expect(edited.status).toBe(200);
+    expect(edited.data).toMatchObject({ id: msg.id, body: "@atlas the plan" });
+    expect(edited.data.editedAt).toBeTruthy();
+    expect(runCount()).toBe(runs);
+    const listed = (await api("GET", `/api/channels/${ch.id}/messages`)).data.messages.find((m: any) => m.id === msg.id);
+    expect(listed.editedAt).toBe(edited.data.editedAt);
+    expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "  " })).status).toBe(400);
+  });
+
+  it("only lets the author edit, and the author or an owner delete", async () => {
+    const ch = await channelNamed("general");
+    const mine = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "owner's note" })).data;
+    const sams = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "sam's note" }, samToken)).data;
+    expect((await api("PATCH", `/api/messages/${mine.id}`, { body: "hijacked" }, samToken)).status).toBe(403);
+    expect((await api("DELETE", `/api/messages/${mine.id}`, undefined, samToken)).status).toBe(403);
+    // owners can tidy up, but can't put words in someone's mouth
+    expect((await api("PATCH", `/api/messages/${sams.id}`, { body: "edited by owner" })).status).toBe(403);
+    expect((await api("DELETE", `/api/messages/${sams.id}`)).data).toEqual({ ok: true, kept: false });
+    expect((await api("DELETE", `/api/messages/${mine.id}`)).data).toEqual({ ok: true, kept: false });
+    const ids = (await api("GET", `/api/channels/${ch.id}/messages`)).data.messages.map((m: any) => m.id);
+    expect(ids).not.toContain(mine.id);
+    expect(ids).not.toContain(sams.id);
+    expect((await api("DELETE", `/api/messages/${mine.id}`)).status).toBe(404);
+  });
+
+  it("keeps a deleted thread root while it has replies", async () => {
+    const ch = await channelNamed("general");
+    const root = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "release notes?" })).data;
+    const reply = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "on it", threadId: root.id }, samToken)).data;
+    await api("PUT", `/api/messages/${root.id}/pin`);
+    expect((await api("DELETE", `/api/messages/${root.id}`)).data).toEqual({ ok: true, kept: true });
+    const top = (await api("GET", `/api/channels/${ch.id}/messages`)).data;
+    const blank = top.messages.find((m: any) => m.id === root.id);
+    expect(blank).toMatchObject({ body: "", parts: [] });
+    expect(blank.deletedAt).toBeTruthy();
+    expect(top.replyCounts[root.id]).toBe(1);
+    expect((await channelNamed("general")).pinnedIds).not.toContain(root.id);
+    expect((await api("GET", `/api/channels/${ch.id}/messages?thread=${root.id}`)).data.messages.map((m: any) => m.body)).toEqual(["", "on it"]);
+    // can't edit or delete it twice
+    expect((await api("PATCH", `/api/messages/${root.id}`, { body: "back" })).status).toBe(404);
+    // once the last reply goes, so does the root
+    await api("DELETE", `/api/messages/${reply.id}`, undefined, samToken);
+    expect((await api("GET", `/api/channels/${ch.id}/messages`)).data.messages.some((m: any) => m.id === root.id)).toBe(false);
+  });
+
+  it("refuses in archived channels", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "frozen" })).data;
+    const msg = (await api("POST", `/api/channels/${ch.id}/messages`, { body: "last words" })).data;
+    await api("POST", `/api/channels/${ch.id}/archive`, { archived: true });
+    expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "new words" })).status).toBe(409);
+    expect((await api("DELETE", `/api/messages/${msg.id}`)).status).toBe(409);
+  });
+});

@@ -72,7 +72,7 @@ export function ShopHeader({ title, onBack, action }: { title: string; onBack?: 
           <ChevronLeft size={22} />
         </button>
       )}
-      <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">{title}</h1>
+      <h1 className="text-lg font-bold tracking-tight flex-1 truncate">{title}</h1>
       {action}
     </header>
   );

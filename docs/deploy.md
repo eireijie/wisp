@@ -30,6 +30,57 @@ Data is stored in `/data` in the container (`./data` with the compose file):
 
 Back up the whole folder, and the memory folder too if you moved it. The vault is a normal git repo, so you can also back it up with `git`, or use it from another computer with [Obsidian](#memory-and-obsidian).
 
+## Run Warren in the cloud
+
+To keep Warren running when your computers are off, put it on a server you rent. The Warren project doesn't host anything or take payment for it. The server is in **your own** cloud account, and the provider bills you directly.
+
+### From the desktop app (Hetzner)
+
+On first run (or **Create or Join Another Server…** in the menu bar), choose **Create one in your cloud account**:
+
+1. In the [Hetzner Console](https://console.hetzner.com), open a project, go to **Security → API tokens → Generate API token**, choose **Read & Write**, and paste it into Warren.
+2. Pick a location and a size. The prices come straight from Hetzner's API each time, per month, including the IPv4 address. Hetzner bills by the hour, up to that monthly price. Warren suggests the cheapest size with 4 GB of memory, which fits the hub plus a couple of agent computers.
+3. Enter your name, email and password for the new Warren, then **Create server**.
+
+The app creates an Ubuntu 24.04 server named `warren-xxxxxx` (labelled `managed-by=warren`) with [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) as its first-boot script. It waits until Warren answers over HTTPS (usually 3–5 minutes), makes your account, and opens it, signed in. If the server doesn't come up in time, the app offers to delete it.
+
+**Where the token goes:** only to `api.hetzner.cloud`. It's held in the setup window's memory while the server is created and is never written to disk. It's gone once the window moves on to your Warren. The app keeps only which server it made (id, name, IP) in its `desktop.json`. You can delete the token in Hetzner afterwards. Warren doesn't need it again.
+
+**To stop paying,** delete the server in the Hetzner Console. Back up `/opt/warren/data` first if you want to keep anything.
+
+### What the server runs
+
+[`docker/cloud-init.yaml`](../docker/cloud-init.yaml) installs Docker and runs two containers from `/opt/warren/compose.yaml`: the hub (`ghcr.io/eireijie/warren`, data in `/opt/warren/data`) and [Caddy](https://caddyserver.com) on ports 80 and 443. HTTPS works without a domain:
+
+- `https://<server IP>`, with a Let's Encrypt certificate for the IP address itself. These come only on Let's Encrypt's six-day "shortlived" profile, and Caddy renews them automatically.
+- `https://<ip-with-dashes>.sslip.io` as a second address, for example `https://203-0-113-7.sslip.io`. [sslip.io](https://sslip.io) answers any such name with the IP inside it. All sslip.io names share Let's Encrypt's weekly limit, so it's only the fallback.
+
+The address is in `/opt/warren/url` and in the login message. The hub image is pulled again every night (`/etc/cron.daily/warren-update`), so the server keeps itself up to date. To use your own domain, point it at the server and add it as another site in `/opt/warren/Caddyfile`, then run `docker compose restart caddy`.
+
+**Nobody else can claim it.** A brand-new hub lets the first visitor make the owner account, and a public IP is found by scanners within minutes. So the app puts a random setup key in the script. Until the first account exists, Caddy refuses `POST /api/setup` without that key, and only the app has it. If the app is closed before it finishes, the key is in `/opt/warren/setup-key` on the server:
+
+```bash
+curl -X POST https://<server IP>/api/setup -H "X-Warren-Setup-Key: $(cat /opt/warren/setup-key)" \
+  -H "content-type: application/json" -d '{"name":"You","email":"you@example.com","password":"at least 8 characters"}'
+```
+
+### By hand, at any provider
+
+Paste [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) into the "user data" or "cloud config" box when you create an Ubuntu 24.04 or Debian server: Hetzner, DigitalOcean, Vultr, Linode, OVH and so on. Left as it is, with the placeholder key, there's no setup key, so open `https://<server IP>` and make your account straight away.
+
+### Why these providers and not others
+
+| | Hetzner Cloud | DigitalOcean |
+| --- | --- | --- |
+| In the app | Yes: paste an API token | Not yet. Use the script by hand |
+| Smallest size that fits | 2 vCPU / 4 GB shared (CX23, or CAX11 on Arm), a few euros a month. Hetzner changed its prices twice in 2026, so the app shows them live from the API | A 2 GB Basic Droplet, roughly twice Hetzner's price |
+| API | `POST /v1/servers` with `user_data` (up to 32 KiB) | `POST /v2/droplets` with `user_data` (up to 64 KiB) |
+| Connecting without a token | No OAuth for third-party apps | OAuth: a "Connect DigitalOcean" button would work once the Warren project registers an OAuth app. Its docs now describe PKCE for desktop apps, but recent reports say the token exchange still wants a client secret. Needs testing before we build on it |
+
+Both give you a whole virtual machine, so Docker runs normally. That's all agent computers need: on a Linux device they're Docker containers from `docker/computer`, with no nested virtualization. To run agents on the cloud server itself, connect it as a device (`curl -fsSL <your Warren>/install.sh | bash` there, then sign in to your agent CLIs).
+
+Platforms like Railway or Render run *your container* but not Docker *inside* it, so the hub would run there but agent computers couldn't. They also need a paid volume for the database and vault. A plain VPS is simpler and cheaper.
+
 ## Memory and Obsidian
 
 Memory is a folder of markdown notes in a git repository. Obsidian is where people browse and edit it; Warren's Memory page is for search, Activity and permissions.
@@ -191,6 +242,8 @@ The restart works the same under systemd, launchd, Task Scheduler or a plain ter
 A hub in Docker can't update itself: pull the new image and recreate the container (`docker compose pull && docker compose up -d`, or `docker pull ghcr.io/eireijie/warren` and `docker run` again with the same volume).
 
 ## Reaching it from your phone
+
+The Warren apps for iPhone and Android pair with your hub by QR code: in Warren on a computer, open **Settings → Mobile → Start pairing** and scan the code with the app. The code carries the address you opened Warren at plus the hub machine's Wi-Fi and Tailscale addresses, and the phone uses the first one it can reach. So on the same Wi-Fi it just works; away from home, the phone needs one of the ways below. Open Warren at that address (say your `ts.net` name) before you pair, so the phone gets it too.
 
 The PWA needs HTTPS to install on iPhone and to use notifications. Pick one:
 

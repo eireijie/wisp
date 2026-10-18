@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Home, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Search, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
+import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -144,7 +144,7 @@ function Workspace() {
       case "tasks":
         return <TasksView onBack={phone ? toYou : undefined} />;
       case "computers":
-        return <ComputersView computerId={route.computerId} teach={route.teach ?? null} onBack={phone ? toYou : undefined} />;
+        return <ComputersView computerId={route.computerId} teach={route.teach ?? null} />;
       case "nodes":
         return <NodesView onBack={phone ? toYou : undefined} />;
       case "settings":
@@ -167,8 +167,11 @@ function Workspace() {
       )}
       <div className="flex-1 min-w-0 flex flex-col">
         <UpdatedBanner />
-        <main className="flex-1 min-h-0 flex flex-col bg-panel overflow-hidden">{page}</main>
-        {showTabs && <TabBar route={route} />}
+        <div className="relative flex-1 min-h-0 flex flex-col">
+          {/* the floating tab bar sits over the page, so pages leave room for it at the bottom */}
+          <main className={cx("flex-1 min-h-0 flex flex-col bg-panel overflow-hidden", showTabs && "[&_.overflow-y-auto]:pb-24", !phone && "m-2 ml-0 rounded-3xl border border-line shadow-panel")}>{page}</main>
+          {showTabs && <TabBar route={route} />}
+        </div>
       </div>
       <CommandPalette />
       {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
@@ -195,39 +198,29 @@ function UpdatedBanner() {
   );
 }
 
+/** Phones: the same four tabs as the iPhone app, on a floating glass bar. */
 function TabBar({ route }: { route: Route }) {
   const channels = useStore((s) => s.channels);
-  const setPalette = useStore((s) => s.setPalette);
   const unread = channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread : 0), 0);
-  const tab = (active: boolean, label: string, icon: ReactNode, target: string | (() => void), badge?: number) => {
-    const cls = cx("flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] h-14", active ? "text-accent-text font-medium" : "text-muted");
-    const inner = (
-      <>
-        <span className="relative">
-          {icon}
-          {!!badge && <span className="absolute -top-1.5 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-accent text-accent-ink text-[10px] font-semibold grid place-items-center">{badge > 99 ? "99+" : badge}</span>}
-        </span>
-        {label}
-      </>
-    );
-    return typeof target === "string" ? (
-      <a href={target} className={cls} aria-current={active ? "page" : undefined}>
-        {inner}
-      </a>
-    ) : (
-      <button onClick={target} className={cls}>
-        {inner}
-      </button>
-    );
-  };
+  const tab = (active: boolean, label: string, icon: ReactNode, target: string, badge?: number) => (
+    <a href={target} aria-current={active ? "page" : undefined} className={cx("flex-1 flex flex-col items-center justify-center gap-0.5 h-14 rounded-full text-[11px] transition-colors", active ? "bg-ink/[0.07] text-ink font-semibold" : "text-muted")}>
+      <span className="relative">
+        {icon}
+        {!!badge && <span className="absolute -top-1.5 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-bad text-white text-[10px] font-semibold grid place-items-center">{badge > 99 ? "99+" : badge}</span>}
+      </span>
+      {label}
+    </a>
+  );
+  const youViews = ["you", "settings", "nodes", "welcome", "teams", "about", "vault", "connectors", "skills", "tasks", "help", "dashboard"];
   return (
-    <nav className="shrink-0 flex border-t border-line bg-panel safe-bottom" aria-label="Main">
-      {tab(route.view === "dashboard", "Home", <Home size={22} />, href({ view: "dashboard" }))}
-      {tab(route.view === "chats" || route.view === "chat", "Chats", <MessageSquare size={22} />, href({ view: "chats" }), unread)}
-      {tab(route.view === "agents", "Agents", <Bot size={22} />, href({ view: "agents", agentId: null }))}
-      {tab(false, "Search", <Search size={22} />, () => setPalette(true))}
-      {tab(["you", "settings", "nodes", "computers", "welcome", "teams", "about", "vault", "connectors", "skills", "tasks", "help"].includes(route.view), "You", <CircleUser size={22} />, href({ view: "you" }))}
-    </nav>
+    <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-2 pointer-events-none safe-bottom">
+      <nav className="glass pointer-events-auto mx-auto max-w-md flex gap-1 p-1 rounded-full" aria-label="Main">
+        {tab(route.view === "chats" || route.view === "chat", "Chats", <MessageSquare size={22} strokeWidth={2.2} />, href({ view: "chats" }), unread)}
+        {tab(route.view === "agents", "Agents", <Bot size={22} strokeWidth={2.2} />, href({ view: "agents", agentId: null }))}
+        {tab(route.view === "computers", "Computers", <Monitor size={22} strokeWidth={2.2} />, href({ view: "computers", computerId: null }))}
+        {tab(youViews.includes(route.view), "You", <CircleUser size={22} strokeWidth={2.2} />, href({ view: "you" }))}
+      </nav>
+    </div>
   );
 }
 
@@ -259,11 +252,12 @@ function YouPage() {
   const simple = useSimple();
   const { progress, steps, complete } = setupProgress(done);
   const isGuest = me.role === "guest";
-  const row = (icon: ReactNode, label: string, to: string | (() => void), hint?: string, desc?: string) => {
-    const cls = "w-full text-left flex items-center gap-3 px-4 min-h-14 py-2 border-b border-line last:border-0";
+  /** a row with its icon in a colored rounded tile, like iOS Settings */
+  const row = (icon: ReactNode, label: string, to: string | (() => void), hint?: string, desc?: string, color = "#8e8e93") => {
+    const cls = "w-full text-left flex items-center gap-3 px-3.5 min-h-14 py-2 border-b border-line last:border-0 hover:bg-hover";
     const inner = (
       <>
-        <span className="text-muted">{icon}</span>
+        <span className="size-8 shrink-0 rounded-[10px] grid place-items-center" style={{ color, background: `color-mix(in oklab, ${color} 16%, transparent)` }}>{icon}</span>
         <span className="flex-1 min-w-0">
           <span className="block text-[15px]">{label}</span>
           {desc && <span className="block text-xs text-muted">{desc}</span>}
@@ -294,23 +288,26 @@ function YouPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-line overflow-hidden">
-          {!complete ? row(<Sparkles size={19} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`) : null}
-          {row(<LayoutDashboard size={19} />, "Dashboard", href({ view: "dashboard" }))}
-          {row(<ListTodo size={19} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to a helper")}
-          {!isGuest && row(<SquarePen size={19} />, "New task", () => useStore.setState({ newTaskOpen: true }))}
-          {row(<BookOpen size={19} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share")}
-          {row(<Brain size={19} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you")}
-          {!simple && row(<Users size={19} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together")}
-          {row(<Monitor size={19} />, "Computers", href({ view: "computers", computerId: null }), undefined, "Desktops helpers use")}
-          {row(<Server size={19} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren")}
-          {row(<Plug size={19} />, "Connected apps", href({ view: "connectors" }), undefined, "Gmail, Slack and other apps helpers can use")}
-          {row(<Wand2 size={19} />, "Skills", href({ view: "skills" }), undefined, "Things helpers know how to do")}
-          {row(<LifeBuoy size={19} />, "Help", href({ view: "help" }), undefined, "Answers, setup, and what words mean")}
-          {row(<Settings size={19} />, "Settings", href({ view: "settings" }))}
+        {!complete && <div className="rounded-3xl bg-bg overflow-hidden">{row(<Sparkles size={17} strokeWidth={2.4} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`, undefined, "#ff9f0a")}</div>}
+        <div className="rounded-3xl bg-bg overflow-hidden">
+          {row(<LayoutDashboard size={17} strokeWidth={2.4} />, "Dashboard", href({ view: "dashboard" }), undefined, undefined, "#0a84ff")}
+          {row(<ListTodo size={17} strokeWidth={2.4} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to a helper", "#30b0c7")}
+          {!isGuest && row(<SquarePen size={17} strokeWidth={2.4} />, "New task", () => useStore.setState({ newTaskOpen: true }), undefined, undefined, "#34c759")}
+        </div>
+        <div className="rounded-3xl bg-bg overflow-hidden">
+          {row(<BookOpen size={17} strokeWidth={2.4} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share", "#af52de")}
+          {row(<Brain size={17} strokeWidth={2.4} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you", "#ff2d55")}
+          {!simple && row(<Users size={17} strokeWidth={2.4} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together", "#5856d6")}
+          {row(<Plug size={17} strokeWidth={2.4} />, "Connected apps", href({ view: "connectors" }), undefined, "Gmail, Slack and other apps helpers can use", "#ff9500")}
+          {row(<Wand2 size={17} strokeWidth={2.4} />, "Skills", href({ view: "skills" }), undefined, "Things helpers know how to do", "#ffcc00")}
+          {row(<Server size={17} strokeWidth={2.4} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren", "#64748b")}
+        </div>
+        <div className="rounded-3xl bg-bg overflow-hidden">
+          {row(<LifeBuoy size={17} strokeWidth={2.4} />, "Help", href({ view: "help" }), undefined, "Answers, setup, and what words mean", "#32ade6")}
+          {row(<Settings size={17} strokeWidth={2.4} />, "Settings", href({ view: "settings" }), undefined, undefined, "#8e8e93")}
         </div>
         <ModePicker />
-        <button onClick={logout} className="w-full h-12 rounded-2xl border border-line text-bad text-[15px] inline-flex items-center justify-center gap-2">
+        <button onClick={logout} className="w-full h-12 rounded-full bg-bg text-bad text-[15px] font-medium inline-flex items-center justify-center gap-2">
           <LogOut size={17} /> Sign out
         </button>
       </div>
@@ -327,9 +324,9 @@ function ModePicker() {
     ["dark", "Dark", <Moon key="d" size={16} />],
   ];
   return (
-    <div className="flex rounded-2xl border border-line p-1" role="radiogroup" aria-label="Mode">
+    <div className="flex rounded-full bg-bg p-1" role="radiogroup" aria-label="Mode">
       {options.map(([value, label, icon]) => (
-        <button key={value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)} className={cx("flex-1 h-10 rounded-xl text-[15px] inline-flex items-center justify-center gap-2", mode === value ? "bg-hover text-ink font-medium" : "text-muted")}>
+        <button key={value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)} className={cx("flex-1 h-10 rounded-full text-[15px] inline-flex items-center justify-center gap-2 transition-colors", mode === value ? "bg-panel shadow-panel text-ink font-medium" : "text-muted")}>
           {icon} {label}
         </button>
       ))}

@@ -6,13 +6,14 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const engine = require("./engine.cjs");
+const cloud = require("./cloud.cjs");
 
 const PORT = Number(process.env.PORT || 4747);
 const LOCAL_HUB = `http://localhost:${PORT}`;
 const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
 
-/** @type {{ mode?: "local" | "remote", hubUrl?: string, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
+/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
@@ -43,6 +44,14 @@ const buddy = require("./buddy.cjs")({
 });
 
 const logDir = app.getPath("logs");
+const updater = require("./updater.cjs").createUpdater({
+  app,
+  shell,
+  notify: (title, body) => notify(title, body),
+  refresh: () => refresh(),
+  log: (line) => fs.appendFile(path.join(logDir, "updates.log"), `${new Date().toISOString()} ${line}\n`, () => {}),
+  enabled: () => config.autoUpdate !== false,
+});
 const hub = new engine.Child("hub", logDir, () => refresh());
 const device = new engine.Child("device", logDir, () => refresh());
 
@@ -372,6 +381,8 @@ function trayMenu() {
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
     { label: "Create or Join Another Server…", click: () => showSetup() },
+    ...updater.menu(),
+    { label: "Update Automatically", type: "checkbox", checked: config.autoUpdate !== false, click: (i) => ((config.autoUpdate = i.checked), save()) },
     { label: "Show Logs", click: () => shell.openPath(logDir) },
     { type: "separator" },
     { label: "Quit Warren", accelerator: "CmdOrCtrl+Q", click: () => app.quit() },
@@ -388,7 +399,7 @@ function appMenu() {
   const mac = process.platform === "darwin";
   return Menu.buildFromTemplate([
     ...(mac
-      ? [{ label: "Warren", submenu: [{ role: "about" }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
+      ? [{ label: "Warren", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => updater.check() }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
       : []),
     { label: "File", submenu: [{ label: "Create or Join Another Server…", click: () => showSetup() }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
     { role: "editMenu" },
@@ -408,7 +419,7 @@ function appMenu() {
       ],
     },
     { role: "windowMenu" },
-    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal("https://github.com/eireijie/warren") }, { label: "Show Logs", click: () => shell.openPath(logDir) }] },
+    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal("https://github.com/eireijie/warren") }, ...(mac ? [] : [{ label: "Check for Updates…", click: () => updater.check() }]), { label: "Show Logs", click: () => shell.openPath(logDir) }] },
   ]);
 }
 
@@ -447,7 +458,7 @@ setup("setup:check", () => {
 setup("setup:create", async ({ device: asDevice = true } = {}) => {
   const found = needs();
   if (found.problem) return { ok: false, error: found.problem };
-  switchTo({ mode: "local", hubUrl: undefined, device: !!asDevice });
+  switchTo({ mode: "local", hubUrl: undefined, cloud: undefined, device: !!asDevice });
   connect();
   return { ok: true };
 });
@@ -459,10 +470,58 @@ setup("setup:test", (url) => engine.testHub(url));
 setup("setup:join", async (url, { device: asDevice = true } = {}) => {
   const test = await engine.testHub(url);
   if (!test.ok) return test;
-  switchTo({ mode: "remote", hubUrl: test.url, device: !!asDevice });
+  switchTo({ mode: "remote", hubUrl: test.url, cloud: sameOrigin(test.url, config.hubUrl ?? "") ? config.cloud : undefined, device: !!asDevice });
   connect();
   return test;
 });
+
+/**
+ * Create one in your cloud account: a server in the person's own Hetzner project, which Hetzner
+ * bills them for. The API token comes from the setup page with each call and is never kept here:
+ * not in memory after the call, not in desktop.json. Only where the server is gets saved.
+ */
+setup("setup:cloud-plans", async (token) => {
+  try {
+    return { ok: true, ...(await cloud.plans(String(token || "").trim())) };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+setup("setup:cloud-create", async (token, { type, location, account, device: asDevice = true } = {}) => {
+  try {
+    const r = await cloud.createWarren(
+      { token: String(token || "").trim(), type, location, account },
+      { onStep: (step) => win?.webContents.send("setup:cloud-step", step) },
+    );
+    const { id, name, ip } = r.server;
+    switchTo({ mode: "remote", hubUrl: r.url, device: !!asDevice, cloud: { provider: "hetzner", id, name, ip, location, type } });
+    signInOnOpen(r.url, r.session);
+    connect();
+    return { ok: true, url: r.url };
+  } catch (err) {
+    return { ok: false, error: err.message, server: err.server ?? null };
+  }
+});
+
+setup("setup:cloud-delete", async (token, id) => {
+  try {
+    await cloud.deleteServer(String(token || "").trim(), id);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+/** The account was made by the app, so hand its session to the web app when the hub first opens. */
+function signInOnOpen(url, session) {
+  if (!win) createWindow();
+  const origin = new URL(url).origin;
+  win.webContents.once("did-finish-load", () => {
+    if (!win.webContents.getURL().startsWith(origin)) return;
+    win.webContents.executeJavaScript(`localStorage.setItem("warren.token", ${JSON.stringify(session)}); location.hash = "#/welcome/intro"; location.reload();`);
+  });
+}
 
 /** Leave the current server for another: stop what this app runs for it first. */
 function switchTo(next) {
@@ -495,12 +554,15 @@ app.whenReady().then(() => {
   buddy.ready();
   createWindow();
   connect();
+  updater.start();
 });
 
 app.on("activate", () => showWindow());
 app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", () => {
   quitting = true;
+  updater.stop();
+  updater.installOnQuit();
   buddy.destroy();
   hub.stop();
   device.stop();

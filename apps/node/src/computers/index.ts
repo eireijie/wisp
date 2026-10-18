@@ -10,6 +10,7 @@ import { DockerVm, ENGINE_LABEL, detectEngine, ensureImage, imageExists, recipeT
 import { MacDesktop } from "./macos.ts";
 import { WindowsDesktop } from "./windows.ts";
 import { X11Driver } from "./x11.ts";
+import { localClipboard, localFiles } from "./transfer.ts";
 
 export { DockerVm, detectEngine } from "./docker.ts";
 export { perform, jpegSize, type Driver } from "./driver.ts";
@@ -243,6 +244,9 @@ function desktopDriver(allowShell?: boolean): Driver {
     const env = { DISPLAY: process.env.DISPLAY ?? ":0" };
     d = new X11Driver("this computer", (argv, opts) => exec(argv[0], argv.slice(1), { ...opts, env }));
   }
+  // its owner moves files and clipboard text between here and the device they're on
+  d.clipboard = localClipboard();
+  d.files = localFiles();
   if (allowShell) {
     d.run = async (command, timeoutSec) => {
       const shell = process.platform === "win32" ? ["powershell.exe", ["-NoProfile", "-Command", command]] : [process.env.SHELL || "/bin/sh", ["-lc", command]];

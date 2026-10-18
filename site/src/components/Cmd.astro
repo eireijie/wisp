@@ -1,0 +1,13 @@
+---
+/** A one-line command with a Copy button (the button only appears when JavaScript runs). */
+interface Props {
+  code: string;
+  label: string;
+}
+const { code, label } = Astro.props;
+---
+
+<div class="cmd" role="group" aria-label={label}>
+  <code>{code}</code>
+  <button type="button" data-copy={code} hidden>Copy</button>
+</div>

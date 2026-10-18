@@ -1,7 +1,7 @@
 {
   "name": "@warren/desktop",
   "productName": "Warren",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Warren for Mac, Windows and Linux: the workspace in its own window, a hub on this computer, and this computer as a device for agents.",
   "license": "Apache-2.0",
   "private": true,
@@ -36,24 +36,29 @@
       ],
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Warren uses your microphone when you call an agent."
-      }
+      },
+      "artifactName": "Warren-mac-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.png",
       "target": [
         "nsis"
-      ]
+      ],
+      "artifactName": "Warren-win-${arch}.${ext}"
     },
     "linux": {
       "icon": "build/icon.png",
+      "executableName": "warren",
       "target": [
         "AppImage",
         "deb"
       ],
-      "category": "Office"
+      "category": "Office",
+      "artifactName": "Warren-linux-${arch}.${ext}"
     },
     "afterPack": "scripts/after-pack.cjs",
-    "afterSign": "scripts/after-sign.cjs"
+    "afterSign": "scripts/after-sign.cjs",
+    "publish": null
   },
   "devDependencies": {
     "electron": "44.7.2",

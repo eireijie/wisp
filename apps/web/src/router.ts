@@ -43,7 +43,7 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "mobile", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["members", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];

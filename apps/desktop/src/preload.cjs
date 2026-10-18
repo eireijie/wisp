@@ -33,4 +33,8 @@ if (location.protocol === "file:")
     test: (url) => ipcRenderer.invoke("setup:test", url),
     join: (url, opts) => ipcRenderer.invoke("setup:join", url, opts),
     retry: () => ipcRenderer.invoke("setup:retry"),
+    cloudPlans: (token) => ipcRenderer.invoke("setup:cloud-plans", token),
+    cloudCreate: (token, choice) => ipcRenderer.invoke("setup:cloud-create", token, choice),
+    cloudDelete: (token, id) => ipcRenderer.invoke("setup:cloud-delete", token, id),
+    onCloudStep: (fn) => ipcRenderer.on("setup:cloud-step", (_event, step) => fn(step)),
   });

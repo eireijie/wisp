@@ -62,13 +62,13 @@ struct AgentTile: View {
         Text(harnessLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
       }
       HStack(spacing: 5) {
-        Circle().fill(statusColor).frame(width: 7, height: 7)
+        GlowDot(color: statusColor)
         Text(doing ?? statusWord).font(.caption).foregroundStyle(agent.status == .busy ? .blue : .secondary).lineLimit(1)
       }
     }
     .frame(maxWidth: .infinity)
     .padding(14)
-    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemBackground)))
+    .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
   }
 
   private var glow: Color { Color(hex: agent.settings?.appearance?.color ?? "#8bd4ff") }

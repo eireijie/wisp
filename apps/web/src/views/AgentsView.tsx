@@ -39,7 +39,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Agents</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Agents</h1>
       </header>
       <div className="flex-1 overflow-y-auto @container">
         {agents.length === 0 ? (

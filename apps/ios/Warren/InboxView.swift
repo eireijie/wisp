@@ -1,6 +1,6 @@
 import SwiftUI
 
-/** What's waiting on you: agents asking for an OK, and agents that need you on their computer. */
+/** Everything agents asked you, waiting and decided (opened from Needs you in Chats, or You). */
 struct InboxView: View {
   @Environment(Store.self) private var store
 
@@ -8,7 +8,6 @@ struct InboxView: View {
   private var decided: [Approval] { store.approvals.filter { $0.status != "pending" }.prefix(20).map { $0 } }
 
   var body: some View {
-    NavigationStack {
       List {
         if store.pendingApprovals.isEmpty && helpWanted.isEmpty {
           Section {
@@ -51,12 +50,11 @@ struct InboxView: View {
         }
       }
       .listStyle(.insetGrouped)
-      .navigationTitle("Inbox")
+      .navigationTitle("Approvals")
       .refreshable {
         await store.refreshApprovals()
         await store.refreshComputers()
       }
-    }
   }
 
   private func approvalRow(_ a: Approval) -> some View {
@@ -67,8 +65,8 @@ struct InboxView: View {
         Spacer()
         if let d = Wire.date(a.createdAt) { Text(d, format: .relative(presentation: .named)).font(.caption).foregroundStyle(.tertiary) }
       }
-      ApprovalBox(approval: a)
+      ApprovalBox(approval: a, inList: true)
     }
-    .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
   }
 }

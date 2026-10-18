@@ -55,7 +55,7 @@ export function HelpView({ onBack }: { onBack?: () => void }) {
           </button>
         )}
         <LifeBuoy size={17} className="text-accent-text" aria-hidden />
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Help</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Help</h1>
       </header>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl px-4 md:px-6 py-5 space-y-8">

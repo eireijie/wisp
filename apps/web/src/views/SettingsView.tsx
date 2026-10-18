@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, User, Users } from "lucide-react";
+import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -10,6 +10,7 @@ import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage
 import { RuntimesPage } from "./settings/runtimes.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
+import { MobilePage } from "./settings/mobile.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
@@ -24,6 +25,7 @@ const NAV: NavGroup[] = [
       { id: "voice", label: "Voice", icon: <Mic size={16} /> },
       { id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
       { id: "security", label: "Security", icon: <Lock size={16} /> },
+      { id: "mobile", label: "Mobile", icon: <Smartphone size={16} /> },
     ],
   },
   {
@@ -61,6 +63,7 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   voice: () => <VoicePage />,
   appearance: () => <AppearancePage />,
   security: () => <SecurityPage />,
+  mobile: () => <MobilePage />,
   general: () => <GeneralPage />,
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
@@ -92,7 +95,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
     <nav className="space-y-5" aria-label="Settings">
       {nav.map((g) => (
         <div key={g.group}>
-          <div className="px-2 mb-1 text-[11px] font-mono uppercase tracking-wider text-faint">{g.group}</div>
+          <div className="px-2 mb-1 text-[13px] font-semibold text-faint">{g.group}</div>
           {g.hint && <p className="px-2 mb-1.5 text-xs text-muted">{g.hint}</p>}
           <div className="space-y-px">
             {g.pages.map((p) => (
@@ -133,7 +136,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
           <ChevronLeft size={16} aria-hidden /> Back to Warren
         </a>
         <span aria-hidden className="hidden md:block h-5 w-px bg-line mr-2" />
-        <h1 className="text-sm font-semibold uppercase tracking-wider truncate">
+        <h1 className="text-lg font-bold tracking-tight truncate">
           Settings
           {label && <span className="text-muted font-normal normal-case tracking-normal"> / {label}</span>}
         </h1>

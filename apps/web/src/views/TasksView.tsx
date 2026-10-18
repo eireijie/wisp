@@ -61,7 +61,7 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Tasks</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Tasks</h1>
         {lead && (
           <a href="#/teams" className="hidden sm:flex items-center gap-1.5 text-xs text-muted hover:text-ink mr-1" title="The lead takes every task nobody assigned">
             <Crown size={13} /> Lead <AgentAvatar agent={lead} size={18} badge={false} /> <span className="text-ink">{lead.name}</span>
@@ -289,7 +289,7 @@ const openTask = (t: TaskRow) => t.channelId && go({ view: "chat", channelId: t.
 
 function SectionTitle({ title, count }: { title: string; count: number }) {
   return (
-    <h2 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted">
+    <h2 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-muted">
       {title} <span className="tabular-nums text-faint">{count}</span>
     </h2>
   );

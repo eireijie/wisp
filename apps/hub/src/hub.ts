@@ -133,12 +133,12 @@ export class Hub {
   }
 
   /**
-   * Who may hear about a channel: everyone for a channel; for a DM, its members and the
-   * workspace's owners (the same rule the REST API uses). Undefined means everyone.
+   * Who may hear about a channel: everyone for a channel; for a DM or a private channel, its
+   * members and the workspace's owners (the same rule the REST API uses). Undefined means everyone.
    */
   audience(channelId: string): ((userId: string) => boolean) | undefined {
     const ch = this.store.channel(channelId);
-    if (!ch || ch.kind !== "dm") return undefined;
+    if (!ch || (ch.kind !== "dm" && !ch.private)) return undefined;
     const members = new Set(this.store.channelMembers(ch.id).filter((m) => m.kind === "user").map((m) => m.id));
     return (userId) => members.has(userId) || this.store.role(ch.workspaceId, userId) === "owner";
   }
@@ -416,29 +416,47 @@ export class Hub {
     return this.currentRun(author.id)?.requestedBy ?? null;
   }
 
-  /** Decide which agents should respond to a message. */
+  /**
+   * Decide which agents should respond to a message: anyone @mentioned; in a DM, its agent; for a
+   * person's plain reply in a thread, the agent already talking there; otherwise the channel's
+   * default agent, if it has one. Agents only wake each other by @mention, so they can't loop.
+   */
   targets(msg: Message, workspaceId: string): string[] {
     const { store } = this;
     const out = new Set<string>();
+    const channel = store.channel(msg.channelId);
+    if (channel?.archivedAt) return [];
     for (const handle of parseMentions(msg.body)) {
       const a = store.agentByHandle(workspaceId, handle);
       if (a) out.add(a.id);
     }
-    const channel = store.channel(msg.channelId);
     if (channel?.kind === "dm" && msg.author.kind === "user") {
       for (const m of store.channelMembers(channel.id)) if (m.kind === "agent") out.add(m.id);
     }
-    // A plain reply in a thread an agent started goes back to that agent.
-    if (!out.size && msg.threadId && msg.author.kind === "user") {
-      const root = store.message(msg.threadId);
-      if (root?.author.kind === "agent") out.add(root.author.id);
+    if (!out.size && msg.author.kind === "user" && msg.author.id !== "system") {
+      // a plain reply in a thread goes to the agent already in it: the last one that spoke, or
+      // else the one that started it or was asked at the start
+      if (msg.threadId) {
+        const root = store.message(msg.threadId);
+        const last = store
+          .messages(msg.channelId, { threadId: msg.threadId, limit: 200 })
+          .filter((m) => m.author.kind === "agent" && store.agent(m.author.id))
+          .at(-1);
+        const asked = root ? parseMentions(root.body).map((h) => store.agentByHandle(workspaceId, h)?.id).find(Boolean) : undefined;
+        const inThread = last?.author.id ?? (root?.author.kind === "agent" ? root.author.id : asked);
+        if (inThread) out.add(inThread);
+      }
+      const fallback = channel?.kind === "channel" ? channel.settings.defaultAgentId : null;
+      if (!out.size && fallback && store.agent(fallback)) out.add(fallback);
     }
     if (msg.author.kind === "agent") out.delete(msg.author.id);
     return [...out];
   }
 
   private route(msg: Message, workspaceId: string, replyInThread: boolean, requestedBy: string | null) {
-    const threadId = msg.threadId ?? (replyInThread ? msg.id : null);
+    // a channel can ask agents to answer people in a thread under their message
+    const tidy = msg.author.kind === "user" && this.store.channel(msg.channelId)?.settings.replyInThread;
+    const threadId = msg.threadId ?? (replyInThread || tidy ? msg.id : null);
     for (const agentId of this.targets(msg, workspaceId)) {
       const agent = this.store.agent(agentId)!;
       const notAllowed = this.whyNotAllowed(agent, requestedBy);
@@ -535,6 +553,39 @@ export class Hub {
     const added = this.store.toggleReaction(messageId, actor, emoji, on);
     this.broadcast(channel.workspaceId, { type: "reactions", messageId, channelId: msg.channelId, threadId: msg.threadId, reactions: this.store.reactions([messageId])[messageId] ?? [] }, this.audience(channel.id));
     return added;
+  }
+
+  /** Change a message's text. Agents aren't asked again: an edit fixes what was said, it isn't a new request. */
+  editMessage(msg: Message, body: string) {
+    const channel = this.store.channel(msg.channelId)!;
+    const updated = this.store.withReactions([this.store.editMessage(msg.id, body)!])[0];
+    this.broadcast(channel.workspaceId, { type: "message_updated", message: updated }, this.audience(channel.id));
+    return updated;
+  }
+
+  /**
+   * Delete a message. A thread root with replies is emptied instead of removed, so the replies stay
+   * reachable; it goes for good once its last reply is deleted.
+   */
+  removeMessage(msg: Message): { kept: boolean } {
+    const channel = this.store.channel(msg.channelId)!;
+    const only = this.audience(channel.id);
+    const pinned = this.store.pinnedIds([channel.id])[channel.id]?.includes(msg.id);
+    let kept = false;
+    if (!msg.threadId && (this.store.replyCounts([msg.id])[msg.id] ?? 0) > 0) {
+      this.broadcast(channel.workspaceId, { type: "message_updated", message: { ...this.store.blankMessage(msg.id)!, reactions: [] } }, only);
+      kept = true;
+    } else {
+      this.store.deleteMessage(msg.id);
+      this.broadcast(channel.workspaceId, { type: "message_removed", messageId: msg.id, channelId: msg.channelId, threadId: msg.threadId }, only);
+      const root = msg.threadId ? this.store.message(msg.threadId) : undefined;
+      if (root?.deletedAt && !this.store.replyCounts([root.id])[root.id]) {
+        this.store.deleteMessage(root.id);
+        this.broadcast(channel.workspaceId, { type: "message_removed", messageId: root.id, channelId: root.channelId, threadId: null }, only);
+      }
+    }
+    if (pinned) this.broadcast(channel.workspaceId, { type: "channels_changed" });
+    return { kept };
   }
 
   /** The run an agent is working on right now, if any (its latest, when several are running). */
@@ -707,6 +758,16 @@ export class Hub {
       .filter((a) => a.id !== agent.id)
       .map((a) => `@${a.handle} (${a.name}, ${a.harness}${a.settings.role?.trim() ? `, ${a.settings.role.trim()}` : ""})`);
     const where = channel.kind === "dm" ? "a direct message" : `#${channel.name}${threadId ? " (in a thread)" : ""}`;
+    const channelNotes =
+      channel.kind === "channel" && !background
+        ? [
+            channel.topic.trim() ? `#${channel.name} is for: ${channel.topic.trim()}` : "",
+            channel.settings.defaultAgentId === agent.id ? `You answer messages in #${channel.name} that don't @mention anyone, so not every message here needs a long reply.` : "",
+            channel.settings.instructions.trim() ? `Notes from the people in #${channel.name}; follow them while you work here:\n${channel.settings.instructions.trim()}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : "";
     const forUser = background && run?.requestedBy ? store.user(run.requestedBy) : undefined;
     const person = forUser ? { id: forUser.id, name: forUser.name } : this.memory.personFor(agent.workspaceId, channelId, threadId, triggerId);
     // the person's own clock, so "tomorrow morning" means theirs
@@ -735,6 +796,7 @@ export class Hub {
       memory ? `\n${memory}` : "",
       `\n## Where you are`,
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
+      channelNotes ? `\n## This channel\n${channelNotes}` : "",
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length

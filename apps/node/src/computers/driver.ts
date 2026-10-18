@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import type { Duplex } from "node:stream";
-import { AGENT_SCREEN, parseKeys, toScreen, type ComputerAction, type KeyCombo, type PageElement, type RunOutput, type Screenshot } from "@warren/core";
+import { AGENT_SCREEN, MAX_TRANSFER_BYTES, parseKeys, toScreen, type ComputerAction, type FileData, type KeyCombo, type PageElement, type RunOutput, type Screenshot } from "@warren/core";
+import type { Clipboard, Files } from "./transfer.ts";
 
 export interface Size {
   width: number;
@@ -47,6 +48,10 @@ export interface Driver {
   openSignIn?(harness: string): Promise<void>;
   /** VMs: the web page element under a screen point, in the browser people see */
   inspectAt?(x: number, y: number): Promise<PageElement | null>;
+  /** its clipboard, to copy and paste between it and people's devices */
+  clipboard?: Clipboard;
+  /** its files, to move them between it and people's devices */
+  files?: Files;
 }
 
 export class ActionError extends Error {}
@@ -126,7 +131,35 @@ export async function perform(driver: Driver, a: ComputerAction): Promise<unknow
       const p = await at(a.x, a.y, a.space);
       return { element: await driver.inspectAt(p.x, p.y).catch(() => null) };
     }
+    case "clipboard_get":
+      return { text: await clipboardOf(driver).get() };
+    case "clipboard_set":
+      await clipboardOf(driver).set(a.text);
+      return { ok: true };
+    case "files_list":
+      return filesOf(driver).list(a.path);
+    case "file_read": {
+      const f = await filesOf(driver).read(a.path);
+      return { name: f.name, size: f.data.length, data: f.data.toString("base64") } satisfies FileData;
+    }
+    case "file_write": {
+      const data = Buffer.from(a.data, "base64");
+      if (data.length > MAX_TRANSFER_BYTES) throw new ActionError(`files bigger than ${MAX_TRANSFER_BYTES / 1024 / 1024} MB can't be sent`);
+      return { path: await filesOf(driver).write(a.folder, a.name, data) };
+    }
+    case "file_mkdir":
+      return { path: await filesOf(driver).mkdir(a.folder, a.name) };
   }
+}
+
+function clipboardOf(driver: Driver): Clipboard {
+  if (!driver.clipboard) throw new ActionError(`${driver.label} can't share its clipboard`);
+  return driver.clipboard;
+}
+
+function filesOf(driver: Driver): Files {
+  if (!driver.files) throw new ActionError(`${driver.label} can't share its files`);
+  return driver.files;
 }
 
 // --- process helpers ---------------------------------------------------------------------------

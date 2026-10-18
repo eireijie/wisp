@@ -1,12 +1,56 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, Hash, LogOut, MoreHorizontal, Pencil, Plus, Search, Trash2, UserPlus, Users, X } from "lucide-react";
-import type { Section } from "@warren/core";
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
+import type { Agent, ChannelNotify, ChannelSettings as AgentRules, Section } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore, type ChannelInfo } from "../store.ts";
+import { useNames, useStore, type ChannelInfo } from "../store.ts";
 import { go } from "../router.ts";
-import { AgentAvatar, Button, Field, Input, Menu, Modal, UserAvatar, cx } from "./ui.tsx";
+import { AgentAvatar, Button, Field, Input, Menu, Modal, Textarea, UserAvatar, cx } from "./ui.tsx";
+import { Toggle } from "../views/settings/parts.tsx";
 
 const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+
+/** A channel's icon: a lock for a private one, a hash otherwise. */
+export function ChannelIcon({ channel, size = 14, className = "text-faint" }: { channel: Pick<ChannelInfo, "private">; size?: number; className?: string }) {
+  return channel.private ? <Lock size={size} className={className} aria-label="Private" /> : <Hash size={size} className={className} />;
+}
+
+/** #general and a team's own channel stay public and can't be archived or deleted. */
+export function isProtected(channel: ChannelInfo) {
+  return channel.name === "general" || useStore.getState().teams.some((t) => t.channelId === channel.id);
+}
+
+/** Your own settings for a channel: how much it tells you, and whether it's starred. */
+export async function setChannelPrefs(channel: ChannelInfo, patch: { notify?: ChannelNotify; starred?: boolean }) {
+  // show it straight away; the list refresh confirms it
+  useStore.setState((s) => ({ channels: s.channels.map((c) => (c.id === channel.id ? { ...c, ...patch, ...(patch.notify === "mute" ? { unread: 0 } : {}) } : c)) }));
+  await api("PUT", `/api/channels/${channel.id}/prefs`, patch);
+  await useStore.getState().refreshChannels();
+}
+
+export async function setArchived(channel: ChannelInfo, archived: boolean) {
+  await api("POST", `/api/channels/${channel.id}/archive`, { archived });
+  await useStore.getState().refreshChannels();
+}
+
+export const NOTIFY: Record<ChannelNotify, { label: string; body: string }> = {
+  all: { label: "Every message", body: "Get a notification whenever an agent posts here." },
+  default: { label: "Just what's for me", body: "Answers to what you asked, and agents asking for your OK." },
+  mute: { label: "Mute", body: "No unread badge and no notifications. Agents asking for your OK still reach you." },
+};
+
+/** "Who answers messages without an @mention?": one agent, or nobody (only @mentioned agents). */
+function AnswerSelect({ agents, value, onChange, disabled }: { agents: Agent[]; value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+  return (
+    <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} disabled={disabled} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm" aria-label="Who answers messages without an @mention">
+      <option value="">Nobody: only agents someone @mentions</option>
+      {agents.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.name} (@{a.handle})
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /** "Add a channel": one box to search, join, or create (Buzz-style). */
 export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => void; sectionId?: string | null }) {
@@ -14,16 +58,21 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
   const sections = useStore((s) => s.sections);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"all" | "joined">("all");
+  const agents = useStore((s) => s.agents);
+  const [tab, setTab] = useState<"all" | "joined" | "archived">("all");
   const [creating, setCreating] = useState(false);
   const [topic, setTopic] = useState("");
   const [section, setSection] = useState<string | null>(sectionId);
+  const [isPrivate, setPrivate] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [answerer, setAnswerer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const archivedCount = channels.filter((c) => c.archivedAt).length;
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase().replace(/^#/, "");
     return channels
-      .filter((c) => (tab === "joined" ? c.joined : true))
+      .filter((c) => (tab === "archived" ? !!c.archivedAt : !c.archivedAt && (tab === "joined" ? c.joined : true)))
       .filter((c) => !needle || c.name.includes(needle) || c.topic.toLowerCase().includes(needle))
       .sort((a, b) => b.memberCount - a.memberCount || a.name.localeCompare(b.name));
   }, [channels, q, tab]);
@@ -40,7 +89,14 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
   async function create() {
     setError(null);
     try {
-      const ch = await api<{ id: string }>("POST", "/api/channels", { name, topic, sectionId: section });
+      const ch = await api<{ id: string }>("POST", "/api/channels", {
+        name,
+        topic,
+        sectionId: section,
+        private: isPrivate,
+        members: picked.map((id) => ({ kind: "agent", id })),
+        settings: { defaultAgentId: answerer },
+      });
       await refreshChannels();
       onClose();
       go({ view: "chat", channelId: ch.id, threadId: null });
@@ -65,9 +121,9 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
           />
         </div>
         <div className="flex gap-4 border-b border-line text-sm" role="tablist">
-          {(["all", "joined"] as const).map((t) => (
+          {(["all", "joined", ...(archivedCount ? ["archived" as const] : [])] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx("pb-2 -mb-px border-b-2", tab === t ? "border-ink text-ink font-medium" : "border-transparent text-muted hover:text-ink")}>
-              {t === "all" ? "All channels" : "Joined"}
+              {t === "all" ? "All channels" : t === "joined" ? "Joined" : `Archived · ${archivedCount}`}
             </button>
           ))}
         </div>
@@ -85,6 +141,51 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
                 <SectionSelect sections={sections} value={section} onChange={setSection} />
               </Field>
             )}
+            {agents.length > 0 && (
+              <Field label="Agents in this channel" hint="They answer here when someone @mentions them.">
+                <div className="flex flex-wrap gap-1.5">
+                  {agents.map((a) => {
+                    const on = picked.includes(a.id) || answerer === a.id;
+                    return (
+                      <button
+                        type="button"
+                        key={a.id}
+                        aria-pressed={on}
+                        onClick={() => {
+                          setPicked(on ? picked.filter((x) => x !== a.id) : [...picked, a.id]);
+                          if (on && answerer === a.id) setAnswerer(null);
+                        }}
+                        className={cx("h-8 pl-1 pr-2.5 rounded-full border text-sm inline-flex items-center gap-1.5", on ? "border-accent bg-accent-soft" : "border-line hover:bg-hover")}
+                      >
+                        <AgentAvatar agent={a} size={22} badge={false} /> {a.name}
+                        {on && <Check size={13} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
+            {agents.length > 0 && (
+              <Field label="Who answers messages without an @mention?" hint="Pick an agent to make this its channel: it answers anything nobody @mentions.">
+                <AnswerSelect
+                  agents={agents}
+                  value={answerer}
+                  onChange={(v) => {
+                    setAnswerer(v);
+                    if (v && !picked.includes(v)) setPicked([...picked, v]);
+                  }}
+                />
+              </Field>
+            )}
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>
+                <span className="font-medium flex items-center gap-1.5">
+                  <Lock size={13} /> Private
+                </span>
+                <span className="block text-xs text-muted">Only people and agents you add can see it.</span>
+              </span>
+              <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" />
+            </label>
             {error && <p className="text-sm text-bad">{error}</p>}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setCreating(false)}>
@@ -110,14 +211,17 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
             <button key={c.id} onClick={() => open(c.id, c.joined)} className="w-full text-left px-4 py-3 hover:bg-hover flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="font-medium flex items-center gap-1">
-                  <Hash size={14} className="text-faint" /> {c.name}
+                  <ChannelIcon channel={c} /> {c.name}
+                  {c.archivedAt && <span className="ml-1 text-[11px] font-normal text-muted rounded bg-chip px-1.5">Archived</span>}
                 </div>
                 <div className="text-xs text-muted truncate">
                   {c.memberCount} {c.memberCount === 1 ? "member" : "members"}
                   {c.topic && ` · ${c.topic}`}
                 </div>
               </div>
-              {c.joined ? (
+              {c.archivedAt ? (
+                <span className="text-xs text-muted">Read only</span>
+              ) : c.joined ? (
                 <span className="text-xs text-muted inline-flex items-center gap-1">
                   <Check size={13} /> Joined
                 </span>
@@ -205,7 +309,7 @@ export interface ChannelMember {
   role: string | null;
 }
 
-export type ChannelSettingsTab = "about" | "members" | "danger";
+export type ChannelSettingsTab = "about" | "agents" | "members" | "pins" | "danger";
 
 /** Back to #general (after leaving or deleting the channel you were in). */
 function toGeneral() {
@@ -220,22 +324,26 @@ export async function leaveChannel(channel: ChannelInfo) {
   if (useStore.getState().activeChannel === channel.id) toGeneral();
 }
 
-/** A channel's settings: its name, topic and section; who's in it; and deleting it. */
-export function ChannelSettings({ channel, tab: initialTab = "about", onClose }: { channel: ChannelInfo; tab?: ChannelSettingsTab; onClose: () => void }) {
+/** A channel's settings: its name and topic; how agents behave in it; who's in it; pins; archiving and deleting. */
+export function ChannelSettings({ channel: initial, tab: initialTab = "about", onClose }: { channel: ChannelInfo; tab?: ChannelSettingsTab; onClose: () => void }) {
   const role = useStore((s) => s.me?.role);
+  // follow the live channel, so pins and members update while the dialog is open
+  const channel = useStore((s) => s.channels.find((c) => c.id === initial.id)) ?? initial;
   const canManage = role === "owner" || role === "member";
-  const canDelete = canManage && channel.name !== "general";
-  const [tab, setTab] = useState<ChannelSettingsTab>(initialTab === "danger" && !canDelete ? "about" : initialTab);
+  const canRemove = canManage && !isProtected(channel);
+  const [tab, setTab] = useState<ChannelSettingsTab>(initialTab === "danger" && !canRemove ? "about" : initialTab);
   const tabs: { id: ChannelSettingsTab; label: string }[] = [
     { id: "about", label: "About" },
+    { id: "agents", label: "Agents" },
     { id: "members", label: `Members · ${channel.memberCount}` },
-    ...(canDelete ? [{ id: "danger" as const, label: "Delete" }] : []),
+    { id: "pins", label: channel.pinnedIds.length ? `Pins · ${channel.pinnedIds.length}` : "Pins" },
+    ...(canRemove ? [{ id: "danger" as const, label: channel.archivedAt ? "Archived" : "Archive" }] : []),
   ];
   return (
     <Modal
       title={
         <span className="flex items-center gap-1">
-          <Hash size={16} className="text-faint" />
+          <ChannelIcon channel={channel} size={16} />
           {channel.name}
         </span>
       }
@@ -251,8 +359,10 @@ export function ChannelSettings({ channel, tab: initialTab = "about", onClose }:
         ))}
       </div>
       {tab === "about" && <AboutChannel channel={channel} canManage={canManage} onClose={onClose} />}
+      {tab === "agents" && <ChannelAgents channel={channel} canManage={canManage && !channel.archivedAt} onClose={onClose} />}
       {tab === "members" && <ChannelMembers channel={channel} canManage={canManage} onClose={onClose} />}
-      {tab === "danger" && <DeleteChannel channel={channel} onClose={onClose} />}
+      {tab === "pins" && <ChannelPins channel={channel} onClose={onClose} />}
+      {tab === "danger" && <ArchiveOrDelete channel={channel} onClose={onClose} />}
     </Modal>
   );
 }
@@ -263,9 +373,10 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
   const [name, setName] = useState(channel.name);
   const [topic, setTopic] = useState(channel.topic);
   const [section, setSection] = useState<string | null>(channel.sectionId);
+  const [isPrivate, setPrivate] = useState(channel.private);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const changed = name !== channel.name || topic !== channel.topic || section !== channel.sectionId;
+  const changed = name !== channel.name || topic !== channel.topic || section !== channel.sectionId || isPrivate !== channel.private;
   return (
     <form
       className="space-y-4"
@@ -274,7 +385,7 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
         setError(null);
         setSaving(true);
         try {
-          await api("PATCH", `/api/channels/${channel.id}`, { ...(name !== channel.name ? { name } : {}), topic, sectionId: section });
+          await api("PATCH", `/api/channels/${channel.id}`, { ...(name !== channel.name ? { name } : {}), topic, sectionId: section, ...(isPrivate !== channel.private ? { private: isPrivate } : {}) });
           await refreshChannels();
           onClose();
         } catch (err) {
@@ -285,10 +396,10 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
       }}
     >
       <fieldset disabled={!canManage} className="space-y-4">
-      <Field label="Name" hint={channel.name === "general" ? "Everyone in the workspace lands in #general." : "Lowercase, no spaces. Links to the channel keep working after a rename."}>
+      <Field label="Name" hint={channel.name === "general" ? "Everyone in the workspace lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the channel keep working after a rename."}>
         <div className="relative">
           <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-          <Input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} required maxLength={80} className="pl-8" />
+          <Input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} required maxLength={80} className="pl-8" disabled={channel.name === "general"} />
         </div>
       </Field>
       <Field label="Topic">
@@ -297,6 +408,17 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
       <Field label="Sidebar section">
         <SectionSelect sections={sections} value={section} onChange={setSection} />
       </Field>
+      {!isProtected(channel) && (
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <span>
+            <span className="font-medium flex items-center gap-1.5">
+              <Lock size={13} /> Private
+            </span>
+            <span className="block text-xs text-muted">{isPrivate ? "Only its members (and workspace owners) can see it." : "Anyone in the workspace can find and join it."}</span>
+          </span>
+          <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" disabled={!canManage} />
+        </label>
+      )}
       </fieldset>
       {!canManage && <p className="text-xs text-muted">Guests can't change channels.</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
@@ -468,51 +590,200 @@ function ChannelMembers({ channel, canManage, onClose }: { channel: ChannelInfo;
             ))}
         </div>
       )}
-      <p className="text-xs text-muted">Agents in a channel answer there when someone @mentions them. Anyone in the workspace can still read and join #{channel.name}.</p>
+      <p className="text-xs text-muted">
+        Agents here answer when someone @mentions them{channel.settings.defaultAgentId ? "; the channel's own agent answers everything else (see Agents)" : ""}.{" "}
+        {channel.private ? `Only the people and agents listed can see #${channel.name}.` : `Anyone in the workspace can still read and join #${channel.name}.`}
+      </p>
     </div>
   );
 }
 
-function DeleteChannel({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
+/** How agents behave here: who answers un-@mentioned messages, where they reply, and notes they all follow. */
+function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
+  const agents = useStore((s) => s.agents);
+  const refreshChannels = useStore((s) => s.refreshChannels);
+  const [rules, setRules] = useState<AgentRules>(channel.settings);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const changed = JSON.stringify(rules) !== JSON.stringify(channel.settings);
+  const answerer = agents.find((a) => a.id === rules.defaultAgentId);
+  return (
+    <form
+      className="space-y-5"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setError(null);
+        setSaving(true);
+        try {
+          await api("PATCH", `/api/channels/${channel.id}`, { settings: rules });
+          await refreshChannels();
+          onClose();
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          setSaving(false);
+        }
+      }}
+    >
+      <fieldset disabled={!canManage} className="space-y-5">
+        <Field
+          label="Who answers messages without an @mention?"
+          hint={
+            answerer
+              ? `${answerer.name} answers anything nobody @mentions, and joins #${channel.name} to do it. @mention another agent to ask them instead.`
+              : "Right now a message only reaches an agent when someone @mentions it. Pick an agent to make this its channel."
+          }
+        >
+          {agents.length ? <AnswerSelect agents={agents} value={rules.defaultAgentId} onChange={(v) => setRules({ ...rules, defaultAgentId: v })} /> : <p className="text-sm text-muted">No agents in this workspace yet.</p>}
+        </Field>
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <span>
+            <span className="font-medium">Answer in a thread</span>
+            <span className="block text-xs text-muted">Agents reply under the message they're answering, so the channel stays easy to read.</span>
+          </span>
+          <Toggle on={rules.replyInThread} onChange={(v) => setRules({ ...rules, replyInThread: v })} label="Agents answer in a thread" disabled={!canManage} />
+        </label>
+        <Field label="Notes for agents here" hint="Every agent reads these when it works in this channel, e.g. which repo to use or how long replies should be.">
+          <Textarea value={rules.instructions} onChange={(e) => setRules({ ...rules, instructions: e.target.value })} rows={4} maxLength={4000} placeholder={`e.g. "This is where we plan the launch. Keep answers short and link the doc in shared/launch.md."`} />
+        </Field>
+        <p className="text-xs text-muted">In a thread, a plain reply goes back to the agent already talking there; no @mention needed.</p>
+      </fieldset>
+      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This channel is archived." : "Guests can't change channels."}</p>}
+      {error && <p className="text-sm text-bad">{error}</p>}
+      <div className="flex justify-end">
+        <Button variant="primary" disabled={!canManage || !changed || saving}>
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+interface PinRow {
+  message: import("@warren/core").Message;
+  pinnedBy: import("@warren/core").Actor;
+  pinnedAt: string;
+}
+
+/** The messages pinned in a channel, newest pin first, each one a way back to where it was said. */
+function ChannelPins({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
+  const names = useNames();
+  const canPin = useStore((s) => s.me?.role !== "guest") && !channel.archivedAt;
+  const [pins, setPins] = useState<PinRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const key = channel.pinnedIds.join();
+  useEffect(() => {
+    let live = true;
+    api<PinRow[]>("GET", `/api/channels/${channel.id}/pins`)
+      .then((p) => live && setPins(p))
+      .catch((e) => live && setError((e as Error).message));
+    return () => {
+      live = false;
+    };
+  }, [channel.id, key]);
+  const who = (a: import("@warren/core").Actor) => (a.kind === "agent" ? names.agent(a.id)?.name : names.member(a.id)?.name) ?? "Someone";
+  if (error) return <p className="text-sm text-bad">{error}</p>;
+  if (!pins) return <p className="text-sm text-muted py-6 text-center">Loading pins…</p>;
+  if (!pins.length)
+    return (
+      <div className="py-8 text-center text-sm text-muted">
+        <Pin size={18} className="mx-auto mb-2 text-faint" />
+        Nothing pinned yet. Pin a message from its “…” menu so everyone here can find it again.
+      </div>
+    );
+  return (
+    <div className="rounded-xl border border-line divide-y divide-line max-h-[55vh] overflow-y-auto">
+      {pins.map((p) => (
+        <div key={p.message.id} className="px-3 py-2.5 flex gap-3 items-start">
+          <button
+            className="min-w-0 flex-1 text-left"
+            onClick={() => {
+              onClose();
+              go({ view: "chat", channelId: channel.id, threadId: p.message.threadId });
+            }}
+          >
+            <div className="text-xs text-muted">
+              <span className="font-medium text-ink">{who(p.message.author)}</span> · pinned by {who(p.pinnedBy)}
+            </div>
+            <div className="text-sm line-clamp-3 whitespace-pre-wrap">{p.message.body || "(an attachment)"}</div>
+          </button>
+          {canPin && (
+            <button onClick={() => api("DELETE", `/api/messages/${p.message.id}/pin`).catch((e) => setError((e as Error).message))} className="size-8 shrink-0 rounded-lg grid place-items-center text-muted hover:text-bad hover:bg-hover" aria-label="Unpin" title="Unpin">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ArchiveOrDelete({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
-    <form
-      className="space-y-4"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setError(null);
-        setBusy(true);
-        try {
-          await api("DELETE", `/api/channels/${channel.id}`);
-          const wasOpen = useStore.getState().activeChannel === channel.id;
-          await refreshChannels();
-          onClose();
-          if (wasOpen) toGeneral();
-        } catch (err) {
-          setError((err as Error).message);
-          setBusy(false);
-        }
-      }}
-    >
-      <div className="rounded-xl border border-line p-4 space-y-2">
+    <div className="space-y-5">
+      <div className="rounded-xl border border-line p-4 space-y-3">
+        <div className="font-medium flex items-center gap-2">{channel.archivedAt ? <ArchiveRestore size={15} /> : <Archive size={15} />} {channel.archivedAt ? `#${channel.name} is archived` : `Archive #${channel.name}`}</div>
+        <p className="text-sm text-muted">
+          {channel.archivedAt
+            ? "It's read-only and out of everyone's sidebar. Unarchive it to post here again."
+            : "It leaves everyone's sidebar and becomes read-only; nothing is deleted and you can still find and search it. Agents working here are stopped. You can unarchive it any time."}
+        </p>
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setError(null);
+            setBusy(true);
+            try {
+              await setArchived(channel, !channel.archivedAt);
+              onClose();
+            } catch (err) {
+              setError((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
+        </Button>
+      </div>
+      <form
+        className="rounded-xl border border-line p-4 space-y-3"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setError(null);
+          setBusy(true);
+          try {
+            await api("DELETE", `/api/channels/${channel.id}`);
+            const wasOpen = useStore.getState().activeChannel === channel.id;
+            await refreshChannels();
+            onClose();
+            if (wasOpen) toGeneral();
+          } catch (err) {
+            setError((err as Error).message);
+            setBusy(false);
+          }
+        }}
+      >
         <div className="font-medium flex items-center gap-2 text-bad">
           <Trash2 size={15} /> Delete #{channel.name}
         </div>
         <p className="text-sm text-muted">Every message, thread and discussion in it is deleted for everyone, and agents working here are stopped. Tasks and routines that pointed here keep going without a channel. This can't be undone.</p>
-      </div>
-      <Field label={`Type ${channel.name} to confirm`}>
-        <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={channel.name} autoComplete="off" />
-      </Field>
+        <Field label={`Type ${channel.name} to confirm`}>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={channel.name} autoComplete="off" />
+        </Field>
+        <div className="flex justify-end">
+          <Button variant="danger" disabled={typed !== channel.name || busy}>
+            Delete channel
+          </Button>
+        </div>
+      </form>
       {error && <p className="text-sm text-bad">{error}</p>}
-      <div className="flex justify-end">
-        <Button variant="danger" disabled={typed !== channel.name || busy}>
-          Delete channel
-        </Button>
-      </div>
-    </form>
+    </div>
   );
 }
 
@@ -537,9 +808,16 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           ))
         }
         items={[
+          { label: channel.starred ? "Unstar" : "Star", icon: <Star size={14} />, onSelect: () => void setChannelPrefs(channel, { starred: !channel.starred }) },
+          channel.notify === "mute"
+            ? { label: "Unmute", icon: <Bell size={14} />, onSelect: () => void setChannelPrefs(channel, { notify: "default" }) }
+            : { label: "Mute", icon: <BellOff size={14} />, onSelect: () => void setChannelPrefs(channel, { notify: "mute" }) },
+          "divider" as const,
           ...(role !== "guest" ? [{ label: "Rename…", icon: <Pencil size={14} />, onSelect: () => setSettings("about") }] : []),
+          { label: "Agents", icon: <Bot size={14} />, onSelect: () => setSettings("agents") },
           { label: "Members", icon: <Users size={14} />, onSelect: () => setSettings("members") },
           ...(channel.joined && channel.name !== "general" ? ["divider" as const, { label: "Leave channel", icon: <LogOut size={14} />, onSelect: () => void leaveChannel(channel), danger: true }] : []),
+          ...(role !== "guest" && !isProtected(channel) && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
         ]}
       />
       {settings && <ChannelSettings channel={channel} tab={settings} onClose={() => setSettings(null)} />}

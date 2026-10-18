@@ -181,8 +181,28 @@ export interface Channel {
   topic: string;
   /** sidebar section; null = the default "Channels" group */
   sectionId: string | null;
+  /** only its members (and the workspace owner) can see a private channel */
+  private: boolean;
+  /** set while archived: read-only, out of the sidebar, can be brought back */
+  archivedAt: string | null;
+  settings: ChannelSettings;
   createdAt: string;
 }
+
+/** How agents behave in one channel. */
+export interface ChannelSettings {
+  /** the agent that answers messages nobody @mentions; null = only @mentioned agents answer */
+  defaultAgentId: string | null;
+  /** agents answer a top-level message in a thread under it, keeping the channel tidy */
+  replyInThread: boolean;
+  /** standing notes every agent reads when it works here ("use the web repo", "keep replies short") */
+  instructions: string;
+}
+
+export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null, replyInThread: false, instructions: "" };
+
+/** One person's own setting for a channel: how loud it is. */
+export type ChannelNotify = "all" | "default" | "mute";
 
 /** A sidebar group of channels, shared by the whole workspace. */
 export interface Section {
@@ -209,6 +229,10 @@ export interface Message {
   hop: number; // how many agent-to-agent hops led to this message (loop guard)
   reactions?: Reaction[];
   createdAt: string;
+  /** set when its author changed the text */
+  editedAt?: string;
+  /** set when it was deleted but kept so its thread's replies stay reachable; body and parts are empty */
+  deletedAt?: string;
 }
 
 export type MessagePart =

@@ -109,7 +109,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        <a href="#/agents" className="text-sm font-semibold uppercase tracking-wider text-muted hover:text-ink">
+        <a href="#/agents" className="text-lg font-bold tracking-tight text-muted hover:text-ink">
           Agents
         </a>
         <ChevronRight size={14} className="text-faint shrink-0" />
@@ -130,7 +130,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
         <nav className="hidden md:block w-52 shrink-0 border-r border-line overflow-y-auto p-2 pt-4 space-y-4" aria-label="Agent sections">
           {nav.map((g) => (
             <div key={g.group} className="space-y-px">
-              <div className="px-2 pb-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70">{g.group}</div>
+              <div className="px-2 pb-1 text-[13px] font-semibold text-muted">{g.group}</div>
               {g.items.map((i) => link(i.id, i.label, i.icon))}
             </div>
           ))}
@@ -317,7 +317,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
               className={cx("min-h-[420px] w-full resize-y rounded-xl border border-line bg-bg px-4 py-3 font-mono text-[13.5px] leading-relaxed outline-none focus:border-accent", view === "preview" && "hidden lg:block")}
             />
             <div className={cx("min-h-[420px] rounded-xl border border-line px-5 py-4 overflow-y-auto", view === "write" && "hidden lg:block")}>
-              <div className="text-[11px] uppercase tracking-wide text-faint mb-2">Preview</div>
+              <div className="text-[13px] font-semibold text-faint mb-2">Preview</div>
               <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
             </div>
           </div>

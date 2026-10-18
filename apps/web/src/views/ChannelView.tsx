@@ -1,12 +1,12 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
+import { Archive, Bell, BellOff, BellRing, Pin, PinOff, Star, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
-import { ChannelSettings, type ChannelSettingsTab } from "../components/Channels.tsx";
+import { ChannelIcon, ChannelSettings, NOTIFY, isProtected, setArchived, setChannelPrefs, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
@@ -87,10 +87,19 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           ) : (
             <div className="min-w-0 flex-1">
               <div className="font-semibold flex items-center gap-1 text-[15px]">
-                <Hash size={16} className="text-faint" />
+                <ChannelIcon channel={channel} size={16} />
                 {channel.name}
+                <button
+                  onClick={() => void setChannelPrefs(channel, { starred: !channel.starred })}
+                  className={cx("ml-0.5 size-6 rounded-md grid place-items-center hover:bg-hover", channel.starred ? "text-warn" : "text-faint hover:text-ink")}
+                  aria-label={channel.starred ? `Unstar #${channel.name}` : `Star #${channel.name}`}
+                  aria-pressed={channel.starred}
+                  title={channel.starred ? "Starred" : "Star"}
+                >
+                  <Star size={14} fill={channel.starred ? "currentColor" : "none"} />
+                </button>
               </div>
-              {channel.topic && <div className="text-xs text-muted truncate">{channel.topic}</div>}
+              <ChannelSubtitle channel={channel} onAgents={() => setSettings("agents")} />
             </div>
           )}
           {dmAgent?.computerId && (
@@ -101,6 +110,12 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           {dmAgent && <button onClick={() => setCalling(true)} className="size-9 rounded-full hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={18} /></button>}
           {channel.kind === "channel" && (
             <div className="flex items-center gap-1 shrink-0">
+              {channel.pinnedIds.length > 0 && (
+                <button onClick={() => setSettings("pins")} className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1" aria-label={`Pinned: ${channel.pinnedIds.length}`} title="Pinned messages">
+                  <Pin size={14} /> {channel.pinnedIds.length}
+                </button>
+              )}
+              <NotifyMenu channel={channel} />
               <button
                 onClick={() => setSettings("members")}
                 className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1"
@@ -118,12 +133,89 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
           <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} />
         </SoloAgent.Provider>
-        <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} />
+        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} />}
       </div>
       {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
       {dmAgent && panel && !route.threadId && <AgentPanel agent={dmAgent} tab={panel} onTab={setPanel} onClose={() => setPanel(null)} onCall={() => setCalling(true)} />}
       {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
       {settings && <ChannelSettings key={settings} channel={channel} tab={settings} onClose={() => setSettings(null)} />}
+    </div>
+  );
+}
+
+/** Under a channel's name: its topic, and who answers there when nobody's @mentioned. */
+function ChannelSubtitle({ channel, onAgents }: { channel: ChannelInfo; onAgents: () => void }) {
+  const names = useNames();
+  // nobody answers in an archived channel
+  const answerer = channel.settings.defaultAgentId && !channel.archivedAt ? names.agent(channel.settings.defaultAgentId) : undefined;
+  if (!channel.topic && !answerer) return null;
+  return (
+    <div className="text-xs text-muted truncate">
+      {answerer && (
+        <button onClick={onAgents} className="hover:text-ink hover:underline" title="Who answers here">
+          {answerer.name} answers here
+        </button>
+      )}
+      {answerer && channel.topic && " · "}
+      {channel.topic}
+    </div>
+  );
+}
+
+/** Your own say in how loud a channel is. */
+function NotifyMenu({ channel }: { channel: ChannelInfo }) {
+  const icon = channel.notify === "mute" ? <BellOff size={15} /> : channel.notify === "all" ? <BellRing size={15} /> : <Bell size={15} />;
+  return (
+    <Popover
+      align="right"
+      up={false}
+      className="w-72 p-1.5"
+      trigger={(open, toggle) => (
+        <button onClick={toggle} aria-expanded={open} className={cx("size-8 rounded-lg border border-line grid place-items-center hover:text-ink", channel.notify === "default" ? "text-muted" : "text-ink")} aria-label={`Notifications: ${NOTIFY[channel.notify].label}`} title={`Notifications: ${NOTIFY[channel.notify].label}`}>
+          {icon}
+        </button>
+      )}
+    >
+      {(close) => (
+        <div role="menu">
+          {(Object.keys(NOTIFY) as (keyof typeof NOTIFY)[]).map((k) => (
+            <button
+              key={k}
+              role="menuitemradio"
+              aria-checked={channel.notify === k}
+              onClick={() => {
+                close();
+                void setChannelPrefs(channel, { notify: k });
+              }}
+              className="w-full text-left rounded-lg px-2.5 py-2 hover:bg-hover flex gap-2"
+            >
+              <span className="w-4 pt-0.5 shrink-0">{channel.notify === k && <Check size={14} />}</span>
+              <span>
+                <span className="block text-sm font-medium">{NOTIFY[k].label}</span>
+                <span className="block text-xs text-muted">{NOTIFY[k].body}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </Popover>
+  );
+}
+
+/** Where the composer would be, in an archived channel. */
+function ArchivedBar({ channel }: { channel: ChannelInfo }) {
+  const canManage = useStore((s) => s.me?.role !== "guest");
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="shrink-0 px-3 md:px-5 pb-3 pt-1 safe-bottom">
+      <div className="rounded-2xl border border-line bg-bg px-4 py-3 flex items-center gap-3 text-sm">
+        <Archive size={16} className="text-muted shrink-0" />
+        <span className="flex-1 text-muted">#{channel.name} is archived. You can read and search it, but nobody can post here.</span>
+        {canManage && !isProtected(channel) && (
+          <Button onClick={() => setArchived(channel, false).catch((e) => setError((e as Error).message))}>Unarchive</Button>
+        )}
+      </div>
+      {error && <p className="pt-1 px-1 text-xs text-bad">{error}</p>}
     </div>
   );
 }
@@ -206,7 +298,7 @@ function AccessControl({ agent, ctx, canEdit }: { agent: Agent; ctx: AgentContex
     >
       {(close) => (
         <div role="menu">
-          <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-faint">What {agent.name} can do</div>
+          <div className="px-2.5 pt-1.5 pb-1 text-[13px] font-semibold text-faint">What {agent.name} can do</div>
           {(Object.keys(ACCESS) as AccessLevel[]).map((k) => (
             <button
               key={k}
@@ -544,15 +636,16 @@ function ChannelIntro({ channel }: { channel: ChannelInfo }) {
       </div>
     );
   }
+  const answerer = channel.settings.defaultAgentId ? names.agent(channel.settings.defaultAgentId) : undefined;
   return (
     <div className="px-5 pb-6 pt-2">
       <div className="size-12 rounded-2xl bg-chip grid place-items-center text-muted">
-        <Hash size={22} />
+        <ChannelIcon channel={channel} size={22} className="" />
       </div>
       <h2 className="mt-3 text-xl font-semibold">#{channel.name}</h2>
       <p className="text-sm text-muted">
-        {channel.topic ? `${channel.topic}. ` : "This is the start of the channel. "}
-        @mention an agent to bring it in. New here?{" "}
+        {channel.topic ? `${channel.topic.replace(/[.!?]\s*$/, "")}. ` : "This is the start of the channel. "}
+        {answerer ? `${answerer.name} answers messages here; @mention another agent to ask them instead.` : "@mention an agent to bring it in."} New here?{" "}
         <a href="#/welcome" className="text-accent-text font-medium hover:underline">
           Get started
         </a>
@@ -576,6 +669,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
   const cards = useMemo(() => linkCards(m.body), [m.body]);
   // on a phone the actions open with a tap on the message, and close with a tap anywhere else
   const [touched, setTouched] = useState(false);
+  const [editing, setEditing] = useState(false);
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!touched) return;
@@ -604,6 +698,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
   const solo = useContext(SoloAgent);
   // the DM's own agent already lives in the pill above: no ghost or name on its messages
   const home = !!agent && agent.id === solo;
+  const pinned = useStore((s) => !!s.channels.find((c) => c.id === m.channelId)?.pinnedIds.includes(m.id));
 
   return (
     <div
@@ -636,9 +731,20 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
             </span>
             {agent && <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-medium">{HARNESS_LABELS[agent.harness]}</span>}
             <span className="text-xs text-faint">{time}</span>
+            {pinned && (
+              <span className="text-[11px] text-muted inline-flex items-center gap-0.5">
+                <Pin size={11} /> Pinned
+              </span>
+            )}
           </div>
         )}
-        {html && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />}
+        {m.deletedAt ? (
+          <div className="text-[15px] text-muted italic">This message was deleted.</div>
+        ) : editing ? (
+          <EditBox m={m} onDone={() => setEditing(false)} />
+        ) : (
+          html && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: m.editedAt ? withEditedMark(html, clockTime(m.editedAt, clock)) : html }} />
+        )}
         {cards.map((c) => (
           <a key={c.url} href={c.url} target="_blank" rel="noreferrer" className="mt-1.5 flex max-w-sm items-center gap-3 rounded-xl border border-line bg-panel px-3 py-2 hover:bg-hover">
             <span className="size-8 rounded-lg bg-chip grid place-items-center text-muted">{c.kind === "PR" ? <GitPullRequest size={16} /> : <CircleDot size={16} />}</span>
@@ -658,14 +764,90 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
           </button>
         )}
       </div>
-      <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} open={touched} onDone={() => setTouched(false)} />
+      {!m.deletedAt && !editing && <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} onEdit={() => setEditing(true)} open={touched} onDone={() => setTouched(false)} />}
+    </div>
+  );
+}
+
+/** "(edited)" at the end of the last paragraph, like Slack, rather than on a line of its own. */
+function withEditedMark(html: string, at: string) {
+  const mark = `<span class="text-[11px] text-faint" title="Edited ${at}"> (edited)</span>`;
+  const t = html.trimEnd();
+  return t.endsWith("</p>") ? t.slice(0, -4) + mark + "</p>" : t + mark;
+}
+
+/** Fix a sent message in place: Enter saves, Esc puts it back. Phones get buttons, since Enter is a newline there. */
+function EditBox({ m, onDone }: { m: Message; onDone: () => void }) {
+  const [text, setText] = useState(m.body);
+  const [busy, setBusy] = useState(false);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+  }, [text]);
+  useEffect(() => {
+    const el = ta.current;
+    el?.focus();
+    el?.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+  const save = async () => {
+    if (text === m.body) return onDone();
+    setBusy(true);
+    try {
+      await api("PATCH", `/api/messages/${m.id}`, { body: text });
+      onDone();
+    } catch (e) {
+      alert((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-1 rounded-xl border border-input bg-panel focus-within:border-accent/60">
+      <textarea
+        ref={ta}
+        rows={1}
+        value={text}
+        disabled={busy}
+        aria-label="Edit message"
+        className="block w-full resize-none bg-transparent px-3 py-2 text-[15px] outline-none"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") return (e.preventDefault(), onDone());
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) {
+            e.preventDefault();
+            void save();
+          }
+        }}
+      />
+      <div className="flex items-center justify-end gap-2 px-2 pb-2">
+        <span className="mr-auto pl-1 text-[11px] text-faint hidden [@media(pointer:fine)]:inline">Enter to save · Esc to cancel</span>
+        <Button variant="ghost" className="h-7" onClick={onDone} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="primary" className="h-7" onClick={() => void save()} disabled={busy}>
+          Save
+        </Button>
+      </div>
     </div>
   );
 }
 
 /** Buzz-style toolbar: quick reactions, picker, reply in thread, more. Shows on hover, on keyboard focus, and (`open`) after a tap on a phone. */
-function ActionBar({ m, onReply, open, onDone }: { m: Message; onReply?: () => void; open: boolean; onDone: () => void }) {
+function ActionBar({ m, onReply, onEdit, open, onDone }: { m: Message; onReply?: () => void; onEdit: () => void; open: boolean; onDone: () => void }) {
   const toggleReaction = useStore((s) => s.toggleReaction);
+  const channel = useStore((s) => s.channels.find((c) => c.id === m.channelId));
+  const canPin = useStore((s) => s.me?.role !== "guest") && channel?.kind === "channel" && !channel.archivedAt;
+  const mine = useStore((s) => m.author.kind === "user" && m.author.id === s.me?.user.id);
+  const owner = useStore((s) => s.me?.role === "owner");
+  const writable = !channel?.archivedAt;
+  const remove = () => {
+    onDone();
+    if (!confirm(mine ? "Delete this message? This can't be undone." : "Delete this message from someone else? This can't be undone.")) return;
+    void api("DELETE", `/api/messages/${m.id}`).catch((e) => alert((e as Error).message));
+  };
+  const pinned = !!channel?.pinnedIds.includes(m.id);
   const [picker, setPicker] = useState(false);
   const react = (emoji: string) => {
     toggleReaction(m.id, emoji);
@@ -705,7 +887,12 @@ function ActionBar({ m, onReply, open, onDone }: { m: Message; onReply?: () => v
             <MoreHorizontal size={15} />
           </button>
         )}
-        items={[{ label: "Copy text", icon: <Copy size={14} />, onSelect: () => (navigator.clipboard?.writeText(m.body), onDone()) }]}
+        items={[
+          { label: "Copy text", icon: <Copy size={14} />, onSelect: () => (navigator.clipboard?.writeText(m.body), onDone()) },
+          ...(canPin ? [{ label: pinned ? "Unpin" : "Pin to channel", icon: pinned ? <PinOff size={14} /> : <Pin size={14} />, onSelect: () => (void api(pinned ? "DELETE" : "PUT", `/api/messages/${m.id}/pin`).catch((e) => alert((e as Error).message)), onDone()) }] : []),
+          ...(mine && writable ? [{ label: "Edit", icon: <Pencil size={14} />, onSelect: () => (onDone(), onEdit()) }] : []),
+          ...((mine || owner) && writable ? [{ label: "Delete", icon: <Trash2 size={14} />, danger: true, onSelect: remove }] : []),
+        ]}
       />
     </div>
   );
@@ -989,16 +1176,20 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
 
   // a quiet line about where this will land: no mention in a channel, or an offline agent that was asked
   const mentioned = text.trim() ? parseMentions(text).map((h) => agents.find((a) => a.handle === h)).filter((a): a is Agent => !!a) : [];
+  // the agent that answers this channel's un-@mentioned messages, if it has one
+  const answerer = channel?.kind === "channel" && channel.settings.defaultAgentId ? agents.find((a) => a.id === channel.settings.defaultAgentId) : undefined;
   const offline = mentioned.find((a) => a.status === "offline") ?? (channel?.kind === "dm" && text.trim() ? dmAgent?.status === "offline" ? dmAgent : undefined : undefined);
   const hint = offline
     ? `${offline.name} is offline; it will answer when its device reconnects.`
     : // in a thread, a plain reply can go back to the agent that started it, so only say this at the top level
       channel && channel.kind !== "dm" && !threadId && text.trim() && !mentioned.length
-      ? `Posting to #${channel.name}. @mention an agent to ask it.`
+      ? answerer
+        ? `${answerer.name} will answer. @mention another agent to ask them instead.`
+        : `Posting to #${channel.name}. @mention an agent to ask it.`
       : null;
 
-  // a "ask someone" shortcut for the hint line, in channels (not DMs or threads) that have agents
-  const canAsk = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !mentioned.length;
+  // a "ask someone" shortcut for the hint line, in channels (not DMs or threads) that have agents and nobody answering by default
+  const canAsk = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !mentioned.length && !answerer;
   function ask() {
     if (agents.length === 1) {
       const m = `@${agents[0].handle}`;
@@ -1067,7 +1258,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
     if (!text.trim() && !files.length) return;
     const body = text;
     const attached = files;
-    const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !parseMentions(body).length;
+    const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !answerer && !parseMentions(body).length;
     setNobodyAsked(false);
     setText("");
     setFiles([]);
@@ -1101,16 +1292,17 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   return (
     // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
     <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom @container">
-      <div className="relative rounded-2xl border border-line bg-bg focus-within:border-input" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
+      {/* the message box floats on glass, like the iPhone app's */}
+      <div className="glass relative rounded-[1.75rem]" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
         {suggestions.length > 0 && (
-          <div className="absolute bottom-full mb-2 left-0 w-72 rounded-xl border border-line bg-panel shadow-panel py-1 z-10" role="listbox">
+          <div className="glass absolute bottom-full mb-2 left-0 w-72 rounded-2xl p-1 z-10" role="listbox">
             {suggestions.map((a, i) => (
               <button
                 key={a.id}
                 role="option"
                 aria-selected={i === pick % suggestions.length}
                 onMouseDown={(e) => (e.preventDefault(), complete(a.handle))}
-                className={cx("w-full px-3 py-1.5 flex items-center gap-2.5 text-sm text-left", i === pick % suggestions.length && "bg-hover")}
+                className={cx("w-full px-2.5 py-1.5 rounded-xl flex items-center gap-2.5 text-sm text-left", i === pick % suggestions.length && "bg-hover")}
               >
                 <AgentAvatar agent={a} size={24} badge={false} />
                 <span className="font-medium">{a.name}</span>
@@ -1123,7 +1315,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
         {files.length > 0 && (
           <div className="px-3 pt-2.5 flex flex-wrap gap-1.5">
             {files.map((f) => (
-              <span key={f.id} className="text-xs rounded-lg bg-chip px-2 py-1 flex items-center gap-1">
+              <span key={f.id} className="text-xs rounded-full bg-chip px-2.5 py-1 flex items-center gap-1">
                 <FileText size={12} /> {f.name}
                 <button onClick={() => setFiles(files.filter((x) => x.id !== f.id))} aria-label={`Remove ${f.name}`}>
                   <X size={12} />
@@ -1159,7 +1351,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
               send();
             }
           }}
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[15px] outline-none placeholder:text-faint"
+          className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] outline-none placeholder:text-faint"
         />
         <div className="flex items-center gap-0.5 px-2 pb-2 min-w-0">
           <Popover
@@ -1180,7 +1372,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           </Popover>
           <div className="relative">
             {emoji && (
-              <div className="absolute bottom-full mb-2 left-0 z-20 rounded-xl border border-line bg-panel shadow-panel" onMouseLeave={() => setEmoji(false)}>
+              <div className="glass absolute bottom-full mb-2 left-0 z-20 rounded-2xl" onMouseLeave={() => setEmoji(false)}>
                 <EmojiPicker
                   onPick={(e) => {
                     setEmoji(false);
@@ -1202,7 +1394,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           <button
             onClick={send}
             disabled={!text.trim() && !files.length}
-            className="ml-1 size-8 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
+            className="ml-1 size-9 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
             aria-label="Send"
           >
             <ArrowUp size={17} strokeWidth={2.5} />

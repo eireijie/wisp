@@ -130,7 +130,7 @@ struct PartView: View {
         .font(.callout)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(.secondarySystemBackground)))
+        .background(Capsule().fill(Color(.secondarySystemBackground)))
     case .approval(let id):
       ApprovalCard(approvalId: id)
     case .computer(let id, let request):
@@ -185,6 +185,10 @@ struct ApprovalCard: View {
 struct ApprovalBox: View {
   @Environment(Store.self) private var store
   var approval: Approval
+  /** who's asking, when it isn't clear from around the card */
+  var agentName: String? = nil
+  /** a row of a list, which is its own card */
+  var inList = false
   @State private var busy = false
   @State private var error: String?
   @State private var expanded = false
@@ -194,7 +198,7 @@ struct ApprovalBox: View {
       HStack(spacing: 6) {
         Image(systemName: approval.status == "pending" ? "hand.raised" : approval.status == "approved" ? "checkmark.circle.fill" : "xmark.circle.fill")
           .foregroundStyle(approval.status == "pending" ? .orange : approval.status == "approved" ? .green : .red)
-        Text(approval.status == "pending" ? "Asks for your OK" : approval.status == "approved" ? "Approved" : "Not approved")
+        Text(approval.status == "pending" ? "\(agentName ?? "It") asks for your OK" : approval.status == "approved" ? "Approved" : "Not approved")
           .font(.caption.weight(.semibold))
           .foregroundStyle(.secondary)
       }
@@ -208,26 +212,24 @@ struct ApprovalBox: View {
       if approval.status == "pending" {
         HStack(spacing: 8) {
           Button {
-            decide(true)
-          } label: {
-            Text("Approve").fontWeight(.semibold).frame(maxWidth: .infinity, minHeight: 36)
-          }
-          .foregroundStyle(Color(.systemBackground))
-          .background(Capsule().fill(Color.primary))
-          Button {
             decide(false)
           } label: {
-            Text("Don't").frame(maxWidth: .infinity, minHeight: 36)
+            Text("Not now").frame(maxWidth: .infinity)
           }
-          .background(Capsule().stroke(Color(.separator)))
+          .secondaryButton()
+          .controlSize(.large)
+          Button {
+            decide(true)
+          } label: {
+            Label("Approve", systemImage: "checkmark").fontWeight(.semibold).frame(maxWidth: .infinity)
+          }
+          .primaryButton()
         }
-        .buttonStyle(.plain)
         .disabled(busy)
       }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
     }
-    .padding(12)
-    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.secondarySystemBackground)))
+    .modifier(ApprovalSurface(inList: inList))
   }
 
   private func decide(_ yes: Bool) {
@@ -236,6 +238,13 @@ struct ApprovalBox: View {
       do { try await store.decide(approval, approve: yes) } catch { self.error = error.localizedDescription }
       busy = false
     }
+  }
+}
+
+private struct ApprovalSurface: ViewModifier {
+  var inList: Bool
+  func body(content: Content) -> some View {
+    if inList { content.padding(.vertical, 6) } else { content.card(Corner.card, padding: 14) }
   }
 }
 

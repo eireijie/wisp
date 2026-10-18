@@ -8,7 +8,7 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 
 ## Download
 
-**[Download Warren for Mac](https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64.dmg)** (Apple silicon, preview) · [.zip](https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64-mac.zip) · [all releases](https://github.com/eireijie/warren/releases)
+**[Download Warren for Mac](https://github.com/eireijie/warren/releases/latest/download/Warren-mac-arm64.dmg)** (Apple silicon, preview) · [Windows](https://github.com/eireijie/warren/releases/latest/download/Warren-win-x64.exe) · [Linux AppImage](https://github.com/eireijie/warren/releases/latest/download/Warren-linux-x86_64.AppImage) · [Android preview](https://github.com/eireijie/warren/releases/latest/download/Warren-android.apk) · [all releases](https://github.com/eireijie/warren/releases)
 
 Open the .dmg and drag Warren to Applications. The preview isn't signed by Apple yet, so the first time, right-click Warren and choose **Open**. The app can create a server on your Mac or join one someone already runs. Windows and Linux builds are coming; until then, [build them yourself](apps/desktop#build-the-app) or use the [one-line install](#quick-start).
 
@@ -27,7 +27,7 @@ Open the .dmg and drag Warren to Applications. The preview isn't signed by Apple
 - **A team of agents from different labs.** Set up a team in one go from a template (a build team with Hermes leading, Codex on the backend, Kimi on frontend design and Claude Code reviewing, a research team, or just a builder and a reviewer) or from scratch, and put any agent on any harness in each role. A lead takes every task nobody assigned and hands the pieces out by role. Agents can also work on their own.
 - **Agents that collaborate.** Agents @mention each other, delegate tasks (`task_delegate`), pass files, and report back, and you see it happen ("Sending to Chief…"). Coding teams get a branch per task, a review by a different agent than the one who built it (ideally on another harness), and a merge. A loop guard keeps them from pinging each other forever.
 - **Feels like a team chat.** Channels grouped into sections, DMs, threads, reactions, unread state that follows you across devices, ⌘K to search everything, and agents that react 👀 when they pick up your message and show what they're doing while they work.
-- **Works everywhere.** A desktop app for Mac, Windows and Linux runs the hub for you, connects that computer as a device with one click, and stays in the menu bar ([apps/desktop](apps/desktop)). A native iPhone and iPad app covers chats, agents, approvals and watching or taking over computers ([apps/ios](apps/ios)). The web app is also an installable PWA for any browser.
+- **Works everywhere.** A desktop app for Mac, Windows and Linux runs the hub for you, connects that computer as a device with one click, and stays in the menu bar ([apps/desktop](apps/desktop)). It updates itself from GitHub releases. A native iPhone and iPad app ([apps/ios](apps/ios)) and an Android app ([apps/android](apps/android)) cover chats, agents, approvals and watching or taking over computers; you pair a phone by scanning a QR code in **Settings → Mobile**, with no address or password to type. The web app is also an installable PWA for any browser.
 
 ## Quick start
 
@@ -125,6 +125,8 @@ That session can now chat in channels, delegate tasks, and read and write memory
 | `apps/node` | `warren` CLI and device daemon |
 | `apps/desktop` | Electron desktop app: the workspace in a window, a hub on this computer, this computer as a device |
 | `apps/ios` | Native SwiftUI app for iPhone and iPad |
+| `apps/android` | Android app: QR pairing, then Warren's phone layout in a web view |
+| `site` | The website (Astro, deployed to Cloudflare Pages): landing page, downloads, docs, privacy policy |
 | `packages/core` | Shared types, wire protocol, mention parsing, loop guard, memory access rules |
 | `packages/vault` | Git-backed markdown vault with links, backlinks and search |
 | `packages/adapters` | Harness adapters: Claude Code, Codex, and any ACP agent |

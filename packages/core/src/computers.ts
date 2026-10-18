@@ -127,6 +127,16 @@ const Space = z.object({ width: z.number().int().positive().max(100_000), height
 export const MouseButton = z.enum(["left", "right", "middle"]);
 export const ScrollDirection = z.enum(["up", "down", "left", "right"]);
 
+/** The biggest file moved to or from a computer in one go. */
+export const MAX_TRANSFER_BYTES = 50 * 1024 * 1024;
+
+/** A file or folder name: one path segment. */
+export const FileName = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine((n) => !/[/\\\0]/.test(n) && n !== "." && n !== "..", "a name can't contain / or \\, or be . or ..");
+
 export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("screenshot") }),
   z.object({ action: z.literal("click"), x: coord, y: coord, button: MouseButton.optional(), double: z.boolean().optional(), space: Space.optional() }),
@@ -153,6 +163,18 @@ export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("signin"), harness: z.string().max(60) }),
   /** the web page element at a point on the screen (VMs' browser), for recordings → { element: PageElement | null } */
   z.object({ action: z.literal("inspect"), x: coord, y: coord, space: Space.optional() }),
+  // --- keeping a computer in step with yours: its clipboard and files ---
+  /** the text on its clipboard → { text } */
+  z.object({ action: z.literal("clipboard_get") }),
+  z.object({ action: z.literal("clipboard_set"), text: z.string().max(1_000_000) }),
+  /** what's in a folder ("~" or unset: its home folder) → FolderListing */
+  z.object({ action: z.literal("files_list"), path: z.string().max(4000).optional() }),
+  /** a file's contents → FileData */
+  z.object({ action: z.literal("file_read"), path: z.string().min(1).max(4000) }),
+  /** put a file in a folder (made if missing); a name that's taken gets " (1)" → { path } */
+  z.object({ action: z.literal("file_write"), folder: z.string().max(4000), name: FileName, data: z.string().max(Math.ceil(MAX_TRANSFER_BYTES / 3) * 4) }),
+  /** make a folder inside `folder` → { path } */
+  z.object({ action: z.literal("file_mkdir"), folder: z.string().max(4000), name: FileName }),
 ]);
 export type ComputerAction = z.infer<typeof ComputerAction>;
 
@@ -163,6 +185,76 @@ export interface Screenshot {
   /** size of the image */
   width: number;
   height: number;
+}
+
+/** Actions that move things between a person's device and a computer, not input on its screen. */
+export const TRANSFER_ACTIONS = ["clipboard_get", "clipboard_set", "files_list", "file_read", "file_write", "file_mkdir"] as const;
+
+export interface FileEntry {
+  name: string;
+  dir: boolean;
+  /** bytes; 0 for folders */
+  size: number;
+  modified: string | null;
+}
+
+export interface FolderListing {
+  /** the folder, absolute */
+  path: string;
+  /** the folder above it, or null at the top */
+  parent: string | null;
+  home: string;
+  entries: FileEntry[];
+}
+
+export interface FileData {
+  name: string;
+  size: number;
+  /** base64 */
+  data: string;
+}
+
+/** `~` or `~/x` and a home folder → an absolute path (POSIX or Windows). */
+export function expandHome(p: string | undefined, home: string): string {
+  if (!p || p === "~") return home;
+  if (p.startsWith("~/") || p.startsWith("~\\")) return home.replace(/[/\\]+$/, "") + p.slice(1);
+  return p;
+}
+
+/**
+ * Shell scripts for files on a Linux computer (a VM, a cloud computer), run as `sh -c SCRIPT sh ARGS…`.
+ * Each takes the folder or file as $1, with ~ meaning the home folder.
+ */
+const HOME_ARG = 'p="$1"; case "$p" in ""|"~") p="$HOME";; "~/"*) p="$HOME/${p#??}";; esac';
+export const POSIX_FILES = {
+  /** prints the folder, the home folder, then one "type\tsize\tmtime\tname" line per entry */
+  list: [HOME_ARG, 'cd -- "$p" 2>/dev/null || { echo "There is no folder $p" >&2; exit 2; }', "pwd", 'printf "%s\\n" "$HOME"', "find . -mindepth 1 -maxdepth 1 -printf '%Y\\t%s\\t%T@\\t%f\\n' 2>/dev/null; true"].join("\n"),
+  /** the file's bytes; `base64` prints them as base64 (for shells that only return text) */
+  read: (maxBytes: number, base64 = false) =>
+    [HOME_ARG, '[ -f "$p" ] || { echo "There is no file $p" >&2; exit 2; }', `[ "$(wc -c < "$p")" -le ${maxBytes} ] || { echo "It's bigger than ${Math.round(maxBytes / 1024 / 1024)} MB" >&2; exit 3; }`, base64 ? 'base64 < "$p" | tr -d "\\n"' : 'cat -- "$p"'].join("\n"),
+  /** $2 is the name; stdin is the contents; prints where it went */
+  write: [HOME_ARG, 'mkdir -p -- "$p" || exit 2', 'n="$2"; b="$n"; e=""', 'case "$n" in ?*.*) b="${n%.*}"; e=".${n##*.}";; esac', 'f="$p/$n"; i=1', 'while [ -e "$f" ]; do f="$p/$b ($i)$e"; i=$((i+1)); done', 'cat > "$f" && printf "%s\\n" "$f"'].join("\n"),
+  /** $2 is the new folder's name; prints its path */
+  mkdir: [HOME_ARG, 'f="$p/$2"', '[ -e "$f" ] && { echo "$2 already exists" >&2; exit 2; }', 'mkdir -p -- "$f" && printf "%s\\n" "$f"'].join("\n"),
+};
+
+/** Read POSIX_FILES.list's output. */
+export function parseListing(out: string): FolderListing {
+  const [dir = "/", home = "/", ...lines] = out.split("\n");
+  const entries: FileEntry[] = [];
+  for (const line of lines) {
+    const [type, size, mtime, ...rest] = line.split("\t");
+    const name = rest.join("\t");
+    if (!name) continue;
+    const dirEntry = type === "d";
+    entries.push({ name, dir: dirEntry, size: dirEntry ? 0 : Number(size) || 0, modified: Number(mtime) ? new Date(Number(mtime) * 1000).toISOString() : null });
+  }
+  return { path: dir, parent: dir === "/" ? null : dir.replace(/\/[^/]*$/, "") || "/", home, entries: sortEntries(entries) };
+}
+
+/** Folders first, then by name. */
+export function sortEntries(entries: FileEntry[]): FileEntry[] {
+  return entries.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }) : a.dir ? -1 : 1));
 }
 
 export interface RunOutput {

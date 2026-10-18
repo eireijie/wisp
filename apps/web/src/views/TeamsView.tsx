@@ -30,7 +30,7 @@ export function TeamsView({ teamId, tab, onBack }: { teamId: string | null; tab:
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Teams</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Teams</h1>
         {canEdit && (
           <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus size={16} /> New team
@@ -133,7 +133,7 @@ function TeamList() {
       </div>
       {solo.length > 0 && (
         <section>
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Working on their own</div>
+          <div className="text-[13px] font-semibold text-muted mb-1.5">Working on their own</div>
           <div className="flex flex-wrap gap-2">
             {solo.map((a) => (
               <a key={a.id} href={`#/agents/${a.id}/overview`} className="inline-flex items-center gap-2 rounded-xl border border-line px-2.5 h-9 text-sm hover:bg-hover">
@@ -197,7 +197,7 @@ function TeamDetail({ team, tab, canEdit }: { team: TeamInfo; tab: TeamTab; canE
         <a href="#/teams" className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover text-muted" aria-label="All teams">
           <ChevronLeft size={20} />
         </a>
-        <a href="#/teams" className="hidden md:inline text-sm font-semibold uppercase tracking-wider text-muted hover:text-ink">
+        <a href="#/teams" className="hidden md:inline text-lg font-bold tracking-tight text-muted hover:text-ink">
           Teams
         </a>
         <ChevronRight size={14} className="hidden md:block text-faint shrink-0" />

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BookOpen, LifeBuoy, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BellOff, BookOpen, LifeBuoy, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -8,7 +8,7 @@ import { logout } from "../App.tsx";
 import { setupProgress, useDismissed, useOnboarding } from "../onboarding.ts";
 import { useSimple } from "../experience.tsx";
 import { useAppearance } from "../theme.ts";
-import { ChannelBrowser, ChannelMenu, SectionDialog } from "./Channels.tsx";
+import { ChannelBrowser, ChannelIcon, ChannelMenu, SectionDialog } from "./Channels.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
 import { openDm } from "../openDm.ts";
 
@@ -50,7 +50,10 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const simple = useSimple();
 
   const active = route.view === "chat" ? route.channelId : null;
-  const joined = channels.filter((c) => c.kind === "channel" && c.joined);
+  // archived channels leave the sidebar; starred ones get their own group at the top
+  const joined = channels.filter((c) => c.kind === "channel" && c.joined && !c.archivedAt);
+  const starred = joined.filter((c) => c.starred);
+  const grouped = joined.filter((c) => !c.starred);
   const dmFor = (agentId: string) => channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agentId}`));
   // what agents are waiting on a person for: approvals, and help on their computers
   // a request to borrow a device is only the owner's to answer
@@ -70,7 +73,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const channelRow = (c: ChannelInfo) => (
     <div key={c.id} className="group/ch relative">
       <Item page={page} href={href({ view: "chat", channelId: c.id, threadId: null })} active={active === c.id} unread={c.unread > 0} dot={c.unread > 0}>
-        <Hash size={16} className="shrink-0 opacity-70" /> <span className="truncate">{c.name}</span>
+        <ChannelIcon channel={c} size={16} className="shrink-0 opacity-70" /> <span className={cx("truncate", c.notify === "mute" && "opacity-60")}>{c.name}</span>
+        {c.notify === "mute" && <BellOff size={12} className="shrink-0 opacity-50" aria-label="Muted" />}
       </Item>
       <span className={cx("absolute right-3 top-1/2 -translate-y-1/2", !page && "opacity-0 group-hover/ch:opacity-100 focus-within:opacity-100")}>
         <ChannelMenu channel={c} />
@@ -90,7 +94,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
 
       {page && (
         <div className="px-3 pt-2">
-          <button onClick={() => setPalette(true)} className="w-full flex items-center gap-2 rounded-lg px-3 h-11 text-[15px] text-muted bg-side-hover">
+          <button onClick={() => setPalette(true)} className="w-full flex items-center gap-2 rounded-full px-3.5 h-11 text-[15px] text-muted bg-side-hover">
             <Search size={16} />
             <span className="flex-1 text-left">Search everything</span>
           </button>
@@ -167,8 +171,14 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           })}
         </Group>
 
+        {starred.length > 0 && (
+          <Group page={page} title="Starred" collapsed={!!collapsed.starred} onToggle={() => toggleGroup("starred")}>
+            {starred.map(channelRow)}
+          </Group>
+        )}
+
         {sections.map((s) => {
-          const list = joined.filter((c) => c.sectionId === s.id);
+          const list = grouped.filter((c) => c.sectionId === s.id);
           return (
             <Group
               key={s.id}
@@ -233,7 +243,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
             </>
           }
         >
-          {joined.filter((c) => !c.sectionId || !sections.some((s) => s.id === c.sectionId)).map(channelRow)}
+          {grouped.filter((c) => !c.sectionId || !sections.some((s) => s.id === c.sectionId)).map(channelRow)}
           <Item page={page} onClick={() => setBrowser({ sectionId: null })}>
             <Plus size={16} className="shrink-0 opacity-70" /> <span className="text-muted">Add channels</span>
           </Item>
@@ -333,7 +343,7 @@ function Group({ title, collapsed, onToggle, actions, page, children }: { title:
   return (
     <section className="space-y-px">
       <div className={cx("group px-4 flex items-center gap-1", page ? "h-9" : "h-7")}>
-        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70 hover:text-ink" aria-expanded={!collapsed}>
+        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 text-[13px] font-semibold text-muted hover:text-ink" aria-expanded={!collapsed}>
           <span className="truncate flex items-center gap-1">{title}</span>
           <ChevronDown size={12} className={cx("shrink-0 transition-transform opacity-0 group-hover:opacity-100", collapsed && "-rotate-90 opacity-100")} />
         </button>
