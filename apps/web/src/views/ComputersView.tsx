@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Cloud, Eye, Hand, Info, Laptop, Loader2, Lock, Minimize2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Video, X } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, ClipboardList, Cloud, Eye, FolderOpen, Hand, Info, Laptop, Loader2, Lock, Minimize2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Upload, Video, X } from "lucide-react";
 import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
@@ -7,6 +7,7 @@ import { go, href } from "../router.ts";
 import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
+import { ClipboardPanel, FilesPanel, remotePlatform, saveScreenshot, sendFiles, useClipboardSync } from "../components/ComputerSync.tsx";
 import { AgentAvatar, Button, Empty, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
 /** How a computer is doing, in a word or two, for cards and headers. */
@@ -348,7 +349,9 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   const [error, setError] = useState<string | null>(null);
   const [pickTeach, setPickTeach] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [info, setInfo] = useState(false);
+  const [panel, setPanel] = useState<"info" | "files" | "clipboard" | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const [filesChanged, setFilesChanged] = useState(0);
   const screen = useRef<LiveScreenHandle>(null);
   const touched = useRef(0);
   const mine = c.controller?.id === me.user.id;
@@ -383,6 +386,21 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   }, [teacher?.id, c.online]);
 
   const canControl = canEdit && c.online && !c.paused;
+  // moving files and clipboard text doesn't need control, only a computer that's there
+  const canTransfer = canEdit && c.online && !c.paused;
+  const platform = remotePlatform(c, devices);
+  const sync = useClipboardSync(c, mine && !teacher, platform);
+  const toggle = (p: NonNullable<typeof panel>) => setPanel((cur) => (cur === p ? null : p));
+  const dropOnScreen = async (files: File[]) => {
+    sync.flash(files.length === 1 ? `Sending ${files[0].name}…` : `Sending ${files.length} files…`);
+    try {
+      await sendFiles(c.id, "~/Desktop", files);
+      sync.flash(files.length === 1 ? `Sent ${files[0].name} to the Desktop` : `Sent ${files.length} files to the Desktop`);
+      setFilesChanged((n) => n + 1);
+    } catch (e) {
+      sync.flash((e as Error).message);
+    }
+  };
   const lead = on[0];
   const darkBtn = "inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50";
 
@@ -407,7 +425,17 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
               <Video size={15} /> Teach a task
             </button>
           )}
-          <button onClick={() => setInfo((v) => !v)} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", info && "bg-white/15")} aria-label="Details" title="Details">
+          {canTransfer && (
+            <>
+              <button onClick={() => toggle("files")} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", panel === "files" && "bg-white/15")} aria-label="Files" title="Files: download from it, upload to it">
+                <FolderOpen size={18} />
+              </button>
+              <button onClick={() => toggle("clipboard")} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", panel === "clipboard" && "bg-white/15")} aria-label="Clipboard" title="Clipboard: copy and paste between it and this device">
+                <ClipboardList size={18} />
+              </button>
+            </>
+          )}
+          <button onClick={() => toggle("info")} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", panel === "info" && "bg-white/15")} aria-label="Details" title="Details">
             <Info size={18} />
           </button>
           {canEdit && (
@@ -420,6 +448,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
               )}
               items={[
                 { label: "Rename", onSelect: () => setRenaming(true) },
+                ...(c.online && !c.paused ? [{ label: "Save a screenshot", icon: <Camera size={14} />, onSelect: () => void saveScreenshot(c).catch((e) => setError(e.message)) }] : []),
                 ...(c.kind !== "device" ? [{ label: c.status === "stopped" ? "Start" : "Stop", icon: c.status === "stopped" ? <Play size={14} /> : <Power size={14} />, onSelect: () => api("POST", `/api/computers/${c.id}/${c.status === "stopped" ? "start" : "stop"}`).catch((e) => setError(e.message)) }] : []),
                 ...(canRemove ? ["divider" as const] : []),
                 ...(canRemove ? [{
@@ -467,7 +496,34 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
       {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{c.statusText}</p>}
 
       <div className="flex-1 min-h-0 flex gap-4 px-3 md:px-5">
-        <div className="flex-1 min-h-0 min-w-0">
+        <div
+          className="relative flex-1 min-h-0 min-w-0"
+          onKeyDownCapture={sync.onKeyDownCapture}
+          onDragOver={(e) => {
+            if (!canTransfer || !e.dataTransfer.types.includes("Files")) return;
+            e.preventDefault();
+            setDropping(true);
+          }}
+          onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropping(false)}
+          onDrop={(e) => {
+            setDropping(false);
+            if (!canTransfer || !e.dataTransfer.files.length) return;
+            e.preventDefault();
+            void dropOnScreen([...e.dataTransfer.files]);
+          }}
+        >
+          {dropping && (
+            <div className="absolute inset-0 z-10 rounded-2xl border-2 border-dashed border-info bg-info/15 grid place-items-center pointer-events-none">
+              <span className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 h-10 text-sm font-medium">
+                <Upload size={16} /> Drop to send to {c.name}'s Desktop
+              </span>
+            </div>
+          )}
+          {sync.note && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 max-w-[90%] truncate rounded-full bg-black/75 px-4 h-9 leading-9 text-sm shadow-panel pointer-events-none" role="status">
+              {sync.note}
+            </div>
+          )}
           <LiveScreen
             ref={screen}
             computer={c}
@@ -482,11 +538,20 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             }}
           />
         </div>
-        {info && (
+        {panel && panel !== "info" && (
+          <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-80 shrink-0 overflow-y-auto text-sm bg-bg text-ink rounded-t-2xl lg:rounded-2xl p-4 shadow-panel">
+            {panel === "files" ? (
+              <FilesPanel computer={c} onClose={() => setPanel(null)} refresh={filesChanged} onSent={sync.flash} />
+            ) : (
+              <ClipboardPanel computer={c} mine={mine} platform={platform} onClose={() => setPanel(null)} />
+            )}
+          </aside>
+        )}
+        {panel === "info" && (
           <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-72 shrink-0 overflow-y-auto space-y-4 text-sm bg-bg text-ink rounded-t-2xl lg:rounded-2xl p-4 shadow-panel">
             <div className="flex items-center lg:hidden">
               <h3 className="font-semibold">Details</h3>
-              <button onClick={() => setInfo(false)} className="ml-auto p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close details">
+              <button onClick={() => setPanel(null)} className="ml-auto p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close details">
                 <X size={16} />
               </button>
             </div>

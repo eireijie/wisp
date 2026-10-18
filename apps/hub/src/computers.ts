@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import WebSocket from "ws";
-import { ComputerAction, LOAN_MAX_MINUTES, activeLoan, lentNow, tunnelFrame, type Actor, type Approval, type DeviceConfig, type DeviceLoan, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
+import { ComputerAction, LOAN_MAX_MINUTES, TRANSFER_ACTIONS, activeLoan, lentNow, tunnelFrame, type Actor, type Approval, type DeviceConfig, type DeviceLoan, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
 import { id, now } from "./auth.ts";
 import { OrgoClient, parseResolution } from "./orgo.ts";
 import { relayVnc } from "./vnc-relay.ts";
@@ -178,7 +178,9 @@ export class Computers {
   /** `requester`: the person an agent is working for (see the API's requesterOf); by default, whoever asked for its current run. */
   async act(c: Computer, action: ComputerAction, by: Actor, opts: { timeoutMs?: number; requester?: string | null } = {}): Promise<unknown> {
     const ctl = this.control.get(c.id);
-    const input = !["screenshot", "status", "start", "stop", "destroy", "harness_status", "signin", "inspect"].includes(action.action);
+    const transfer = (TRANSFER_ACTIONS as readonly string[]).includes(action.action);
+    // moving files and clipboard text doesn't need control: it doesn't touch the screen
+    const input = !transfer && !["screenshot", "status", "start", "stop", "destroy", "harness_status", "signin", "inspect"].includes(action.action);
     if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null, action);
     if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`warren node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
@@ -197,7 +199,7 @@ export class Computers {
       if (!ctl || ctl.id !== by.id) throw new ComputerError("take control of the computer first", 409);
       ctl.touched = Date.now();
     }
-    const timeoutMs = opts.timeoutMs ?? (action.action === "start" ? 60 * 60_000 : action.action === "run" ? ((action.timeout ?? 120) + 30) * 1000 : 120_000);
+    const timeoutMs = opts.timeoutMs ?? (action.action === "start" ? 60 * 60_000 : action.action === "run" ? ((action.timeout ?? 120) + 30) * 1000 : transfer ? 10 * 60_000 : 120_000);
     let result: unknown;
     if (c.kind === "orgo") {
       const client = this.orgo(c.workspaceId);
@@ -218,6 +220,8 @@ export class Computers {
       // on a person's own screen even looking is worth recording
       if (action.action !== "status" && (action.action !== "screenshot" || c.kind === "device")) this.log(c, by, describe(action));
     }
+    // files people move in and out are worth a line too
+    if (by.kind === "user" && by.id !== "system" && ["file_read", "file_write", "file_mkdir"].includes(action.action)) this.log(c, by, describe(action));
     return result;
   }
 
@@ -232,6 +236,8 @@ export class Computers {
       if (by.id !== "system" && by.id !== owner) throw new ComputerError(`${c.name} is ${name}'s own screen; only ${name} can use it`, 403);
       return;
     }
+    // a lent screen is the screen alone: a person's files and clipboard stay theirs
+    if ((TRANSFER_ACTIONS as readonly string[]).includes(action.action)) throw new ComputerError(`${c.name} is ${name}'s own screen; its files and clipboard stay with ${name}. Use the screen, or ask ${name} in chat for a file.`, 403);
     const loan = (c.config as DeviceConfig).loan;
     if (loan && loan.agentId === by.id) {
       // a loan is the owner's yes to this agent, for this long, for the screen (not the shell)
@@ -731,6 +737,18 @@ export function describe(a: ComputerAction): string {
       return `Opening ${a.target.slice(0, 60)}`;
     case "signin":
       return `Opening a sign-in for ${a.harness}`;
+    case "clipboard_get":
+      return "Reading the clipboard";
+    case "clipboard_set":
+      return "Setting the clipboard";
+    case "files_list":
+      return "Looking at files";
+    case "file_read":
+      return `Downloaded ${a.path.split(/[/\\]/).pop()}`;
+    case "file_write":
+      return `Uploaded ${a.name}`;
+    case "file_mkdir":
+      return `Made the folder ${a.name}`;
     default:
       return "Working";
   }

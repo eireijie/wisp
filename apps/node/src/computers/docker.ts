@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { ComputerSpec, PageElement, RunOutput, VmConfig } from "@warren/core";
 import { ActionError, exec, has, must, type Driver } from "./driver.ts";
 import { X11Driver } from "./x11.ts";
+import { shellFiles, x11Clipboard, type Clipboard, type Files, type ShRunner } from "./transfer.ts";
 
 const IMAGE_DIR = fileURLToPath(new URL("../../../../docker/computer", import.meta.url));
 const DISPLAY = ":1";
@@ -255,7 +256,14 @@ export class DockerVm implements Driver {
     this.filesDir = path.join(nodeDir, "computers", safe, "files");
     const inVm = (argv: string[], opts: { input?: string; timeoutMs?: number } = {}) => this.ready().then(() => exec(this.engine.bin, ["exec", "-i", "-u", "warren", "-e", `DISPLAY=${DISPLAY}`, this.name, ...argv], opts));
     this.desktop = new X11Driver(this.label, inVm, (command, timeoutSec) => this.shell(command, timeoutSec));
+    const sh: ShRunner = (script, args, input) =>
+      this.ready().then(() => exec(this.engine.bin, ["exec", "-i", "-u", "warren", "-w", VM_HOME, "-e", `DISPLAY=${DISPLAY}`, "-e", `HOME=${VM_HOME}`, this.name, "sh", "-c", script, "sh", ...args], { input, timeoutMs: 5 * 60_000 }));
+    this.clipboard = x11Clipboard(sh);
+    this.files = shellFiles(sh);
   }
+
+  readonly clipboard: Clipboard;
+  readonly files: Files;
 
   private get bin() {
     return this.engine.bin;

@@ -4,7 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { HARNESSES, VM_HARNESSES, harnessInfo, runsInVm } from "@warren/core";
 import { SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs } from "../src/computers/docker.ts";
-import { jpegSize } from "../src/computers/driver.ts";
+import { exec, jpegSize } from "../src/computers/driver.ts";
+import { localFiles, shellFiles } from "../src/computers/transfer.ts";
+import { spawnSync } from "node:child_process";
 import { xdo } from "../src/computers/x11.ts";
 import { textPieces } from "../src/computers/macos.ts";
 import { discoverAgents, frontmatter, hermesModel, readDiscovered } from "../src/discover.ts";
@@ -131,5 +133,45 @@ describe("discovering existing agents", () => {
   it("reads frontmatter", () => {
     expect(frontmatter("---\nname: a\nmodel: 'opus'\n---\nbody")).toEqual({ meta: { name: "a", model: "opus" }, body: "body" });
     expect(frontmatter("no meta")).toEqual({ meta: {}, body: "no meta" });
+  });
+});
+
+describe("moving files to and from a VM", () => {
+  // the same scripts run inside VMs; here with this device's sh, HOME pointing at a scratch folder
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-vmfiles-"));
+  const files = shellFiles((script, args, input) => exec("sh", ["-c", script, "sh", ...args], { input, env: { HOME: home } }));
+  const gnuFind = spawnSync("find", [home, "-maxdepth", "0", "-printf", "%Y"]).stdout?.toString() === "d";
+
+  it("saves into a folder it makes, numbering a name that's taken, and reads it back", async () => {
+    expect(await files.write("~/Desktop", "notes.tar.gz", Buffer.from("one"))).toBe(path.join(home, "Desktop", "notes.tar.gz"));
+    expect(await files.write("~/Desktop", "notes.tar.gz", Buffer.from("two"))).toBe(path.join(home, "Desktop", "notes.tar (1).gz"));
+    expect(await files.write("~", ".env", Buffer.from("x"))).toBe(path.join(home, ".env"));
+    expect(await files.write("~", ".env", Buffer.from("y"))).toBe(path.join(home, ".env (1)"));
+    const bytes = Buffer.from([0, 255, 10, 13, 0]);
+    const where = await files.write("~/odd name's", "bin.dat", bytes);
+    expect((await files.read(where)).data).toEqual(bytes);
+    expect(await files.mkdir("~", "Projects")).toBe(path.join(home, "Projects"));
+    await expect(files.mkdir("~", "Projects")).rejects.toThrow(/already exists/);
+    await expect(files.read("~/missing.txt")).rejects.toThrow(/no file/);
+  });
+
+  it.runIf(gnuFind)("lists a folder, folders first", async () => {
+    const l = await files.list("~");
+    expect(l.path).toBe(home);
+    expect(l.entries.slice(0, 3).map((e) => [e.name, e.dir])).toEqual([["Desktop", true], ["odd name's", true], ["Projects", true]]);
+  });
+});
+
+describe("files on a device's own screen", () => {
+  it("stay inside the home folder", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-home-"));
+    const files = localFiles(home);
+    await files.write("~/Downloads", "a.txt", Buffer.from("hi"));
+    expect((await files.list("~")).entries.map((e) => e.name)).toEqual(["Downloads"]);
+    expect((await files.list("~")).parent).toBeNull();
+    await expect(files.list(os.tmpdir())).rejects.toThrow(/home folder/);
+    await expect(files.read("~/../../etc/hosts")).rejects.toThrow(/home folder|no hosts/);
+    fs.symlinkSync("/etc", path.join(home, "sneaky"));
+    await expect(files.list("~/sneaky")).rejects.toThrow(/home folder/);
   });
 });

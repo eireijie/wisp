@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { ComputerAction, DEVICE_HARNESS, LOAN_MAX_MINUTES, activeLoan, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type RecordedStep } from "@warren/core";
+import { ComputerAction, DEVICE_HARNESS, FileName, LOAN_MAX_MINUTES, MAX_TRANSFER_BYTES, activeLoan, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type FileData, type FolderListing, type RecordedStep } from "@warren/core";
 import type { Caller } from "./api.ts";
 import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
@@ -311,6 +311,105 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!action) return;
     try {
       return await computers.act(comp, action, c.actor);
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  // --- clipboard and files: keeping a computer in step with your device -------------------------------
+
+  /** A computer people may move things to and from (members; a device's screen: its owner, see `own`). */
+  const transferTarget = (req: FastifyRequest, reply: FastifyReply): { c: Caller; comp: Computer } | null => {
+    const c = need(req, reply, { member: true });
+    if (!c) return null;
+    const comp = own(c, (req.params as { id: string }).id);
+    if (!comp) {
+      reply.code(404).send({ error: "computer not found" });
+      return null;
+    }
+    return { c, comp };
+  };
+
+  app.get("/api/computers/:id/clipboard", async (req, reply) => {
+    const t = transferTarget(req, reply);
+    if (!t) return;
+    try {
+      return await computers.act(t.comp, { action: "clipboard_get" }, t.c.actor);
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  app.put("/api/computers/:id/clipboard", async (req, reply) => {
+    const t = transferTarget(req, reply);
+    if (!t) return;
+    const body = parse(z.object({ text: z.string().max(1_000_000) }), req.body, reply);
+    if (!body) return;
+    try {
+      return await computers.act(t.comp, { action: "clipboard_set", text: body.text }, t.c.actor);
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  /** What's in a folder on the computer (`?path=`, default its home folder). */
+  app.get("/api/computers/:id/files", async (req, reply) => {
+    const t = transferTarget(req, reply);
+    if (!t) return;
+    const path = (req.query as { path?: string }).path;
+    try {
+      return (await computers.act(t.comp, { action: "files_list", path: path ? path.slice(0, 4000) : undefined }, t.c.actor)) as FolderListing;
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  /** A file from the computer, as a download. */
+  app.get("/api/computers/:id/files/download", async (req, reply) => {
+    const t = transferTarget(req, reply);
+    if (!t) return;
+    const path = (req.query as { path?: string }).path;
+    if (!path) return reply.code(400).send({ error: "which file? (?path=)" });
+    try {
+      const f = (await computers.act(t.comp, { action: "file_read", path: path.slice(0, 4000) }, t.c.actor)) as FileData;
+      return reply
+        .header("content-type", "application/octet-stream")
+        .header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`)
+        .header("cache-control", "no-store")
+        .send(Buffer.from(f.data, "base64"));
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  /** Put a file on the computer: the body is the file (application/octet-stream), `?folder=` where, X-Filename its name. */
+  app.post("/api/computers/:id/files", async (req, reply) => {
+    const t = transferTarget(req, reply);
+    if (!t) return;
+    const buf = req.body as Buffer;
+    if (!Buffer.isBuffer(buf)) return reply.code(400).send({ error: "send the file as application/octet-stream" });
+    if (buf.length > MAX_TRANSFER_BYTES) return reply.code(413).send({ error: `files bigger than ${MAX_TRANSFER_BYTES / 1024 / 1024} MB can't be sent to a computer` });
+    let raw = String(req.headers["x-filename"] ?? "");
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {}
+    const name = FileName.safeParse(raw.trim());
+    if (!name.success) return reply.code(400).send({ error: `bad file name: ${name.error.issues[0]?.message}` });
+    const folder = String((req.query as { folder?: string }).folder ?? "~").slice(0, 4000);
+    try {
+      return await computers.act(t.comp, { action: "file_write", folder, name: name.data, data: buf.toString("base64") }, t.c.actor);
+    } catch (err) {
+      return fail(reply, err);
+    }
+  });
+
+  app.post("/api/computers/:id/files/folder", async (req, reply) => {
+    const t = transferTarget(req, reply);
+    if (!t) return;
+    const body = parse(z.object({ folder: z.string().max(4000), name: FileName }), req.body, reply);
+    if (!body) return;
+    try {
+      return await computers.act(t.comp, { action: "file_mkdir", folder: body.folder, name: body.name }, t.c.actor);
     } catch (err) {
       return fail(reply, err);
     }

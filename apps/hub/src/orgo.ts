@@ -1,4 +1,4 @@
-import { AGENT_SCREEN, parseKeys, toScreen, x11Combo, type ComputerAction, type OrgoConfig, type Screenshot } from "@warren/core";
+import { AGENT_SCREEN, POSIX_FILES, parseKeys, parseListing, toScreen, x11Combo, type ComputerAction, type FileData, type OrgoConfig, type Screenshot } from "@warren/core";
 
 /**
  * Orgo (orgo.ai) cloud computers, driven from the hub with the workspace's API key. The key
@@ -8,6 +8,10 @@ import { AGENT_SCREEN, parseKeys, toScreen, x11Combo, type ComputerAction, type 
 
 export const ORGO_API = "https://www.orgo.ai/api";
 const ORGO_WS = "wss://www.orgo.ai";
+
+/** Orgo's shell only returns text, so files move as base64 in pieces; kept smaller than on VMs. */
+export const ORGO_MAX_TRANSFER = 10 * 1024 * 1024;
+const ORGO_CHUNK = 256 * 1024;
 
 export class OrgoError extends Error {
   constructor(
@@ -82,6 +86,14 @@ export class OrgoClient {
    * The password is root on the computer, so it never leaves the hub: browsers watch through the
    * hub's relay, which signs in for them (see vnc-relay.ts).
    */
+  /** `sh -c script sh args…` in its shell; a non-zero exit is an error with the shell's last line. */
+  private async sh(id: string, script: string, args: string[], timeoutMs = 120_000): Promise<{ output: string }> {
+    const command = ["sh", "-c", script, "sh", ...args].map(shellQuote).join(" ");
+    const r = await this.request<{ output: string; exit_code: number }>("POST", `/computers/${id}/bash`, { command, timeout: Math.round(timeoutMs / 1000) }, timeoutMs + 30_000);
+    if (r.exit_code !== 0) throw new OrgoError(r.output.trim().split("\n").pop() || "the cloud computer's shell failed", 422);
+    return { output: r.output };
+  }
+
   async vncTarget(cfg: OrgoConfig): Promise<{ url: string; password: string }> {
     const instanceId = cfg.instanceId ?? (await this.get(cfg.computerId)).instanceId;
     if (!instanceId) throw new OrgoError("Orgo hasn't placed this computer yet; try again in a moment");
@@ -152,6 +164,30 @@ export class OrgoClient {
           if ((e as OrgoError).status !== 404) throw e;
         });
         return { ok: true };
+      case "clipboard_get":
+        return { text: (await this.sh(id, "xclip -selection clipboard -o 2>/dev/null || true", [])).output };
+      case "clipboard_set":
+        await this.sh(id, 'printf %s "$1" | base64 -d | xclip -selection clipboard -i >/dev/null 2>&1', [Buffer.from(a.text).toString("base64")]);
+        return { ok: true };
+      case "files_list":
+        return parseListing((await this.sh(id, POSIX_FILES.list, [a.path ?? "~"])).output);
+      case "file_read": {
+        const data = Buffer.from((await this.sh(id, POSIX_FILES.read(ORGO_MAX_TRANSFER, true), [a.path], 300_000)).output.trim(), "base64");
+        return { name: a.path.split("/").pop() ?? "file", size: data.length, data: data.toString("base64") } satisfies FileData;
+      }
+      case "file_write": {
+        if (a.data.length > Math.ceil(ORGO_MAX_TRANSFER / 3) * 4) throw new OrgoError(`files bigger than ${ORGO_MAX_TRANSFER / 1024 / 1024} MB can't be sent to cloud computers`, 413);
+        const tmp = `/tmp/warren-upload-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+        try {
+          for (let i = 0; i < a.data.length; i += ORGO_CHUNK) await this.sh(id, 'printf %s "$2" >> "$1"', [tmp, a.data.slice(i, i + ORGO_CHUNK)]);
+          const r = await this.sh(id, `base64 -d "$3" | sh -c '${POSIX_FILES.write.replace(/'/g, `'\''`)}' sh "$1" "$2"`, [a.folder, a.name, tmp]);
+          return { path: r.output.trim() };
+        } finally {
+          await this.sh(id, 'rm -f "$1"', [tmp]).catch(() => {});
+        }
+      }
+      case "file_mkdir":
+        return { path: (await this.sh(id, POSIX_FILES.mkdir, [a.folder, a.name])).output.trim() };
       case "status": {
         const c = await this.get(id);
         const ready = c.status === "running" || c.status === "suspended";

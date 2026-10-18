@@ -10,6 +10,8 @@ import type { HarnessAdapter, RunInput } from "@warren/adapters";
 import { WarrenClient } from "@warren/sdk";
 import { ComputerHost } from "../../node/src/computers/index.ts";
 import type { Driver, Shot } from "../../node/src/computers/driver.ts";
+import { localFiles } from "../../node/src/computers/transfer.ts";
+import { mkdirSync } from "node:fs";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
@@ -23,7 +25,12 @@ let rfbPort = 0;
 
 function fakeDriver(spec: ComputerSpec): Driver {
   const log = (op: string, ...args: unknown[]) => void did.push({ computer: spec.id, op, args });
+  const vmHome = path.join(dir, "vm-homes", spec.id);
+  mkdirSync(vmHome, { recursive: true });
+  let clip = "";
   return {
+    clipboard: { get: async () => clip, set: async (t) => void (clip = t) },
+    files: localFiles(vmHome),
     label: "fake",
     screenSize: async () => ({ width: 2560, height: 1600 }),
     screenshot: async (): Promise<Shot> => (log("screenshot"), { jpeg: JPEG, width: 1280, height: 800 }),
@@ -302,6 +309,37 @@ describe("computers", () => {
     const res = await fetch(`${url}/api/computers/${vm.id}/screen`, { headers: { authorization: `Bearer ${(owner as any).opts.token}` } });
     expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect(Buffer.from(await res.arrayBuffer()).subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  });
+
+  it("moves clipboard text and files between a person's device and a VM, without taking control", async () => {
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await owner.request("PUT", `/api/computers/${vm.id}/clipboard`, { text: "héllo from my laptop" });
+    expect(await owner.request("GET", `/api/computers/${vm.id}/clipboard`)).toEqual({ text: "héllo from my laptop" });
+
+    const send = (name: string, body: Buffer, folder = "~/Desktop") =>
+      fetch(`${url}/api/computers/${vm.id}/files?folder=${encodeURIComponent(folder)}`, { method: "POST", headers: { authorization: `Bearer ${(owner as any).opts.token}`, "content-type": "application/octet-stream", "x-filename": encodeURIComponent(name) }, body: new Uint8Array(body) });
+    const upRes = await send("report.pdf", Buffer.from([0, 1, 2, 255]));
+    const up = await upRes.json();
+    expect(up).toEqual({ path: expect.any(String) });
+    expect(up.path).toMatch(/Desktop[/\\]report\.pdf$/);
+    // a name that's taken gets a number, never overwrites
+    expect((await (await send("report.pdf", Buffer.from("again"))).json()).path).toMatch(/report \(1\)\.pdf$/);
+    expect((await send("../escape.txt", Buffer.from("x"))).status).toBe(400);
+    await owner.request("POST", `/api/computers/${vm.id}/files/folder`, { folder: "~", name: "Projects" });
+
+    const home = await owner.request<any>("GET", `/api/computers/${vm.id}/files`);
+    expect(home.entries.map((e: any) => [e.name, e.dir])).toEqual([["Desktop", true], ["Projects", true]]);
+    expect(home.parent).toBeNull();
+    const desktop = await owner.request<any>("GET", `/api/computers/${vm.id}/files?path=${encodeURIComponent("~/Desktop")}`);
+    expect(desktop.entries.map((e: any) => e.name)).toEqual(["report (1).pdf", "report.pdf"]);
+
+    const down = await fetch(`${url}/api/computers/${vm.id}/files/download?path=${encodeURIComponent(up.path)}`, { headers: { authorization: `Bearer ${(owner as any).opts.token}` } });
+    expect(down.headers.get("content-disposition")).toContain("report.pdf");
+    expect(Buffer.from(await down.arrayBuffer())).toEqual(Buffer.from([0, 1, 2, 255]));
+    // nothing outside the computer's home folder
+    await expect(owner.request("GET", `/api/computers/${vm.id}/files?path=${encodeURIComponent("/etc")}`)).rejects.toThrow(/home folder/);
+    // and it shows in the computer's activity
+    expect((await owner.request<any[]>("GET", `/api/computers/${vm.id}/log`)).map((l) => l.text)).toEqual(expect.arrayContaining(["Uploaded report.pdf", "Downloaded report.pdf", "Made the folder Projects"]));
   });
 
   it("relays a VM's VNC to the browser through the device", async () => {
