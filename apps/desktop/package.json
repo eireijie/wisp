@@ -48,6 +48,7 @@
     },
     "linux": {
       "icon": "build/icon.png",
+      "executableName": "warren",
       "target": [
         "AppImage",
         "deb"
