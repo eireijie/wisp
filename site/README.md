@@ -25,7 +25,7 @@ command `npm run build` and output directory `dist`. Node 22.12 or newer.
 | **The domain** | `SITE_URL` in `astro.config.mjs`, the only place it's set. It's the placeholder `https://warren.example` until a domain is chosen; canonical links and social tags follow it. |
 | Contact email, download links, install commands, doc order | `src/lib/site.ts` (`CONTACT_EMAIL` is a placeholder too) |
 | Pages | `src/pages/` (`index`, `download`, `privacy`, `terms`, `404`, `docs/`) |
-| Look: colors, fonts, shared styles | `src/styles/global.css`, Warren's Moonlight tokens, Figtree and Bricolage Grotesque (self-hosted through Fontsource) |
+| Look: colors, fonts, shared styles | `src/styles/global.css`, Warren's Moonlight colors, rounded type (SF Pro Rounded on Apple devices, Nunito self-hosted through Fontsource) and glass, matching the apps |
 | The ghost | `src/components/Ghost.astro`, the app's classic ghost shape |
 | Icons | `public/` (`favicon.svg`, PNGs made from `apps/desktop/build/icon.png`) |
 

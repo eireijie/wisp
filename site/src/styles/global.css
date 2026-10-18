@@ -1,10 +1,10 @@
 /*
  * Warren's website. The colors are Warren's own "Moonlight" look: grays with a faint night-blue
  * tint (hue 280), night ink by day and moonlight at night, ghosts that glow in their own color.
- * Figtree for reading, Bricolage Grotesque for headings, both served from this site (no font CDN).
+ * Rounded type like the apps (SF Pro Rounded on Apple devices, Nunito elsewhere, served from this
+ * site), big soft corners, capsule buttons, and frosted glass for what floats over the page.
  */
-@import "@fontsource-variable/figtree";
-@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/nunito";
 
 :root {
   --gc: 0.014;
@@ -30,11 +30,11 @@
   --ghost-glow: 0.3;
   --sky: radial-gradient(1200px 500px at 70% -10%, oklch(0.9 0.05 285 / 0.55), transparent 70%);
 
-  --font-sans: "Figtree Variable", "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-head: "Bricolage Grotesque Variable", "Bricolage Grotesque", var(--font-sans);
+  --font-sans: ui-rounded, "SF Pro Rounded", "Nunito Variable", "Nunito", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: var(--font-sans);
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --radius: 14px;
-  --radius-lg: 22px;
+  --radius: 20px;
+  --radius-lg: 30px;
   --wrap: 1120px;
   color-scheme: light dark;
 }
@@ -93,7 +93,7 @@ h2,
 h3,
 h4 {
   font-family: var(--font-head);
-  font-weight: 650;
+  font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.02em;
   margin: 0 0 0.5em;
@@ -170,9 +170,9 @@ pre {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 46px;
-  padding: 10px 20px;
-  border-radius: 12px;
+  min-height: 48px;
+  padding: 10px 22px;
+  border-radius: 999px;
   border: 1px solid transparent;
   font: inherit;
   font-weight: 600;
@@ -190,9 +190,12 @@ pre {
   box-shadow: var(--shadow);
 }
 .btn-quiet {
-  background: var(--panel);
+  background: color-mix(in oklab, var(--panel) 70%, transparent);
   color: var(--ink);
-  border-color: var(--line);
+  border-color: oklch(1 0 0 / 0.55);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(20px) saturate(1.8);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.6), var(--sheet-shadow);
 }
 .btn-quiet:hover {
   background: var(--bg);
@@ -211,8 +214,8 @@ pre {
   font-weight: 600;
   color: var(--accent-text);
   background: var(--accent-soft);
-  padding: 4px 12px;
-  border-radius: 10px;
+  padding: 5px 14px;
+  border-radius: 999px;
   margin-bottom: 18px;
 }
 
@@ -224,8 +227,8 @@ pre {
 
 .chip {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 8px;
+  padding: 3px 12px;
+  border-radius: 999px;
   background: var(--chip);
   font-size: 0.875rem;
   font-weight: 500;
@@ -235,8 +238,27 @@ pre {
   border-left: 3px solid var(--ring);
   background: var(--accent-soft);
   padding: 12px 16px;
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 16px 16px 0;
   color: var(--ink);
+}
+
+/* Glass: frosted and translucent with a bright rim, like Liquid Glass in the apps */
+.glass {
+  background: color-mix(in oklab, var(--panel) 66%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
+  border: 1px solid oklch(1 0 0 / 0.6);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.7), var(--sheet-shadow);
+}
+@media (prefers-color-scheme: dark) {
+  .glass,
+  .btn-quiet {
+    border-color: oklch(1 0 0 / 0.12);
+    box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.1), var(--sheet-shadow);
+  }
+  .glass {
+    background: color-mix(in oklab, var(--panel) 62%, transparent);
+  }
 }
 
 .ghost-glow {
@@ -272,7 +294,7 @@ pre {
   align-items: stretch;
   gap: 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
   background: var(--code);
   overflow: hidden;
   margin: 8px 0 16px;
@@ -355,7 +377,7 @@ pre {
 .prose pre {
   background: var(--code) !important;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
   padding: 14px 16px;
   overflow-x: auto;
   line-height: 1.5;
@@ -380,7 +402,7 @@ pre {
   overflow-x: auto;
   margin: 0 0 1.2em;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 18px;
 }
 .prose table {
   border-collapse: collapse;

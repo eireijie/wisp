@@ -41,7 +41,7 @@ const nav = [
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
-      <div class="wrap bar">
+      <div class="wrap"><div class="bar glass">
         <a class="brand" href="/" aria-label="Warren home" aria-current={current === "home" ? "page" : undefined}>
           <span class="tile"><Ghost size={22} color="#ffffff" color2="#d9d4ff" /></span>
           <span>Warren</span>
@@ -62,7 +62,7 @@ const nav = [
             </li>
           </ul>
         </nav>
-      </div>
+      </div></div>
     </header>
 
     <main id="main">
@@ -108,21 +108,21 @@ const nav = [
     </script>
 
     <style>
+      /* the top bar floats over the page as a glass capsule, like the apps' tab bars */
       .site-header {
         position: sticky;
         top: 0;
         z-index: 20;
-        background: color-mix(in oklab, var(--app) 82%, transparent);
-        backdrop-filter: saturate(1.4) blur(14px);
-        -webkit-backdrop-filter: saturate(1.4) blur(14px);
-        border-bottom: 1px solid var(--line);
+        padding-top: 10px;
       }
       .bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        min-height: 64px;
+        min-height: 60px;
+        padding: 0 8px 0 12px;
+        border-radius: 999px;
       }
       .brand {
         display: inline-flex;
@@ -131,7 +131,7 @@ const nav = [
         color: var(--ink);
         text-decoration: none;
         font-family: var(--font-head);
-        font-weight: 700;
+        font-weight: 800;
         font-size: 1.3rem;
         letter-spacing: -0.02em;
       }
@@ -139,16 +139,16 @@ const nav = [
       .tile {
         display: inline-grid;
         place-items: center;
-        width: 34px;
-        height: 34px;
-        border-radius: 10px;
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
         background: #141414;
         box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
       }
       .site-footer .tile {
         width: 30px;
         height: 30px;
-        border-radius: 9px;
+        border-radius: 10px;
       }
       nav ul {
         list-style: none;
@@ -160,8 +160,8 @@ const nav = [
       }
       .bar nav a {
         display: inline-block;
-        padding: 8px 12px;
-        border-radius: 10px;
+        padding: 8px 14px;
+        border-radius: 999px;
         color: var(--muted);
         font-weight: 600;
         font-size: 0.97rem;
@@ -175,12 +175,24 @@ const nav = [
         color: var(--ink);
         background: var(--accent-soft);
       }
-      @media (max-width: 400px) {
-        .bar nav a {
-          padding: 8px 9px;
+      nav ul {
+        flex-wrap: nowrap;
+      }
+      /* phones: the ghost alone stands for the name, so the links stay on one line in the capsule */
+      @media (max-width: 480px) {
+        .bar {
+          padding: 0 6px 0 8px;
         }
-        .brand {
-          font-size: 1.15rem;
+        .bar nav a {
+          padding: 8px 10px;
+          font-size: 0.93rem;
+        }
+        .brand > span:not(.tile) {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
         }
       }
       .site-footer {
@@ -208,7 +220,7 @@ const nav = [
       .site-footer nav a {
         color: var(--muted);
         padding: 4px 8px;
-        border-radius: 8px;
+        border-radius: 999px;
       }
       .site-footer nav a:hover {
         color: var(--ink);
