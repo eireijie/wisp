@@ -136,7 +136,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         <button className="p-1.5 rounded-md hover:bg-hover text-muted" onClick={() => setShowTree(!showTree)} aria-label="Toggle file list" title="Toggle file list">
           <PanelLeft size={18} />
         </button>
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 min-w-0 truncate">Memory</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 min-w-0 truncate">Memory</h1>
         {isOwner && agents.length > 0 && (
           <label className="hidden sm:flex items-center gap-1.5 text-sm text-muted" title="See memory the way an agent does">
             <ScanEye size={16} />

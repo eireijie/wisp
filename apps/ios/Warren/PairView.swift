@@ -24,7 +24,7 @@ struct PairView: View {
           Image("Mark")
             .resizable()
             .frame(width: 64, height: 64)
-            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
           Text("Connect to Warren")
             .font(.largeTitle.bold())
           Text("Warren runs on your computer. Pair this phone with it to chat with your agents and watch their computers from your phone.")
@@ -46,13 +46,10 @@ struct PairView: View {
             } label: {
               Label("Scan QR code", systemImage: "qrcode.viewfinder")
                 .fontWeight(.semibold)
-                .frame(maxWidth: .infinity, minHeight: 50)
+                .frame(maxWidth: .infinity, minHeight: 34)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(.systemBackground))
-            .background(Capsule().fill(Color.primary))
+            .primaryButton()
             .disabled(!QRScanner.available)
-            .opacity(QRScanner.available ? 1 : 0.5)
 
             Button("Paste a pairing link instead") { pasting = true }
               .font(.subheadline)
@@ -105,7 +102,7 @@ struct PairView: View {
       .ignoresSafeArea()
       .overlay(alignment: .topTrailing) {
         Button("Close") { scanning = false }
-          .buttonStyle(.borderedProminent)
+          .secondaryButton()
           .padding()
       }
     }

@@ -192,7 +192,7 @@ export function SkillsView({ onBack }: { onBack?: () => void }) {
                 <>
                   {everyday && (
                     <section className="space-y-2" aria-labelledby="skills-everyday">
-                      <h2 id="skills-everyday" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                      <h2 id="skills-everyday" className="text-[13px] font-semibold text-muted">
                         Everyday
                       </h2>
                       <p className="text-sm text-muted">You don't need a skill for ordinary requests. Just ask your helper. A skill helps when you want something done the same way every time.</p>
@@ -200,7 +200,7 @@ export function SkillsView({ onBack }: { onBack?: () => void }) {
                     </section>
                   )}
                   <section className="space-y-2">
-                    {everyday && rest.length > 0 && <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">More skills</h2>}
+                    {everyday && rest.length > 0 && <h2 className="text-[13px] font-semibold text-muted">More skills</h2>}
                     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map(card)}</div>
                   </section>
                 </>
@@ -418,18 +418,18 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
           <section className="space-y-2" aria-label="In plain words">
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-xs font-semibold uppercase tracking-wider text-muted">What it does</dt>
+                <dt className="text-[13px] font-semibold text-muted">What it does</dt>
                 <dd className="mt-1 text-ink">{plain.does}</dd>
               </div>
               {plain.needs && (
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted">What it needs</dt>
+                  <dt className="text-[13px] font-semibold text-muted">What it needs</dt>
                   <dd className="mt-1 text-ink">{plain.needs}</dd>
                 </div>
               )}
               {plain.example && (
                 <div>
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted">Example</dt>
+                  <dt className="text-[13px] font-semibold text-muted">Example</dt>
                   <dd className="mt-1">
                     <q className="text-ink">{plain.example}</q>
                   </dd>
@@ -443,7 +443,7 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
 
         {skill && (
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{simple ? "Helpers" : "Agents"} with this skill</h3>
+            <h3 className="text-[13px] font-semibold text-muted">{simple ? "Helpers" : "Agents"} with this skill</h3>
             {agents.length === 0 ? (
               <p className="text-sm text-muted">No {who}s yet.</p>
             ) : (
@@ -474,7 +474,7 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
 
         <Advanced title="Full instructions">
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{simple ? "How your helper does it" : "SKILL.md"}</h3>
+            <h3 className="text-[13px] font-semibold text-muted">{simple ? "How your helper does it" : "SKILL.md"}</h3>
             <div className="prose-w rounded-lg border border-line p-4 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
           </section>
         </Advanced>
@@ -518,7 +518,7 @@ function TryIt({ skill, agents, onClose }: { skill: Skill; agents: Agent[]; onCl
 
   return (
     <section className="space-y-2 rounded-lg border border-line p-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Try it</h3>
+      <h3 className="text-[13px] font-semibold text-muted">Try it</h3>
       <p className="text-sm text-muted">Copy this request, open the chat, paste it, then add your own details.</p>
       <p className="text-sm rounded-lg bg-code p-3 select-all whitespace-pre-wrap" aria-label="Suggested request">
         {text}

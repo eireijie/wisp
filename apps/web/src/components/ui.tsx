@@ -18,8 +18,9 @@ export function Button({ variant = "default", className, ...p }: ButtonHTMLAttri
       {...p}
       className={cx(
         "inline-flex items-center justify-center gap-1.5 h-9 text-sm font-medium whitespace-nowrap transition-colors disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-        // the one mint, pill-shaped call to action (Grok Bot's shape); everything else stays square-ish
-        variant === "primary" ? "rounded-full px-4 bg-accent text-accent-ink hover:bg-accent/90" : "rounded-lg px-3",
+        // every button is a capsule, like the iPhone app; the main action is filled
+        "rounded-full",
+        variant === "primary" ? "px-4 bg-accent text-accent-ink hover:bg-accent/90 shadow-[inset_0_1px_0_oklch(1_0_0/0.18)]" : "px-3.5",
         variant === "default" && "border border-input bg-panel dark:bg-input/30 hover:bg-hover dark:hover:bg-input/50",
         variant === "ghost" && "text-ink/85 hover:bg-hover hover:text-ink",
         variant === "danger" && "border border-input text-bad hover:bg-hover",
@@ -42,7 +43,7 @@ export function IconButton({ icon, label, labelAlways, tone = "default", classNa
       aria-label={label}
       {...p}
       className={cx(
-        "inline-flex items-center gap-1.5 h-8 min-w-8 justify-center rounded-md px-1.5 text-xs font-medium whitespace-nowrap text-muted transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
+        "inline-flex items-center gap-1.5 h-8 min-w-8 justify-center rounded-full px-1.5 text-xs font-medium whitespace-nowrap text-muted transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
         labelAlways ? "px-2" : "md:px-2",
         tone === "danger" ? "hover:bg-hover hover:text-bad" : "hover:bg-hover hover:text-ink",
         className,
@@ -55,11 +56,11 @@ export function IconButton({ icon, label, labelAlways, tone = "default", classNa
 }
 
 export function Input({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx("h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;
+  return <input {...p} className={cx("h-9 w-full rounded-xl border border-input bg-transparent px-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;
 }
 
 export function Textarea({ className, ...p }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...p} className={cx("w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;
+  return <textarea {...p} className={cx("w-full rounded-2xl border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30", className)} />;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
@@ -94,11 +95,11 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
   }, []);
   return (
     <div className={drawer ? "fixed inset-0 z-50 flex justify-end" : "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "w-full bg-panel border border-line rounded-t-2xl sm:rounded-2xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "w-full bg-panel border border-line rounded-t-3xl sm:rounded-3xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
         {!headerless && <div className="flex items-center justify-between px-5 pt-4 pb-2">
           {typeof title === "string" ? <h2 className="text-base font-semibold">{title}</h2> : <div className="text-base font-semibold">{title}</div>}
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close">
-            <X size={18} />
+          <button onClick={onClose} className="size-8 grid place-items-center rounded-full bg-chip hover:bg-hover text-muted" aria-label="Close">
+            <X size={16} strokeWidth={2.5} />
           </button>
         </div>}
         <div className={cx("px-5 pb-5", contentClassName)}>{children}</div>
@@ -323,7 +324,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
       })}
       {open &&
         createPortal(
-          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="z-[100] min-w-48 rounded-xl border border-line bg-panel shadow-panel p-1">
+          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="glass z-[100] min-w-48 rounded-2xl p-1.5">
             {items.map((it, i) =>
               it === "divider" ? (
                 <div key={i} className="-mx-1 my-1 h-px bg-line" />
@@ -335,7 +336,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
                     setOpen(false);
                     it.onSelect();
                   }}
-                  className={cx("w-full px-2 py-1.5 min-h-8 rounded-md flex items-start gap-2 text-sm text-left hover:bg-hover", it.danger && "text-bad")}
+                  className={cx("w-full px-2.5 py-1.5 min-h-9 rounded-xl flex items-start gap-2 text-sm text-left hover:bg-hover", it.danger && "text-bad")}
                 >
                   {it.icon && <span className="shrink-0 mt-0.5">{it.icon}</span>}
                   <span className="min-w-0 break-words">{it.label}</span>
@@ -415,7 +416,7 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
     <div ref={ref} className="relative">
       {trigger(open, () => setOpen((o) => !o))}
       {open && (
-        <div ref={panel} role="dialog" style={shift ? { transform: `translateX(${shift}px)` } : undefined} className={cx("absolute z-50 max-w-[calc(100vw-1rem)] rounded-2xl border border-line bg-panel shadow-panel", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-2" : "top-full mt-2", className)}>
+        <div ref={panel} role="dialog" style={shift ? { transform: `translateX(${shift}px)` } : undefined} className={cx("glass absolute z-50 max-w-[calc(100vw-1rem)] rounded-2xl", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-2" : "top-full mt-2", className)}>
           {children(() => setOpen(false))}
         </div>
       )}

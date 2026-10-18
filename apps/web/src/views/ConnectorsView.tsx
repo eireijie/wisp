@@ -266,7 +266,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
           {!canEdit && <p className="text-xs text-muted">Guests can look around; members add and change connectors.</p>}
 
           <section aria-labelledby="connected-h">
-            <h2 id="connected-h" className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
+            <h2 id="connected-h" className="text-[13px] font-semibold text-muted mb-2">
               Connected {list && <span className="text-faint tabular-nums">{list.length}</span>}
             </h2>
             {list === null ? (
@@ -287,7 +287,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
           {simple && everyday && (
             <>
               <section aria-labelledby="recommended-h" className="space-y-2">
-                <h2 id="recommended-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                <h2 id="recommended-h" className="text-[13px] font-semibold text-muted">
                   Recommended way to connect {everyday.name}
                 </h2>
                 <p className="text-sm text-muted">{everyday.does}</p>
@@ -295,7 +295,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{builtInFor ? catalogCard(builtInFor) : zapier ? marketCard(zapier) : <Loader />}</div>
               </section>
               <section aria-labelledby="other-ways-h" className="space-y-2">
-                <h2 id="other-ways-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
+                <h2 id="other-ways-h" className="text-[13px] font-semibold text-muted">
                   Other ways
                 </h2>
                 <Advanced title="Other servers from the registry">{registryGrid((market.entries ?? []).filter((e) => e.id !== ZAPIER_ID))}</Advanced>
@@ -304,7 +304,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
           )}
           {simple && !everyday && zapier && (
             <section aria-labelledby="recommended-h" className="space-y-2">
-              <h2 id="recommended-h" className="text-xs font-semibold uppercase tracking-wider text-muted">
+              <h2 id="recommended-h" className="text-[13px] font-semibold text-muted">
                 Recommended for most people
               </h2>
               <p className="text-sm text-muted">One sign-in with Zapier connects Gmail, Google Calendar, Drive, Todoist and thousands more apps.</p>

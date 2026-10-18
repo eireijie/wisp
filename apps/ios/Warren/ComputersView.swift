@@ -26,12 +26,13 @@ struct ComputersView: View {
                   ComputerStatus(computer: c)
                 }
                 if let help = c.help {
-                  Label("\(store.agent(help.agentId)?.name ?? "An agent") needs you: \(help.request)", systemImage: "person.fill.questionmark")
+                  Label("\(store.agent(help.agentId)?.name ?? "An agent") needs you: \(help.request)", systemImage: "hand.raised.fill")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.orange)
                     .lineLimit(2)
                 }
               }
+              .card(Corner.card, padding: 10)
             }
             .buttonStyle(.plain)
           }
@@ -63,7 +64,7 @@ struct ComputerStatus: View {
     default: ("Offline", .gray)
     }
     HStack(spacing: 5) {
-      Circle().fill(color).frame(width: 7, height: 7).shadow(color: color.opacity(0.6), radius: 3)
+      GlowDot(color: color)
       Text(word).font(.caption.weight(.medium)).foregroundStyle(.secondary)
     }
   }
@@ -77,7 +78,7 @@ struct ScreenThumb: View {
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground))
+      RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemBackground))
       if let image {
         Image(uiImage: image).resizable().scaledToFit()
       } else {
@@ -87,8 +88,8 @@ struct ScreenThumb: View {
       }
     }
     .aspectRatio(16 / 10, contentMode: .fit)
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color(.separator).opacity(0.5)))
+    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(.separator).opacity(0.5)))
     .task(id: computer.status) {
       guard computer.status == "ready" else { return }
       while !Task.isCancelled {
@@ -112,72 +113,157 @@ struct ComputerDetail: View {
   private var computer: Computer? { store.computers.first { $0.id == computerId } }
   private var inControl: Bool { computer?.controller?.id == store.me?.id && computer?.controller != nil }
 
+  @State private var keyboard = false
+  @State private var note: String?
+  @FocusState private var typingFocused: Bool
+
   var body: some View {
     if let c = computer {
       ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
           if let help = c.help {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("\(store.agent(help.agentId)?.name ?? "An agent") needs you").font(.subheadline.weight(.semibold))
-              Text(help.request).font(.callout)
-              Text("Take control, do it on the screen below, then hand it back.").font(.caption).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+              AgentAvatar(agent: store.agent(help.agentId), size: 36, showStatus: false)
+              VStack(alignment: .leading, spacing: 3) {
+                Text("\(store.agent(help.agentId)?.name ?? "An agent") needs you").font(.subheadline.weight(.semibold))
+                Text(help.request).font(.callout)
+              }
             }
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.12)))
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color.orange.opacity(0.14)))
           }
 
           screen(c)
-
-          HStack {
-            ComputerStatus(computer: c)
-            Spacer()
-            if c.status == "ready" { controlButton(c) }
-          }
-          if !c.statusText.isEmpty && c.status != "ready" {
-            Text(c.statusText).font(.footnote).foregroundStyle(.secondary)
-          }
-
-          if inControl {
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Tap the screen to click. Type here to send keys.").font(.caption).foregroundStyle(.secondary)
-              HStack {
-                TextField("Type on \(c.name)", text: $typing)
-                  .textInputAutocapitalization(.never)
-                  .autocorrectionDisabled()
-                  .onSubmit { sendTyping(c, enter: true) }
-                  .padding(.horizontal, 12)
-                  .frame(minHeight: 40)
-                  .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(.secondarySystemBackground)))
-                Button("Send") { sendTyping(c, enter: false) }.disabled(typing.isEmpty)
-              }
-              HStack(spacing: 8) {
-                ForEach(["Enter", "Tab", "Escape", "Backspace"], id: \.self) { k in
-                  Button(k == "Backspace" ? "⌫" : k) { key(c, k) }
-                    .font(.caption.weight(.medium))
-                    .buttonStyle(.bordered)
-                }
-                Spacer()
-                Button { scroll(c, "up") } label: { Image(systemName: "chevron.up") }.buttonStyle(.bordered)
-                Button { scroll(c, "down") } label: { Image(systemName: "chevron.down") }.buttonStyle(.bordered)
+            .overlay(alignment: .bottom) {
+              if let note {
+                Text(note).font(.footnote.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 8).glassCapsule().padding(10).transition(.opacity)
               }
             }
+
+          if inControl { controls(c) }
+
+          if c.status == "ready" {
+            controlButton(c)
+          } else {
+            HStack { ComputerStatus(computer: c); Spacer() }
           }
+          Text(hint(c)).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
           if let error { Text(error).font(.footnote).foregroundStyle(.red) }
         }
         .padding(16)
       }
       .navigationTitle(c.name)
       .navigationBarTitleDisplayMode(.inline)
+      .toolbar { ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) } }
+      .toolbar(.hidden, for: .tabBar)
       .task(id: c.status) { await stream(c) }
     } else {
       ContentUnavailableView("Computer not found", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
     }
   }
 
+  private func hint(_ c: Computer) -> String {
+    if c.status != "ready" { return c.statusText.isEmpty ? "It starts when an agent next uses it." : c.statusText }
+    if inControl { return "Tap the screen to click. Agents wait until you hand it back." }
+    if c.controller != nil { return "Someone else is using it right now." }
+    return c.help != nil ? "Take control, do it on the screen, then hand it back." : "Watching live. Take control to use it yourself."
+  }
+
+  /** While you're in control: a keyboard, scrolling, and the rest tucked in a menu. */
+  @ViewBuilder private func controls(_ c: Computer) -> some View {
+    VStack(spacing: 10) {
+      if keyboard {
+        HStack(spacing: 6) {
+          TextField("Type on \(c.name)", text: $typing)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .focused($typingFocused)
+            .submitLabel(.send)
+            .onSubmit { sendTyping(c, enter: true) }
+            .padding(.leading, 16)
+            .padding(.vertical, 12)
+          Button { sendTyping(c, enter: false) } label: {
+            Image(systemName: "arrow.up").font(.body.weight(.bold)).foregroundStyle(Color(.systemBackground)).frame(width: 34, height: 34).background(Circle().fill(Color.primary))
+          }
+          .buttonStyle(.plain)
+          .disabled(typing.isEmpty)
+          .opacity(typing.isEmpty ? 0.25 : 1)
+          .padding(5)
+        }
+        .glass(22, interactive: true)
+      }
+      HStack(spacing: 10) {
+        toolButton(keyboard ? "keyboard.chevron.compact.down" : "keyboard", "Keyboard") {
+          keyboard.toggle()
+          typingFocused = keyboard
+        }
+        toolButton("chevron.up", "Scroll up") { scroll(c, "up") }
+        toolButton("chevron.down", "Scroll down") { scroll(c, "down") }
+        Menu {
+          Section("Keys") {
+            Button("Return", systemImage: "return") { key(c, "Enter") }
+            Button("Tab", systemImage: "arrow.right.to.line") { key(c, "Tab") }
+            Button("Escape", systemImage: "escape") { key(c, "Escape") }
+            Button("Delete", systemImage: "delete.left") { key(c, "Backspace") }
+          }
+          Section("Clipboard") {
+            Button("Paste from iPhone", systemImage: "doc.on.clipboard") { pasteFromPhone(c) }
+            Button("Copy to iPhone", systemImage: "iphone.and.arrow.forward") { copyToPhone(c) }
+          }
+        } label: {
+          Image(systemName: "ellipsis").font(.title3.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+        }
+        .glass(18, interactive: true)
+        .accessibilityLabel("More")
+      }
+      .foregroundStyle(.primary)
+    }
+  }
+
+  private func toolButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: symbol).font(.title3.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .glass(18, interactive: true)
+    .accessibilityLabel(label)
+  }
+
+  private func flash(_ text: String) {
+    withAnimation { note = text }
+    Task {
+      try? await Task.sleep(for: .seconds(2))
+      withAnimation { if note == text { note = nil } }
+    }
+  }
+
+  /** What you copied on this iPhone goes onto the computer's clipboard, then pastes where its cursor is. */
+  private func pasteFromPhone(_ c: Computer) {
+    guard let text = UIPasteboard.general.string, !text.isEmpty else { return flash("Nothing copied on this iPhone") }
+    Task {
+      do {
+        try await store.setClipboard(c, text)
+        try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable(await store.pasteKeys(c))])
+        flash("Pasted from iPhone")
+      } catch { self.error = error.localizedDescription }
+    }
+  }
+
+  private func copyToPhone(_ c: Computer) {
+    Task {
+      do {
+        let text = try await store.clipboard(c)
+        if text.isEmpty { return flash("Nothing copied on \(c.name)") }
+        UIPasteboard.general.string = text
+        flash("Copied to iPhone")
+      } catch { self.error = error.localizedDescription }
+    }
+  }
+
   @ViewBuilder private func screen(_ c: Computer) -> some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.black)
+      RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black)
       if let image {
         GeometryReader { geo in
           let fit = fitted(in: geo.size)
@@ -200,27 +286,26 @@ struct ComputerDetail: View {
       }
     }
     .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: .fit)
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(inControl ? Color.orange : .clear, lineWidth: 2))
+    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(inControl ? Color.blue : .clear, lineWidth: 3))
+    .shadow(color: inControl ? Color.blue.opacity(0.35) : .clear, radius: 14)
   }
 
-  private func controlButton(_ c: Computer) -> some View {
-    Button {
+  @ViewBuilder private func controlButton(_ c: Computer) -> some View {
+    let button = Button {
       busy = true
       Task {
         do { try await store.control(c, take: !inControl) } catch { self.error = error.localizedDescription }
+        if !inControl { keyboard = false }
         busy = false
       }
     } label: {
-      Text(inControl ? "Hand back" : "Take control")
-        .font(.subheadline.weight(.semibold))
-        .padding(.horizontal, 16)
-        .frame(minHeight: 36)
-        .foregroundStyle(inControl ? Color.primary : Color(.systemBackground))
-        .background(Capsule().fill(inControl ? Color(.secondarySystemFill) : Color.primary))
+      Label(inControl ? "Hand back" : "Take control", systemImage: inControl ? "hand.wave.fill" : "hand.point.up.left.fill")
+        .fontWeight(.semibold)
+        .frame(maxWidth: .infinity)
     }
-    .buttonStyle(.plain)
     .disabled(busy || (c.controller != nil && !inControl))
+    if inControl { button.secondaryButton().controlSize(.large) } else { button.primaryButton() }
   }
 
   private func fitted(in size: CGSize) -> CGSize {

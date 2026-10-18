@@ -17,6 +17,7 @@
 		64E201E1CF5EF81820B0871D /* WarrenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFA4D03542D8A8DB87AB33E /* WarrenApp.swift */; };
 		685E56E9910C9F15C7F12F0D /* ChannelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD47CAF1D820F54D092BAE0 /* ChannelView.swift */; };
 		762BC27018EFF337F4CF28EF /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = 299CA5756D2F3494FC63A55A /* Store.swift */; };
+		76BEFA83718096B2F215029F /* Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D62FAD8E0A01280D6E11A13 /* Style.swift */; };
 		9090DBF9F852BDF0CBF86AF3 /* Ghost.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB970218AAD524154ED3477B /* Ghost.swift */; };
 		92001F53136957D1C27B17E4 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6307D6AAE8BA08F79C7C17F /* MessageRow.swift */; };
 		C03D399D12A7AEF8F32FC8E5 /* Pairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EDE39FC82656C8046662C37 /* Pairing.swift */; };
@@ -30,6 +31,7 @@
 		299CA5756D2F3494FC63A55A /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		438DF6DC6455C1194CEFB566 /* ComputersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputersView.swift; sourceTree = "<group>"; };
 		4AFA4D03542D8A8DB87AB33E /* WarrenApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WarrenApp.swift; sourceTree = "<group>"; };
+		4D62FAD8E0A01280D6E11A13 /* Style.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Style.swift; sourceTree = "<group>"; };
 		4EDE39FC82656C8046662C37 /* Pairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pairing.swift; sourceTree = "<group>"; };
 		591F0588ABC074B87086D375 /* Warren.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Warren.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5B33C39EAB3C761F266D1D0B /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
@@ -74,6 +76,7 @@
 				F81B13238E1CE5164CB16619 /* PairView.swift */,
 				26E9CB4124B1DFF3D52B8D49 /* Push.swift */,
 				299CA5756D2F3494FC63A55A /* Store.swift */,
+				4D62FAD8E0A01280D6E11A13 /* Style.swift */,
 				D7A5E6C8E9A6B4514011BE6A /* Warren.entitlements */,
 				4AFA4D03542D8A8DB87AB33E /* WarrenApp.swift */,
 				F2BF673384EC2F035B08700C /* YouView.swift */,
@@ -172,6 +175,7 @@
 				C03D399D12A7AEF8F32FC8E5 /* Pairing.swift in Sources */,
 				D06A02FB594B6445EC1424A3 /* Push.swift in Sources */,
 				762BC27018EFF337F4CF28EF /* Store.swift in Sources */,
+				76BEFA83718096B2F215029F /* Style.swift in Sources */,
 				64E201E1CF5EF81820B0871D /* WarrenApp.swift in Sources */,
 				C6CAF60FAFA5CCEBBE028A19 /* YouView.swift in Sources */,
 			);

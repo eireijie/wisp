@@ -94,7 +94,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
 
       {page && (
         <div className="px-3 pt-2">
-          <button onClick={() => setPalette(true)} className="w-full flex items-center gap-2 rounded-lg px-3 h-11 text-[15px] text-muted bg-side-hover">
+          <button onClick={() => setPalette(true)} className="w-full flex items-center gap-2 rounded-full px-3.5 h-11 text-[15px] text-muted bg-side-hover">
             <Search size={16} />
             <span className="flex-1 text-left">Search everything</span>
           </button>
@@ -343,7 +343,7 @@ function Group({ title, collapsed, onToggle, actions, page, children }: { title:
   return (
     <section className="space-y-px">
       <div className={cx("group px-4 flex items-center gap-1", page ? "h-9" : "h-7")}>
-        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 font-mono text-[10px] font-medium uppercase tracking-widest text-muted/70 hover:text-ink" aria-expanded={!collapsed}>
+        <button onClick={onToggle} className="flex-1 min-w-0 flex items-center gap-1 text-[13px] font-semibold text-muted hover:text-ink" aria-expanded={!collapsed}>
           <span className="truncate flex items-center gap-1">{title}</span>
           <ChevronDown size={12} className={cx("shrink-0 transition-transform opacity-0 group-hover:opacity-100", collapsed && "-rotate-90 opacity-100")} />
         </button>

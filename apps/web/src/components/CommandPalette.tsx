@@ -264,7 +264,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             return (
               <div key={r.key} role="presentation">
                 {header && (
-                  <div role="presentation" className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-faint">
+                  <div role="presentation" className="px-4 pt-2 pb-1 text-[13px] font-semibold text-faint">
                     {header}
                   </div>
                 )}

@@ -95,7 +95,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
     <nav className="space-y-5" aria-label="Settings">
       {nav.map((g) => (
         <div key={g.group}>
-          <div className="px-2 mb-1 text-[11px] font-mono uppercase tracking-wider text-faint">{g.group}</div>
+          <div className="px-2 mb-1 text-[13px] font-semibold text-faint">{g.group}</div>
           {g.hint && <p className="px-2 mb-1.5 text-xs text-muted">{g.hint}</p>}
           <div className="space-y-px">
             {g.pages.map((p) => (
@@ -136,7 +136,7 @@ export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBa
           <ChevronLeft size={16} aria-hidden /> Back to Warren
         </a>
         <span aria-hidden className="hidden md:block h-5 w-px bg-line mr-2" />
-        <h1 className="text-sm font-semibold uppercase tracking-wider truncate">
+        <h1 className="text-lg font-bold tracking-tight truncate">
           Settings
           {label && <span className="text-muted font-normal normal-case tracking-normal"> / {label}</span>}
         </h1>

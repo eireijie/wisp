@@ -11,6 +11,7 @@ struct WarrenApp: App {
       RootView()
         .environment(store)
         .tint(.primary)
+        .fontDesign(.rounded)
         .onOpenURL { url in
           if let link = PairLink(url.absoluteString) { store.pendingPair = link }
         }
@@ -42,7 +43,7 @@ struct RootView: View {
       } description: {
         Text(msg)
       } actions: {
-        Button("Try again") { Task { await store.load() } }.buttonStyle(.borderedProminent).foregroundStyle(Color(.systemBackground))
+        Button("Try again") { Task { await store.load() } }.primaryButton()
         Button("Sign out", role: .destructive) { store.signOut() }
       }
     case .ready:
@@ -68,23 +69,29 @@ struct MainTabs: View {
 
   var body: some View {
     TabView(selection: $tab) {
-      Tab("Chats", systemImage: "bubble.left.and.bubble.right", value: 0) { ChatsView() }
-        .badge(store.unreadTotal)
+      // what needs you (approvals, computers) sits at the top of Chats, so there's no Inbox to check
+      Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill", value: 0) { ChatsView() }
+        .badge(store.unreadTotal + store.needsYouCount)
       Tab("Agents", systemImage: "sparkles", value: 1) { AgentsView() }
-      Tab("Computers", systemImage: "desktopcomputer", value: 2) { ComputersView() }
-      Tab("Inbox", systemImage: "tray", value: 3) { InboxView() }
-        .badge(store.pendingApprovals.count + store.computers.filter { $0.help != nil }.count)
-      Tab("You", systemImage: "person.crop.circle", value: 4) { YouView() }
+      Tab("Computers", systemImage: "macbook.and.iphone", value: 2) { ComputersView() }
+      Tab("You", systemImage: "person.crop.circle.fill", value: 3) { YouView() }
     }
+    .minimizingTabBar()
     .onChange(of: store.unreadTotal, initial: true) { store.updateBadge() }
-    // a tapped notification: go to its tab; the tab's own screen opens the chat or computer
+    // a tapped notification: go to its tab; the tab's own screen opens the chat, computer or approval
     .onChange(of: store.route, initial: true) { _, route in
       switch route {
-      case .chat: tab = 0
+      case .chat, .approval: tab = 0
       case .computer: tab = 2
-      case .approval: tab = 3; store.route = nil
       case nil: break
       }
     }
+  }
+}
+
+private extension View {
+  /** On iOS 26 the glass tab bar tucks away while you scroll down a list. */
+  @ViewBuilder func minimizingTabBar() -> some View {
+    if #available(iOS 26, *) { self.tabBarMinimizeBehavior(.onScrollDown) } else { self }
   }
 }

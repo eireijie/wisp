@@ -65,7 +65,7 @@ export function ComputersView({ computerId, teach, onBack }: { computerId: strin
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Computers</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Computers</h1>
         {canEdit && (
           <Button variant="primary" onClick={() => setAdding(true)}>
             <Plus size={16} /> Add computer

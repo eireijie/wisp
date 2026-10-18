@@ -298,7 +298,7 @@ function AccessControl({ agent, ctx, canEdit }: { agent: Agent; ctx: AgentContex
     >
       {(close) => (
         <div role="menu">
-          <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-faint">What {agent.name} can do</div>
+          <div className="px-2.5 pt-1.5 pb-1 text-[13px] font-semibold text-faint">What {agent.name} can do</div>
           {(Object.keys(ACCESS) as AccessLevel[]).map((k) => (
             <button
               key={k}
@@ -1292,16 +1292,17 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   return (
     // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
     <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom @container">
-      <div className="relative rounded-2xl border border-line bg-bg focus-within:border-input" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
+      {/* the message box floats on glass, like the iPhone app's */}
+      <div className="glass relative rounded-[1.75rem]" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
         {suggestions.length > 0 && (
-          <div className="absolute bottom-full mb-2 left-0 w-72 rounded-xl border border-line bg-panel shadow-panel py-1 z-10" role="listbox">
+          <div className="glass absolute bottom-full mb-2 left-0 w-72 rounded-2xl p-1 z-10" role="listbox">
             {suggestions.map((a, i) => (
               <button
                 key={a.id}
                 role="option"
                 aria-selected={i === pick % suggestions.length}
                 onMouseDown={(e) => (e.preventDefault(), complete(a.handle))}
-                className={cx("w-full px-3 py-1.5 flex items-center gap-2.5 text-sm text-left", i === pick % suggestions.length && "bg-hover")}
+                className={cx("w-full px-2.5 py-1.5 rounded-xl flex items-center gap-2.5 text-sm text-left", i === pick % suggestions.length && "bg-hover")}
               >
                 <AgentAvatar agent={a} size={24} badge={false} />
                 <span className="font-medium">{a.name}</span>
@@ -1314,7 +1315,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
         {files.length > 0 && (
           <div className="px-3 pt-2.5 flex flex-wrap gap-1.5">
             {files.map((f) => (
-              <span key={f.id} className="text-xs rounded-lg bg-chip px-2 py-1 flex items-center gap-1">
+              <span key={f.id} className="text-xs rounded-full bg-chip px-2.5 py-1 flex items-center gap-1">
                 <FileText size={12} /> {f.name}
                 <button onClick={() => setFiles(files.filter((x) => x.id !== f.id))} aria-label={`Remove ${f.name}`}>
                   <X size={12} />
@@ -1350,7 +1351,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
               send();
             }
           }}
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-[15px] outline-none placeholder:text-faint"
+          className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] outline-none placeholder:text-faint"
         />
         <div className="flex items-center gap-0.5 px-2 pb-2 min-w-0">
           <Popover
@@ -1371,7 +1372,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           </Popover>
           <div className="relative">
             {emoji && (
-              <div className="absolute bottom-full mb-2 left-0 z-20 rounded-xl border border-line bg-panel shadow-panel" onMouseLeave={() => setEmoji(false)}>
+              <div className="glass absolute bottom-full mb-2 left-0 z-20 rounded-2xl" onMouseLeave={() => setEmoji(false)}>
                 <EmojiPicker
                   onPick={(e) => {
                     setEmoji(false);
@@ -1393,7 +1394,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           <button
             onClick={send}
             disabled={!text.trim() && !files.length}
-            className="ml-1 size-8 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
+            className="ml-1 size-9 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
             aria-label="Send"
           >
             <ArrowUp size={17} strokeWidth={2.5} />

@@ -149,7 +149,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Devices</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Devices</h1>
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus size={16} /> Add device
         </Button>

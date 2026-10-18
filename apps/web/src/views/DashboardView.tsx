@@ -120,7 +120,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-sm font-semibold uppercase tracking-wider flex-1 truncate">Dashboard</h1>
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Dashboard</h1>
         {agents.length > 0 && !simple && (
           <span className="text-xs text-muted tabular-nums">
             {busyCount} working · {onlineCount} online · {plural(agents.length, "agent")}
@@ -414,7 +414,7 @@ function Section({ title, count, more, children }: { title: string; count?: numb
   return (
     <section className="min-w-0">
       <div className="mb-2 flex items-center gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted flex-1">
+        <h2 className="text-[13px] font-semibold text-muted flex-1">
           {title} {count !== undefined && <span className="tabular-nums text-faint">{count}</span>}
         </h2>
         {more && (

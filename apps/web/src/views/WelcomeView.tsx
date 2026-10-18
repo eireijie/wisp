@@ -274,7 +274,7 @@ function Status({ ok, children }: { ok: boolean | null; children: ReactNode }) {
 function Command({ label, text, children }: { label?: string; text: string; children?: ReactNode }) {
   return (
     <div className="space-y-1.5">
-      {label && <div className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</div>}
+      {label && <div className="text-[13px] font-semibold text-muted">{label}</div>}
       <CopyBlock text={text} />
       {children && <p className="text-xs text-muted">{children}</p>}
     </div>

@@ -184,6 +184,30 @@ final class Store {
     try await api!.post("/api/computers/\(computer.id)/act", Body(action: action))
   }
 
+  /** The keys that paste on a computer: ⌘V on a Mac's own screen, Ctrl+V everywhere else. */
+  func pasteKeys(_ computer: Computer) async -> String {
+    guard computer.kind == "device", let nodeId = computer.nodeId else { return "ctrl+v" }
+    struct Node: Decodable {
+      struct Caps: Decodable { var platform: String }
+      var id: String
+      var capabilities: Caps?
+    }
+    let nodes: [Node] = (try? await api!.get("/api/nodes")) ?? []
+    return nodes.first { $0.id == nodeId }?.capabilities?.platform == "darwin" ? "cmd+v" : "ctrl+v"
+  }
+
+  /** The text on a computer's clipboard. */
+  func clipboard(_ computer: Computer) async throws -> String {
+    struct Clip: Decodable { var text: String }
+    let c: Clip = try await api!.get("/api/computers/\(computer.id)/clipboard")
+    return c.text
+  }
+
+  func setClipboard(_ computer: Computer, _ text: String) async throws {
+    struct Body: Encodable { var text: String }
+    let _: Data = try await api!.request("PUT", "/api/computers/\(computer.id)/clipboard", body: Body(text: text)).0
+  }
+
   func screen(_ computer: Computer, maxAge: Int = 1500) async throws -> Frame {
     let (data, resp) = try await api!.request("GET", "/api/computers/\(computer.id)/screen", query: ["maxAge": String(maxAge)], body: Optional<Empty>.none)
     let w = Int(resp.value(forHTTPHeaderField: "x-frame-width") ?? "") ?? 0
@@ -211,6 +235,8 @@ final class Store {
 
   var pendingApprovals: [Approval] { approvals.filter { $0.status == "pending" } }
   var unreadTotal: Int { channels.reduce(0) { $0 + ($1.unread ?? 0) } }
+  /** agents waiting on you: asking for an OK, or for help on their computer */
+  var needsYouCount: Int { pendingApprovals.count + computers.filter { $0.help != nil }.count }
 
   // MARK: live events
 

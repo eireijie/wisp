@@ -206,30 +206,34 @@ struct Composer: View {
   var body: some View {
     VStack(spacing: 4) {
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
-      HStack(alignment: .bottom, spacing: 8) {
+      HStack(alignment: .bottom, spacing: 6) {
         TextField(placeholder, text: $text, axis: .vertical)
           .lineLimit(1...8)
           .focused($focused)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 10)
-          .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color(.secondarySystemBackground)))
+          .padding(.leading, 18)
+          .padding(.vertical, 12)
         Button {
           submit()
         } label: {
           Image(systemName: sending ? "ellipsis" : "arrow.up")
             .font(.body.weight(.bold))
             .foregroundStyle(Color(.systemBackground))
-            .frame(width: 38, height: 38)
+            .frame(width: 36, height: 36)
             .background(Circle().fill(Color.primary))
         }
+        .buttonStyle(.plain)
         .disabled(empty || sending)
-        .opacity(empty ? 0.35 : 1)
+        .opacity(empty ? 0.25 : 1)
+        .animation(.snappy, value: empty)
+        .padding(5)
         .accessibilityLabel("Send")
       }
+      // the message bar floats over the conversation on glass, like the tab bar
+      .glass(23, interactive: true)
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 8)
-    .background(.bar)
+    .padding(.bottom, 6)
+    .padding(.top, 4)
   }
 
   private func submit() {
