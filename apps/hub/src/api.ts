@@ -1026,6 +1026,21 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { node, token: issueToken(db, "node", node.id, c.workspaceId, body.name) };
   });
 
+  /**
+   * A new connection code for a device that isn't connected, so it can still be connected after the
+   * first code was lost (or a setup failed): the old code stops working.
+   */
+  app.post("/api/nodes/:id/token", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const node = store.node((req.params as { id: string }).id);
+    if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
+    if (node.ownerId !== c.actor.id && c.viewer.role !== "owner") return reply.code(403).send({ error: "only the person who added this device, or a workspace owner, can connect it" });
+    if (hub.isNodeOnline(node.id)) return reply.code(409).send({ error: `${node.name} is connected already` });
+    revokeSubjectTokens(db, "node", node.id);
+    return { token: issueToken(db, "node", node.id, c.workspaceId, node.name) };
+  });
+
   /** The device's owner shares it (others can add agents and VMs there) or renames it. */
   app.patch("/api/nodes/:id", async (req, reply) => {
     const c = need(req, reply, { member: true });

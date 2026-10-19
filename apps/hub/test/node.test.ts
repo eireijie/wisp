@@ -231,3 +231,24 @@ describe("node daemon", () => {
     expect(await bolt()).toBe("offline");
   }, 20_000);
 });
+
+describe("a device that never connected", () => {
+  it("gets a new connection code, and a device with the old one is told it's turned down", async () => {
+    const { node, token: old } = await owner.request("POST", "/api/nodes", { name: "spare" });
+    const { token } = await owner.request("POST", `/api/nodes/${node.id}/token`);
+    expect(token).not.toBe(old);
+
+    let rejected = false;
+    const stale = new NodeDaemon({ hub: url, token: old, name: "spare", dir: path.join(dir, "stale") }, () => {}, { custom: fake });
+    stale.onRejected = () => (rejected = true);
+    stale.start();
+    await waitFor(async () => rejected);
+
+    const fresh = new NodeDaemon({ hub: url, token, name: "spare", dir: path.join(dir, "fresh") }, () => {}, { custom: fake });
+    fresh.start();
+    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes")).find((n) => n.id === node.id && n.online));
+    // a connected device keeps its code
+    await expect(owner.request("POST", `/api/nodes/${node.id}/token`)).rejects.toThrow(/connected already/);
+    await fresh.stop();
+  });
+});

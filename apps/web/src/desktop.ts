@@ -10,7 +10,8 @@ declare global {
     warrenDesktop?: {
       setBadge(n: number): void;
       info(): Promise<{ version: string; platform: string; device: boolean }>;
-      connectDevice(): Promise<void>;
+      /** with a claim, this computer becomes that waiting device; without one, a new device */
+      connectDevice(claim?: { token: string; name: string }): Promise<void>;
       buddy: {
         agents(agents: { id: string; name: string }[], leadId: string | null): void;
         settings(): Promise<BuddySettings>;

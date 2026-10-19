@@ -214,6 +214,9 @@ function lanAddresses(port) {
 }
 
 /** A Warren process this app started; it stops when the app quits. */
+/** what `warren node start` exits with when the hub turns its token down ($WARREN_EXIT_IF_REJECTED) */
+const REJECTED_CODE = 78;
+
 class Child {
   constructor(name, logDir, onChange) {
     this.name = name;
@@ -241,6 +244,11 @@ class Child {
     proc.on("exit", (code, signal) => {
       this.proc = null;
       if (!this.wanted) return this.set("stopped", "");
+      if (code === REJECTED_CODE) {
+        // the hub turned the device's token down: restarting can't help
+        this.wanted = false;
+        return this.set("rejected", "");
+      }
       // crashed: try again a few times, then say so
       if (Date.now() - startedAt > 60_000) this.restarts = 0;
       if (this.restarts < 3) {

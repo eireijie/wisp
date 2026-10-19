@@ -77,6 +77,8 @@ export class NodeDaemon {
   private outbox: NodeToHub[] = [];
   /** when the hub replaced this connection with another one using the same token */
   private replaced: number[] = [];
+  /** called once the hub turns this device's token down for good (the device was removed, say) */
+  onRejected?: () => void;
 
   constructor(
     private cfg: NodeConfig,
@@ -201,6 +203,7 @@ export class NodeDaemon {
       if (code === 4401) {
         this.log("hub rejected the node token. Create a new node in Warren and run `warren node start` again.");
         this.stopped = true;
+        this.onRejected?.();
         return;
       }
       // another daemon with this token took our place; if it keeps happening the two would replace each other forever
