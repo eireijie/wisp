@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct WarrenApp: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  @AppStorage("warren.mode") private var mode = "system"
   private var store: Store { delegate.store }
   @Environment(\.scenePhase) private var scenePhase
 
@@ -10,6 +11,7 @@ struct WarrenApp: App {
     WindowGroup {
       RootView()
         .environment(store)
+        .preferredColorScheme(mode == "dark" ? .dark : mode == "light" ? .light : nil)
         .tint(.primary)
         .fontDesign(.rounded)
         .onOpenURL { url in

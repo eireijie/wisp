@@ -41,6 +41,8 @@ struct AgentPage: View {
         }
         NavigationLink("Personality") { AgentEditor(agent: current, panel: .personality) }
         NavigationLink("Instructions") { AgentEditor(agent: current, panel: .instructions) }
+        NavigationLink("Routines") { RoutinesView(agent: current) }.accessibilityIdentifier("agent-routines")
+        NavigationLink("Background") { BackgroundView(agent: current) }.accessibilityIdentifier("agent-background")
         NavigationLink("Model") { AgentEditor(agent: current, panel: .model) }
         NavigationLink("Device") { AgentEditor(agent: current, panel: .device) }
         if device != nil && store.harnessOnDevice(current) {

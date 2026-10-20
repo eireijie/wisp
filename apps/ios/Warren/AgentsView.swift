@@ -77,6 +77,7 @@ struct AgentTile: View {
       .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
     }
     .buttonStyle(.plain)
+    .accessibilityIdentifier("agent-tile")
     .contextMenu {
       Button("Message", systemImage: "bubble.left") { action.run { openChat(try await store.dm(with: agent)) } }
       if store.canManage { Button("Edit look", systemImage: "paintpalette") { editingLook = true } }
