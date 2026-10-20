@@ -44,6 +44,14 @@ struct MessageRow: View {
             Text(store.name(of: message.author))
               .font(.subheadline.weight(.semibold))
               .foregroundStyle(nameColor)
+            if message.author.kind == .agent {
+              Text("agent")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(Color(.tertiarySystemFill)))
+            }
             Text(message.date, format: .dateTime.hour().minute())
               .font(.caption2)
               .foregroundStyle(.tertiary)

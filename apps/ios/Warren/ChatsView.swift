@@ -18,27 +18,17 @@ struct ChatsView: View {
   var body: some View {
     NavigationStack(path: $path) {
       List {
-        if search.isEmpty { NeedsYouSection() }
-        Section("Agents") {
+        if search.isEmpty {
+          Section { InboxRow() }
+        }
+        Section("Your agents") {
           ForEach(store.agents.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.handle.localizedCaseInsensitiveContains(search) }) { agent in
             Button {
               action.run { path.append(try await store.dm(with: agent)) }
-            } label: {
-              let dm = store.channels.first { $0.isDM && store.dmAgent($0)?.id == agent.id }
-              HStack(spacing: 12) {
-                AgentAvatar(agent: agent, size: 44)
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(agent.name).font(.body.weight((dm?.badge ?? 0) > 0 ? .semibold : .regular)).foregroundStyle(.primary)
-                  Text(store.activity[agent.id] ?? "@\(agent.handle)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer()
-                if dm?.isMuted == true { Image(systemName: "bell.slash").foregroundStyle(.secondary) }
-                UnreadBadge(count: dm?.badge ?? 0)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-              }.opacity(dm?.isMuted == true ? 0.55 : 1)
-            }.disabled(action.busy)
+            } label: { AgentChatRow(agent: agent) }.disabled(action.busy)
           }
           if store.agents.isEmpty { Text("No agents yet.").foregroundStyle(.secondary) }
+          if store.canManage { Button("New agent", systemImage: "plus") { sheet = "agent" } }
         }
         if rooms.contains(where: { $0.starred == true }) {
           Section("Starred") { ForEach(rooms.filter { $0.starred == true }) { ChatChannelRow(channel: $0) } }
@@ -72,7 +62,7 @@ struct ChatsView: View {
       }
       .listStyle(.insetGrouped)
       .searchable(text: $search, prompt: "Search chats")
-      .navigationTitle(store.workspace?.name ?? "Warren")
+      .orgSwitcher()
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) { ConnectionDot() }
         ToolbarItem(placement: .topBarTrailing) {
@@ -81,7 +71,7 @@ struct ChatsView: View {
             Button("Browse channels", systemImage: "magnifyingglass") { sheet = "browse" }
             if store.canManage {
               Button("New section", systemImage: "folder.badge.plus") { sheet = "section" }
-              Button("Add agent", systemImage: "sparkles") { sheet = "agent" }
+              Button("New agent", systemImage: "sparkles") { sheet = "agent" }
             }
           } label: { Image(systemName: "plus") }.accessibilityLabel("Add to Warren")
         }
@@ -96,6 +86,7 @@ struct ChatsView: View {
       .navigationDestination(for: Channel.self) { ChannelView(channel: $0) }
       .navigationDestination(for: ThreadRef.self) { ThreadView(ref: $0) }
       .navigationDestination(for: Agent.self) { AgentPage(agent: $0) }
+      .navigationDestination(for: ChatsScreen.self) { _ in InboxView() }
       .sheet(isPresented: Binding(get: { sheet != nil }, set: { if !$0 { sheet = nil } })) {
         switch sheet {
         case "channel": NewChannel { path.append($0) }
@@ -119,7 +110,9 @@ struct ChatsView: View {
   private func open(_ route: Route?) async {
     if case .approval = route {
       store.route = nil
-      path = NavigationPath()
+      var p = NavigationPath()
+      p.append(ChatsScreen.inbox)
+      path = p
       await store.refreshApprovals()
       return
     }
@@ -141,6 +134,11 @@ struct ChatChannelRow: View {
   @State private var moving = false
   @State private var leaving = false
 
+  /** an agent is replying in this channel right now */
+  private var busy: Bool {
+    store.activityChannel.contains { id, ch in ch == channel.id && store.agent(id)?.status == .busy }
+  }
+
   var body: some View {
     NavigationLink(value: channel) {
       HStack(spacing: 12) {
@@ -150,6 +148,7 @@ struct ChatChannelRow: View {
           if !channel.topic.isEmpty { Text(channel.topic).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
         }
         Spacer()
+        if busy { GlowDot(color: .green).accessibilityLabel("An agent is working here") }
         if channel.isMuted { Image(systemName: "bell.slash").foregroundStyle(.secondary) }
         UnreadBadge(count: channel.badge)
       }.opacity(channel.isMuted ? 0.55 : 1)
@@ -199,39 +198,56 @@ struct ChatChannelRow: View {
   }
 }
 
-/** Agents waiting on you, answerable right here: the first thing you see when something needs you. */
-struct NeedsYouSection: View {
+enum ChatsScreen: Hashable { case inbox }
+
+/** The first row in Chats: what's waiting on you (approvals and computers that need you). */
+struct InboxRow: View {
   @Environment(Store.self) private var store
 
-  private var helpWanted: [Computer] { store.computers.filter { $0.help != nil } }
-
   var body: some View {
-    if store.needsYouCount > 0 {
-      Section {
-        ForEach(helpWanted) { c in
-          NavigationLink {
-            ComputerDetail(computerId: c.id)
-          } label: {
-            HStack(spacing: 12) {
-              AgentAvatar(agent: store.agent(c.help!.agentId), size: 44)
-              VStack(alignment: .leading, spacing: 2) {
-                Text(c.help!.request).font(.subheadline.weight(.semibold)).lineLimit(2)
-                Text("\(store.agent(c.help!.agentId)?.name ?? "An agent") needs you on \(c.name)").font(.caption).foregroundStyle(.secondary)
-              }
-            }
-          }
+    NavigationLink(value: ChatsScreen.inbox) {
+      HStack(spacing: 12) {
+        IconTile(symbol: "tray.full.fill", color: store.needsYouCount > 0 ? .orange : .secondary, size: 44)
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Inbox").font(.body.weight(store.needsYouCount > 0 ? .semibold : .regular))
+          Text(store.needsYouCount > 0 ? "Waiting on you" : "Nothing waiting on you").font(.caption).foregroundStyle(.secondary)
         }
-        ForEach(store.pendingApprovals) { a in
-          ApprovalBox(approval: a, agentName: store.agent(a.agentId)?.name, inList: true)
-        }
-      } header: {
-        HStack {
-          Label("Needs you", systemImage: "hand.raised.fill").foregroundStyle(.orange)
-          Spacer()
-          NavigationLink("History") { InboxView() }.font(.caption.weight(.semibold)).textCase(nil)
-        }
+        Spacer()
+        UnreadBadge(count: store.needsYouCount)
       }
     }
+    .accessibilityIdentifier("chats-inbox")
+  }
+}
+
+/** A DM with one of your agents: working now, or unread messages. */
+struct AgentChatRow: View {
+  @Environment(Store.self) private var store
+  var agent: Agent
+
+  var body: some View {
+    let dm = store.channels.first { $0.isDM && store.dmAgent($0)?.id == agent.id }
+    let working = agent.status == .busy
+    HStack(spacing: 12) {
+      AgentAvatar(agent: agent, size: 44, showStatus: false)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(agent.name).font(.body.weight((dm?.badge ?? 0) > 0 ? .semibold : .regular)).foregroundStyle(.primary)
+        if working {
+          HStack(spacing: 5) {
+            GlowDot(color: .green)
+            Text(store.activity[agent.id].map { $0 == "started" ? "Working" : $0 } ?? "Working").font(.caption).foregroundStyle(.green).lineLimit(1)
+          }
+        } else {
+          Text(agent.settings?.description.flatMap { $0.isEmpty ? nil : $0 } ?? "@\(agent.handle)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+      }
+      Spacer()
+      if dm?.isMuted == true { Image(systemName: "bell.slash").foregroundStyle(.secondary) }
+      UnreadBadge(count: dm?.badge ?? 0)
+      Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+    }
+    .opacity(dm?.isMuted == true ? 0.55 : 1)
+    .accessibilityElement(children: .combine)
   }
 }
 

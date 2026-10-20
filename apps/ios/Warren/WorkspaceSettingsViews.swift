@@ -97,12 +97,12 @@ struct DataExportView: View {
   var body: some View {
     List {
       Section("Back up everything") {
-        Text("One folder on the computer that runs the Warren hub holds everything for this workspace. Copy that folder on the computer for a full backup.")
+        Text("One folder on the computer that runs the Warren hub holds everything for this organization. Copy that folder on the computer for a full backup.")
         if let info { Text(info.dataDir ?? "").textSelection(.enabled); Text("\(info.notes ?? 0) notes, \(info.messages ?? 0) messages, \(info.files ?? 0) files and \(info.agents ?? 0) agents.").font(.footnote) }
-        else if !store.isOwner { Text("Ask a workspace owner for the backup folder.").font(.footnote) }
+        else if !store.isOwner { Text("Ask an organization owner for the backup folder.").font(.footnote) }
       }
       Section("Download copies") {
-        Text("These downloads are copies to keep or read. They can't restore a workspace on their own. The folder backup does.").font(.footnote)
+        Text("These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.").font(.footnote)
         if store.isOwner { Button("Download my notes (Markdown ZIP)") { export("/api/export/vault.zip", name: "warren-memory.zip") }.disabled(action.busy) }
         Button("Download conversations (JSON, for developers)") { export("/api/export/conversations.json", name: "warren-conversations.json") }.disabled(action.busy)
         if let exported { ShareLink("Save or share download", item: exported) }

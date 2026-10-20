@@ -34,6 +34,11 @@ final class Store {
   var routinesVersion = 0
   var backgroundVersion = 0
   var simple = false
+  /** the optional features this organization has on (all on when the hub doesn't say) */
+  var features: Features = .everything
+  /** every organization you belong to, for the switcher at the top of Chats */
+  var orgs: [OrgSummary] = []
+  var agentDefaults: AgentDefaults?
   var syncError: String?
   var channelVersion = 0
   var memoryVersion = 0
@@ -53,6 +58,11 @@ final class Store {
   var activity: [String: String] = [:]
   /** the channel each working agent is replying in */
   var activityChannel: [String: String] = [:]
+  /** the steps of each working agent's current run, oldest first */
+  var activitySteps: [String: [String]] = [:]
+  /** the run each working agent is on, so it can be stopped */
+  var activityRun: [String: String] = [:]
+  var activitySince: [String: Date] = [:]
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
@@ -107,17 +117,39 @@ final class Store {
     socket?.cancel(with: .goingAway, reason: nil)
     socket = nil
     api = nil
+    clearData()
+    phase = .signedOut
+    // the hub forgets this phone's push token along with the sign-in
+    updateBadge()
+  }
+
+  /** Moves this phone to another organization with a session token scoped to it, then reloads everything. */
+  func switchSession(token: String) {
+    guard let base = api?.base else { return }
+    socket?.cancel(with: .goingAway, reason: nil)
+    socket = nil
+    connected = false
+    Session.hub = base
+    Session.token = token
+    api = API(base: base, token: token)
+    clearData()
+    phase = .loading
+    Task { await load() }
+  }
+
+  private func clearData() {
     me = nil
+    workspace = nil
+    features = .everything; orgs = []; agentDefaults = nil
+    activitySteps = [:]; activityRun = [:]; activitySince = [:]
     sections = []; nodes = []; teams = []; syncError = nil
     tasks = []; notes = []; profiles = [:]; routines = []; backgrounds = [:]
     skills = []; connectors = []; sessions = []; invites = []; prefs = nil
     taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
     channels = []; agents = []; members = []; computers = []; approvals = []
-    messages = [:]; threads = [:]; activity = [:]; activityChannel = [:]
+    messages = [:]; threads = [:]; replyCounts = [:]; activity = [:]; activityChannel = [:]
+    openChannel = nil
     route = nil
-    phase = .signedOut
-    // the hub forgets this phone's push token along with the sign-in
-    updateBadge()
   }
 
   // MARK: loading
@@ -131,6 +163,7 @@ final class Store {
       self.prefs = me.prefs
       self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
+      self.features = me.features ?? .everything
       async let ch: [Channel] = api.get("/api/channels")
       async let ag: [Agent] = api.get("/api/agents")
       channels = try await ch
@@ -140,6 +173,7 @@ final class Store {
       connect()
       await refreshComputers()
       await refreshApprovals()
+      await refreshOrgs()
       await setUpPush()
     } catch let e as API.Failure where e.status == 401 {
       signOut()
@@ -374,6 +408,7 @@ final class Store {
         prefs = me.prefs
         simple = me.prefs?.experience == "simple"
         role = me.role ?? "member"
+        features = me.features ?? .everything
         try await refreshAgents()
         try await refreshManagement()
         syncError = nil
@@ -381,6 +416,7 @@ final class Store {
       if let open = openChannel { try? await loadMessages(open) }
       await refreshComputers()
       await refreshApprovals()
+      await refreshOrgs()
     }
   }
 
@@ -389,10 +425,12 @@ final class Store {
   private struct StatusEvent: Decodable { var agentId: String; var status: Agent.Status }
   private struct RunEvent: Decodable {
     struct E: Decodable { var type: String; var text: String?; var name: String? }
+    var runId: String?
     var agentId: String
     var channelId: String
     var event: E
   }
+  private struct FeaturesEvent: Decodable { var features: Features }
   private struct ReactionsEvent: Decodable { var messageId: String; var channelId: String; var threadId: String?; var reactions: [Reaction] }
   private struct ComputerEvent: Decodable { var computer: Computer }
   private struct RemovedEvent: Decodable { var computerId: String }
@@ -433,16 +471,32 @@ final class Store {
       if e.status != .busy {
         activity[e.agentId] = nil
         activityChannel[e.agentId] = nil
+        activitySteps[e.agentId] = nil
+        activityRun[e.agentId] = nil
+        activitySince[e.agentId] = nil
+      } else if activitySince[e.agentId] == nil {
+        activitySince[e.agentId] = Date()
       }
     case "run_event":
       guard let e = try? d.decode(RunEvent.self, from: data) else { return }
       activityChannel[e.agentId] = e.channelId
+      if let run = e.runId, activityRun[e.agentId] != run {
+        activityRun[e.agentId] = run
+        activitySteps[e.agentId] = []
+        activitySince[e.agentId] = Date()
+      }
       switch e.event.type {
-      case "status": activity[e.agentId] = e.event.text
-      case "tool_call": activity[e.agentId] = "Using \(e.event.name ?? "a tool")"
+      case "status":
+        activity[e.agentId] = e.event.text
+        if let text = e.event.text, text != "started" { addStep(text, for: e.agentId) }
+      case "tool_call":
+        activity[e.agentId] = "Using \(e.event.name ?? "a tool")"
+        addStep("Used \(e.event.name ?? "a tool")", for: e.agentId)
       case "text": activity[e.agentId] = "Writing…"
       default: break
       }
+    case "features":
+      if let e = try? d.decode(FeaturesEvent.self, from: data) { features = e.features }
     case "reactions":
       guard let e = try? d.decode(ReactionsEvent.self, from: data) else { return }
       update(e.messageId, channel: e.channelId, thread: e.threadId) { $0.reactions = e.reactions }
@@ -479,6 +533,13 @@ final class Store {
     default:
       break
     }
+  }
+
+  private func addStep(_ text: String, for agentId: String) {
+    var steps = activitySteps[agentId] ?? []
+    guard steps.last != text else { return }
+    steps.append(text)
+    activitySteps[agentId] = Array(steps.suffix(30))
   }
 
   private func insert(_ m: Message) {

@@ -42,7 +42,6 @@ struct ChannelView: View {
           MessageRow(message: m, compact: continues(m, after: i > 0 ? list[i - 1] : nil), replies: store.replyCounts[m.id] ?? 0, thread: ThreadRef(channelId: channel.id, rootId: m.id))
           .id(m.id)
         }
-        WorkingNow(channel: channel)
         Color.clear.frame(height: 1).id(Bottom.id)
       }
       .padding(.bottom, 8)
@@ -55,9 +54,13 @@ struct ChannelView: View {
       if current.archivedAt != nil {
         Text("#\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
       } else {
-        Composer(placeholder: placeholder) { text in
-          try await store.send(text, in: channel.id)
+        VStack(spacing: 6) {
+          ActivityPill(channel: current)
+          Composer(placeholder: placeholder) { text in
+            try await store.send(text, in: channel.id)
+          }
         }
+        .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
     }
     .toolbar(.hidden, for: .tabBar)
@@ -143,7 +146,6 @@ struct ThreadView: View {
           .padding(.vertical, 6)
         }
         ForEach(replies) { m in MessageRow(message: m, compact: false, replies: 0, thread: nil) }
-        if let ch = store.channels.first(where: { $0.id == ref.channelId }) { WorkingNow(channel: ch) }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
     }
@@ -155,7 +157,10 @@ struct ThreadView: View {
       if store.channels.first(where: { $0.id == ref.channelId })?.archivedAt != nil {
         Text("This channel is archived").font(.footnote).foregroundStyle(.secondary).padding()
       } else {
-        Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+        VStack(spacing: 6) {
+          if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch) }
+          Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+        }
       }
     }
     .toolbar(.hidden, for: .tabBar)
@@ -170,31 +175,6 @@ enum Bottom {
   static let id = "bottom"
   static func follow(_ proxy: ScrollViewProxy) {
     withAnimation(.snappy) { proxy.scrollTo(id, anchor: .bottom) }
-  }
-}
-
-/** Agents working on something in this channel right now, and what they're doing. */
-struct WorkingNow: View {
-  @Environment(Store.self) private var store
-  var channel: Channel
-
-  var body: some View {
-    let working = store.agents.filter { a in
-      store.activityChannel[a.id] == channel.id || (a.status == .busy && store.dmAgent(channel)?.id == a.id)
-    }
-    ForEach(working) { a in
-      HStack(spacing: 8) {
-        AgentAvatar(agent: a, size: 22, showStatus: false)
-          .phaseAnimator([0, -2]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: 0.8) }
-        Text("**\(a.name)** \(store.activity[a.id].map { $0.prefix(1).lowercased() + $0.dropFirst() } ?? "is working…")")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 6)
-      .transition(.opacity)
-    }
   }
 }
 

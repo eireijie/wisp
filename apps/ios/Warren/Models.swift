@@ -29,6 +29,8 @@ struct Me: Codable {
   var user: User?
   var role: String?
   var workspace: Workspace?
+  /** resolved by the hub for the current organization; missing on older hubs (everything on) */
+  var features: Features?
 }
 
 struct Member: Codable, Identifiable, Hashable {
@@ -64,6 +66,9 @@ struct Agent: Codable, Identifiable, Hashable {
     var roleNotes: String?
     var runIn: String?
     var headless: Bool?
+    /** who it answers: "me" (its creator), "anyone", or "people" (respondPeople); unset is anyone */
+    var respondTo: String?
+    var respondPeople: [String]?
   }
   enum Status: String, Codable { case online, busy, offline }
 
