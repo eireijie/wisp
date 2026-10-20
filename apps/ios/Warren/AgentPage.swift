@@ -43,7 +43,7 @@ struct AgentPage: View {
         NavigationLink("Instructions") { AgentEditor(agent: current, panel: .instructions) }
         if store.features.routines { NavigationLink("Routines") { RoutinesView(agent: current) }.accessibilityIdentifier("agent-routines") }
         if store.features.background { NavigationLink("Background") { BackgroundView(agent: current) }.accessibilityIdentifier("agent-background") }
-        if store.canManage && (store.features.invite || store.members.count > 1) {
+        if (store.isOwner || current.settings?.createdBy == store.me?.id) && (store.features.invite || store.members.count > 1) {
           Picker("Answers", selection: Binding(get: { current.settings?.respondTo ?? "anyone" }, set: { value in
             action.run { try await store.updateAgent(current.id, ["settings": AnyEncodable(["respondTo": value])]) }
           })) {

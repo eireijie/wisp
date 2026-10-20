@@ -69,6 +69,8 @@ struct Agent: Codable, Identifiable, Hashable {
     /** who it answers: "me" (its creator), "anyone", or "people" (respondPeople); unset is anyone */
     var respondTo: String?
     var respondPeople: [String]?
+    /** the person who made it; they (or an owner) decide who it answers */
+    var createdBy: String?
   }
   enum Status: String, Codable { case online, busy, offline }
 

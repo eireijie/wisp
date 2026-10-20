@@ -126,12 +126,13 @@ final class Store {
   /** Moves this phone to another organization with a session token scoped to it, then reloads everything. */
   func switchSession(token: String) {
     guard let base = api?.base else { return }
-    socket?.cancel(with: .goingAway, reason: nil)
-    socket = nil
-    connected = false
+    // the hub revoked the old token when it issued this one: keep the new one before anything else
     Session.hub = base
     Session.token = token
     api = API(base: base, token: token)
+    socket?.cancel(with: .goingAway, reason: nil)
+    socket = nil
+    connected = false
     clearData()
     phase = .loading
     Task { await load() }
@@ -176,7 +177,8 @@ final class Store {
       await refreshOrgs()
       await setUpPush()
     } catch let e as API.Failure where e.status == 401 {
-      signOut()
+      // a token revoked by switching organizations isn't a sign-out if a newer one is in use
+      if self.api?.token == api.token { signOut() }
     } catch {
       if phase != .ready { phase = .failed(error.localizedDescription) }
       else { syncError = error.localizedDescription }
