@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store.ts";
+import { useFeature } from "./features.ts";
 
 export interface BuddySettings {
   agentId: string | null;
@@ -26,13 +27,14 @@ declare global {
   }
 }
 
-/** Keep the tray current even when the buddy is turned off. */
+/** Keep the tray current even when the buddy is turned off. With the Desk buddy feature off, the app hears no agents, so no buddy appears. */
 export function useDesktopAgents() {
   const agents = useStore((s) => s.agents);
   const leadId = useStore((s) => s.teams.find((t) => t.leadId)?.leadId ?? null);
+  const buddy = useFeature("buddy");
   useEffect(() => {
-    window.warrenDesktop?.buddy.agents(agents.map(({ id, name }) => ({ id, name })), leadId);
-  }, [agents, leadId]);
+    window.warrenDesktop?.buddy.agents(buddy ? agents.map(({ id, name }) => ({ id, name })) : [], buddy ? leadId : null);
+  }, [agents, leadId, buddy]);
   useEffect(() => () => window.warrenDesktop?.buddy.agents([], null), []);
 }
 

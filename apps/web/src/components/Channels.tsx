@@ -396,7 +396,7 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
       }}
     >
       <fieldset disabled={!canManage} className="space-y-4">
-      <Field label="Name" hint={channel.name === "general" ? "Everyone in the workspace lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the channel keep working after a rename."}>
+      <Field label="Name" hint={channel.name === "general" ? "Everyone in the organization lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the channel keep working after a rename."}>
         <div className="relative">
           <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <Input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} required maxLength={80} className="pl-8" disabled={channel.name === "general"} />
@@ -414,7 +414,7 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
             <span className="font-medium flex items-center gap-1.5">
               <Lock size={13} /> Private
             </span>
-            <span className="block text-xs text-muted">{isPrivate ? "Only its members (and workspace owners) can see it." : "Anyone in the workspace can find and join it."}</span>
+            <span className="block text-xs text-muted">{isPrivate ? "Only its members (and organization owners) can see it." : "Anyone in the organization can find and join it."}</span>
           </span>
           <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" disabled={!canManage} />
         </label>
@@ -592,7 +592,7 @@ export function ChannelMembers({ channel, canManage, onClose }: { channel: Chann
       )}
       <p className="text-xs text-muted">
         Agents here answer when someone @mentions them{channel.settings.defaultAgentId ? "; the channel's own agent answers everything else (see Agents)" : ""}.{" "}
-        {channel.private ? `Only the people and agents listed can see #${channel.name}.` : `Anyone in the workspace can still read and join #${channel.name}.`}
+        {channel.private ? `Only the people and agents listed can see #${channel.name}.` : `Anyone in the organization can still read and join #${channel.name}.`}
       </p>
     </div>
   );
@@ -634,7 +634,7 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
               : "Right now a message only reaches an agent when someone @mentions it. Pick an agent to make this its channel."
           }
         >
-          {agents.length ? <AnswerSelect agents={agents} value={rules.defaultAgentId} onChange={(v) => setRules({ ...rules, defaultAgentId: v })} /> : <p className="text-sm text-muted">No agents in this workspace yet.</p>}
+          {agents.length ? <AnswerSelect agents={agents} value={rules.defaultAgentId} onChange={(v) => setRules({ ...rules, defaultAgentId: v })} /> : <p className="text-sm text-muted">No agents in this organization yet.</p>}
         </Field>
         <label className="flex items-center justify-between gap-3 text-sm">
           <span>

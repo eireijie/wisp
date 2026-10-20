@@ -341,11 +341,11 @@ function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => v
       </span>
       {n.mine ? (
         <label className="inline-flex items-center gap-2 cursor-pointer" title="Off for a personal computer: agents that run directly on it then only take requests from you.">
-          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the workspace add agents and VMs here" />
+          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the organization add agents and VMs here" />
           Shared with workspace
         </label>
       ) : (
-        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
+        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the organization can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
           {n.shared ? <Users size={13} /> : <Lock size={13} />} {n.shared ? "Shared" : "Private"}
         </span>
       )}
