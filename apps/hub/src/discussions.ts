@@ -105,7 +105,8 @@ export class Discussions {
 
   /** The decision note goes in the team's decisions folder (or shared/decisions), written by the moderator. */
   private async saveDecision(d: Discussion, text: string): Promise<string> {
-    const { store, vault } = this.hub;
+    const { store } = this.hub;
+    const vault = this.hub.vault(d.workspaceId);
     const team = d.teamId ? store.team(d.teamId) : undefined;
     const dir = `${team?.folder ?? "shared"}/decisions`;
     const date = new Date().toISOString().slice(0, 10);

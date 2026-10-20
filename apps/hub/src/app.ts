@@ -12,6 +12,7 @@ import { Hub } from "./hub.ts";
 import { registerVaultGit } from "./vault-git.ts";
 import { carryOverVault, rememberVaultDir, resolveVaultLocation } from "./vault-location.ts";
 import { Store } from "./store.ts";
+import { Vaults } from "./vaults.ts";
 
 export interface HubOptions {
   dataDir: string;
@@ -30,7 +31,12 @@ export async function buildHub(opts: HubOptions) {
   if (moved && moved.files > 0) await vault.syncFromDisk({ name: "Warren", email: "warren@localhost" }, "Brought over memory from the earlier folder");
   rememberVaultDir(opts.dataDir, location.path);
   const store = new Store(db);
-  const hub = new Hub(store, vault);
+  // each organization's memory: the first keeps this vault, the others get their own under <data>/orgs
+  let hubRef: Hub | null = null;
+  const vaults = new Vaults(path.resolve(opts.dataDir), vault, store, (wsId) => hubRef?.broadcast(wsId, { type: "memory_changed" }));
+  await vaults.openAll();
+  const hub = new Hub(store, vaults);
+  hubRef = hub;
   await hub.ensureTeams();
   hub.routines.start();
   hub.background.start();
@@ -76,7 +82,10 @@ export async function buildHub(opts: HubOptions) {
     stopWatching();
     await hub.shutdown();
   });
-  app.addHook("onClose", async () => db.close());
+  app.addHook("onClose", async () => {
+    vaults.close();
+    db.close();
+  });
   return { app, hub };
 }
 

@@ -47,6 +47,10 @@ import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { agentPolicy } from "./policy.ts";
+import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
+import { agentDefaults } from "./agent-defaults.ts";
+import { workspaceFeatures } from "./features.ts";
+import { VM_SIZES, computerDefaults } from "./policy.ts";
 
 export interface Caller {
   principal: Principal;
@@ -92,6 +96,10 @@ const SETTINGS = z
     runIn: z.enum(["computer", "device"]),
     role: z.string().trim().max(60),
     roleNotes: z.string().max(2000),
+    respondTo: z.enum(["me", "anyone", "people"]),
+    respondPeople: z.array(z.string().min(1)).max(500),
+    /** set by the hub when the agent is made; accepted (and ignored) so a client can send settings back as it got them */
+    createdBy: z.string().optional(),
   })
   .partial()
   .strict();
@@ -132,7 +140,9 @@ export interface RegisterOptions {
 }
 
 export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOptions) {
-  const { store, vault } = hub;
+  const { store } = hub;
+  /** The memory vault of the caller's organization. */
+  const vaultOf = (c: Caller) => hub.vault(c.workspaceId);
   const db = store.db;
 
   // --- helpers ----------------------------------------------------------------
@@ -207,7 +217,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     let p: string;
     try {
       p = notePath(raw);
-      vault.resolve(p);
+      vaultOf(c).resolve(p);
     } catch {
       reply.code(400).send({ error: "invalid path" });
       return null;
@@ -222,7 +232,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   function rulePathFor(raw: string, reply: FastifyReply): string | null {
     const p = cleanRulePath(raw);
     try {
-      if (p) vault.resolve(p);
+      if (p) hub.vaults.primary.resolve(p);
       return p;
     } catch {
       reply.code(400).send({ error: "invalid path" });
@@ -311,19 +321,15 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
 
   app.post("/api/setup", async (req, reply) => {
     if (store.userCount() > 0) return reply.code(409).send({ error: "already set up" });
-    const body = parse(z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Warren") }), req.body, reply);
+    const body = parse(
+      z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Warren"), features: FEATURE_PRESET.default("simple") }),
+      req.body,
+      reply,
+    );
     if (!body) return;
     const user = store.createUser(body.email, body.name, hashPassword(body.password));
-    const ws = store.createWorkspace(body.workspaceName);
-    store.addMember(ws.id, user.id, "owner");
-    const general = store.createChannel(ws.id, "general", "channel", "Everyone, humans and agents");
-    store.addChannelMember(general.id, { kind: "user", id: user.id });
-    await vault.write(
-      "shared/Welcome.md",
-      `# Welcome to ${ws.name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; Obsidian shows backlinks and a graph of them.\n- Every change is a git commit, so nothing is ever lost.\n`,
-      { name: user.name, email: user.email },
-      "Create welcome note",
-    );
+    // the first organization keeps the vault the hub opened at startup
+    const ws = await createOrganization(hub, user, body.workspaceName, body.features);
     return { token: issueToken(db, "session", user.id, ws.id, deviceLabel(req.headers["user-agent"])), user, workspace: ws };
   });
 
@@ -341,7 +347,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       return reply.code(401).send({ error: "wrong email or password" });
     }
     failures.delete(key);
-    const ws = db.prepare("SELECT workspace_id FROM memberships WHERE user_id = ? LIMIT 1").get(u.id) as { workspace_id: string } | undefined;
+    // back into the organization they used last (their latest sign-in), else the first they joined
+    const ws = (db
+      .prepare(
+        `SELECT t.workspace_id FROM tokens t JOIN memberships m ON m.workspace_id = t.workspace_id AND m.user_id = t.subject_id
+         WHERE t.kind = 'session' AND t.subject_id = ? ORDER BY COALESCE(t.last_used, t.created_at) DESC LIMIT 1`,
+      )
+      .get(u.id) ??
+      db.prepare("SELECT m.workspace_id FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? ORDER BY w.created_at LIMIT 1").get(u.id)) as { workspace_id: string } | undefined;
     if (!ws) return reply.code(403).send({ error: "not a member of any workspace" });
     return { token: issueToken(db, "session", u.id, ws.workspace_id, deviceLabel(req.headers["user-agent"])) };
   });
@@ -365,8 +378,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       )
       .get(c.workspaceId) as { id: string; channelId: string; agentId: string } | undefined;
     const canRead = readable(c);
-    const agentNotes = vault.list((p) => canRead(p) && agents.some((a) => p.startsWith(`agents/${a.id}/`))).filter((n) => !/\/(About|SOUL)\.md$/.test(n.path));
-    const sharedNotes = vault.list((p) => canRead(p) && p.startsWith("shared/")).filter((n) => n.path !== "shared/Welcome.md");
+    const agentNotes = vaultOf(c).list((p) => canRead(p) && agents.some((a) => p.startsWith(`agents/${a.id}/`))).filter((n) => !/\/(About|SOUL)\.md$/.test(n.path));
+    const sharedNotes = vaultOf(c).list((p) => canRead(p) && p.startsWith("shared/")).filter((n) => n.path !== "shared/Welcome.md");
     return {
       devices: nodes.map((n) => ({ id: n.id, name: n.name, online: hub.isNodeOnline(n.id), mine: n.ownerId === c.actor.id, role: n.role })),
       // computers agents can share: VMs and cloud computers (never someone's own screen)
@@ -384,8 +397,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply);
     if (!c) return;
     const ws = store.workspace(c.workspaceId);
-    if (c.actor.kind === "user") return { kind: "user", user: store.user(c.actor.id), prefs: store.prefs(c.actor.id), role: c.viewer.role, workspace: ws };
-    return { kind: "agent", agent: agentView(store.agent(c.actor.id)!), workspace: ws };
+    const features = workspaceFeatures(store, c.workspaceId);
+    if (c.actor.kind === "user") return { kind: "user", user: store.user(c.actor.id), prefs: store.prefs(c.actor.id), role: c.viewer.role, workspace: ws, features };
+    return { kind: "agent", agent: agentView(store.agent(c.actor.id)!), workspace: ws, features };
   });
 
   app.get("/api/members", async (req, reply) => {
@@ -729,7 +743,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       .slice(0, 8)
       .map(agentView);
     const messages = store.searchMessages(visible.map((ch) => ch.id), q, 15).map((m) => ({ ...m, channelName: visible.find((ch) => ch.id === m.channelId)?.name ?? "" }));
-    const notes = vault.search(q, readable(c), 8);
+    const notes = vaultOf(c).search(q, readable(c), 8);
     return { channels, agents, messages, notes };
   });
 
@@ -851,7 +865,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       z.object({
         handle: HANDLE,
         name: z.string().min(1).max(80),
-        harness: HARNESS,
+        /** optional with useDefaults: the organization's defaults fill it in */
+        harness: HARNESS.optional(),
         model: z.string().max(100).nullable().optional(),
         nodeId: z.string().nullable().optional(),
         computerId: z.string().nullable().optional(),
@@ -859,23 +874,49 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         instructions: z.string().max(20_000).default(""),
         settings: SETTINGS.optional(),
         soul: z.string().max(50_000).optional(),
+        /** fill in harness, model, device and computer from Settings' defaults where they aren't given */
+        useDefaults: z.boolean().optional(),
       }),
       req.body,
       reply,
     );
     if (!body) return;
+    const { useDefaults, ...fields } = body;
+    const defaults = useDefaults ? agentDefaults(store, c.workspaceId) : null;
+    if (defaults) {
+      fields.harness ??= defaults.harness ?? undefined;
+      if (fields.model === undefined && fields.harness === defaults.harness) fields.model = defaults.model;
+      if (fields.nodeId === undefined && defaults.nodeId && canUseDevice(c, defaults.nodeId)) fields.nodeId = defaults.nodeId;
+    }
+    const harness = fields.harness;
+    if (!harness) return reply.code(400).send({ error: "harness: pick a harness (no device offers one yet to use as a default)" });
     if (store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
+    if (body.settings?.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this organization" });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
     if (body.settings?.anyoneCanAsk && (!body.nodeId || store.node(body.nodeId)?.ownerId !== c.actor.id)) delete body.settings.anyoneCanAsk;
     // new agents start at the workspace's default access unless someone picked one
     if (!body.settings?.access) body.settings = { ...body.settings, access: agentPolicy(hub, c.workspaceId).defaultAccess };
-    const created = store.createAgent({ ...body, workspaceId: c.workspaceId });
-    const agent = body.settings ? store.updateAgent(created.id, { settings: body.settings })! : created;
+    // it remembers who made it, and answers only them until they say otherwise
+    body.settings = { respondTo: "me", ...body.settings, createdBy: c.actor.id };
+    // "Use my defaults" with a VM: the agent gets a computer of its own on its device
+    let computerId = fields.computerId;
+    if (defaults && computerId === undefined) {
+      const caps = fields.nodeId ? store.nodeCapabilities(fields.nodeId) : null;
+      if (defaults.computer === "own-vm" && fields.nodeId && caps?.vm.ok) {
+        const size = VM_SIZES[computerDefaults(hub, c.workspaceId).vmSize];
+        const comp = store.createComputer({ workspaceId: c.workspaceId, name: `${body.name}'s computer`.slice(0, 80), kind: "vm", nodeId: fields.nodeId, config: { cpus: size.cpus, memoryGb: size.memoryGb }, status: "starting" });
+        hub.computers.startInBackground(comp);
+        computerId = comp.id;
+        body.settings = { runIn: "computer", ...body.settings };
+      } else if (defaults.computer === "none") body.settings = { headless: true, ...body.settings };
+    }
+    const created = store.createAgent({ ...fields, harness, computerId, workspaceId: c.workspaceId });
+    const agent = store.updateAgent(created.id, { settings: body.settings })!;
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
-    await vault.write(soulPath(agent.id), body.soul ?? soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
+    await vaultOf(c).write(soulPath(agent.id), body.soul ?? soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
     hub.broadcast(c.workspaceId, { type: "agents_changed" });
     return agentView(agent);
   });
@@ -893,6 +934,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       reply,
     );
     if (!body) return;
+    // who made it is the hub's record, not a setting
+    if (body.settings) delete body.settings.createdBy;
+    // who an agent answers is up to whoever made it (and the organization's owners)
+    if (body.settings && (body.settings.respondTo !== undefined || body.settings.respondPeople !== undefined)) {
+      const creator = agent.settings.createdBy;
+      if (creator && creator !== c.actor.id && c.viewer.role !== "owner") return reply.code(403).send({ error: `only whoever made @${agent.handle} (or an owner) decides who it answers` });
+      if (body.settings.respondPeople?.some((p) => !store.role(c.workspaceId, p))) return reply.code(400).send({ error: "respondPeople: someone isn't in this organization" });
+    }
     // whoever's device the agent runs directly on (now, or after this change) decides about it
     const after = { ...agent, ...body, settings: { ...agent.settings, ...body.settings } };
     for (const owner of [deviceOwnerOf(agent), deviceOwnerOf(after)]) {
@@ -1138,7 +1187,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const fresh = store.team(team.id)!;
     for (const a of [c.actor, ...fresh.members.map((m) => ({ kind: "agent" as const, id: m.agentId })), ...(fresh.reportsTo ? [{ kind: "agent" as const, id: fresh.reportsTo }] : [])]) store.addChannelMember(channel.id, a);
     const brief = `# Team ${name}\n\n${body.description || "What this team is for, what it's working on, and how it works. The lead keeps this up to date."}\n\n## How we work\n- Decisions go in \`${fresh.folder}/decisions/\`, one note each.\n- Anything the whole team should know goes in this folder; anything everyone should know goes in \`shared/\`.\n`;
-    await vault.write(`${fresh.folder}/README.md`, brief, commitAuthor(c), `Create team ${name}`).catch(() => undefined);
+    await vaultOf(c).write(`${fresh.folder}/README.md`, brief, commitAuthor(c), `Create team ${name}`).catch(() => undefined);
     hub.broadcast(c.workspaceId, { type: "teams_changed" });
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return teamView(fresh);
@@ -1504,7 +1553,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!channel) return reply.code(404).send({ error: "channel not found" });
     const requester = requesterOf(c);
     for (const a of [...participants, moderator.id]) {
-      const why = hub.whyNotAllowed(store.agent(a)!, requester);
+      const agent = store.agent(a)!;
+      if (!hub.answers(agent, requester)) return reply.code(403).send({ error: `@${agent.handle} only answers the people its owner picked` });
+      const why = hub.whyNotAllowed(agent, requester);
       if (why) return reply.code(403).send({ error: why });
     }
     for (const a of [...participants, moderator.id]) store.addChannelMember(channel.id, { kind: "agent", id: a });
@@ -1546,7 +1597,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const viewer = as ? viewAs(c, as, reply) : c.viewer;
     if (!viewer) return;
     const check = hub.access.checker(c.workspaceId, viewer);
-    return vault.list((p) => atLeast(check(p).level, "read"));
+    return vaultOf(c).list((p) => atLeast(check(p).level, "read"));
   });
 
   app.get("/api/vault/note", async (req, reply) => {
@@ -1554,8 +1605,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const p = noteFor(c, (req.query as { path?: string }).path ?? "", "read", reply);
     if (!p) return;
-    const [note, [last]] = await Promise.all([vault.read(p), vault.history(p, 1).catch(() => [])]);
-    return { ...note, access: memory(c)(p).level, backlinks: vault.backlinks(note.path, readable(c)), editedBy: last?.author ?? null, editedAt: last?.date ?? null };
+    const [note, [last]] = await Promise.all([vaultOf(c).read(p), vaultOf(c).history(p, 1).catch(() => [])]);
+    return { ...note, access: memory(c)(p).level, backlinks: vaultOf(c).backlinks(note.path, readable(c)), editedBy: last?.author ?? null, editedAt: last?.date ?? null };
   });
 
   app.put("/api/vault/note", async (req, reply) => {
@@ -1564,7 +1615,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ path: z.string().min(1), content: z.string().max(2_000_000), message: z.string().max(200).optional() }), req.body, reply);
     const p = body && noteFor(c, body.path, "edit", reply);
     if (!body || !p) return;
-    return vault.write(p, body.content, commitAuthor(c), body.message);
+    return vaultOf(c).write(p, body.content, commitAuthor(c), body.message);
   });
 
   app.post("/api/vault/append", async (req, reply) => {
@@ -1573,7 +1624,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ path: z.string().min(1), text: z.string().max(200_000) }), req.body, reply);
     const p = body && noteFor(c, body.path, "edit", reply);
     if (!body || !p) return;
-    return vault.append(p, body.text, commitAuthor(c));
+    return vaultOf(c).append(p, body.text, commitAuthor(c));
   });
 
   app.post("/api/vault/move", async (req, reply) => {
@@ -1583,7 +1634,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const from = body && noteFor(c, body.from, "edit", reply);
     const to = from && noteFor(c, body.to, "edit", reply);
     if (!from || !to) return;
-    return vault.move(from, to, commitAuthor(c));
+    return vaultOf(c).move(from, to, commitAuthor(c));
   });
 
   app.delete("/api/vault/note", async (req, reply) => {
@@ -1591,7 +1642,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const p = noteFor(c, (req.query as { path?: string }).path ?? "", "edit", reply);
     if (!p) return;
-    await vault.remove(p, commitAuthor(c));
+    await vaultOf(c).remove(p, commitAuthor(c));
     return { ok: true };
   });
 
@@ -1599,14 +1650,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply);
     if (!c) return;
     const q = req.query as { q?: string; limit?: string };
-    return vault.search(q.q ?? "", readable(c), limitParam(q.limit, 20, 100));
+    return vaultOf(c).search(q.q ?? "", readable(c), limitParam(q.limit, 20, 100));
   });
 
   app.get("/api/vault/resolve", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
     const q = req.query as { target?: string; from?: string };
-    const p = vault.resolveLink(q.target ?? "", q.from);
+    const p = vaultOf(c).resolveLink(q.target ?? "", q.from);
     return { path: p && readable(c)(p) ? p : null };
   });
 
@@ -1615,7 +1666,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const p = noteFor(c, (req.query as { path?: string }).path ?? "", "read", reply);
     if (!p) return;
-    return vault.history(p);
+    return vaultOf(c).history(p);
   });
 
   app.get("/api/vault/at", async (req, reply) => {
@@ -1624,7 +1675,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const q = req.query as { path?: string; rev?: string };
     const p = noteFor(c, q.path ?? "", "read", reply);
     if (!p) return;
-    return { content: await vault.readAt(p, q.rev ?? "") };
+    return { content: await vaultOf(c).readAt(p, q.rev ?? "") };
   });
 
   /** Pick up edits made outside Warren (Obsidian, git pull). */
@@ -1632,8 +1683,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply, { user: true });
     if (!c) return;
     // edits found on disk are credited to Obsidian, not to whoever pressed the button
-    const changed = await vault.syncFromDisk();
-    return { notes: vault.list().length, changed };
+    const changed = await vaultOf(c).syncFromDisk();
+    return { notes: vaultOf(c).list().length, changed };
   });
 
   /** Who last changed each line of a note. */
@@ -1642,7 +1693,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const p = noteFor(c, (req.query as { path?: string }).path ?? "", "read", reply);
     if (!p) return;
-    return vault.blame(p);
+    return vaultOf(c).blame(p);
   });
 
   /** Recent edits across memory that you can see: who changed which notes, newest first. */
@@ -1653,7 +1704,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const canRead = readable(c);
     const prefix = q.path ? cleanRulePath(q.path).toLowerCase() : "";
     const limit = limitParam(q.limit, 50, 200);
-    return (await vault.changes(limit * 4))
+    return (await vaultOf(c).changes(limit * 4))
       .map((ch) => ({ ...ch, files: ch.files.filter((f) => canRead(f.path) && (!prefix || f.path.toLowerCase() === prefix || f.path.toLowerCase().startsWith(prefix + "/"))) }))
       .filter((ch) => ch.files.length && (!q.author || ch.author === q.author))
       .slice(0, limit);
@@ -1681,7 +1732,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!person) return reply.code(404).send({ error: "person not found" });
     const level = memory(c)(`${personDir(person.id)}/x.md`).level;
     if (!atLeast(level, "read")) return reply.code(403).send({ error: `you can't see what's saved about ${person.name}` });
-    return { person: { id: person.id, name: person.name }, level, items: await hub.memory.profiles.items(person.id) };
+    return { person: { id: person.id, name: person.name }, level, items: await hub.memory.profiles(c.workspaceId).items(person.id) };
   });
 
   /**
@@ -1718,7 +1769,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       messageId: run?.triggerMessageId ?? null,
     };
     const check = memory(c);
-    const result = await hub.memory.profiles.remember(person.id, body, origin, commitAuthor(c), (p) => atLeast(check(p).level, "edit"));
+    const result = await hub.memory.profiles(c.workspaceId).remember(person.id, body, origin, commitAuthor(c), (p) => atLeast(check(p).level, "edit"));
     if (!result.saved && result.error) return reply.code(result.error.startsWith("no edit access") ? 403 : 400).send({ error: result.error });
     return { ...result, person: { id: person.id, name: person.name } };
   });
@@ -1903,6 +1954,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
 
   registerComputerApi(app, hub, { need, parse, commitAuthor, agentView, requesterOf, channelVisible });
   registerSettingsApi(app, hub, { need, parse, dataDir: opts.dataDir });
+  registerOrgApi(app, hub, { need, parse });
   registerMemoryStorageApi(app, hub, { need, parse, dataDir: opts.dataDir, started: opts.vault, restart: opts.restart });
   registerConnectorApi(app, hub, { need, parse, commitAuthor });
   registerVoiceApi(app, hub, { need });

@@ -115,13 +115,13 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${addr.port}`;
   close = () => app.close();
 
-  const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", workspaceName: "Test" }, "");
+  const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Test" }, "");
   token = setup.data.token;
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general").id;
 
   const n = await api("POST", "/api/nodes", { name: "box" });
   nodeToken = n.data.token;
-  atlas = (await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "claude-code", nodeId: n.data.node.id })).data;
+  atlas = (await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "claude-code", nodeId: n.data.node.id, settings: { respondTo: "anyone" } })).data;
   nova = (await api("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "codex", nodeId: n.data.node.id })).data;
 
   node = new FakeNode(nodeToken, (prompt, agentId) => {
@@ -158,7 +158,7 @@ describe("hub", () => {
   });
 
   it("setup only works once and requires auth", async () => {
-    expect((await api("POST", "/api/setup", { email: "x@example.com", name: "X", password: "password123" }, "")).status).toBe(409);
+    expect((await api("POST", "/api/setup", { email: "x@example.com", name: "X", password: "password123", features: "everything" }, "")).status).toBe(409);
     expect((await api("GET", "/api/channels", undefined, "")).status).toBe(401);
     expect((await api("POST", "/api/auth/login", { email: "me@example.com", password: "password123" }, "")).status).toBe(200);
   });
@@ -703,7 +703,8 @@ describe("agent settings", () => {
   it("validates settings and merges them key by key", async () => {
     await api("PATCH", `/api/agents/${nova.id}`, { settings: { effort: "high" } });
     const r = await api("PATCH", `/api/agents/${nova.id}`, { settings: { access: "read-only" }, model: "gpt-6-astra" });
-    expect(r.data.settings).toEqual({ effort: "high", access: "read-only" });
+    // new agents also record who made them and start out answering only them
+    expect(r.data.settings).toEqual({ effort: "high", access: "read-only", respondTo: "me", createdBy: expect.any(String) });
     expect(r.data.model).toBe("gpt-6-astra");
     expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { access: "root" } })).status).toBe(400);
     expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { sudo: true } })).status).toBe(400);

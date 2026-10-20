@@ -11,6 +11,7 @@ import { Marketplace } from "./marketplace.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
+import type { Vaults } from "./vaults.ts";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
@@ -70,10 +71,10 @@ export class Hub {
 
   constructor(
     readonly store: Store,
-    readonly vault: Vault,
+    readonly vaults: Vaults,
   ) {
     this.access = new MemoryAccess(store);
-    this.memory = new AgentMemory(store, vault, this.access);
+    this.memory = new AgentMemory(store, (wsId) => this.vault(wsId), this.access);
     this.discussions = new Discussions(this);
     this.computers = new Computers(this);
     this.routines = new Routines(this);
@@ -84,6 +85,11 @@ export class Hub {
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
     this.apns = new Apns(this);
+  }
+
+  /** An organization's memory vault (each organization has its own). */
+  vault(workspaceId: string): Vault {
+    return this.vaults.get(workspaceId);
   }
 
   /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
@@ -97,8 +103,9 @@ export class Hub {
       for (const m of team.members) this.store.addChannelMember(channel.id, { kind: "agent", id: m.agentId });
       for (const p of this.store.members(r.workspace_id).filter((m) => m.role === "owner")) this.store.addChannelMember(channel.id, { kind: "user", id: p.id });
       const brief = `${team.folder}/README.md`;
-      if (!this.vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
-        await this.vault
+      const vault = this.vault(r.workspace_id);
+      if (!vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
+        await vault
           .write(brief, `# Team ${team.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for team ${team.name}`)
           .catch(() => undefined);
       }
@@ -205,6 +212,20 @@ export class Hub {
     if (!node?.ownerId || node.shared || node.ownerId === requestedBy) return null;
     const owner = this.store.user(node.ownerId)?.name ?? "its owner";
     return `@${agent.handle} runs directly on ${owner}'s device "${node.name}", so only ${owner} can ask it for things. ${owner} can open it up to everyone on its page`;
+  }
+
+  /**
+   * Does this agent answer `personId`? Its "Who it answers" setting: only its creator ("me"; the
+   * organization's owners when nobody is recorded as its creator, or they left), chosen people
+   * (and its creator), or anyone. Unset is anyone, as agents did before the setting existed. Work
+   * nobody asked for (a schedule, the system) always goes through.
+   */
+  answers(agent: Pick<Agent, "workspaceId" | "settings">, personId: string | null): boolean {
+    const mode = agent.settings.respondTo ?? "anyone";
+    if (mode === "anyone" || !personId || personId === "system") return true;
+    const creator = agent.settings.createdBy && this.store.role(agent.workspaceId, agent.settings.createdBy) ? agent.settings.createdBy : null;
+    if (creator ? creator === personId : this.store.role(agent.workspaceId, personId) === "owner") return true;
+    return mode === "people" && (agent.settings.respondPeople ?? []).includes(personId);
   }
 
   agentStatus(agent: { id: string; nodeId: string | null }): "online" | "busy" | "offline" {
@@ -459,6 +480,8 @@ export class Hub {
     const threadId = msg.threadId ?? (replyInThread || tidy ? msg.id : null);
     for (const agentId of this.targets(msg, workspaceId)) {
       const agent = this.store.agent(agentId)!;
+      // an agent that only answers certain people stays quiet for everyone else
+      if (!this.answers(agent, msg.author.kind === "user" ? msg.author.id : requestedBy)) continue;
       const notAllowed = this.whyNotAllowed(agent, requestedBy);
       if (notAllowed) {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${notAllowed}.`);
@@ -726,7 +749,9 @@ export class Hub {
   /** The agent's SOUL.md from its private vault folder, or "" if it doesn't have one. */
   async soul(agentId: string): Promise<string> {
     try {
-      return (await this.vault.read(soulPath(agentId))).content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+      const agent = this.store.agent(agentId);
+      if (!agent) return "";
+      return (await this.vault(agent.workspaceId).read(soulPath(agentId))).content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
     } catch {
       return "";
     }

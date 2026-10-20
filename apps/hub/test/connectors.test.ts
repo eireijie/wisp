@@ -31,7 +31,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   atlas = (await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "custom" })).data;
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");
 });
@@ -100,7 +100,7 @@ describe("skills", () => {
   it("installs a catalog skill into the agent's folder and its prompt, and takes it back out", async () => {
     const s = (await api("POST", "/api/skills", { catalogId: "weekly-status-report", agentIds: [atlas.id] })).data;
     expect(s).toMatchObject({ slug: "weekly-status-report", source: "catalog", agentIds: [atlas.id] });
-    const file = await hub.vault.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`);
+    const file = await hub.vaults.primary.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`);
     expect(file.content).toMatch(/^---\nname: weekly-status-report\n/);
     expect(file.content).toContain("# Weekly status report");
 
@@ -113,10 +113,10 @@ describe("skills", () => {
 
     // edits reach the agent's copy
     await api("PATCH", `/api/skills/${s.id}`, { content: "# Weekly status report\n\nKeep it to five bullets." });
-    expect((await hub.vault.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`)).content).toContain("five bullets");
+    expect((await hub.vaults.primary.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`)).content).toContain("five bullets");
 
     await api("DELETE", `/api/skills/${s.id}/agents/${atlas.id}`);
-    await expect(hub.vault.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`)).rejects.toThrow();
+    await expect(hub.vaults.primary.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`)).rejects.toThrow();
     expect(await promptFor(atlas.id)).not.toContain("## Your skills");
   });
 
@@ -126,6 +126,6 @@ describe("skills", () => {
     expect([a.slug, b.slug, a.source]).toEqual(["ship-it", "ship-it-2", "custom"]);
     expect((await api("POST", "/api/skills", { name: "x", content: "y", agentIds: ["agt_nope"] })).status).toBe(400);
     await api("DELETE", `/api/skills/${b.id}`);
-    await expect(hub.vault.read(`agents/${atlas.id}/skills/ship-it-2/SKILL.md`)).rejects.toThrow();
+    await expect(hub.vaults.primary.read(`agents/${atlas.id}/skills/ship-it-2/SKILL.md`)).rejects.toThrow();
   });
 });

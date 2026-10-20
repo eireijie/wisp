@@ -66,7 +66,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   ownerId = (await api("GET", "/api/me")).data.user.id;
   const invite = (await api("POST", "/api/invites", { role: "member" })).data;
   sam = (await api("POST", "/api/invites/accept", { code: invite.code, name: "Sam", email: "sam@example.com", password: "password123" }, "")).data.token;
@@ -121,8 +121,8 @@ describe("memory over git", () => {
     // the line-by-line view says the same
     expect((await api<any[]>("GET", "/api/vault/blame?path=shared/new.md")).data[0].author).toBe("Yugal");
     // and the vault on disk is at the pushed commit, with a clean working folder
-    expect(await git(hub.vault.root, "rev-parse", "HEAD")).toBe(await git(clone, "rev-parse", "HEAD"));
-    expect(await git(hub.vault.root, "status", "--porcelain")).toBe("");
+    expect(await git(hub.vaults.primary.root, "rev-parse", "HEAD")).toBe(await git(clone, "rev-parse", "HEAD"));
+    expect(await git(hub.vaults.primary.root, "status", "--porcelain")).toBe("");
   });
 
   it("handles big pushes and pulls (git compresses these requests)", async () => {
@@ -181,10 +181,10 @@ describe("memory over git", () => {
     expect(other.out).toMatch(/only the .* branch can be pushed/);
     const branch = await git(clone, "branch", "--show-current");
     expect((await tryGit(clone, "push", "origin", `:${branch}`)).ok).toBe(false);
-    expect(fs.existsSync(path.join(hub.vault.root, "shared/passwd.md"))).toBe(false);
-    expect(fs.existsSync(path.join(hub.vault.root, ".obsidian"))).toBe(false);
+    expect(fs.existsSync(path.join(hub.vaults.primary.root, "shared/passwd.md"))).toBe(false);
+    expect(fs.existsSync(path.join(hub.vaults.primary.root, ".obsidian"))).toBe(false);
     // nothing odd got into the vault
-    expect(await git(hub.vault.root, "status", "--porcelain")).toBe("");
+    expect(await git(hub.vaults.primary.root, "status", "--porcelain")).toBe("");
   });
 
   it("only lets people who can read everything clone, and holds their pushes to what they can edit", async () => {
@@ -252,7 +252,7 @@ describe("memory over git", () => {
 
 describe("edits made in Obsidian on this machine", () => {
   it("show up in Warren, credited to Obsidian, without looping on Warren's own saves", async () => {
-    const root = hub.vault.root;
+    const root = hub.vaults.primary.root;
     fs.mkdirSync(path.join(root, "Projects"), { recursive: true });
     fs.writeFileSync(path.join(root, "Projects/Idea.md"), "# Idea\nwritten straight to disk zebrafinch\n");
     await waitFor(async () => (await api<any[]>("GET", "/api/vault/search?q=zebrafinch")).data.length > 0);
@@ -284,7 +284,7 @@ describe("edits made in Obsidian on this machine", () => {
 describe("where memory lives", () => {
   it("shows the folder to the owner only, and refuses folders that would hold Warren's own data", async () => {
     const s = (await api("GET", "/api/memory/storage")).data;
-    expect(s).toMatchObject({ path: hub.vault.root, source: "default", pendingRestart: false, sync: { allowed: true, urlPath: "/git/vault.git" } });
+    expect(s).toMatchObject({ path: hub.vaults.primary.root, source: "default", pendingRestart: false, sync: { allowed: true, urlPath: "/git/vault.git" } });
     expect((await api("GET", "/api/memory/storage", undefined, sam)).data.path).toBeNull();
     expect((await api("PUT", "/api/memory/storage", { path: path.join(tmp, "x") }, sam)).status).toBe(403);
     for (const bad of ["/", os.homedir(), path.join(tmp, "data"), tmp, "relative/not/ok"]) {
@@ -292,7 +292,7 @@ describe("where memory lives", () => {
     }
     const target = path.join(tmp, "my-obsidian-vault");
     const set = await api("PUT", "/api/memory/storage", { path: target });
-    expect(set.data).toMatchObject({ setting: target, pendingRestart: true, path: hub.vault.root });
+    expect(set.data).toMatchObject({ setting: target, pendingRestart: true, path: hub.vaults.primary.root });
     expect((await api("PUT", "/api/memory/storage", { path: null })).data).toMatchObject({ setting: null, pendingRestart: false });
   });
 });

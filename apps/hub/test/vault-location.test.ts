@@ -35,7 +35,7 @@ async function withHub<T>(fn: (h: { hub: Awaited<ReturnType<typeof buildHub>>["h
     return res.json();
   };
   try {
-    const r = existing ? await api("POST", "/api/auth/login", { email: "me@example.com", password: "password123" }) : await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", workspaceName: "Lab" });
+    const r = existing ? await api("POST", "/api/auth/login", { email: "me@example.com", password: "password123", features: "everything" }) : await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", workspaceName: "Lab" });
     token = r.token;
     return await fn({ hub: built.hub, api });
   } finally {
@@ -77,7 +77,7 @@ describe("opening an existing Obsidian vault", () => {
     write(path.join(vault, "Journal/today.md"), "# Today\nbasilisk meeting");
     process.env.WARREN_VAULT_DIR = vault;
     await withHub(async ({ hub, api }) => {
-      expect(hub.vault.root).toBe(vault);
+      expect(hub.vaults.primary.root).toBe(vault);
       expect((await api("GET", "/api/vault/search?q=basilisk")).map((h: any) => h.path)).toEqual(["Journal/today.md"]);
       await api("PUT", "/api/vault/note", { path: "shared/from-warren.md", content: "# Hi\n" });
       const storage = await api("GET", "/api/memory/storage");
@@ -102,7 +102,7 @@ describe("moving memory to another folder", () => {
     const target = path.join(tmp, "Moved");
     expect(saveVaultLocation(data, target)).toEqual({ ok: true });
     await withHub(async ({ hub, api }) => {
-      expect(hub.vault.root).toBe(target);
+      expect(hub.vaults.primary.root).toBe(target);
       expect((await api("GET", "/api/vault/note?path=shared/keep.md")).content).toContain("this moves");
       expect((await api("GET", "/api/vault/changes")).length).toBeGreaterThan(1); // history came along
       const s = await api("GET", "/api/memory/storage");
@@ -136,7 +136,7 @@ describe("moving memory to another folder", () => {
     expect(fs.readFileSync(path.join(data, "vault/shared/clash.md"), "utf8")).toBe("from warren");
 
     await withHub(async ({ hub }) => {
-      expect(hub.vault.list().map((n) => n.path)).toEqual(expect.arrayContaining(["Ideas.md", "agents/a/mind.md", "shared/clash.md"]));
+      expect(hub.vaults.primary.list().map((n) => n.path)).toEqual(expect.arrayContaining(["Ideas.md", "agents/a/mind.md", "shared/clash.md"]));
     }, true);
     expect(git(target, "log", "--format=%an")).toContain("Warren");
   });

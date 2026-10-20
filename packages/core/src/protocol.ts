@@ -198,7 +198,9 @@ export type ClientEvent =
   | { type: "background_changed"; agentId: string }
   | { type: "tasks_changed" }
   /** notes were changed outside Warren (Obsidian, a git pull or push) */
-  | { type: "memory_changed" };
+  | { type: "memory_changed" }
+  /** an owner switched optional features on or off (Settings → Features) */
+  | { type: "features"; features: import("./features.ts").Features };
 
 /**
  * Tunnel bytes travel as binary WebSocket frames: one byte with the tunnel id's length, the id,

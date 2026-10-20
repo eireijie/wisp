@@ -70,6 +70,16 @@ export interface AgentSettings {
   role?: string;
   /** what the role means for how it works: what it owns, what to send its way */
   roleNotes?: string;
+  /**
+   * Whose messages wake it: only its creator ("me"; the organization's owners when it has no
+   * creator), anyone in the organization, or the people in `respondPeople` (plus its creator).
+   * Unset means anyone, as agents did before this existed; new agents start at "me".
+   */
+  respondTo?: "me" | "anyone" | "people";
+  /** user ids it answers when respondTo is "people" */
+  respondPeople?: string[];
+  /** the person who made it (set by the hub when it's created; older agents don't have one) */
+  createdBy?: string;
 }
 
 /**

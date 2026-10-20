@@ -15,14 +15,15 @@ const stripFrontmatter = (t: string) => t.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\
  * teams, the teams that report to it, notes pinned for it, and notes related to the message.
  */
 export class AgentMemory {
-  readonly profiles: Profiles;
-
   constructor(
     private store: Store,
-    private vault: Vault,
+    private vaultOf: (workspaceId: string) => Vault,
     private access: MemoryAccess,
-  ) {
-    this.profiles = new Profiles(vault);
+  ) {}
+
+  /** What memory holds about people, in an organization's vault. */
+  profiles(workspaceId: string): Profiles {
+    return new Profiles(this.vaultOf(workspaceId));
   }
 
   /** Who a conversation is with: the person who sent the message, else the last person who spoke there, else the workspace owner. */
@@ -46,19 +47,20 @@ export class AgentMemory {
     const check = accessChecker(viewer, rules);
     const readable = (p: string) => atLeast(check(p).level, "read");
     const shown = new Set<string>([soulPath(agent.id).toLowerCase()]);
+    const vault = this.vaultOf(agent.workspaceId);
 
     const person = opts.person && readable(`${personDir(opts.person.id)}/x.md`) ? opts.person : null;
-    const about = person ? await this.profiles.context(person.id, opts.query) : "";
+    const about = person ? await this.profiles(agent.workspaceId).context(person.id, opts.query) : "";
     if (person) shown.add(personDir(person.id).toLowerCase());
 
-    const pinned = await this.startupNotes(this.vault.list((p) => readable(p) && startupRules(viewer, rules).some((r) => covers(r.path, p))).map((n) => n.path));
+    const pinned = await this.startupNotes(vault, vault.list((p) => readable(p) && startupRules(viewer, rules).some((r) => covers(r.path, p))).map((n) => n.path));
     for (const p of pinned.paths) shown.add(p.toLowerCase());
 
     const mine = await this.teamSection(agent, teams, shown);
     const below = await this.bossSection(agent, teams, shown);
 
     const related = opts.query.trim()
-      ? this.vault
+      ? vault
           .search(opts.query, (p) => readable(p) && ![...shown].some((s) => p.toLowerCase() === s || p.toLowerCase().startsWith(s + "/")), 5, "any")
           .map((h) => `- ${h.path} (${h.title}): ${h.snippet.replace(/\s+/g, " ")}`)
       : [];
@@ -77,14 +79,14 @@ export class AgentMemory {
   }
 
   /** Notes people pinned for this agent, within a size budget. */
-  private async startupNotes(paths: string[]): Promise<{ text: string; paths: string[] }> {
+  private async startupNotes(vault: Vault, paths: string[]): Promise<{ text: string; paths: string[] }> {
     const shown: string[] = [];
     const used: string[] = [];
     let budget = STARTUP_CHARS;
     for (const p of paths) {
       let body: string;
       try {
-        body = stripFrontmatter((await this.vault.read(p)).content);
+        body = stripFrontmatter((await vault.read(p)).content);
       } catch {
         continue;
       }
@@ -101,9 +103,9 @@ export class AgentMemory {
 
   private handle = (agentId: string | null) => (agentId ? `@${this.store.agent(agentId)?.handle ?? "unknown"}` : "none");
 
-  private async excerpt(path: string, chars: number): Promise<string> {
+  private async excerpt(workspaceId: string, path: string, chars: number): Promise<string> {
     try {
-      const body = stripFrontmatter((await this.vault.read(path)).content);
+      const body = stripFrontmatter((await this.vaultOf(workspaceId).read(path)).content);
       return body.length > chars ? body.slice(0, chars) + "…" : body;
     } catch {
       return "";
@@ -111,7 +113,7 @@ export class AgentMemory {
   }
 
   private decisions(t: Team, n = 5) {
-    return this.vault
+    return this.vaultOf(t.workspaceId)
       .list((p) => p.startsWith(`${t.folder}/decisions/`))
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, n)
@@ -136,7 +138,7 @@ export class AgentMemory {
         const boss = me.managerId && onTeam.has(me.managerId) ? me.managerId : null;
         const reports = t.members.filter((m) => m.managerId === agent.id).map((m) => this.handle(m.agentId));
         const channel = t.channelId ? this.store.channel(t.channelId)?.name : null;
-        const brief = await this.excerpt(`${t.folder}/README.md`, BRIEF_CHARS);
+        const brief = await this.excerpt(t.workspaceId, `${t.folder}/README.md`, BRIEF_CHARS);
         shown.add(`${t.folder}/readme.md`.toLowerCase());
         const decisions = this.decisions(t);
         return [
@@ -170,7 +172,7 @@ export class AgentMemory {
     const parts = await Promise.all(
       below.map(async (t) => {
         const open = tasks.filter((task) => t.members.some((m) => m.agentId === task.toAgentId)).slice(0, 8);
-        const brief = await this.excerpt(`${t.folder}/README.md`, 600);
+        const brief = await this.excerpt(t.workspaceId, `${t.folder}/README.md`, 600);
         shown.add(`${t.folder}/readme.md`.toLowerCase());
         const decisions = this.decisions(t, 3);
         const direct = t.reportsTo === agent.id;
