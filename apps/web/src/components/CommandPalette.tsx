@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Bot, CornerDownLeft, FileText, Hash, MessageSquare, Plus, Search, Server, Settings } from "lucide-react";
+import { BookOpen, Brain, Building2, CornerDownLeft, FileText, Ghost, Hash, Inbox, LifeBuoy, ListTodo, MessageSquare, Monitor, Plug, Plus, Search, Server, Settings, SquarePen, Users, Wand2 } from "lucide-react";
 import type { Agent, Channel, Message } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go } from "../router.ts";
+import { useFeatures } from "../features.ts";
+import { NewOrgDialog } from "./OrgSwitcher.tsx";
 import { AgentAvatar, cx } from "./ui.tsx";
 
 interface Results {
@@ -13,7 +15,7 @@ interface Results {
   notes: { path: string; title: string; snippet: string }[];
 }
 
-type Kind = "Note" | "Task" | "Routine" | "Message" | "Agent" | "Channel" | "Page";
+type Kind = "Note" | "Task" | "Routine" | "Message" | "Agent" | "Channel" | "Page" | "Action";
 
 interface Row {
   key: string;
@@ -114,7 +116,7 @@ function KindChip({ kind }: { kind: Kind }) {
   return <span className="shrink-0 rounded border border-line bg-chip px-1.5 text-[10px] font-medium leading-4 text-muted">{kind}</span>;
 }
 
-/** ⌘K / Ctrl+K: jump anywhere, search messages and memory, or run an action. */
+/** ⌘K / Ctrl+K: jump anywhere, search messages and memory, or make something new. */
 export function CommandPalette() {
   const open = useStore((s) => s.paletteOpen);
   const setOpen = useStore((s) => s.setPalette);
@@ -130,14 +132,22 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", k);
   }, [setOpen]);
 
-  return open ? <Palette onClose={() => setOpen(false)} /> : null;
+  const [newOrg, setNewOrg] = useState(false);
+  return (
+    <>
+      {open && <Palette onClose={() => setOpen(false)} onNewOrg={() => setNewOrg(true)} />}
+      {newOrg && <NewOrgDialog onClose={() => setNewOrg(false)} />}
+    </>
+  );
 }
 
-function Palette({ onClose }: { onClose: () => void }) {
+function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => void }) {
   const channels = useStore((s) => s.channels);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
   const teams = useStore((s) => s.teams);
+  const guest = useStore((s) => s.me?.role) === "guest";
+  const features = useFeatures();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Results | null>(null);
   const [sel, setSel] = useState(0);
@@ -207,16 +217,35 @@ function Palette({ onClose }: { onClose: () => void }) {
         run: () => go({ view: "vault", path: n.path }),
       });
     }
-    const actions: Row[] = [
-      { key: "x:agent", group: "Pages", kind: "Page", icon: <Plus size={15} />, label: "Add an agent", run: () => go({ view: "agents", agentId: null }) },
-      { key: "x:vault", group: "Pages", kind: "Page", icon: <BookOpen size={15} />, label: "Open memory", run: () => go({ view: "vault", path: null }) },
-      { key: "x:devices", group: "Pages", kind: "Page", icon: <Server size={15} />, label: "Devices", run: () => go({ view: "nodes" }) },
-      { key: "x:settings", group: "Pages", kind: "Page", icon: <Settings size={15} />, label: "Settings", run: () => go({ view: "settings" }) },
-      { key: "x:agents", group: "Pages", kind: "Page", icon: <Bot size={15} />, label: "Manage agents", run: () => go({ view: "agents", agentId: null }) },
+    const action = (key: string, icon: ReactNode, label: string, run: () => void, also = ""): Row & { words: string } => ({ key: `x:${key}`, group: "Actions", kind: "Action", icon, label, run, words: `${label} ${also}` });
+    const pageRow = (key: string, icon: ReactNode, label: string, run: () => void, also = ""): Row & { words: string } => ({ key: `p:${key}`, group: "Pages", kind: "Page", icon, label, run, words: `${label} ${also}` });
+    const actions = [
+      ...(!guest ? [action("agent", <Plus size={15} />, "New agent", () => (useStore.setState({ newAgentOpen: true }), go({ view: "agents", agentId: null })), "add create helper")] : []),
+      action("channel", <Hash size={15} />, "New channel", () => useStore.setState({ channelBrowser: { sectionId: null } }), "add create browse channels"),
+      ...(!guest && features.tasks ? [action("task", <SquarePen size={15} />, "New task", () => useStore.setState({ newTaskOpen: true }), "create assign work")] : []),
+      action("org", <Building2 size={15} />, "New organization", onNewOrg, "create workspace"),
     ];
-    out.push(...actions.filter((a) => !needle || String(a.label).toLowerCase().includes(needle)));
+    // every page, including the ones that left the sidebar
+    const pages = [
+      pageRow("inbox", <Inbox size={15} />, "Inbox", () => go({ view: "dashboard" }), "dashboard waiting approvals"),
+      pageRow("agents", <Ghost size={15} />, "Agents", () => go({ view: "agents", agentId: null }), "manage helpers"),
+      pageRow("computers", <Monitor size={15} />, "Computers", () => go({ view: "computers", computerId: null }), "screens vm"),
+      pageRow("vault", <BookOpen size={15} />, "Memory", () => go({ view: "vault", path: null }), "notes vault"),
+      ...(features.tasks ? [pageRow("tasks", <ListTodo size={15} />, "Tasks", () => go({ view: "tasks" }), "work board")] : []),
+      ...(features.teams ? [pageRow("teams", <Users size={15} />, "Teams", () => go({ view: "teams", teamId: null }), "groups lead")] : []),
+      pageRow("devices", <Server size={15} />, "Devices", () => go({ view: "nodes" }), "nodes machines"),
+      pageRow("connectors", <Plug size={15} />, "Connected apps", () => go({ view: "connectors" }), "connectors mcp gmail slack integrations"),
+      pageRow("skills", <Wand2 size={15} />, "Skills", () => go({ view: "skills" }), "shop learn"),
+      pageRow("about", <Brain size={15} />, "About you", () => go({ view: "about" }), "profile memory"),
+      pageRow("help", <LifeBuoy size={15} />, "Help", () => go({ view: "help" }), "support setup"),
+      pageRow("settings", <Settings size={15} />, "Settings", () => go({ view: "settings" }), "preferences organization features"),
+    ];
+    const match = (r: { words: string }) => !needle || r.words.toLowerCase().includes(needle);
+    // with nothing typed, making something comes first; while searching, the results do
+    if (!needle) return [...actions, ...out, ...pages];
+    out.push(...actions.filter(match), ...pages.filter(match));
     return out;
-  }, [q, results, channels, agents, members, teams]);
+  }, [q, results, channels, agents, members, teams, guest, features, onNewOrg]);
 
   useEffect(() => {
     setSel(0);
@@ -246,7 +275,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             aria-activedescendant={rows[sel] ? `palette-opt-${sel}` : undefined}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search channels, agents, messages and notes…"
+            placeholder="Search or create…"
             className="flex-1 bg-transparent outline-none text-[15px] h-12 placeholder:text-faint"
             onKeyDown={(e) => {
               if (e.key === "Escape") onClose();

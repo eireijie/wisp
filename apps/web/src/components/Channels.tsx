@@ -445,7 +445,7 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
   );
 }
 
-function ChannelMembers({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
+export function ChannelMembers({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
   const me = useStore((s) => s.me);
   const people = useStore((s) => s.members);
   const agents = useStore((s) => s.agents);

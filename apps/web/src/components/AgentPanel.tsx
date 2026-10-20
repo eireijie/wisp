@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, MessageSquare, ChevronRight, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
+import { Activity, BookOpen, Check, MessageSquare, ChevronRight, Square, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
 import { harnessLabel, type Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
-import { useStore, type ComputerInfo } from "../store.ts";
+import { useStore, type ComputerInfo, type LiveRun } from "../store.ts";
+import { useFeature } from "../features.ts";
 import { go, href, type AgentTab } from "../router.ts";
 import { Advanced, useSimple } from "../experience.tsx";
 import { openDm } from "../openDm.ts";
@@ -14,6 +15,9 @@ import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
 import { prettyModel, effortName } from "./EffortSlider.tsx";
 import { AgentAvatar, AGENT_STATUS, Button, HARNESS_LABELS, Pill, cx, timeAgo } from "./ui.tsx";
+import { RightPane } from "./RightPane.tsx";
+import { runActivity, stopRuns } from "./ActivityPill.tsx";
+import { minutesSince, runStartedAt, workSteps } from "./agentActivity.ts";
 
 export type AgentPanelTab = "details" | "computer" | "settings";
 
@@ -34,45 +38,81 @@ const SECTIONS: { id: AgentTab; label: string; body: string; icon: ReactNode }[]
 ];
 
 /**
- * The agent beside its DM: who it is, its computer live, and the way into every setting. Kept
- * to three tabs so the chat stays the main thing.
+ * An agent in the pane beside a chat (its DM, or any channel it works in), Buzz style: who it is
+ * and whether it's working, Message and Stop, its computer live, the steps of what it's doing,
+ * and who it answers. Settings are one tab away, so the chat stays the main thing.
  */
-export function AgentPanel({ agent, tab, onTab, onClose, onCall }: { agent: Agent; tab: AgentPanelTab; onTab: (t: AgentPanelTab) => void; onClose: () => void; onCall: () => void }) {
+export function AgentPanel({ agent, tab, onTab, onClose, onCall, inDm = false }: { agent: Agent; tab: AgentPanelTab; onTab: (t: AgentPanelTab) => void; onClose: () => void; onCall: () => void; inDm?: boolean }) {
   const tabs: { id: AgentPanelTab; label: string }[] = [
     { id: "details", label: "Details" },
     { id: "computer", label: "Computer" },
     { id: "settings", label: "Settings" },
   ];
+  const live = useStore((s) => s.live);
+  const runs = Object.values(live).filter((r) => r.agentId === agent.id);
+  const voice = useFeature("voice");
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!runs.length) return;
+    const t = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [runs.length]);
+  const working = runs.length > 0 || agent.status === "busy";
+  const since = runs.length ? Math.min(...runs.map((r) => runStartedAt(r.runId))) : null;
+  const status = AGENT_STATUS[agent.status];
   return (
-    <aside className="fixed inset-0 z-40 bg-bg lg:static lg:z-auto lg:w-[380px] shrink-0 border-l border-line flex flex-col min-h-0 safe-top" aria-label={`${agent.name}'s details`}>
-      <div className="flex justify-end gap-1.5 px-3 pt-3">
-        <button onClick={() => go({ view: "agents", agentId: agent.id, tab: "overview" })} className="size-9 rounded-full border border-line grid place-items-center text-muted hover:text-ink hover:bg-hover" aria-label="Open its full page" title="Open its full page">
+    <RightPane label={`${agent.name}'s details`}>
+      <div className="h-15 shrink-0 flex items-center gap-1.5 px-4 border-b border-line">
+        <span className="font-semibold flex-1">Agent</span>
+        <button onClick={() => go({ view: "agents", agentId: agent.id, tab: "overview" })} className="size-8 rounded-lg grid place-items-center text-muted hover:text-ink hover:bg-hover" aria-label="Open its full page" title="Open its full page">
           <ExternalLink size={16} />
         </button>
-        <button onClick={onClose} className="size-9 rounded-full border border-line grid place-items-center text-muted hover:text-ink hover:bg-hover" aria-label="Close" title="Close">
+        <button onClick={onClose} className="size-8 rounded-lg grid place-items-center text-muted hover:text-ink hover:bg-hover" aria-label="Close panel" title="Close">
           <X size={17} />
         </button>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6">
-        <div className="flex flex-col items-center text-center pt-1">
-          <AgentAvatar agent={agent} size={84} live />
-          <h2 className="mt-3 text-xl font-semibold">{agent.name}</h2>
-          <RoleLabel agent={agent} />
+        <div className="flex items-center gap-3.5 pt-5">
+          <AgentAvatar agent={agent} size={64} live />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold truncate">{agent.name}</h2>
+            <RoleLabel agent={agent} />
+            <div className={cx("mt-0.5 flex items-center gap-1.5 text-[13px] font-medium", working ? "text-ok" : "text-muted")}>
+              <span className={cx("size-1.5 rounded-full", working ? "bg-ok" : "bg-faint")} style={working ? undefined : { background: status.dot ?? status.hue }} aria-hidden />
+              {working ? `Working${since ? ` · ${minutesSince(since)}` : ""}` : <span className="capitalize">{status.label}</span>}
+            </div>
+          </div>
         </div>
-        <nav className="mt-5 flex justify-center gap-1" role="tablist">
+        <div className="mt-4 flex gap-2">
+          {inDm ? (
+            voice && (
+              <Button className="flex-1 h-9!" onClick={onCall}>
+                <Phone size={15} /> Call
+              </Button>
+            )
+          ) : (
+            <Button variant="primary" className="flex-1 h-9!" onClick={() => void openDm(agent.id)}>
+              <MessageSquare size={15} /> Message
+            </Button>
+          )}
+          <Button className="flex-1 h-9!" disabled={!runs.length} onClick={() => void stopRuns(runs)} title={runs.length ? `Stop ${agent.name}` : "It isn't working on anything"}>
+            <Square size={13} /> Stop
+          </Button>
+        </div>
+        <nav className="mt-5 flex gap-1" role="tablist">
           {tabs.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => onTab(t.id)} className={cx("h-9 px-3.5 rounded-full text-sm", tab === t.id ? "bg-chip text-ink font-medium" : "text-muted hover:text-ink")}>
+            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => onTab(t.id)} className={cx("h-8 px-3 rounded-full text-sm", tab === t.id ? "bg-chip text-ink font-medium" : "text-muted hover:text-ink")}>
               {t.label}
             </button>
           ))}
         </nav>
-        <div className="mt-5">
-          {tab === "details" && <Details agent={agent} onCall={onCall} />}
+        <div className="mt-4">
+          {tab === "details" && <Details agent={agent} onCall={onCall} runs={runs} inDm={inDm} />}
           {tab === "computer" && <ComputerTab agent={agent} />}
           {tab === "settings" && <SettingsTab agent={agent} />}
         </div>
       </div>
-    </aside>
+    </RightPane>
   );
 }
 
@@ -97,17 +137,18 @@ function RoleLabel({ agent }: { agent: Agent }) {
       placeholder="Add a label"
       aria-label="Its label"
       maxLength={60}
-      className="mt-0.5 w-48 bg-transparent text-center text-sm text-muted placeholder:text-faint outline-none focus:text-ink rounded-md hover:bg-hover focus:bg-hover px-2 h-7"
+      className="-ml-1.5 w-full max-w-56 bg-transparent text-sm text-muted placeholder:text-faint outline-none focus:text-ink rounded-md hover:bg-hover focus:bg-hover px-1.5 h-6"
     />
   );
 }
 
-function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
+function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => void; runs: LiveRun[]; inDm: boolean }) {
   const status = AGENT_STATUS[agent.status];
   const computer = useStore((s) => s.computers.find((c) => c.id === agent.computerId));
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
   const simple = useSimple();
+  const voice = useFeature("voice");
   const next = simple ? setupNextStep(agent, devices) : null;
   const device = devices?.find((d) => d.id === agent.nodeId);
   type Row = [string, ReactNode];
@@ -130,14 +171,16 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
     </dl>
   );
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {agent.settings.roleNotes && <p className="text-sm text-muted whitespace-pre-wrap">{agent.settings.roleNotes}</p>}
-      {simple ? table([statusRow, deviceRow, computerRow, ...tail]) : table([statusRow, ...technical, deviceRow, computerRow, ...tail])}
-      {simple && (
-        <Advanced title="Technical details">
-          {table(technical)}
-        </Advanced>
+      {computer && (
+        <section className="space-y-2">
+          <h3 className="text-[13px] font-semibold text-muted">Its computer</h3>
+          <ComputerCard agent={agent} computer={computer} />
+        </section>
       )}
+      <WhatItsDoing agent={agent} runs={runs} />
+      <AnswersRow agent={agent} />
       {!readiness.ready && (
         <p className="rounded-xl border border-line bg-panel px-3 py-2 text-xs text-muted">
           Setup incomplete: {readiness.problem}. Messages to {agent.name} will wait until that's fixed.
@@ -151,18 +194,74 @@ function Details({ agent, onCall }: { agent: Agent; onCall: () => void }) {
           )}
         </p>
       )}
-      <Button className="w-full" onClick={() => void openDm(agent.id)}>
-        <MessageSquare size={15} /> Send a test message
-      </Button>
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={onCall}>
-          <Phone size={15} /> Call
-        </Button>
-        <Button onClick={() => go({ view: "vault", path: soulPath(agent.id) })}>
-          <BookOpen size={15} /> Memory
-        </Button>
-      </div>
+      <Advanced title="More about it">
+        <div className="space-y-4">
+          {simple ? table([statusRow, deviceRow, computerRow, ...tail, ...technical]) : table([statusRow, ...technical, deviceRow, computerRow, ...tail])}
+          <div className={cx("grid gap-2", voice && !inDm ? "grid-cols-2" : "grid-cols-1")}>
+            {voice && !inDm && (
+              <Button onClick={onCall}>
+                <Phone size={15} /> Call
+              </Button>
+            )}
+            <Button onClick={() => go({ view: "vault", path: soulPath(agent.id) })}>
+              <BookOpen size={15} /> Memory
+            </Button>
+          </div>
+        </div>
+      </Advanced>
     </div>
+  );
+}
+
+/** "What it's doing": the steps of its current run (or the latest one), the newest one live. */
+function WhatItsDoing({ agent, runs }: { agent: Agent; runs: LiveRun[] }) {
+  const agents = useStore((s) => s.agents);
+  const run = runs.at(-1);
+  const steps = run ? workSteps(run.tools, true) : [];
+  // nothing called yet: it's thinking or writing
+  if (run && !steps.length) steps.push({ kind: "other", count: 0, now: true, text: runActivity(run, agents).replace(/^./, (c) => c.toUpperCase()) });
+  const shown = steps.slice(-6);
+  const hidden = steps.length - shown.length;
+  return (
+    <section className="space-y-2.5">
+      <h3 className="text-[13px] font-semibold text-muted">What it's doing</h3>
+      {!run ? (
+        <p className="text-sm text-muted">Nothing right now. Ask {agent.name} for something and its steps show up here.</p>
+      ) : (
+        <ol className="space-y-2">
+          {hidden > 0 && <li className="text-xs text-faint pl-7">{hidden} earlier {hidden === 1 ? "step" : "steps"}</li>}
+          {shown.map((st, i) => (
+            <li key={i} className={cx("flex items-center gap-2.5 text-sm", st.now ? "text-ink font-semibold" : "text-muted")}>
+              <span className={cx("size-5 shrink-0 rounded-full grid place-items-center", st.now ? "bg-ok/15" : "bg-ink text-panel")}>
+                {st.now ? <span className="size-2 rounded-full bg-ok animate-pulse" /> : <Check size={12} strokeWidth={3} />}
+              </span>
+              <span className="min-w-0 truncate">{st.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <a href={href({ view: "agents", agentId: agent.id, tab: "runs" })} className="inline-block text-[13px] text-muted hover:text-ink underline-offset-2 hover:underline">
+        Show full log
+      </a>
+    </section>
+  );
+}
+
+/** "Answers: Only you": whose messages wake it. Only matters once other people can be in the organization. */
+function AnswersRow({ agent }: { agent: Agent }) {
+  const invite = useFeature("invite");
+  const me = useStore((s) => s.me);
+  const members = useStore((s) => s.members);
+  if (!invite) return null;
+  const to = agent.settings.respondTo ?? "anyone";
+  const mine = agent.settings.createdBy ? agent.settings.createdBy === me?.user.id : me?.role === "owner";
+  const picked = (agent.settings.respondPeople ?? []).map((id) => members.find((m) => m.id === id)?.name).filter(Boolean);
+  const label = to === "anyone" ? "Anyone" : to === "people" ? (picked.length ? `${mine ? "You, " : ""}${picked.join(", ")}` : "Picked people") : mine ? "Only you" : "Only its creator";
+  return (
+    <a href={href({ view: "agents", agentId: agent.id, tab: "permissions" })} className="flex items-center justify-between gap-3 pt-3 border-t border-line text-[13px] hover:text-ink group" title="Change who it answers">
+      <span className="text-muted">Answers</span>
+      <span className="font-semibold truncate group-hover:underline">{label}</span>
+    </a>
   );
 }
 
@@ -302,6 +401,7 @@ function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; com
   const mine = !!me && c.controller?.id === me.user.id;
   const canControl = me?.role !== "guest" && c.online && !c.paused;
   const someoneElse = !!c.controller && !mine;
+  const teach = useFeature("teach");
   const touched = useRef(0);
 
   const control = async (take: boolean) => {
@@ -346,12 +446,12 @@ function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; com
             </button>
           </div>
         )}
-        {canControl && !someoneElse && (
+        {teach && canControl && !someoneElse && (
           <button onClick={() => go({ view: "computers", computerId: c.id, teach: agent.id })} className="ml-auto inline-flex items-center gap-1.5 h-9 px-3 rounded-full border border-white/20 text-sm font-medium hover:bg-white/10" title={`Do a task once while ${agent.name} watches; it saves it as a routine`}>
             <Video size={15} /> Teach a task
           </button>
         )}
-        <button onClick={close} className={cx(!(canControl && !someoneElse) && "ml-auto", "size-9 rounded-full hover:bg-white/10 grid place-items-center")} aria-label="Exit full screen" title="Exit full screen">
+        <button onClick={close} className={cx(!(teach && canControl && !someoneElse) && "ml-auto", "size-9 rounded-full hover:bg-white/10 grid place-items-center")} aria-label="Exit full screen" title="Exit full screen">
           <Minimize2 size={18} />
         </button>
       </div>

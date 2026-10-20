@@ -1,48 +1,76 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, Bell, BellOff, BellRing, Pin, PinOff, Star, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
+import { Archive, Bell, BellOff, BellRing, Bot, Pin, PinOff, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
-import { ChannelIcon, ChannelSettings, NOTIFY, isProtected, setArchived, setChannelPrefs, type ChannelSettingsTab } from "../components/Channels.tsx";
+import { ChannelIcon, ChannelMembers, ChannelSettings, NOTIFY, isProtected, setArchived, setChannelPrefs, type ChannelMember, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
-import { ApprovalCard, ComputerPart, HandoffPill, RoutineChip, describeTool } from "../components/AgentCards.tsx";
+import { ApprovalCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { takeDraft } from "../draft.ts";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
+import { ActivityPill } from "../components/ActivityPill.tsx";
+import { RightPane } from "../components/RightPane.tsx";
+import { workSummary } from "../components/agentActivity.ts";
+import { useFeature } from "../features.ts";
+import { openDm } from "../openDm.ts";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
+
+/** What's open in the pane beside the chat (a thread comes from the route instead). */
+type Side = { kind: "agent"; agentId: string; tab: AgentPanelTab } | { kind: "members" };
+
+/** The DM's own agent panel stays open across DMs once you open it. */
+function storedDmPanel(): AgentPanelTab | null {
+  try {
+    return (localStorage.getItem("warren.agentPanel") as AgentPanelTab | null) || null;
+  } catch {
+    return null;
+  }
+}
 
 export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "chat" }>; onBack?: () => void }) {
   const channels = useStore((s) => s.channels);
   const setActive = useStore((s) => s.setActive);
   const loadChannel = useStore((s) => s.loadChannel);
+  const role = useStore((s) => s.me?.role);
   const names = useNames();
+  const voice = useFeature("voice");
   const [calling, setCalling] = useState(!!route.call);
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
-  // the agent beside its DM (Details · Computer · Settings); stays open across DMs once you open it
-  const [panel, setPanelState] = useState<AgentPanelTab | null>(() => {
-    try {
-      return (localStorage.getItem("warren.agentPanel") as AgentPanelTab | null) || null;
-    } catch {
-      return null;
-    }
-  });
-  const setPanel = (t: AgentPanelTab | null) => {
-    setPanelState(t);
-    try {
-      if (t) localStorage.setItem("warren.agentPanel", t);
-      else localStorage.removeItem("warren.agentPanel");
-    } catch {}
-  };
 
   const channel = channels.find((c) => c.id === route.channelId) ?? (route.channelId ? undefined : channels.find((c) => c.name === "general"));
+  const dmAgentId = channel?.kind === "dm" ? channel.name.split(":").pop()! : null;
+  // the pane beside the chat: an agent's details or the member list
+  const [side, setSideState] = useState<Side | null>(null);
+  useEffect(() => {
+    const tab = dmAgentId ? storedDmPanel() : null;
+    setSideState(dmAgentId && tab ? { kind: "agent", agentId: dmAgentId, tab } : null);
+  }, [channel?.id, dmAgentId]);
+  const setSide = (next: Side | null) => {
+    setSideState(next);
+    // remember the DM's own panel, so it's there in the next DM too
+    if (!dmAgentId) return;
+    try {
+      if (next?.kind === "agent" && next.agentId === dmAgentId) localStorage.setItem("warren.agentPanel", next.tab);
+      else if (!next) localStorage.removeItem("warren.agentPanel");
+    } catch {}
+  };
+  /** Open a pane; a thread that's open closes first, since they share the space. */
+  const openSide = (next: Side) => {
+    if (route.threadId && channel) go({ view: "chat", channelId: channel.id, threadId: null });
+    setSide(next);
+  };
+  const openAgent = (agentId: string, tab: AgentPanelTab = "details") => openSide({ kind: "agent", agentId, tab });
+  const toggleMembers = () => (side?.kind === "members" && !route.threadId ? setSide(null) : openSide({ kind: "members" }));
+
   // where you'd stopped reading when you opened the channel; the "NEW" divider goes there
   const [readMark, setReadMark] = useState<{ channelId: string; at: string | null } | null>(null);
 
@@ -63,7 +91,9 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
 
   if (!channel) return <Empty icon={<Hash />} title="Channel not found" />;
 
-  const dmAgent = channel.kind === "dm" ? names.agent(channel.name.split(":").pop()!) : undefined;
+  const dmAgent = dmAgentId ? names.agent(dmAgentId) : undefined;
+  const sideAgent = !route.threadId && side?.kind === "agent" ? names.agent(side.agentId) : undefined;
+  const dmPanel = sideAgent && dmAgent && sideAgent.id === dmAgent.id ? (side as Extract<Side, { kind: "agent" }>).tab : null;
 
   return (
     <div className="flex-1 min-h-0 flex">
@@ -79,7 +109,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
               {/* the agent lives here, in the middle, and nowhere else in its DM */}
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
                 <div className="pointer-events-auto">
-                  <AgentPill agent={dmAgent} open={panel === "details"} onClick={() => setPanel(panel === "details" ? null : "details")} />
+                  <AgentPill agent={dmAgent} open={dmPanel === "details"} onClick={() => (dmPanel === "details" ? setSide(null) : openAgent(dmAgent.id, "details"))} />
                 </div>
               </div>
               <span className="flex-1" />
@@ -103,27 +133,20 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             </div>
           )}
           {dmAgent?.computerId && (
-            <button onClick={() => setPanel(panel === "computer" ? null : "computer")} className={cx("size-9 rounded-full hover:bg-hover grid place-items-center hover:text-ink", panel === "computer" ? "text-ink bg-hover" : "text-muted")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>
+            <button onClick={() => (dmPanel === "computer" ? setSide(null) : openAgent(dmAgent.id, "computer"))} className={cx("size-9 rounded-full hover:bg-hover grid place-items-center hover:text-ink", dmPanel === "computer" ? "text-ink bg-hover" : "text-muted")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>
               <Monitor size={18} />
             </button>
           )}
-          {dmAgent && <button onClick={() => setCalling(true)} className="size-9 rounded-full hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={18} /></button>}
+          {dmAgent && voice && <button onClick={() => setCalling(true)} className="size-9 rounded-full hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={18} /></button>}
           {channel.kind === "channel" && (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <MemberStack channel={channel} open={side?.kind === "members" && !route.threadId} onClick={toggleMembers} />
               {channel.pinnedIds.length > 0 && (
                 <button onClick={() => setSettings("pins")} className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1" aria-label={`Pinned: ${channel.pinnedIds.length}`} title="Pinned messages">
                   <Pin size={14} /> {channel.pinnedIds.length}
                 </button>
               )}
               <NotifyMenu channel={channel} />
-              <button
-                onClick={() => setSettings("members")}
-                className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1"
-                title={`${channel.memberCount} ${channel.memberCount === 1 ? "member" : "members"}`}
-                aria-label={`Members: ${channel.memberCount}`}
-              >
-                <Users size={14} /> {channel.memberCount}
-              </button>
               <button onClick={() => setSettings("about")} className="size-8 rounded-lg border border-line text-muted hover:text-ink grid place-items-center" aria-label="Channel settings" title="Channel settings">
                 <Settings2 size={15} />
               </button>
@@ -131,15 +154,86 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           )}
         </header>
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
-          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} />
+          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("agents")} onMembers={() => openSide({ kind: "members" })} />
         </SoloAgent.Provider>
-        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} />}
+        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} onDetails={openAgent} />}
       </div>
       {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
-      {dmAgent && panel && !route.threadId && <AgentPanel agent={dmAgent} tab={panel} onTab={setPanel} onClose={() => setPanel(null)} onCall={() => setCalling(true)} />}
+      {sideAgent && side?.kind === "agent" && (
+        <AgentPanel
+          key={sideAgent.id}
+          agent={sideAgent}
+          tab={side.tab}
+          inDm={sideAgent.id === dmAgent?.id}
+          onTab={(tab) => setSide({ kind: "agent", agentId: sideAgent.id, tab })}
+          onClose={() => setSide(null)}
+          onCall={() => (sideAgent.id === dmAgent?.id ? setCalling(true) : void callAgent(sideAgent.id))}
+        />
+      )}
+      {!route.threadId && side?.kind === "members" && channel.kind === "channel" && (
+        <RightPane label={`People and agents in #${channel.name}`}>
+          <div className="h-15 shrink-0 flex items-center gap-2 px-4 border-b border-line">
+            <span className="font-semibold flex-1">Members · {channel.memberCount}</span>
+            <button onClick={() => setSide(null)} className="size-8 rounded-lg grid place-items-center text-muted hover:text-ink hover:bg-hover" aria-label="Close panel" title="Close">
+              <X size={17} />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            <ChannelMembers channel={channel} canManage={role === "owner" || role === "member"} onClose={() => setSide(null)} />
+          </div>
+        </RightPane>
+      )}
       {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
       {settings && <ChannelSettings key={settings} channel={channel} tab={settings} onClose={() => setSettings(null)} />}
     </div>
+  );
+}
+
+/** Call an agent from somewhere other than its DM: open the DM with the call started. */
+async function callAgent(agentId: string) {
+  await openDm(agentId);
+  const dm = useStore.getState().channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agentId}`));
+  if (dm) go({ view: "chat", channelId: dm.id, threadId: null, call: true });
+}
+
+/**
+ * The people and agents in a channel as a stack of faces (ghosts for agents, initials for
+ * people) and a count. Opens the member list beside the chat.
+ */
+function MemberStack({ channel, open, onClick }: { channel: ChannelInfo; open: boolean; onClick: () => void }) {
+  const agents = useStore((s) => s.agents);
+  const [members, setMembers] = useState<ChannelMember[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    api<ChannelMember[]>("GET", `/api/channels/${channel.id}/members`).then((m) => live && setMembers(m), () => live && setMembers(null));
+    return () => {
+      live = false;
+    };
+  }, [channel.id, channel.memberCount]);
+  // people first, like the mockup; then agents
+  const faces = [...(members ?? []).filter((m) => m.kind === "user"), ...(members ?? []).filter((m) => m.kind === "agent")].slice(0, 4);
+  const count = channel.memberCount;
+  return (
+    <button
+      onClick={onClick}
+      aria-expanded={open}
+      className={cx("h-8 pl-1.5 pr-2.5 rounded-full border border-line inline-flex items-center gap-2 hover:bg-hover", open && "bg-hover")}
+      title={`${count} ${count === 1 ? "member" : "members"}`}
+      aria-label={`Members: ${count}`}
+    >
+      {faces.length > 0 ? (
+        <span className="flex">
+          {faces.map((m, i) => (
+            <span key={`${m.kind}:${m.id}`} className={cx("rounded-full ring-2 ring-panel bg-panel", i > 0 && "-ml-1.5")}>
+              {m.kind === "agent" ? <AgentAvatar agent={agents.find((a) => a.id === m.id) ?? { name: m.name, handle: m.handle ?? undefined, harness: "custom" }} size={20} interactive={false} /> : <UserAvatar name={m.name} size={20} />}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <Users size={14} className="text-muted" />
+      )}
+      <span className="text-xs font-semibold text-muted tabular-nums">{count}</span>
+    </button>
   );
 }
 
@@ -541,7 +635,7 @@ function ContextRing({ ctx }: { ctx: AgentContext }) {
 /** In a DM the agent lives in the pill at the top, so its messages don't repeat its ghost and name. */
 const SoloAgent = createContext<string | null>(null);
 
-function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: string | null }) {
+function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: ChannelInfo; readMark: string | null; onAddAgent: () => void; onMembers: () => void }) {
   const messages = useStore((s) => s.messages[channel.id]);
   const replyCounts = useStore((s) => s.replyCounts);
   const live = useStore((s) => s.live);
@@ -596,7 +690,7 @@ function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: st
           if (bottom) setNewSince(0);
         }}
       >
-        {messages.length < 100 && <ChannelIntro channel={channel} />}
+        {messages.length < 100 && <ChannelIntro channel={channel} empty={!messages.some((m) => m.author.id !== "system")} onAddAgent={onAddAgent} onMembers={onMembers} />}
         {messages.map((m, i) => (
           <div key={m.id}>
             {m.id === firstNew && (
@@ -626,8 +720,10 @@ function MessageList({ channel, readMark }: { channel: ChannelInfo; readMark: st
   );
 }
 
-function ChannelIntro({ channel }: { channel: ChannelInfo }) {
+function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: ChannelInfo; empty: boolean; onAddAgent: () => void; onMembers: () => void }) {
   const names = useNames();
+  const invite = useFeature("invite");
+  const canManage = useStore((s) => s.me?.role !== "guest") && !channel.archivedAt;
   if (channel.kind === "dm") {
     const a = names.agent(channel.name.split(":").pop()!);
     return (
@@ -637,6 +733,12 @@ function ChannelIntro({ channel }: { channel: ChannelInfo }) {
     );
   }
   const answerer = channel.settings.defaultAgentId ? names.agent(channel.settings.defaultAgentId) : undefined;
+  // Buzz-style first steps for a new channel: bring in an agent, add files, invite people
+  const cards: { icon: React.ReactNode; title: string; body: string; onClick: () => void }[] = [
+    ...(canManage ? [{ icon: <Bot size={18} />, title: "Add agent", body: answerer ? `${answerer.name} answers here. Add another.` : "Pick an agent to answer here.", onClick: onAddAgent }] : []),
+    ...(!channel.archivedAt ? [{ icon: <Paperclip size={18} />, title: "Add files", body: "Share something to work on.", onClick: () => window.dispatchEvent(new CustomEvent(COMPOSER_ATTACH, { detail: channel.id })) }] : []),
+    ...(invite && canManage ? [{ icon: <UserPlus size={18} />, title: "Invite people", body: "Bring someone into this channel.", onClick: onMembers }] : []),
+  ];
   return (
     <div className="px-5 pb-6 pt-2">
       <div className="size-12 rounded-2xl bg-chip grid place-items-center text-muted">
@@ -650,9 +752,25 @@ function ChannelIntro({ channel }: { channel: ChannelInfo }) {
           Get started
         </a>
       </p>
+      {empty && cards.length > 0 && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-3 max-w-2xl">
+          {cards.map((c) => (
+            <button key={c.title} type="button" onClick={c.onClick} className="rounded-2xl border border-line bg-panel px-4 py-3 text-left hover:bg-hover flex flex-col gap-2">
+              <span className="size-9 rounded-xl bg-chip grid place-items-center text-muted">{c.icon}</span>
+              <span>
+                <span className="block text-sm font-semibold">{c.title}</span>
+                <span className="block text-xs text-muted">{c.body}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+/** "Add files" on a new channel's intro asks the composer to open its file picker. */
+const COMPOSER_ATTACH = "warren:composer-attach";
 
 function isGrouped(prev: Message | undefined, m: Message) {
   return !!prev && prev.author.kind === m.author.kind && prev.author.id === m.author.id && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000 && m.author.id !== "system";
@@ -729,7 +847,11 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
             <span className={cx("font-semibold text-[14.5px]", agent && "agent-ink")} style={agent ? agentVar(agent) : undefined}>
               {name}
             </span>
-            {agent && <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-medium">{HARNESS_LABELS[agent.harness]}</span>}
+            {agent && (
+              <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-semibold" title={`Agent · ${HARNESS_LABELS[agent.harness]}`}>
+                agent
+              </span>
+            )}
             <span className="text-xs text-faint">{time}</span>
             {pinned && (
               <span className="text-[11px] text-muted inline-flex items-center gap-0.5">
@@ -938,6 +1060,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
   const status = parts.filter((p) => p.type === "status");
   const { toolCalls } = usePrefs();
   const [open, setOpen] = useState(toolCalls === "expanded");
+  const summary = useMemo(() => workSummary(tools.flatMap((t) => (t.type === "tool_call" ? [{ name: t.name, input: t.input }] : []))), [parts]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <>
       {parts.map((p) => p.type === "discussion" && <DiscussionCard key={p.discussionId} id={p.discussionId} />)}
@@ -954,10 +1077,12 @@ function Parts({ parts }: { parts: MessagePart[] }) {
       {status.map((s, i) => s.type === "status" && <div key={i} className={cx("mt-1", s.text === "Voice message" ? "text-[11px] text-faint inline-flex items-center gap-1" : "text-sm text-bad")}>{s.text === "Voice message" && <Mic size={11} />}{s.text}</div>)}
       <Remembered tools={tools} />
       {tools.length > 0 && toolCalls !== "hidden" && (
-        <div className="mt-1">
-          <button onClick={() => setOpen(!open)} className="h-6 px-1.5 -ml-1.5 rounded-md text-xs text-muted hover:text-ink hover:bg-hover inline-flex items-center gap-1">
-            <ChevronRight size={13} className={cx("transition-transform", open && "rotate-90")} />
-            <Wrench size={12} /> Used {tools.length} tool{tools.length === 1 ? "" : "s"}
+        <div className="mt-1.5">
+          {/* one line of what it did, like "Searched the web · read 6 pages"; opens the tool calls */}
+          <button onClick={() => setOpen(!open)} aria-expanded={open} className="max-w-full h-7 px-2.5 rounded-lg border border-line bg-bg text-[13px] text-muted hover:text-ink hover:bg-hover inline-flex items-center gap-2">
+            <SquareTerminal size={13} className="shrink-0" />
+            <span className="truncate">{summary}</span>
+            <ChevronRight size={13} className={cx("shrink-0 transition-transform", open && "rotate-90")} />
           </button>
           {open && (
             <div className="mt-1 space-y-1">
@@ -1082,8 +1207,8 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
 
   const close = () => go({ view: "chat", channelId, threadId: null });
   return (
-    <section className="w-full lg:w-[420px] shrink-0 flex flex-col border-l border-line">
-      <header className="h-15 shrink-0 px-3 flex items-center gap-2 border-b border-line safe-top">
+    <RightPane label="Thread">
+      <header className="h-15 shrink-0 px-3 flex items-center gap-2 border-b border-line">
         <button onClick={close} className="lg:hidden p-1.5 rounded-md hover:bg-hover" aria-label="Back">
           <ChevronLeft size={20} />
         </button>
@@ -1101,7 +1226,7 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
         {replies?.map((m, i) => <MessageItem key={m.id} m={m} grouped={isGrouped(replies[i - 1], m)} inThread />)}
       </div>
       <Composer channelId={channelId} threadId={rootId} agentId={agentId} placeholder="Reply…" />
-    </section>
+    </RightPane>
   );
 }
 
@@ -1155,7 +1280,7 @@ function TaskChip({ id }: { id: string }) {
 
 // --- composer -----------------------------------------------------------------------------------
 
-function Composer({ channelId, threadId, agentId, placeholder }: { channelId: string; threadId?: string; agentId?: string; placeholder: string }) {
+function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void }) {
   const { sendWith } = usePrefs();
   const agents = useStore((s) => s.agents);
   const canEdit = useStore((s) => s.me?.role !== "guest");
@@ -1222,6 +1347,16 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
       setText(draft);
       ta.current?.focus();
     }
+  }, [channelId, threadId]);
+
+  // "Add files" on the channel intro opens this composer's file picker
+  useEffect(() => {
+    if (threadId) return;
+    const open = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === channelId) fileInput.current?.click();
+    };
+    window.addEventListener(COMPOSER_ATTACH, open);
+    return () => window.removeEventListener(COMPOSER_ATTACH, open);
   }, [channelId, threadId]);
 
   useEffect(() => {
@@ -1291,7 +1426,13 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
 
   return (
     // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
-    <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom @container">
+    <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom @container flex flex-col">
+      {/* who's working here and on what (Buzz's activity bar); Stop and details are in its popover */}
+      {working.length > 0 && (
+        <div className="pb-2 flex">
+          <ActivityPill runs={working} onDetails={(id) => (onDetails ? onDetails(id) : go({ view: "agents", agentId: id, tab: "overview" }))} />
+        </div>
+      )}
       {/* the message box floats on glass, like the iPhone app's */}
       <div className="glass relative rounded-[1.75rem]" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
         {suggestions.length > 0 && (
@@ -1410,9 +1551,6 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           </button>
         )}
         {!error && nobodyAsked && !hint && <span className="text-muted">Nobody was asked. @mention a helper to get an answer.</span>}
-        {working.map((r) => (
-          <AgentWorking key={r.runId} run={r} home={r.agentId === agentId} />
-        ))}
       </div>
     </div>
   );
@@ -1432,40 +1570,5 @@ function ToolButton({ label, onClick, disabled, active, children }: { label: str
     <button type="button" onClick={onClick} disabled={disabled} className={cx("size-8 rounded-lg hover:bg-hover text-muted hover:text-ink grid place-items-center", active && "bg-hover text-ink")} aria-label={label} title={label}>
       {children}
     </button>
-  );
-}
-
-/** "Nova: working · using memory_search · Stop" under the composer, like Buzz's agent status line. */
-/** `home`: the DM's own agent, whose ghost is already in the pill at the top. */
-function AgentWorking({ run, home }: { run: LiveRun; home?: boolean }) {
-  const names = useNames();
-  const agents = useStore((s) => s.agents);
-  const agent = names.agent(run.agentId);
-  const doing = run.last ? describeTool(run.last.name, run.last.input, agents) : null;
-  if (doing?.with.length)
-    return (
-      <span className="inline-flex items-center gap-1.5 text-muted">
-        <HandoffPill agent={agent} text={doing.text} with={doing.with} />
-        <button onClick={() => api("POST", `/api/runs/${run.runId}/cancel`)} className="ml-1 inline-flex items-center gap-0.5 text-faint hover:text-bad" title="Stop">
-          <Square size={10} /> Stop
-        </button>
-      </span>
-    );
-  return (
-    <span className="inline-flex items-center gap-1.5 text-muted">
-      {!home && (
-        <>
-          <AgentAvatar agent={agent} size={18} badge={false} live />
-          <span className="font-medium text-ink">{agent?.name ?? "Agent"}:</span>
-        </>
-      )}
-      <span className="inline-flex items-center gap-1">
-        <Loader2 size={11} className="animate-spin" />
-        {doing ? doing.text : run.text ? "writing" : "thinking"}
-      </span>
-      <button onClick={() => api("POST", `/api/runs/${run.runId}/cancel`)} className="ml-1 inline-flex items-center gap-0.5 text-faint hover:text-bad" title="Stop">
-        <Square size={10} /> Stop
-      </button>
-    </span>
   );
 }

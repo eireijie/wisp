@@ -6,7 +6,8 @@ import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { STEPS, isLocalOnlyHost, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
+import { STEPS, featuresForExperience, isLocalOnlyHost, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
+import { setFeatures, useFeature } from "../features.ts";
 import { useDesktopInfo } from "../desktop.ts";
 import { Advanced, setExperience, useSimple, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
@@ -301,6 +302,7 @@ const EXAMPLES: { icon: ReactNode; text: string }[] = [
 /** Plain words about what Warren is, and how much of it to show. Not a numbered step. */
 function IntroScreen({ onContinue }: { onContinue: () => void }) {
   const picked = useStore((s) => s.me?.prefs?.experience);
+  const isOwner = useStore((s) => s.me?.role) === "owner";
   const [choice, setChoice] = useState<Experience>(picked ?? "simple");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +311,11 @@ function IntroScreen({ onContinue }: { onContinue: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      if (choice !== picked) await setExperience(choice);
+      if (choice !== picked) {
+        await setExperience(choice);
+        // owners also pick the organization's features: Simple starts small, Advanced turns everything on
+        if (isOwner) await setFeatures(featuresForExperience(choice)).catch(() => {});
+      }
       onContinue();
     } catch {
       setError("Couldn't save that. Check your connection and try again. You can also change it later in Settings.");
@@ -1123,6 +1129,7 @@ function failureText(parts: MessagePart[]): string {
 
 function DoneScreen({ state, onFinish }: { state: OnboardingState | null; onFinish: () => void }) {
   const me = useStore((s) => s.me)!;
+  const invite = useFeature("invite");
   return (
     <>
       <Heading title={`${me.workspace.name} is ready`}>Your agents talk to you and to each other, hand work across devices, and build up memory you can read and edit.</Heading>
@@ -1130,9 +1137,11 @@ function DoneScreen({ state, onFinish }: { state: OnboardingState | null; onFini
         <Tip icon={<Bot size={17} />} title="Add more agents" onClick={() => go({ view: "agents", agentId: null })}>
           Give each one a job. They @mention each other and hand off tasks.
         </Tip>
-        <Tip icon={<Users size={17} />} title="Bring in your team" onClick={() => go({ view: "settings", page: "people" })}>
-          Invite people with a link and choose what they can do.
-        </Tip>
+        {invite && (
+          <Tip icon={<Users size={17} />} title="Bring in your team" onClick={() => go({ view: "settings", page: "people" })}>
+            Invite people to your organization with a link and choose what they can do.
+          </Tip>
+        )}
         <Tip icon={<BookOpen size={17} />} title="Read the memory" onClick={() => go({ view: "vault", path: state?.memoryNotes[0]?.path ?? null })}>
           Notes your agents keep, with links and history.
         </Tip>

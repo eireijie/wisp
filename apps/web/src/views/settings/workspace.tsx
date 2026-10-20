@@ -20,9 +20,9 @@ export function GeneralPage() {
   const [saved, flash] = useSavedFlash();
   return (
     <>
-      <PageHeader title="General">The workspace everyone here shares: people, agents, devices and memory.</PageHeader>
+      <PageHeader title="General">The organization everyone here shares: people, agents, devices and memory.</PageHeader>
       <OwnersOnly show={!isOwner} />
-      <Section title="Workspace name">
+      <Section title="Organization name">
         <form
           className="flex flex-wrap items-center gap-2 max-w-md"
           onSubmit={async (e) => {
@@ -796,8 +796,8 @@ export function DataPage() {
   const memoryElsewhere = !!(info && memoryPath && !isInside(memoryPath, info.dataDir));
   return (
     <>
-      <PageHeader title="Data">Back up your workspace, or take a copy of your notes and conversations.</PageHeader>
-      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this workspace. Copy that folder and you have a full backup.">
+      <PageHeader title="Data">Back up your organization, or take a copy of your notes and conversations.</PageHeader>
+      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this organization. Copy that folder and you have a full backup.">
         {isOwner && info ? (
           <>
             <Card>
@@ -820,7 +820,7 @@ export function DataPage() {
             )}
           </>
         ) : (
-          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask a workspace owner to back up the hub.</p>
+          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask an organization owner to back up the hub.</p>
         )}
       </Section>
       <Section title="What is not in it">
@@ -847,7 +847,7 @@ export function DataPage() {
           <li>Start Warren again. Your devices reconnect by themselves when they are online.</li>
         </ol>
       </Section>
-      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore a workspace on their own. The folder backup does.">
+      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.">
         {error && <p className="mb-2 text-sm text-bad">{error}</p>}
         <Card>
           {isOwner && (

@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { Agent, AgentEvent, Approval, Channel, ChannelNotify, ClientEvent, Computer, Discussion, Message, LeadStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
+import type { Agent, AgentEvent, Approval, Channel, ChannelNotify, ClientEvent, Computer, Discussion, Features, Message, LeadStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
+import { listOrgs, type Org } from "./orgs.ts";
 
 export interface Me {
   kind: "user";
@@ -12,6 +13,8 @@ export interface Me {
   prefs: UserPrefs;
   role: "owner" | "member" | "guest";
   workspace: { id: string; name: string };
+  /** the organization's optional features (features.ts); missing from older hubs, which means all on */
+  features?: Features;
 }
 
 /** A discussion plus who has answered in its current round. */
@@ -95,6 +98,12 @@ interface State {
   lead: LeadStatus | null;
   activeChannel: string | null;
   paletteOpen: boolean;
+  /** every organization you're in; null until loaded. A hub without organizations gives just this one. */
+  orgs: Org[] | null;
+  /** the New agent screen should open (sidebar +, ⌘K); the Agents page picks it up */
+  newAgentOpen: boolean;
+  /** the channel browser is open, adding to this section (or none) */
+  channelBrowser: { sectionId: string | null } | null;
 
   load(): Promise<void>;
   loadChannel(id: string): Promise<void>;
@@ -103,6 +112,7 @@ interface State {
   refreshTeams(): Promise<void>;
   refreshComputers(): Promise<void>;
   refreshLead(): Promise<void>;
+  refreshOrgs(): Promise<void>;
   loadApproval(id: string): Promise<void>;
   loadDiscussion(id: string): Promise<void>;
   setDiscussion(d: DiscussionInfo): void;
@@ -149,6 +159,9 @@ export const useStore = create<State>((set, get) => ({
   lead: null,
   activeChannel: null,
   paletteOpen: false,
+  orgs: null,
+  newAgentOpen: false,
+  channelBrowser: null,
 
   async load() {
     const [me, channels, sections, agents, members, teams] = await Promise.all([
@@ -163,7 +176,16 @@ export const useStore = create<State>((set, get) => ({
     set({ me, channels, sections, agents, members, teams });
     get().refreshComputers();
     get().refreshLead();
+    get().refreshOrgs();
     api<Approval[]>("GET", "/api/approvals?status=pending").then((list) => set((s) => ({ approvals: { ...s.approvals, ...Object.fromEntries(list.map((a) => [a.id, a])) } })), () => {});
+  },
+
+  async refreshOrgs() {
+    const list = await listOrgs();
+    const { me, members, agents } = get();
+    if (list && list.length) return set({ orgs: list });
+    // no organizations on this hub (or it couldn't say): just the one you're in
+    if (me) set({ orgs: [{ id: me.workspace.id, name: me.workspace.name, role: me.role, members: Math.max(1, members.length), agents: agents.length, current: true, unread: false }] });
   },
 
   async refreshLead() {
@@ -277,11 +299,17 @@ export const useStore = create<State>((set, get) => ({
       get().refreshTeams();
       get().refreshChannels();
       get().refreshComputers();
+      get().refreshOrgs();
     }
   },
 
   handle(e, notify = true) {
     const before = get();
+    // features changed for this organization (an owner flipped one in Settings → Features)
+    if (e.type === "features") {
+      set((s) => (s.me ? { me: { ...s.me, features: e.features } } : {}));
+      return;
+    }
     if (e.type === "message") {
       const m = e.message;
       // the agent's reply replaces its live preview
@@ -406,4 +434,25 @@ export function useHandleNames(): Map<string, string> {
 export function useHandleColors(): Map<string, string> {
   const agents = useStore((s) => s.agents);
   return useMemo(() => new Map(agents.map((a) => [a.handle, agentColor(a)])), [agents]);
+}
+
+/** What agents are waiting on you for: approvals (a device loan only for its owner) and help on their computers. Guests answer none. */
+export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[] } {
+  const me = useStore((s) => s.me);
+  const approvals = useStore((s) => s.approvals);
+  const computers = useStore((s) => s.computers);
+  return useMemo(() => {
+    if (!me || me.role === "guest") return { approvals: [], help: [] };
+    return {
+      approvals: Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me.user.id)),
+      help: computers.filter((c) => c.help),
+    };
+  }, [me, approvals, computers]);
+}
+
+/** The Inbox badge: everything waiting on you plus unread messages in your channels and DMs. */
+export function useInboxCount(): number {
+  const waiting = useWaitingOnYou();
+  const unread = useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
+  return waiting.approvals.length + waiting.help.length + unread;
 }
