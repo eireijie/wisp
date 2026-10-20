@@ -12,3 +12,4 @@ export * from "./schedule.ts";
 export * from "./connectors.ts";
 export * from "./skills.ts";
 export * from "./marketplace.ts";
+export * from "./features.ts";
