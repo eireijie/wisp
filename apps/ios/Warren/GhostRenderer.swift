@@ -111,7 +111,8 @@ struct GhostRenderer {
       face.moved(60, g.mouth).mouth(happy ? "open" : mood == .error ? "wavy" : [.asleep, .thinking, .working].contains(mood) ? "flat" : look.mouth!, ink: ink)
     }
     if sleeping && details { face.moved(63.5, g.mouth + 2.2).path("M0 0 q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z", fill: Color(hex: "#e8f6ff").opacity(0.95)) }
-    p.accessory(look.accessory!, geometry: g)
+    // glasses and the mustache ride on the face, so they follow its mood shifts; neckwear stays with the body
+    (["glasses", "sunglasses", "monocle", "mustache"].contains(look.accessory!) ? face : p).accessory(look.accessory!, geometry: g)
     p.moved(60, g.top, scaleX: g.hatScale, scaleY: g.hatScale).hat(look.hat!, time: time, animated: animated)
     if mood == .error && details {
       p.moved(g.eyeX[1] + 5, g.top + 8).path("M0 0 c-1 4 -5 7 -4 10 c1 4 7 4 7 0 c0 -3 -2 -7 -3 -10 Z", fill: Color(hex: "#a9dfff"), stroke: Color(hex: "#e4f6ff"), width: 0.7)
