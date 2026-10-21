@@ -1,3 +1,4 @@
+import { shareOrigin, useAccess } from "../access.ts";
 import { useState } from "react";
 import { CopyBlock, cx } from "./ui.tsx";
 
@@ -16,7 +17,8 @@ export function ConnectionInstructions({
         ? "codex"
         : "json",
   );
-  const hub = location.origin;
+  useAccess();
+  const hub = shareOrigin();
   // Shell and TOML use their own quoting rules; hub URLs can contain special characters.
   const shell = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
   const config =

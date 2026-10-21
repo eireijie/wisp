@@ -26,8 +26,11 @@ jobs:
         include:
           - os: macos-14
             dist: --mac --arm64
-          - os: macos-13
+          # Intel Macs, built on Apple silicon (GitHub's Intel runners never started): the bundled
+          # native modules are fetched for x64 (WARREN_BUNDLE_ARCH) and electron-builder packs an x64 app
+          - os: macos-14
             dist: --mac --x64
+            arch: x64
           - os: windows-latest
             dist: --win --x64
           - os: ubuntu-latest
@@ -44,6 +47,8 @@ jobs:
       - run: npm version "${GITHUB_REF_NAME#desktop-v}" --no-git-tag-version --allow-same-version -w @warren/desktop
         shell: bash
       - run: npm run bundle -w @warren/desktop
+        env:
+          WARREN_BUNDLE_ARCH: ${{ matrix.arch }}
       - run: npx electron-builder ${{ matrix.dist }} --publish never
         working-directory: apps/desktop
       - run: gh release upload "$GITHUB_REF_NAME" apps/desktop/dist/Warren-* --clobber

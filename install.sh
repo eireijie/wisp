@@ -10,6 +10,8 @@
 #   --dir DIR                    where to put Warren (default ~/warren, or $WARREN_DIR)
 #   --yes                        don't ask before installing a VM engine during `warren setup`
 #   --no-service                 install only; don't start anything
+#   --no-device                  with --hub-server: don't also make this computer a device for agents
+#   --no-open                    don't open the browser at the end
 #
 # It checks for git and Node 22+, clones (or updates) Warren, installs its dependencies, puts the
 # `warren` command on your PATH, and sets it up to keep running. Nothing is installed with sudo.
@@ -17,7 +19,7 @@ set -euo pipefail
 
 WARREN_REPO="${WARREN_REPO:-https://github.com/eireijie/warren.git}"
 DIR="${WARREN_DIR:-$HOME/warren}"
-MODE="" HUB="" TOKEN="" NAME="" YES="" SERVICE=1
+MODE="" HUB="" TOKEN="" NAME="" YES="" SERVICE=1 DEVICE=1 OPEN=1
 
 # an option that takes a value, given without one ("--hub" at the end), is a mistake worth a message, not "unbound variable"
 value() { [ -n "$2" ] || { printf '\033[31m%s\033[0m\n' "$1 needs a value, for example: $1 $3" >&2; exit 1; }; }
@@ -30,7 +32,9 @@ while [ $# -gt 0 ]; do
     --dir) value "$1" "${2:-}" "~/warren"; DIR="$2"; shift ;;
     --yes|-y) YES=1 ;;
     --no-service) SERVICE="" ;;
-    -h|--help) sed -n '2,15p' "$0" 2>/dev/null || true; exit 0 ;;
+    --no-device) DEVICE="" ;;
+    --no-open) OPEN="" ;;
+    -h|--help) sed -n '2,17p' "$0" 2>/dev/null || true; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
   shift
@@ -43,6 +47,19 @@ ask() {
   local q="$1" a=""
   if [ -r /dev/tty ]; then read -r -p "$q" a </dev/tty || true; fi
   printf '%s' "$a"
+}
+
+# this computer's address on its home network, for other devices on the same Wi-Fi
+lan_ip() {
+  if [ "$(uname)" = Darwin ]; then ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true
+  else hostname -I 2>/dev/null | tr ' ' '\n' | grep -Ev '^(100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|172\.1[7-9]\.|127\.)' | head -1 || true; fi
+}
+# the browser, when someone is sitting at this computer (not over SSH, and there's a screen)
+open_browser() {
+  [ -n "$OPEN" ] && [ -z "${SSH_CONNECTION:-}" ] || return 0
+  if [ "$(uname)" = Darwin ]; then open "$1" >/dev/null 2>&1 || true
+  elif { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; } && command -v xdg-open >/dev/null; then (xdg-open "$1" >/dev/null 2>&1 &) || true
+  fi
 }
 
 bold "Warren installer"
@@ -120,16 +137,37 @@ export PATH="$BIN:$PATH"
 
 # 6. start it
 if [ "$MODE" = hub ]; then
+  P="${PORT:-4747}"
   if [ -n "$SERVICE" ]; then
-    warren service install hub
+    warren service install hub || true
+    up=""
+    for _ in $(seq 1 30); do
+      if curl -fsS "http://127.0.0.1:$P/healthz" >/dev/null 2>&1; then up=1; break; fi
+      sleep 1
+    done
+    if [ -z "$up" ]; then
+      echo
+      fail "Warren didn't start. Its log is in ~/.warren/hub.log; \`warren service status\` shows what's running. Run the installer again once it's fixed."
+    fi
+    # the hub's own computer runs agents too, so one computer is enough to start
+    if [ -n "$DEVICE" ]; then
+      bold "Making this computer a device for your agents"
+      dev_args=(--local)
+      [ -n "$NAME" ] && dev_args+=(--name "$NAME")
+      warren service install node "${dev_args[@]}" || echo "Couldn't set up this computer as a device; add it later in Warren → Devices."
+      echo "To give agents their own computers (VMs) here, run: warren setup"
+    fi
     echo
-    bold "Warren is running at http://localhost:${PORT:-4747}"
+    bold "Warren is running: http://localhost:$P"
+    lan="$(lan_ip)"
+    [ -n "$lan" ] && echo "On other devices on this Wi-Fi: http://$lan:$P"
+    echo "Open it to make your account. Setup then helps you use Warren from anywhere with Tailscale (free)."
+    open_browser "http://localhost:$P"
   else
     echo
     bold "Start the hub with: warren hub start"
+    echo "Then open http://localhost:$P in a browser to make your account."
   fi
-  echo "Open it in a browser to create your workspace. From other devices, use this computer's address."
-  echo "For HTTPS and phones (Tailscale, a domain, Cloudflare Tunnel), see $DIR/docs/deploy.md."
 elif [ "$MODE" = device ]; then
   bold "Getting this device ready for agents' VMs"
   setup_args=()

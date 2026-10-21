@@ -14,7 +14,9 @@ const desktop = fileURLToPath(new URL("..", import.meta.url));
 const repo = path.resolve(desktop, "../..");
 const out = path.join(desktop, "build", "warren-runtime");
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+const run = (cmd, args, cwd, env = {}) => execFileSync(cmd, args, { cwd, stdio: "inherit", shell: process.platform === "win32", env: { ...process.env, ...env } });
+// WARREN_BUNDLE_ARCH=x64 bundles for Intel on an Apple silicon Mac: native modules come prebuilt for that processor
+const arch = process.env.WARREN_BUNDLE_ARCH;
 
 console.log("building the web app");
 run(npm, ["run", "build"], repo);
@@ -38,7 +40,7 @@ fs.writeFileSync(
 );
 
 console.log("installing production dependencies");
-run(npm, ["install", "--omit=dev", "--no-audit", "--no-fund"], out);
+run(npm, ["install", "--omit=dev", "--no-audit", "--no-fund", ...(arch ? [`--cpu=${arch}`] : [])], out, arch ? { npm_config_arch: arch, npm_config_target_arch: arch } : {});
 
 fs.rmSync(path.join(out, "package-lock.json"), { force: true });
 console.log(`Warren runtime ready in ${path.relative(repo, out)}`);

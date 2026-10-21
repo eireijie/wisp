@@ -7,12 +7,14 @@ vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 
 const dev = (o: Partial<DeviceInfo> = {}): DeviceInfo => ({ id: "n1", name: "my-mac", online: true, agents: [], ...o });
 const helper = (o: Partial<Agent> = {}) => ({ id: "a1", name: "Everyday Helper", nodeId: "n1", harness: "gemini", ...o }) as Agent;
-const none = { device: false, role: false, agent: false, harness: false, hello: false };
-const all = { device: true, role: true, agent: true, harness: true, hello: true };
+const none = { anywhere: true, device: false, role: false, agent: false, harness: false, hello: false };
+const all = { anywhere: true, device: true, role: true, agent: true, harness: true, hello: true };
 
 describe("nextStep", () => {
   it("names the first unmet step, or null when done", () => {
     expect(nextStep(none)).toBe("device");
+    // Tailscale comes first, before any device
+    expect(nextStep({ ...none, anywhere: false })).toBe("anywhere");
     expect(nextStep({ ...all, hello: false })).toBe("hello");
     expect(nextStep(all)).toBeNull();
   });

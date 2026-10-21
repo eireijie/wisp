@@ -19,6 +19,8 @@ export interface NodeConfig {
   hub: string;
   token: string;
   name: string;
+  /** waiting to become a device of the hub on this same computer (`--local`), until it hands over a token */
+  local?: boolean;
   dir: string; // state + agent working directories
   /** per-harness extras passed to adapters */
   harnessOptions?: Record<string, Record<string, string>>;

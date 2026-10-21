@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { FEATURE_PRESETS, type Agent, type DeviceRole, type Features } from "@warren/core";
 import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
 import { api } from "./api.ts";
+import { accessSkipped, onPublicAddress } from "./access.ts";
 import { useStore } from "./store.ts";
 import { agentReadiness, type DeviceInfo } from "./devices.ts";
 import type { Route } from "./router.ts";
@@ -14,15 +15,19 @@ export interface OnboardingState {
   agents: Agent[];
   firstReply: { id: string; channelId: string; agentId: string } | null;
   memoryNotes: { path: string; title: string }[];
+  /** the hub has an address that works from anywhere (Tailscale serving it) */
+  reachable?: boolean;
 }
 
 /** The setup's screens, in order. */
-export const STEPS = ["device", "role", "agent", "harness", "hello"] as const;
+export const STEPS = ["anywhere", "device", "role", "agent", "harness", "hello"] as const;
 export type StepId = (typeof STEPS)[number];
 
 export function stepsDone(s: OnboardingState | null): Record<StepId, boolean> {
   const agent = !!s?.agents.length;
   return {
+    // Tailscale first, so every device and phone added next can reach Warren from anywhere
+    anywhere: !!s?.reachable || onPublicAddress() || accessSkipped(),
     device: !!s?.devices.some((d) => d.online),
     role: !!s?.devices.some((d) => d.role),
     agent,
@@ -72,7 +77,7 @@ const useOnboardingStore = create<{ state: OnboardingState | null; error: string
       (state) => set({ state, error: null }),
       (e: { status?: number; message: string }) =>
         // a 404 means the browser has a newer app than the hub is running
-        set({ error: e.status === 404 ? "This hub is running an older version than the app. Restart it (Ctrl-C, then npm start) to continue." : `Couldn't check your progress: ${e.message}` }),
+        set({ error: e.status === 404 ? "This hub is running an older version than the app. Restart Warren on the computer it runs on (or run: warren update), then reload this page." : `Couldn't check your progress: ${e.message}` }),
     ),
 }));
 
@@ -101,6 +106,7 @@ export function useOnboarding(pollMs?: number) {
 
 /** Each setup step as a plain next thing to do, for "Continue setup" and Help. */
 export const NEXT_STEP: Record<StepId, string> = {
+  anywhere: "Set up Warren to work from anywhere",
   device: "Connect a computer to Warren",
   role: "Choose what that computer does for helpers",
   agent: "Make your first helper",

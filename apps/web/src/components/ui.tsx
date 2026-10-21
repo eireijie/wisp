@@ -1,3 +1,4 @@
+import { shareOrigin, useAccess } from "../access.ts";
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -432,7 +433,8 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
 export function DeviceInstall({ token, name }: { token: string; name: string }) {
   const windowsGuess = /Windows/.test(navigator.userAgent);
   const [os, setOs] = useState<"unix" | "windows" | "manual">(windowsGuess ? "windows" : "unix");
-  const hub = location.origin;
+  useAccess();
+  const hub = shareOrigin();
   const sh = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
   const pwsh = (s: string) => `'${s.replace(/'/g, "''")}'`;
   const commands = {

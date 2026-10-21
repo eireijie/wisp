@@ -47,6 +47,7 @@ import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerPairingApi } from "./pairing.ts";
+import { registerReachApi } from "./api-reach.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
@@ -393,6 +394,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       agents: agents.map(agentView),
       firstReply: firstReply ?? null,
       memoryNotes: [...agentNotes, ...sharedNotes].slice(0, 5).map((n) => ({ path: n.path, title: n.title })),
+      reachable: !!(await hub.reach.publicUrl().catch(() => null)),
     };
   });
 
@@ -2064,6 +2066,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
   registerPairingApi(app, hub, { need, parse });
+  registerReachApi(app, hub, { need, parse });
 
   // --- websockets -------------------------------------------------------------
 
