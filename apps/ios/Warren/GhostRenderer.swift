@@ -11,19 +11,6 @@ struct GhostRenderer {
   var darkMode: Bool
 
   func draw(_ context: GraphicsContext) {
-    if look.glow == true {
-      let bottom = mood == .asleep ? "#44464a" : look.color2 ?? GhostColor.shade(look.color)
-      let pulse = animated ? GhostAnimation.wave(time, 2.8) : 0.5
-      var glow = context
-      glow.addFilter(.shadow(color: Color(hex: bottom), radius: 2 + 2 * pulse))
-      glow.addFilter(.shadow(color: Color(hex: bottom), radius: 5 + 5 * pulse))
-      glow.drawLayer { layer in
-        var ghost = self
-        ghost.look.glow = false
-        ghost.draw(layer)
-      }
-      return
-    }
     let g = GhostGeometry.shapes[look.shape ?? "classic"]!
     let sleeping = mood == .asleep, details = size >= 26
     let top = sleeping ? "#a6aaad" : look.color

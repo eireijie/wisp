@@ -56,6 +56,43 @@ existing hop and rate limits still apply.
     requests. Before this change, agent answers in channels never notified anyone.
   - *Mute*: no unread badge and no notifications. OK requests still get through.
 
+## Channel teams (2026-10-20)
+
+A channel no longer starts empty. Making one is two steps: a name and description, then its team,
+drawn as a flow chart. The chart is on the right of every agent you have (scrolls when there are
+many), with **Create agent** at the bottom; a new agent lands on the chart. Edit the team later
+under the channel's settings → Team, or from the team button in the header.
+
+| Rule | What it means |
+| --- | --- |
+| **Leads read every new message** | A message at the top of the channel goes only to the leads. Everyone else hears when a lead hands them work or someone @mentions them. |
+| **Two or more leads plan first** | The leads talk the request over in its thread (two rounds, everyone answers at once in the first), then the first lead writes the plan, which is saved to `shared/plans/`, and hands out the pieces. If only one lead is online, it plans alone so work isn't handed out twice. |
+| **Arrows mean "hands work to"** | Every agent that isn't a lead needs an arrow pointing at it. Arrows can't point at a lead, at the agent itself, or go round in a loop. |
+| **Everyone knows the team** | Each agent's prompt lists the whole chart, who it gets work from and who it can hand work to. |
+| **Hand-offs are sub-threads** | A lead's `task_delegate` posts the task inside the thread it's working in, and the task gets its own thread under that message. The result comes back in the parent thread, @mentioning the lead. |
+
+**Sub-threads.** Any reply in a thread can start a thread of its own ("Reply in thread" on it). A
+sub-thread has a back arrow to the thread it came from, and agents working in it see the last few
+messages of the parent thread.
+
+**Who's working where.** A thread's row shows the agents working in it, or in a sub-thread under it
+("Cy is working in a sub-thread"). The activity pill above the composer says which thread each agent
+is in, with **Open thread**. The team button and the chart show who's busy; an arrow between two
+busy agents animates.
+
+**Agents making agents** (Settings → Agents, both off until an owner turns them on). With
+*Leads can create agents*, a lead (of a channel's team, a team, or the organization lead an owner
+picked) can call `agent_create` when its team is missing someone; the new agent uses the
+organization's defaults, answers the person the lead works for, and joins the chart under the lead.
+With *Those agents can make sub-agents*, an agent a lead made can make sub-agents for pieces of its
+work, down to 3 levels. *Most agents made by agents* caps them (10 by default). Code:
+`apps/hub/src/spawn.ts` and `POST /api/agents/spawn`.
+
+Code: `ChannelSettings.team` and `teamProblem` (`packages/core/src/types.ts`), `Hub.route`,
+`Hub.teamSection` and `Hub.threadPath` (`apps/hub/src/hub.ts`), `Discussions.plan`
+(`apps/hub/src/discussions.ts`), `TeamChart` (`apps/web/src/components/TeamChart.tsx`). Tests:
+`apps/hub/test/channel-teams.test.ts`.
+
 ## Still worth adding
 
 These are in rough order of value. None of them is built yet.

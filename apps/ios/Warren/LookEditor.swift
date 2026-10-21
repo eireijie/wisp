@@ -2,7 +2,7 @@ import SwiftUI
 
 /**
  * Preview and save the same wardrobe offered by Warren on the web: every palette, shape, face,
- * hat, accessory and motion, with cheeks and glow, and a mood to preview it in.
+ * hat, accessory and motion, with cheeks, and a mood to preview it in.
  */
 struct LookEditor: View {
   @Environment(Store.self) private var store
@@ -133,13 +133,6 @@ struct LookEditor: View {
           Text("A little blush under the eyes.").font(.caption).foregroundStyle(.secondary)
         }
       }.padding(.vertical, 10)
-      Divider()
-      Toggle(isOn: flag(\.glow)) {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Glow")
-          Text("A soft halo in its own color.").font(.caption).foregroundStyle(.secondary)
-        }
-      }.padding(.vertical, 10)
     }
     .padding(.horizontal, 16)
     .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
@@ -200,7 +193,7 @@ extension GhostLook {
   static func shuffled(keeping motion: String? = nil) -> GhostLook {
     let palette = palettes.randomElement()!
     return GhostLook(color: palette.top, color2: palette.bottom, eyes: eyeStyles.randomElement(), mouth: mouths.dropLast().randomElement(),
-      cheeks: Double.random(in: 0..<1) < 0.6, shape: shapes.randomElement(), glow: Double.random(in: 0..<1) < 0.2,
+      cheeks: Double.random(in: 0..<1) < 0.6, shape: shapes.randomElement(), glow: false,
       hat: Double.random(in: 0..<1) < 0.4 ? hats.dropFirst().randomElement() : "none",
       accessory: Double.random(in: 0..<1) < 0.35 ? accessories.dropFirst().randomElement() : "none", motion: motion ?? "float")
   }

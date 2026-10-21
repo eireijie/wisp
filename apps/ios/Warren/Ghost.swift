@@ -123,7 +123,7 @@ extension Color {
       }
       ForEach(GhostLook.shapes, id: \.self) { shape in
         GhostView(look: GhostLook(color: "#7516cf", color2: "#00e8d1", shape: shape,
-          glow: true, hat: "propeller", accessory: "bowtie"), seed: shape, size: 100)
+          glow: false, hat: "propeller", accessory: "bowtie"), seed: shape, size: 100)
       }
     }.padding()
   }

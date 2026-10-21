@@ -368,7 +368,7 @@ function ComputerCard({ agent, computer: c }: { agent: Agent; computer: Computer
               </>
             ) : (
               <>
-                <Ghost look={{ ...(agent.settings.appearance ?? defaultAppearance(agent.handle)), color: "#8d8d8d", color2: undefined, glow: false }} size={56} mood="asleep" ambient={false} label="asleep" />
+                <Ghost look={{ ...(agent.settings.appearance ?? defaultAppearance(agent.handle)), color: "#8d8d8d", color2: undefined }} size={56} mood="asleep" ambient={false} label="asleep" />
                 <p className="font-medium">{asleep ? "Computer is asleep" : c.paused ? "Paused at its device" : "Computer is offline"}</p>
                 {asleep && (
                   <Button onClick={wake} disabled={busy}>

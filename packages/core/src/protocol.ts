@@ -183,7 +183,11 @@ export type ClientEvent =
   /** a deleted message, or a system notice that no longer applies (the "queued until its device reconnects" line once the run starts) */
   | { type: "message_removed"; messageId: string; channelId: string; threadId: string | null }
   | { type: "agent_status"; agentId: string; status: "online" | "busy" | "offline" }
-  | { type: "run_event"; runId: string; agentId: string; channelId: string; event: AgentEvent }
+  /**
+   * An agent's run event. `threadId` is the thread it works in (null at the top of the channel) and
+   * `threadPath` every thread above it, outermost first, so a parent thread can show who's working in its sub-threads.
+   */
+  | { type: "run_event"; runId: string; agentId: string; channelId: string; threadId?: string | null; threadPath?: string[]; event: AgentEvent }
   | { type: "reactions"; messageId: string; channelId: string; threadId: string | null; reactions: import("./types.ts").Reaction[] }
   | { type: "sections_changed" }
   | { type: "channels_changed" }

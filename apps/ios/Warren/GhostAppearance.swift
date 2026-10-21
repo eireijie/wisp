@@ -47,7 +47,8 @@ extension GhostLook {
     look.hat = Self.hats.contains(hat ?? "") ? hat : "none"
     look.accessory = Self.accessories.contains(accessory ?? "") ? accessory : "none"
     look.motion = Self.motions.contains(motion ?? "") ? motion : "float"
-    look.glow = glow ?? false
+    // glow was removed; a saved look that had it on draws without it
+    look.glow = false
     look.cheeks = cheeks ?? false
     look.color = GhostColor.safe(color, fallback: "#f4f1ff")
     if let color2 { look.color2 = GhostColor.safe(color2, fallback: look.color) }

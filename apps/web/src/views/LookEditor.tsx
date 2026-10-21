@@ -4,6 +4,7 @@ import type { Agent } from "@warren/core";
 import { GHOST_ACCESSORIES, GHOST_PALETTES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
+import { GhostColors } from "../components/GhostColors.tsx";
 import { Ghost } from "../components/Ghost.tsx";
 import { Button, cx } from "../components/ui.tsx";
 import { Toggle } from "./settings/parts.tsx";
@@ -66,7 +67,7 @@ export function paletteOf(look: Pick<GhostAppearance, "color" | "color2">) {
 
 /**
  * The full look editor: a big preview that watches your pointer, a mood preview, and every option
- * as chips (colors, shape, eyes, mouth, hat, accessory, motion) plus rosy cheeks and glow.
+ * as chips (colors, shape, eyes, mouth, hat, accessory, motion) plus rosy cheeks.
  * Controlled: the caller keeps the look and decides when to save.
  */
 export function LookEditor({ value: look, onChange, name, below, extra, speakingLevel }: { value: GhostAppearance; onChange: (look: GhostAppearance) => void; name: string; below?: ReactNode; extra?: ReactNode; speakingLevel?: number }) {
@@ -97,32 +98,7 @@ export function LookEditor({ value: look, onChange, name, below, extra, speaking
       <div className="space-y-6 min-w-0">
         {extra}
         <Section title="Colors">
-          <div className="flex flex-wrap items-center gap-2.5">
-            {GHOST_PALETTES.map((p) => {
-              const selected = look.color.toLowerCase() === p.color && look.color2?.toLowerCase() === p.color2;
-              return (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => onChange({ ...look, color: p.color, color2: p.color2 })}
-                  title={p.name}
-                  aria-label={p.name}
-                  aria-pressed={selected}
-                  className={cx("size-9 rounded-full border-[3px] border-panel transition-transform", selected ? "ring-2 ring-ink" : "ring-1 ring-line hover:scale-105")}
-                  style={{ background: `linear-gradient(180deg, ${p.color}, ${p.color2})` }}
-                />
-              );
-            })}
-            {/* any two colors: the left half picks the top, the right half the bottom */}
-            <span className={cx("relative size-9 rounded-full border-[3px] border-panel overflow-hidden flex", custom ? "ring-2 ring-ink" : "ring-1 ring-line")} title="Pick your own top and bottom colors">
-              <label className="relative flex-1 cursor-pointer" style={{ background: look.color }}>
-                <input type="color" value={look.color} onChange={(e) => set("color", e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Top color" />
-              </label>
-              <label className="relative flex-1 cursor-pointer" style={{ background: look.color2 ?? look.color }}>
-                <input type="color" value={look.color2 ?? look.color} onChange={(e) => set("color2", e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label="Bottom color" />
-              </label>
-            </span>
-          </div>
+          <GhostColors look={look} onChange={(c) => onChange({ ...look, ...c })} labels />
         </Section>
         <Chips title="Shape" options={GHOST_SHAPES} value={look.shape} onPick={(v) => set("shape", v)} />
         <Chips title="Eyes" options={GHOST_EYES} value={look.eyes} onPick={(v) => set("eyes", v)} />
@@ -132,7 +108,6 @@ export function LookEditor({ value: look, onChange, name, below, extra, speaking
         <Chips title="Motion" options={GHOST_MOTIONS} value={look.motion} onPick={(v) => set("motion", v)} />
         <section className="rounded-2xl border border-line divide-y divide-line">
           <SwitchRow name="Rosy cheeks" body="A little blush under the eyes." on={look.cheeks} onChange={(v) => set("cheeks", v)} />
-          <SwitchRow name="Glow" body="A soft halo in its own color." on={look.glow} onChange={(v) => set("glow", v)} />
         </section>
       </div>
     </div>

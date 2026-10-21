@@ -19,8 +19,10 @@ interface ShapeDef {
   /** the body's lowest point; the body gradient (shared with the arms) runs from top to here */
   bottom: number;
   hatScale: number;
-  /** where neckwear goes, and half the body width there */
-  neck: { y: number; half: number };
+  /** a point on the head's edge, up and to the right, where a bow or flower clips on */
+  clip: { x: number; y: number };
+  /** where neckwear goes, half the body width there, and how far down the body stays solid (where the hem starts) */
+  neck: { y: number; half: number; hem: number };
   /** where its shadow sits, just under the hem */
   ground: number;
 }
@@ -36,11 +38,13 @@ const WISP_A = "M60 16 C80 16 90 32 90 52 C90 74 78 84 68 90 C60 95 58 104 66 10
 const WISP_B = "M60 16 C80 16 90 32 90 52 C90 74 80 86 70 92 C62 97 64 106 72 110 C58 110 52 100 52 92 C38 86 30 72 30 52 C30 32 40 16 60 16 Z";
 
 export const SHAPES: Record<GhostShape, ShapeDef> = {
-  classic: { body: [CLASSIC, swap(CLASSIC, "104", "88")], eyes: { y: 54, x: [50, 70] }, mouthY: 66, top: 18, bottom: 100, hatScale: 1, neck: { y: 77, half: 30 }, ground: 111 },
-  round: { body: [ROUND, swap(ROUND, "100", "84")], eyes: { y: 58, x: [47, 73] }, mouthY: 70, top: 26, bottom: 96, hatScale: 1.1, neck: { y: 80, half: 37 }, ground: 107 },
-  tall: { body: [TALL, swap(TALL, "110", "94")], eyes: { y: 44, x: [52, 68] }, mouthY: 56, top: 10, bottom: 106, hatScale: 0.85, neck: { y: 68, half: 22 }, ground: 115 },
-  sheet: { body: [SHEET_A, SHEET_B], eyes: { y: 46, x: [53, 67] }, mouthY: 57, top: 16, bottom: 102, hatScale: 0.8, neck: { y: 64, half: 19 }, ground: 110 },
-  wisp: { body: [WISP_A, WISP_B], eyes: { y: 50, x: [50, 70] }, mouthY: 62, top: 16, bottom: 109, hatScale: 1, neck: { y: 72, half: 28 }, ground: 115 },
+  // hatScale: the head's width just under its top, against the classic head's (measured from the paths), so a
+  // hat covers the same part of every head; neck.half: the body's half-width at the neck
+  classic: { body: [CLASSIC, swap(CLASSIC, "104", "88")], eyes: { y: 54, x: [50, 70] }, mouthY: 66, top: 18, bottom: 100, hatScale: 1, clip: { x: 75, y: 23 }, neck: { y: 77, half: 30, hem: 98 }, ground: 111 },
+  round: { body: [ROUND, swap(ROUND, "100", "84")], eyes: { y: 58, x: [47, 73] }, mouthY: 70, top: 26, bottom: 96, hatScale: 1.38, clip: { x: 83, y: 32 }, neck: { y: 80, half: 38, hem: 92 }, ground: 107 },
+  tall: { body: [TALL, swap(TALL, "110", "94")], eyes: { y: 44, x: [52, 68] }, mouthY: 56, top: 10, bottom: 106, hatScale: 0.77, clip: { x: 72, y: 15 }, neck: { y: 68, half: 22, hem: 100 }, ground: 115 },
+  sheet: { body: [SHEET_A, SHEET_B], eyes: { y: 46, x: [53, 67] }, mouthY: 57, top: 16, bottom: 102, hatScale: 0.65, clip: { x: 70, y: 21 }, neck: { y: 64, half: 20.5, hem: 96 }, ground: 110 },
+  wisp: { body: [WISP_A, WISP_B], eyes: { y: 50, x: [50, 70] }, mouthY: 62, top: 16, bottom: 109, hatScale: 1.09, clip: { x: 77, y: 21 }, neck: { y: 72, half: 25.7, hem: 92 }, ground: 115 },
 };
 
 // --- color helpers ------------------------------------------------------------------------------
@@ -156,8 +160,6 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
         viewBox={look.hat === "none" ? "4.5 8 111 111" : "-8 -18 136 140"}
         width={size}
         height={size}
-        className={cx(look.glow && "ghost-glow", !ambientMotion && "ghost-glow-still")}
-        style={look.glow ? ({ "--glow": bottom } as React.CSSProperties) : undefined}
         overflow="visible"
       >
         <defs>
@@ -214,13 +216,25 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                         {speakingLevel !== undefined ? <ellipse cx="60" cy={shape.mouthY + 1} rx={animated ? 3.4 + Math.min(1, Math.max(0, speakingLevel)) * 1.5 : 3.4} ry={animated ? 1 + Math.min(1, Math.max(0, speakingLevel)) * 5 : 2.5} fill={ink} /> : (look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={happy ? "open" : mood === "error" ? "wavy" : asleep || mood === "thinking" || mood === "working" ? "flat" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
                         {asleep && details && <path d={`M63.5 ${shape.mouthY + 2.2} q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z`} fill="#e8f6ff" opacity="0.95" />}
                         {/* glasses and the mustache ride on the face, so they follow its gaze and mood shifts */}
-                        {FACE_WEAR.has(look.accessory) && <Accessory kind={look.accessory} shape={shape} />}
+                        {FACE_WEAR.has(look.accessory) && (
+                          <g className="ghost-worn">
+                            <Accessory kind={look.accessory} shape={shape} eyeShift={mood === "thinking" ? [0.8, -1] : mood === "working" && !happy ? [0, 1.5] : [0, 0]} />
+                          </g>
+                        )}
                       </g>
                     </g>
-                    {look.accessory !== "none" && !FACE_WEAR.has(look.accessory) && <Accessory kind={look.accessory} shape={shape} />}
+                    {look.accessory !== "none" && !FACE_WEAR.has(look.accessory) && (
+                      // worn on the body: it moves exactly as the body does
+                      <g className="ghost-worn">
+                        <Accessory kind={look.accessory} shape={shape} />
+                      </g>
+                    )}
                     {look.hat !== "none" && (
-                      <g transform={`translate(60 ${shape.top}) scale(${shape.hatScale})`}>
-                        <Hat kind={look.hat} animate={ambientMotion} />
+                      // the brim sinks into the head a little, so the hat sits on it instead of hovering
+                      <g className="ghost-worn">
+                        <g transform={CLIPPED.has(look.hat) ? `translate(${shape.clip.x} ${shape.clip.y}) scale(${shape.hatScale})` : `translate(60 ${shape.top + (HAT_SINK[look.hat] ?? 2.5)}) scale(${shape.hatScale})`}>
+                          <Hat kind={look.hat} animate={ambientMotion} />
+                        </g>
                       </g>
                     )}
                     {mood === "error" && details && (
@@ -269,6 +283,15 @@ const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ")
 
 /** Accessories worn on the face; neckwear stays with the body. */
 const FACE_WEAR = new Set<GhostAppearance["accessory"]>(["glasses", "sunglasses", "monocle", "mustache"]);
+
+/**
+ * How far each hat's brim sits down into the head, in viewBox units. The same depth works for every
+ * shape: at it, each head is as wide (relative to its hat scale) as the classic one.
+ */
+/** Worn clipped to the side of the head rather than on top of it. */
+const CLIPPED = new Set<GhostAppearance["hat"]>(["bow", "flower"]);
+
+const HAT_SINK: Partial<Record<GhostAppearance["hat"], number>> = { tophat: 3, party: 2, beanie: 4.5, crown: 2.5, witch: 3, headphones: 0, bow: 0, halo: 0, flower: 0, propeller: 4 };
 
 /** where the "done" sparkles twinkle: x, y below the head's top, size, delay */
 const SPARKLES: [number, number, number, number][] = [[24, 4, 5, 0], [97, 2, 6, 0.35], [106, 34, 4, 0.7], [13, 38, 4.5, 0.2], [50, -9, 3.5, 0.55], [80, -8, 4, 0.9], [104, 62, 3, 0.45], [16, 66, 3.2, 1.05]];
@@ -424,7 +447,7 @@ function Hat({ kind, animate }: { kind: GhostAppearance["hat"]; animate: boolean
       );
     case "bow":
       return (
-        <g transform="translate(15 5) rotate(18)">
+        <g transform="rotate(18)">
           <path d="M0 0 L-10 -7 L-10 7 Z M0 0 L10 -7 L10 7 Z" fill="#ff6fa3" strokeLinejoin="round" />
           <circle r="3" fill="#ff3d7f" />
         </g>
@@ -433,7 +456,7 @@ function Hat({ kind, animate }: { kind: GhostAppearance["hat"]; animate: boolean
       return <ellipse cx="0" cy="-11" rx="16" ry="4.5" fill="none" stroke="#ffd84d" strokeWidth="3.6" className={animate ? "ghost-halo" : undefined} />;
     case "flower":
       return (
-        <g transform="translate(14 5)">
+        <g>
           {[0, 72, 144, 216, 288].map((a) => (
             <circle key={a} cx={Math.cos((a * Math.PI) / 180) * 4.2} cy={Math.sin((a * Math.PI) / 180) * 4.2} r="3.6" fill="#ffffff" stroke="#f1e7ff" strokeWidth="0.6" />
           ))}
@@ -459,7 +482,28 @@ function Hat({ kind, animate }: { kind: GhostAppearance["hat"]; animate: boolean
   }
 }
 
-function Accessory({ kind, shape }: { kind: GhostAppearance["accessory"]; shape: ShapeDef }) {
+/**
+ * Accessories are drawn for the classic ghost and fitted to the others: face wear scales with the
+ * eye spacing (centered between the eyes), neckwear with the body's width at the neck.
+ */
+function Accessory({ kind, shape, eyeShift = [0, 0] }: { kind: GhostAppearance["accessory"]; shape: ShapeDef; eyeShift?: [number, number] }) {
+  const { eyes, neck, mouthY } = shape;
+  const face = (eyes.x[1] - eyes.x[0]) / 20;
+  if (kind === "mustache") {
+    // it sits over the mouth, as wide as the face is
+    return <g transform={`translate(60 ${mouthY - 1.5}) scale(${face}) translate(-60 -64.5)`}>{wear(kind, CLASSIC_FIT, eyeShift)}</g>;
+  }
+  if (FACE_WEAR.has(kind)) return <g transform={`translate(60 ${eyes.y}) scale(${face}) translate(-60 ${-CLASSIC_FIT.eyes.y})`}>{wear(kind, CLASSIC_FIT, eyeShift)}</g>;
+  // a scarf wraps the body, so it takes the body's own width; ties and bow ties scale a little with it
+  if (kind === "scarf") return wear(kind, shape, eyeShift);
+  const body = Math.min(1.15, Math.max(0.75, neck.half / 28));
+  return <g transform={`translate(60 ${neck.y}) scale(${body}) translate(-60 ${-neck.y})`}>{wear(kind, shape, eyeShift)}</g>;
+}
+
+/** The classic ghost's face, which face wear is drawn for. */
+const CLASSIC_FIT = { eyes: { y: 54, x: [50, 70] as [number, number] }, mouthY: 66, neck: { y: 77, half: 30, hem: 98 } };
+
+function wear(kind: GhostAppearance["accessory"], shape: Pick<ShapeDef, "eyes" | "neck" | "mouthY">, eyeShift: [number, number]) {
   const {
     eyes: {
       x: [a, b],
@@ -478,12 +522,15 @@ function Accessory({ kind, shape }: { kind: GhostAppearance["accessory"]; shape:
         </g>
       );
     case "sunglasses":
+      // they move with the eyes behind them: the mood's glance here, the pointer's in data-ghost-lens
       return (
-        <g>
+        <g data-ghost-lens>
+          <g transform={`translate(${eyeShift[0]} ${eyeShift[1]})`}>
           <rect x={a - 8} y={y - 5.5} width="16" height="11" rx="4" fill="#1f1d2b" />
           <rect x={b - 8} y={y - 5.5} width="16" height="11" rx="4" fill="#1f1d2b" />
           <path d={`M${a + 8} ${y - 2} L${b - 8} ${y - 2}`} stroke="#1f1d2b" strokeWidth="2.2" />
           <path d={`M${a - 4.5} ${y - 2.5} l3 -1.5 M${b - 4.5} ${y - 2.5} l3 -1.5`} stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.8" />
+          </g>
         </g>
       );
     case "monocle":
@@ -503,18 +550,21 @@ function Accessory({ kind, shape }: { kind: GhostAppearance["accessory"]; shape:
     case "scarf":
       return (
         <g>
-          <rect x={60 - neck.half + 1} y={neck.y - 4.5} width={(neck.half - 1) * 2} height="9" rx="4.5" fill="#ff8f5a" />
+          <rect x={60 - neck.half - 1.5} y={neck.y - 4.5} width={(neck.half + 1.5) * 2} height="9" rx="4.5" fill="#ff8f5a" />
           <path d={`M${60 - neck.half + 8} ${neck.y - 4.5} v9 M${60 - neck.half + 16} ${neck.y - 4.5} v9 M${60 + neck.half - 10} ${neck.y - 4.5} v9`} stroke="#ffd166" strokeWidth="2.4" />
-          <rect x={60 + neck.half * 0.25} y={neck.y + 1} width="8" height="18" rx="3.5" fill="#ff8f5a" transform={`rotate(-10 ${60 + neck.half * 0.25} ${neck.y})`} />
+          <rect x={60 + neck.half * 0.25} y={neck.y + 1} width="8" height={Math.max(9, Math.min(18, neck.hem - neck.y - 3))} rx="3.5" fill="#ff8f5a" transform={`rotate(-10 ${60 + neck.half * 0.25} ${neck.y})`} />
         </g>
       );
-    case "tie":
+    case "tie": {
+      // as long as the body has room for above its hem
+      const len = Math.max(12, Math.min(24, neck.hem - neck.y - 2));
       return (
         <g>
           <path d={`M56.5 ${neck.y - 4} L63.5 ${neck.y - 4} L62 ${neck.y + 1.5} L58 ${neck.y + 1.5} Z`} fill="#2563eb" />
-          <path d={`M58 ${neck.y + 1.5} L62 ${neck.y + 1.5} L65 ${neck.y + 19} L60 ${neck.y + 24} L55 ${neck.y + 19} Z`} fill="#3b82f6" />
+          <path d={`M58 ${neck.y + 1.5} L62 ${neck.y + 1.5} L65 ${neck.y + len - 5} L60 ${neck.y + len} L55 ${neck.y + len - 5} Z`} fill="#3b82f6" />
         </g>
       );
+    }
     case "mustache": {
       const m = mouthY - 1.5;
       return <path d={`M60 ${m} Q52 ${m - 5} 46 ${m - 1} Q44 ${m + 3.5} 48.5 ${m + 3} Q54 ${m + 1.6} 60 ${m + 2.2} Q66 ${m + 1.6} 71.5 ${m + 3} Q76 ${m + 3.5} 74 ${m - 1} Q68 ${m - 5} 60 ${m} Z`} fill="#3a2a20" />;

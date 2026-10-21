@@ -132,12 +132,12 @@ describe("who answers in a channel", () => {
 
   it("only wakes @mentioned agents until the channel has a default agent", async () => {
     const ch = (await api("POST", "/api/channels", { name: "support" })).data;
-    expect(ch.settings).toEqual({ defaultAgentId: null, replyInThread: false, instructions: "" });
+    expect(ch.settings).toEqual({ defaultAgentId: null, replyInThread: false, instructions: "", team: null });
     expect(hub.targets(await post(ch.id, "anyone around?"), ch.workspaceId)).toEqual([]);
 
     const set = await api("PATCH", `/api/channels/${ch.id}`, { settings: { defaultAgentId: atlas.id, instructions: "Keep it short." } });
     expect(set.status).toBe(200);
-    expect(set.data.settings).toEqual({ defaultAgentId: atlas.id, replyInThread: false, instructions: "Keep it short." });
+    expect(set.data.settings).toEqual({ defaultAgentId: atlas.id, replyInThread: false, instructions: "Keep it short.", team: null });
     // the default agent joins the channel it answers in
     expect((await api<any[]>("GET", `/api/channels/${ch.id}/members`)).data.some((m) => m.id === atlas.id)).toBe(true);
 

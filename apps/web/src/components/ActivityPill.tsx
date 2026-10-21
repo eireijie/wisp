@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { PanelRight, Square } from "lucide-react";
+import { MessageSquare, PanelRight, Square } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import type { Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type LiveRun } from "../store.ts";
@@ -26,8 +27,27 @@ export function stopRuns(runs: LiveRun[]) {
  * green dot and "Nova is editing files". Hover or click lists each one with what it's doing,
  * how long it's been at it, Stop, and a way into its details.
  */
-export function ActivityPill({ runs, onDetails }: { runs: LiveRun[]; onDetails: (agentId: string) => void }) {
+/** A thread's first words, to say where an agent is working: "in “Plan the launch…”". */
+function useThreadTitles(runs: LiveRun[]): Record<string, string> {
+  return useStore(
+    useShallow((s) => {
+      const out: Record<string, string> = {};
+      for (const r of runs) {
+        // a sub-thread is named after the thread at the top of it
+        const id = r.threadPath[0] ?? r.threadId;
+        if (!id || out[id]) continue;
+        const m = s.messages[r.channelId]?.find((x) => x.id === id) ?? s.roots[id] ?? Object.values(s.threads).flat().find((x) => x.id === id);
+        const text = m?.body.replace(/@[\w-]+\s*/g, "").replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+        out[id] = text ? (text.length > 36 ? `${text.slice(0, 34)}…` : text) : "a thread";
+      }
+      return out;
+    }),
+  );
+}
+
+export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: { runs: LiveRun[]; onDetails: (agentId: string) => void; onThread?: (threadId: string) => void; hereThread?: string | null }) {
   const agents = useStore((s) => s.agents);
+  const titles = useThreadTitles(runs);
   const [open, setOpen] = useState(false);
   const [, tick] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
@@ -112,7 +132,25 @@ export function ActivityPill({ runs, onDetails }: { runs: LiveRun[]; onDetails: 
                 <div className="text-xs text-muted">
                   {runActivity(w.run, agents).replace(/^./, (c) => c.toUpperCase())} · {minutesSince(Math.min(...w.runs.map((r) => runStartedAt(r.runId))))}
                 </div>
+                {/* where: which thread (or the channel itself) */}
+                {w.run.threadId && w.run.threadId !== hereThread && (
+                  <div className="text-xs text-muted truncate">
+                    in {w.run.threadPath.length ? "a sub-thread of " : ""}“{titles[w.run.threadPath[0] ?? w.run.threadId]}”
+                  </div>
+                )}
                 <div className="mt-1.5 flex items-center gap-1">
+                  {onThread && w.run.threadId && w.run.threadId !== hereThread && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        onThread(w.run.threadId!);
+                      }}
+                      className="h-7 px-2.5 rounded-lg bg-chip hover:bg-hover text-xs font-medium inline-flex items-center gap-1.5"
+                    >
+                      <MessageSquare size={13} /> Open thread
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

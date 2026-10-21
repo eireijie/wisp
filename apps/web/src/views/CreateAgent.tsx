@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bot, Check, ChevronRight, Cloud, Download, Laptop, Loader2, Lock, Monitor, Plus, Search, Shuffle, UserPlus, X } from "lucide-react";
-import { GHOST_PALETTES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import { GHOST_WHITE, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { Ghost } from "../components/Ghost.tsx";
+import { GhostColors } from "../components/GhostColors.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { prettyModel } from "../components/EffortSlider.tsx";
-import { HARNESSES, runsInVm, soulTemplate, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@warren/core";
+import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go } from "../router.ts";
 import type { NodeInfo } from "./AgentSettings.tsx";
 import { computerKindLabel, usableDevices } from "../devices.ts";
-import { TEMPLATES, type AgentTemplate } from "../templates.ts";
 import { defaultComputer, resolveComputer, vmOnDevice, withComputer, type ComputerChoice } from "../agentComputer.ts";
 import { Advanced, useSimple } from "../experience.tsx";
 import { useFeature } from "../features.ts";
@@ -313,7 +313,6 @@ type View = "form" | "look" | "external" | "discover" | "invitation";
 type RespondTo = "me" | "anyone" | "people";
 
 /** The palettes offered right on the New agent screen; the rest are in the full look editor. */
-const QUICK_PALETTES = ["Violet ember", "Bubblegum sky", "Lime lagoon", "Golden hour", "Arctic blue", "Ultraviolet tide"];
 
 /** "Claude Code · Sonnet 5.5" and "Its own computer on my-mac": the defaults in a line each. */
 export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "name">[]): { ai: string; computer: string } {
@@ -332,7 +331,8 @@ export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "
  * are under Advanced, open from the start in the Advanced experience. Agents that already run
  * somewhere come in through the link at the bottom.
  */
-export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: () => void }) {
+/** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. */
+export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
@@ -353,10 +353,9 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
   const [handle, setHandle] = useState("");
   const [handleEdited, setHandleEdited] = useState(false);
   const [role, setRole] = useState("");
-  const [template, setTemplate] = useState<AgentTemplate | null>(null);
-  const [moreRoles, setMoreRoles] = useState(false);
   const [instructions, setInstructions] = useState("");
-  const [appearance, setAppearance] = useState<GhostAppearance | null>(null);
+  // every new agent starts white with a face and outfit of its own, picked once (typing its name doesn't change it)
+  const [appearance, setAppearance] = useState<GhostAppearance>(() => ({ ...randomAppearance(), ...GHOST_WHITE }));
 
   // which AI and computer
   const [defaults, setDefaults] = useState<AgentDefaults | null | "error">(null);
@@ -439,25 +438,16 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
   const cleanName = name.trim();
   const finalHandle = handle || slug(cleanName);
   // every agent has its own colors: the ghost follows its handle until you pick a look
-  const look = appearance ?? defaultAppearance(finalHandle || "new-agent");
+  const look = appearance;
   const invalidHandle = !/^[a-z][a-z0-9-]{0,31}$/.test(finalHandle);
   const taken = agents.some((a) => a.handle === finalHandle);
   const validName = !!cleanName && !invalidHandle && !taken;
-
-  const templateGroups = splitTemplates(TEMPLATES);
-  // Simple lists the everyday jobs first; "More roles" shows the business ones. The chosen one always shows.
-  const roles = !simple || moreRoles ? TEMPLATES : template && !templateGroups.everyday.some((t) => t.id === template.id) ? [...templateGroups.everyday, template] : templateGroups.everyday;
-  const pickTemplate = (t: AgentTemplate | null) => {
-    // "What it does" follows the role until you write your own
-    if (!role.trim() || role === template?.name) setRole(t?.name ?? "");
-    setTemplate(t);
-    setInstructions(t?.instructions ?? "");
-  };
 
   const others = people.filter((p) => p.id !== me?.user.id);
   const togglePick = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
   const finish = () => {
+    if (created && onCreated) return onCreated(created);
     onClose();
     if (created) go({ view: "agents", agentId: created.id, tab: "connect" });
   };
@@ -469,13 +459,12 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
     try {
       let a = created;
       if (!a) {
-        const soul = template ? soulTemplate(cleanName, finalHandle).replace(/## Voice\n(?:- .*\n?)*/, `## Voice\n- ${template.voice}\n`) : undefined;
         const settings = {
-          ...(appearance ? { appearance } : {}),
+          appearance,
           ...(role.trim() ? { role: role.trim().slice(0, 60) } : {}),
           ...(inviteOn ? { respondTo, ...(respondTo === "people" ? { respondPeople } : {}) } : {}),
         };
-        const common = { name: cleanName, handle: finalHandle, instructions, soul };
+        const common = { name: cleanName, handle: finalHandle, instructions };
         if (useDefaults) {
           a = await api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings });
         } else {
@@ -511,6 +500,8 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
         setToken(r.token);
         setError(null);
         setView("invitation");
+      } else if (onCreated) {
+        onCreated(a);
       } else {
         onClose();
         go({ view: "agents", agentId: a.id, tab: "overview" });
@@ -554,24 +545,7 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
                   <div className="text-lg font-semibold truncate">{cleanName || "Your agent"}</div>
                   <div className="text-[13px] text-muted truncate">@{finalHandle || "your-agent"}</div>
                 </div>
-                <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Colors">
-                  {QUICK_PALETTES.map((n) => GHOST_PALETTES.find((p) => p.name === n)).filter((p): p is (typeof GHOST_PALETTES)[number] => !!p).map((p) => {
-                    const on = look.color.toLowerCase() === p.color && look.color2?.toLowerCase() === p.color2;
-                    return (
-                      <button
-                        key={p.name}
-                        type="button"
-                        aria-label={p.name}
-                        title={p.name}
-                        aria-pressed={on}
-                        disabled={!!created}
-                        onClick={() => setAppearance({ ...look, color: p.color, color2: p.color2 })}
-                        className={cx("size-7 rounded-full border-[3px] border-bg", on ? "ring-2 ring-ink" : "ring-1 ring-line hover:scale-105 transition-transform")}
-                        style={{ background: `linear-gradient(180deg, ${p.color}, ${p.color2})` }}
-                      />
-                    );
-                  })}
-                </div>
+                <GhostColors look={look} onChange={(c) => setAppearance({ ...look, ...c })} limit={5} size={26} disabled={!!created} />
                 <div className="flex gap-2">
                   <Button type="button" className="h-8! rounded-full! px-3.5! text-[13px]" disabled={!!created} onClick={() => setAppearance(randomAppearance())} aria-label="Shuffle its look">
                     <Shuffle size={14} /> Shuffle
@@ -623,26 +597,6 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
                     .
                   </p>
                 )}
-
-                <div className="space-y-2">
-                  <span className="block text-sm font-semibold">Start from</span>
-                  <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Start from">
-                    <Chip on={!template} onClick={() => pickTemplate(null)}>
-                      Blank
-                    </Chip>
-                    {roles.map((t) => (
-                      <Chip key={t.id} on={template?.id === t.id} onClick={() => pickTemplate(t)} title={t.blurb}>
-                        {t.name}
-                      </Chip>
-                    ))}
-                    {simple && !moreRoles && templateGroups.business.length > 0 && (
-                      <button type="button" onClick={() => setMoreRoles(true)} className="h-8 px-3 rounded-full text-[13px] font-semibold text-muted hover:text-ink">
-                        More roles…
-                      </button>
-                    )}
-                  </div>
-                  {template && <p className="text-xs text-muted">{template.blurb}</p>}
-                </div>
 
                 <label className="block space-y-1.5">
                   <span className="block text-sm font-semibold">Instructions</span>
@@ -959,11 +913,13 @@ export function CreateAgent({ nodes, onClose }: { nodes: NodeInfo[]; onClose: ()
               Once connected, ask it to introduce itself in #general and save selected notes with <code className="text-ink">memory_write</code>. Its local profile and skills aren't imported automatically.
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={finish}>
-                Close
-              </Button>
+              {!onCreated && (
+                <Button type="button" variant="ghost" onClick={finish}>
+                  Close
+                </Button>
+              )}
               <Button type="button" variant="primary" onClick={finish}>
-                Open agent <ArrowRight size={16} />
+                {onCreated ? "Back to the team" : "Open agent"} <ArrowRight size={16} />
               </Button>
             </div>
           </div>

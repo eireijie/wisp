@@ -3,6 +3,8 @@ import { id } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
 export const MAX_ROUNDS = 5;
+/** how many times a channel's leads go back and forth before the plan is written */
+export const PLAN_ROUNDS = 2;
 
 const slug = (t: string) =>
   t
@@ -34,6 +36,32 @@ export class Discussions {
       route: false,
     });
     const d = store.createDiscussion({ id: did, workspaceId: o.workspaceId, channelId: o.channelId, threadId: root.id, teamId: o.teamId, topic: o.topic, goal: o.goal, participants: o.participants, moderatorId: o.moderatorId, rounds: o.rounds, startedBy: o.startedBy, requestedBy: o.requestedBy });
+    this.next(d, 1);
+    return store.discussion(d.id)!;
+  }
+
+  /**
+   * A channel's leads plan a request together, in a thread under it: they each read it and say
+   * how they'd go about it, answer each other, and then the first lead writes the plan and hands
+   * out the pieces. Nothing is handed out before they've talked.
+   */
+  plan(o: { workspaceId: string; request: { id: string; channelId: string; body: string }; leads: string[]; requestedBy: string | null; startedBy: Actor }): Discussion {
+    const { store } = this.hub;
+    const topic = o.request.body.replace(/\s+/g, " ").trim().slice(0, 120) || "A new request";
+    const d = store.createDiscussion({
+      workspaceId: o.workspaceId,
+      channelId: o.request.channelId,
+      threadId: o.request.id,
+      teamId: null,
+      topic,
+      goal: "",
+      participants: o.leads,
+      moderatorId: o.leads[0],
+      rounds: PLAN_ROUNDS,
+      startedBy: o.startedBy,
+      requestedBy: o.requestedBy,
+      kind: "plan",
+    });
     this.next(d, 1);
     return store.discussion(d.id)!;
   }
@@ -72,7 +100,17 @@ export class Discussions {
     }
     const updated = store.updateDiscussion(d.id, { round: n, status: summary ? "summarizing" : "running", moderatorId })!;
     const sitOut = !summary && away.length ? ` (${list(away)} offline and sit${away.length === 1 ? "s" : ""} this round out)` : "";
-    this.notice(updated, summary ? `${handle(moderatorId)} is writing up the decision${standIn}` : `Round ${n} of ${d.rounds}${sitOut}`);
+    const plan = d.kind === "plan";
+    this.notice(
+      updated,
+      summary
+        ? `${handle(moderatorId)} is writing up the ${plan ? "plan and handing out the work" : "decision"}${standIn}`
+        : plan
+          ? n === 1
+            ? `${d.participants.map(handle).join(" and ")} are talking it over before handing out work${sitOut}`
+            : `The leads are answering each other${sitOut}`
+          : `Round ${n} of ${d.rounds}${sitOut}`,
+    );
     for (const agentId of agents) {
       const runId = store.createRun({ agentId, channelId: d.channelId, threadId: d.threadId, triggerMessageId: d.threadId, hop: 0, discussionId: d.id, phase, requestedBy: d.requestedBy ?? null });
       this.hub.dispatchRun(runId);
@@ -91,7 +129,8 @@ export class Discussions {
     if (run.phase !== "summary") return this.next(d, d.round + 1);
     const path = await this.saveDecision(d, finalText).catch(() => null);
     const done = store.updateDiscussion(d.id, { status: "done", decisionPath: path })!;
-    this.notice(done, path ? `Decision saved to ${path}` : "The discussion is over, but the decision couldn't be saved to memory");
+    const what = d.kind === "plan" ? "Plan" : "Decision";
+    this.notice(done, path ? `${what} saved to ${path}` : `The discussion is over, but the ${what.toLowerCase()} couldn't be saved to memory`);
     this.broadcast(d.id);
   }
 
@@ -108,7 +147,7 @@ export class Discussions {
     const { store } = this.hub;
     const vault = this.hub.vault(d.workspaceId);
     const team = d.teamId ? store.team(d.teamId) : undefined;
-    const dir = `${team?.folder ?? "shared"}/decisions`;
+    const dir = `${team?.folder ?? "shared"}/${d.kind === "plan" ? "plans" : "decisions"}`;
     const date = new Date().toISOString().slice(0, 10);
     let path = `${dir}/${date}-${slug(d.topic)}.md`;
     for (let n = 2; vault.list((p) => p.toLowerCase() === path.toLowerCase()).length; n++) path = `${dir}/${date}-${slug(d.topic)}-${n}.md`;
@@ -118,7 +157,7 @@ export class Discussions {
       `date: ${date}`,
       `participants: [${d.participants.map((a) => `"${this.hub.handleOf(a)}"`).join(", ")}]`,
       `moderator: "${this.hub.handleOf(d.moderatorId)}"`,
-      "tags: [decision]",
+      `tags: [${d.kind === "plan" ? "plan" : "decision"}]`,
     ];
     const body = `---\n${fm.join("\n")}\n---\n# ${d.topic}\n\n${text.trim() || "(The moderator didn't write a summary.)"}\n`;
     await vault.write(path, body, moderator ? { name: `@${moderator.handle}`, email: `${moderator.handle}@agents.warren` } : { name: "Warren", email: "warren@localhost" }, `Decision: ${d.topic.slice(0, 60)}`);
@@ -130,6 +169,7 @@ export class Discussions {
     const { store } = this.hub;
     const d = run.discussionId ? store.discussion(run.discussionId) : undefined;
     if (!d || !run.phase) return "";
+    if (d.kind === "plan") return this.planSection(d, run.phase);
     const team = d.teamId ? store.team(d.teamId) : undefined;
     const role = (a: string) => team?.members.find((m) => m.agentId === a)?.role;
     const people = d.participants.map((a) => `${this.hub.handleOf(a)}${role(a) ? ` (${role(a)})` : ""}`).join(", ");
@@ -143,6 +183,21 @@ export class Discussions {
         ? "Give your own take: what you'd do and the main risks you see. Everyone answers at the same time, so you'll see the others' answers next round."
         : "Read the thread above and respond to the others: what you agree with, where you disagree and why, and how you'd refine the plan. Don't repeat what's already been said."
     }\nKeep it to a few short paragraphs. Don't start the work yet and don't @mention anyone; the discussion moves on by itself.`;
+  }
+
+  /** What a lead needs to know while the leads plan a request together. */
+  private planSection(d: Discussion, phase: string): string {
+    const others = d.participants.filter((a) => a !== d.moderatorId);
+    const leads = d.participants.map((a) => this.hub.handleOf(a)).join(", ");
+    if (phase === "summary") {
+      return `## Write the plan and hand out the work\nYou and the other leads (${leads}) talked over the request at the top of this thread. Read the thread, then reply with the plan you agreed on: the steps, who does each one, and anything still open. Then hand each piece to the agent it's for with task_delegate (to the agents your team chart says get work from a lead; ${others.length ? "a co-lead's agents too" : "your own agents"}), or do a piece yourself when nobody fits. Each piece you hand out opens its own sub-thread here. Your plan is saved to memory as a note.`;
+    }
+    const n = Number(phase.split(":")[1]);
+    return `## Plan this with the other leads first\nYou lead #${this.hub.store.channel(d.channelId)?.name ?? "this channel"} together with ${leads}. A request came in (the message at the top of this thread). Before anyone hands out work, the leads agree on a plan. This is round ${n} of ${d.rounds}. ${
+      n === 1
+        ? "Say how you'd go about it: the steps, which agents on the team should do which part, and the risks. The other leads answer at the same time, so you'll see their takes next round."
+        : "Read what the other leads said and answer them: what you agree with, what you'd change and why, and who should do what. Don't repeat what's already been said."
+    }\nKeep it short. Don't hand out work or start on it yet, and don't @mention anyone; ${this.hub.handleOf(d.moderatorId)} writes the plan and hands out the work after round ${d.rounds}.`;
   }
 
   private notice(d: Discussion, text: string) {

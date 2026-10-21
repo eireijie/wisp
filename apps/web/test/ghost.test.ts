@@ -76,6 +76,9 @@ describe("still ghosts", () => {
     expect(html).not.toContain("<animate");
     expect(html).not.toMatch(/ghost-(float|bounce|spin|type|key|interactive)\b/);
   });
+  it("doesn't glow, even for a look saved with glow on (the feature was removed)", () => {
+    expect(renderToStaticMarkup(createElement(Ghost, { look, size: 80 }))).not.toContain("glow");
+  });
 });
 
 describe("soft ghost details", () => {

@@ -49,6 +49,9 @@ export interface LiveRun {
   runId: string;
   agentId: string;
   channelId: string;
+  /** the thread it works in (null at the top of the channel), and the threads above that one, outermost first */
+  threadId: string | null;
+  threadPath: string[];
   text: string;
   tools: string[];
   /** the latest tool call with its input, for "Sending to @chief…" */
@@ -81,6 +84,8 @@ interface State {
   messages: Record<string, Message[]>; // top-level by channel
   threads: Record<string, Message[]>; // replies by thread root id
   replyCounts: Record<string, number>;
+  /** thread roots as loaded with their thread (a sub-thread's root is a reply in another thread) */
+  roots: Record<string, Message>;
   live: Record<string, LiveRun>; // by runId
   computers: ComputerInfo[];
   approvals: Record<string, Approval>;
@@ -148,6 +153,7 @@ export const useStore = create<State>((set, get) => ({
   messages: {},
   threads: {},
   replyCounts: {},
+  roots: {},
   live: {},
   computers: [],
   approvals: {},
@@ -208,8 +214,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async loadThread(channelId, rootId) {
-    const r = await api<{ messages: Message[] }>("GET", `/api/channels/${channelId}/messages?thread=${rootId}&limit=200`);
-    set((s) => ({ threads: { ...s.threads, [rootId]: r.messages.filter((m) => m.id !== rootId) } }));
+    const r = await api<{ messages: Message[]; replyCounts?: Record<string, number> }>("GET", `/api/channels/${channelId}/messages?thread=${rootId}&limit=200`);
+    // the root comes too: a sub-thread's root is a reply in another thread, which may not be loaded
+    const root = r.messages.find((m) => m.id === rootId);
+    set((s) => ({ threads: { ...s.threads, [rootId]: r.messages.filter((m) => m.id !== rootId) }, replyCounts: { ...s.replyCounts, ...r.replyCounts }, ...(root ? { roots: { ...s.roots, [rootId]: root } } : {}) }));
   },
 
   async refreshAgents() {
@@ -386,7 +394,7 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ memoryVersion: s.memoryVersion + 1 }));
     } else if (e.type === "run_event") {
       set((s) => {
-        const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, text: "", tools: [], last: null, usedComputer: false };
+        const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId ?? null, threadPath: e.threadPath ?? [], text: "", tools: [], last: null, usedComputer: false };
         return { live: { ...s.live, [e.runId]: applyEvent(cur, e.event) } };
       });
     }

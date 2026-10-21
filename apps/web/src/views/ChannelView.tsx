@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, Bell, BellOff, BellRing, Bot, Pin, PinOff, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
+import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Pin, PinOff, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -129,7 +129,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
                   <Star size={14} fill={channel.starred ? "currentColor" : "none"} />
                 </button>
               </div>
-              <ChannelSubtitle channel={channel} onAgents={() => setSettings("agents")} />
+              <ChannelSubtitle channel={channel} onAgents={() => setSettings(channel.settings.team?.nodes.length ? "team" : "agents")} />
             </div>
           )}
           {dmAgent?.computerId && (
@@ -140,6 +140,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           {dmAgent && voice && <button onClick={() => setCalling(true)} className="size-9 rounded-full hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={18} /></button>}
           {channel.kind === "channel" && (
             <div className="flex items-center gap-1.5 shrink-0">
+              <TeamButton channel={channel} onClick={() => setSettings("team")} />
               <MemberStack channel={channel} open={side?.kind === "members" && !route.threadId} onClick={toggleMembers} />
               {channel.pinnedIds.length > 0 && (
                 <button onClick={() => setSettings("pins")} className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1" aria-label={`Pinned: ${channel.pinnedIds.length}`} title="Pinned messages">
@@ -154,7 +155,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           )}
         </header>
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
-          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("agents")} onMembers={() => openSide({ kind: "members" })} />
+          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "members" })} />
         </SoloAgent.Provider>
         {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} onDetails={openAgent} />}
       </div>
@@ -242,17 +243,38 @@ function ChannelSubtitle({ channel, onAgents }: { channel: ChannelInfo; onAgents
   const names = useNames();
   // nobody answers in an archived channel
   const answerer = channel.settings.defaultAgentId && !channel.archivedAt ? names.agent(channel.settings.defaultAgentId) : undefined;
-  if (!channel.topic && !answerer) return null;
+  const leads = channel.archivedAt ? [] : (channel.settings.team?.nodes ?? []).filter((n) => n.lead).map((n) => names.agent(n.agentId)).filter((a): a is Agent => !!a);
+  if (!channel.topic && !answerer && !leads.length) return null;
   return (
     <div className="text-xs text-muted truncate">
-      {answerer && (
+      {leads.length > 0 ? (
+        <button onClick={onAgents} className="hover:text-ink hover:underline" title="The team">
+          {leads.map((a) => a.name).join(" and ")} {leads.length > 1 ? "lead" : "leads"} here
+        </button>
+      ) : answerer && (
         <button onClick={onAgents} className="hover:text-ink hover:underline" title="Who answers here">
           {answerer.name} answers here
         </button>
       )}
-      {answerer && channel.topic && " · "}
+      {(leads.length > 0 || answerer) && channel.topic && " · "}
       {channel.topic}
     </div>
+  );
+}
+
+/** The channel's team, from the header: how many agents are on it, and a green dot while any of them works. */
+function TeamButton({ channel, onClick }: { channel: ChannelInfo; onClick: () => void }) {
+  const names = useNames();
+  const live = useStore((s) => s.live);
+  const team = (channel.settings.team?.nodes ?? []).filter((n) => names.agent(n.agentId));
+  if (!team.length) return null;
+  const busy = new Set(Object.values(live).filter((r) => r.channelId === channel.id).map((r) => r.agentId));
+  const working = team.filter((n) => busy.has(n.agentId)).length;
+  return (
+    <button onClick={onClick} className="h-8 px-2 rounded-lg border border-line text-xs text-muted hover:text-ink inline-flex items-center gap-1.5" aria-label={`Team: ${team.length} agents${working ? `, ${working} working` : ""}`} title={working ? `${working} of the team working` : "The team"}>
+      <Workflow size={14} /> {team.length}
+      {working > 0 && <span className="size-1.5 rounded-full bg-ok animate-pulse" aria-hidden />}
+    </button>
   );
 }
 
@@ -646,7 +668,8 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
   const [newSince, setNewSince] = useState(0);
   const positioned = useRef<string | null>(null);
   const lastCount = useRef(0);
-  const runs = Object.values(live).filter((r) => r.channelId === channel.id && (r.text || r.usedComputer));
+  const runs = Object.values(live).filter((r) => r.channelId === channel.id && !r.threadId && (r.text || r.usedComputer));
+  const inThreads = Object.values(live).filter((r) => r.channelId === channel.id && r.threadId);
 
   // first message from someone else after where you'd read up to
   const firstNew = useMemo(() => {
@@ -698,7 +721,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
                 <span className="h-px flex-1 bg-accent/40" /> NEW <span className="h-px flex-1 bg-accent/40" />
               </div>
             )}
-            <MessageItem m={m} grouped={isGrouped(messages[i - 1], m) && m.id !== firstNew} replies={replyCounts[m.id]} onReplies={() => go({ view: "chat", channelId: channel.id, threadId: m.id })} />
+            <MessageItem m={m} grouped={isGrouped(messages[i - 1], m) && m.id !== firstNew} replies={replyCounts[m.id]} working={inThreads.filter((r) => r.threadId === m.id || r.threadPath.includes(m.id))} onReplies={() => go({ view: "chat", channelId: channel.id, threadId: m.id })} />
           </div>
         ))}
         {runs.map((r) => (
@@ -733,9 +756,10 @@ function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: Chan
     );
   }
   const answerer = channel.settings.defaultAgentId ? names.agent(channel.settings.defaultAgentId) : undefined;
+  const leads = (channel.settings.team?.nodes ?? []).filter((n) => n.lead).map((n) => names.agent(n.agentId)).filter((a): a is Agent => !!a);
   // Buzz-style first steps for a new channel: bring in an agent, add files, invite people
   const cards: { icon: React.ReactNode; title: string; body: string; onClick: () => void }[] = [
-    ...(canManage ? [{ icon: <Bot size={18} />, title: "Add agent", body: answerer ? `${answerer.name} answers here. Add another.` : "Pick an agent to answer here.", onClick: onAddAgent }] : []),
+    ...(canManage ? [{ icon: <Bot size={18} />, title: "Add agent", body: leads.length ? "Put another agent on the team." : answerer ? `${answerer.name} answers here. Add another.` : "Give this channel a team of agents.", onClick: onAddAgent }] : []),
     ...(!channel.archivedAt ? [{ icon: <Paperclip size={18} />, title: "Add files", body: "Share something to work on.", onClick: () => window.dispatchEvent(new CustomEvent(COMPOSER_ATTACH, { detail: channel.id })) }] : []),
     ...(invite && canManage ? [{ icon: <UserPlus size={18} />, title: "Invite people", body: "Bring someone into this channel.", onClick: onMembers }] : []),
   ];
@@ -747,7 +771,12 @@ function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: Chan
       <h2 className="mt-3 text-xl font-semibold">#{channel.name}</h2>
       <p className="text-sm text-muted">
         {channel.topic ? `${channel.topic.replace(/[.!?]\s*$/, "")}. ` : "This is the start of the channel. "}
-        {answerer ? `${answerer.name} answers messages here; @mention another agent to ask them instead.` : "@mention an agent to bring it in."} New here?{" "}
+        {leads.length
+          ? `${leads.map((a) => a.name).join(" and ")} ${leads.length > 1 ? "read every new message here, plan it together" : "reads every new message here, plans it"} and hand${leads.length > 1 ? "" : "s"} the work to the team in a thread. @mention an agent to ask it directly.`
+          : answerer
+            ? `${answerer.name} answers messages here; @mention another agent to ask them instead.`
+            : "@mention an agent to bring it in."}{" "}
+        New here?{" "}
         <a href="#/welcome" className="text-accent-text font-medium hover:underline">
           Get started
         </a>
@@ -778,7 +807,7 @@ function isGrouped(prev: Message | undefined, m: Message) {
 
 // --- one message --------------------------------------------------------------------------------
 
-function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message; grouped?: boolean; replies?: number; onReplies?: () => void; inThread?: boolean }) {
+function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }: { m: Message; grouped?: boolean; replies?: number; onReplies?: () => void; inThread?: boolean; working?: LiveRun[] }) {
   const { clock } = usePrefs();
   const names = useNames();
   const handles = useHandleNames();
@@ -880,13 +909,18 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
         ))}
         <Parts parts={m.parts} />
         <Reactions messageId={m.id} reactions={m.reactions ?? []} />
-        {!!replies && onReplies && (
-          <button onClick={onReplies} className="mt-1 h-6 px-2 -ml-1 rounded-md text-xs font-medium text-accent-text hover:bg-accent-soft inline-flex items-center gap-1">
-            <MessageSquare size={13} /> {replies} {replies === 1 ? "reply" : "replies"} <ChevronRight size={12} />
-          </button>
+        {(!!replies || working.length > 0) && onReplies && (
+          <div className="mt-1 -ml-1 flex flex-wrap items-center gap-1.5">
+            {!!replies && (
+              <button onClick={onReplies} className="h-6 px-2 rounded-md text-xs font-medium text-accent-text hover:bg-accent-soft inline-flex items-center gap-1">
+                <MessageSquare size={13} /> {replies} {replies === 1 ? "reply" : "replies"} <ChevronRight size={12} />
+              </button>
+            )}
+            {working.length > 0 && <ThreadWork runs={working} threadId={m.id} onClick={onReplies} />}
+          </div>
         )}
       </div>
-      {!m.deletedAt && !editing && <ActionBar m={m} onReply={!inThread && !m.threadId ? onReplies : undefined} onEdit={() => setEditing(true)} open={touched} onDone={() => setTouched(false)} />}
+      {!m.deletedAt && !editing && <ActionBar m={m} onReply={onReplies} onEdit={() => setEditing(true)} open={touched} onDone={() => setTouched(false)} />}
     </div>
   );
 }
@@ -1193,26 +1227,33 @@ function StreamingItem({ run }: { run: LiveRun }) {
 // --- thread -------------------------------------------------------------------------------------
 
 function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId: string; agentId?: string }) {
-  const root = useStore((s) => s.messages[channelId]?.find((m) => m.id === rootId));
+  const root = useStore((s) => s.messages[channelId]?.find((m) => m.id === rootId) ?? s.roots[rootId] ?? Object.values(s.threads).flat().find((m) => m.id === rootId));
   const replies = useStore((s) => s.threads[rootId]);
+  const replyCounts = useStore((s) => s.replyCounts);
+  const live = useStore((s) => s.live);
   const loadThread = useStore((s) => s.loadThread);
   const ref = useRef<HTMLDivElement>(null);
+  const streaming = Object.values(live).filter((r) => r.channelId === channelId && r.threadId === rootId && (r.text || r.usedComputer));
+  const below = Object.values(live).filter((r) => r.channelId === channelId && r.threadPath.includes(rootId));
 
   useEffect(() => {
     loadThread(channelId, rootId);
   }, [channelId, rootId, loadThread]);
   useLayoutEffect(() => {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [replies?.length]);
+  }, [replies?.length, streaming.map((r) => r.text.length).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = () => go({ view: "chat", channelId, threadId: null });
+  // a sub-thread goes back to the thread it branched off from
+  const parent = root?.threadId ?? null;
+  const open = (id: string) => go({ view: "chat", channelId, threadId: id });
   return (
-    <RightPane label="Thread">
+    <RightPane label={parent ? "Sub-thread" : "Thread"}>
       <header className="h-15 shrink-0 px-3 flex items-center gap-2 border-b border-line">
-        <button onClick={close} className="lg:hidden p-1.5 rounded-md hover:bg-hover" aria-label="Back">
+        <button onClick={parent ? () => open(parent) : close} className={cx("p-1.5 rounded-md hover:bg-hover", !parent && "lg:hidden")} aria-label={parent ? "Back to the thread it came from" : "Back"} title={parent ? "Back to the thread it came from" : undefined}>
           <ChevronLeft size={20} />
         </button>
-        <span className="font-semibold flex-1">Thread</span>
+        <span className="font-semibold flex-1 min-w-0 truncate">{parent ? "Sub-thread" : "Thread"}</span>
         <button onClick={close} className="hidden lg:block p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close thread">
           <X size={18} />
         </button>
@@ -1223,10 +1264,40 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
           {replies ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Loading…"}
           <span className="h-px flex-1 bg-line" />
         </div>
-        {replies?.map((m, i) => <MessageItem key={m.id} m={m} grouped={isGrouped(replies[i - 1], m)} inThread />)}
+        {replies?.map((m, i) => (
+          <MessageItem key={m.id} m={m} grouped={isGrouped(replies[i - 1], m)} inThread replies={replyCounts[m.id]} working={below.filter((r) => r.threadId === m.id || r.threadPath.includes(m.id))} onReplies={() => open(m.id)} />
+        ))}
+        {streaming.map((r) => (
+          <StreamingItem key={r.runId} run={r} />
+        ))}
       </div>
       <Composer channelId={channelId} threadId={rootId} agentId={agentId} placeholder="Reply…" />
     </RightPane>
+  );
+}
+
+/** Who's working in a thread (or a sub-thread of it), on the thread's row: their ghosts and "Ada is working". */
+function ThreadWork({ runs, threadId, onClick }: { runs: LiveRun[]; threadId: string; onClick: () => void }) {
+  const names = useNames();
+  const ids = [...new Set(runs.map((r) => r.agentId))];
+  const agents = ids.map((id) => names.agent(id)).filter((a): a is Agent => !!a);
+  if (!agents.length) return null;
+  const deeper = runs.every((r) => r.threadId !== threadId);
+  const who = agents.length === 1 ? agents[0].name : agents.length === 2 ? `${agents[0].name} and ${agents[1].name}` : `${agents[0].name} and ${agents.length - 1} more`;
+  return (
+    <button onClick={onClick} className="h-6 pl-1 pr-2 rounded-full bg-chip hover:bg-hover text-xs inline-flex items-center gap-1.5" title={deeper ? "Working in a sub-thread" : "Working in this thread"}>
+      <span className="flex">
+        {agents.slice(0, 3).map((a, i) => (
+          <span key={a.id} className={cx("rounded-full ring-2 ring-chip", i > 0 && "-ml-1.5")}>
+            <AgentAvatar agent={a} size={16} live interactive={false} />
+          </span>
+        ))}
+      </span>
+      <span className="size-1.5 rounded-full bg-ok animate-pulse" aria-hidden />
+      <span>
+        <span className="font-medium">{who}</span> {agents.length === 1 ? "is" : "are"} working{deeper ? " in a sub-thread" : ""}
+      </span>
+    </button>
   );
 }
 
@@ -1296,8 +1367,10 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
   const [nobodyAsked, setNobodyAsked] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const working = Object.values(live).filter((r) => r.channelId === channelId);
+  // in a thread, who's working in it (or a sub-thread of it); at the top, everyone in the channel
+  const working = Object.values(live).filter((r) => r.channelId === channelId && (!threadId || r.threadId === threadId || r.threadPath.includes(threadId)));
   const channel = useStore((s) => s.channels.find((c) => c.id === channelId));
+  const leads = channel?.kind === "channel" ? (channel.settings.team?.nodes ?? []).filter((n) => n.lead).map((n) => agents.find((a) => a.id === n.agentId)).filter((a): a is Agent => !!a) : [];
 
   // a quiet line about where this will land: no mention in a channel, or an offline agent that was asked
   const mentioned = text.trim() ? parseMentions(text).map((h) => agents.find((a) => a.handle === h)).filter((a): a is Agent => !!a) : [];
@@ -1308,13 +1381,15 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
     ? `${offline.name} is offline; it will answer when its device reconnects.`
     : // in a thread, a plain reply can go back to the agent that started it, so only say this at the top level
       channel && channel.kind !== "dm" && !threadId && text.trim() && !mentioned.length
-      ? answerer
+      ? leads.length
+        ? `${leads.map((a) => a.name).join(" and ")} ${leads.length > 1 ? "will plan it together, then hand out the work" : "will take it and hand out the work"}.`
+        : answerer
         ? `${answerer.name} will answer. @mention another agent to ask them instead.`
         : `Posting to #${channel.name}. @mention an agent to ask it.`
       : null;
 
   // a "ask someone" shortcut for the hint line, in channels (not DMs or threads) that have agents and nobody answering by default
-  const canAsk = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !mentioned.length && !answerer;
+  const canAsk = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !mentioned.length && !answerer && !leads.length;
   function ask() {
     if (agents.length === 1) {
       const m = `@${agents[0].handle}`;
@@ -1393,7 +1468,7 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
     if (!text.trim() && !files.length) return;
     const body = text;
     const attached = files;
-    const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !answerer && !parseMentions(body).length;
+    const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !answerer && !leads.length && !parseMentions(body).length;
     setNobodyAsked(false);
     setText("");
     setFiles([]);
@@ -1430,7 +1505,7 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
       {/* who's working here and on what (Buzz's activity bar); Stop and details are in its popover */}
       {working.length > 0 && (
         <div className="pb-2 flex">
-          <ActivityPill runs={working} onDetails={(id) => (onDetails ? onDetails(id) : go({ view: "agents", agentId: id, tab: "overview" }))} />
+          <ActivityPill runs={working} onDetails={(id) => (onDetails ? onDetails(id) : go({ view: "agents", agentId: id, tab: "overview" }))} onThread={(id) => go({ view: "chat", channelId, threadId: id })} hereThread={threadId ?? null} />
         </div>
       )}
       {/* the message box floats on glass, like the iPhone app's */}

@@ -323,7 +323,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { owner: true });
     if (!c) return;
     const body = parse(
-      z.object({ askBefore: z.array(z.enum(ASK_BEFORE)), maxHops: z.number().int().min(1).max(30), maxRunsPerMinute: z.number().int().min(1).max(200), defaultAccess: z.enum(["read-only", "edit", "full"]) }).partial(),
+      z.object({ askBefore: z.array(z.enum(ASK_BEFORE)), maxHops: z.number().int().min(1).max(30), maxRunsPerMinute: z.number().int().min(1).max(200), defaultAccess: z.enum(["read-only", "edit", "full"]), leadsCreateAgents: z.boolean(), subAgents: z.boolean(), maxAgentMade: z.number().int().min(1).max(50) }).partial(),
       req.body,
       reply,
     );
@@ -332,6 +332,9 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (body.maxHops) store.setSetting(c.workspaceId, "agents.maxHops", String(body.maxHops));
     if (body.maxRunsPerMinute) store.setSetting(c.workspaceId, "agents.maxRunsPerMinute", String(body.maxRunsPerMinute));
     if (body.defaultAccess) store.setSetting(c.workspaceId, "agents.defaultAccess", body.defaultAccess);
+    if (body.leadsCreateAgents !== undefined) store.setSetting(c.workspaceId, "agents.leadsCreateAgents", String(body.leadsCreateAgents));
+    if (body.subAgents !== undefined) store.setSetting(c.workspaceId, "agents.subAgents", String(body.subAgents));
+    if (body.maxAgentMade) store.setSetting(c.workspaceId, "agents.maxAgentMade", String(body.maxAgentMade));
     return agentPolicy(hub, c.workspaceId);
   });
 

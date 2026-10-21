@@ -24,6 +24,7 @@ import {
   pickReviewer,
   teamChain,
   wouldLoop,
+  teamProblem,
   type AccessRule,
   type Actor,
   type MemoryLevel,
@@ -49,6 +50,7 @@ import { registerPairingApi } from "./pairing.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
+import { spawnRight } from "./spawn.ts";
 import { workspaceFeatures } from "./features.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
 
@@ -74,7 +76,8 @@ const APPEARANCE = z
     shape: z.enum(GHOST_SHAPES),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a #rrggbb color"),
     color2: z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a #rrggbb color").optional(),
-    glow: z.boolean(),
+    // glow was removed; older clients may still send it
+    glow: z.boolean().optional(),
     eyes: z.enum(GHOST_EYES),
     mouth: z.enum(GHOST_MOUTHS),
     cheeks: z.boolean(),
@@ -449,9 +452,25 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
    * How agents behave in a channel. The default agent must be in the workspace; it's added to the
    * channel so it shows up among the members it answers for.
    */
-  const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000) }).partial();
-  const checkSettings = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined) =>
-    !settings?.defaultAgentId || store.agent(settings.defaultAgentId)?.workspaceId === c.workspaceId;
+  const CHANNEL_TEAM = z.object({
+    nodes: z.array(z.object({ agentId: z.string().min(1), lead: z.boolean(), x: z.number().finite(), y: z.number().finite() })).max(50),
+    edges: z.array(z.object({ from: z.string().min(1), to: z.string().min(1) })).max(200),
+  });
+  const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000), team: CHANNEL_TEAM.nullable() }).partial();
+  const ours = (c: Caller, agentId: string) => store.agent(agentId)?.workspaceId === c.workspaceId;
+  /** What's wrong with the settings (an agent from elsewhere, a chart that doesn't work), or null. */
+  const settingsProblem = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined): string | null => {
+    if (settings?.defaultAgentId && !ours(c, settings.defaultAgentId)) return "agent not found";
+    const team = settings?.team;
+    if (!team) return null;
+    if (team.nodes.some((n) => !ours(c, n.agentId))) return "agent not found";
+    return teamProblem(team);
+  };
+  /** Everyone on a channel's team (and the agent that answers there) is in the channel. */
+  const joinTeam = (channelId: string, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined) => {
+    for (const n of settings?.team?.nodes ?? []) store.addChannelMember(channelId, { kind: "agent", id: n.agentId });
+    if (settings?.defaultAgentId) store.addChannelMember(channelId, { kind: "agent", id: settings.defaultAgentId });
+  };
   /** Channels that can't be archived, made private or deleted: where everyone lands, and a team's own. */
   const protectedReason = (c: Caller, ch: { id: string; name: string }, what: string) => {
     if (ch.name === "general") return `#general can't be ${what}: everyone in the workspace lands there`;
@@ -469,14 +488,15 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.name && body.name !== ch.name && store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.name && body.name !== ch.name && ch.name === "general") return reply.code(409).send({ error: "#general can't be renamed: everyone in the workspace lands there" });
-    if (!checkSettings(c, body.settings)) return reply.code(400).send({ error: "agent not found" });
+    const problem = settingsProblem(c, body.settings);
+    if (problem) return reply.code(400).send({ error: problem });
     if (body.private && !ch.private) {
       const why = protectedReason(c, ch, "made private");
       if (why) return reply.code(409).send({ error: why });
       // making it private keeps you in it, so you don't lock yourself out
       if (c.actor.kind === "user") store.addChannelMember(ch.id, c.actor);
     }
-    if (body.settings?.defaultAgentId) store.addChannelMember(ch.id, { kind: "agent", id: body.settings.defaultAgentId });
+    joinTeam(ch.id, body.settings);
     const updated = store.updateChannel(ch.id, body);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return updated;
@@ -786,14 +806,15 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!body) return;
     if (store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
-    if (!checkSettings(c, body.settings)) return reply.code(400).send({ error: "agent not found" });
+    const problem = settingsProblem(c, body.settings);
+    if (problem) return reply.code(400).send({ error: problem });
     const members = body.members.filter((m) => (m.kind === "user" ? !!store.role(c.workspaceId, m.id) : store.agent(m.id)?.workspaceId === c.workspaceId));
     if (members.length !== body.members.length) return reply.code(400).send({ error: "someone to add isn't in this workspace" });
     const created = store.createChannel(c.workspaceId, body.name, "channel", body.topic);
     const ch = store.updateChannel(created.id, { sectionId: body.sectionId ?? null, private: body.private, settings: body.settings ?? {} })!;
     store.addChannelMember(ch.id, c.actor);
     for (const m of members) store.addChannelMember(ch.id, m as Actor);
-    if (ch.settings.defaultAgentId) store.addChannelMember(ch.id, { kind: "agent", id: ch.settings.defaultAgentId });
+    joinTeam(ch.id, ch.settings);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return ch;
   });
@@ -813,7 +834,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     const q = req.query as { thread?: string; before?: string; limit?: string };
     const messages = store.withReactions(store.messages(ch.id, { threadId: q.thread, before: q.before, limit: limitParam(q.limit, 50, 200) }));
-    return { messages, replyCounts: q.thread ? {} : store.replyCounts(messages.map((m) => m.id)) };
+    // replies in a thread can have sub-threads of their own
+    return { messages, replyCounts: store.replyCounts(messages.filter((m) => m.id !== q.thread).map((m) => m.id)) };
   });
 
   app.post("/api/channels/:id/messages", async (req, reply) => {
@@ -826,11 +848,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!body) return;
     const files = body.fileIds.map((fid) => store.file(fid)).filter((f) => f && f.workspaceId === c.workspaceId);
     if (!body.body.trim() && !files.length) return reply.code(400).send({ error: "empty message" });
-    let threadId = body.threadId ?? null;
+    // any message can start a thread, a reply in a thread too (a sub-thread)
+    const threadId = body.threadId ?? null;
     if (threadId) {
       const root = store.message(threadId);
       if (!root || root.channelId !== ch.id) return reply.code(400).send({ error: "thread not in channel" });
-      threadId = root.threadId ?? root.id;
     }
     // An agent posting mid-run continues that run's hop count so loops stay bounded.
     let hop = 0;
@@ -856,6 +878,73 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply);
     if (!c) return;
     return store.agents(c.workspaceId).map(agentView);
+  });
+
+  /**
+   * An agent makes an agent: a lead creating someone its team needs, or an agent a lead made
+   * making a sub-agent (Settings → Agents switches both on; spawnRight says who may). The new agent
+   * uses the organization's defaults, answers the person its maker works for, and joins the chart
+   * of the channel its maker is working in, under its maker.
+   */
+  app.post("/api/agents/spawn", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only; people use New agent" });
+    const maker = store.agent(c.actor.id);
+    if (!maker) return reply.code(404).send({ error: "agent not found" });
+    const body = parse(z.object({ name: z.string().trim().min(1).max(80), handle: HANDLE.optional(), role: z.string().max(60).default(""), instructions: z.string().max(20_000).default("") }), req.body, reply);
+    if (!body) return;
+    const right = spawnRight(hub, maker);
+    if (!("kind" in right)) return reply.code(403).send({ error: right.why });
+    let handle = body.handle ?? (body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 28) || "agent");
+    if (!/^[a-z]/.test(handle)) handle = `a-${handle}`.slice(0, 32);
+    for (let n = 2; store.agentByHandle(c.workspaceId, handle); n++) handle = `${handle.replace(/-\d+$/, "")}-${n}`;
+    const defaults = agentDefaults(store, c.workspaceId);
+    const harness = defaults.harness ?? maker.harness;
+    // a person's device only when it's shared, or theirs and this is their work; else where its maker runs
+    const requester = requesterOf(c) ?? maker.settings.createdBy ?? null;
+    const node = defaults.nodeId ? store.node(defaults.nodeId) : undefined;
+    const nodeId = node && (node.shared || !node.ownerId || node.ownerId === requester) ? node.id : maker.nodeId;
+    const policy = agentPolicy(hub, c.workspaceId);
+    let settings: Record<string, unknown> = {
+      respondTo: "me",
+      access: policy.defaultAccess,
+      ...(requester ? { createdBy: requester } : {}),
+      parentAgentId: maker.id,
+      madeDepth: right.depth,
+      ...(body.role.trim() ? { role: body.role.trim() } : {}),
+    };
+    let computerId: string | null = null;
+    const caps = nodeId ? store.nodeCapabilities(nodeId) : null;
+    if (defaults.computer === "own-vm" && nodeId && caps?.vm.ok) {
+      const size = VM_SIZES[computerDefaults(hub, c.workspaceId).vmSize];
+      const comp = store.createComputer({ workspaceId: c.workspaceId, name: `${body.name}'s computer`.slice(0, 80), kind: "vm", nodeId, config: { cpus: size.cpus, memoryGb: size.memoryGb }, status: "starting" });
+      hub.computers.startInBackground(comp);
+      computerId = comp.id;
+      settings = { runIn: "computer", ...settings };
+    } else if (defaults.computer === "none") settings = { headless: true, ...settings };
+    const created = store.createAgent({ workspaceId: c.workspaceId, handle, name: body.name, harness, model: harness === defaults.harness ? defaults.model : maker.model, nodeId: nodeId ?? null, computerId, instructions: body.instructions, groups: [] });
+    const agent = store.updateAgent(created.id, { settings: settings as never })!;
+    const general = store.channelByName(c.workspaceId, "general");
+    if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
+    await vaultOf(c).write(soulPath(agent.id), soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
+    // it joins the chart of the channel its maker is working in, under its maker
+    const run = hub.currentRun(maker.id);
+    const ch = run ? store.channel(run.channelId) : undefined;
+    const team = ch?.settings.team;
+    const above = team?.nodes.find((n) => n.agentId === maker.id);
+    if (ch && team && above) {
+      // the first free spot on the row under its maker, so it doesn't land on another card
+      const y = above.y + 132;
+      let x = above.x;
+      while (team.nodes.some((n) => Math.abs(n.y - y) < 64 && Math.abs(n.x - x) < 196)) x += 212;
+      store.updateChannel(ch.id, { settings: { team: { nodes: [...team.nodes, { agentId: agent.id, lead: false, x, y }], edges: [...team.edges, { from: maker.id, to: agent.id }] } } });
+      store.addChannelMember(ch.id, { kind: "agent", id: agent.id });
+      hub.broadcast(c.workspaceId, { type: "channels_changed" });
+    }
+    if (run && ch) hub.postMessage({ channelId: ch.id, threadId: run.threadId, author: { kind: "user", id: "system" }, body: "", parts: [{ type: "notice", text: `@${maker.handle} made ${right.kind === "agent" ? "a new agent" : "a sub-agent"}: @${agent.handle}${body.role.trim() ? ` (${body.role.trim()})` : ""}` }], route: false });
+    hub.broadcast(c.workspaceId, { type: "agents_changed" });
+    return agentView(agent);
   });
 
   app.post("/api/agents", async (req, reply) => {
@@ -1320,6 +1409,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     reviewOf?: string | null;
     /** the task this is a piece of */
     parentId?: string | null;
+    /** post the hand-off inside this thread, so the task's own thread is a sub-thread of it */
+    threadId?: string | null;
     /** the person this work is for */
     onBehalfOf: string | null;
   }) {
@@ -1332,6 +1423,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const files = (o.fileIds ?? []).map((f) => store.file(f)).filter((f) => f && f.workspaceId === o.workspaceId);
     const msg = hub.postMessage({
       channelId: o.channelId,
+      threadId: o.threadId ?? null,
       author: o.author,
       body: `@${o.target.handle} New task **${task.title}**\n\n${task.brief}`,
       parts: [{ type: "task" as const, taskId: task.id }, ...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name }))],
@@ -1379,10 +1471,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       c.actor.kind === "agent"
         ? teams.find((t) => t.channelId && t.members.some((m) => m.agentId === target.id) && (t.members.some((m) => m.agentId === c.actor.id) || teamChain(t, teams).includes(c.actor.id)))
         : undefined;
+    // an agent handing work to a teammate on the chart of the channel it's working in keeps it
+    // there, as a sub-thread of the thread it's in
+    const here = !body.channelId && running ? store.channel(running.channelId) : undefined;
+    const onChart = here?.kind === "channel" && here.settings.team?.nodes.some((n) => n.agentId === target.id) && here.settings.team.nodes.some((n) => n.agentId === c.actor.id) ? here : undefined;
     // a person's task for a team goes to its channel; for one agent, to their DM with it
     const ch = body.channelId
       ? channelVisible(c, body.channelId)
-      : shared
+      : onChart
+        ? onChart
+        : shared
         ? store.channel(shared.channelId!)
         : forTeam?.channelId
           ? store.channel(forTeam.channelId)
@@ -1390,7 +1488,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
             ? store.dmChannel(c.workspaceId, c.actor.id, target.id)
             : store.channelByName(c.workspaceId, "general");
     if (!ch) return reply.code(404).send({ error: "channel not found" });
-    return delegate({ workspaceId: c.workspaceId, author: c.actor, from: c.actor, target, title: body.title, brief: body.brief, channelId: ch.id, fileIds: body.fileIds, hop: running ? running.hop + 1 : 0, parentId: parent?.id ?? null, onBehalfOf: requesterOf(c) });
+    const threadId = onChart && running?.threadId && store.message(running.threadId)?.channelId === ch.id ? running.threadId : null;
+    return delegate({ workspaceId: c.workspaceId, author: c.actor, from: c.actor, target, title: body.title, brief: body.brief, channelId: ch.id, fileIds: body.fileIds, hop: running ? running.hop + 1 : 0, parentId: parent?.id ?? null, threadId, onBehalfOf: requesterOf(c) });
   });
 
   /**
@@ -1449,12 +1548,15 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const parent = task.parentId ? store.task(task.parentId) : undefined;
       const siblings = parent ? store.subtasks(parent.id) : [];
       const progress = parent ? `\n\nPart of **${parent.title}** (\`${parent.id}\`): ${siblings.filter((t) => t.status === "done").length}/${siblings.length} subtasks done.` : "";
+      // a hand-off in a sub-thread reports back in the thread it came from, where the lead and the person are
+      const above = task.threadId ? (store.message(task.threadId)?.threadId ?? null) : null;
       // Mentioning the requesting agent hands the result back to it.
       hub.postMessage({
         channelId: task.channelId,
-        threadId: task.threadId,
+        threadId: above ?? task.threadId,
         author: c.actor,
         body: `${requester}Task **${task.title}** ${body.status === "done" ? "is done" : "failed"}.${body.result ? `\n\n${body.result}` : ""}${progress}`,
+        ...(above ? { parts: [{ type: "task" as const, taskId: task.id }] } : {}),
         hop: 1,
         route: task.from.kind === "agent",
         onBehalfOf: requesterOf(c),

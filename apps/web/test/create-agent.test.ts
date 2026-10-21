@@ -21,8 +21,8 @@ describe("add agent onboarding", () => {
     expect(html).toContain("Shuffle");
     expect(html).toContain("Edit look");
     expect(html).toContain("What it does");
-    expect(html).toContain("Start from");
-    expect(html).toContain("Blank");
+    // templates live on their own page now, not in this form
+    expect(html).not.toContain("Start from");
     expect(html).toContain("Instructions");
     expect(html).toContain("AI and computer");
     expect(html).toContain("Use my defaults");

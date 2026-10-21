@@ -50,6 +50,7 @@ describe("warren-mcp", () => {
   it("exposes the tool set", async () => {
     const names = (await mcp.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([
+      "agent_create",
       "agents_list",
       "approval_request",
       "branch_merge",
