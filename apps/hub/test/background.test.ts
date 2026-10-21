@@ -157,6 +157,33 @@ describe("background work", () => {
     await idle();
   });
 
+  it("doesn't count, list or date a check until its device starts it, and drops one that's turned off while waiting", async () => {
+    // a started check shows in Runs under a readable name
+    const runs = await owner.request("GET", `/api/agents/${agentId}/runs?limit=50`);
+    expect(runs.some((r: { trigger: string | null; status: string }) => r.trigger === "Background check · Dot" && r.status === "done")).toBe(true);
+    expect(runs.some((r: { trigger: string | null }) => r.trigger === null)).toBe(false);
+
+    // an agent whose device isn't connected
+    const { node } = await owner.request("POST", "/api/nodes", { name: "laptop" });
+    const sleepyId = (await owner.request("POST", "/api/agents", { handle: "ivy", name: "Ivy", harness: "custom", nodeId: node.id })).id;
+    await owner.request("PUT", `/api/agents/${sleepyId}/background`, { enabled: true });
+    const state = await owner.request("GET", `/api/agents/${sleepyId}/background`);
+    // the check is waiting, but it hasn't happened yet
+    expect(state.background.checking).toBe(true);
+    expect(state.background.lastAt).toBeNull();
+    expect(state.usage.checksToday).toBe(0);
+    expect(await owner.request("GET", `/api/agents/${sleepyId}/runs`)).toEqual([]);
+    expect(hub.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE agent_id = ? AND status = 'queued'").get(sleepyId)).toEqual({ n: 1 });
+
+    // turned off before the device ever took it: as if it never was
+    await owner.request("PUT", `/api/agents/${sleepyId}/background`, { enabled: false });
+    const off = await owner.request("GET", `/api/agents/${sleepyId}/background`);
+    expect(off.background.checking).toBe(false);
+    expect(off.background.lastAt).toBeNull();
+    expect(off.usage.checksToday).toBe(0);
+    expect(hub.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE agent_id = ?").get(sleepyId)).toEqual({ n: 0 });
+  });
+
   it("waits out quiet hours instead of checking", () => {
     const b = hub.store.setBackground(agentId, me, { quietStart: "00:00", quietEnd: "23:59", nextAt: null });
     const n = calls.length;

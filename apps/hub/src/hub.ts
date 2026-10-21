@@ -452,9 +452,9 @@ export class Hub {
         continue;
       }
       const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop, requestedBy });
-      if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a node yet. The request is queued.`);
-      else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its node reconnects.`);
-      else if (this.isNodePaused(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)}'s device is paused. The request is queued until it's resumed there.`);
+      // a note under the message while the request waits; it goes away once the run starts
+      const waiting = !agent.nodeId ? " isn't connected to a node yet. The request is queued" : !this.isNodeOnline(agent.nodeId) ? " is offline. The request is queued until its node reconnects" : this.isNodePaused(agent.nodeId) ? "'s device is paused. The request is queued until it's resumed there" : null;
+      if (waiting) this.postSystem(msg, `${this.handleOf(agentId)}${waiting}.`);
       this.dispatchRun(runId);
     }
   }
@@ -463,6 +463,19 @@ export class Hub {
     const channel = this.store.channel(near.channelId)!;
     const sys = this.store.insertMessage({ channelId: near.channelId, threadId: near.threadId, author: { kind: "user", id: "system" }, body: "", parts: [{ type: "status", text }], hop: near.hop });
     this.broadcast(channel.workspaceId, { type: "message", message: sys }, this.audience(channel.id));
+    return sys;
+  }
+
+  /** The "queued until its device reconnects" note under a message no longer applies once its run starts. */
+  private dropWaitingNotice(run: { channelId: string; threadId: string | null; triggerMessageId: string }, agent: Agent) {
+    const trigger = run.triggerMessageId ? this.store.message(run.triggerMessageId) : undefined;
+    if (!trigger) return;
+    const isWaiting = (text: string) => (text.startsWith(`@${agent.handle} `) || text.startsWith(`@${agent.handle}'s `)) && text.includes("The request is queued");
+    for (const sys of this.store.systemNotices(trigger.channelId, trigger.threadId, trigger.createdAt)) {
+      if (!sys.parts.some((p) => p.type === "status" && isWaiting(p.text))) continue;
+      this.store.deleteMessage(sys.id);
+      this.broadcast(agent.workspaceId, { type: "message_removed", messageId: sys.id, channelId: sys.channelId, threadId: sys.threadId }, this.audience(sys.channelId));
+    }
   }
 
   /** Send a queued run to its agent's device (if it's online; otherwise it waits until the device connects). */
@@ -475,6 +488,8 @@ export class Hub {
     // mark it running before the (async) prompt build so it can't be dispatched twice
     this.store.setRunStatus(run.id, "running");
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
+    if (run.kind === "background") this.background.started(run);
+    else this.dropWaitingNotice(run, agent);
     // like a teammate saying "on it": the agent marks the message it picked up
     if (run.kind !== "background") this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
     // working again, so an earlier "needs you on my computer" no longer stands

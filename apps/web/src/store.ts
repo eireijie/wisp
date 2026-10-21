@@ -290,6 +290,13 @@ export const useStore = create<State>((set, get) => ({
         }));
         if (get().activeChannel === m.channelId && !mine) get().markRead(m.channelId);
       }
+    } else if (e.type === "message_removed") {
+      const drop = (list: Message[] | undefined) => list?.filter((m) => m.id !== e.messageId);
+      set((s) => ({
+        messages: s.messages[e.channelId] ? { ...s.messages, [e.channelId]: drop(s.messages[e.channelId])! } : s.messages,
+        threads: e.threadId && s.threads[e.threadId] ? { ...s.threads, [e.threadId]: drop(s.threads[e.threadId])! } : s.threads,
+        replyCounts: e.threadId && s.replyCounts[e.threadId] ? { ...s.replyCounts, [e.threadId]: Math.max(0, s.replyCounts[e.threadId] - 1) } : s.replyCounts,
+      }));
     } else if (e.type === "reactions") {
       set((s) => applyReactions(s, e.messageId, e.reactions));
     } else if (e.type === "channels_changed") {

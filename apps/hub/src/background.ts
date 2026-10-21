@@ -141,14 +141,36 @@ export class Background {
     if (!agent || !store.user(userId) || this.hub.whyNotAllowed(agent, userId)) return null;
     if (this.checking(agentId, userId)) return null;
     const channel = store.dmChannel(agent.workspaceId, userId, agentId);
+    // queued until its device takes it: not a check yet, so it isn't counted, listed or shown as "last checked"
     const runId = store.createRun({ agentId, channelId: channel.id, threadId: null, triggerMessageId: "", hop: 0, requestedBy: userId, kind: "background" });
     this.pendingFollowups.set(runId, followups);
-    const b = store.background(agentId, userId);
-    // the default pace until the agent says otherwise during the check
-    if (b) store.setBackground(agentId, userId, { lastAt: at.toISOString(), nextAt: new Date(at.getTime() + b.everyMinutes * 60_000).toISOString(), nextReason: "" });
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId });
     this.hub.dispatchRun(runId);
     return runId;
+  }
+
+  /** The device took the check: now it counts as one, and "last checked" is now. */
+  started(run: { id: string; agentId: string; requestedBy: string | null }, at = new Date()) {
+    const { store } = this.hub;
+    const agent = store.agent(run.agentId);
+    if (!agent || !run.requestedBy) return;
+    const b = store.background(run.agentId, run.requestedBy);
+    // the default pace until the agent says otherwise during the check
+    if (b) store.setBackground(run.agentId, run.requestedBy, { lastAt: at.toISOString(), nextAt: new Date(at.getTime() + b.everyMinutes * 60_000).toISOString(), nextReason: "" });
+    this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId: agent.id });
+  }
+
+  /** Turned off while a check was still waiting for its device: that check never happens. */
+  turnedOff(agentId: string, userId: string) {
+    const { store } = this.hub;
+    const queued = store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND kind = 'background' AND requested_by = ? AND status = 'queued'").all(agentId, userId) as { id: string }[];
+    for (const r of queued) {
+      // a check that carries follow-ups the agent promised still goes ahead
+      if (this.pendingFollowups.get(r.id)?.length) continue;
+      if (store.deleteQueuedRun(r.id)) this.pendingFollowups.delete(r.id);
+    }
+    const agent = store.agent(agentId);
+    if (agent) this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId });
   }
 
   private pendingFollowups = new Map<string, Followup[]>();

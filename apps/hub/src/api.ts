@@ -615,7 +615,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       return {
         ...r,
         channelName: hidden ? null : r.channelName,
-        trigger: hidden ? null : (r.trigger?.slice(0, 280) ?? null),
+        // a background check has no message behind it, so it's named for what it is
+        trigger: r.kind === "background" ? `Background check · ${agent.name}` : hidden ? null : (r.trigger?.slice(0, 280) ?? null),
         // a failure in plain words when it's a known one (the harness needs signing in on its device)
         hint: r.status === "failed" && r.error ? (hub.explainFailure(agent, r.error) !== r.error ? hub.explainFailure(agent, r.error) : null) : null,
       };
