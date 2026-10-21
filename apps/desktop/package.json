@@ -49,6 +49,7 @@
     "linux": {
       "icon": "build/icon.png",
       "executableName": "warren",
+      "maintainer": "Warren contributors <warren@localhost>",
       "target": [
         "AppImage",
         "deb"
