@@ -11,12 +11,12 @@ describe("settings navigation", () => {
     const groups = settingsNav(false, false);
     expect(groups.map((g) => g.group)).toEqual(["You", "Organization"]);
     expect(groups[0].pages.map((p) => p.id)).toEqual(["profile", "preferences", "appearance", "notifications", "voice", "security", "mobile"]);
-    expect(groups[1].pages.map((p) => p.id)).toEqual(["general", "agent-defaults", "agents", "computers", "memory", "apps", "features", "people", "runtimes", "connections", "data", "updates"]);
+    expect(groups[1].pages.map((p) => p.id)).toEqual(["general", "access", "agent-defaults", "agents", "computers", "memory", "apps", "features", "people", "runtimes", "connections", "data", "updates"]);
   });
 
   it("moves agent runtimes and connections under Advanced at the bottom in Simple", () => {
     expect(ids(settingsNav(true, false)).slice(1)).toEqual([
-      ["Organization", ["general", "agent-defaults", "agents", "computers", "memory", "apps", "features", "people", "data", "updates"]],
+      ["Organization", ["general", "access", "agent-defaults", "agents", "computers", "memory", "apps", "features", "people", "data", "updates"]],
       ["Advanced", ["runtimes", "connections"]],
     ]);
   });

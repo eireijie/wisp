@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, Plug, RefreshCw, Shield, SlidersHorizontal, Smartphone, ToggleRight, User, Users, Wand2 } from "lucide-react";
+import { Bell, Globe, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, Plug, RefreshCw, Shield, SlidersHorizontal, Smartphone, ToggleRight, User, Users, Wand2 } from "lucide-react";
 import { resolveFeatures, type Features } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -16,6 +16,7 @@ import { MobilePage } from "./settings/mobile.tsx";
 import { FeaturesPage } from "./settings/features.tsx";
 import { AgentDefaultsPage } from "./settings/defaults.tsx";
 import { ConnectorsView } from "./ConnectorsView.tsx";
+import { AccessPanel } from "../components/Access.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /**
@@ -41,6 +42,7 @@ const NAV: NavGroup[] = [
     group: "Organization",
     pages: [
       { id: "general", label: "General", icon: <Building2 size={16} /> },
+      { id: "access", label: "Access", icon: <Globe size={16} /> },
       { id: "agent-defaults", label: "Agent defaults", icon: <Wand2 size={16} />, noGuests: true },
       { id: "agents", label: "Agents", icon: <Bot size={16} />, noGuests: true },
       { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
@@ -81,6 +83,12 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   security: () => <SecurityPage />,
   mobile: () => <MobilePage />,
   general: () => <GeneralPage />,
+  access: () => (
+    <>
+      <PageHeader title="Access">Use Warren from anywhere: on your phone, at work, or from a friend's computer. Tailscale gives it a private address that only your own devices can open.</PageHeader>
+      <AccessPanel />
+    </>
+  ),
   "agent-defaults": () => <AgentDefaultsPage />,
   features: () => <FeaturesPage />,
   people: () => <PeoplePage />,

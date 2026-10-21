@@ -1,3 +1,4 @@
+import { watchLocalDevice } from "./local-device.ts";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -59,6 +60,8 @@ export async function buildHub(opts: HubOptions) {
     restart: () => app.close().then(() => process.exit(RESTART_CODE)),
   });
   registerVaultGit(app, hub, { dataDir: path.resolve(opts.dataDir) });
+  // the hub's own computer becomes a device once someone asks for it and there's an owner
+  const stopLocalDevice = watchLocalDevice(hub, path.resolve(opts.dataDir));
 
   if (opts.webDir && fs.existsSync(opts.webDir)) {
     // wildcard serving picks up rebuilt assets without a restart
@@ -80,6 +83,7 @@ export async function buildHub(opts: HubOptions) {
 
   app.addHook("preClose", async () => {
     stopWatching();
+    stopLocalDevice();
     await hub.shutdown();
   });
   app.addHook("onClose", async () => {

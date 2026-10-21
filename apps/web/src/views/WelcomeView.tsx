@@ -1,3 +1,6 @@
+import { AccessPanel } from "../components/Access.tsx";
+import { onPublicAddress, originReach, shareOrigin, skipAccess, useAccess } from "../access.ts";
+import { RELEASES, desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, FileText, KeyRound, Laptop, Loader2, MessageSquareText, Monitor, Plus, Server, Smartphone, Sparkles, TerminalSquare, UtensilsCrossed, Users } from "lucide-react";
 import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@warren/core";
@@ -23,7 +26,7 @@ import { AgentAvatar, Button, CopyBlock, DeviceInstall, cx } from "../components
  * actually happened (a device connected, an agent replied), so it picks up where you left off.
  */
 
-const LABELS: Record<StepId, string> = { device: "Device", role: "Its job", agent: "Agent", harness: "Harness", hello: "First task" };
+const LABELS: Record<StepId, string> = { anywhere: "Anywhere", device: "Device", role: "Its job", agent: "Agent", harness: "Harness", hello: "First task" };
 
 /** "intro" comes before step 1 and is not a numbered step: it only shows for a new account, or when asked for. */
 type Screen = StepId | "intro" | "done";
@@ -112,6 +115,15 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
           ) : (
             <div key={screen} className="wizard-in">
               {screen === "intro" && <IntroScreen onContinue={startSetup} />}
+              {screen === "anywhere" && (
+                <AnywhereScreen
+                  onNext={(skip) => {
+                    if (skip) skipAccess();
+                    refresh();
+                    next("anywhere");
+                  }}
+                />
+              )}
               {screen === "device" && (
                 <DeviceScreen
                   usable={usable}
@@ -166,6 +178,29 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Step 1: give Warren an address that works from anywhere (Tailscale), before adding devices and phones. */
+function AnywhereScreen({ onNext }: { onNext: (skip: boolean) => void }) {
+  const access = useAccess(3000);
+  const ready = !!access?.publicUrl || onPublicAddress();
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Use Warren from anywhere</h1>
+        <p className="mt-1.5 text-[15px] text-muted">Your agents work on your devices, and you'll want to reach them from your phone or another computer, not just this Wi-Fi. Tailscale connects them privately; it takes a couple of minutes.</p>
+      </div>
+      <AccessPanel compact={false} />
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" onClick={() => onNext(true)} className="text-sm text-muted hover:text-ink">
+          Only on this Wi-Fi for now
+        </button>
+        <Button variant="primary" disabled={!ready} onClick={() => onNext(false)}>
+          Continue
+        </Button>
       </div>
     </div>
   );
@@ -371,13 +406,15 @@ function guessName(): string {
 /** Device names like "yug-mac" read as one word, so they don't break at the hyphen. */
 const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
-const DMG = "https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64.dmg";
 
 /** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
 function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
   const { inDesktop, info, connect } = useDesktopInfo();
   const [busy, setBusy] = useState(false);
-  const hub = location.origin;
+  useAccess();
+  const hub = shareOrigin();
+  const os = desktopOs();
+  const get = downloadsFor(os);
   if (inDesktop)
     return (
       <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
@@ -404,17 +441,20 @@ function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
     );
   return (
     <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
-      <p className="text-sm font-medium">Easiest: download Warren for Mac</p>
+      <p className="text-sm font-medium">Easiest: download the Warren app</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <a className="font-medium underline" href={DMG}>Download for this Mac</a>
-        <a className="text-muted underline" href="https://github.com/eireijie/warren/releases" target="_blank" rel="noreferrer">All releases</a>
+        <a className="font-medium underline" href={get.href}>{get.label}</a>
+        {get.more.map((m) => (
+          <a key={m.href} className="text-muted underline" href={m.href}>{m.label}</a>
+        ))}
+        <a className="text-muted underline" href={RELEASES} target="_blank" rel="noreferrer">All downloads</a>
       </div>
-      <p className="text-xs text-muted">Apple silicon means a Mac from 2020 on with an M1, M2, M3 or M4 chip; older Intel Macs aren't supported yet.</p>
-      <p className="text-sm text-muted">Then open it and choose “Join a server” with this address:</p>
-      <p className="text-xs text-muted">A server is just this Warren; the address below is where it lives.</p>
+      <p className="text-sm text-muted">Then open it, choose “Join a server”, and enter this address:</p>
       <CopyBlock text={hub} />
-      {typeof window !== "undefined" && isLocalOnlyHost(window.location.hostname) && (
-        <p className="text-xs text-muted">This address only works on this computer. On another computer, use this Mac's network address instead (shown in Settings → Updates &amp; about if available; otherwise ask the person who set Warren up).</p>
+      {originReach(hub) !== "anywhere" && (
+        <p className="text-xs text-muted">
+          {originReach(hub) === "this-computer" ? "This address only works on this computer." : "This address only works on this Wi-Fi."} For a computer somewhere else, go back to step 1 and turn on Tailscale.
+        </p>
       )}
     </div>
   );

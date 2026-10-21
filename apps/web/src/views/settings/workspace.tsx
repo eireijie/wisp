@@ -4,6 +4,7 @@ import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
 import { api, getToken } from "../../api.ts";
 import { useStore } from "../../store.ts";
 import { href } from "../../router.ts";
+import { originReach, shareOrigin, useAccess } from "../../access.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, Toggle, useSavedFlash } from "./parts.tsx";
@@ -14,6 +15,7 @@ const useIsOwner = () => useStore((s) => s.me)?.role === "owner";
 
 export function GeneralPage() {
   const me = useStore((s) => s.me)!;
+  const access = useAccess();
   const isOwner = useIsOwner();
   const [name, setName] = useState(me.workspace.name);
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +49,8 @@ export function GeneralPage() {
         </form>
         {error && <p className="mt-2 text-sm text-bad">{error}</p>}
       </Section>
-      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp.">
-        <CopyBlock text={location.origin} />
+      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp. Settings → Access gives it an address that works from anywhere.">
+        <CopyBlock text={shareOrigin(access)} />
       </Section>
     </>
   );
@@ -72,6 +74,7 @@ const ROLE_HINT: Record<string, string> = {
 
 export function PeoplePage() {
   const me = useStore((s) => s.me)!;
+  useAccess();
   const members = useStore((s) => s.members);
   const isOwner = useIsOwner();
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -118,7 +121,7 @@ export function PeoplePage() {
               onClick={() =>
                 run(async () => {
                   const r = await api<Invite & { code: string }>("POST", "/api/invites", { role: inviteRole, days: Number(days) });
-                  setMade({ url: `${location.origin}/#/join/${r.code}`, role: r.role, expiresAt: r.expiresAt });
+                  setMade({ url: `${shareOrigin()}/#/join/${r.code}`, role: r.role, expiresAt: r.expiresAt });
                 })
               }
             >
@@ -131,6 +134,15 @@ export function PeoplePage() {
           {made && (
             <div className="mt-3 space-y-1.5">
               <CopyBlock text={made.url} />
+              {originReach(made.url) !== "anywhere" && (
+                <p className="text-xs text-warn">
+                  {originReach(made.url) === "this-computer" ? "This link only works on this computer." : "This link only works on this Wi-Fi."} To invite someone elsewhere, turn on an address that works from anywhere in{" "}
+                  <a href={href({ view: "settings", page: "access" })} className="underline">
+                    Settings → Access
+                  </a>{" "}
+                  first, then make a new link.
+                </p>
+              )}
               <p className="text-xs text-muted">
                 For a {made.role}, until {new Date(made.expiresAt).toLocaleDateString()}. It's shown only now; make a new one if you lose it.
               </p>

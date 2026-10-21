@@ -12,14 +12,16 @@ describe("setup progress", () => {
     const offline = { ...empty, devices: [{ id: "n", name: "box", online: false, mine: true, role: null }] };
     expect(stepsDone(offline)).toMatchObject({ device: false, role: false });
     const set = { ...empty, devices: [{ id: "n", name: "box", online: true, mine: true, role: "vms" as const }], agents: [{ id: "a" } as Agent] };
-    expect(stepsDone(set)).toEqual({ device: true, role: true, agent: true, harness: true, hello: false });
+    expect(stepsDone(set)).toEqual({ anywhere: false, device: true, role: true, agent: true, harness: true, hello: false });
+    // reachable from anywhere once Tailscale serves the hub
+    expect(stepsDone({ ...set, reachable: true }).anywhere).toBe(true);
   });
 });
 
 describe("setupProgress", () => {
   it("counts finished steps and says when setup is complete", () => {
-    expect(setupProgress(stepsDone(empty))).toEqual({ progress: 0, steps: 5, complete: false });
-    expect(setupProgress({ device: true, role: true, agent: true, harness: true, hello: true })).toMatchObject({ progress: 5, complete: true });
+    expect(setupProgress(stepsDone(empty))).toEqual({ progress: 0, steps: 6, complete: false });
+    expect(setupProgress({ anywhere: true, device: true, role: true, agent: true, harness: true, hello: true })).toMatchObject({ progress: 6, complete: true });
   });
 });
 
