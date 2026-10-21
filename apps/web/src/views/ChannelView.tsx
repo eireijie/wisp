@@ -116,9 +116,9 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             </>
           ) : (
             <div className="min-w-0 flex-1">
-              <div className="font-semibold flex items-center gap-1 text-[15px]">
+              <div className="font-semibold flex items-center gap-1 text-[15px] min-w-0">
                 <ChannelIcon channel={channel} size={16} />
-                {channel.name}
+                <span className="truncate">{channel.name}</span>
                 <button
                   onClick={() => void setChannelPrefs(channel, { starred: !channel.starred })}
                   className={cx("ml-0.5 size-6 rounded-md grid place-items-center hover:bg-hover", channel.starred ? "text-warn" : "text-faint hover:text-ink")}
@@ -225,7 +225,8 @@ function MemberStack({ channel, open, onClick }: { channel: ChannelInfo; open: b
       {faces.length > 0 ? (
         <span className="flex">
           {faces.map((m, i) => (
-            <span key={`${m.kind}:${m.id}`} className={cx("rounded-full ring-2 ring-panel bg-panel", i > 0 && "-ml-1.5")}>
+            // one face on a phone, so the channel's name and who leads it keep their room
+            <span key={`${m.kind}:${m.id}`} className={cx("rounded-full ring-2 ring-panel bg-panel", i > 0 && "-ml-1.5 max-sm:hidden")}>
               {m.kind === "agent" ? <AgentAvatar agent={agents.find((a) => a.id === m.id) ?? { name: m.name, handle: m.handle ?? undefined, harness: "custom" }} size={20} interactive={false} /> : <UserAvatar name={m.name} size={20} />}
             </span>
           ))}
