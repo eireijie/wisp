@@ -1,0 +1,85 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Connectors" [level=1]
+  - button "Add your own":
+    - generic: Add your own
+  - paragraph: Connect the apps you use, so agents can work in them and keep an eye on them for you. Search thousands of MCP servers, sign in, and pick which agents get each.
+  - searchbox "Search apps and MCP servers": Gmail
+  - region "Connected 0":
+    - heading "Connected 0" [level=2]
+    - generic: Nothing connected yet. Pick one from the catalog below, or add your own.
+  - button "Marketplace"
+  - button "Warren's catalog" [active]
+  - region "Ones Warren knows well, with what each needs.":
+    - heading "Ones Warren knows well, with what each needs." [level=2]
+    - button "All"
+    - button "Code"
+    - button "Chat & docs"
+    - button "Work tracking"
+    - button "Data"
+    - button "Web & browser"
+    - button "Payments"
+    - button "Utilities"
+    - button "Cloud keys"
+    - paragraph: Nothing in the catalog matches. You can still add your own.

@@ -1,0 +1,144 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Notifications" [level=1]:
+    - text: Settings
+    - generic: / Notifications
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications" [active]:
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Notifications" [level=2]
+    - paragraph: Get a notification when something needs you. These settings are for this device and browser.
+    - heading "Push notifications" [level=3]
+    - paragraph: "Agents reach you here even when Warren is closed: when one writes to you, or wants your OK before it sends something."
+    - text: Push to this device
+    - generic: Off. Your browser will ask for permission.
+    - switch "Push to this device"
+    - heading "While Warren is open" [level=3]
+    - text: Notifications on this device
+    - generic: Off. Your browser will ask for permission.
+    - button "Turn on"
+    - heading "Tell me about" [level=3]
+    - paragraph: Turn notifications on to choose.
+    - generic: Direct messages
+    - generic: An agent writes to you in a DM.
+    - switch "Direct messages" [checked]
+    - generic: Replies to you
+    - generic: An agent answers in a thread you started.
+    - switch "Replies to you" [checked]
+    - generic: Approvals
+    - generic: An agent wants your OK before it does something.
+    - switch "Approvals" [checked]
+    - generic: Help on a computer
+    - generic: An agent needs you to sign in, enter a code or check something on its screen.
+    - switch "Help on a computer" [checked]
+    - generic: Finished tasks
+    - generic: A task you handed off is done, or couldn't be done.
+    - switch "Finished tasks" [checked]

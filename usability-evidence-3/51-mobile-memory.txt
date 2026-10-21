@@ -1,0 +1,64 @@
+- main:
+  - button "Toggle file list":
+    - img
+  - heading "Memory" [level=1]
+  - button "Who changed what, newest first":
+    - img
+  - button "Look for changes made in Obsidian or on disk":
+    - img
+  - button "Write a new note here":
+    - img
+  - complementary:
+    - img
+    - textbox "Search memory…"
+    - button "Shared":
+      - img
+      - img
+      - text: Shared
+    - button "Share shared":
+      - img
+    - button "Welcome to Martin’s home"
+    - button "People":
+      - img
+      - img
+      - text: People
+    - button "Share people":
+      - img
+    - button "Martin":
+      - img
+      - img
+      - text: Martin
+    - button "Share people/usr_PZ_yomyptyd2":
+      - img
+    - button "Agents":
+      - img
+      - img
+      - text: Agents
+    - button "Share agents":
+      - img
+    - button "@sam":
+      - img
+      - img
+      - text: "@sam"
+    - button "Share agents/agt_GmUbthp9WHuY":
+      - img
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

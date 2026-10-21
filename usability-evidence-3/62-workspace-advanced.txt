@@ -1,0 +1,150 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - img
+      - text: Teams
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Agents" [level=1]
+  - tablist:
+    - tab "All" [selected]
+    - tab "Online"
+    - tab "Offline"
+  - button "New agent":
+    - img
+    - text: New agent
+  - paragraph: 1 agent
+  - link "Sam Sam @sam Setup incomplete · my-mac is offline Gemini CLI my-mac · no computer":
+    - /url: "#/agents/agt_GmUbthp9WHuY/overview"
+    - img "Sam":
+      - img: z z
+    - text: Sam @sam Setup incomplete · my-mac is offline Gemini CLI my-mac · no computer
+  - button "Chat with Sam": Chat
+  - text: offline
+  - dialog "Add an agent":
+    - text: Add to Warren
+    - button "Close":
+      - img
+    - navigation "Add agent steps":
+      - button "Identity, step 1 of 3": Identity
+      - button "Harness, step 2 of 3": Harness
+      - button "Workspace, step 3 of 3": Workspace
+      - text: Workspace · 3 of 3
+    - img "Test preview's ghost":
+      - img
+    - heading "Set up Test preview" [level=1]
+    - paragraph: Claude Code
+    - button "Shuffle agent appearance":
+      - img
+    - group:
+      - text: Handle
+      - textbox "Handle How people and agents @mention it.":
+        - /placeholder: test-preview
+        - text: test-preview
+      - text: How people and agents @mention it. Device
+      - combobox "Device Where Warren starts its harness.":
+        - option "Decide later"
+        - option "my-mac (offline)" [selected]
+      - text: Where Warren starts its harness. Computer
+      - paragraph: "Where it works: it opens apps and websites there, and you can watch and take over."
+      - button "New VM on my-mac Connect the device to check" [disabled]:
+        - img
+        - text: New VM on my-mac Connect the device to check
+      - button "Your own screen Only while you lend it, and only for things you ask." [disabled]:
+        - img
+        - text: Your own screen Only while you lend it, and only for things you ask.
+      - button "Choose later Pick one on its Computer tab.":
+        - img
+        - text: Choose later Pick one on its Computer tab.
+      - 'checkbox "Run it headless: no computer, so no apps or websites"'
+      - text: "Run it headless: no computer, so no apps or websites"
+      - group: Give it a job (optional)
+    - status: my-mac is offline. You can create Test preview now, but it can't answer until my-mac reconnects.
+    - button "Back":
+      - img
+      - text: Back
+    - button "Add agent":
+      - text: Add agent
+      - img

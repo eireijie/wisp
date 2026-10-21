@@ -1,0 +1,71 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers" [active]:
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Computers" [level=1]
+  - button "Add computer":
+    - text: Add computer
+  - heading "Give your agents a computer" [level=2]
+  - paragraph: "Agents work on computers the way you do: they open apps and websites, sign in once, and keep their files. You can watch them work and take control anytime."
+  - paragraph: "Each agent gets its own screen: a VM on one of your devices, or an Orgo cloud computer. Your own screen stays yours."
+  - button "Add computer":
+    - text: Add computer

@@ -1,0 +1,131 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - generic: Everyday Helper
+  - button "Message":
+    - generic: Message
+  - button "Memory":
+    - generic: Memory
+  - navigation "Agent sections":
+    - generic: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/overview"
+      - text: Overview
+    - link "Look":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/look"
+      - text: Look
+    - link "Soul":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/soul"
+      - text: Soul
+    - link "Instructions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/instructions"
+      - text: Instructions
+    - generic: Runtime
+    - link "Model" [active]:
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/model"
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/device"
+      - text: Device
+    - link "Computer":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/computer"
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/background"
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/routines"
+      - text: Routines
+    - generic: Access
+    - link "Permissions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/permissions"
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/connect"
+      - text: Connect
+    - generic: Activity
+    - link "Runs":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/runs"
+      - text: Runs
+  - tabpanel:
+    - heading "Model" [level=3]
+    - paragraph: Which Claude Code model this agent uses.
+    - paragraph: my-mac is offline. Start it to see the models it offers.
+    - combobox "Model":
+      - option "Harness default" [selected]
+      - option "Other model…"
+    - heading "Reasoning effort" [level=3]
+    - paragraph: More effort thinks deeper but replies slower. Default is Low.
+    - generic: Low
+    - button "Default" [disabled]
+    - slider "Reasoning effort"
+    - heading "Fast mode" [level=3]
+    - paragraph: Not offered for this model.
+    - switch "Fast mode" [disabled]
+    - text: Fast mode
+    - generic: Changes apply from the next message.
+    - button "Save ⌘S" [disabled]:
+      - text: Save
+      - generic: ⌘S

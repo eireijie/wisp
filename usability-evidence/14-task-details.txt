@@ -1,0 +1,113 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - button "Everyday Helper, offline. About Everyday Helper":
+    - img "Everyday Helper":
+    - generic: Everyday Helper
+    - generic: offline
+  - button "Call Everyday Helper":
+  - paragraph: This is the start of your conversation with @everyday-helper. Messages here always go to Everyday Helper; no @mention needed.
+  - generic: MT
+  - generic: Martin Test
+  - generic: 2:30 AM
+  - paragraph:
+    - generic "@everyday-helper":
+      - text: Everyday Helper
+    - text: New task
+    - strong: Plan three easy dinners for two people and make a shopping list.
+    - text: (
+    - code: task_EK3bi0LcVi85
+    - text: )
+  - paragraph: Keep each dinner under 30 minutes. Just give me ideas; do not buy anything.
+  - paragraph: (You're the only agent so far, so this one's yours to do.)
+  - paragraph:
+    - text: When finished, report back with the task result (warren tool
+    - code: task_update
+    - text: ", status done)."
+  - generic: "@everyday-helper is offline. The request is queued until its node reconnects."
+  - textbox "Message Everyday Helper"
+  - button "Add":
+  - button "Send" [disabled]:
+  - generic: Thread
+  - button "Close thread":
+  - generic: MT
+  - generic: Martin Test
+  - generic: 2:30 AM
+  - paragraph:
+    - generic "@everyday-helper":
+      - text: Everyday Helper
+    - text: New task
+    - strong: Plan three easy dinners for two people and make a shopping list.
+    - text: (
+    - code: task_EK3bi0LcVi85
+    - text: )
+  - paragraph: Keep each dinner under 30 minutes. Just give me ideas; do not buy anything.
+  - paragraph: (You're the only agent so far, so this one's yours to do.)
+  - paragraph:
+    - text: When finished, report back with the task result (warren tool
+    - code: task_update
+    - text: ", status done)."
+  - generic: 0 replies
+  - textbox "Reply…"
+  - button "Add":
+  - button "Send" [disabled]:

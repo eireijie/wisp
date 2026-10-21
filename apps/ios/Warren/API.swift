@@ -6,6 +6,7 @@ struct API {
   var base: URL
   var token: String?
   var session: URLSession = .shared
+  var timeout: TimeInterval = 30
 
   struct Failure: LocalizedError {
     var status: Int
@@ -49,6 +50,7 @@ struct API {
     }
   }
 
+  @discardableResult
   func raw<B: Encodable>(_ method: String, _ path: String, query: [String: String] = [:], body: B?) async throws -> Data {
     let (data, _) = try await request(method, path, query: query, body: body)
     return data
@@ -57,7 +59,7 @@ struct API {
   func request<B: Encodable>(_ method: String, _ path: String, query: [String: String] = [:], body: B?) async throws -> (Data, HTTPURLResponse) {
     var comps = URLComponents(url: base.appending(path: path), resolvingAgainstBaseURL: false)!
     if !query.isEmpty { comps.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
-    var req = URLRequest(url: comps.url!, timeoutInterval: 30)
+    var req = URLRequest(url: comps.url!, timeoutInterval: timeout)
     req.httpMethod = method
     if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
     if let body {

@@ -1,0 +1,105 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - img
+  - text: general Everyone, humans and agents
+  - 'button "Members: 2"':
+    - img
+    - text: "2"
+  - button "Channel settings":
+    - img
+  - img
+  - heading "#general" [level=2]
+  - paragraph:
+    - text: Everyone, humans and agents. @mention an agent to bring it in. New here?
+    - link "Get started":
+      - /url: "#/welcome"
+  - text: M Martin 4:23 AM
+  - paragraph: Please write a short thank-you note to my neighbour for watering my plants while I was away.
+  - 'textbox "Message #general"'
+  - button "Add":
+    - img
+  - button "Send" [disabled]:
+    - img

@@ -1,0 +1,179 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - link "Back to Warren":
+    - /url: "#/dashboard"
+  - heading "Settings / App behavior" [level=1]
+  - complementary:
+    - navigation "Settings":
+      - text: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - img
+        - text: Profile
+      - link "App behavior":
+        - /url: "#/settings/preferences"
+        - img
+        - text: App behavior
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - img
+        - text: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - img
+        - text: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - img
+        - text: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - img
+        - text: Security
+      - text: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - img
+        - text: General
+      - link "People":
+        - /url: "#/settings/people"
+        - img
+        - text: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - img
+        - text: Agents
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - img
+        - text: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - img
+        - text: Computers
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - img
+        - text: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - img
+        - text: Updates & about
+      - text: Advanced
+      - paragraph: For setting up agent tools by hand.
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - img
+        - text: Agent runtimes
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - img
+        - text: Connections
+  - main:
+    - heading "App behavior" [level=2]
+    - paragraph: How Warren works for you, on every device you sign in on.
+    - heading "How much to show" [level=3]
+    - paragraph: Simple keeps the advanced parts (teams, harness details, VM sizes, tokens, raw files) behind “Advanced” so the everyday ones stand out. Nothing is removed; you can switch any time.
+    - text: Experience The everyday parts first; advanced options a click away.
+    - radiogroup "Experience":
+      - radio "Simple" [checked]
+      - radio "Advanced"
+    - heading "Messages" [level=3]
+    - text: Sending a message Shift + Enter starts a new line.
+    - radiogroup "Sending a message":
+      - radio "Enter sends" [checked]
+      - radio "⌘ + Enter sends"
+    - text: Clock Times show as 4:25 AM.
+    - radiogroup "Clock":
+      - radio "Automatic" [checked]
+      - radio "12-hour"
+      - radio "24-hour"
+    - heading "Agents" [level=3]
+    - text: "Tools agents used Under each reply: which tools an agent called and what came back. Memory it saved about you always shows."
+    - radiogroup "Tools agents used":
+      - radio "Collapsed" [checked]
+      - radio "Open"
+      - radio "Hidden"

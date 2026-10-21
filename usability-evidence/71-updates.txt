@@ -1,0 +1,137 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Updates & about" [level=1]:
+    - text: Settings
+    - generic: / Updates & about
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about" [active]:
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Updates & about" [level=2]
+    - paragraph: Warren is free and open source (Apache-2.0). Your data stays on this hub.
+    - heading "Updates" [level=3]
+    - paragraph:
+      - text: This hub runs Warren
+      - code: f8d3d23
+      - text: from 10/17/2026. Update devices from
+      - link "Devices":
+        - /url: "#/nodes"
+      - text: .
+    - button "Check now"
+    - generic: Up to date
+    - generic: Up to date.
+    - heading "About" [level=3]
+    - generic: Source code
+    - generic: Issues, ideas and contributions welcome.
+    - link "GitHub":
+      - /url: https://github.com/eireijie/warren
+    - generic: License
+    - generic: Use it, change it, share it.
+    - generic: Apache-2.0

@@ -1,0 +1,118 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - img
+      - text: Teams
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - text: Set up Martin’s home
+  - button "Do this later"
+  - heading "Welcome to Warren" [level=1]
+  - paragraph: Warren is a place where you and AI helpers work together. You chat with them, they do the work on a computer you choose, and they remember what matters.
+  - list "Things you can ask":
+    - listitem:
+      - img
+      - text: Plan a week of dinners and a shopping list
+    - listitem:
+      - img
+      - text: Draft a polite message to a landlord or a coworker
+    - listitem:
+      - img
+      - text: Summarize a document
+  - paragraph:
+    - img
+    - text: You'll set up your first helper in the next few minutes, then you can ask things like these.
+  - heading "How much do you want to see?" [level=2]
+  - radiogroup "How much do you want to see?":
+    - radio "Simple Recommended The everyday parts first. Advanced options stay a click away.":
+      - img
+      - text: Simple Recommended The everyday parts first. Advanced options stay a click away.
+    - 'radio "Advanced Everything: teams, harness details, VM sizes, tokens, raw files." [checked]':
+      - img
+      - text: "Advanced Everything: teams, harness details, VM sizes, tokens, raw files."
+  - paragraph: You can change this any time in Settings.
+  - button "Continue":
+    - text: Continue
+    - img

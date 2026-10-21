@@ -1,0 +1,118 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Get started 0/5":
+      - /url: "#/welcome"
+      - img
+      - text: Get started 0/5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - paragraph: No agents yet.
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - text: Set up Martin’s home
+  - button "Do this later"
+  - navigation "Setup steps":
+    - text: Step 1 of 5 · Device
+    - list:
+      - listitem:
+        - button "Device, step 1 of 5" [disabled]
+      - listitem:
+        - button "Its job, step 2 of 5" [disabled]
+      - listitem:
+        - button "Agent, step 3 of 5" [disabled]
+      - listitem:
+        - button "Harness, step 4 of 5" [disabled]
+      - listitem:
+        - button "First task, step 5 of 5" [disabled]
+  - heading "Connect my-mac" [level=1]
+  - paragraph: Warren needs to be running on my-mac so your agents can work there. The Mac app does this for you; a command works for any computer.
+  - paragraph: "Easiest: download Warren for Mac"
+  - link "Download for Apple silicon":
+    - /url: https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64.dmg
+  - link "All releases":
+    - /url: https://github.com/eireijie/warren/releases
+  - paragraph: "Then open it and choose “Join a server” with this address:"
+  - text: http://localhost:5240
+  - button "Copy"
+  - group: Connect another computer with a command
+  - paragraph: The token is shown once and saved on the device. If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from.
+  - status:
+    - img
+    - text: Waiting for my-mac to connect…
+  - button "Back":
+    - img
+    - text: Back
+  - button "Waiting" [disabled]:
+    - img
+    - text: Waiting

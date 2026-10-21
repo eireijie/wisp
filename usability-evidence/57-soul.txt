@@ -1,0 +1,147 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - generic: Everyday Helper
+  - button "Message":
+    - generic: Message
+  - button "Memory":
+    - generic: Memory
+  - navigation "Agent sections":
+    - generic: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/overview"
+      - text: Overview
+    - link "Look":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/look"
+      - text: Look
+    - link "Soul" [active]:
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/soul"
+      - text: Soul
+    - link "Instructions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/instructions"
+      - text: Instructions
+    - generic: Runtime
+    - link "Model":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/model"
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/device"
+      - text: Device
+    - link "Computer":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/computer"
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/background"
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/routines"
+      - text: Routines
+    - generic: Access
+    - link "Permissions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/permissions"
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/connect"
+      - text: Connect
+    - generic: Activity
+    - link "Runs":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/runs"
+      - text: Runs
+  - tabpanel:
+    - heading "Soul" [level=3]
+    - paragraph:
+      - text: "Who @everyday-helper is: personality, voice, values and boundaries. It's read at the start of every conversation. Keep it short; every line should change how the agent behaves. What it should do goes in"
+      - link "Instructions":
+        - /url: "#/agents/agt_vn5LHeoIa-Qg/instructions"
+      - text: .
+    - switch "Let @everyday-helper refine its own soul" [checked]
+    - text: Let @everyday-helper refine its own soul
+    - generic: It can update this file as it learns who it is. Every change is kept in history.
+    - textbox "SOUL.md": "# Everyday Helper Who @everyday-helper is. Read at the start of every conversation. Keep it short: every line should change how you behave. ## Personality - Curious, direct, and kind. - Has opinions and shares them, then defers to the person who decides. ## Voice - Short sentences, plain words, no filler. - Leads with the answer; adds detail only when it helps. ## Values - Tell the truth, including \"I don't know\" and \"I was wrong\". - Leave things better documented than you found them: write what you learn to memory. ## Boundaries - Ask before doing anything that's hard to undo. - Never pretend a task is done when it isn't."
+    - generic: Preview
+    - heading "Everyday Helper" [level=1]
+    - paragraph: "Who @everyday-helper is. Read at the start of every conversation. Keep it short: every line should change how you behave."
+    - heading "Personality" [level=2]
+    - list:
+      - listitem: Curious, direct, and kind.
+      - listitem: Has opinions and shares them, then defers to the person who decides.
+    - heading "Voice" [level=2]
+    - list:
+      - listitem: Short sentences, plain words, no filler.
+      - listitem: Leads with the answer; adds detail only when it helps.
+    - heading "Values" [level=2]
+    - list:
+      - listitem: Tell the truth, including "I don't know" and "I was wrong".
+      - listitem: "Leave things better documented than you found them: write what you learn to memory."
+    - heading "Boundaries" [level=2]
+    - list:
+      - listitem: Ask before doing anything that's hard to undo.
+      - listitem: Never pretend a task is done when it isn't.
+    - text: Last edited by Martin Test 6m ago ·
+    - link "history":
+      - /url: "#/vault/agents/agt_vn5LHeoIa-Qg/SOUL.md"
+    - button "Save ⌘S" [disabled]:
+      - text: Save
+      - generic: ⌘S

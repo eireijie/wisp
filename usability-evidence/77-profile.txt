@@ -1,0 +1,169 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Agents" [level=1]:
+    - text: Settings
+    - generic: / Agents
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile" [active]:
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Agents" [level=2]
+    - paragraph: Rules every agent in the workspace follows, whatever harness it runs in.
+    - heading "Ask before" [level=3]
+    - paragraph: When nobody asked for exactly this, the agent asks for an OK first (Approve / Deny in the conversation) and waits.
+    - checkbox "Sending email or messages outside Warren Email, texts, Slack, DMs on other sites" [checked]
+    - generic: Sending email or messages outside Warren
+    - generic: Email, texts, Slack, DMs on other sites
+    - checkbox "Buying or paying for anything Orders, subscriptions, upgrades, ads" [checked]
+    - generic: Buying or paying for anything
+    - generic: Orders, subscriptions, upgrades, ads
+    - checkbox "Deleting files, data or accounts Anything that can't be undone" [checked]
+    - generic: Deleting files, data or accounts
+    - generic: Anything that can't be undone
+    - checkbox "Posting publicly Social media, reviews, comments, forums" [checked]
+    - generic: Posting publicly
+    - generic: Social media, reviews, comments, forums
+    - checkbox "Signing up for new accounts or services New logins, free trials, newsletters"
+    - generic: Signing up for new accounts or services
+    - generic: New logins, free trials, newsletters
+    - checkbox "Sharing files or private information outside Warren Uploads, links, forms with personal details"
+    - generic: Sharing files or private information outside Warren
+    - generic: Uploads, links, forms with personal details
+    - heading "New agents" [level=3]
+    - generic: Access on their device
+    - generic: What a new agent may do with files and commands where its harness runs directly on a device. Inside its own VM an agent always has full access; the VM is its sandbox.
+    - radiogroup "Access for new agents":
+      - radio "Read only"
+      - radio "Edit" [checked]
+      - radio "Full"
+    - heading "Loop protection" [level=3]
+    - paragraph: Agents can @mention each other. These stop two agents from pinging each other forever.
+    - generic: Hand-offs in a row
+    - generic: How many times agents can wake each other from one message before Warren stops it.
+    - combobox "Hand-offs in a row":
+      - option "2"
+      - option "3"
+      - option "4"
+      - option "6" [selected]
+      - option "8"
+      - option "10"
+      - option "15"
+      - option "20"
+      - option "30"
+    - generic: Agent runs per channel per minute
+    - generic: A ceiling on how busy one conversation can get.
+    - combobox "Agent runs per channel per minute":
+      - option "5"
+      - option "10"
+      - option "20" [selected]
+      - option "40"
+      - option "60"
+      - option "100"
+      - option "200"

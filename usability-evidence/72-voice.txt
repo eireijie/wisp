@@ -1,0 +1,141 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Voice" [level=1]:
+    - text: Settings
+    - generic: / Voice
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice" [active]:
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Voice" [level=2]
+    - paragraph: Call your ghosts, hands free. On this device is free and needs no key. Your browser may use its own online speech service.
+    - heading "Your voice engines" [level=3]
+    - paragraph: These settings belong to you. Your microphone is requested only when you start a call.
+    - generic: Listening
+    - generic: How your speech becomes a chat message.
+    - combobox "Listening engine":
+      - option "On this device" [selected]
+      - option "OpenAI"
+    - generic: Speaking
+    - generic: An AI voice reads a short version; the complete reply stays in chat.
+    - combobox "Speaking engine":
+      - option "On this device" [selected]
+      - option "OpenAI"
+      - option "ElevenLabs"
+    - heading "Bring your own key" [level=3]
+    - paragraph: Optional. Provider usage is billed to your account. Keys stay on your hub, masked on read like connector credentials. Clear a key and save to remove it.
+    - generic: OpenAI API key
+    - generic: Enables transcription and speech.
+    - textbox "OpenAI API key"
+    - generic: ElevenLabs API key
+    - generic: Enables speech; listening still uses your chosen engine.
+    - textbox "ElevenLabs API key"
+    - button "Save voice settings"
+    - paragraph: Pick each ghost's voice in Agents → Look. For calls, use HTTPS or localhost. If browser recognition isn't available in your Electron build, OpenAI listening is an alternative. Headphones help with interruptions and speaker echo.

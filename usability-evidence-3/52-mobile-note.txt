@@ -1,0 +1,45 @@
+- main:
+  - button "Toggle file list":
+    - img
+  - heading "Memory" [level=1]
+  - button "Who changed what, newest first":
+    - img
+  - button "Look for changes made in Obsidian or on disk":
+    - img
+  - button "Write a new note here":
+    - img
+  - text: Saturday shopping
+  - link "Opens this in the Obsidian app on this computer":
+    - /url: obsidian://open?path=%2Fprivate%2Ftmp%2Fclaude-501%2F-Users-yugpatel-kodi%2F9df3d273-216f-47f7-9460-707d2266e20a%2Fscratchpad%2Fcodex-data%2Fvault%2Fpeople%2Fusr_PZ_yomyptyd2%2FSaturday%20shopping.md
+    - img
+  - button "Edit this note here":
+    - img
+  - button "Who wrote what":
+    - img
+  - button "History":
+    - img
+  - button "Who can see this note":
+    - img
+  - button "Delete":
+    - img
+  - paragraph: Saturday shopping Buy rice, tomatoes, eggs and apples. Check the cupboard before buying more pasta.
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

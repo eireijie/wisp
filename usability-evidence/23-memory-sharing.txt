@@ -1,0 +1,147 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - button "Toggle file list":
+  - heading "Memory" [level=1]
+  - generic "See memory the way an agent does":
+    - combobox "View memory as":
+      - option "View as you" [selected]
+      - option "View as @everyday-helper"
+  - button "Activity":
+    - generic: Activity
+  - button "Refresh":
+    - generic: Refresh
+  - button "New note":
+    - generic: New note
+  - complementary:
+    - textbox "Search memory…"
+    - button "Shared":
+      - generic: Shared
+    - button "Share shared":
+    - button "Dinner preferences":
+      - generic: Dinner preferences
+    - button "Welcome to Everyday tasks — usability test":
+      - generic: Welcome to Everyday tasks — usability test
+    - button "Agents":
+      - generic: Agents
+    - button "Share agents":
+    - button "@everyday-helper":
+      - generic: "@everyday-helper"
+    - button "Share agents/agt_vn5LHeoIa-Qg":
+  - generic: Shared
+  - generic: Dinner preferences
+  - generic "10/17/2026, 2:31:04 AM": edited by Martin Test · just now
+  - link "Open in Obsidian":
+    - /url: obsidian://open?path=%2Ftmp%2Fwarren-usability-20261017%2Fvault%2Fshared%2FDinner%20preferences.md
+    - generic: Open in Obsidian
+  - button "Edit":
+    - generic: Edit
+  - button "Who wrote what":
+  - button "History":
+  - button "Who can see this note" [active]:
+  - button "Delete":
+  - heading "Dinner preferences" [level=1]
+  - paragraph: I like simple meals that take less than 30 minutes. Cooking for two.
+  - dialog "Share Dinner preferences":
+    - heading "Share Dinner preferences" [level=2]
+    - button "Close":
+    - paragraph: Only shared/Dinner preferences.md. A rule set here beats what's inherited, and a rule for one agent beats one for its role, its team or all agents.
+    - text: Agents
+    - generic: All agents
+    - generic: default from shared/
+    - button "Load at startup":
+    - combobox "Access for All agents":
+      - option "No access"
+      - option "Can read"
+      - option "Can edit" [selected]
+    - img "Everyday Helper":
+    - generic: "@everyday-helper"
+    - generic: All agents · default from shared/
+    - button "Load at startup":
+    - combobox "Access for @everyday-helper":
+      - option "No access"
+      - option "Can read"
+      - option "Can edit" [selected]
+    - text: People
+    - generic: Everyone (members)
+    - generic: default for the whole vault
+    - combobox "Access for Everyone (members)":
+      - option "No access"
+      - option "Can read"
+      - option "Can edit" [selected]
+      - option "Can manage"
+    - generic: Guests
+    - generic: default from shared/
+    - combobox "Access for Guests":
+      - option "No access"
+      - option "Can read" [selected]
+    - generic: MT
+    - generic: Martin Test (you)
+    - generic: Owner · always manages everything
+    - combobox "Access for Martin Test (you)" [disabled]:
+      - option "No access"
+      - option "Can read"
+      - option "Can edit"
+      - option "Can manage" [selected]
+    - paragraph:
+      - generic: "Load at startup: the agent gets this note in its prompt every time it works."

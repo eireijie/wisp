@@ -1,0 +1,171 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - img
+  - text: Sam
+  - button "Message":
+    - img
+    - text: Message
+  - button "Memory":
+    - img
+    - text: Memory
+  - navigation "Agent sections":
+    - text: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_GmUbthp9WHuY/overview"
+      - img
+      - text: Overview
+    - link "Look":
+      - /url: "#/agents/agt_GmUbthp9WHuY/look"
+      - img
+      - text: Look
+    - link "Personality":
+      - /url: "#/agents/agt_GmUbthp9WHuY/soul"
+      - img
+      - text: Personality
+    - link "Instructions":
+      - /url: "#/agents/agt_GmUbthp9WHuY/instructions"
+      - img
+      - text: Instructions
+    - text: Runtime
+    - link "Model":
+      - /url: "#/agents/agt_GmUbthp9WHuY/model"
+      - img
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_GmUbthp9WHuY/device"
+      - img
+      - text: Device
+    - link "Computer":
+      - /url: "#/agents/agt_GmUbthp9WHuY/computer"
+      - img
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_GmUbthp9WHuY/background"
+      - img
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_GmUbthp9WHuY/routines"
+      - img
+      - text: Routines
+    - text: Access
+    - link "Permissions":
+      - /url: "#/agents/agt_GmUbthp9WHuY/permissions"
+      - img
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_GmUbthp9WHuY/connect"
+      - img
+      - text: Connect
+    - text: Activity
+    - link "Activity":
+      - /url: "#/agents/agt_GmUbthp9WHuY/runs"
+      - img
+      - text: Activity
+  - tabpanel:
+    - paragraph: Jobs it does on a schedule.
+    - heading "Routines" [level=3]
+    - paragraph: A routine is something your helper does on a schedule, like dinner ideas every Monday.
+    - paragraph: Things @sam knows how to do again on its own. Teach one by doing the task once while it watches, or write the steps yourself. Routines can run on a schedule.
+    - button "Teach a task":
+      - img
+      - text: Teach a task
+    - button "Write a routine":
+      - img
+      - text: Write a routine
+    - paragraph: "Teaching needs a computer: pick one on the Computer tab."
+    - text: Weekly dinner ideas Every Monday at 9am · next Mon 9:00 AM
+    - link "Steps":
+      - /url: "#/vault/agents/agt_GmUbthp9WHuY/routines/weekly-dinner-ideas-mvc4tfzl.md"
+    - button "Schedule":
+      - img
+      - text: Schedule
+    - button "Run now":
+      - img
+      - text: Run now
+    - button "Delete routine":
+      - img

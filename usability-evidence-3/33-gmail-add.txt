@@ -1,0 +1,302 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Connected apps" [level=1]
+  - paragraph: Apps your helpers can use for you, like Gmail or Slack. Each one asks you to sign in (a few ask for a key instead); your password never goes to a helper.
+  - img
+  - searchbox "Search apps": Gmail
+  - region "Connected 0":
+    - heading "Connected 0" [level=2]
+    - text: Nothing connected yet. Pick one from the catalog below.
+  - region "Recommended for most people":
+    - heading "Recommended for most people" [level=2]
+    - paragraph: One sign-in with Zapier connects Gmail, Google Calendar, Drive, Todoist and thousands more apps.
+    - text: Z Zapier Published by zapier.com Made by Zapier
+    - paragraph: Hosted MCP server connecting AI assistants to 9,000+ apps and 40,000+ actions via Zapier.
+    - text: Remote · sign in
+    - link:
+      - /url: https://docs.zapier.com/mcp/home
+      - img
+    - button "Add":
+      - img
+      - text: Add
+  - button "Marketplace"
+  - button "Warren's catalog"
+  - region "Marketplace":
+    - paragraph: Results from the MCP Registry. Servers whose publisher is verified come first. "Made by" means the app's own company publishes it; "Verified publisher" only means the registry confirmed who published it.
+    - text: Gmail Agent by Nova (CIVAI) Published by nova.civai.co Made by Civai
+    - paragraph: I do everything related to Gmail and productivity
+    - text: Remote · sign in
+    - link:
+      - /url: https://nova.civai.co/agent/gmail-agent
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: A agmail Published by shveik.dev Verified publisher
+    - paragraph: "Email inboxes for agents by the hour: wait for a mail, get the code or link. Pay per call."
+    - text: Remote · sign in
+    - link:
+      - /url: https://agmail.shveik.dev
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by waystation.ai Not verified
+    - paragraph: Read emails, send messages, and manage labels in your Gmail account.
+    - text: Remote · sign in
+    - link:
+      - /url: https://github.com/waystation-ai/mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by mintmcp.com Not verified
+    - paragraph: A MCP server for Gmail that lets you search, read, and draft emails and replies.
+    - text: Remote · sign in
+    - link:
+      - /url: https://github.com/mintmcp/servers
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by pipeworx-io Not verified
+    - paragraph: Gmail MCP Pack
+    - text: Remote · sign in
+    - link:
+      - /url: https://pipeworx.io/packs/gmail
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by pulsemcp.com Not verified
+    - paragraph: MCP server for Gmail with OAuth2 (personal) and service account (Workspace) support.
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/pulsemcp/mcp-servers
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by domdomegg Not verified
+    - paragraph: Allow AI systems to read, send, archive, and manage emails via Gmail.
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/domdomegg/gmail-mcp#readme
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by markswendsen-code Not verified
+    - paragraph: Gmail MCP server — send, read, and search email. By Strider Labs.
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/markswendsen-code/mcp-gmail
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Published by mcp-z Not verified
+    - paragraph: Gmail integration with OAuth authentication, message search, batch operations, and Sheets export
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/mcp-z/mcp-gmail#readme
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Attachments MCP Published by zayansalman Not verified
+    - paragraph: Minimal MCP server for downloading Gmail attachments to disk. Read-only OAuth by default.
+    - text: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/zayansalman/gmail-attachments-mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail MCP Published by A1-x-Tech Not verified
+    - paragraph: "MCP server for the Gmail API: search, read and send email, manage drafts, labels and the trash."
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/A1-x-Tech/mcp-google-gmail#readme
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail MCP Server Published by ArtyMcLabin Not verified
+    - paragraph: Lean Gmail MCP server with auto authentication support
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/ArtyMcLabin/Gmail-MCP-Server
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Gmail Tidy MCP Published by imkath Not verified
+    - paragraph: "Organize several Gmail accounts: labels, filters, archiving, drafts. Never sends or deletes mail."
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/imkath/gmail-tidy-mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G gmail-agent Published by dremok Not verified
+    - paragraph: "Gmail for AI agents: search, read, download attachments, send, reply, drafts, labels."
+    - text: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/dremok/gmail-agent
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: S Sebastianall1977 Gmail MCP Published by smithery.ai Not verified
+    - paragraph: "Manage Gmail end-to-end: search, read, send, draft, label, and organize threads. Automate workflow…"
+    - text: Remote · needs a key
+    - link:
+      - /url: https://github.com/sebastianall1977/gmail-mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: F Faithk7 Gmail MCP Published by smithery.ai Not verified
+    - paragraph: Manage Gmail messages, threads, labels, drafts, and settings from your workflows. Send and organiz…
+    - text: Remote · needs a key
+    - link:
+      - /url: https://github.com/faithk7/gmail-mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: G Google Gmail Published by mcparmory.com Not verified
+    - paragraph: Send, read, organize emails, manage labels, drafts, and filters
+    - text: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/mcparmory/registry
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: M Multi Gmail MCP Published by gx-55 Not verified
+    - paragraph: Manage multiple Gmail accounts in Claude Desktop — search, send, reply, draft, and organize.
+    - text: npm · runs on the device
+    - link:
+      - /url: https://github.com/gx-55/multi-gmail-mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - text: M Multi-Account Gmail Published by cunicopia-dev Not verified
+    - paragraph: Multi-account Gmail MCP server — read, search, draft, and label across every inbox.
+    - text: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/cunicopia-dev/gmail-mcp
+      - img
+    - button "Add":
+      - img
+      - text: Add
+  - button "Add your own server"
+  - dialog "Add Zapier":
+    - heading "Add Zapier" [level=2]
+    - button "Close":
+      - img
+    - text: Z Zapier Published by zapier.com Made by Zapier Hosted MCP server connecting AI assistants to 9,000+ apps and 40,000+ actions via Zapier. If it asks you to sign in, Warren takes you to its sign-in page next. Agents never see your password. Name
+    - textbox "Name Agents see its tools under this name.": Zapier
+    - text: Agents see its tools under this name.
+    - button "Show how it starts"
+    - group "Which agents get it":
+      - text: Which agents get it
+      - button "Clear"
+      - checkbox "Sam Sam @sam · Gemini CLI · not wired yet for this harness" [checked]
+      - img "Sam":
+        - img
+      - text: Sam @sam · Gemini CLI · not wired yet for this harness
+    - paragraph: Works with Claude Code and Codex. Not wired yet for ACP agents (Gemini, OpenCode, Hermes…).
+    - region "Before you connect":
+      - heading "Before you connect" [level=3]
+      - paragraph: "Your helpers will be able to use Zapier through this connection: read and act on what this app allows."
+      - paragraph: Made and run by Zapier (zapier.com), not by Warren.
+    - button "Cancel"
+    - button "Connect and sign in"

@@ -1,0 +1,36 @@
+- main:
+  - button "Back to chats":
+    - img
+  - img
+  - text: general Everyone, humans and agents
+  - 'button "Members: 2"':
+    - img
+    - text: "2"
+  - button "Channel settings":
+    - img
+  - img
+  - heading "#general" [level=2]
+  - paragraph:
+    - text: Everyone, humans and agents. @mention an agent to bring it in. New here?
+    - link "Get started":
+      - /url: "#/welcome"
+  - text: M Martin 4:23 AM
+  - paragraph: Please write a short thank-you note to my neighbour for watering my plants while I was away.
+  - button "React 👍": 👍
+  - button "React ❤️": ❤️
+  - button "React 😂": 😂
+  - button "React 🎉": 🎉
+  - button "React 👀": 👀
+  - button "Add reaction":
+    - img
+  - button "Reply in thread":
+    - img
+  - button "More":
+    - img
+  - paragraph: Sam Please write a short thank-you note to my neighbour for watering my plants.
+  - text: "@sam is offline. The request is queued until its device reconnects."
+  - 'textbox "Message #general"'
+  - button "Add":
+    - img
+  - button "Send" [disabled]:
+    - img

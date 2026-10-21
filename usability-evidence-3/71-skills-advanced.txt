@@ -1,0 +1,220 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - img
+      - text: Teams
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Skills" [level=1]
+  - button "Create a skill":
+    - img
+    - text: Create a skill
+  - paragraph: Skills are step-by-step instructions for kinds of work. Install one and your agents follow it whenever a request fits, whatever harness they run in.
+  - tablist:
+    - tab "Skill library14" [selected]
+    - tab "Installed0"
+  - img
+  - searchbox "Search skills"
+  - button "All"
+  - button "code"
+  - button "data"
+  - button "github"
+  - button "research"
+  - button "routine"
+  - button "spreadsheets"
+  - button "support"
+  - button "writing"
+  - button "Write a weekly status report When asked for a weekly update, status report or \"what happened this week\" for a team or project.":
+    - img
+    - text: Write a weekly status report When asked for a weekly update, status report or "what happened this week" for a team or project.
+  - text: writing reporting teams Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Triage a GitHub issue When given a new GitHub issue (or a batch of them) to label, reproduce, prioritize and route.":
+    - img
+    - text: Triage a GitHub issue When given a new GitHub issue (or a batch of them) to label, reproduce, prioritize and route.
+  - text: code github support Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Research a topic and write a brief When asked to research a question, market, technology or company and come back with a written brief.":
+    - img
+    - text: Research a topic and write a brief When asked to research a question, market, technology or company and come back with a written brief.
+  - text: research writing Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Review a pull request When asked to review a pull request or a branch's changes before merging.":
+    - img
+    - text: Review a pull request When asked to review a pull request or a branch's changes before merging.
+  - text: code github review Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Summarize a meeting transcript When given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.":
+    - img
+    - text: Summarize a meeting transcript When given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.
+  - text: writing meetings Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Draft a customer reply When asked to answer a customer email, ticket or review. Drafts for a person to send unless told otherwise.":
+    - img
+    - text: Draft a customer reply When asked to answer a customer email, ticket or review. Drafts for a person to send unless told otherwise.
+  - text: support writing Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Fill a form on a website carefully When asked to fill in and submit a web form (applications, registrations, orders, government or vendor portals).":
+    - img
+    - text: Fill a form on a website carefully When asked to fill in and submit a web form (applications, registrations, orders, government or vendor portals).
+  - text: browser computer Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - 'button "Clean up data in a spreadsheet When given a messy CSV or spreadsheet to clean: duplicates, inconsistent formats, blanks, bad headers."':
+    - img
+    - text: "Clean up data in a spreadsheet When given a messy CSV or spreadsheet to clean: duplicates, inconsistent formats, blanks, bad headers."
+  - text: data spreadsheets Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Write release notes from commits When asked to write release notes or a changelog for a version, from commits, PRs and tags.":
+    - img
+    - text: Write release notes from commits When asked to write release notes or a changelog for a version, from commits, PRs and tags.
+  - text: code writing github Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - 'button "Daily inbox digest For a daily (or on-demand) digest of new email, messages and notifications: what needs a reply, what can wait."':
+    - img
+    - text: "Daily inbox digest For a daily (or on-demand) digest of new email, messages and notifications: what needs a reply, what can wait."
+  - text: email routine productivity Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Compare vendors When asked to compare tools, vendors or service providers and recommend one.":
+    - img
+    - text: Compare vendors When asked to compare tools, vendors or service providers and recommend one.
+  - text: research purchasing Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - button "Categorize transactions for bookkeeping When given bank or card transactions to categorize into the chart of accounts, flagging anything unclear.":
+    - img
+    - text: Categorize transactions for bookkeeping When given bank or card transactions to categorize into the chart of accounts, flagging anything unclear.
+  - text: finance data spreadsheets Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - 'button "Watch competitors For a periodic check on competitors: pricing, launches, changelogs, hiring and news."':
+    - img
+    - text: "Watch competitors For a periodic check on competitors: pricing, launches, changelogs, hiring and news."
+  - text: research routine marketing Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install
+  - 'button "Write a how-to doc When asked to document how to do something: a guide, runbook or README section."':
+    - img
+    - text: "Write a how-to doc When asked to document how to do something: a guide, runbook or README section."
+  - text: writing docs Not installed
+  - button "Read"
+  - button "Install":
+    - img
+    - text: Install

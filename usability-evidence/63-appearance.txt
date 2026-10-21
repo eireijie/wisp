@@ -1,0 +1,472 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - generic: Everyday Helper
+  - button "Message":
+    - generic: Message
+  - button "Memory":
+    - generic: Memory
+  - navigation "Agent sections":
+    - generic: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/overview"
+      - text: Overview
+    - link "Look" [active]:
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/look"
+      - text: Look
+    - link "Soul":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/soul"
+      - text: Soul
+    - link "Instructions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/instructions"
+      - text: Instructions
+    - generic: Runtime
+    - link "Model":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/model"
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/device"
+      - text: Device
+    - link "Computer":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/computer"
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/background"
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/routines"
+      - text: Routines
+    - generic: Access
+    - link "Permissions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/permissions"
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/connect"
+      - text: Connect
+    - generic: Activity
+    - link "Runs":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/runs"
+      - text: Runs
+  - tabpanel:
+    - heading "Look" [level=3]
+    - paragraph: Every agent is a little ghost. Dress Everyday Helper up; it shows everywhere it appears, concentrates while it works, and naps in gray when its device is offline.
+    - img "Everyday Helper's ghost":
+    - radiogroup "Preview mood":
+      - radio "Awake" [checked]:
+        - text: Awake
+      - radio "Thinking":
+        - text: Thinking
+      - radio "Working":
+        - text: Working
+      - radio "Done":
+        - text: Done
+      - radio "Waiting":
+        - text: Waiting
+      - radio "Error":
+        - text: Error
+      - radio "Offline":
+        - text: Offline
+    - button "Shuffle":
+      - text: Shuffle
+    - button "Reset":
+      - text: Reset
+    - heading "Voice" [level=4]
+    - paragraph:
+      - text: Each ghost gets its own default. Choose a voice for any engine; calls use your choice in
+      - link "Settings → Voice":
+        - /url: "#/settings/voice"
+      - text: .
+    - combobox "Voice engine to preview":
+      - option "On this device" [selected]
+      - option "OpenAI"
+      - option "ElevenLabs"
+    - combobox "device voice":
+      - option "Automatic for Everyday Helper" [selected]
+      - option "Albert · en-US"
+      - option "Alice · it-IT"
+      - option "Alva · sv-SE"
+      - option "Amélie · fr-CA"
+      - option "Amira · ms-MY"
+      - option "Anna · de-DE"
+      - option "Bad News · en-US"
+      - option "Bahh · en-US"
+      - option "Bells · en-US"
+      - option "Boing · en-US"
+      - option "Bubbles · en-US"
+      - option "Carmit · he-IL"
+      - option "Cellos · en-US"
+      - option "Damayanti · id-ID"
+      - option "Daniel · en-GB"
+      - option "Daria · bg-BG"
+      - option "Eddy (Chinese (China mainland)) · zh-CN"
+      - option "Eddy (Chinese (Taiwan)) · zh-TW"
+      - option "Eddy (English (United Kingdom)) · en-GB"
+      - option "Eddy (English (United States)) · en-US"
+      - option "Eddy (Finnish (Finland)) · fi-FI"
+      - option "Eddy (French (Canada)) · fr-CA"
+      - option "Eddy (French (France)) · fr-FR"
+      - option "Eddy (German (Germany)) · de-DE"
+      - option "Eddy (Italian (Italy)) · it-IT"
+      - option "Eddy (Japanese (Japan)) · ja-JP"
+      - option "Eddy (Korean (South Korea)) · ko-KR"
+      - option "Eddy (Portuguese (Brazil)) · pt-BR"
+      - option "Eddy (Spanish (Mexico)) · es-MX"
+      - option "Eddy (Spanish (Spain)) · es-ES"
+      - option "Ellen · nl-BE"
+      - option "Flo (Chinese (China mainland)) · zh-CN"
+      - option "Flo (Chinese (Taiwan)) · zh-TW"
+      - option "Flo (English (United Kingdom)) · en-GB"
+      - option "Flo (English (United States)) · en-US"
+      - option "Flo (Finnish (Finland)) · fi-FI"
+      - option "Flo (French (Canada)) · fr-CA"
+      - option "Flo (French (France)) · fr-FR"
+      - option "Flo (German (Germany)) · de-DE"
+      - option "Flo (Italian (Italy)) · it-IT"
+      - option "Flo (Japanese (Japan)) · ja-JP"
+      - option "Flo (Korean (South Korea)) · ko-KR"
+      - option "Flo (Portuguese (Brazil)) · pt-BR"
+      - option "Flo (Spanish (Mexico)) · es-MX"
+      - option "Flo (Spanish (Spain)) · es-ES"
+      - option "Fred · en-US"
+      - option "Geeta · te-IN"
+      - option "Good News · en-US"
+      - option "Grandma (Chinese (China mainland)) · zh-CN"
+      - option "Grandma (Chinese (Taiwan)) · zh-TW"
+      - option "Grandma (English (United Kingdom)) · en-GB"
+      - option "Grandma (English (United States)) · en-US"
+      - option "Grandma (Finnish (Finland)) · fi-FI"
+      - option "Grandma (French (Canada)) · fr-CA"
+      - option "Grandma (French (France)) · fr-FR"
+      - option "Grandma (German (Germany)) · de-DE"
+      - option "Grandma (Italian (Italy)) · it-IT"
+      - option "Grandma (Japanese (Japan)) · ja-JP"
+      - option "Grandma (Korean (South Korea)) · ko-KR"
+      - option "Grandma (Portuguese (Brazil)) · pt-BR"
+      - option "Grandma (Spanish (Mexico)) · es-MX"
+      - option "Grandma (Spanish (Spain)) · es-ES"
+      - option "Grandpa (Chinese (China mainland)) · zh-CN"
+      - option "Grandpa (Chinese (Taiwan)) · zh-TW"
+      - option "Grandpa (English (United Kingdom)) · en-GB"
+      - option "Grandpa (English (United States)) · en-US"
+      - option "Grandpa (Finnish (Finland)) · fi-FI"
+      - option "Grandpa (French (Canada)) · fr-CA"
+      - option "Grandpa (French (France)) · fr-FR"
+      - option "Grandpa (German (Germany)) · de-DE"
+      - option "Grandpa (Italian (Italy)) · it-IT"
+      - option "Grandpa (Japanese (Japan)) · ja-JP"
+      - option "Grandpa (Korean (South Korea)) · ko-KR"
+      - option "Grandpa (Portuguese (Brazil)) · pt-BR"
+      - option "Grandpa (Spanish (Mexico)) · es-MX"
+      - option "Grandpa (Spanish (Spain)) · es-ES"
+      - option "Ioana · ro-RO"
+      - option "Jacques · fr-FR"
+      - option "Jester · en-US"
+      - option "Joana · pt-PT"
+      - option "Junior · en-US"
+      - option "Kanya · th-TH"
+      - option "Karen · en-AU"
+      - option "Kathy · en-US"
+      - option "Kyoko · ja-JP"
+      - option "Lana · hr-HR"
+      - option "Laura · sk-SK"
+      - option "Lekha · hi-IN"
+      - option "Lesya · uk-UA"
+      - option "Linh · vi-VN"
+      - option "Luciana · pt-BR"
+      - option "Majed · ar-001"
+      - option "Meijia · zh-TW"
+      - option "Melina · el-GR"
+      - option "Milena · ru-RU"
+      - option "Moira · en-IE"
+      - option "Mónica · es-ES"
+      - option "Montse · ca-ES"
+      - option "Nora · nb-NO"
+      - option "Organ · en-US"
+      - option "Paulina · es-MX"
+      - option "Piya · bn-IN"
+      - option "Ralph · en-US"
+      - option "Reed (Chinese (China mainland)) · zh-CN"
+      - option "Reed (Chinese (Taiwan)) · zh-TW"
+      - option "Reed (English (United Kingdom)) · en-GB"
+      - option "Reed (English (United States)) · en-US"
+      - option "Reed (Finnish (Finland)) · fi-FI"
+      - option "Reed (French (Canada)) · fr-CA"
+      - option "Reed (German (Germany)) · de-DE"
+      - option "Reed (Italian (Italy)) · it-IT"
+      - option "Reed (Japanese (Japan)) · ja-JP"
+      - option "Reed (Korean (South Korea)) · ko-KR"
+      - option "Reed (Portuguese (Brazil)) · pt-BR"
+      - option "Reed (Spanish (Mexico)) · es-MX"
+      - option "Reed (Spanish (Spain)) · es-ES"
+      - option "Rishi · en-IN"
+      - option "Rocko (Chinese (China mainland)) · zh-CN"
+      - option "Rocko (Chinese (Taiwan)) · zh-TW"
+      - option "Rocko (English (United Kingdom)) · en-GB"
+      - option "Rocko (English (United States)) · en-US"
+      - option "Rocko (Finnish (Finland)) · fi-FI"
+      - option "Rocko (French (Canada)) · fr-CA"
+      - option "Rocko (French (France)) · fr-FR"
+      - option "Rocko (German (Germany)) · de-DE"
+      - option "Rocko (Italian (Italy)) · it-IT"
+      - option "Rocko (Japanese (Japan)) · ja-JP"
+      - option "Rocko (Korean (South Korea)) · ko-KR"
+      - option "Rocko (Portuguese (Brazil)) · pt-BR"
+      - option "Rocko (Spanish (Mexico)) · es-MX"
+      - option "Rocko (Spanish (Spain)) · es-ES"
+      - option "Samantha · en-US"
+      - option "Sandy (Chinese (China mainland)) · zh-CN"
+      - option "Sandy (Chinese (Taiwan)) · zh-TW"
+      - option "Sandy (English (United Kingdom)) · en-GB"
+      - option "Sandy (English (United States)) · en-US"
+      - option "Sandy (Finnish (Finland)) · fi-FI"
+      - option "Sandy (French (Canada)) · fr-CA"
+      - option "Sandy (French (France)) · fr-FR"
+      - option "Sandy (German (Germany)) · de-DE"
+      - option "Sandy (Italian (Italy)) · it-IT"
+      - option "Sandy (Japanese (Japan)) · ja-JP"
+      - option "Sandy (Korean (South Korea)) · ko-KR"
+      - option "Sandy (Portuguese (Brazil)) · pt-BR"
+      - option "Sandy (Spanish (Mexico)) · es-MX"
+      - option "Sandy (Spanish (Spain)) · es-ES"
+      - option "Sara · da-DK"
+      - option "Satu · fi-FI"
+      - option "Shelley (Chinese (China mainland)) · zh-CN"
+      - option "Shelley (Chinese (Taiwan)) · zh-TW"
+      - option "Shelley (English (United Kingdom)) · en-GB"
+      - option "Shelley (English (United States)) · en-US"
+      - option "Shelley (Finnish (Finland)) · fi-FI"
+      - option "Shelley (French (Canada)) · fr-CA"
+      - option "Shelley (French (France)) · fr-FR"
+      - option "Shelley (German (Germany)) · de-DE"
+      - option "Shelley (Italian (Italy)) · it-IT"
+      - option "Shelley (Japanese (Japan)) · ja-JP"
+      - option "Shelley (Korean (South Korea)) · ko-KR"
+      - option "Shelley (Portuguese (Brazil)) · pt-BR"
+      - option "Shelley (Spanish (Mexico)) · es-MX"
+      - option "Shelley (Spanish (Spain)) · es-ES"
+      - option "Sinji · yue-HK"
+      - option "Soumya · kn-IN"
+      - option "Superstar · en-US"
+      - option "Tessa · en-ZA"
+      - option "Thomas · fr-FR"
+      - option "Tina · sl-SI"
+      - option "Tingting · zh-CN"
+      - option "Trinoids · en-US"
+      - option "Tünde · hu-HU"
+      - option "Vani · ta-IN"
+      - option "Whisper · en-US"
+      - option "Wobble · en-US"
+      - option "Xander · nl-NL"
+      - option "Yelda · tr-TR"
+      - option "Yuna · ko-KR"
+      - option "Zarvox · en-US"
+      - option "Zosia · pl-PL"
+      - option "Zuzana · cs-CZ"
+    - button "Preview"
+    - heading "Shape" [level=4]
+    - radio "ghost Classic" [checked]:
+      - img "ghost":
+      - generic: Classic
+    - radio "ghost Round":
+      - img "ghost":
+      - generic: Round
+    - radio "ghost Tall":
+      - img "ghost":
+      - generic: Tall
+    - radio "ghost Bedsheet":
+      - img "ghost":
+      - generic: Bedsheet
+    - radio "ghost Wisp":
+      - img "ghost":
+      - generic: Wisp
+    - heading "Colors" [level=4]
+    - button "Bubblegum sky"
+    - button "Pink lemonade"
+    - button "Orchid peach"
+    - button "Coral mint"
+    - button "Lime lagoon"
+    - button "Arctic blue"
+    - button "Solar flare"
+    - button "Violet ember"
+    - button "Deep tide"
+    - button "Coral current"
+    - button "Golden hour"
+    - button "Tangerine cobalt" [pressed]
+    - button "Electric grove"
+    - button "Flamingo jade"
+    - button "Cherry pop"
+    - button "Turquoise cherry"
+    - button "Ultraviolet tide"
+    - generic "Pick your own top and bottom colors":
+      - textbox "Top color": "#ffad32"
+      - textbox "Bottom color": "#4169ff"
+    - switch "Glow"
+    - text: Glow
+    - heading "Eyes" [level=4]
+    - radio "ghost Dots":
+      - img "ghost":
+      - generic: Dots
+    - radio "ghost Big":
+      - img "ghost":
+      - generic: Big
+    - radio "ghost Happy":
+      - img "ghost":
+      - generic: Happy
+    - radio "ghost Sparkle" [checked]:
+      - img "ghost":
+      - generic: Sparkle
+    - radio "ghost Wink":
+      - img "ghost":
+      - generic: Wink
+    - heading "Mouth" [level=4]
+    - switch "Blush"
+    - text: Blush
+    - radio "ghost Smile" [checked]:
+      - img "ghost":
+      - generic: Smile
+    - radio "ghost Open":
+      - img "ghost":
+      - generic: Open
+    - radio "ghost Cat":
+      - img "ghost":
+      - generic: Cat
+    - radio "ghost Fangs":
+      - img "ghost":
+      - generic: Fangs
+    - radio "ghost Tongue":
+      - img "ghost":
+      - generic: Tongue
+    - radio "ghost None":
+      - img "ghost":
+      - generic: None
+    - heading "Hat" [level=4]
+    - radio "ghost None":
+      - img "ghost":
+      - generic: None
+    - radio "ghost Top hat":
+      - img "ghost":
+      - generic: Top hat
+    - radio "ghost Party":
+      - img "ghost":
+      - generic: Party
+    - radio "ghost Beanie":
+      - img "ghost":
+      - generic: Beanie
+    - radio "ghost Crown" [checked]:
+      - img "ghost":
+      - generic: Crown
+    - radio "ghost Witch":
+      - img "ghost":
+      - generic: Witch
+    - radio "ghost Headphones":
+      - img "ghost":
+      - generic: Headphones
+    - radio "ghost Bow":
+      - img "ghost":
+      - generic: Bow
+    - radio "ghost Halo":
+      - img "ghost":
+      - generic: Halo
+    - radio "ghost Flower":
+      - img "ghost":
+      - generic: Flower
+    - radio "ghost Propeller":
+      - img "ghost":
+      - generic: Propeller
+    - heading "Accessory" [level=4]
+    - radio "ghost None" [checked]:
+      - img "ghost":
+      - generic: None
+    - radio "ghost Glasses":
+      - img "ghost":
+      - generic: Glasses
+    - radio "ghost Shades":
+      - img "ghost":
+      - generic: Shades
+    - radio "ghost Monocle":
+      - img "ghost":
+      - generic: Monocle
+    - radio "ghost Bow tie":
+      - img "ghost":
+      - generic: Bow tie
+    - radio "ghost Scarf":
+      - img "ghost":
+      - generic: Scarf
+    - radio "ghost Tie":
+      - img "ghost":
+      - generic: Tie
+    - radio "ghost Mustache":
+      - img "ghost":
+      - generic: Mustache
+    - heading "Motion" [level=4]
+    - radiogroup "Motion":
+      - radio "Float" [checked]
+      - radio "Bounce"
+      - radio "Sway"
+      - radio "Still"
+    - generic: Using its original ghost.
+    - button "Save ⌘S" [disabled]:
+      - text: Save
+      - generic: ⌘S

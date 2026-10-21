@@ -1,0 +1,46 @@
+- main:
+  - button "Back":
+    - img
+  - heading "Dashboard" [level=1]
+  - region "Sam is waiting for my-mac":
+    - heading "Sam is waiting for my-mac" [level=2]
+    - paragraph: my-mac is offline
+    - link "Open Devices":
+      - /url: "#/nodes"
+  - heading "Recent conversations" [level=2]
+  - link "#general":
+    - /url: "#/c/ch_9W6HteXpucjf"
+    - img
+    - text: "#general"
+    - img
+  - link "Sam":
+    - /url: "#/c/ch_gFve8ErmNxZf"
+    - img
+    - text: Sam
+    - img
+  - heading "Tasks to check 1" [level=2]
+  - link "Suggest three easy dinners and a shopping list · not started · 2m ago":
+    - /url: "#/c/ch_gFve8ErmNxZf/t/msg_7A4ZCc4bmBhj"
+    - img
+    - text: Suggest three easy dinners and a shopping list · not started · 2m ago
+    - img
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

@@ -1,0 +1,324 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Connected apps" [level=1]
+  - paragraph: Apps your helpers can use for you, like Gmail or Slack. Each one asks you to sign in (a few ask for a key instead); your password never goes to a helper.
+  - img
+  - searchbox "Search apps"
+  - region "Connected 0":
+    - heading "Connected 0" [level=2]
+    - text: Nothing connected yet. Pick one from the catalog below.
+  - button "Marketplace"
+  - button "Warren's catalog"
+  - region "Ones Warren knows well, with what each needs.":
+    - heading "Ones Warren knows well, with what each needs." [level=2]
+    - button "All"
+    - button "Code"
+    - button "Chat & docs"
+    - button "Work tracking"
+    - button "Data"
+    - button "Web & browser"
+    - button "Payments"
+    - button "Utilities"
+    - button "Cloud keys"
+    - img
+    - text: GitHub Built in · MCP · remote
+    - paragraph: Issues, pull requests, code search and repos, through GitHub's own MCP server.
+    - link "Docs":
+      - /url: https://github.com/github/github-mcp-server
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Git Built in · MCP · runs on the device
+    - paragraph: Read history, diffs and branches of local repositories, and make commits.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers/tree/main/src/git
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Context7 Built in · MCP · remote
+    - paragraph: Up-to-date docs and code examples for thousands of libraries, so code isn't written against old APIs.
+    - link "Docs":
+      - /url: https://github.com/upstash/context7
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Sentry Built in · MCP · runs on the device
+    - paragraph: Look up errors, issues and releases, and see what broke and where.
+    - link "Docs":
+      - /url: https://github.com/getsentry/sentry-mcp
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Slack Built in · MCP · runs on the device
+    - paragraph: Read channels and threads, post messages and reply, as a Slack bot.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers-archived/tree/main/src/slack
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Notion Built in · MCP · runs on the device
+    - paragraph: Search, read and write Notion pages and databases.
+    - link "Docs":
+      - /url: https://github.com/makenotion/notion-mcp-server
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Google Drive Built in · MCP · runs on the device
+    - paragraph: Search and read files in Google Drive, with Docs and Sheets exported as text.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers-archived/tree/main/src/gdrive
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Linear Built in · MCP · remote
+    - paragraph: Find, create and update Linear issues, projects and comments.
+    - link "Docs":
+      - /url: https://linear.app/docs/mcp
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Jira & Confluence Built in · MCP · runs on the device
+    - paragraph: Search and update Jira issues and Confluence pages (Cloud or Server).
+    - link "Docs":
+      - /url: https://github.com/sooperset/mcp-atlassian
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Postgres Built in · MCP · runs on the device
+    - paragraph: Look at a Postgres database's tables and run read-only SQL queries.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers-archived/tree/main/src/postgres
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Supabase Built in · MCP · runs on the device
+    - paragraph: "Manage Supabase projects: tables, SQL, migrations, edge functions and logs."
+    - link "Docs":
+      - /url: https://github.com/supabase-community/supabase-mcp
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Filesystem Built in · MCP · runs on the device
+    - paragraph: Read and write files in one folder on the device, and nowhere else.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Knowledge graph Built in · MCP · runs on the device
+    - paragraph: A small graph memory of people, things and how they relate. (Warren's vault is the shared memory; this is extra.)
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers/tree/main/src/memory
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Playwright browser Built in · MCP · runs on the device
+    - paragraph: "Drive a browser by page elements: open pages, click, type, fill forms, take snapshots."
+    - link "Docs":
+      - /url: https://github.com/microsoft/playwright-mcp
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Puppeteer Built in · MCP · runs on the device
+    - paragraph: "Headless Chrome: navigate, screenshot, click and run JavaScript on pages."
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers-archived/tree/main/src/puppeteer
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Fetch Built in · MCP · runs on the device
+    - paragraph: Fetch a web page and get it back as clean markdown.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers/tree/main/src/fetch
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Brave Search Built in · MCP · runs on the device
+    - paragraph: Web, news, image and local search through the Brave Search API.
+    - link "Docs":
+      - /url: https://github.com/brave/brave-search-mcp-server
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Stripe Built in · MCP · runs on the device
+    - paragraph: Customers, payments, invoices, products and refunds in your Stripe account.
+    - link "Docs":
+      - /url: https://github.com/stripe/agent-toolkit
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Time Built in · MCP · runs on the device
+    - paragraph: Current time and conversions between time zones.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers/tree/main/src/time
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Sequential thinking Built in · MCP · runs on the device
+    - paragraph: A scratchpad tool for working through hard problems step by step.
+    - link "Docs":
+      - /url: https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking
+      - text: Docs
+      - img
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: AWS keys Built in · Key
+    - paragraph: AWS credentials in the agent's environment, for the aws CLI and SDKs.
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Cloudflare token Built in · Key
+    - paragraph: A Cloudflare API token in the agent's environment, for wrangler and the API.
+    - button "Add":
+      - img
+      - text: Add
+    - img
+    - text: Hugging Face token Built in · Key
+    - paragraph: HF_TOKEN in the agent's environment, for models and datasets on the Hub.
+    - button "Add":
+      - img
+      - text: Add
+  - button "Add your own server"

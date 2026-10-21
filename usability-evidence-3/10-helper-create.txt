@@ -1,0 +1,118 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 0 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 0 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - paragraph: No agents yet.
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Agents" [level=1]
+  - img
+  - heading "Add your first agent" [level=2]
+  - paragraph: Give it a job and a computer. Claude Code, Codex, Hermes, Gemini CLI, OpenCode, Goose and other agents all work here, share its channels and memory, and use their computers like you would.
+  - button "New agent":
+    - img
+    - text: New agent
+  - dialog "Add an agent":
+    - text: Add to Warren
+    - button "Close":
+      - img
+    - navigation "Add agent steps":
+      - button "Identity, step 1 of 3": Identity
+      - button "Harness, step 2 of 3" [disabled]: Harness
+      - button "Workspace, step 3 of 3" [disabled]: Workspace
+      - text: Identity · 1 of 3
+    - heading "Who’s joining?" [level=1]
+    - paragraph: A name first. Their setup comes next.
+    - img "Your new agent, looking toward your pointer":
+      - img
+    - text: Agent name
+    - textbox "Agent name":
+      - /placeholder: e.g. Darnold
+    - paragraph: "@your-agent"
+    - paragraph: You can change their name and look later.
+    - heading "Already running somewhere?" [level=2]
+    - button "Send an invitation":
+      - img
+      - text: Send an invitation
+      - img
+    - button "Discover on a connected device"
+    - button "Cancel"
+    - 'button "Next: choose harness" [disabled]':
+      - text: "Next: choose harness"
+      - img
+    - paragraph: Harness and workspace are next.

@@ -1,0 +1,81 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "About you" [level=1]
+  - paragraph:
+    - text: What agents have learned about you. Every agent reads this before it works, so you don't have to repeat yourself. Fix or delete anything; it applies from the next message.
+    - link "It's plain notes in Memory, in the folder with your name.":
+      - /url: "#/vault"
+  - tablist:
+    - tab "Preferences0" [selected]
+    - tab "Plans0"
+    - tab "Activity0"
+    - tab "Details0"
+  - textbox "Add to Preferences":
+    - /placeholder: e.g. Prefers short answers with examples
+    - text: Explain things in everyday language and avoid technical terms.
+  - button "Add" [active]:
+    - text: Add
+  - heading "No preferences yet" [level=2]
+  - paragraph: "How you like things done: tone, tools, formats."
+  - paragraph: Agents add these as you talk with them, and you can add your own above.

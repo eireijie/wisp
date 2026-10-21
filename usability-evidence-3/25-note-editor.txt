@@ -1,0 +1,149 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - button "Toggle file list":
+    - img
+  - heading "Memory" [level=1]
+  - img
+  - combobox "View memory as":
+    - option "View as you" [selected]
+    - option "View as @sam"
+  - button "Activity":
+    - img
+    - text: Activity
+  - button "Refresh":
+    - img
+    - text: Refresh
+  - button "New note":
+    - img
+    - text: New note
+  - complementary:
+    - img
+    - textbox "Search memory…"
+    - button "Shared":
+      - img
+      - img
+      - text: Shared
+    - button "Share shared":
+      - img
+    - button "Welcome to Martin’s home"
+    - button "People":
+      - img
+      - img
+      - text: People
+    - button "Share people":
+      - img
+    - button "Martin":
+      - img
+      - img
+      - text: Martin
+    - button "Share people/usr_PZ_yomyptyd2":
+      - img
+    - button "Agents":
+      - img
+      - img
+      - text: Agents
+    - button "Share agents":
+      - img
+    - button "@sam":
+      - img
+      - img
+      - text: "@sam"
+    - button "Share agents/agt_GmUbthp9WHuY":
+      - img
+  - text: People
+  - img
+  - text: Martin
+  - img
+  - text: Saturday shopping edited by Martin · just now
+  - button "Save"
+  - button "Cancel"
+  - button "Who wrote what":
+    - img
+  - button "History":
+    - img
+  - button "Who can see this note":
+    - img
+  - textbox "Note text": "# Saturday shopping"

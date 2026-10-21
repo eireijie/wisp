@@ -1,0 +1,118 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - img
+      - text: Teams
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Dashboard" [level=1]
+  - text: 0 working · 0 online · 1 agent
+  - heading "Agents 1" [level=2]
+  - link "All agents":
+    - /url: "#/agents"
+    - text: All agents
+    - img
+  - button "Sam Sam offline Offline":
+    - img "Sam":
+      - img: z z
+    - text: Sam offline
+    - paragraph: Offline
+  - heading "Teams 0" [level=2]
+  - link "All teams":
+    - /url: "#/teams"
+    - text: All teams
+    - img
+  - paragraph:
+    - text: No teams yet.
+    - link "Make a team":
+      - /url: "#/teams"
+    - text: to group agents who work together.
+  - heading "Tasks 1" [level=2]
+  - link "Open Tasks":
+    - /url: "#/tasks"
+    - text: Open Tasks
+    - img
+  - text: 1 To do 0 Working 0 Done 0 Failed
+  - paragraph: No agent is on a task right now.

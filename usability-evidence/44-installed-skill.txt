@@ -1,0 +1,245 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Skills" [level=1]
+  - button "Create a skill":
+    - generic: Create a skill
+  - paragraph: Skills are step-by-step instructions for kinds of work. Install one and your agents follow it whenever a request fits, whatever harness they run in.
+  - tablist:
+    - tab "Shop14" [selected]
+    - tab "Installed0"
+  - searchbox "Search skills"
+  - button "All"
+  - button "code"
+  - button "data"
+  - button "github"
+  - button "research"
+  - button "routine"
+  - button "spreadsheets"
+  - button "support"
+  - button "writing"
+  - button "Write a weekly status report When asked for a weekly update, status report or \"what happened this week\" for a team or project.":
+    - generic: Write a weekly status report
+    - generic: When asked for a weekly update, status report or "what happened this week" for a team or project.
+  - generic: writing
+  - generic: reporting
+  - generic: teams
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Triage a GitHub issue When given a new GitHub issue (or a batch of them) to label, reproduce, prioritize and route.":
+    - generic: Triage a GitHub issue
+    - generic: When given a new GitHub issue (or a batch of them) to label, reproduce, prioritize and route.
+  - generic: code
+  - generic: github
+  - generic: support
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Research a topic and write a brief When asked to research a question, market, technology or company and come back with a written brief.":
+    - generic: Research a topic and write a brief
+    - generic: When asked to research a question, market, technology or company and come back with a written brief.
+  - generic: research
+  - generic: writing
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Review a pull request When asked to review a pull request or a branch's changes before merging.":
+    - generic: Review a pull request
+    - generic: When asked to review a pull request or a branch's changes before merging.
+  - generic: code
+  - generic: github
+  - generic: review
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Summarize a meeting transcript When given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.":
+    - generic: Summarize a meeting transcript
+    - generic: When given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.
+  - generic: writing
+  - generic: meetings
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Draft a customer reply When asked to answer a customer email, ticket or review. Drafts for a person to send unless told otherwise.":
+    - generic: Draft a customer reply
+    - generic: When asked to answer a customer email, ticket or review. Drafts for a person to send unless told otherwise.
+  - generic: support
+  - generic: writing
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Fill a form on a website carefully When asked to fill in and submit a web form (applications, registrations, orders, government or vendor portals).":
+    - generic: Fill a form on a website carefully
+    - generic: When asked to fill in and submit a web form (applications, registrations, orders, government or vendor portals).
+  - generic: browser
+  - generic: computer
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - 'button "Clean up data in a spreadsheet When given a messy CSV or spreadsheet to clean: duplicates, inconsistent formats, blanks, bad headers."':
+    - generic: Clean up data in a spreadsheet
+    - generic: "When given a messy CSV or spreadsheet to clean: duplicates, inconsistent formats, blanks, bad headers."
+  - generic: data
+  - generic: spreadsheets
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Write release notes from commits When asked to write release notes or a changelog for a version, from commits, PRs and tags.":
+    - generic: Write release notes from commits
+    - generic: When asked to write release notes or a changelog for a version, from commits, PRs and tags.
+  - generic: code
+  - generic: writing
+  - generic: github
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - 'button "Daily inbox digest For a daily (or on-demand) digest of new email, messages and notifications: what needs a reply, what can wait."':
+    - generic: Daily inbox digest
+    - generic: "For a daily (or on-demand) digest of new email, messages and notifications: what needs a reply, what can wait."
+  - generic: email
+  - generic: routine
+  - generic: productivity
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Compare vendors When asked to compare tools, vendors or service providers and recommend one.":
+    - generic: Compare vendors
+    - generic: When asked to compare tools, vendors or service providers and recommend one.
+  - generic: research
+  - generic: purchasing
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - button "Categorize transactions for bookkeeping When given bank or card transactions to categorize into the chart of accounts, flagging anything unclear.":
+    - generic: Categorize transactions for bookkeeping
+    - generic: When given bank or card transactions to categorize into the chart of accounts, flagging anything unclear.
+  - generic: finance
+  - generic: data
+  - generic: spreadsheets
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - 'button "Watch competitors For a periodic check on competitors: pricing, launches, changelogs, hiring and news."':
+    - generic: Watch competitors
+    - generic: "For a periodic check on competitors: pricing, launches, changelogs, hiring and news."
+  - generic: research
+  - generic: routine
+  - generic: marketing
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - 'button "Write a how-to doc When asked to document how to do something: a guide, runbook or README section."':
+    - generic: Write a how-to doc
+    - generic: "When asked to document how to do something: a guide, runbook or README section."
+  - generic: writing
+  - generic: docs
+  - generic: Not installed
+  - button "Read"
+  - button "Install":
+    - text: Install
+  - dialog "Summarize a meeting transcript":
+    - generic: Summarize a meeting transcript
+    - button "Close":
+    - paragraph: Use when given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.
+    - generic: In the shop
+    - button "Install":
+      - text: Install
+    - heading "SKILL.md" [level=3]
+    - heading "Meeting summary" [level=1]
+    - paragraph: From a transcript, produce notes someone who missed the meeting can act on.
+    - code: "# <Meeting> — <date> **Attendees:** names **TL;DR:** 2–3 sentences. ## Decisions - What was decided, and by whom. ## Action items - [ ] Owner — task — due date (if said) ## Discussion - Topic: the gist, the options raised, where it landed. ## Open questions - Unresolved points, and who should resolve them."
+    - paragraph: "Rules:"
+    - list:
+      - listitem: Only list decisions that were actually made; "we should look into" is an open question, not a decision.
+      - listitem: "Every action item has one owner. If none was named, write \"owner: ?\" rather than guessing."
+      - listitem: Attribute opinions carefully; don't put words in people's mouths. Quote sparingly.
+      - listitem: Drop small talk and repetition. Keep numbers, dates and names exact.
+      - listitem: Save to the vault (shared/meetings/-.md); post the TL;DR and action items.
+  - dialog "Install \"Summarize a meeting transcript\"":
+    - heading "Install \"Summarize a meeting transcript\"" [level=2]
+    - button "Close":
+    - paragraph: Use when given a meeting transcript, recording notes or call log to turn into notes with decisions and action items.
+    - group "Which agents learn it":
+      - generic: Which agents learn it
+      - button "Clear"
+      - checkbox "Everyday Helper Everyday Helper @everyday-helper · Claude Code" [checked] [active]
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+      - generic: "@everyday-helper · Claude Code"
+      - generic: You can give it to more agents later.
+    - button "Cancel"
+    - button "Install for 1 agent"

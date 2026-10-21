@@ -1,0 +1,198 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Agent runtimes" [level=1]:
+    - text: Settings
+    - generic: / Agent runtimes
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes" [active]:
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Agent runtimes" [level=2]
+    - paragraph: The agent tools (harnesses) Warren can run on each of your devices. Agents in a VM also get Claude Code, Codex, Hermes and Kimi CLI inside it.
+    - generic: my-mac
+    - generic: Offline
+    - button "Check again" [disabled]:
+      - text: Check again
+    - heading "On this device" [level=3]
+    - text: Claude Code
+    - generic: CLI needed
+    - generic: Anthropic's coding agent
+    - button "Install" [disabled]
+    - button "More for Claude Code":
+    - text: Codex
+    - generic: CLI needed
+    - generic: OpenAI's coding agent
+    - button "Install" [disabled]
+    - button "More for Codex":
+    - text: Hermes
+    - generic: CLI needed
+    - generic: Nous Research's agent, with its own skills
+    - button "How to install"
+    - button "More for Hermes":
+    - text: Gemini CLI
+    - generic: CLI needed
+    - generic: Google's agent
+    - button "Install" [disabled]
+    - button "More for Gemini CLI":
+    - text: OpenCode
+    - generic: CLI needed
+    - generic: Open-source agent for any model
+    - button "Install" [disabled]
+    - button "More for OpenCode":
+    - text: Goose
+    - generic: CLI needed
+    - generic: Block's open-source agent
+    - button "How to install"
+    - button "More for Goose":
+    - text: Kimi CLI
+    - generic: CLI needed
+    - generic: Moonshot's agent
+    - button "Install" [disabled]
+    - button "More for Kimi CLI":
+    - text: Qwen Code
+    - generic: CLI needed
+    - generic: Alibaba's agent
+    - button "Install" [disabled]
+    - button "More for Qwen Code":
+    - text: Cursor
+    - generic: CLI needed
+    - generic: Cursor's agent CLI
+    - button "How to install"
+    - button "More for Cursor":
+    - text: OpenClaw
+    - generic: CLI needed
+    - generic: Needs its gateway running
+    - button "Install" [disabled]
+    - button "More for OpenClaw":
+    - button "Add runtime":
+      - text: Add runtime
+    - heading "Inside your agents' VMs" [level=3]
+    - paragraph: Every VM comes with these, so an agent can run entirely inside its computer. Sign each in once per VM, on the agent's Computer tab.
+    - generic: Claude Code
+    - generic: Anthropic's coding agent
+    - generic: In every VM
+    - generic: Codex
+    - generic: OpenAI's coding agent
+    - generic: In every VM
+    - generic: Hermes
+    - generic: Nous Research's agent, with its own skills
+    - generic: In every VM
+    - generic: Kimi CLI
+    - generic: Moonshot's agent
+    - generic: In every VM
+    - heading "Connect from anywhere" [level=3]
+    - paragraph: "Agents that run somewhere Warren doesn't start them join through warren-mcp: add the agent, then make a connection token on its Connect tab."
+    - generic: Grok
+    - generic: Connects through warren-mcp
+    - generic: Through MCP
+    - generic: CU
+    - generic: Custom
+    - generic: Your own agent, through the API or MCP
+    - generic: Through MCP

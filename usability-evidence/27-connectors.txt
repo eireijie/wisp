@@ -1,0 +1,354 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors" [active]:
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Connectors" [level=1]
+  - button "Add your own":
+    - generic: Add your own
+  - paragraph: Connect the apps you use, so agents can work in them and keep an eye on them for you. Search thousands of MCP servers, sign in, and pick which agents get each.
+  - searchbox "Search apps and MCP servers"
+  - region "Connected 0":
+    - heading "Connected 0" [level=2]
+    - generic: Nothing connected yet. Pick one from the catalog below, or add your own.
+  - button "Marketplace"
+  - button "Warren's catalog"
+  - region "Marketplace":
+    - paragraph: Popular official servers. Search to find any of the thousands in the MCP Registry. Zapier connects thousands more apps, like Gmail, Google Calendar, Drive and Todoist, with one sign-in.
+    - generic: Z
+    - text: Zapier
+    - img "Official"
+    - generic: Official · zapier.com
+    - paragraph: Hosted MCP server connecting AI assistants to 9,000+ apps and 40,000+ actions via Zapier.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://docs.zapier.com/mcp/home
+    - button "Add":
+      - text: Add
+    - generic: "N"
+    - text: Notion
+    - img "Official"
+    - generic: Official · notion.com
+    - paragraph: Official Notion MCP server
+    - generic: Remote · sign in
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: mintmcp.com
+    - paragraph: A MCP server for Gmail that lets you search, read, and draft emails and replies.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/mintmcp/servers
+    - button "Add":
+      - text: Add
+    - generic: O
+    - generic: Outlook Email
+    - generic: mintmcp.com
+    - paragraph: A MCP server for Outlook email that lets you search, read, and draft emails and replies.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/mintmcp/servers
+    - button "Add":
+      - text: Add
+    - generic: O
+    - generic: Outlook Calendar
+    - generic: mintmcp.com
+    - paragraph: A MCP server that works with Outlook Calendar to manage event listing, reading, and updates.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/mintmcp/servers
+    - button "Add":
+      - text: Add
+    - generic: G
+    - text: GitHub
+    - img "Official"
+    - generic: Official · github
+    - paragraph: Connect AI assistants to GitHub - manage repos, issues, PRs, and workflows through natural language.
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://github.com/github/github-mcp-server
+    - button "Add":
+      - text: Add
+    - generic: L
+    - text: Linear
+    - img "Official"
+    - generic: Official · linear.app
+    - paragraph: MCP server for Linear project management and issue tracking
+    - generic: Remote · sign in
+    - link:
+      - /url: https://linear.app
+    - button "Add":
+      - text: Add
+    - generic: A
+    - text: Atlassian Rovo MCP Server
+    - img "Official"
+    - generic: Official · atlassian.com
+    - paragraph: Connect to Atlassian Jira, Confluence, Loom, and more to search, create, and manage your work.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/
+    - button "Add":
+      - text: Add
+    - generic: A
+    - text: Airtable
+    - img "Official"
+    - generic: Official · airtable.com
+    - paragraph: Official Airtable MCP server — database and operations layer for agents.
+    - generic: Remote · sign in
+    - button "Add":
+      - text: Add
+    - generic: M
+    - text: Monday.Com
+    - img "Official"
+    - generic: Official · monday.com
+    - paragraph: MCP server for monday.com integration.
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://github.com/mondaycom/mcp
+    - button "Add":
+      - text: Add
+    - generic: F
+    - text: Figma MCP Server
+    - img "Official"
+    - generic: Official · mcp.figma.com
+    - paragraph: The Figma MCP server brings Figma design context directly into your AI workflow.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/figma/mcp-server-guide
+    - button "Add":
+      - text: Add
+    - generic: C
+    - text: Canva MCP
+    - img "Official"
+    - generic: Official · mcp.canva.com
+    - paragraph: Create, search, edit, and export designs and assets from Canva.
+    - generic: Remote · sign in
+    - button "Add":
+      - text: Add
+    - text: Fireflies.ai
+    - img "Official"
+    - generic: Official · fireflies.ai
+    - paragraph: Search and analyze meeting transcripts, summaries, soundbites and analytics from Fireflies.ai
+    - generic: Remote · sign in
+    - link:
+      - /url: https://docs.fireflies.ai/mcp-tools/overview
+    - button "Add":
+      - text: Add
+    - generic: G
+    - text: Gitlab
+    - img "Official"
+    - generic: Official · gitlab.com
+    - paragraph: Official GitLab MCP Server
+    - generic: Remote · sign in
+    - link:
+      - /url: https://gitlab.com/gitlab-org/gitlab
+    - button "Add":
+      - text: Add
+    - generic: S
+    - text: Stripe
+    - img "Official"
+    - generic: Official · stripe.com
+    - paragraph: MCP server integrating with Stripe - tools for customers, products, payments, and more.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/stripe/agent-toolkit
+    - button "Add":
+      - text: Add
+    - generic: P
+    - text: Paypal
+    - img "Official"
+    - generic: Official · mcp.paypal.com
+    - paragraph: PayPal MCP server provides access to PayPal services and operations for AI assistants
+    - generic: Remote · needs a key
+    - button "Add":
+      - text: Add
+    - generic: S
+    - text: Supabase
+    - img "Official"
+    - generic: Official · supabase.com
+    - paragraph: MCP server for interacting with the Supabase platform
+    - generic: Remote · sign in
+    - link:
+      - /url: https://supabase.com/mcp
+    - button "Add":
+      - text: Add
+    - text: Neon
+    - img "Official"
+    - generic: Official · neon.com
+    - paragraph: Official Neon MCP server for managing Neon projects and Lakebase Postgres databases.
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://neon.com/docs/ai/neon-mcp-server
+    - button "Add":
+      - text: Add
+    - generic: V
+    - text: Vercel MCP
+    - img "Official"
+    - generic: Official · vercel.com
+    - paragraph: An MCP server for Vercel
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/vercel/vercel-mcp-overview
+    - button "Add":
+      - text: Add
+    - generic: C
+    - text: Cloudflare
+    - img "Official"
+    - generic: Official · mcp.cloudflare.com
+    - paragraph: Cloudflare MCP servers
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/cloudflare/mcp-server-cloudflare
+    - button "Add":
+      - text: Add
+    - generic: W
+    - text: Webflow
+    - img "Official"
+    - generic: Official · webflow.com
+    - paragraph: AI-powered design and management for Webflow Sites
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/webflow/mcp-server
+    - button "Add":
+      - text: Add
+    - generic: W
+    - text: Wix
+    - img "Official"
+    - generic: Official · wix.com
+    - paragraph: A Model Context Protocol server for Wix AI tools
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/wix/wix-mcp
+    - button "Add":
+      - text: Add
+    - generic: C
+    - text: Close MCP
+    - img "Official"
+    - generic: Official · close.com
+    - paragraph: Close CRM to manage your sales pipeline. Learn more at https://close.com or https://mcp.close.com
+    - generic: Remote · sign in
+    - button "Add":
+      - text: Add
+    - text: PandaDoc MCP Server
+    - img "Official"
+    - generic: Official · mcp.pandadoc.com
+    - paragraph: PandaDoc MCP server for creating, sending, signing, and tracking PandaDoc documents.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://developers.pandadoc.com/docs/getting-started-with-mcp
+    - button "Add":
+      - text: Add
+    - text: Postman MCP Server
+    - img "Official"
+    - generic: Official · postman.com
+    - paragraph: Give your AI agents trusted access to the full Postman platform.
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://www.postman.com/product/mcp-server/
+    - button "Add":
+      - text: Add
+    - generic: A
+    - text: Amplitude
+    - img "Official"
+    - generic: Official · amplitude.com
+    - paragraph: Search, access, and get insights on your Amplitude data
+    - generic: Remote · sign in
+    - button "Add":
+      - text: Add
+    - generic: A
+    - text: Apify MCP Server
+    - img "Official"
+    - generic: Official · apify.com
+    - paragraph: Extract data from any website with thousands of scrapers, crawlers, and automations on Apify Store ⚡
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://github.com/apify/apify-mcp-server
+    - button "Add":
+      - text: Add
+    - generic: E
+    - text: Exa
+    - img "Official"
+    - generic: Official · exa.ai
+    - paragraph: Connect AI agents to Exa for web search, content fetching, and multi-step research.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/exa-labs/exa-mcp-server
+    - button "Add":
+      - text: Add
+    - generic: H
+    - text: Hugging Face
+    - img "Official"
+    - generic: Official · huggingface.co
+    - paragraph: Connect to Hugging Face Hub and thousands of Gradio AI Applications
+    - generic: Remote · sign in
+    - button "Add":
+      - text: Add
+    - generic: E
+    - text: ElevenLabs
+    - img "Official"
+    - generic: Official · elevenlabs.io
+    - paragraph: Manage ElevenLabs voice agents and generate speech, music, sound effects, images, and video.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://elevenlabs.io/mcp
+    - button "Add":
+      - text: Add

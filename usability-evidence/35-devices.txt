@@ -1,0 +1,81 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices" [active]:
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Devices" [level=1]
+  - button "Add device":
+    - text: Add device
+  - text: my-mac
+  - generic: offline
+  - generic: Yours
+  - generic: "@everyday-helper"
+  - button "Remove device":
+  - text: For agents, it
+  - combobox "What my-mac does for agents":
+    - option "Not chosen yet" [selected]
+    - option "runs their computers (VMs)"
+    - option "lends them its own screen"
+    - option "runs them headless"
+  - generic: "Its screen: unknown until it connects."
+  - checkbox "Let others in the workspace add agents and VMs here Leave this off for a personal computer. Agents that run directly on it then only take requests from you."
+  - text: Let others in the workspace add agents and VMs here
+  - text: Leave this off for a personal computer. Agents that run directly on it then only take requests from you.

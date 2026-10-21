@@ -1,0 +1,16 @@
+- button "Switch to dark mode":
+  - img
+- text: Warren
+- heading "Set up Warren" [level=1]
+- paragraph: You'll be the owner of this workspace.
+- text: Your name
+- textbox "Your name"
+- text: Workspace name
+- textbox "Workspace name":
+  - /placeholder: Warren
+- text: Email
+- textbox "Email"
+- text: Password
+- textbox "Password At least 8 characters."
+- text: At least 8 characters.
+- button "Create workspace"

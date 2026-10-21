@@ -1,0 +1,118 @@
+- main:
+  - button "Back":
+    - img
+  - heading "Help" [level=1]
+  - navigation "On this page":
+    - list:
+      - listitem:
+        - link "Finish setup":
+          - /url: "#/help"
+      - listitem:
+        - link "My helper isn't answering":
+          - /url: "#/help"
+      - listitem:
+        - link "What can Warren do?":
+          - /url: "#/help"
+      - listitem:
+        - link "Words you'll see":
+          - /url: "#/help"
+      - listitem:
+        - link "Simple or Advanced":
+          - /url: "#/help"
+      - listitem:
+        - link "Report a problem":
+          - /url: "#/help"
+  - region "Finish setup":
+    - heading "Finish setup" [level=2]
+    - progressbar "Setup progress"
+    - text: 2 of 5 steps done
+    - paragraph: "Next: Connect a computer to Warren"
+    - link "Continue setup":
+      - /url: "#/welcome"
+    - link "What is Warren? See the welcome again":
+      - /url: "#/welcome/intro"
+  - region "My helper isn't answering":
+    - heading "My helper isn't answering" [level=2]
+    - paragraph: Go down this list. The first item marked "Needs fixing" is usually the reason. This updates by itself.
+    - list:
+      - listitem: "Working: You have a helper: Sam"
+      - listitem: "Working: Sam works on my-mac"
+      - listitem:
+        - text: "Needs fixing: my-mac is on and connectedNeeds fixing"
+        - paragraph: Turn on my-mac and make sure Warren is running there.
+        - link "Fix this":
+          - /url: "#/nodes"
+      - listitem: "Can't tell yet: Its AI is installed thereCan't tell yet"
+  - region "What can Warren do?":
+    - heading "What can Warren do?" [level=2]
+    - list:
+      - listitem: Plan your meals for the week and write the shopping list.
+      - listitem: Draft a polite message or email for you to check and send.
+      - listitem: Summarize a long document into a few clear points.
+      - listitem: Keep notes on what matters to you, so you don't repeat yourself.
+      - listitem: Check a website and tell you what changed.
+      - listitem: Help sort your inbox, once you connect Gmail.
+    - paragraph: Each of these needs a helper set up first, and some need a connected app, like Gmail. Warren can only do what you connect it to.
+  - region "Words you'll see":
+    - heading "Words you'll see" [level=2]
+    - term: Agent (helper)
+    - definition: An AI helper you give work to, like a teammate. It has a name, remembers things, and works on a device.
+    - term: Harness
+    - definition: The AI program a helper runs on, like Claude Code or Codex. You pick it once when you make a helper.
+    - term: Device
+    - definition: A computer of yours with Warren installed. Helpers do their work there.
+    - term: Computer
+    - definition: A desktop a helper can see and use, either a virtual one on your device or your own screen.
+    - term: Memory
+    - definition: Notes Warren keeps about you and your work, so helpers don't need to be told twice. You can read and fix them.
+    - term: Skill
+    - definition: Something a helper has learned how to do, like a recipe it can follow again.
+    - term: Routine
+    - definition: A job a helper does on its own, on a schedule or when something happens.
+    - term: Team
+    - definition:
+      - text: A group of helpers that work on something together.
+      - link "Open Teams":
+        - /url: "#/teams"
+    - term: Connected app
+    - definition: A service you link to Warren, like Gmail, so helpers can use it for you.
+    - term: Token
+    - definition: A unit AI services use to measure and charge for work. More text means more tokens.
+  - region "Simple or Advanced":
+    - heading "Simple or Advanced" [level=2]
+    - paragraph:
+      - strong: Simple
+      - text: shows the everyday parts first, with advanced options a click away.
+      - strong: Advanced
+      - text: shows everything, including teams, harness details, VM sizes, tokens and raw files.
+    - paragraph:
+      - text: You're using
+      - strong: Simple
+      - text: .
+    - button "Switch to Advanced"
+    - paragraph: You can also change this in Settings → App behavior.
+  - region "Report a problem":
+    - heading "Report a problem" [level=2]
+    - paragraph: Something broken or confusing? Tell us what you were trying to do, what you expected, and what happened instead. Leave out passwords and private details.
+    - link "Open an issue on GitHub (opens in a new tab)":
+      - /url: https://github.com/eireijie/warren/issues
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

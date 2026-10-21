@@ -1,0 +1,93 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Computers" [level=1]
+  - button "Add computer":
+    - text: Add computer
+  - heading "Give your agents a computer" [level=2]
+  - paragraph: "Agents work on computers the way you do: they open apps and websites, sign in once, and keep their files. You can watch them work and take control anytime."
+  - paragraph: "Each agent gets its own screen: a VM on one of your devices, or an Orgo cloud computer. Your own screen stays yours."
+  - button "Add computer":
+    - text: Add computer
+  - dialog "Add a computer":
+    - heading "Add a computer" [level=2]
+    - button "Close":
+    - 'button "A VM on one of your devices A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours. None of your devices can run VMs yet: install Docker on one."':
+      - generic: A VM on one of your devices
+      - generic: A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.
+      - generic: "None of your devices can run VMs yet: install Docker on one."
+    - button "Your own screen Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask." [active]:
+      - generic: Your own screen
+      - generic: Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask.
+    - button "An Orgo cloud computer A Linux desktop in the cloud from orgo.ai that keeps running when your devices are off. Add your Orgo API key in Settings → Computers first.":
+      - generic: An Orgo cloud computer
+      - generic: A Linux desktop in the cloud from orgo.ai that keeps running when your devices are off.
+      - generic: Add your Orgo API key in Settings → Computers first.
+    - text: Device
+    - combobox "Device":
+      - option "my-mac (computer, offline)" [selected]
+    - text: Name
+    - textbox "Name":
+      - /placeholder: my-mac
+    - button "Cancel"
+    - button "Add computer"

@@ -1,0 +1,52 @@
+- main:
+  - button "Back":
+    - img
+  - heading "Dashboard" [level=1]
+  - text: 0 working · 0 online · 1 agent
+  - heading "Agents 1" [level=2]
+  - link "All agents":
+    - /url: "#/agents"
+    - text: All agents
+    - img
+  - button "Sam Sam offline Offline":
+    - img "Sam":
+      - img: z z
+    - text: Sam offline
+    - paragraph: Offline
+  - heading "Teams 0" [level=2]
+  - link "All teams":
+    - /url: "#/teams"
+    - text: All teams
+    - img
+  - paragraph:
+    - text: No teams yet.
+    - link "Make a team":
+      - /url: "#/teams"
+    - text: to group agents who work together.
+  - heading "Tasks 1" [level=2]
+  - link "Open Tasks":
+    - /url: "#/tasks"
+    - text: Open Tasks
+    - img
+  - text: 1 To do 0 Working 0 Done 0 Failed
+  - paragraph: No agent is on a task right now.
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

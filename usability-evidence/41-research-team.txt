@@ -1,0 +1,192 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Teams" [level=1]
+  - button "New team":
+    - text: New team
+  - generic: Lead
+  - paragraph: Takes every task nobody assigned, splits it up and hands the pieces to agents by role.
+  - combobox "Lead agent":
+    - option "Automatic (Everyday Helper)" [selected]
+    - option "@everyday-helper (Everyday Helper)"
+  - heading "Put agents to work together" [level=2]
+  - paragraph: A team is a few agents with a role each, like a lead who hands out work, a backend, a frontend and a reviewer. Start from a template or build your own, and pick any agent for each role.
+  - paragraph: Agents that aren't on a team keep working on their own.
+  - button "New team":
+    - text: New team
+  - dialog "New team":
+    - heading "New team" [level=2]
+    - button "Close":
+    - generic: Start from
+    - button "Blank"
+    - button "🛠️ Build team"
+    - button "🔎 Research team" [active] [pressed]
+    - button "🧑‍💻 Solo + reviewer"
+    - paragraph: Roles are just a starting point. Rename them, add or remove any, and put any agent in each one.
+    - text: Label
+    - button "Pick a label": 🔎
+    - text: Name
+    - 'textbox "Name Becomes the channel #team-name and the memory folder teams/name/."':
+      - /placeholder: web
+    - generic: "Becomes the channel #team-name and the memory folder teams/name/."
+    - text: What it's for
+    - textbox "What it's for Starts the team's brief, which every member reads before working.":
+      - /placeholder: Builds and ships the website.
+      - text: Finds things out and writes them up. One agent leads the question, others dig in and check the facts.
+    - generic: Starts the team's brief, which every member reads before working.
+    - generic: Roles
+    - textbox "Role name":
+      - /placeholder: Role, e.g. Backend
+      - text: Lead researcher
+    - radio "Leads" [checked]
+    - text: Leads
+    - button "Remove Lead researcher":
+    - textbox "What the role owns":
+      - /placeholder: What it owns and what to send its way. The agent reads this.
+      - text: Takes the question, breaks it into things to look up and hands them out. Pulls the answers together into one clear write-up.
+    - combobox "Who fills this role":
+      - option "New agent…"
+      - option "@everyday-helper (Everyday Helper, Claude Code)" [selected]
+    - textbox "Role name":
+      - /placeholder: Role, e.g. Backend
+      - text: Researcher
+    - radio "Leads"
+    - text: Leads
+    - button "Remove Researcher":
+    - textbox "What the role owns":
+      - /placeholder: What it owns and what to send its way. The agent reads this.
+      - text: Digs into sources, reads closely and reports what it found, with where each fact came from.
+    - combobox "Who fills this role":
+      - option "New agent…" [selected]
+      - option "@everyday-helper (Everyday Helper, Claude Code)" [disabled]
+    - combobox "Harness for the new agent" [disabled]:
+      - option "Choose a harness…" [disabled] [selected]
+      - option "Claude Code (not installed on my-mac)"
+      - option "Codex (not installed on my-mac)"
+      - option "Hermes (not installed on my-mac)"
+      - option "Gemini CLI (suggested) (not installed on my-mac)"
+      - option "OpenCode (not installed on my-mac)"
+      - option "Goose (not installed on my-mac)"
+      - option "Kimi CLI (not installed on my-mac)"
+      - option "Qwen Code (not installed on my-mac)"
+      - option "Cursor (not installed on my-mac)"
+      - option "OpenClaw (not installed on my-mac)"
+    - textbox "Name for the new agent":
+      - /placeholder: Name (new agent)
+    - textbox "Role name":
+      - /placeholder: Role, e.g. Backend
+      - text: Analyst
+    - radio "Leads"
+    - text: Leads
+    - button "Remove Analyst":
+    - textbox "What the role owns":
+      - /placeholder: What it owns and what to send its way. The agent reads this.
+      - text: "Works with numbers and data: collects it, cleans it up and says what it shows."
+    - combobox "Who fills this role":
+      - option "New agent…" [selected]
+      - option "@everyday-helper (Everyday Helper, Claude Code)" [disabled]
+    - combobox "Harness for the new agent" [disabled]:
+      - option "Choose a harness…" [disabled] [selected]
+      - option "Claude Code (not installed on my-mac)"
+      - option "Codex (suggested) (not installed on my-mac)"
+      - option "Hermes (not installed on my-mac)"
+      - option "Gemini CLI (not installed on my-mac)"
+      - option "OpenCode (not installed on my-mac)"
+      - option "Goose (not installed on my-mac)"
+      - option "Kimi CLI (not installed on my-mac)"
+      - option "Qwen Code (not installed on my-mac)"
+      - option "Cursor (not installed on my-mac)"
+      - option "OpenClaw (not installed on my-mac)"
+    - textbox "Name for the new agent":
+      - /placeholder: Name (new agent)
+    - textbox "Role name":
+      - /placeholder: Role, e.g. Backend
+      - text: Fact-checker
+    - radio "Leads"
+    - text: Leads
+    - button "Remove Fact-checker":
+    - textbox "What the role owns":
+      - /placeholder: What it owns and what to send its way. The agent reads this.
+      - text: Checks claims and sources in the write-up before it goes out, and says what doesn't hold up.
+    - combobox "Who fills this role":
+      - option "New agent…" [selected]
+      - option "@everyday-helper (Everyday Helper, Claude Code)" [disabled]
+    - combobox "Harness for the new agent" [disabled]:
+      - option "Choose a harness…" [disabled] [selected]
+      - option "Claude Code (not installed on my-mac)"
+      - option "Codex (not installed on my-mac)"
+      - option "Hermes (suggested) (not installed on my-mac)"
+      - option "Gemini CLI (not installed on my-mac)"
+      - option "OpenCode (not installed on my-mac)"
+      - option "Goose (not installed on my-mac)"
+      - option "Kimi CLI (not installed on my-mac)"
+      - option "Qwen Code (not installed on my-mac)"
+      - option "Cursor (not installed on my-mac)"
+      - option "OpenClaw (not installed on my-mac)"
+    - textbox "Name for the new agent":
+      - /placeholder: Name (new agent)
+    - button "Add a role":
+      - text: Add a role
+    - paragraph: Pick a harness for each new agent.
+    - button "Cancel"
+    - button "Create team" [disabled]

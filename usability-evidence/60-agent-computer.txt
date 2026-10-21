@@ -1,0 +1,125 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - generic: Everyday Helper
+  - button "Message":
+    - generic: Message
+  - button "Memory":
+    - generic: Memory
+  - navigation "Agent sections":
+    - generic: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/overview"
+      - text: Overview
+    - link "Look":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/look"
+      - text: Look
+    - link "Soul":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/soul"
+      - text: Soul
+    - link "Instructions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/instructions"
+      - text: Instructions
+    - generic: Runtime
+    - link "Model":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/model"
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/device"
+      - text: Device
+    - link "Computer" [active]:
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/computer"
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/background"
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/routines"
+      - text: Routines
+    - generic: Access
+    - link "Permissions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/permissions"
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/connect"
+      - text: Connect
+    - generic: Activity
+    - link "Runs":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/runs"
+      - text: Runs
+  - tabpanel:
+    - heading "Computer" [level=3]
+    - paragraph: "The computer @everyday-helper works on: it opens apps and websites, signs in once and stays signed in, and keeps its files there. You can watch it live and take control anytime. Agents that share a computer share its files, browser and sign-ins, so they can hand work to each other."
+    - generic: "@everyday-helper doesn't have a computer yet, so it can't use apps or websites. Pick one below."
+    - heading "Where Claude Code runs" [level=3]
+    - paragraph: Directly on my-mac, where it can reach that device's files. Give it a VM on my-mac to run it inside that instead.
+    - heading "Give it" [level=3]
+    - button "Your own screen Only while you lend it, and only for things you ask. For apps that only live on your computer.":
+      - generic: Your own screen
+      - generic: Only while you lend it, and only for things you ask. For apps that only live on your computer.
+    - button "Another computer… A VM on a different device, or an Orgo cloud computer.":
+      - generic: Another computer…
+      - generic: A VM on a different device, or an Orgo cloud computer.
+    - button "Run it headless instead (no computer)"

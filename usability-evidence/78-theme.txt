@@ -1,0 +1,169 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Appearance" [level=1]:
+    - text: Settings
+    - generic: / Appearance
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance" [active]:
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Appearance" [level=2]
+    - paragraph: How Warren looks on this device.
+    - heading "Mode" [level=3]
+    - radiogroup "Mode":
+      - radio "System" [checked]:
+        - text: System
+      - radio "Light":
+        - text: Light
+      - radio "Dark":
+        - text: Dark
+    - heading "Theme" [level=3]
+    - paragraph: Every theme works in light and dark. Agents keep their own colors in all of them.
+    - radiogroup "Theme":
+      - radio "Mono Black and white. Color only for status and agents." [checked]:
+        - generic: New agent
+        - generic: a link
+        - generic: "# launch"
+        - generic: Mono
+        - paragraph: Black and white. Color only for status and agents.
+      - radio "Ghost mint Fresh mint with cool grays.":
+        - generic: New agent
+        - generic: a link
+        - generic: "# launch"
+        - generic: Ghost mint
+        - paragraph: Fresh mint with cool grays.
+      - radio "Iris Calm periwinkle with cool grays.":
+        - generic: New agent
+        - generic: a link
+        - generic: "# launch"
+        - generic: Iris
+        - paragraph: Calm periwinkle with cool grays.
+      - radio "Lilac Soft and a little playful.":
+        - generic: New agent
+        - generic: a link
+        - generic: "# launch"
+        - generic: Lilac
+        - paragraph: Soft and a little playful.
+      - radio "Sky Clear blue, bright and simple.":
+        - generic: New agent
+        - generic: a link
+        - generic: "# launch"
+        - generic: Sky
+        - paragraph: Clear blue, bright and simple.
+    - heading "Accessibility" [level=3]
+    - generic: Text size
+    - generic: Makes text and spacing smaller or bigger.
+    - radiogroup "Text size":
+      - radio "Small"
+      - radio "Default" [checked]
+      - radio "Large"
+    - generic: Reduce motion
+    - generic: Keeps ghosts and transitions still. Your system's reduce-motion setting does this too.
+    - switch "Reduce motion"

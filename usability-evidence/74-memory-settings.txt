@@ -1,0 +1,169 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Settings / Memory" [level=1]:
+    - text: Settings
+    - generic: / Memory
+  - complementary:
+    - navigation "Settings":
+      - generic: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - generic: Profile
+      - link "Preferences":
+        - /url: "#/settings/preferences"
+        - generic: Preferences
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - generic: Notifications
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - generic: Voice
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - generic: Appearance
+      - link "Security":
+        - /url: "#/settings/security"
+        - generic: Security
+      - generic: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - generic: General
+      - link "People":
+        - /url: "#/settings/people"
+        - generic: People
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - generic: Agents
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - generic: Agent runtimes
+      - link "Memory" [active]:
+        - /url: "#/settings/memory"
+        - generic: Memory
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - generic: Computers
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - generic: Connections
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - generic: Data & export
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - generic: Updates & about
+  - main:
+    - heading "Memory" [level=2]
+    - paragraph: Everything your agents and people remember is kept as plain markdown notes in one folder. Use Obsidian to read and write them; Warren keeps track of who changed what and who is allowed to see each note.
+    - heading "Where memory is kept" [level=3]
+    - paragraph: A folder on the computer that runs Warren. It can be an existing Obsidian vault.
+    - generic: Current folder
+    - code: /tmp/warren-usability-20261017/vault
+    - generic: Set by WARREN_VAULT_DIR where Warren runs, so it can only be changed there.
+    - heading "Use it in Obsidian" [level=3]
+    - paragraph: Obsidian is where you browse and edit notes. Anything you change there shows up in Warren, and your name goes on it.
+    - generic: On the computer that runs Warren
+    - paragraph:
+      - text: In Obsidian choose Open folder as vault and pick
+      - code: /tmp/warren-usability-20261017/vault
+      - text: . Edits you make are picked up within a few seconds and saved as "Edited in Obsidian".
+    - link "Open in Obsidian":
+      - /url: obsidian://open?path=%2Ftmp%2Fwarren-usability-20261017%2Fvault
+      - text: Open in Obsidian
+    - heading "On another computer" [level=4]
+    - paragraph: Warren shares memory as a git repository, which Obsidian's free Git plugin can copy to your computer and keep in step, both ways.
+    - list:
+      - text: Make sure git is installed on that computer (
+      - code: git --version
+      - text: in a terminal tells you), and install Obsidian.
+      - text: Make a sign-in token for that computer. It's shown once, so copy it right away.
+      - textbox "Token name":
+        - /placeholder: Name, e.g. My laptop
+      - button "Create token":
+        - text: Create token
+      - text: "Copy memory to that computer. In a terminal, in the folder where you keep your vaults:"
+      - generic: git clone "http://warren:YOUR-TOKEN@127.0.0.1:4837/git/vault.git" "Warren memory"
+      - button "Copy"
+      - paragraph: Replace YOUR-TOKEN with the token from step 2.
+      - text: In Obsidian choose Open folder as vault and pick the new
+      - code: Warren memory
+      - text: folder. Then open Settings → Community plugins → Browse, install Git (by Vinzent03) and turn it on.
+      - listitem: In the Git plugin's settings set Auto pull interval and Auto commit-and-sync interval (called "Vault backup interval" in older versions) to a few minutes, and turn on Pull on startup. From then on it brings in what agents and others wrote, and sends what you write.
+    - list:
+      - listitem: Your changes show up in Warren under your name, in Activity.
+      - listitem: Warren checks every change against the same rules as the app. If you edit a note you're not allowed to edit, the sync is refused and the plugin says so; undo that edit and sync again.
+      - listitem: If you and an agent changed the same note, the plugin shows a merge conflict the way any git project does. Keep the text you want and sync again.
+      - text: Obsidian's own settings and plugins (the
+      - code: .obsidian
+      - text: folder) stay on your computer and are never synced.
+      - listitem: Syncing hands over all of memory, history included, so it's only for people who are allowed to read every note. Revoke a token below the moment a computer is lost.
+    - heading "Who can see and edit what" [level=3]
+    - paragraph:
+      - text: By default every agent reads and writes Shared, its own folder, its teams' folders and what it learns about people, and people can edit everything except each other's personal folders. Rules here change that for a folder or note and everything inside it. You can also use the share button on any folder or note in
+      - link "Memory":
+        - /url: "#/vault"
+      - text: .
+    - button "Add rule":
+      - text: Add rule
+    - paragraph: No rules yet. Agents only see Shared, their own folders and their teams' folders.

@@ -1,0 +1,104 @@
+- main:
+  - button "Back"
+  - heading "Settings" [level=1]
+  - main:
+    - navigation "Settings":
+      - text: Account
+      - link "Profile":
+        - /url: "#/settings/profile"
+        - img
+        - text: Profile
+        - img
+      - link "App behavior":
+        - /url: "#/settings/preferences"
+        - img
+        - text: App behavior
+        - img
+      - link "Notifications":
+        - /url: "#/settings/notifications"
+        - img
+        - text: Notifications
+        - img
+      - link "Voice":
+        - /url: "#/settings/voice"
+        - img
+        - text: Voice
+        - img
+      - link "Appearance":
+        - /url: "#/settings/appearance"
+        - img
+        - text: Appearance
+        - img
+      - link "Security":
+        - /url: "#/settings/security"
+        - img
+        - text: Security
+        - img
+      - text: Workspace
+      - link "General":
+        - /url: "#/settings/general"
+        - img
+        - text: General
+        - img
+      - link "People":
+        - /url: "#/settings/people"
+        - img
+        - text: People
+        - img
+      - link "Agents":
+        - /url: "#/settings/agents"
+        - img
+        - text: Agents
+        - img
+      - link "Memory":
+        - /url: "#/settings/memory"
+        - img
+        - text: Memory
+        - img
+      - link "Computers":
+        - /url: "#/settings/computers"
+        - img
+        - text: Computers
+        - img
+      - link "Data & export":
+        - /url: "#/settings/data"
+        - img
+        - text: Data & export
+        - img
+      - link "Updates & about":
+        - /url: "#/settings/updates"
+        - img
+        - text: Updates & about
+        - img
+      - text: Advanced
+      - paragraph: For setting up agent tools by hand.
+      - link "Agent runtimes":
+        - /url: "#/settings/runtimes"
+        - img
+        - text: Agent runtimes
+        - img
+      - link "Connections":
+        - /url: "#/settings/connections"
+        - img
+        - text: Connections
+        - img
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

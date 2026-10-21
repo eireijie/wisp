@@ -1,0 +1,101 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Teams" [level=1]
+  - button "New team":
+    - text: New team
+  - generic: Lead
+  - paragraph: Takes every task nobody assigned, splits it up and hands the pieces to agents by role.
+  - combobox "Lead agent":
+    - option "Automatic (Everyday Helper)" [selected]
+    - option "@everyday-helper (Everyday Helper)"
+  - heading "Put agents to work together" [level=2]
+  - paragraph: A team is a few agents with a role each, like a lead who hands out work, a backend, a frontend and a reviewer. Start from a template or build your own, and pick any agent for each role.
+  - paragraph: Agents that aren't on a team keep working on their own.
+  - button "New team":
+    - text: New team
+  - dialog "New team":
+    - heading "New team" [level=2]
+    - button "Close":
+    - generic: Start from
+    - button "Blank" [pressed]
+    - button "🛠️ Build team"
+    - button "🔎 Research team"
+    - button "🧑‍💻 Solo + reviewer"
+    - paragraph: Roles are just a starting point. Rename them, add or remove any, and put any agent in each one.
+    - text: Label
+    - button "Pick a label":
+    - text: Name
+    - 'textbox "Name Becomes the channel #team-name and the memory folder teams/name/." [active]':
+      - /placeholder: web
+    - generic: "Becomes the channel #team-name and the memory folder teams/name/."
+    - text: What it's for
+    - textbox "What it's for Starts the team's brief, which every member reads before working.":
+      - /placeholder: Builds and ships the website.
+    - generic: Starts the team's brief, which every member reads before working.
+    - generic: Roles
+    - paragraph: No roles yet. Add one, or create the team empty and add agents later.
+    - button "Add a role":
+      - text: Add a role
+    - button "Cancel"
+    - button "Create team" [disabled]

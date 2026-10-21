@@ -1,0 +1,187 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - img
+      - text: Teams
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - img
+  - text: Sam
+  - button "Message":
+    - img
+    - text: Message
+  - button "Memory":
+    - img
+    - text: Memory
+  - navigation "Agent sections":
+    - text: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_GmUbthp9WHuY/overview"
+      - img
+      - text: Overview
+    - link "Look":
+      - /url: "#/agents/agt_GmUbthp9WHuY/look"
+      - img
+      - text: Look
+    - link "Personality":
+      - /url: "#/agents/agt_GmUbthp9WHuY/soul"
+      - img
+      - text: Personality
+    - link "Instructions":
+      - /url: "#/agents/agt_GmUbthp9WHuY/instructions"
+      - img
+      - text: Instructions
+    - text: Runtime
+    - link "Model":
+      - /url: "#/agents/agt_GmUbthp9WHuY/model"
+      - img
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_GmUbthp9WHuY/device"
+      - img
+      - text: Device
+    - link "Computer":
+      - /url: "#/agents/agt_GmUbthp9WHuY/computer"
+      - img
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_GmUbthp9WHuY/background"
+      - img
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_GmUbthp9WHuY/routines"
+      - img
+      - text: Routines
+    - text: Access
+    - link "Permissions":
+      - /url: "#/agents/agt_GmUbthp9WHuY/permissions"
+      - img
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_GmUbthp9WHuY/connect"
+      - img
+      - text: Connect
+    - text: Activity
+    - link "Activity":
+      - /url: "#/agents/agt_GmUbthp9WHuY/runs"
+      - img
+      - text: Activity
+  - tabpanel:
+    - link "Sam":
+      - /url: "#/agents/agt_GmUbthp9WHuY/look"
+      - img "Sam":
+        - img: z z
+    - heading "Sam Edit profile" [level=2]:
+      - text: Sam
+      - button "Edit profile":
+        - img
+    - paragraph: "@sam · Gemini CLI offline"
+    - paragraph:
+      - text: Works on its own.
+      - link "Put it on a team":
+        - /url: "#/teams"
+    - link "Model Harness default":
+      - /url: "#/agents/agt_GmUbthp9WHuY/model"
+    - link "Device my-mac · offline":
+      - /url: "#/agents/agt_GmUbthp9WHuY/device"
+    - link "Computer None yet":
+      - /url: "#/agents/agt_GmUbthp9WHuY/computer"
+    - link "Access Can edit files":
+      - /url: "#/agents/agt_GmUbthp9WHuY/permissions"
+    - heading "Personality" [level=3]
+    - link "Edit":
+      - /url: "#/agents/agt_GmUbthp9WHuY/soul"
+    - text: "Who @sam is. Read at the start of every conversation. Keep it short: every line should change how you behave. ## Personality - Curious, direct, and kind. - Has opinions and shares them, then defers to the person who decides. ## Voice - Short sentences, plain words, no filler. - Leads with the answer; adds detail only when it helps. ## Values - Tell the truth, including \"I don't know\" and \"I was wrong\". - Leave things better documented than you found them: write what you learn to memory. ## Boundaries - Ask before doing anything that's hard to undo. - Never pretend a task is done when it isn't."
+    - heading "Recent activity" [level=3]
+    - link "All activity":
+      - /url: "#/agents/agt_GmUbthp9WHuY/runs"
+    - paragraph: Nothing yet. Message the agent to give it something to do.
+    - heading "Remove agent" [level=3]
+    - paragraph: Removes @sam from the workspace. Its memory notes and personality stay in the vault.
+    - button "Remove @sam":
+      - img
+      - text: Remove @sam

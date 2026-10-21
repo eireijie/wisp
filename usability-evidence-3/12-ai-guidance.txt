@@ -1,0 +1,124 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 0 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 0 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - paragraph: No agents yet.
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Agents" [level=1]
+  - img
+  - heading "Add your first agent" [level=2]
+  - paragraph: Give it a job and a computer. Claude Code, Codex, Hermes, Gemini CLI, OpenCode, Goose and other agents all work here, share its channels and memory, and use their computers like you would.
+  - button "New agent":
+    - img
+    - text: New agent
+  - dialog "Add an agent":
+    - text: Add to Warren
+    - button "Close":
+      - img
+    - navigation "Add agent steps":
+      - button "Identity, step 1 of 3": Identity
+      - button "Harness, step 2 of 3": Harness
+      - button "Workspace, step 3 of 3": Workspace
+      - text: Harness · 2 of 3
+    - heading "Which AI do you use?" [level=1]
+    - paragraph: A harness is the AI program that does the work. You need an account with it; it may charge separately.
+    - group "Recommended harnesses":
+      - button "Claude Code Made by Anthropic, the company behind Claude. Needs a Claude subscription (Pro or Max) or an Anthropic API key, signed in on the device." [pressed]:
+        - img
+        - text: Claude Code Made by Anthropic, the company behind Claude. Needs a Claude subscription (Pro or Max) or an Anthropic API key, signed in on the device.
+      - button "Codex Made by OpenAI, the company behind ChatGPT. Needs a ChatGPT account (Plus or higher) or an OpenAI API key, signed in on the device."
+      - button "Gemini CLI Made by Google. Works with Gemini models. Sign in with a Google account. There is a free tier."
+    - group:
+      - text: I'm not sure
+      - paragraph: Pick the one you already pay for. If you don't have one, Claude Code or Codex are the usual choice.
+      - paragraph:
+        - text: "Get an account:"
+        - link "Claude (for Claude Code)":
+          - /url: https://claude.ai
+        - text: ","
+        - link "ChatGPT (for Codex)":
+          - /url: https://chatgpt.com
+        - text: .
+    - button "More harnesses"
+    - button "Back":
+      - img
+      - text: Back
+    - 'button "Next: workspace"':
+      - text: "Next: workspace"
+      - img

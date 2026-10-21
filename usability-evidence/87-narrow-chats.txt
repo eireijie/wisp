@@ -1,0 +1,38 @@
+- main:
+  - generic: E
+  - heading "Everyday tasks — usability test" [level=1]
+  - paragraph: Connected
+  - navigation:
+    - button "Search everything":
+      - generic: Search everything
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+- navigation "Main":
+  - link "Chats" [active]:
+    - /url: "#/chats"
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - text: Agents
+  - button "Search":
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - text: You

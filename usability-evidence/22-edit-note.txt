@@ -1,0 +1,99 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - button "Toggle file list":
+  - heading "Memory" [level=1]
+  - generic "See memory the way an agent does":
+    - combobox "View memory as":
+      - option "View as you" [selected]
+      - option "View as @everyday-helper"
+  - button "Activity":
+    - generic: Activity
+  - button "Refresh":
+    - generic: Refresh
+  - button "New note":
+    - generic: New note
+  - complementary:
+    - textbox "Search memory…"
+    - button "Shared":
+      - generic: Shared
+    - button "Share shared":
+    - button "Dinner preferences":
+      - generic: Dinner preferences
+    - button "Welcome to Everyday tasks — usability test":
+      - generic: Welcome to Everyday tasks — usability test
+    - button "Agents":
+      - generic: Agents
+    - button "Share agents":
+    - button "@everyday-helper":
+      - generic: "@everyday-helper"
+    - button "Share agents/agt_vn5LHeoIa-Qg":
+  - generic: Shared
+  - generic: Dinner preferences
+  - generic "10/17/2026, 2:31:04 AM": edited by Martin Test · just now
+  - button "Save"
+  - button "Cancel"
+  - button "Who wrote what":
+  - button "History":
+  - button "Who can see this note":
+  - textbox "Note text" [active]: "# Dinner preferences"

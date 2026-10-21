@@ -1,0 +1,158 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - link "Agents":
+    - /url: "#/agents"
+  - generic: Everyday Helper
+  - button "Message":
+    - generic: Message
+  - button "Memory":
+    - generic: Memory
+  - navigation "Agent sections":
+    - generic: Agent
+    - link "Overview":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/overview"
+      - text: Overview
+    - link "Look":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/look"
+      - text: Look
+    - link "Soul":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/soul"
+      - text: Soul
+    - link "Instructions":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/instructions"
+      - text: Instructions
+    - generic: Runtime
+    - link "Model":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/model"
+      - text: Model
+    - link "Device":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/device"
+      - text: Device
+    - link "Computer":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/computer"
+      - text: Computer
+    - link "Background":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/background"
+      - text: Background
+    - link "Routines":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/routines"
+      - text: Routines
+    - generic: Access
+    - link "Permissions" [active]:
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/permissions"
+      - text: Permissions
+    - link "Connect":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/connect"
+      - text: Connect
+    - generic: Activity
+    - link "Runs":
+      - /url: "#/agents/agt_vn5LHeoIa-Qg/runs"
+      - text: Runs
+  - tabpanel:
+    - heading "On its device" [level=3]
+    - paragraph: What @everyday-helper may do with files and commands on the computer it runs on.
+    - radio "Read only Reads files and answers. Can't change anything on the device.":
+      - generic: Read only
+      - generic: Reads files and answers. Can't change anything on the device.
+    - radio "Can edit files Edits files in its own working folder. Recommended." [checked]:
+      - generic: Can edit files
+      - generic: Edits files in its own working folder. Recommended.
+    - radio "Full access No sandbox or permission checks. Only works on devices started with --allow-full-access.":
+      - generic: Full access
+      - generic: No sandbox or permission checks. Only works on devices started with --allow-full-access.
+    - heading "Who can ask it" [level=3]
+    - paragraph: "@everyday-helper runs directly on your device \"my-mac\", where it can reach files. So only you can ask it for things, including through other agents."
+    - radio "Only me Requests from anyone else, or from agents working for them, are turned away." [checked]:
+      - generic: Only me
+      - generic: Requests from anyone else, or from agents working for them, are turned away.
+    - radio "Anyone in the workspace People and their agents can ask it. It still can't use your own screen for them.":
+      - generic: Anyone in the workspace
+      - generic: People and their agents can ask it. It still can't use your own screen for them.
+    - heading "In memory" [level=3]
+    - paragraph:
+      - text: Which folders and notes @everyday-helper can use, and why. Change them with the share button on any folder or note in
+      - link "Memory":
+        - /url: "#/vault"
+      - text: ", or under"
+      - link "Settings → Memory":
+        - /url: "#/settings"
+      - text: .
+    - generic: "@everyday-helper"
+    - generic: Can edit · default
+    - generic: Martin Test
+    - text: Can edit
+    - generic: · via All agents · default
+    - generic: shared
+    - text: Can edit
+    - generic: · via All agents · default
+    - generic: Its folder is shared with
+    - generic: No one else
+    - generic: Soul
+    - generic: It can refine its own soul
+    - generic: Instructions
+    - generic: Only people can edit them
+    - generic: Applies from the next message.
+    - button "Save ⌘S" [disabled]:
+      - text: Save
+      - generic: ⌘S

@@ -1,0 +1,117 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - img
+      - text: Teams
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - text: Set up Martin’s home
+  - button "Do this later"
+  - navigation "Setup steps":
+    - text: Step 1 of 5 · Device
+    - list:
+      - listitem:
+        - button "Device, step 1 of 5" [disabled]
+      - listitem:
+        - button "Its job, step 2 of 5" [disabled]
+      - listitem:
+        - button "Agent, step 3 of 5, done" [disabled]
+      - listitem:
+        - button "Harness, step 4 of 5, done" [disabled]
+      - listitem:
+        - button "First task, step 5 of 5" [disabled]
+  - heading "Where will your agents live?" [level=1]
+  - paragraph: Pick the device to set up. You can add more later under Devices.
+  - radiogroup "Device":
+    - radio "my-mac Not running. Start it there with warren node start" [checked]:
+      - img
+      - text: my-mac Not running. Start it there with
+      - code: warren node start
+    - button "Connect another device":
+      - img
+      - text: Connect another device
+  - button "Waiting" [disabled]:
+    - img
+    - text: Waiting

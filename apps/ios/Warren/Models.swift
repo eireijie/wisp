@@ -14,6 +14,7 @@ struct User: Codable, Identifiable, Hashable {
   var email: String
   var name: String
   var preferredName: String?
+  var timezone: String?
 }
 
 struct Workspace: Codable, Hashable {
@@ -22,7 +23,7 @@ struct Workspace: Codable, Hashable {
 }
 
 struct Me: Codable {
-  struct Prefs: Codable { var experience: String? }
+  struct Prefs: Codable { var experience: String?; var sendWith: String?; var clock: String?; var toolCalls: String? }
   var prefs: Prefs?
   var kind: String
   var user: User?
@@ -207,6 +208,13 @@ enum Wire {
   }()
   nonisolated(unsafe) private static let iso = ISO8601DateFormatter()
 
-  static func date(_ s: String) -> Date? { isoFrac.date(from: s) ?? iso.date(from: s) }
+  private static let day: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.dateFormat = "yyyy-MM-dd"
+    f.isLenient = false
+    return f
+  }()
+  static func date(_ s: String) -> Date? { isoFrac.date(from: s) ?? iso.date(from: s) ?? (s.count == 10 ? day.date(from: s) : nil) }
   static func now() -> String { isoFrac.string(from: Date()) }
 }

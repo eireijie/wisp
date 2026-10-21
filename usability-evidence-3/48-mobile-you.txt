@@ -1,0 +1,89 @@
+- main:
+  - text: M Martin martin.beginner@example.com · owner
+  - link "Finish setup 2 of 5":
+    - /url: "#/welcome"
+    - img
+    - text: Finish setup 2 of 5
+    - img
+  - link "Dashboard":
+    - /url: "#/dashboard"
+    - img
+    - text: Dashboard
+    - img
+  - link "Tasks Work you handed to a helper":
+    - /url: "#/tasks"
+    - img
+    - text: Tasks Work you handed to a helper
+    - img
+  - button "New task":
+    - img
+    - text: New task
+    - img
+  - link "About you What helpers should know about you":
+    - /url: "#/about"
+    - img
+    - text: About you What helpers should know about you
+    - img
+  - link "Computers Desktops helpers use":
+    - /url: "#/computers"
+    - img
+    - text: Computers Desktops helpers use
+    - img
+  - link "Devices Computers running Warren":
+    - /url: "#/nodes"
+    - img
+    - text: Devices Computers running Warren
+    - img
+  - link "Connected apps Gmail, Slack and other apps helpers can use":
+    - /url: "#/connectors"
+    - img
+    - text: Connected apps Gmail, Slack and other apps helpers can use
+    - img
+  - link "Skills Things helpers know how to do":
+    - /url: "#/skills"
+    - img
+    - text: Skills Things helpers know how to do
+    - img
+  - link "Help Answers, setup, and what words mean":
+    - /url: "#/help"
+    - img
+    - text: Help Answers, setup, and what words mean
+    - img
+  - link "Settings":
+    - /url: "#/settings"
+    - img
+    - text: Settings
+    - img
+  - radiogroup "Mode":
+    - radio "System" [checked]:
+      - img
+      - text: System
+    - radio "Light":
+      - img
+      - text: Light
+    - radio "Dark":
+      - img
+      - text: Dark
+  - button "Sign out":
+    - img
+    - text: Sign out
+- navigation "Main":
+  - link "Chats":
+    - /url: "#/chats"
+    - img
+    - text: Chats
+  - link "Agents":
+    - /url: "#/agents"
+    - img
+    - text: Agents
+  - button "Search":
+    - img
+    - text: Search
+  - link "Memory":
+    - /url: "#/vault"
+    - img
+    - text: Memory
+  - link "You":
+    - /url: "#/you"
+    - img
+    - text: You

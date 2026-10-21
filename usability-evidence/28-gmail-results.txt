@@ -1,0 +1,247 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - heading "Connectors" [level=1]
+  - button "Add your own":
+    - generic: Add your own
+  - paragraph: Connect the apps you use, so agents can work in them and keep an eye on them for you. Search thousands of MCP servers, sign in, and pick which agents get each.
+  - searchbox "Search apps and MCP servers" [active]: Gmail
+  - region "Connected 0":
+    - heading "Connected 0" [level=2]
+    - generic: Nothing connected yet. Pick one from the catalog below, or add your own.
+  - button "Marketplace"
+  - button "Warren's catalog"
+  - region "Marketplace":
+    - paragraph: Results from the official MCP Registry. Official ones (from the company that makes the app) come first.
+    - text: Gmail Agent by Nova (CIVAI)
+    - img "Official"
+    - generic: Official · nova.civai.co
+    - paragraph: I do everything related to Gmail and productivity
+    - generic: Remote · sign in
+    - link:
+      - /url: https://nova.civai.co/agent/gmail-agent
+    - button "Add":
+      - text: Add
+    - generic: A
+    - text: agmail
+    - img "Official"
+    - generic: Official · shveik.dev
+    - paragraph: "Email inboxes for agents by the hour: wait for a mail, get the code or link. Pay per call."
+    - generic: Remote · sign in
+    - link:
+      - /url: https://agmail.shveik.dev
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: waystation.ai
+    - paragraph: Read emails, send messages, and manage labels in your Gmail account.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/waystation-ai/mcp
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: mintmcp.com
+    - paragraph: A MCP server for Gmail that lets you search, read, and draft emails and replies.
+    - generic: Remote · sign in
+    - link:
+      - /url: https://github.com/mintmcp/servers
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: pipeworx-io
+    - paragraph: Gmail MCP Pack
+    - generic: Remote · sign in
+    - link:
+      - /url: https://pipeworx.io/packs/gmail
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: pulsemcp.com
+    - paragraph: MCP server for Gmail with OAuth2 (personal) and service account (Workspace) support.
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/pulsemcp/mcp-servers
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: domdomegg
+    - paragraph: Allow AI systems to read, send, archive, and manage emails via Gmail.
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/domdomegg/gmail-mcp#readme
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: markswendsen-code
+    - paragraph: Gmail MCP server — send, read, and search email. By Strider Labs.
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/markswendsen-code/mcp-gmail
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail
+    - generic: mcp-z
+    - paragraph: Gmail integration with OAuth authentication, message search, batch operations, and Sheets export
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/mcp-z/mcp-gmail#readme
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail Attachments MCP
+    - generic: zayansalman
+    - paragraph: Minimal MCP server for downloading Gmail attachments to disk. Read-only OAuth by default.
+    - generic: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/zayansalman/gmail-attachments-mcp
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail MCP
+    - generic: A1-x-Tech
+    - paragraph: "MCP server for the Gmail API: search, read and send email, manage drafts, labels and the trash."
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/A1-x-Tech/mcp-google-gmail#readme
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail MCP Server
+    - generic: ArtyMcLabin
+    - paragraph: Lean Gmail MCP server with auto authentication support
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/ArtyMcLabin/Gmail-MCP-Server
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Gmail Tidy MCP
+    - generic: imkath
+    - paragraph: "Organize several Gmail accounts: labels, filters, archiving, drafts. Never sends or deletes mail."
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/imkath/gmail-tidy-mcp
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: gmail-agent
+    - generic: dremok
+    - paragraph: "Gmail for AI agents: search, read, download attachments, send, reply, drafts, labels."
+    - generic: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/dremok/gmail-agent
+    - button "Add":
+      - text: Add
+    - generic: S
+    - generic: Sebastianall1977 Gmail MCP
+    - generic: smithery.ai
+    - paragraph: "Manage Gmail end-to-end: search, read, send, draft, label, and organize threads. Automate workflow…"
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://github.com/sebastianall1977/gmail-mcp
+    - button "Add":
+      - text: Add
+    - generic: F
+    - generic: Faithk7 Gmail MCP
+    - generic: smithery.ai
+    - paragraph: Manage Gmail messages, threads, labels, drafts, and settings from your workflows. Send and organiz…
+    - generic: Remote · needs a key
+    - link:
+      - /url: https://github.com/faithk7/gmail-mcp
+    - button "Add":
+      - text: Add
+    - generic: G
+    - generic: Google Gmail
+    - generic: mcparmory.com
+    - paragraph: Send, read, organize emails, manage labels, drafts, and filters
+    - generic: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/mcparmory/registry
+    - button "Add":
+      - text: Add
+    - generic: M
+    - generic: Multi Gmail MCP
+    - generic: gx-55
+    - paragraph: Manage multiple Gmail accounts in Claude Desktop — search, send, reply, draft, and organize.
+    - generic: npm · runs on the device
+    - link:
+      - /url: https://github.com/gx-55/multi-gmail-mcp
+    - button "Add":
+      - text: Add
+    - generic: M
+    - generic: Multi-Account Gmail
+    - generic: cunicopia-dev
+    - paragraph: Multi-account Gmail MCP server — read, search, draft, and label across every inbox.
+    - generic: PyPI · runs on the device
+    - link:
+      - /url: https://github.com/cunicopia-dev/gmail-mcp
+    - button "Add":
+      - text: Add

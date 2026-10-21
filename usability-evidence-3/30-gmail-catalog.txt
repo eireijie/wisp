@@ -1,0 +1,119 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 2 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 2 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - button "Sam Sam":
+      - img "Sam":
+        - img
+      - text: Sam
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Connected apps" [level=1]
+  - paragraph: Apps your helpers can use for you, like Gmail or Slack. Each one asks you to sign in (a few ask for a key instead); your password never goes to a helper.
+  - img
+  - searchbox "Search apps": Gmail
+  - region "Connected 0":
+    - heading "Connected 0" [level=2]
+    - text: Nothing connected yet. Pick one from the catalog below.
+  - region "Recommended for most people":
+    - heading "Recommended for most people" [level=2]
+    - paragraph: One sign-in with Zapier connects Gmail, Google Calendar, Drive, Todoist and thousands more apps.
+    - text: Z Zapier Published by zapier.com Made by Zapier
+    - paragraph: Hosted MCP server connecting AI assistants to 9,000+ apps and 40,000+ actions via Zapier.
+    - text: Remote · sign in
+    - link:
+      - /url: https://docs.zapier.com/mcp/home
+      - img
+    - button "Add":
+      - img
+      - text: Add
+  - button "Marketplace"
+  - button "Warren's catalog"
+  - region "Ones Warren knows well, with what each needs.":
+    - heading "Ones Warren knows well, with what each needs." [level=2]
+    - button "All"
+    - button "Code"
+    - button "Chat & docs"
+    - button "Work tracking"
+    - button "Data"
+    - button "Web & browser"
+    - button "Payments"
+    - button "Utilities"
+    - button "Cloud keys"
+    - paragraph: Nothing in the catalog matches.
+  - button "Add your own server"

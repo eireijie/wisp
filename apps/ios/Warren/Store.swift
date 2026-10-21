@@ -17,6 +17,22 @@ final class Store {
   var sections: [ChannelSection] = []
   var nodes: [AgentNode] = []
   var teams: [WorkspaceTeam] = []
+  var tasks: [WorkTask] = []
+  var taskLead: String?
+  var taskLeadOverride: String?
+  var notes: [MemoryNote] = []
+  var profiles: [String: MemoryProfile] = [:]
+  var routines: [Routine] = []
+  var backgrounds: [String: AgentBackground] = [:]
+  var skills: [HelperSkill] = []
+  var connectors: [AppConnector] = []
+  var sessions: [AccountSession] = []
+  var invites: [WorkspaceInvite] = []
+  var prefs: Me.Prefs?
+  var memoryStorage: MemoryStorage?
+  var agentPolicy: AgentPolicy?
+  var routinesVersion = 0
+  var backgroundVersion = 0
   var simple = false
   var syncError: String?
   var channelVersion = 0
@@ -51,6 +67,15 @@ final class Store {
   private var retry = 0
 
   init(loadSession: Bool = true) {
+    #if DEBUG
+    if loadSession, let address = ProcessInfo.processInfo.environment["WARREN_HUB"],
+       let hub = URL(string: address), let token = ProcessInfo.processInfo.environment["WARREN_TOKEN"], !token.isEmpty {
+      api = API(base: hub, token: token)
+      phase = .loading
+      Task { await load() }
+      return
+    }
+    #endif
     if loadSession, let hub = Session.hub, let token = Session.token {
       api = API(base: hub, token: token)
       phase = .loading
@@ -84,6 +109,9 @@ final class Store {
     api = nil
     me = nil
     sections = []; nodes = []; teams = []; syncError = nil
+    tasks = []; notes = []; profiles = [:]; routines = []; backgrounds = [:]
+    skills = []; connectors = []; sessions = []; invites = []; prefs = nil
+    taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
     channels = []; agents = []; members = []; computers = []; approvals = []
     messages = [:]; threads = [:]; activity = [:]; activityChannel = [:]
     route = nil
@@ -100,6 +128,7 @@ final class Store {
       let me: Me = try await api.get("/api/me")
       self.me = me.user
       self.role = me.role ?? "member"
+      self.prefs = me.prefs
       self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
       async let ch: [Channel] = api.get("/api/channels")
@@ -341,6 +370,8 @@ final class Store {
       do {
         // Simple/Advanced and role can change on the computer while the phone sleeps
         let me: Me = try await connection().get("/api/me")
+        self.me = me.user
+        prefs = me.prefs
         simple = me.prefs?.experience == "simple"
         role = me.role ?? "member"
         try await refreshAgents()
@@ -420,12 +451,25 @@ final class Store {
       Task { await refreshChannels() }
     case "sections_changed":
       Task { do { try await refreshSections() } catch { syncError = error.localizedDescription } }
-    case "agent_created", "agent_updated", "agent_removed", "agents_changed", "tasks_changed":
+    case "agent_created", "agent_updated", "agent_removed", "agents_changed":
       Task { do { try await refreshAgents() } catch { syncError = error.localizedDescription } }
     case "teams_changed":
-      Task { do { try await refreshManagement() } catch { syncError = error.localizedDescription } }
+      Task { do { try await refreshManagement(); try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
+    case "lead_changed":
+      Task { do { try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
+    case "tasks_changed":
+      Task { do { try await refreshTasks() } catch { syncError = error.localizedDescription } }
+    case "routines_changed":
+      routinesVersion += 1
+      Task { do { try await refreshRoutines() } catch { syncError = error.localizedDescription } }
+    case "background_changed":
+      backgroundVersion += 1
+      if let event = try? JSONSerialization.jsonObject(with: data) as? [String: String], let id = event["agentId"], backgrounds[id] != nil {
+        Task { do { try await refreshBackground(id) } catch { syncError = error.localizedDescription } }
+      }
     case "memory_changed":
       memoryVersion += 1
+      Task { do { try await refreshNotes() } catch { syncError = error.localizedDescription } }
     case "computer":
       if let e = try? d.decode(ComputerEvent.self, from: data) { upsert(e.computer) }
     case "computer_removed":

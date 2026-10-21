@@ -1,0 +1,130 @@
+- complementary:
+  - navigation:
+    - text: Martin’s home
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - img
+      - text: Dashboard
+    - button "New task":
+      - img
+      - text: New task
+    - button "Search ⌘K":
+      - img
+      - text: Search ⌘K
+    - link "Finish setup 0 of 5":
+      - /url: "#/welcome"
+      - img
+      - text: Finish setup 0 of 5
+    - button "Agents" [expanded]:
+      - text: Agents
+      - img
+    - button "Add agent":
+      - img
+    - paragraph: No agents yet.
+    - button "Channels" [expanded]:
+      - text: Channels
+      - img
+    - button "Add a channel":
+      - img
+    - button "New section":
+      - img
+    - link "general":
+      - /url: "#/c/ch_9W6HteXpucjf"
+      - img
+      - text: general
+    - button "#general options":
+      - img
+    - button "Add channels":
+      - img
+      - text: Add channels
+    - button "Workspace" [expanded]:
+      - text: Workspace
+      - img
+    - link "Tasks":
+      - /url: "#/tasks"
+      - img
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - img
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - img
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - img
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - img
+      - text: Agents
+    - link "Connected apps":
+      - /url: "#/connectors"
+      - img
+      - text: Connected apps
+    - link "Skills":
+      - /url: "#/skills"
+      - img
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - img
+      - text: About you
+    - link "Help":
+      - /url: "#/help"
+      - img
+      - text: Help
+    - button "M Martin"
+    - button "Switch to dark mode":
+      - img
+- main:
+  - heading "Agents" [level=1]
+  - img
+  - heading "Add your first agent" [level=2]
+  - paragraph: Give it a job and a computer. Claude Code, Codex, Hermes, Gemini CLI, OpenCode, Goose and other agents all work here, share its channels and memory, and use their computers like you would.
+  - button "New agent":
+    - img
+    - text: New agent
+  - dialog "Add an agent":
+    - text: Add to Warren
+    - button "Close":
+      - img
+    - navigation "Add agent steps":
+      - button "Identity, step 1 of 3": Identity
+      - button "Harness, step 2 of 3": Harness
+      - button "Workspace, step 3 of 3": Workspace
+      - text: Workspace · 3 of 3
+    - img "Sam's ghost":
+      - img
+    - heading "Set up Sam" [level=1]
+    - paragraph: Gemini CLI
+    - button "Shuffle agent appearance":
+      - img
+    - group:
+      - button "Handle (how people @mention it)"
+      - text: Device
+      - combobox "Device The computer that runs this helper.":
+        - option "Decide later"
+        - option "my-mac (offline)" [selected]
+      - text: The computer that runs this helper. Where should it work?
+      - button "Its own desktop on my-mac Connect the device to check" [disabled]:
+        - img
+        - text: Its own desktop on my-mac Connect the device to check
+      - button "My own screen Only while you lend it." [disabled]:
+        - img
+        - text: My own screen Only while you lend it.
+      - button "Decide later You can pick on its Computer tab.":
+        - img
+        - text: Decide later You can pick on its Computer tab.
+      - button "More options"
+      - paragraph: Install Gemini CLI on my-mac before its first run.
+      - group: Give it a job (optional)
+    - status: my-mac is offline. You can create Sam now, but it can't answer until my-mac reconnects.
+    - button "Back":
+      - img
+      - text: Back
+    - button "Add agent":
+      - text: Add agent
+      - img

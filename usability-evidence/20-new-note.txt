@@ -1,0 +1,105 @@
+- complementary:
+  - navigation:
+    - generic: E
+    - generic: Everyday tasks — usability test
+    - generic "Connected"
+    - link "Dashboard":
+      - /url: "#/dashboard"
+      - text: Dashboard
+    - button "New task":
+      - text: New task
+    - button "Search ⌘K":
+      - text: Search
+      - generic: ⌘K
+    - button "Agents" [expanded]:
+      - generic: Agents
+    - button "Add agent":
+    - button "Everyday Helper Everyday Helper":
+      - img "Everyday Helper":
+      - generic: Everyday Helper
+    - button "Channels" [expanded]:
+      - generic: Channels
+    - button "Add a channel":
+    - button "New section":
+    - link "general":
+      - /url: "#/c/ch_pySxcSbrNz4j"
+      - generic: general
+    - button "#general options":
+    - button "Add channels":
+      - generic: Add channels
+    - button "Workspace" [expanded]:
+      - generic: Workspace
+    - link "Tasks":
+      - /url: "#/tasks"
+      - text: Tasks
+    - link "Memory":
+      - /url: "#/vault"
+      - text: Memory
+    - link "Computers":
+      - /url: "#/computers"
+      - text: Computers
+    - link "Devices":
+      - /url: "#/nodes"
+      - text: Devices
+    - link "Agents":
+      - /url: "#/agents"
+      - text: Agents
+    - link "Teams":
+      - /url: "#/teams"
+      - text: Teams
+    - link "Connectors":
+      - /url: "#/connectors"
+      - text: Connectors
+    - link "Skills":
+      - /url: "#/skills"
+      - text: Skills
+    - link "About you":
+      - /url: "#/about"
+      - text: About you
+    - button "MT Martin Test":
+      - generic: MT
+      - generic: Martin Test
+    - button "Switch to light mode":
+- main:
+  - button "Toggle file list":
+  - heading "Memory" [level=1]
+  - generic "See memory the way an agent does":
+    - combobox "View memory as":
+      - option "View as you" [selected]
+      - option "View as @everyday-helper"
+  - button "Activity":
+    - generic: Activity
+  - button "Refresh":
+    - generic: Refresh
+  - button "New note":
+    - generic: New note
+  - complementary:
+    - textbox "Search memory…"
+    - button "Shared":
+      - generic: Shared
+    - button "Share shared":
+    - button "Welcome to Everyday tasks — usability test":
+      - generic: Welcome to Everyday tasks — usability test
+    - button "Agents":
+      - generic: Agents
+    - button "Share agents":
+    - button "@everyday-helper":
+      - generic: "@everyday-helper"
+    - button "Share agents/agt_vn5LHeoIa-Qg":
+  - heading "Your shared memory" [level=2]
+  - paragraph: Obsidian is the best place to write and organize notes. You can also fix, add or delete notes here. This page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
+  - paragraph: Every agent has a private folder and everyone shares Shared. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.
+  - paragraph:
+    - link "Open in Obsidian":
+      - /url: obsidian://open?path=%2Ftmp%2Fwarren-usability-20261017%2Fvault
+      - generic: Open in Obsidian
+  - dialog "New note":
+    - heading "New note" [level=2]
+    - button "Close":
+    - text: Folder
+    - combobox "Folder Pick one or type a new name to make a folder." [active]: shared
+    - generic: Pick one or type a new name to make a folder.
+    - text: Name
+    - textbox "Name":
+      - /placeholder: Meeting notes
+    - button "Create"
