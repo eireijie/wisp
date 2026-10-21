@@ -125,7 +125,7 @@
     <button class="link back" data-back>← Back</button>
     <section class="card">
       <h2>Join a server</h2>
-      <p>Enter the address of the Warren you're joining. Whoever runs it can copy it from their Warren menu.</p>
+      <p>Enter the address of the Warren you're joining, or paste the link from its device step. Whoever runs it can copy the address from their Warren menu.</p>
       <form id="join-form">
         <div class="row" style="margin-bottom:12px">
           <input id="url" placeholder="warren.example.com or 192.168.1.20:4747" autocomplete="url" spellcheck="false" autofocus />
@@ -193,6 +193,13 @@
   async function test(join) {
     const url = $("url").value.trim();
     if (!url) return $("url").focus();
+    if (/^warren:\/\//i.test(url)) {
+      err("join-error", "");
+      const r = await setup.joinLink(url);
+      if (!r.ok) return err("join-error", r.error);
+      $("starting-title").textContent = "Joining…";
+      return show("starting");
+    }
     $("join-go").disabled = $("test").disabled = $("url").disabled = true;
     err("join-error", "");
     checks([], "Testing the connection…");
@@ -215,7 +222,12 @@
 
   if (state.step === "starting") {
     show("starting");
+    if (state.title) $("starting-title").textContent = state.title;
     $("subtitle").textContent = "Getting your workspace ready.";
+  } else if (state.step === "join") {
+    show("join");
+    if (state.url) $("url").value = state.url;
+    err("join-error", state.problem);
   } else if (state.step === "unreachable") {
     show("unreachable");
     $("title").textContent = "Warren";

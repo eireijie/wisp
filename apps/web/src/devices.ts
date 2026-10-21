@@ -43,6 +43,33 @@ export function useDevices(intervalMs = 5000): DeviceInfo[] | null {
   return devices;
 }
 
+/**
+ * The link that opens the Warren app on this computer with everything it needs to register as
+ * `name`: the server's address and the device's connection code. Nothing to copy or sign in to.
+ */
+export function joinLink(hub: string, token: string, name: string): string {
+  const q = new URLSearchParams({ hub, code: token, name });
+  return `warren://join?${q}`;
+}
+
+/** The progress a person sees while connecting a computer with the app: each true once it's known to have happened. */
+export interface ConnectProgress {
+  /** they clicked the download (we can't see the file land) */
+  downloaded: boolean;
+  /** they clicked "Open in the Warren app" */
+  opened: boolean;
+  /** the hub reports the device online: the only one of these that is certain */
+  connected: boolean;
+}
+
+/** Each step done or not, in order; a later step done counts the earlier ones as done too. */
+export function connectSteps(p: ConnectProgress): { downloaded: boolean; opened: boolean; connected: boolean } {
+  const connected = p.connected;
+  const opened = connected || p.opened;
+  const downloaded = opened || p.downloaded;
+  return { downloaded, opened, connected };
+}
+
 const OS: Record<string, string> = { darwin: "Mac", win32: "Windows PC", linux: "Linux" };
 
 export function osName(platform: string | undefined) {

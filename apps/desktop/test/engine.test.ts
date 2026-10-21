@@ -56,3 +56,18 @@ describe("testing a server before joining", () => {
     expect(r.checks.at(-1).label).toMatch(/first account/);
   });
 });
+
+describe("join links from the web app's device step", () => {
+  it("reads the hub, connection code and device name", () => {
+    expect(engine.parseJoinLink("warren://join?hub=http%3A%2F%2F192.168.1.20%3A4747&code=wr_node_abc-DEF_123&name=my-mac")).toEqual({ hub: "http://192.168.1.20:4747", code: "wr_node_abc-DEF_123", name: "my-mac" });
+    expect(engine.parseJoinLink("  WARREN://join?hub=https://warren.example.com&code=wr_node_x  ")).toEqual({ hub: "https://warren.example.com", code: "wr_node_x", name: "" });
+  });
+
+  it("is not fooled by a plain address, another action, or a code that isn't a device code", () => {
+    expect(engine.parseJoinLink("192.168.1.20:4747")).toBeNull();
+    expect(engine.parseJoinLink("warren://open?hub=http://h")).toBeNull();
+    expect(engine.parseJoinLink("warren://join?hub=http://h&code=wr_session_abc")).toBeNull();
+    expect(engine.parseJoinLink("warren://join?hub=ftp://h&code=wr_node_abc")).toBeNull();
+    expect(engine.parseJoinLink("")).toBeNull();
+  });
+});

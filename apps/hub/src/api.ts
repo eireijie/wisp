@@ -874,6 +874,20 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { node, token: issueToken(db, "node", node.id, c.workspaceId, body.name) };
   });
 
+  /**
+   * A fresh connection code for a device that already exists (its first one is shown once, when it
+   * is added). Same rules as adding one: a member, and this device's owner or a workspace owner.
+   * Earlier codes keep working, so a device that is already connected is never cut off by this.
+   */
+  app.post("/api/nodes/:id/token", async (req, reply) => {
+    const c = need(req, reply, { member: true });
+    if (!c) return;
+    const node = store.node((req.params as { id: string }).id);
+    if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
+    if (node.ownerId !== c.actor.id && c.viewer.role !== "owner") return reply.code(403).send({ error: "only the person who connected this device, or a workspace owner, can get a new connection code for it" });
+    return { node, token: issueToken(db, "node", node.id, c.workspaceId, node.name) };
+  });
+
   /** The device's owner shares it (others can add agents and VMs there) or renames it. */
   app.patch("/api/nodes/:id", async (req, reply) => {
     const c = need(req, reply, { member: true });

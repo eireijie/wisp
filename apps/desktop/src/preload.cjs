@@ -32,5 +32,6 @@ if (location.protocol === "file:")
     create: (opts) => ipcRenderer.invoke("setup:create", opts),
     test: (url) => ipcRenderer.invoke("setup:test", url),
     join: (url, opts) => ipcRenderer.invoke("setup:join", url, opts),
+    joinLink: (text) => ipcRenderer.invoke("setup:join-link", text),
     retry: () => ipcRenderer.invoke("setup:retry"),
   });

@@ -3,7 +3,8 @@ import { Bot, ChevronLeft, Download, Lock, Monitor, Pause, Plus, Server, Trash2,
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { Button, CopyBlock, DeviceInstall, Empty, Field, IconButton, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
+import { ConnectWithApp, ConnectWithCommand } from "../components/ConnectWithApp.tsx";
+import { Button, DeviceInstall, Empty, Field, IconButton, Input, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 interface NodeInfo {
   id: string;
@@ -50,27 +51,44 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
   return n.lastSeen ? "This device was connected before but is offline now." : "This device hasn't connected yet.";
 }
 
-/** Shown on a device that is not connected: the no-Terminal way first; a command (needing a token) is for removing and re-adding. */
+/** Shown on a device that is not connected: a fresh connection code, then the app (no Terminal) or a command. */
 function ConnectDevice({ node: n }: { node: NodeInfo }) {
   const line = notConnectedLine(n);
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!line) return null;
+  if (code)
+    return (
+      <div className="mt-3 ml-14 space-y-3 text-sm">
+        <p className="font-medium">Connect {n.name}</p>
+        <ConnectWithApp name={n.name} token={code} connected={n.online} />
+        <ConnectWithCommand name={n.name} token={code} />
+      </div>
+    );
   return (
     <div className="mt-3 ml-14 rounded-lg border border-line bg-panel p-3 space-y-2 text-sm">
       <p className="font-medium">Connect this device</p>
       <p className="text-muted">{line}</p>
-      <p className="text-xs">
-        <b>Easiest:</b>{" "}
-        <a className="font-medium underline" href="https://github.com/eireijie/warren/releases/latest" target="_blank" rel="noopener noreferrer">
-          Download the Warren app for Mac
-        </a>
-        . Open it, choose to join a server, and enter this address:
-      </p>
-      <CopyBlock text={location.origin} />
-      {isLocalOnlyHost(location.hostname) && <p className="text-xs text-muted">This address only works on this computer. On another computer, use this computer's network address instead.</p>}
-      <details className="text-xs">
-        <summary className="cursor-pointer text-muted">Connect with a command instead</summary>
-        <p className="mt-2 text-muted">The command needs a connection code, which is shown only once when a device is added. To get a new one, remove this device and add it again.</p>
-      </details>
+      <p className="text-xs text-muted">A connection code lets the Warren app on that computer join as {n.name}. Get a new one here whenever you need it.</p>
+      <Button
+        variant="primary"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            setCode((await api<{ token: string }>("POST", `/api/nodes/${n.id}/token`)).token);
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        Get a new connection code
+      </Button>
+      {error && <p className="text-bad">{error}</p>}
     </div>
   );
 }

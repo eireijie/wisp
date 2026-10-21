@@ -270,6 +270,16 @@ class Child {
     setTimeout(() => p.exitCode === null && p.kill("SIGKILL"), 8000).unref();
   }
 
+  /** Stop, and resolve once the process is gone (so a start right after isn't skipped). */
+  stopAndWait(ms = 9000) {
+    this.stop();
+    return new Promise((resolve) => {
+      const until = Date.now() + ms;
+      const tick = () => (!this.proc || Date.now() > until ? resolve() : setTimeout(tick, 100));
+      tick();
+    });
+  }
+
   /** Last lines of its log, to show when something goes wrong. */
   tail(lines = 30) {
     try {
@@ -280,4 +290,26 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+/**
+ * A join link from the web app's device step: warren://join?hub=<url>&code=<connection code>&name=<device name>.
+ * Returns what it carries, or null when it isn't one (a plain server address is not a link).
+ */
+function parseJoinLink(input) {
+  const text = String(input ?? "").trim();
+  if (!/^warren:\/\//i.test(text)) return null;
+  let u;
+  try {
+    u = new URL(text);
+  } catch {
+    return null;
+  }
+  const action = u.host.toLowerCase();
+  if (action !== "join") return null;
+  const hub = u.searchParams.get("hub")?.trim() ?? "";
+  const code = u.searchParams.get("code")?.trim() ?? "";
+  const name = u.searchParams.get("name")?.trim() ?? "";
+  if (!/^https?:\/\//i.test(hub) || !/^wr_node_[A-Za-z0-9_-]+$/.test(code)) return null;
+  return { hub, code, name: name.slice(0, 80) };
+}
+
+module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, parseJoinLink, NODE_CONFIG };

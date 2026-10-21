@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, FileText, KeyRound, Laptop, Loader2, MessageSquareText, Monitor, Plus, Server, Smartphone, Sparkles, TerminalSquare, UtensilsCrossed, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, FileText, KeyRound, Laptop, Loader2, MessageSquareText, Monitor, Plus, RefreshCw, Send, Server, Smartphone, Sparkles, TerminalSquare, UtensilsCrossed, Users } from "lucide-react";
 import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { STEPS, isLocalOnlyHost, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
-import { useDesktopInfo } from "../desktop.ts";
+import { STEPS, setDismissed, useOnboarding, type OnboardingState, type StepId } from "../onboarding.ts";
 import { Advanced, setExperience, useSimple, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
 import { Ghost } from "../components/Ghost.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
-import { AgentAvatar, Button, CopyBlock, DeviceInstall, cx } from "../components/ui.tsx";
+import { ConnectWithApp, ConnectWithCommand } from "../components/ConnectWithApp.tsx";
+import { AgentAvatar, Button, CopyBlock, cx } from "../components/ui.tsx";
 
 /**
  * First-run setup, laid out like Paperclip's: one question per screen on a plain page, a
@@ -156,6 +156,7 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
                     }}
                     onBack={() => back("harness")}
                     onNext={() => next("harness")}
+                    onReplied={() => (refresh(), show("done"))}
                   />
                 ) : (
                   <NoDevice onBack={() => back("harness")} />
@@ -365,57 +366,9 @@ function guessName(): string {
 /** Device names like "yug-mac" read as one word, so they don't break at the hyphen. */
 const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
-const DMG = "https://github.com/eireijie/warren/releases/download/desktop-v0.0.1/Warren-0.0.1-arm64.dmg";
-
-/** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
-function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
-  const { inDesktop, info, connect } = useDesktopInfo();
-  const [busy, setBusy] = useState(false);
-  const hub = location.origin;
-  if (inDesktop)
-    return (
-      <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
-        <p className="text-sm font-medium">This Mac is being connected automatically</p>
-        <p className="text-sm text-muted">
-          {connected ? `${name} is connected.` : info?.device ? "Connected to Warren. It can take a few seconds to show up here." : "The Warren app has not connected this Mac yet."}
-        </p>
-        {!connected && !info?.device && (
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await connect();
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Connect this Mac
-          </Button>
-        )}
-      </div>
-    );
-  return (
-    <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
-      <p className="text-sm font-medium">Easiest: download Warren for Mac</p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <a className="font-medium underline" href={DMG}>Download for this Mac</a>
-        <a className="text-muted underline" href="https://github.com/eireijie/warren/releases" target="_blank" rel="noreferrer">All releases</a>
-      </div>
-      <p className="text-xs text-muted">Apple silicon means a Mac from 2020 on with an M1, M2, M3 or M4 chip; older Intel Macs aren't supported yet.</p>
-      <p className="text-sm text-muted">Then open it and choose “Join a server” with this address:</p>
-      <p className="text-xs text-muted">A server is just this Warren; the address below is where it lives.</p>
-      <CopyBlock text={hub} />
-      {typeof window !== "undefined" && isLocalOnlyHost(window.location.hostname) && (
-        <p className="text-xs text-muted">This address only works on this computer. On another computer, use this Mac's network address instead (shown in Settings → Updates &amp; about if available; otherwise ask the person who set Warren up).</p>
-      )}
-    </div>
-  );
-}
-
 function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]; device: DeviceInfo | undefined; onPick: (id: string) => void; onNext: (id: string) => void }) {
   const simple = useSimple();
+  const isOwner = useStore((s) => s.me)?.role === "owner";
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState(guessName);
   const [created, setCreated] = useState<{ id: string; name: string; token: string } | null>(null);
@@ -428,16 +381,10 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
       <>
         <Heading title={`Connect ${created.name}`}>Warren needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
         <div className="space-y-5">
-          <EasiestWay name={created.name} connected={!!live} />
-          <details className="rounded-xl border border-line p-4">
-            <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
-            <div className="mt-3 space-y-3">
-              <DeviceInstall token={created.token} name={created.name} />
-              <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
-            </div>
-          </details>
+          <ConnectWithApp name={created.name} token={created.token} connected={!!live} />
+          <ConnectWithCommand name={created.name} token={created.token} />
           <p className="text-xs text-muted">
-            The token is shown once and saved on the device.
+            The connection code is shown once and saved on the device. You can get a new one from Devices any time.
             {onHub() && " If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from."}
           </p>
           <Status ok={!!live}>{live ? `${created.name} is connected` : `Waiting for ${created.name} to connect…`}</Status>
@@ -453,6 +400,21 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
     setError(null);
     try {
       const r = await api<{ node: { id: string; name: string }; token: string }>("POST", "/api/nodes", { name: name.trim() });
+      setCreated({ ...r.node, token: r.token });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** A device that was added but never (or no longer) connects: a fresh code, then the same connect screen as a new one. */
+  const newCode = async (d: DeviceInfo) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ node: { id: string; name: string }; token: string }>("POST", `/api/nodes/${d.id}/token`);
       setCreated({ ...r.node, token: r.token });
     } catch (err) {
       setError((err as Error).message);
@@ -510,10 +472,10 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
             body={
               d.online ? (
                 <span className="text-ok">Connected{d.mine ? "" : ` · shared by ${d.ownerName ?? "its owner"}`}</span>
+              ) : d.lastSeen ? (
+                "Was connected before, but isn't now. Open Warren there, or connect it again below."
               ) : (
-                <>
-                  Not running. Start it there with <code>warren node start</code>
-                </>
+                "Added, but it hasn't connected yet. Connect it below."
               )
             }
           />
@@ -525,7 +487,14 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
           <span className="text-[15px] font-medium">Connect another device</span>
         </button>
       </div>
-      <Footer label={device?.online ? "Continue" : "Waiting"} waiting={!!device && !device.online} disabled={!device?.online} onNext={() => device && onNext(device.id)} />
+      {error && <p className="mt-3 text-sm text-bad">{error}</p>}
+      <Footer
+        label={device?.online ? "Continue" : device?.mine || isOwner ? `Connect ${device?.name ?? "it"}` : "Waiting"}
+        waiting={!!device && !device.online && !(device.mine || isOwner)}
+        busy={busy}
+        disabled={!device || (!device.online && !(device.mine || isOwner))}
+        onNext={() => device && (device.online ? onNext(device.id) : newCode(device))}
+      />
     </>
   );
 }
@@ -761,7 +730,7 @@ function harnessesFor(device: DeviceInfo) {
   return [...built, ...declared];
 }
 
-function HarnessScreen({ device, name, agent, onCreated, onBack, onNext }: { device: DeviceInfo; name: string; agent: Agent | undefined; onCreated: (a: Agent) => void; onBack: () => void; onNext: () => void }) {
+function HarnessScreen({ device, name, agent, onCreated, onBack, onNext, onReplied }: { device: DeviceInfo; name: string; agent: Agent | undefined; onCreated: (a: Agent) => void; onBack: () => void; onNext: () => void; onReplied: () => void }) {
   const computers = useStore((s) => s.computers);
   const installed = new Set((device.harnesses ?? []).map((h) => h.id));
   const vms = (device.role ?? "vms") === "vms" && !!device.capabilities?.vm.ok;
@@ -775,7 +744,7 @@ function HarnessScreen({ device, name, agent, onCreated, onBack, onNext }: { dev
   const [installing, setInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (agent) return <SignIn agent={agent} device={device} onBack={onBack} onNext={onNext} />;
+  if (agent) return <SignIn agent={agent} device={device} onBack={onBack} onNext={onNext} onReplied={onReplied} />;
 
   const shown = more ? all : all.slice(0, 6);
   if (!shown.includes(harness)) shown.push(harness);
@@ -880,7 +849,7 @@ function loginSteps(harness: string): { command: string; then: string | null } |
 }
 
 /** Where its harness signs in: once on its computer when it runs in there, or as usual on the device. */
-function SignIn({ agent, device, onBack, onNext }: { agent: Agent; device: DeviceInfo; onBack: () => void; onNext: () => void }) {
+function SignIn({ agent, device, onBack, onNext, onReplied }: { agent: Agent; device: DeviceInfo; onBack: () => void; onNext: () => void; onReplied: () => void }) {
   const computer = useStore((s) => s.computers.find((c) => c.id === agent.computerId));
   const label = harnessLabel(agent.harness);
   const inVm = agent.settings.runIn === "computer" && computer?.kind === "vm";
@@ -920,22 +889,7 @@ function SignIn({ agent, device, onBack, onNext }: { agent: Agent; device: Devic
     }
   };
 
-  if (!inVm || !computer)
-    return (
-      <>
-        <Heading title={`${agent.name} is in`}>
-          {label} runs on {device.name} and uses its sign-in there.
-        </Heading>
-        {login && (
-          <Command label={`Not signed in to ${label} on ${device.name} yet?`} text={login.command}>
-            Run this there once{login.then ? `, then ${login.then}` : ""}.
-          </Command>
-        )}
-        {computer?.kind === "device" && <p className="mt-5 text-sm text-muted">It works on {device.name}'s own screen while you lend it. You'll lend it in the next step.</p>}
-        {!computer && <p className="mt-5 text-sm text-muted">It runs headless, so it has no apps or websites. You can give it a computer later on its page.</p>}
-        <Footer onBack={onBack} label="Continue" onNext={onNext} />
-      </>
-    );
+  if (!inVm || !computer) return <DeviceHarnessSetup agent={agent} device={device} computer={computer} onBack={onBack} onNext={onNext} onReplied={onReplied} />;
 
   const start = async () => {
     setBusy(true);
@@ -983,6 +937,216 @@ function SignIn({ agent, device, onBack, onNext }: { agent: Agent; device: Devic
         onNext={onNext}
         extra={
           signedIn !== true && (
+            <Button variant="ghost" onClick={onNext}>
+              Later
+            </Button>
+          )
+        }
+      />
+    </>
+  );
+}
+
+/**
+ * A test message to the agent in #general, and what came back: its reply, or the failure the hub
+ * explained (a harness that needs signing in says so in plain words).
+ */
+function useTestMessage(agent: Agent) {
+  const channels = useStore((s) => s.channels);
+  const loadChannel = useStore((s) => s.loadChannel);
+  const live = useStore((s) => s.live);
+  const general = channels.find((c) => c.name === "general");
+  const messages = useStore((s) => (general ? s.messages[general.id] : undefined));
+  const [sentAt, setSentAt] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (general) loadChannel(general.id);
+  }, [general, loadChannel]);
+  const reply = useMemo(() => (sentAt ? messages?.find((m) => m.author.kind === "agent" && m.author.id === agent.id && m.createdAt >= sentAt) : undefined), [messages, sentAt, agent.id]);
+  const running = Object.values(live).find((r) => r.agentId === agent.id);
+  const send = async () => {
+    if (!general) return setError("There's no #general channel to send it to.");
+    setBusy(true);
+    setError(null);
+    try {
+      const m = await api<{ createdAt: string }>("POST", `/api/channels/${general.id}/messages`, { body: `@${agent.handle} Hi! Introduce yourself in two sentences.` });
+      setSentAt(m.createdAt);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { sentAt, reply, running, busy, error, send, reset: () => setSentAt(null) };
+}
+
+type SetupState = "ok" | "todo" | "wait" | "later";
+
+/** One line of the device checklist: done, up to you now, being checked, or not yet. */
+function SetupStep({ n, state, title, children }: { n: number; state: SetupState; title: ReactNode; children?: ReactNode }) {
+  return (
+    <li className={cx("flex gap-3", state === "later" && "opacity-60")}>
+      <span className={cx("mt-0.5 size-6 shrink-0 rounded-full grid place-items-center text-xs font-semibold", state === "ok" ? "bg-ok text-white" : state === "todo" ? "bg-accent text-accent-ink" : "bg-chip text-muted")} aria-hidden>
+        {state === "ok" ? <Check size={13} /> : state === "wait" ? <Loader2 size={13} className="animate-spin" /> : n}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className={cx("text-sm", state === "ok" ? "text-muted" : "font-medium")} aria-current={state === "todo" ? "step" : undefined}>
+          {title}
+          <span className="sr-only">{state === "ok" ? ", done" : state === "todo" ? ", to do" : state === "wait" ? ", checking" : ", later"}</span>
+        </div>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * Its harness runs on the device itself: get it installed there (the device reports what it has),
+ * signed in with your own account, and answering, all from this page. The test message's reply is
+ * also the first task, so setup is done the moment it arrives.
+ */
+function DeviceHarnessSetup({ agent, device, computer, onBack, onNext, onReplied }: { agent: Agent; device: DeviceInfo; computer: ComputerInfo | undefined; onBack: () => void; onNext: () => void; onReplied: () => void }) {
+  const label = harnessLabel(agent.harness);
+  const info = harnessInfo(agent.harness);
+  const login = loginSteps(agent.harness);
+  const reported = device.harnesses ?? [];
+  const known = reported.length > 0 && device.online;
+  const installed = reported.some((h) => h.id === agent.harness);
+  const [installing, setInstalling] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const test = useTestMessage(agent);
+  const replied = !!test.reply?.body;
+  const failed = !!test.reply && !test.reply.body;
+  const html = useMemo(() => (test.reply?.body ? renderMarkdown(test.reply.body) : ""), [test.reply]);
+
+  const install = async () => {
+    setInstalling(true);
+    setError(null);
+    try {
+      await api("POST", `/api/nodes/${device.id}/install`, { harness: agent.harness });
+      await api("POST", `/api/nodes/${device.id}/refresh`).catch(() => {});
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setInstalling(false);
+    }
+  };
+  // ask the device to look again; what it finds shows up through the devices list within a few seconds
+  const check = async () => {
+    setChecking(true);
+    setError(null);
+    await api("POST", `/api/nodes/${device.id}/refresh`).catch((err) => setError((err as Error).message));
+    setTimeout(() => setChecking(false), 3000);
+  };
+
+  const installState: SetupState = !device.online ? "wait" : installed ? "ok" : known ? "todo" : "wait";
+  const signState: SetupState = replied ? "ok" : installed ? "todo" : "later";
+  const testState: SetupState = replied ? "ok" : test.sentAt && !failed ? "wait" : installed ? "todo" : "later";
+
+  return (
+    <>
+      <Heading title={`Set up ${label} on ${device.name}`}>
+        {agent.name} uses {label} with your own account. Get it installed and signed in there, then send a test message to make sure it answers.
+      </Heading>
+      <ol className="space-y-4" aria-label={`${label} on ${device.name}`}>
+        <SetupStep n={1} state={installState} title={installed ? `${label} is installed on ${device.name}` : `Install ${label} on ${device.name}`}>
+          {!device.online ? (
+            <p className="text-xs text-muted">{device.name} is offline. Open Warren there; this page updates by itself.</p>
+          ) : installed ? null : !known ? (
+            <p className="text-xs text-muted">Checking what {device.name} has…</p>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {info?.install?.npm && device.mine ? (
+                <p className="text-muted">Warren can install it there for you. It takes a minute or two.</p>
+              ) : info?.install?.docs ? (
+                <p className="text-muted">
+                  Install it on {device.name} with{" "}
+                  <a className="text-accent-text hover:underline" href={info.install.docs} target="_blank" rel="noreferrer">
+                    its installer
+                  </a>
+                  , then check again.
+                </p>
+              ) : (
+                <p className="text-muted">Install it on {device.name}, then check again.</p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {info?.install?.npm && device.mine && (
+                  <Button variant="primary" onClick={install} disabled={installing}>
+                    {installing ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} {installing ? `Installing on ${device.name}…` : `Install on ${device.name}`}
+                  </Button>
+                )}
+                <Button onClick={check} disabled={checking || installing}>
+                  <RefreshCw size={15} className={checking ? "animate-spin" : undefined} /> Check again
+                </Button>
+              </div>
+            </div>
+          )}
+        </SetupStep>
+        <SetupStep n={2} state={signState} title={replied ? `${label} is signed in` : `Sign in to ${label} on ${device.name}`}>
+          {!replied && (
+            <div className="space-y-2 text-sm">
+              {info?.account && (
+                <p className="text-muted">
+                  {info.account}
+                  {info.signup && (
+                    <>
+                      {" "}
+                      No account yet?{" "}
+                      <a className="text-accent-text hover:underline" href={info.signup} target="_blank" rel="noreferrer">
+                        Get one here
+                      </a>
+                      .
+                    </>
+                  )}
+                </p>
+              )}
+              {login ? (
+                <Command text={login.command}>
+                  Open Terminal on {device.name} (press ⌘ Space, type Terminal), paste this, press Return{login.then ? `, then ${login.then}` : ""}. Once. Then send the test message below: that's how this page finds out.
+                </Command>
+              ) : (
+                <p className="text-muted">Sign in to {label} on {device.name} the way it asks, then send the test message below.</p>
+              )}
+            </div>
+          )}
+        </SetupStep>
+        <SetupStep n={3} state={testState} title={replied ? `${agent.name} answered` : "Send a test message"}>
+          {!test.sentAt ? (
+            <div className="space-y-2 text-sm">
+              <p className="text-muted">A hello to {agent.name} in #general. Its reply counts as your first task.</p>
+              <Button variant="primary" onClick={test.send} disabled={test.busy || !installed || !device.online}>
+                {test.busy ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} Send a test message
+              </Button>
+            </div>
+          ) : failed ? (
+            <div className="space-y-2 text-sm">
+              <p className="text-bad">{failureText(test.reply!.parts)}</p>
+              <Button onClick={test.reset}>Try again</Button>
+            </div>
+          ) : !replied ? (
+            <Status ok={null}>
+              Waiting for {agent.name} to answer… {test.running?.tools.length ? `(using ${test.running.tools.at(-1)!.replace(/^mcp__warren__/, "")})` : agent.status === "offline" ? "(waiting for its device)" : ""}
+            </Status>
+          ) : (
+            <div className="rounded-xl border border-line p-3 flex gap-3" role="status" aria-live="polite">
+              <AgentAvatar agent={agent} />
+              <div className="prose-w min-w-0 flex-1 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
+            </div>
+          )}
+          {test.error && <p className="text-sm text-bad">{test.error}</p>}
+        </SetupStep>
+      </ol>
+      {computer?.kind === "device" && <p className="mt-5 text-sm text-muted">It works on {device.name}'s own screen while you lend it. You'll lend it in the next step.</p>}
+      {!computer && <p className="mt-5 text-sm text-muted">It runs headless, so it has no apps or websites. You can give it a computer later on its page.</p>}
+      {error && <p className="mt-3 text-sm text-bad">{error}</p>}
+      <Footer
+        onBack={onBack}
+        label={replied ? "Finish" : "Continue"}
+        onNext={replied ? onReplied : onNext}
+        extra={
+          !replied && (
             <Button variant="ghost" onClick={onNext}>
               Later
             </Button>

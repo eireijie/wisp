@@ -21,6 +21,14 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "protocols": [
+      {
+        "name": "Warren join link",
+        "schemes": [
+          "warren"
+        ]
+      }
+    ],
     "files": [
       "src/**/*",
       "build/icon.png",

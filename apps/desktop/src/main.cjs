@@ -47,7 +47,26 @@ const hub = new engine.Child("hub", logDir, () => refresh());
 const device = new engine.Child("device", logDir, () => refresh());
 
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on("second-instance", () => showWindow());
+// a second launch is usually a warren:// link (Windows and Linux pass it in argv); otherwise just show the window
+app.on("second-instance", (_e, argv) => {
+  const link = joinLinkIn(argv);
+  if (link) joinByLink(link);
+  else showWindow();
+});
+
+// warren://join?hub=…&code=…&name=…: the web app's device step opens the app with everything it needs
+if (process.defaultApp && process.argv[1]) app.setAsDefaultProtocolClient("warren", process.execPath, [path.resolve(process.argv[1])]);
+else app.setAsDefaultProtocolClient("warren");
+/** @type {{ hub: string, code: string, name: string } | null} a link that arrived before the app was ready */
+let pendingLink = null;
+app.on("open-url", (e, url) => {
+  const link = engine.parseJoinLink(url);
+  if (!link) return;
+  e.preventDefault();
+  if (app.isReady()) joinByLink(link);
+  else pendingLink = link;
+});
+const joinLinkIn = (argv) => argv.map((a) => engine.parseJoinLink(a)).find(Boolean) ?? null;
 
 app.setAboutPanelOptions?.({ applicationName: "Warren", copyright: "Apache-2.0", website: "https://github.com/eireijie/warren" });
 
@@ -286,6 +305,49 @@ function stopDevice() {
   refresh();
 }
 
+/**
+ * Join a server from a link the web app's device step made: it carries the server address and a
+ * connection code for a device that already exists there, so this computer registers as that device
+ * with nothing to copy and no sign-in needed first. The web page then sees it connect by itself.
+ */
+async function joinByLink(link) {
+  showSetup({ step: "starting", title: `Joining ${hostOf(link.hub)}…` });
+  const test = await engine.testHub(link.hub);
+  if (!test.ok) return showSetup({ step: "join", url: link.hub, problem: test.error });
+  const found = needs();
+  const service = await engine.serviceRunning("node");
+  if (!service && found.problem) return showSetup({ step: "join", url: test.url, problem: found.problem });
+  // a device of another server stays one unless the person says otherwise
+  const cfg = engine.readNodeConfig();
+  if (cfg.hub && cfg.token && !sameOrigin(cfg.hub, test.url)) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: "question",
+      buttons: ["Connect to this Warren", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      message: "This computer is a device of another Warren",
+      detail: `It's set up for ${cfg.hub}. Connecting it to ${test.url} instead disconnects it from there.`,
+    });
+    if (response !== 0) return connect();
+  }
+  // this computer may already be a device (of this or another server) under its old code: stop that first
+  if (deviceBy === "app") await device.stopAndWait();
+  // the server this app already runs stays as it is; anything else becomes the server this app shows
+  if (config.mode === "local" && sameOrigin(test.url, LOCAL_HUB)) {
+    stopWaiting();
+    deviceBy = "";
+    deviceError = "";
+    config.device = true;
+    save();
+  } else switchTo({ mode: "remote", hubUrl: test.url, device: true });
+  const name = link.name || deviceName();
+  engine.writeNodeConfig({ hub: test.url, token: link.code, name });
+  // a `warren service install node` reads node.json when it starts: point it at this server now
+  if (service) await engine.restartService("node");
+  await connect();
+  if (hubOrigin) notify(`${name} is connected to ${hostOf(test.url)}`, "Agents can run here. Choose what it does for them in Warren → Devices.");
+}
+
 /** "Yug's MacBook Air" on a Mac; elsewhere the host name without its network domain. */
 function deviceName() {
   if (process.platform === "darwin") {
@@ -464,6 +526,14 @@ setup("setup:join", async (url, { device: asDevice = true } = {}) => {
   return test;
 });
 
+/** A warren://join link pasted into the address field does everything the link would. */
+setup("setup:join-link", (text) => {
+  const link = engine.parseJoinLink(text);
+  if (!link) return { ok: false, error: "That isn't a Warren join link. It starts with warren://join and comes from the device step in Warren." };
+  joinByLink(link);
+  return { ok: true };
+});
+
 /** Leave the current server for another: stop what this app runs for it first. */
 function switchTo(next) {
   stopWaiting();
@@ -494,7 +564,10 @@ app.whenReady().then(() => {
   makeTray();
   buddy.ready();
   createWindow();
-  connect();
+  const link = pendingLink ?? joinLinkIn(process.argv);
+  pendingLink = null;
+  if (link) joinByLink(link);
+  else connect();
 });
 
 app.on("activate", () => showWindow());
