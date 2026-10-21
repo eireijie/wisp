@@ -80,13 +80,13 @@ extension GhostPainter {
       rect(-34, 16, 10, 16, 4.5, Color(hex: "#ff6b6b"))
       rect(24, 16, 10, 16, 4.5, Color(hex: "#ff6b6b"))
     case "bow":
-      let p = moved(15, 5, angle: 18)
+      let p = moved(angle: 18)
       p.path("M0 0 L-10 -7 L-10 7 Z M0 0 L10 -7 L10 7 Z", fill: Color(hex: "#ff6fa3"))
       p.ellipse(0, 0, 3, 3, Color(hex: "#ff3d7f"))
     case "halo":
       ellipse(0, -11 - (animated ? 2.5 * GhostAnimation.wave(time, 2.4) : 0), 16, 4.5, stroke: Color(hex: "#ffd84d"), width: 3.6)
     case "flower":
-      let p = moved(14, 5)
+      let p = self
       for i in 0..<5 {
         let a = Double(i) * .pi * 2 / 5
         p.ellipse(cos(a) * 4.2, sin(a) * 4.2, 3.6, 3.6, .white, stroke: Color(hex: "#f1e7ff"), width: 0.6)
@@ -103,42 +103,86 @@ extension GhostPainter {
     }
   }
 
-  func accessory(_ kind: String, geometry g: GhostGeometry) {
-    let a = g.eyeX[0], b = g.eyeX[1], dark = Color(hex: "#2b2735")
-    let face = moved(0, g.eyeY), neck = moved(60, g.neck)
+  /**
+   * Accessories are drawn for the classic ghost and fitted to the others, as on the web: face wear
+   * scales with the eye spacing (centered between the eyes), neckwear with the body's width at the
+   * neck, and a scarf takes the body's own width. Sunglasses also follow the eyes' glance.
+   */
+  func accessory(_ kind: String, geometry g: GhostGeometry, eyeShift: CGPoint = .zero) {
+    let face = (g.eyeX[1] - g.eyeX[0]) / 20
+    switch kind {
+    case "mustache":
+      moved(60, g.mouth - 1.5, scaleX: face, scaleY: face).moved(-60, -64.5).wear(kind, .classic, eyeShift: eyeShift)
+    case "glasses", "sunglasses", "monocle":
+      moved(60, g.eyeY, scaleX: face, scaleY: face).moved(-60, -WearFit.classic.eyeY).wear(kind, .classic, eyeShift: eyeShift)
+    case "scarf":
+      wear(kind, WearFit(g), eyeShift: eyeShift)
+    default:
+      let body = min(1.15, max(0.75, g.half / 28))
+      moved(60, g.neck, scaleX: body, scaleY: body).moved(-60, -g.neck).wear(kind, WearFit(g), eyeShift: eyeShift)
+    }
+  }
+
+  private func wear(_ kind: String, _ fit: WearFit, eyeShift: CGPoint) {
+    let a = fit.eyeX[0], b = fit.eyeX[1], y = fit.eyeY, dark = Color(hex: "#2b2735")
+    let neck = moved(60, fit.neck)
     switch kind {
     case "glasses":
-      face.ellipse(a, 0, 7, 7, .white.opacity(0.18), stroke: dark, width: 2)
-      face.ellipse(b, 0, 7, 7, .white.opacity(0.18), stroke: dark, width: 2)
-      var bridge = Path(); bridge.move(to: CGPoint(x: a + 7, y: 0))
-      bridge.addQuadCurve(to: CGPoint(x: b - 7, y: 0), control: CGPoint(x: 60, y: -3))
-      face.draw(bridge, stroke: dark, width: 2)
+      ellipse(a, y, 7, 7, .white.opacity(0.18), stroke: dark, width: 2)
+      ellipse(b, y, 7, 7, .white.opacity(0.18), stroke: dark, width: 2)
+      var bridge = Path(); bridge.move(to: CGPoint(x: a + 7, y: y))
+      bridge.addQuadCurve(to: CGPoint(x: b - 7, y: y), control: CGPoint(x: 60, y: y - 3))
+      draw(bridge, stroke: dark, width: 2)
     case "sunglasses":
+      // they move with the eyes behind them
+      let p = moved(eyeShift.x, eyeShift.y)
       for x in [a, b] {
-        face.rect(x - 8, -5.5, 16, 11, 4, Color(hex: "#1f1d2b"))
-        face.moved(x, 0).path("M-4.5 -2.5 l3 -1.5", stroke: .white.opacity(0.8), width: 1.4)
+        p.rect(x - 8, y - 5.5, 16, 11, 4, Color(hex: "#1f1d2b"))
+        p.moved(x, y).path("M-4.5 -2.5 l3 -1.5", stroke: .white.opacity(0.8), width: 1.4)
       }
-      var bridge = Path(); bridge.move(to: CGPoint(x: a + 8, y: -2)); bridge.addLine(to: CGPoint(x: b - 8, y: -2))
-      face.draw(bridge, stroke: Color(hex: "#1f1d2b"), width: 2.2)
+      var bridge = Path(); bridge.move(to: CGPoint(x: a + 8, y: y - 2)); bridge.addLine(to: CGPoint(x: b - 8, y: y - 2))
+      p.draw(bridge, stroke: Color(hex: "#1f1d2b"), width: 2.2)
     case "monocle":
-      let p = face.moved(b, 0), gold = Color(hex: "#c9a227")
+      let p = moved(b, y), gold = Color(hex: "#c9a227")
       p.ellipse(0, 0, 7, 7, .white.opacity(0.2), stroke: gold, width: 2.2)
       p.path("M5 5 Q12 12 7 22", stroke: gold, width: 1.2)
     case "bowtie":
       neck.path("M0 0 L-11 -6.5 L-11 6.5 Z M0 0 L11 -6.5 L11 6.5 Z", fill: Color(hex: "#e5484d"))
       neck.rect(-3, -3.2, 6, 6.4, 1.6, Color(hex: "#c2333a"))
     case "scarf":
-      neck.rect(-g.half + 1, -4.5, (g.half - 1) * 2, 9, 4.5, Color(hex: "#ff8f5a"))
-      for x in [-g.half + 8, -g.half + 16, g.half - 10] {
+      neck.rect(-fit.half - 1.5, -4.5, (fit.half + 1.5) * 2, 9, 4.5, Color(hex: "#ff8f5a"))
+      for x in [-fit.half + 8, -fit.half + 16, fit.half - 10] {
         neck.moved(x, 0).path("M0 -4.5 v9", stroke: Color(hex: "#ffd166"), width: 2.4)
       }
-      neck.moved(g.half * 0.25, 0, angle: -10).rect(0, 1, 8, 18, 3.5, Color(hex: "#ff8f5a"))
+      // the tail hangs down as far as the body is solid
+      neck.moved(fit.half * 0.25, 0, angle: -10).rect(0, 1, 8, max(9, min(18, fit.hem - fit.neck - 3)), 3.5, Color(hex: "#ff8f5a"))
     case "tie":
+      // as long as the body has room for above its hem
+      let len = max(12, min(24, fit.hem - fit.neck - 2))
       neck.path("M-3.5 -4 L3.5 -4 L2 1.5 L-2 1.5 Z", fill: Color(hex: "#2563eb"))
-      neck.path("M-2 1.5 L2 1.5 L5 19 L0 24 L-5 19 Z", fill: Color(hex: "#3b82f6"))
+      var blade = Path()
+      blade.move(to: CGPoint(x: -2, y: 1.5)); blade.addLine(to: CGPoint(x: 2, y: 1.5)); blade.addLine(to: CGPoint(x: 5, y: len - 5))
+      blade.addLine(to: CGPoint(x: 0, y: len)); blade.addLine(to: CGPoint(x: -5, y: len - 5)); blade.closeSubpath()
+      neck.draw(blade, fill: Color(hex: "#3b82f6"))
     case "mustache":
-      moved(60, g.mouth - 1.5).path("M0 0 Q-8 -5 -14 -1 Q-16 3.5 -11.5 3 Q-6 1.6 0 2.2 Q6 1.6 11.5 3 Q16 3.5 14 -1 Q8 -5 0 0 Z", fill: Color(hex: "#3a2a20"))
+      moved(60, fit.mouth - 1.5).path("M0 0 Q-8 -5 -14 -1 Q-16 3.5 -11.5 3 Q-6 1.6 0 2.2 Q6 1.6 11.5 3 Q16 3.5 14 -1 Q8 -5 0 0 Z", fill: Color(hex: "#3a2a20"))
     default: break
     }
   }
+}
+
+/** The parts of a ghost's shape accessories are fitted to; face wear is drawn for the classic one. */
+struct WearFit {
+  var eyeX: [Double]
+  var eyeY: Double
+  var mouth: Double
+  var neck: Double
+  var half: Double
+  var hem: Double
+
+  static let classic = WearFit(eyeX: [50, 70], eyeY: 54, mouth: 66, neck: 77, half: 30, hem: 98)
+}
+
+extension WearFit {
+  init(_ g: GhostGeometry) { self.init(eyeX: g.eyeX, eyeY: g.eyeY, mouth: g.mouth, neck: g.neck, half: g.half, hem: g.hem) }
 }

@@ -103,6 +103,8 @@ struct Channel: Codable, Identifiable, Hashable {
     var defaultAgentId: String?
     var replyInThread: Bool?
     var instructions: String?
+    /** the channel's agent team, drawn as a flow chart; nil = no team (only @mentioned agents, or defaultAgentId, answer) */
+    var team: ChannelTeam?
   }
   var `private`: Bool?
   var archivedAt: String?
@@ -114,6 +116,27 @@ struct Channel: Codable, Identifiable, Hashable {
   var isDM: Bool { kind == "dm" }
   var isMuted: Bool { notify == "mute" }
   var badge: Int { isMuted || archivedAt != nil || joined == false ? 0 : unread ?? 0 }
+}
+
+/**
+ * A channel's agent team (ChannelTeam in packages/core/src/types.ts). Leads read every new message;
+ * an edge means "hands work to". x and y are where each agent sits on the web's flow chart.
+ */
+struct ChannelTeam: Codable, Hashable {
+  struct Node: Codable, Hashable {
+    var agentId: String
+    var lead: Bool
+    var x: Double
+    var y: Double
+  }
+  struct Edge: Codable, Hashable {
+    var from: String
+    var to: String
+  }
+  var nodes: [Node]
+  var edges: [Edge]
+
+  static let empty = ChannelTeam(nodes: [], edges: [])
 }
 
 struct Reaction: Codable, Hashable {
@@ -164,6 +187,7 @@ struct Message: Codable, Identifiable, Hashable {
 
 struct MessagePage: Codable {
   var messages: [Message]
+  /** replies per message; in a thread, per reply (any reply can start a sub-thread) */
   var replyCounts: [String: Int]
 }
 

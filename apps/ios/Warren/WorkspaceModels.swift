@@ -22,7 +22,11 @@ struct TeamAgent: Codable, Identifiable {
 }
 struct AccountSession: Decodable, Identifiable { var id: String; var label: String?; var current: Bool?; var createdAt: String?; var lastUsed: String? }
 struct WorkspaceInvite: Decodable, Identifiable { var id: String; var role: String; var createdAt: String?; var expiresAt: String?; var code: String? }
-struct AgentPolicy: Codable { var askBefore: [String]; var maxHops: Int; var maxRunsPerMinute: Int; var defaultAccess: String }
+struct AgentPolicy: Codable {
+  var askBefore: [String]; var maxHops: Int; var maxRunsPerMinute: Int; var defaultAccess: String
+  /** agents making agents (Settings → Agents); missing on older hubs */
+  var leadsCreateAgents: Bool?; var subAgents: Bool?; var maxAgentMade: Int?
+}
 struct MemoryStorage: Decodable {
   struct Sync: Decodable { var allowed: Bool; var reason: String?; var urlPath: String?; var branch: String? }
   struct Move: Decodable { var how: String?; var files: Int? }
