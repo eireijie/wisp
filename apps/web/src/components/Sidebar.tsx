@@ -1,14 +1,15 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BellOff, BookOpen, LifeBuoy, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BellOff, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Sun, SunMoon, Trash2, UserPlus } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore, type ChannelInfo } from "../store.ts";
+import { useInboxCount, useStore, useWaitingOnYou, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { logout } from "../App.tsx";
 import { setupProgress, useDismissed, useOnboarding } from "../onboarding.ts";
-import { useSimple } from "../experience.tsx";
 import { useAppearance } from "../theme.ts";
-import { ChannelBrowser, ChannelIcon, ChannelMenu, SectionDialog } from "./Channels.tsx";
+import { useFeature } from "../features.ts";
+import { ChannelIcon, ChannelMenu, SectionDialog } from "./Channels.tsx";
+import { OrgSwitcher } from "./OrgSwitcher.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
 import { openDm } from "../openDm.ts";
 
@@ -21,22 +22,32 @@ const loadCollapsed = (): Record<string, boolean> => {
   }
 };
 
+const ROLE_LABEL = { owner: "Owner", member: "Member", guest: "Guest" } as const;
+
+/** Open the New agent screen from anywhere (the sidebar's +, ⌘K). */
+export function startNewAgent() {
+  useStore.setState({ newAgentOpen: true });
+  go({ view: "agents", agentId: null });
+}
+
 /**
- * The workspace sidebar, top to bottom: the workspace, Dashboard and quick actions, anything
- * waiting on you, your agents, channels, then everything else under Workspace, and you at the
- * bottom. On phones the same content is the Chats screen (variant "page": agents then channels)
- * with larger touch targets.
+ * The sidebar, top to bottom: the organization (a switcher), search-or-create, the main pages
+ * (Inbox, Agents, Computers, Memory), your agents, starred channels, sections and channels, and
+ * you at the bottom with Settings. Everything else (Tasks, Teams, Devices, Connected apps,
+ * Skills, About you, Help) is a click away on the Agents page, in Settings, or in ⌘K. On phones
+ * the same lists are the Chats screen (variant "page") with larger touch targets.
  */
 export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?: "sidebar" | "page" }) {
   const me = useStore((s) => s.me)!;
   const channels = useStore((s) => s.channels);
   const sections = useStore((s) => s.sections);
   const agents = useStore((s) => s.agents);
-  const connected = useStore((s) => s.connected);
+  const live = useStore((s) => s.live);
   const setPalette = useStore((s) => s.setPalette);
   const computers = useStore((s) => s.computers);
-  const approvals = useStore((s) => s.approvals);
-  const [browser, setBrowser] = useState<{ sectionId: string | null } | null>(null);
+  const waiting = useWaitingOnYou();
+  const inboxCount = useInboxCount();
+  const invite = useFeature("invite");
   const [editing, setEditing] = useState<Section | "new" | null>(null);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const { done } = useOnboarding();
@@ -47,7 +58,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const showGetStarted = route.view === "welcome" || !complete;
   const page = variant === "page";
   const isGuest = me.role === "guest";
-  const simple = useSimple();
+  const browse = (sectionId: string | null) => useStore.setState({ channelBrowser: { sectionId } });
 
   const active = route.view === "chat" ? route.channelId : null;
   // archived channels leave the sidebar; starred ones get their own group at the top
@@ -55,11 +66,10 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const starred = joined.filter((c) => c.starred);
   const grouped = joined.filter((c) => !c.starred);
   const dmFor = (agentId: string) => channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agentId}`));
-  // what agents are waiting on a person for: approvals, and help on their computers
-  // a request to borrow a device is only the owner's to answer
-  const pending = Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me?.user.id));
-  const helpNeeded = computers.filter((c) => c.help);
-  const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
+  // a channel where an agent is working right now gets a green dot
+  const busyChannels = new Set(Object.values(live).map((r) => r.channelId));
+  const computerWorking = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
+  const waitingCount = waiting.approvals.length + waiting.help.length;
 
   const toggleGroup = (key: string) => {
     const next = { ...collapsed, [key]: !collapsed[key] };
@@ -75,6 +85,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       <Item page={page} href={href({ view: "chat", channelId: c.id, threadId: null })} active={active === c.id} unread={c.unread > 0} dot={c.unread > 0}>
         <ChannelIcon channel={c} size={16} className="shrink-0 opacity-70" /> <span className={cx("truncate", c.notify === "mute" && "opacity-60")}>{c.name}</span>
         {c.notify === "mute" && <BellOff size={12} className="shrink-0 opacity-50" aria-label="Muted" />}
+        {busyChannels.has(c.id) && <span className="ml-auto mr-1 size-[7px] rounded-full bg-ok shrink-0 group-hover/ch:opacity-0" title="An agent is working here" aria-label="An agent is working here" />}
       </Item>
       <span className={cx("absolute right-3 top-1/2 -translate-y-1/2", !page && "opacity-0 group-hover/ch:opacity-100 focus-within:opacity-100")}>
         <ChannelMenu channel={c} />
@@ -83,56 +94,61 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   );
 
   return (
-    <nav className={cx("h-full flex flex-col", !page && "safe-top")}>
+    <nav className={cx("h-full flex flex-col", !page && "safe-top")} aria-label="Warren">
       {!page && (
-        <div className="h-15 shrink-0 px-4 flex items-center gap-2">
-          <WorkspaceTile name={me.workspace.name} />
-          <div className="text-sm font-bold truncate flex-1">{me.workspace.name}</div>
-          <span className={cx("size-1.5 rounded-full shrink-0", connected ? "bg-ok" : "bg-faint animate-pulse")} title={connected ? "Connected" : "Reconnecting…"} />
-        </div>
-      )}
-
-      {page && (
-        <div className="px-3 pt-2">
-          <button onClick={() => setPalette(true)} className="w-full flex items-center gap-2 rounded-full px-3.5 h-11 text-[15px] text-muted bg-side-hover">
-            <Search size={16} />
-            <span className="flex-1 text-left">Search everything</span>
+        <div className="shrink-0 px-2 pt-2 flex items-center gap-0.5">
+          <div className="flex-1 min-w-0">
+            <OrgSwitcher />
+          </div>
+          <button onClick={() => history.back()} className="size-7 grid place-items-center rounded-lg text-muted hover:text-ink hover:bg-side-hover" aria-label="Back" title="Back">
+            <ChevronLeft size={16} />
+          </button>
+          <button onClick={() => history.forward()} className="size-7 grid place-items-center rounded-lg text-faint hover:text-ink hover:bg-side-hover" aria-label="Forward" title="Forward">
+            <ChevronRight size={16} />
           </button>
         </div>
       )}
 
-      <div className={cx("flex-1 overflow-y-auto pb-4 space-y-3", page ? "pt-3" : "pt-1")}>
+      <div className={cx("px-2", page ? "pt-2 px-3" : "pt-2")}>
+        <button onClick={() => setPalette(true)} className={cx("w-full flex items-center gap-2.5 text-muted text-left", page ? "rounded-full px-3.5 h-11 text-[15px] bg-side-hover" : "mx-0 rounded-xl px-3 h-10 text-sm bg-panel border border-line hover:border-input")}>
+          <Search size={16} className="shrink-0" />
+          <span className="flex-1 truncate">Search or create…</span>
+          {!page && <kbd className="text-[11px] font-sans text-muted bg-chip rounded-md px-1.5 py-0.5">⌘K</kbd>}
+        </button>
+      </div>
+
+      <div className={cx("flex-1 overflow-y-auto pb-4 space-y-4", page ? "pt-3" : "pt-3")}>
         {!page && (
           <div className="space-y-px">
-            <Item href={href({ view: "dashboard" })} active={route.view === "dashboard" || (route.view === "chat" && !route.channelId)}>
-              <LayoutDashboard size={16} className="shrink-0" /> Dashboard
+            <Item href={href({ view: "dashboard" })} active={route.view === "dashboard" || (route.view === "chat" && !route.channelId)} count={inboxCount} strongCount>
+              <Inbox size={16} className="shrink-0" /> Inbox
             </Item>
-            {!isGuest && (
-              <Item onClick={() => useStore.setState({ newTaskOpen: true })}>
-                <SquarePen size={16} className="shrink-0" /> New task
-              </Item>
-            )}
-            <Item onClick={() => setPalette(true)}>
-              <Search size={16} className="shrink-0" /> Search
-              <kbd className="ml-auto text-[11px] text-faint font-sans">⌘K</kbd>
+            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents" || route.view === "teams" || route.view === "tasks" || route.view === "skills" || route.view === "connectors"}>
+              <Ghost size={16} className="shrink-0" /> Agents
+            </Item>
+            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers" || route.view === "nodes"}>
+              <Monitor size={16} className="shrink-0" /> Computers
+              {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
+            </Item>
+            <Item href={href({ view: "vault", path: null })} active={route.view === "vault" || route.view === "about"}>
+              <BookOpen size={16} className="shrink-0" /> Memory
             </Item>
             {showGetStarted && (
               <Item href={href({ view: "welcome" })} active={route.view === "welcome"}>
                 <Sparkles size={16} className="shrink-0" /> {dismissed && !complete ? "Finish setup" : "Get started"}
-                <span className="ml-auto text-[11px] text-muted tabular-nums">
-                  {dismissed && !complete ? `${progress} of ${steps}` : `${progress}/${steps}`}
-                </span>
+                <span className="ml-auto text-[11px] text-muted tabular-nums">{dismissed && !complete ? `${progress} of ${steps}` : `${progress}/${steps}`}</span>
               </Item>
             )}
           </div>
         )}
 
-        {!isGuest && pending.length + helpNeeded.length > 0 && (
-          <Group page={page} title="Waiting on you" collapsed={!!collapsed.waiting} onToggle={() => toggleGroup("waiting")}>
-            {helpNeeded.map((c) => {
+        {/* phones have no Inbox in this list, so what's waiting shows here */}
+        {page && waitingCount > 0 && (
+          <Group page title="Waiting on you" collapsed={!!collapsed.waiting} onToggle={() => toggleGroup("waiting")}>
+            {waiting.help.map((c) => {
               const a = agents.find((x) => x.id === c.help!.agentId);
               return (
-                <Item key={c.id} page={page} href={href({ view: "computers", computerId: c.id })} active={route.view === "computers" && route.computerId === c.id} dot>
+                <Item key={c.id} page href={href({ view: "computers", computerId: c.id })} dot>
                   <Hand size={16} className="shrink-0 text-warn" />
                   <span className="truncate">
                     {a?.name ?? "Agent"}: {c.help!.request}
@@ -140,10 +156,10 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
                 </Item>
               );
             })}
-            {pending.map((p) => {
+            {waiting.approvals.map((p) => {
               const a = agents.find((x) => x.id === p.agentId);
               return (
-                <Item key={p.id} page={page} href={href({ view: "chat", channelId: p.channelId, threadId: p.threadId })} dot>
+                <Item key={p.id} page href={href({ view: "chat", channelId: p.channelId, threadId: p.threadId })} dot>
                   <ShieldQuestion size={16} className="shrink-0 text-warn" />
                   <span className="truncate">
                     {a?.name ?? "Agent"}: {p.summary}
@@ -154,18 +170,20 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           </Group>
         )}
 
-        <Group page={page} title="Agents" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="Add agent" onClick={() => go({ view: "agents", agentId: null })}><Plus size={14} /></IconButton>}>
+        <Group page={page} title="Your agents" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="New agent" onClick={startNewAgent}><Plus size={14} /></IconButton>}>
           {agents.length === 0 && <p className="px-4 text-xs text-faint">No agents yet.</p>}
           {agents.map((a) => {
             const dm = dmFor(a.id);
+            const unread = dm?.unread ?? 0;
             return (
-              <Item key={a.id} page={page} agent={a} onClick={() => openDm(a.id)} active={!!dm && active === dm.id} unread={!!dm && dm.unread > 0} count={dm?.unread}>
+              <Item key={a.id} page={page} agent={a} onClick={() => openDm(a.id)} active={!!dm && active === dm.id} unread={unread > 0} count={unread}>
                 {/* the ghost dozes in gray when offline; a dot marks one that's working */}
                 <span className="relative shrink-0">
                   <AgentAvatar agent={a} size={page ? 30 : 22} live />
                   {a.status === "busy" && <StatusDot status={a.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar" />}
                 </span>
                 <span className="truncate">{a.name}</span>
+                {a.status === "busy" && unread === 0 && <span className="ml-auto text-xs font-semibold text-ok shrink-0">working</span>}
               </Item>
             );
           })}
@@ -193,7 +211,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
               actions={
                 !isGuest && (
                   <>
-                    <IconButton label={`Add channel to ${s.name}`} onClick={() => setBrowser({ sectionId: s.id })}>
+                    <IconButton label={`Add channel to ${s.name}`} onClick={() => browse(s.id)}>
                       <Plus size={14} />
                     </IconButton>
                     <Menu
@@ -232,7 +250,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           onToggle={() => toggleGroup("channels")}
           actions={
             <>
-              <IconButton label="Add a channel" onClick={() => setBrowser({ sectionId: null })}>
+              <IconButton label="New channel" onClick={() => browse(null)}>
                 <Plus size={14} />
               </IconButton>
               {!isGuest && (
@@ -244,101 +262,55 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           }
         >
           {grouped.filter((c) => !c.sectionId || !sections.some((s) => s.id === c.sectionId)).map(channelRow)}
-          <Item page={page} onClick={() => setBrowser({ sectionId: null })}>
+          <Item page={page} onClick={() => browse(null)}>
             <Plus size={16} className="shrink-0 opacity-70" /> <span className="text-muted">Add channels</span>
           </Item>
         </Group>
-
-        {!page && (
-          <Group title="Workspace" collapsed={!!collapsed.workspace} onToggle={() => toggleGroup("workspace")}>
-            <Item href={href({ view: "tasks" })} active={route.view === "tasks"} title="Work you handed to a helper">
-              <ListTodo size={16} className="shrink-0" /> Tasks
-            </Item>
-            <Item href={href({ view: "vault", path: null })} active={route.view === "vault"} title="Notes you and your helpers share">
-              <BookOpen size={16} className="shrink-0" /> Memory
-            </Item>
-            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"} title="Desktops helpers use">
-              <Monitor size={16} className="shrink-0" /> Computers
-              {working && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
-            </Item>
-            <Item href={href({ view: "nodes" })} active={route.view === "nodes"} title="Computers running Warren">
-              <Server size={16} className="shrink-0" /> Devices
-            </Item>
-            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents"} title="Your helpers">
-              <Bot size={16} className="shrink-0" /> Agents
-            </Item>
-            {!simple && (
-              <Item href={href({ view: "teams", teamId: null })} active={route.view === "teams"} title="Groups of helpers that work together">
-                <Users size={16} className="shrink-0" /> Teams
-              </Item>
-            )}
-            <Item href={href({ view: "connectors" })} active={route.view === "connectors"} title="Gmail, Slack and other apps helpers can use">
-              <Plug size={16} className="shrink-0" /> Connected apps
-            </Item>
-            <Item href={href({ view: "skills" })} active={route.view === "skills"} title="Things helpers know how to do">
-              <Wand2 size={16} className="shrink-0" /> Skills
-            </Item>
-            <Item href={href({ view: "about" })} active={route.view === "about"} title="What helpers should know about you">
-              <Brain size={16} className="shrink-0" /> About you
-            </Item>
-            <Item href={href({ view: "help" })} active={route.view === "help"} title="Answers, setup, and what words mean">
-              <LifeBuoy size={16} className="shrink-0" /> Help
-            </Item>
-            <Item href={href({ view: "settings", page: "general" })} active={route.view === "settings"} title="Workspace, people and app settings">
-              <Settings size={16} className="shrink-0" /> Settings
-            </Item>
-          </Group>
-        )}
-
       </div>
 
       {!page && (
-        <div className="shrink-0 px-2 py-2 flex items-center gap-1 safe-bottom">
-          <div className="flex-1 min-w-0">
-            <Menu
-              up
-              trigger={(_o, t) => (
-                <button onClick={t} className="w-full flex items-center gap-2.5 rounded-lg px-2 h-9 hover:bg-side-hover text-left">
-                  <UserAvatar name={me.user.name} size={24} />
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink/80">{me.user.name}</span>
-                </button>
-              )}
-              items={[
-                { label: "Profile", icon: <CircleUser size={14} />, onSelect: () => go({ view: "settings", page: "profile" }) },
-                { label: "App behavior", icon: <SlidersHorizontal size={14} />, onSelect: () => go({ view: "settings", page: "preferences" }) },
-                { label: "Notifications", icon: <Bell size={14} />, onSelect: () => go({ view: "settings", page: "notifications" }) },
-                { label: "Appearance", icon: <Palette size={14} />, onSelect: () => go({ view: "settings", page: "appearance" }) },
-                ...(mode !== "system" ? [{ label: "Match system light or dark", icon: <SunMoon size={14} />, onSelect: () => setMode("system") }] : []),
-                "divider",
-                { label: `${me.workspace.name} settings`, icon: <Settings size={14} />, onSelect: () => go({ view: "settings", page: "general" }) },
-                ...(me.role === "owner" ? [{ label: "Invite people", icon: <UserPlus size={14} />, onSelect: () => go({ view: "settings", page: "people" }) }] : []),
-                "divider",
-                { label: "Sign out", icon: <LogOut size={14} />, onSelect: logout },
-              ]}
-            />
+        <div className="shrink-0 p-2 safe-bottom">
+          <div className="flex items-center gap-1 rounded-xl bg-side-active p-1">
+            <div className="flex-1 min-w-0">
+              <Menu
+                up
+                trigger={(_o, t) => (
+                  <button onClick={t} className="w-full flex items-center gap-2.5 rounded-lg px-1.5 h-11 hover:bg-side-hover text-left" aria-label="You">
+                    <UserAvatar name={me.user.name} size={30} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-bold">{me.user.name}</span>
+                      <span className="block truncate text-xs text-muted">{ROLE_LABEL[me.role]}</span>
+                    </span>
+                  </button>
+                )}
+                items={[
+                  { label: "Profile", icon: <CircleUser size={14} />, onSelect: () => go({ view: "settings", page: "profile" }) },
+                  { label: "App behavior", icon: <SlidersHorizontal size={14} />, onSelect: () => go({ view: "settings", page: "preferences" }) },
+                  { label: "Notifications", icon: <Bell size={14} />, onSelect: () => go({ view: "settings", page: "notifications" }) },
+                  { label: "Appearance", icon: <Palette size={14} />, onSelect: () => go({ view: "settings", page: "appearance" }) },
+                  { label: resolvedMode === "dark" ? "Light mode" : "Dark mode", icon: resolvedMode === "dark" ? <Sun size={14} /> : <Moon size={14} />, onSelect: toggleMode },
+                  ...(mode !== "system" ? [{ label: "Match system light or dark", icon: <SunMoon size={14} />, onSelect: () => setMode("system") }] : []),
+                  "divider",
+                  { label: "Organization settings", icon: <Settings size={14} />, onSelect: () => go({ view: "settings", page: "general" }) },
+                  ...(me.role === "owner" && invite ? [{ label: "Invite people", icon: <UserPlus size={14} />, onSelect: () => go({ view: "settings", page: "people" }) }] : []),
+                  "divider",
+                  { label: "Sign out", icon: <LogOut size={14} />, onSelect: logout },
+                ]}
+              />
+            </div>
+            <a href={href({ view: "settings", page: null })} className="size-8 shrink-0 grid place-items-center rounded-lg text-ink/70 hover:text-ink hover:bg-side-hover" aria-label="Settings" title="Settings">
+              <SlidersHorizontal size={17} />
+            </a>
           </div>
-          <button onClick={toggleMode} className="p-2 rounded-lg text-muted hover:text-ink hover:bg-side-hover" aria-label={resolvedMode === "dark" ? "Switch to light mode" : "Switch to dark mode"} title={resolvedMode === "dark" ? "Light mode" : "Dark mode"}>
-            {resolvedMode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
         </div>
       )}
 
-      {browser && <ChannelBrowser sectionId={browser.sectionId} onClose={() => setBrowser(null)} />}
       {editing && <SectionDialog section={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
     </nav>
   );
 }
 
-/** The workspace's letter on a mint tile: Warren's one accent, like Paperclip's company tile. */
-export function WorkspaceTile({ name, size = 22 }: { name: string; size?: number }) {
-  return (
-    <span className="shrink-0 rounded-md grid place-items-center font-semibold bg-accent text-accent-ink" style={{ width: size, height: size, fontSize: size * 0.55 }} aria-hidden>
-      {(name.trim()[0] ?? "W").toUpperCase()}
-    </span>
-  );
-}
-
-/** A small mono label (AGENTS, CHANNELS, WORKSPACE); click it to fold the group away. */
+/** A section heading; click it to fold the group away. */
 function Group({ title, collapsed, onToggle, actions, page, children }: { title: ReactNode; collapsed: boolean; onToggle: () => void; actions?: ReactNode; page?: boolean; children: ReactNode }) {
   return (
     <section className="space-y-px">
@@ -362,11 +334,11 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
-function Item({ href: to, onClick, active, unread, dot, count, page, agent, title, children }: { title?: string; href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; page?: boolean; agent?: Agent; children: ReactNode }) {
+function Item({ href: to, onClick, active, unread, dot, count, strongCount, page, agent, title, children }: { title?: string; href?: string; onClick?: () => void; active?: boolean; unread?: boolean; dot?: boolean; count?: number; strongCount?: boolean; page?: boolean; agent?: Agent; children: ReactNode }) {
   const cls = cx(
     "mx-2 px-2 flex items-center gap-2.5 rounded-lg text-left w-[calc(100%-1rem)] transition-colors",
     page ? "h-11 text-[15px]" : "h-8 text-[13px] font-medium",
-    // the open item is tinted mint, or in the agent's own color for a chat with it
+    // the open item is tinted with the accent, or in the agent's own color for a chat with it
     active ? (agent ? "agent-tint text-ink" : "bg-accent-soft text-ink") : "hover:bg-side-active/70 hover:text-ink",
     unread && !active && "font-semibold text-ink",
     !unread && !active && "text-ink/80",
@@ -375,7 +347,7 @@ function Item({ href: to, onClick, active, unread, dot, count, page, agent, titl
     <>
       <span className="flex-1 min-w-0 flex items-center gap-2.5">{children}</span>
       {!!count && count > 0 ? (
-        <span className="text-[11px] font-semibold bg-accent text-accent-ink rounded-full px-1.5 min-w-5 h-5 grid place-items-center">{count > 99 ? "99+" : count}</span>
+        <span className={cx("text-[11px] font-semibold rounded-full px-1.5 min-w-5 h-5 grid place-items-center tabular-nums", strongCount ? "bg-ink text-panel" : "bg-accent text-accent-ink")}>{count > 99 ? "99+" : count}</span>
       ) : (
         dot && <span className="size-1.5 rounded-full bg-accent shrink-0" />
       )}

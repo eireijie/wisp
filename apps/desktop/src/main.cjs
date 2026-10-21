@@ -53,7 +53,10 @@ const updater = require("./updater.cjs").createUpdater({
   enabled: () => config.autoUpdate !== false,
 });
 const hub = new engine.Child("hub", logDir, () => refresh());
-const device = new engine.Child("device", logDir, () => refresh());
+const device = new engine.Child("device", logDir, () => {
+  if (device.state === "rejected") deviceRejected();
+  refresh();
+});
 
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on("second-instance", () => showWindow());
@@ -223,13 +226,19 @@ function stopWaiting() {
   refresh();
 }
 
-async function startDevice({ quiet = false, confirmed = false } = {}) {
+async function startDevice({ quiet = false, confirmed = false, claim = null } = {}) {
   deviceError = "";
   if (!hubOrigin) return;
   const service = await engine.serviceRunning("node");
+  // a device card in Warren that never connected: this computer becomes that device
+  if (claim?.token) {
+    if (device.running()) await stopAndWait();
+    engine.writeNodeConfig({ hub: hubOrigin, token: claim.token, name: claim.name || deviceName() });
+    deviceBy = "";
+  }
   let cfg = engine.readNodeConfig();
   const sameHub = cfg.hub && cfg.token && sameOrigin(cfg.hub, hubOrigin);
-  if (service && sameHub) {
+  if (service && sameHub && !claim) {
     deviceBy = "service";
     config.device = true;
     save();
@@ -276,7 +285,7 @@ async function startDevice({ quiet = false, confirmed = false } = {}) {
     return;
   }
   deviceBy = "app";
-  device.start(found.node, found.warrenDir, ["node", "start"], found.env);
+  device.start(found.node, found.warrenDir, ["node", "start"], { ...found.env, WARREN_EXIT_IF_REJECTED: "1" });
   if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Warren → Devices.");
 
   function fail(msg) {
@@ -286,6 +295,17 @@ async function startDevice({ quiet = false, confirmed = false } = {}) {
   }
 }
 
+/**
+ * The hub turned this computer's device token down (it was removed there, or the token is from an
+ * old setup): forget it and add this computer again for whoever is signed in, instead of staying dead.
+ */
+function deviceRejected() {
+  device.state = "stopped";
+  deviceBy = "";
+  engine.writeNodeConfig({ token: undefined });
+  if (config.device && hubOrigin) waitForSignIn();
+}
+
 function stopDevice() {
   stopWaiting();
   config.device = false;
@@ -293,6 +313,11 @@ function stopDevice() {
   device.stop();
   deviceBy = "";
   refresh();
+}
+
+async function stopAndWait() {
+  device.stop();
+  for (let i = 0; i < 50 && device.running(); i++) await new Promise((r) => setTimeout(r, 200));
 }
 
 /** "Yug's MacBook Air" on a Mac; elsewhere the host name without its network domain. */
@@ -543,7 +568,7 @@ ipcMain.on("badge", (_e, n) => {
   if (process.platform === "darwin") app.dock?.setBadge(count ? String(count) : "");
 });
 ipcMain.handle("desktop:info", () => ({ version: app.getVersion(), platform: process.platform, device: deviceBy === "service" || device.running() }));
-ipcMain.handle("desktop:connect-device", () => startDevice());
+ipcMain.handle("desktop:connect-device", (_e, claim) => startDevice({ confirmed: !!claim, claim: claim && typeof claim.token === "string" ? { token: claim.token, name: String(claim.name || "") } : null }));
 
 // ---------------------------------------------------------------- lifecycle
 

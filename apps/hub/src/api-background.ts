@@ -56,6 +56,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     if (!agent) return;
     const notAllowed = hub.whyNotAllowed(agent, c.actor.id);
     if (notAllowed) return reply.code(403).send({ error: notAllowed });
+    if (!hub.answers(agent, c.actor.id)) return reply.code(403).send({ error: `@${agent.handle} only answers the people its owner picked` });
     const body = parse(z.object({ enabled: z.boolean(), everyMinutes: z.number().int().min(10).max(1440), focus: z.string().trim().max(2000), quietStart: HHMM, quietEnd: HHMM, model: z.string().trim().max(200).nullable(), effort: z.string().trim().max(32).nullable(), dailyCap: z.number().int().min(1).max(1000).nullable() }).partial().strict(), req.body, reply);
     if (!body) return;
     const was = store.background(agent.id, c.actor.id);

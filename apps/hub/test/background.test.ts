@@ -58,7 +58,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   const url = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123" }) })).json();
+  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WarrenClient({ url, token: setup.token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
@@ -108,8 +108,8 @@ describe("background work", () => {
     const ws = hub.store.agent(agentId)!.workspaceId;
     const notion = hub.connectors.create(ws, me, { kind: "mcp-http", name: "Notion", catalogId: "notion", url: "https://mcp.notion.com/mcp", headers: {}, env: {} });
     hub.connectors.attach(notion.id, agentId, true);
-    await hub.vault.write("Projects/launch.md", "# Launch", { name: "t", email: "t@example.com" }, "add");
-    await hub.vault.write(`agents/${agentId}/background/${me}.md`, "Notion: last saw page 'Q4 plan' edited 9am", { name: "t", email: "t@example.com" }, "add");
+    await hub.vaults.primary.write("Projects/launch.md", "# Launch", { name: "t", email: "t@example.com" }, "add");
+    await hub.vaults.primary.write(`agents/${agentId}/background/${me}.md`, "Notion: last saw page 'Q4 plan' edited 9am", { name: "t", email: "t@example.com" }, "add");
     await owner.request("PUT", `/api/agents/${agentId}/background`, { focus: "the launch project and anything from my landlord" });
     const sources = (await owner.request("GET", `/api/agents/${agentId}/background`)).sources;
     expect(sources.map((x: { kind: string; name: string }) => `${x.kind}:${x.name}`)).toEqual(expect.arrayContaining(["app:Notion", "memory:shared/"]));

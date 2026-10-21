@@ -21,7 +21,7 @@ beforeAll(async () => {
   const url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
 
-  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123" }) })).json();
+  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WarrenClient({ url, token: setup.token });
   const agent = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "claude-code" });
   await owner.request("POST", "/api/agents", { handle: "helper", name: "Helper", harness: "codex" });
@@ -50,6 +50,7 @@ describe("warren-mcp", () => {
   it("exposes the tool set", async () => {
     const names = (await mcp.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([
+      "agent_create",
       "agents_list",
       "approval_request",
       "branch_merge",

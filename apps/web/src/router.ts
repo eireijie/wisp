@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
  * Hash routes:
  *   #/buddy                          desktop ghost (no workspace chrome)
  *   #/c/<channelId>[/t/<threadId>]   chat
- *   #/dashboard                      a bit of everything: agents, teams, tasks
+ *   #/dashboard (or #/inbox)         the Inbox: what's waiting on you, what agents are doing, new replies
  *   #/vault[/<path>]                 memory vault
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
  *   #/teams[/<teamId>[/<tab>]]       teams, and each team (members, work, settings)
@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
  *   #/nodes                          devices
  *   #/connectors                     MCP servers and other connections agents can use
  *   #/skills                         the skill shop: things agents can learn to do
- *   #/settings[/<page>]              your settings and the workspace's (see SETTINGS_PAGES)
+ *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
  *   #/join/<code>                    accept an invite (signed out)
  *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Warren is" and Simple or Advanced
  *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
@@ -43,7 +43,7 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "mobile", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "mobile", "general", "agent-defaults", "features", "people", "agents", "runtimes", "memory", "computers", "apps", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["members", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
@@ -54,6 +54,7 @@ export function parseRoute(hash: string): Route {
     case "buddy":
       return { view: "buddy" };
     case "dashboard":
+    case "inbox":
       return { view: "dashboard" };
     case "connectors":
       return { view: "connectors" };
@@ -151,6 +152,20 @@ export function mayLeave(): boolean {
 export function go(r: Route) {
   if (!mayLeave()) return;
   location.hash = href(r);
+}
+
+/** The last place in the app outside Settings, for Settings' "Back to app". */
+let lastAppHash: string | null = null;
+function noteAppHash() {
+  if (typeof location === "undefined") return;
+  if (parseRoute(location.hash).view !== "settings") lastAppHash = location.hash || "#/";
+}
+if (typeof window !== "undefined") {
+  noteAppHash();
+  window.addEventListener("hashchange", noteAppHash);
+}
+export function appHashBeforeSettings(): string {
+  return lastAppHash ?? href({ view: "dashboard" });
 }
 
 export function useRoute(): Route {

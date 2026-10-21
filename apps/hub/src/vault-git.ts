@@ -44,7 +44,7 @@ export async function syncProblem(hub: Hub, workspaceId: string, viewer: Viewer)
   if (viewer.role === "guest") return "Guests can read memory in Warren but can't sync it with Obsidian.";
   if (viewer.role === "owner") return null;
   const check = hub.access.checker(workspaceId, viewer);
-  const hidden = (await hub.vault.pathsEver()).find((p) => !atLeast(check(p).level, "read"));
+  const hidden = (await hub.vault(workspaceId).pathsEver()).find((p) => !atLeast(check(p).level, "read"));
   return hidden ? "Syncing hands over all of memory, including notes only some people can see. Ask an owner to sync, or to change who can read those notes." : null;
 }
 
@@ -188,12 +188,15 @@ export function newSyncToken(): { token: string; hash: string } {
 // --- routes -----------------------------------------------------------------------------------
 
 export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir: string }) {
-  const { store, vault } = hub;
-  const gateway = path.join(opts.dataDir, "vault-gateway");
-  let gatewayBranch: string | null = null;
+  const { store } = hub;
+  /** each organization's vault is served from its own read-only copy; the first keeps the original folder */
+  const gatewayOf = (workspaceId: string) => (hub.vaults.isPrimary(workspaceId) ? path.join(opts.dataDir, "vault-gateway") : path.join(hub.vaults.orgDir(workspaceId), "vault-gateway"));
+  const gatewayBranches = new Map<string, string>();
 
   /** The read-only copy git serves: a bare repository that borrows the vault's objects and points at its branch. */
-  async function refreshGateway(): Promise<boolean> {
+  async function refreshGateway(workspaceId: string): Promise<boolean> {
+    const vault = hub.vault(workspaceId);
+    const gateway = gatewayOf(workspaceId);
     const [head, branch] = await Promise.all([vault.head(), vault.branch()]);
     if (!head || !branch) return false;
     const repo = path.join(gateway, "vault.git");
@@ -213,11 +216,11 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
       fs.mkdirSync(path.dirname(alternates), { recursive: true });
       fs.writeFileSync(alternates, want);
     }
-    if (gatewayBranch !== branch) {
+    if (gatewayBranches.get(gateway) !== branch) {
       const refs = (await git(repo, ["for-each-ref", "--format=%(refname)"])).stdout.split("\n").filter(Boolean);
       for (const r of refs) if (r !== `refs/heads/${branch}`) await git(repo, ["update-ref", "-d", r]);
       await git(repo, ["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
-      gatewayBranch = branch;
+      gatewayBranches.set(gateway, branch);
     }
     await git(repo, ["update-ref", `refs/heads/${branch}`, head]);
     return true;
@@ -252,7 +255,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
       denied(reply, 403, problem);
       return null;
     }
-    if (readOnlyCopy && !(await refreshGateway())) {
+    if (readOnlyCopy && !(await refreshGateway(person.workspaceId))) {
       denied(reply, 503, "Memory has no saved notes yet, or isn't on a branch. Open Warren and add a note first.");
       return null;
     }
@@ -278,7 +281,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
     return send(
       reply,
       req,
-      await backend(gateway, {
+      await backend(gatewayOf(person.workspaceId), {
         method: "GET",
         pathInfo: "/vault.git/info/refs",
         query: `service=${service}`,
@@ -296,7 +299,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
     return send(
       reply,
       req,
-      await backend(gateway, {
+      await backend(gatewayOf(person.workspaceId), {
         method: "POST",
         pathInfo: "/vault.git/git-upload-pack",
         query: "",
@@ -316,6 +319,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
     let body = req.body as Buffer;
     if (req.headers["content-encoding"] === "gzip") body = zlib.gunzipSync(body);
     const { commands, caps } = readPackets(body);
+    const vault = hub.vault(person.workspaceId);
     const branch = await vault.branch();
     const refuse = (reason: string) => reply.code(200).type("application/x-git-receive-pack-result").header("cache-control", "no-cache").send(pushRefusal(caps, commands.map((c) => c.ref), reason));
     if (!commands.length) return denied(reply, 400, "Nothing to receive.");

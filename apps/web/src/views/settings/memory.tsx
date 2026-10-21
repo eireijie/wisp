@@ -48,7 +48,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [restarting, setRestarting] = useState(false);
-  const fixed = storage.source === "env";
+  const fixed = storage.source === "env" || storage.movable === false;
   const save = async (path: string | null) => {
     setError(null);
     setBusy(true);
@@ -71,7 +71,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
             <div>
               <Code>{storage.path}</Code>
             </div>
-            <div className="text-xs text-muted">{fixed ? "Set by WARREN_VAULT_DIR where Warren runs, so it can only be changed there." : storage.source === "default" ? "Warren's own data folder, the default." : "Chosen here."}</div>
+            <div className="text-xs text-muted">{storage.movable === false ? "Each extra organization keeps its memory in Warren's own data folder, so it can't be moved." : fixed ? "Set by WARREN_VAULT_DIR where Warren runs, so it can only be changed there." : storage.source === "default" ? "Warren's own data folder, the default." : "Chosen here."}</div>
           </div>
           {!fixed && (
             <form

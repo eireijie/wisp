@@ -11,6 +11,9 @@ struct ChannelView: View {
   @State private var error: String?
   @State private var loadingEarlier = false
   @State private var noEarlier = false
+  @Environment(\.dismiss) private var dismiss
+
+  private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
 
   private var list: [Message] { store.messages[channel.id] ?? [] }
 
@@ -39,7 +42,6 @@ struct ChannelView: View {
           MessageRow(message: m, compact: continues(m, after: i > 0 ? list[i - 1] : nil), replies: store.replyCounts[m.id] ?? 0, thread: ThreadRef(channelId: channel.id, rootId: m.id))
           .id(m.id)
         }
-        WorkingNow(channel: channel)
         Color.clear.frame(height: 1).id(Bottom.id)
       }
       .padding(.bottom, 8)
@@ -49,25 +51,47 @@ struct ChannelView: View {
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
-      Composer(placeholder: placeholder) { text in
-        try await store.send(text, in: channel.id)
+      if current.archivedAt != nil {
+        Text("#\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
+      } else {
+        VStack(spacing: 6) {
+          ActivityPill(channel: current)
+          Composer(placeholder: placeholder) { text in
+            try await store.send(text, in: channel.id)
+          }
+        }
+        .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
     }
     .toolbar(.hidden, for: .tabBar)
-    .navigationTitle(store.title(of: channel))
+    .navigationTitle(store.title(of: current))
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      if let agent = store.dmAgent(channel) {
-        ToolbarItem(placement: .principal) {
-          HStack(spacing: 8) {
-            AgentAvatar(agent: agent, size: 24, showStatus: false)
-            VStack(alignment: .leading, spacing: 0) {
-              Text(agent.name).font(.subheadline.weight(.semibold))
-              Text(statusLine(agent)).font(.caption2).foregroundStyle(.secondary)
+      ToolbarItem(placement: .principal) {
+        if let agent = store.dmAgent(current) {
+          NavigationLink {
+            AgentPage(agent: agent)
+          } label: {
+            HStack(spacing: 8) {
+              AgentAvatar(agent: agent, size: 24, showStatus: false)
+              VStack(alignment: .leading, spacing: 0) {
+                Text(agent.name).font(.subheadline.weight(.semibold))
+                Text(statusLine(agent)).font(.caption2).foregroundStyle(.secondary)
+              }
             }
-          }
+          }.buttonStyle(.plain)
+        } else {
+          NavigationLink {
+            ChannelDetails(channel: current)
+          } label: {
+            Label(current.name, systemImage: current.private == true ? "lock" : "number").font(.subheadline.weight(.semibold))
+          }.buttonStyle(.plain)
         }
       }
+    }
+    .onChange(of: store.channels) { old, new in
+      if old.contains(where: { $0.id == channel.id }) && !new.contains(where: { $0.id == channel.id }) { dismiss() }
+      if old.first(where: { $0.id == channel.id })?.joined == true && new.first(where: { $0.id == channel.id })?.joined == false { dismiss() }
     }
     .overlay(alignment: .top) {
       if let error {
@@ -83,8 +107,8 @@ struct ChannelView: View {
   }
 
   private var placeholder: String {
-    if let agent = store.dmAgent(channel) { return "Message \(agent.name)" }
-    return "Message #\(channel.name)"
+    if let agent = store.dmAgent(current) { return "Message \(agent.name)" }
+    return "Message #\(current.name)"
   }
 
   private func statusLine(_ a: Agent) -> String {
@@ -122,7 +146,6 @@ struct ThreadView: View {
           .padding(.vertical, 6)
         }
         ForEach(replies) { m in MessageRow(message: m, compact: false, replies: 0, thread: nil) }
-        if let ch = store.channels.first(where: { $0.id == ref.channelId }) { WorkingNow(channel: ch) }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
     }
@@ -131,7 +154,14 @@ struct ThreadView: View {
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
-      Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+      if store.channels.first(where: { $0.id == ref.channelId })?.archivedAt != nil {
+        Text("This channel is archived").font(.footnote).foregroundStyle(.secondary).padding()
+      } else {
+        VStack(spacing: 6) {
+          if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch) }
+          Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+        }
+      }
     }
     .toolbar(.hidden, for: .tabBar)
     .navigationTitle("Thread")
@@ -148,38 +178,13 @@ enum Bottom {
   }
 }
 
-/** Agents working on something in this channel right now, and what they're doing. */
-struct WorkingNow: View {
-  @Environment(Store.self) private var store
-  var channel: Channel
-
-  var body: some View {
-    let working = store.agents.filter { a in
-      store.activityChannel[a.id] == channel.id || (a.status == .busy && store.dmAgent(channel)?.id == a.id)
-    }
-    ForEach(working) { a in
-      HStack(spacing: 8) {
-        AgentAvatar(agent: a, size: 22, showStatus: false)
-          .phaseAnimator([0, -2]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: 0.8) }
-        Text("**\(a.name)** \(store.activity[a.id].map { $0.prefix(1).lowercased() + $0.dropFirst() } ?? "is working…")")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 6)
-      .transition(.opacity)
-    }
-  }
-}
-
 struct EmptyChannel: View {
   @Environment(Store.self) private var store
   var channel: Channel
   var body: some View {
     VStack(spacing: 10) {
       if let a = store.dmAgent(channel) {
-        AgentAvatar(agent: a, size: 64, showStatus: false)
+        AgentAvatar(agent: a, size: 64, showStatus: false, interactive: true)
         Text("This is the start of your chat with \(a.name).").font(.subheadline).foregroundStyle(.secondary)
       } else {
         Text("#\(channel.name)").font(.title3.bold())

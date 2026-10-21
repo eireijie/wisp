@@ -70,6 +70,20 @@ export interface AgentSettings {
   role?: string;
   /** what the role means for how it works: what it owns, what to send its way */
   roleNotes?: string;
+  /**
+   * Whose messages wake it: only its creator ("me"; the organization's owners when it has no
+   * creator), anyone in the organization, or the people in `respondPeople` (plus its creator).
+   * Unset means anyone, as agents did before this existed; new agents start at "me".
+   */
+  respondTo?: "me" | "anyone" | "people";
+  /** user ids it answers when respondTo is "people" */
+  respondPeople?: string[];
+  /** the person who made it (set by the hub when it's created; older agents don't have one) */
+  createdBy?: string;
+  /** the agent that made it, when a lead or another agent created it (Settings → Agents allows that) */
+  parentAgentId?: string;
+  /** how many agents up the chain it was made: 1 = by a lead, 2 = a sub-agent of that one, … */
+  madeDepth?: number;
 }
 
 /**
@@ -197,9 +211,58 @@ export interface ChannelSettings {
   replyInThread: boolean;
   /** standing notes every agent reads when it works here ("use the web repo", "keep replies short") */
   instructions: string;
+  /** the channel's agent team, drawn as a flow chart; null = no team (the older rules above apply) */
+  team: ChannelTeam | null;
 }
 
-export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null, replyInThread: false, instructions: "" };
+/**
+ * A channel's agent team. Leads read every new message in the channel; when there's more than one
+ * they talk it over and agree on a plan before handing out work. An arrow means "hands work to".
+ */
+export interface ChannelTeam {
+  nodes: ChannelTeamNode[];
+  edges: { from: string; to: string }[];
+}
+
+export interface ChannelTeamNode {
+  agentId: string;
+  lead: boolean;
+  /** where it sits on the flow chart */
+  x: number;
+  y: number;
+}
+
+export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null, replyInThread: false, instructions: "", team: null };
+
+/** What's wrong with a team's chart, in plain words, or null when it's fine. */
+export function teamProblem(team: ChannelTeam): string | null {
+  if (!team.nodes.length) return "Add at least one agent to the team.";
+  if (!team.nodes.some((n) => n.lead)) return "Make at least one agent a lead.";
+  const ids = new Set(team.nodes.map((n) => n.agentId));
+  if (ids.size !== team.nodes.length) return "An agent is on the chart twice.";
+  for (const e of team.edges) {
+    if (!ids.has(e.from) || !ids.has(e.to)) return "An arrow points at an agent that isn't on the chart.";
+    if (e.from === e.to) return "An agent can't hand work to itself.";
+  }
+  const lead = new Set(team.nodes.filter((n) => n.lead).map((n) => n.agentId));
+  if (team.edges.some((e) => lead.has(e.to))) return "Leads hear every message already; arrows can't point at a lead.";
+  // every agent that isn't a lead gets work from someone
+  if (team.nodes.some((n) => !n.lead && !team.edges.some((e) => e.to === n.agentId))) return "Connect every agent that isn't a lead to whoever hands it work.";
+  // and no loops
+  const next = (id: string) => team.edges.filter((e) => e.from === id).map((e) => e.to);
+  const seen = new Set<string>();
+  const walk = (id: string, path: Set<string>): boolean => {
+    if (path.has(id)) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    path.add(id);
+    const loop = next(id).some((n) => walk(n, path));
+    path.delete(id);
+    return loop;
+  };
+  if (team.nodes.some((n) => walk(n.agentId, new Set()))) return "The arrows go round in a loop.";
+  return null;
+}
 
 /** One person's own setting for a channel: how loud it is. */
 export type ChannelNotify = "all" | "default" | "mute";
@@ -416,6 +479,8 @@ export interface Discussion {
   startedBy: Actor;
   /** the person it's for (who started it, or who asked the agent that did) */
   requestedBy?: string | null;
+  /** "plan": a channel's leads agreeing on a plan for a request before they hand out the work */
+  kind?: "plan" | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,10 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, LayoutDashboard, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
+import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, Inbox, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
-import { useStore } from "./store.ts";
+import { useInboxCount, useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
 import { useAppearance, type ModeChoice } from "./theme.ts";
-import { Sidebar, WorkspaceTile } from "./components/Sidebar.tsx";
+import { Sidebar } from "./components/Sidebar.tsx";
+import { OrgRail } from "./components/OrgRail.tsx";
+import { OrgSwitcher } from "./components/OrgSwitcher.tsx";
+import { ChannelBrowser } from "./components/Channels.tsx";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ChannelView } from "./views/ChannelView.tsx";
 import { VaultView } from "./views/VaultView.tsx";
@@ -24,7 +27,7 @@ import { HelpView } from "./views/HelpView.tsx";
 import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { setupProgress, useDismissed, useOnboarding } from "./onboarding.ts";
-import { useSimple } from "./experience.tsx";
+import { useFeatures } from "./features.ts";
 import { BuddyView } from "./views/BuddyView.tsx";
 import { useDesktopAgents } from "./desktop.ts";
 import { useHubUpdated } from "./hubUpdate.ts";
@@ -78,6 +81,7 @@ function Workspace() {
   const handle = useStore((s) => s.handle);
   const setConnected = useStore((s) => s.setConnected);
   const newTaskOpen = useStore((s) => s.newTaskOpen);
+  const channelBrowser = useStore((s) => s.channelBrowser);
   const route = useRoute();
   const phone = useIsPhone();
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +152,7 @@ function Workspace() {
       case "nodes":
         return <NodesView onBack={phone ? toYou : undefined} />;
       case "settings":
-        return <SettingsView page={route.page ?? null} onBack={phone ? toYou : undefined} />;
+        return <SettingsView page={route.page ?? null} onBack={toYou} />;
       case "welcome":
         return <WelcomeView intro={route.intro} />;
       case "help":
@@ -157,11 +161,32 @@ function Workspace() {
   })();
   // conversations use the whole screen on phones; everything else keeps the tab bar
   const showTabs = phone && !(route.view === "chat" && route.channelId);
+  // on larger screens Settings takes the whole window: its own list replaces the sidebar
+  const fullSettings = !phone && route.view === "settings";
+  const dialogs = (
+    <>
+      <CommandPalette />
+      {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
+      {channelBrowser && <ChannelBrowser sectionId={channelBrowser.sectionId} onClose={() => useStore.setState({ channelBrowser: null })} />}
+    </>
+  );
+
+  if (fullSettings)
+    return (
+      <div className="h-full flex flex-col overflow-hidden bg-app">
+        <UpdatedBanner />
+        <div className="flex-1 min-h-0 flex">
+          <SettingsView page={route.page ?? null} fullWindow />
+        </div>
+        {dialogs}
+      </div>
+    );
 
   return (
     <div className="h-full flex overflow-hidden bg-app">
+      {!phone && <OrgRail />}
       {!phone && (
-        <aside className="w-60 shrink-0 bg-sidebar">
+        <aside className="w-64 shrink-0 bg-sidebar">
           <Sidebar route={route} />
         </aside>
       )}
@@ -173,8 +198,7 @@ function Workspace() {
           {showTabs && <TabBar route={route} />}
         </div>
       </div>
-      <CommandPalette />
-      {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
+      {dialogs}
     </div>
   );
 }
@@ -212,13 +236,14 @@ function TabBar({ route }: { route: Route }) {
     </a>
   );
   const youViews = ["you", "settings", "nodes", "welcome", "teams", "about", "vault", "connectors", "skills", "tasks", "help", "dashboard"];
+  const inbox = useInboxCount();
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-2 pointer-events-none safe-bottom">
       <nav className="glass pointer-events-auto mx-auto max-w-md flex gap-1 p-1 rounded-full" aria-label="Main">
         {tab(route.view === "chats" || route.view === "chat", "Chats", <MessageSquare size={22} strokeWidth={2.2} />, href({ view: "chats" }), unread)}
         {tab(route.view === "agents", "Agents", <Bot size={22} strokeWidth={2.2} />, href({ view: "agents", agentId: null }))}
         {tab(route.view === "computers", "Computers", <Monitor size={22} strokeWidth={2.2} />, href({ view: "computers", computerId: null }))}
-        {tab(youViews.includes(route.view), "You", <CircleUser size={22} strokeWidth={2.2} />, href({ view: "you" }))}
+        {tab(youViews.includes(route.view), "You", <CircleUser size={22} strokeWidth={2.2} />, href({ view: "you" }), route.view === "you" ? undefined : inbox - unread)}
       </nav>
     </div>
   );
@@ -226,16 +251,12 @@ function TabBar({ route }: { route: Route }) {
 
 /** Phones: the channel list as its own screen. */
 function ChatsPage({ route }: { route: Route }) {
-  const me = useStore((s) => s.me)!;
-  const connected = useStore((s) => s.connected);
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="shrink-0 px-4 pt-4 pb-2 safe-top flex items-center gap-2.5">
-        <WorkspaceTile name={me.workspace.name} size={32} />
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold leading-tight truncate">{me.workspace.name}</h1>
-          <p className="text-xs text-muted">{connected ? "Connected" : "Reconnecting…"}</p>
-        </div>
+      {/* the organization switcher: phones have no rail, so switching lives here */}
+      <header className="shrink-0 px-2 pt-3 pb-1 safe-top">
+        <h1 className="sr-only">Chats</h1>
+        <OrgSwitcher large />
       </header>
       <div className="flex-1 min-h-0">
         <Sidebar route={route} variant="page" />
@@ -249,7 +270,8 @@ function YouPage() {
   const me = useStore((s) => s.me)!;
   const { done } = useOnboarding();
   const dismissed = useDismissed();
-  const simple = useSimple();
+  const features = useFeatures();
+  const inbox = useInboxCount();
   const { progress, steps, complete } = setupProgress(done);
   const isGuest = me.role === "guest";
   /** a row with its icon in a colored rounded tile, like iOS Settings */
@@ -290,14 +312,14 @@ function YouPage() {
         </div>
         {!complete && <div className="rounded-3xl bg-bg overflow-hidden">{row(<Sparkles size={17} strokeWidth={2.4} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`, undefined, "#ff9f0a")}</div>}
         <div className="rounded-3xl bg-bg overflow-hidden">
-          {row(<LayoutDashboard size={17} strokeWidth={2.4} />, "Dashboard", href({ view: "dashboard" }), undefined, undefined, "#0a84ff")}
-          {row(<ListTodo size={17} strokeWidth={2.4} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to a helper", "#30b0c7")}
-          {!isGuest && row(<SquarePen size={17} strokeWidth={2.4} />, "New task", () => useStore.setState({ newTaskOpen: true }), undefined, undefined, "#34c759")}
+          {row(<Inbox size={17} strokeWidth={2.4} />, "Inbox", href({ view: "dashboard" }), inbox ? String(inbox) : undefined, "What's waiting on you and what agents are doing", "#0a84ff")}
+          {features.tasks && row(<ListTodo size={17} strokeWidth={2.4} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to a helper", "#30b0c7")}
+          {features.tasks && !isGuest && row(<SquarePen size={17} strokeWidth={2.4} />, "New task", () => useStore.setState({ newTaskOpen: true }), undefined, undefined, "#34c759")}
         </div>
         <div className="rounded-3xl bg-bg overflow-hidden">
           {row(<BookOpen size={17} strokeWidth={2.4} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share", "#af52de")}
           {row(<Brain size={17} strokeWidth={2.4} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you", "#ff2d55")}
-          {!simple && row(<Users size={17} strokeWidth={2.4} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together", "#5856d6")}
+          {features.teams && row(<Users size={17} strokeWidth={2.4} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together", "#5856d6")}
           {row(<Plug size={17} strokeWidth={2.4} />, "Connected apps", href({ view: "connectors" }), undefined, "Gmail, Slack and other apps helpers can use", "#ff9500")}
           {row(<Wand2 size={17} strokeWidth={2.4} />, "Skills", href({ view: "skills" }), undefined, "Things helpers know how to do", "#ffcc00")}
           {row(<Server size={17} strokeWidth={2.4} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren", "#64748b")}

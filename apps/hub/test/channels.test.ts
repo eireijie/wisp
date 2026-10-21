@@ -34,7 +34,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   me = (await api("GET", "/api/me")).data.user;
   sam = (await api("POST", "/api/members", { email: "sam@example.com", name: "Sam", password: "password123", role: "member" })).data;
   await api("POST", "/api/members", { email: "gus@example.com", name: "Gus", password: "password123", role: "guest" });
@@ -132,12 +132,12 @@ describe("who answers in a channel", () => {
 
   it("only wakes @mentioned agents until the channel has a default agent", async () => {
     const ch = (await api("POST", "/api/channels", { name: "support" })).data;
-    expect(ch.settings).toEqual({ defaultAgentId: null, replyInThread: false, instructions: "" });
+    expect(ch.settings).toEqual({ defaultAgentId: null, replyInThread: false, instructions: "", team: null });
     expect(hub.targets(await post(ch.id, "anyone around?"), ch.workspaceId)).toEqual([]);
 
     const set = await api("PATCH", `/api/channels/${ch.id}`, { settings: { defaultAgentId: atlas.id, instructions: "Keep it short." } });
     expect(set.status).toBe(200);
-    expect(set.data.settings).toEqual({ defaultAgentId: atlas.id, replyInThread: false, instructions: "Keep it short." });
+    expect(set.data.settings).toEqual({ defaultAgentId: atlas.id, replyInThread: false, instructions: "Keep it short.", team: null });
     // the default agent joins the channel it answers in
     expect((await api<any[]>("GET", `/api/channels/${ch.id}/members`)).data.some((m) => m.id === atlas.id)).toBe(true);
 

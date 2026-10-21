@@ -73,6 +73,8 @@ const { values, positionals } = parseArgs({
 
 const dir = path.resolve(values.dir ?? process.env.WARREN_NODE_DIR ?? path.join(os.homedir(), ".warren"));
 const configFile = path.join(dir, "node.json");
+/** `node start` exits with this once the hub turns its token down, when $WARREN_EXIT_IF_REJECTED asks it to (the desktop app does) */
+const REJECTED_CODE = 78;
 const [cmd, sub] = positionals;
 
 if (values.help || !cmd) {
@@ -112,6 +114,8 @@ if (values.help || !cmd) {
     process.exit(1);
   }
   const daemon = new NodeDaemon(cfg);
+  // the desktop app asks for this, so it can add this computer again instead of leaving a dead device running
+  if (process.env.WARREN_EXIT_IF_REJECTED) daemon.onRejected = () => process.exit(REJECTED_CODE);
   daemon.start();
   watchForUpdates(async () => {
     if (!kept) return console.log("[warren] Warren was updated; restart `warren node start` to use the new version");

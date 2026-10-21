@@ -44,6 +44,8 @@ Write-Host "node $(node -v), $(git --version)"
 # 2. the code
 if (Test-Path (Join-Path $Dir ".git")) {
   Write-Host "Updating $Dir"
+  # npm rewrites the lockfile on some installs; that change is never the user's work
+  git -C $Dir checkout -- package-lock.json 2>$null
   git -C $Dir pull --ff-only
 } else {
   if (Test-Path $Dir) { Fail "$Dir exists and isn't a Warren checkout. Pick another folder with -Dir." }

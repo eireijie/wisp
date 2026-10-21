@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { Agent, DeviceRole } from "@warren/core";
+import { FEATURE_PRESETS, type Agent, type DeviceRole, type Features } from "@warren/core";
 import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import { useStore } from "./store.ts";
@@ -205,4 +205,9 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
 export function isLocalOnlyHost(hostname: string): boolean {
   const h = hostname.trim().toLowerCase();
   return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+}
+
+/** The features an owner's Simple or Advanced choice sets for the organization: Simple keeps the extras off, Advanced turns them all on. */
+export function featuresForExperience(choice: "simple" | "advanced"): Features {
+  return { ...(choice === "simple" ? FEATURE_PRESETS.simple : FEATURE_PRESETS.everything) };
 }

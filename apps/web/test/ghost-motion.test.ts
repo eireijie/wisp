@@ -27,12 +27,21 @@ describe("shared ghost gaze", () => {
     const pointer = (type: string, pointerType = "mouse", x = 180, y = 150) => window.dispatchEvent(Object.assign(new Event(type), { pointerType, clientX: x, clientY: y }));
     const ghost = (offscreen = false, facing = 1) => {
       const node = () => ({ setAttribute: vi.fn() });
-      const pupil = node(), shine = node(), body = node();
+      const pupil = node(), shine = node(), body = { ...node(), querySelectorAll: () => [] };
       const face = { ...node(), querySelectorAll: (selector: string) => selector === "[data-ghost-pupil]" ? [pupil] : [shine] };
       const root = { getBoundingClientRect: () => ({ left: 100, top: offscreen ? 1000 : 100, width: 40, height: 40, right: 140, bottom: offscreen ? 1040 : 140 }), closest: () => ({ dataset: { petFacing: String(facing) } }) };
       return { face, body, pupil, shine, stop: registerGhost({ root, face, body } as unknown as Parameters<typeof registerGhost>[0]) };
     };
-    return { window, document, frames, flush, pointer, ghost };
+    /** a ghost wearing sunglasses, a hat and a tie */
+    const dressed = () => {
+      const node = (data: Record<string, string> = {}) => ({ setAttribute: vi.fn(), dataset: data });
+      const lens = node(), hat = node({ ghostHat: "60,18" }), neck = node({ ghostNeck: "60,77" });
+      const face = { setAttribute: vi.fn(), querySelectorAll: () => [] };
+      const body = { setAttribute: vi.fn(), querySelectorAll: (sel: string) => (sel === "[data-ghost-lens]" ? [lens] : sel === "[data-ghost-hat]" ? [hat] : sel === "[data-ghost-neck]" ? [neck] : []) };
+      const root = { getBoundingClientRect: () => ({ left: 100, top: 100, width: 40, height: 40, right: 140, bottom: 140 }), closest: () => null };
+      return { lens, hat, neck, stop: registerGhost({ root, face, body } as unknown as Parameters<typeof registerGhost>[0]) };
+    };
+    return { window, document, frames, flush, pointer, ghost, dressed };
   }
 
   it("clamps distant gaze, strengthens previews and tilts only nearby", () => {
@@ -108,5 +117,18 @@ describe("shared ghost gaze", () => {
       p.flush();
       expect(a.face.setAttribute.mock.lastCall?.[1]).toBe("translate(0 0)");
     } finally { a.stop(); }
+  });
+
+  it("moves sunglasses with the eyes behind them", () => {
+    const p = page();
+    const d = p.dressed();
+    try {
+      p.pointer("pointermove", "mouse", 600, 120);
+      p.flush();
+      expect(String(d.lens.setAttribute.mock.lastCall?.[1])).toMatch(/^translate\([1-9]/);
+      // hats and neckwear are fixed to the body: the gaze leaves them alone
+      expect(d.hat.setAttribute).not.toHaveBeenCalled();
+      expect(d.neck.setAttribute).not.toHaveBeenCalled();
+    } finally { d.stop(); }
   });
 });

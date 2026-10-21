@@ -20,23 +20,27 @@ interface Helpers {
 
 /** Settings → Memory: where the vault lives, and the tokens Obsidian's Git plugin signs in with. */
 export function registerMemoryStorageApi(app: FastifyInstance, hub: Hub, h: Helpers) {
-  const { store, vault } = hub;
+  const { store } = hub;
   const { need, parse } = h;
 
   async function describe(c: Caller) {
     const owner = c.viewer.role === "owner";
+    const vault = hub.vault(c.workspaceId);
+    // only the first organization's memory can live in a folder of the owner's choosing; the others stay in Warren's data folder
+    const movable = hub.vaults.isPrimary(c.workspaceId);
     const next = resolveVaultLocation(h.dataDir);
     const problem = await syncProblem(hub, c.workspaceId, c.viewer);
     return {
       // the folder is the owner's business; everyone else only needs the instructions
       path: owner ? vault.root : null,
-      source: h.started.location.source,
-      setting: owner ? next.setting : null,
-      pendingRestart: owner && path.resolve(next.path) !== path.resolve(vault.root),
-      nextPath: owner ? next.path : null,
+      source: movable ? h.started.location.source : "default",
+      setting: owner && movable ? next.setting : null,
+      pendingRestart: owner && movable && path.resolve(next.path) !== path.resolve(vault.root),
+      nextPath: owner ? (movable ? next.path : vault.root) : null,
       restartable: underKeeper(),
-      previous: owner ? h.started.location.previous : null,
-      moved: owner ? h.started.moved : null,
+      previous: owner && movable ? h.started.location.previous : null,
+      moved: owner && movable ? h.started.moved : null,
+      movable,
       sync: { allowed: !problem, reason: problem, urlPath: GIT_PATH, branch: await vault.branch() },
       tokens: store.vaultTokens(c.actor.id),
     };
@@ -54,6 +58,7 @@ export function registerMemoryStorageApi(app: FastifyInstance, hub: Hub, h: Help
     if (!c) return;
     const body = parse(z.object({ path: z.string().max(1000).nullable() }), req.body, reply);
     if (!body) return;
+    if (!hub.vaults.isPrimary(c.workspaceId)) return reply.code(409).send({ error: "Only the first organization's memory can be moved to another folder; this one stays in Warren's data folder." });
     if (h.started.location.source === "env") return reply.code(409).send({ error: "This is set by the WARREN_VAULT_DIR setting where Warren runs; change it there." });
     const saved = saveVaultLocation(h.dataDir, body.path);
     if (!saved.ok) return reply.code(400).send({ error: saved.error });

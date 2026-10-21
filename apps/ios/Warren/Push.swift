@@ -14,7 +14,7 @@ enum Route: Equatable {
     let channel = w["channelId"] as? String
     let thread = w["threadId"] as? String
     switch kind {
-    case "message": guard let channel else { return nil }; self = .chat(channelId: channel, threadId: thread)
+    case "message", "task": guard let channel, !channel.isEmpty else { return nil }; self = .chat(channelId: channel, threadId: thread)
     case "approval":
       if let id = w["approvalId"] as? String { self = .approval(id: id) } else if let channel { self = .chat(channelId: channel, threadId: thread) } else { return nil }
     case "computer": guard let id = w["computerId"] as? String else { return nil }; self = .computer(id: id)
@@ -47,10 +47,28 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
   /** In the app: show it, unless it's about the chat already on screen. */
   nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+    let payload = notification.request.content.userInfo["warren"] as? [String: Any]
+    let kind = payload?["kind"] as? String
+    let hasThread = payload?["threadId"] is String
     let route = Route(notification.request.content.userInfo)
-    let open = await MainActor.run { store.openChannel }
-    if case .chat(let channel, _) = route, channel == open { return [] }
-    return [.banner, .list, .sound]
+    return await MainActor.run {
+      if kind == "test" { return [.banner, .list, .sound] }
+      let defaults = UserDefaults.standard
+      let on: (String, Bool) -> Bool = { key, fallback in
+        defaults.object(forKey: "warren.notify." + key) as? Bool ?? fallback
+      }
+      guard on("enabled", true) else { return [] }
+      if case .chat(let channel, _) = route, channel == store.openChannel { return [] }
+      let category: String
+      switch kind {
+      case "approval": category = "approvals"
+      case "computer": category = "help"
+      case "task": category = "tasks"
+      default: category = hasThread ? "replies" : "dms"
+      }
+      guard on(category, true) else { return [] }
+      return on("sound", false) ? [.banner, .list, .sound] : [.banner, .list]
+    }
   }
 
   nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {

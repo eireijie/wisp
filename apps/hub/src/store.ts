@@ -657,10 +657,28 @@ export class Store {
     return this.channel(channelId);
   }
 
-  /** Channels whose default agent is this one go back to "only @mentioned agents" (the agent is gone, or left). */
+  /**
+   * The agent is gone, or left: channels whose default agent it was go back to "only @mentioned
+   * agents", and it comes off their team chart (with its arrows; whoever it handed work to now
+   * gets work from whoever handed it work).
+   */
   clearDefaultAgent(agentId: string, channelId?: string) {
     const rows = this.db.prepare(`SELECT id, settings_json FROM channels WHERE settings_json LIKE ?${channelId ? " AND id = ?" : ""}`).all(`%${agentId}%`, ...(channelId ? [channelId] : [])) as { id: string; settings_json: string }[];
-    for (const r of rows) if (this.channel(r.id)?.settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
+    for (const r of rows) {
+      const settings = this.channel(r.id)?.settings;
+      if (!settings) continue;
+      if (settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
+      const team = settings.team;
+      if (team?.nodes.some((n) => n.agentId === agentId)) {
+        const above = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
+        const below = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
+        const edges = [...team.edges.filter((e) => e.from !== agentId && e.to !== agentId), ...above.flatMap((from) => below.map((to) => ({ from, to })))];
+        const nodes = team.nodes.filter((n) => n.agentId !== agentId);
+        // with its lead gone, whoever it handed work to leads now
+        const fed = new Set(edges.map((e) => e.to));
+        this.updateChannel(r.id, { settings: { team: nodes.length ? { nodes: nodes.map((n) => (n.lead || fed.has(n.agentId) ? n : { ...n, lead: true })), edges } : null } });
+      }
+    }
   }
 
   // --- one person's channel settings and pins -------------------------------
@@ -965,10 +983,10 @@ export class Store {
     const ts = now();
     this.db
       .prepare(
-        `INSERT INTO discussions (id, workspace_id, channel_id, thread_id, team_id, topic, goal, participants_json, moderator_id, rounds, round, status, started_by_kind, started_by_id, requested_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?)`,
+        `INSERT INTO discussions (id, workspace_id, channel_id, thread_id, team_id, topic, goal, participants_json, moderator_id, rounds, round, status, started_by_kind, started_by_id, requested_by, kind, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?, ?)`,
       )
-      .run(did, d.workspaceId, d.channelId, d.threadId, d.teamId, d.topic, d.goal, JSON.stringify(d.participants), d.moderatorId, d.rounds, d.startedBy.kind, d.startedBy.id, d.requestedBy ?? null, ts, ts);
+      .run(did, d.workspaceId, d.channelId, d.threadId, d.teamId, d.topic, d.goal, JSON.stringify(d.participants), d.moderatorId, d.rounds, d.startedBy.kind, d.startedBy.id, d.requestedBy ?? null, d.kind ?? null, ts, ts);
     return this.discussion(did)!;
   }
 
@@ -1505,6 +1523,7 @@ type DiscussionRow = {
   started_by_kind: "user" | "agent";
   started_by_id: string;
   requested_by: string | null;
+  kind: "plan" | null;
   created_at: string;
   updated_at: string;
 };
@@ -1526,6 +1545,7 @@ function toDiscussion(r: DiscussionRow): Discussion {
     decisionPath: r.decision_path,
     startedBy: { kind: r.started_by_kind, id: r.started_by_id } as Actor,
     requestedBy: r.requested_by,
+    kind: r.kind ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

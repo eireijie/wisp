@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct WarrenApp: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  @AppStorage("warren.mode") private var mode = "system"
   private var store: Store { delegate.store }
   @Environment(\.scenePhase) private var scenePhase
 
@@ -10,6 +11,7 @@ struct WarrenApp: App {
     WindowGroup {
       RootView()
         .environment(store)
+        .preferredColorScheme(mode == "dark" ? .dark : mode == "light" ? .light : nil)
         .tint(.primary)
         .fontDesign(.rounded)
         .onOpenURL { url in
@@ -33,7 +35,6 @@ struct RootView: View {
     case .loading:
       VStack(spacing: 14) {
         GhostView(look: GhostLook(color: "#f5f5f5", color2: "#d9d9d9"), seed: "", size: 56)
-          .phaseAnimator([0, -4]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: 1.4) }
         ProgressView()
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -77,6 +78,12 @@ struct MainTabs: View {
       Tab("You", systemImage: "person.crop.circle.fill", value: 3) { YouView() }
     }
     .minimizingTabBar()
+    .safeAreaInset(edge: .top) {
+      if let error = store.syncError {
+        Text(error).font(.footnote).foregroundStyle(.red).padding(8)
+          .frame(maxWidth: .infinity).background(.regularMaterial)
+      }
+    }
     .onChange(of: store.unreadTotal, initial: true) { store.updateBadge() }
     // a tapped notification: go to its tab; the tab's own screen opens the chat, computer or approval
     .onChange(of: store.route, initial: true) { _, route in

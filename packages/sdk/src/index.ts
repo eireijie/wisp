@@ -65,6 +65,10 @@ export class WarrenClient {
   react(messageId: string, emoji: string, on?: boolean) {
     return this.request("POST", `/api/messages/${messageId}/reactions`, { emoji, on });
   }
+  /** Make an agent (a lead) or a sub-agent (an agent a lead made), when the organization allows it. */
+  spawnAgent(a: { name: string; role?: string; instructions?: string; handle?: string }) {
+    return this.request("POST", "/api/agents/spawn", a);
+  }
   delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[]; parentTaskId?: string } = {}) {
     return this.request("POST", "/api/tasks", { to, title, brief, ...opts });
   }

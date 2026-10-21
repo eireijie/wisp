@@ -50,7 +50,7 @@ struct InboxView: View {
         }
       }
       .listStyle(.insetGrouped)
-      .navigationTitle("Approvals")
+      .navigationTitle("Inbox")
       .refreshable {
         await store.refreshApprovals()
         await store.refreshComputers()

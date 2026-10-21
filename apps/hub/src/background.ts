@@ -1,4 +1,5 @@
 import { CONNECTOR_CATALOG, zonedParts, type BackgroundSource, type BackgroundUsage, type Followup } from "@warren/core";
+import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
 /** The device sees background checks as their own conversation, so they don't mix into the DM's. */
@@ -85,6 +86,9 @@ export class Background {
     }
     for (const b of store.activeBackground()) {
       if (b.checking || (b.nextAt && new Date(b.nextAt) > at)) continue;
+      // no checks while the organization has Background agents switched off (Settings → Features)
+      const ws = store.agent(b.agentId)?.workspaceId;
+      if (!ws || !featureOn(store, ws, "background")) continue;
       const tz = this.timezone(b.userId);
       if (inQuietHours(at, tz, b.quietStart, b.quietEnd)) {
         store.setBackground(b.agentId, b.userId, { nextAt: afterQuietHours(at, tz, b.quietStart, b.quietEnd).toISOString(), nextReason: "after quiet hours" });
@@ -138,7 +142,7 @@ export class Background {
   wake(agentId: string, userId: string, followups: Followup[] = [], at = new Date()): string | null {
     const { store } = this.hub;
     const agent = store.agent(agentId);
-    if (!agent || !store.user(userId) || this.hub.whyNotAllowed(agent, userId)) return null;
+    if (!agent || !store.user(userId) || this.hub.whyNotAllowed(agent, userId) || !this.hub.answers(agent, userId)) return null;
     if (this.checking(agentId, userId)) return null;
     const channel = store.dmChannel(agent.workspaceId, userId, agentId);
     // queued until its device takes it: not a check yet, so it isn't counted, listed or shown as "last checked"
@@ -200,9 +204,10 @@ export class Background {
    * memory folders it can read, and Warren itself. Shown on its Background tab and in each check.
    */
   sources(agentId: string): BackgroundSource[] {
-    const { store, vault, access } = this.hub;
+    const { store, access } = this.hub;
     const agent = store.agent(agentId);
     if (!agent) return [];
+    const vault = this.hub.vault(agent.workspaceId);
     const out: BackgroundSource[] = [];
     const connectors = store.db
       .prepare("SELECT c.name, c.catalog_id AS catalogId FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 ORDER BY c.created_at")
@@ -243,7 +248,7 @@ export class Background {
     const later = store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === user?.id);
     const sources = this.sources(agent.id);
     const notesPath = user ? this.watchNotesPath(agent.id, user.id) : null;
-    const notes = notesPath ? await this.hub.vault.read(notesPath).then((n) => n.content.trim(), () => "") : "";
+    const notes = notesPath ? await this.hub.vault(agent.workspaceId).read(notesPath).then((n) => n.content.trim(), () => "") : "";
     const sourceLine = (x: BackgroundSource) => `- ${x.kind === "app" ? `${x.name} (connected app: ${x.detail})` : x.kind === "computer" ? `${x.name}, ${x.detail}` : `${x.name} (memory folder)`}`;
     const approvals = store.db.prepare("SELECT summary, created_at AS createdAt FROM approvals WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10").all(agent.id) as { summary: string; createdAt: string }[];
 

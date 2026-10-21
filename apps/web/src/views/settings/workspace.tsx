@@ -6,7 +6,7 @@ import { useStore } from "../../store.ts";
 import { href } from "../../router.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
-import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, useSavedFlash } from "./parts.tsx";
+import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, Toggle, useSavedFlash } from "./parts.tsx";
 
 const useIsOwner = () => useStore((s) => s.me)?.role === "owner";
 
@@ -20,9 +20,9 @@ export function GeneralPage() {
   const [saved, flash] = useSavedFlash();
   return (
     <>
-      <PageHeader title="General">The workspace everyone here shares: people, agents, devices and memory.</PageHeader>
+      <PageHeader title="General">The organization everyone here shares: people, agents, devices and memory.</PageHeader>
       <OwnersOnly show={!isOwner} />
-      <Section title="Workspace name">
+      <Section title="Organization name">
         <form
           className="flex flex-wrap items-center gap-2 max-w-md"
           onSubmit={async (e) => {
@@ -287,6 +287,9 @@ interface AgentPolicy {
   maxHops: number;
   maxRunsPerMinute: number;
   defaultAccess: "read-only" | "edit" | "full";
+  leadsCreateAgents: boolean;
+  subAgents: boolean;
+  maxAgentMade: number;
 }
 
 const ASK: [string, string, string][] = [
@@ -359,6 +362,25 @@ export function AgentsPolicyPage() {
                 ["full", "Full"],
               ]}
             />
+          </Row>
+        </Card>
+      </Section>
+      <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">
+        <Card>
+          <Row label="Leads can create agents" hint="A channel's lead (or a team's) can create an agent its team is missing. It joins the team chart under the lead.">
+            <Toggle on={p.leadsCreateAgents} onChange={(v) => save({ leadsCreateAgents: v })} label="Leads can create agents" disabled={!isOwner} />
+          </Row>
+          <Row label="Those agents can make sub-agents" hint={p.leadsCreateAgents ? "An agent a lead made can make sub-agents for pieces of its own work, up to 3 levels down." : "Needs “Leads can create agents” on first."}>
+            <Toggle on={p.subAgents} onChange={(v) => save({ subAgents: v })} label="Agents a lead made can make sub-agents" disabled={!isOwner || !p.leadsCreateAgents} />
+          </Row>
+          <Row label="Most agents made by agents" hint="Once there are this many, agents can't make more until you remove some.">
+            <Select label="Most agents made by agents" value={String(p.maxAgentMade)} disabled={!isOwner || !p.leadsCreateAgents} onChange={(v) => save({ maxAgentMade: Number(v) })}>
+              {[3, 5, 10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
           </Row>
         </Card>
       </Section>
@@ -796,8 +818,8 @@ export function DataPage() {
   const memoryElsewhere = !!(info && memoryPath && !isInside(memoryPath, info.dataDir));
   return (
     <>
-      <PageHeader title="Data">Back up your workspace, or take a copy of your notes and conversations.</PageHeader>
-      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this workspace. Copy that folder and you have a full backup.">
+      <PageHeader title="Data">Back up your organization, or take a copy of your notes and conversations.</PageHeader>
+      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this organization. Copy that folder and you have a full backup.">
         {isOwner && info ? (
           <>
             <Card>
@@ -820,7 +842,7 @@ export function DataPage() {
             )}
           </>
         ) : (
-          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask a workspace owner to back up the hub.</p>
+          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask an organization owner to back up the hub.</p>
         )}
       </Section>
       <Section title="What is not in it">
@@ -847,7 +869,7 @@ export function DataPage() {
           <li>Start Warren again. Your devices reconnect by themselves when they are online.</li>
         </ol>
       </Section>
-      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore a workspace on their own. The folder backup does.">
+      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.">
         {error && <p className="mb-2 text-sm text-bad">{error}</p>}
         <Card>
           {isOwner && (

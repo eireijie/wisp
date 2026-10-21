@@ -1,10 +1,10 @@
 import SwiftUI
 
-/** Everyone you work with: each agent's ghost, what it's doing now, and a tap to chat. */
+/** Everyone you work with: each agent's ghost, what it's doing now, and a tap to open its page. */
 struct AgentsView: View {
   @Environment(Store.self) private var store
   @State private var path = NavigationPath()
-  @State private var error: String?
+  @State private var adding = false
 
   private var sorted: [Agent] {
     store.agents.sorted { a, b in
@@ -17,65 +17,83 @@ struct AgentsView: View {
     NavigationStack(path: $path) {
       ScrollView {
         if store.agents.isEmpty {
-          ContentUnavailableView("No agents yet", systemImage: "sparkles", description: Text("Add your first agent from Warren on your computer: pick a harness like Claude Code or Codex and a device to run it."))
-            .padding(.top, 80)
+          ContentUnavailableView {
+            Label("Add your first agent", systemImage: "sparkles")
+          } description: {
+            Text("Give it a job and a computer.")
+          } actions: {
+            if store.canManage { Button("Add agent") { adding = true }.primaryButton() }
+          }.padding(.top, 80)
         }
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
           ForEach(sorted) { a in
-            Button {
-              open(a)
-            } label: {
-              AgentTile(agent: a, doing: store.activity[a.id])
-            }
-            .buttonStyle(.plain)
+            AgentTile(agent: a, doing: store.activity[a.id], openSettings: { path.append(a) }, openChat: { path.append($0) })
           }
         }
         .padding(16)
-        if let error { Text(error).font(.footnote).foregroundStyle(.red) }
       }
       .navigationTitle("Agents")
       .refreshable { await store.load() }
+      .toolbar {
+        if store.canManage {
+          ToolbarItem(placement: .topBarTrailing) { Button("Add agent", systemImage: "plus") { adding = true } }
+        }
+      }
+      .sheet(isPresented: $adding) { AddAgent { path.append($0) } }
+      .navigationDestination(for: Agent.self) { AgentPage(agent: $0) }
       .navigationDestination(for: Channel.self) { ChannelView(channel: $0) }
       .navigationDestination(for: ThreadRef.self) { ThreadView(ref: $0) }
     }
   }
 
-  private func open(_ a: Agent) {
-    Task {
-      do { path.append(try await store.dm(with: a)) } catch { self.error = error.localizedDescription }
-    }
-  }
 }
 
 struct AgentTile: View {
+  @Environment(Store.self) private var store
+  @State private var editingLook = false
   var agent: Agent
   var doing: String?
+  var openSettings: () -> Void
+  var openChat: (Channel) -> Void
+  @State private var removing = false
+  @State private var action = FormAction()
 
   var body: some View {
-    VStack(spacing: 10) {
-      GhostView(look: agent.settings?.appearance, seed: agent.id, asleep: agent.status == .offline, size: 64)
-        .phaseAnimator(agent.status == .offline ? [0] : [0, -4]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: agent.status == .busy ? 0.7 : 1.8) }
-        .shadow(color: glow.opacity(agent.status == .offline ? 0 : 0.45), radius: 14, y: 4)
-        .padding(.top, 6)
-      VStack(spacing: 3) {
-        Text(agent.name).font(.headline).lineLimit(1)
-        Text(harnessLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+    Button(action: openSettings) {
+      VStack(spacing: 10) {
+        GhostView(look: agent.settings?.appearance, seed: agent.handle, size: 64, mood: store.mood(for: agent))
+          .padding(.top, 6)
+        VStack(spacing: 3) {
+          Text(agent.name).font(.headline).lineLimit(1)
+          Text(harnessLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+        HStack(spacing: 5) {
+          GlowDot(color: statusColor)
+          Text(doing ?? statusWord).font(.caption).foregroundStyle(agent.status == .busy ? .blue : .secondary).lineLimit(1)
+        }
       }
-      HStack(spacing: 5) {
-        GlowDot(color: statusColor)
-        Text(doing ?? statusWord).font(.caption).foregroundStyle(agent.status == .busy ? .blue : .secondary).lineLimit(1)
-      }
+      .frame(maxWidth: .infinity)
+      .padding(14)
+      .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
     }
-    .frame(maxWidth: .infinity)
-    .padding(14)
-    .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("agent-tile")
+    .contextMenu {
+      Button("Message", systemImage: "bubble.left") { action.run { openChat(try await store.dm(with: agent)) } }
+      if store.canManage { Button("Edit look", systemImage: "paintpalette") { editingLook = true } }
+      Button("Settings", systemImage: "gearshape", action: openSettings)
+      if store.canManage { Button("Remove", systemImage: "trash", role: .destructive) { removing = true } }
+    }
+    .confirmationDialog("Remove \(agent.name) (@\(agent.handle))?", isPresented: $removing, titleVisibility: .visible) {
+      Button("Remove \(agent.name)", role: .destructive) { action.run { try await store.deleteAgent(agent.id) } }
+    } message: { Text("Its memory notes and personality stay in the vault.") }
+    .managementAlert(action)
+    .sheet(isPresented: $editingLook) { LookEditor(agent: store.agent(agent.id) ?? agent) }
   }
 
-  private var glow: Color { Color(hex: agent.settings?.appearance?.color ?? "#8bd4ff") }
   private var statusWord: String { agent.status == .busy ? "Working" : agent.status == .online ? "Online" : "Offline" }
   private var statusColor: Color { agent.status == .busy ? .blue : agent.status == .online ? .green : .gray }
   private var harnessLabel: String {
-    let names = ["claude-code": "Claude Code", "codex": "Codex", "gemini": "Gemini CLI", "hermes": "Hermes", "opencode": "OpenCode", "goose": "Goose", "openclaw": "OpenClaw", "kimi": "Kimi CLI", "qwen": "Qwen Code", "cursor": "Cursor", "grok": "Grok", "custom": "Custom"]
-    return names[agent.harness] ?? agent.harness.replacingOccurrences(of: "acp:", with: "").capitalized
+    HarnessChoice.label(agent.harness)
   }
 }

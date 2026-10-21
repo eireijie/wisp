@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("warrenDesktop", {
   setBadge: (n) => ipcRenderer.send("badge", n),
   info: () => ipcRenderer.invoke("desktop:info"),
-  connectDevice: () => ipcRenderer.invoke("desktop:connect-device"),
+  connectDevice: (claim) => ipcRenderer.invoke("desktop:connect-device", claim),
   buddy: {
     agents: (agents, leadId) => ipcRenderer.send("buddy:agents", agents, leadId),
     settings: () => ipcRenderer.invoke("buddy:settings"),

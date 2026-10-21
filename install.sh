@@ -70,6 +70,8 @@ echo "node $(node -v), $(git --version)"
 # 2. the code
 if [ -d "$DIR/.git" ]; then
   echo "Updating $DIR"
+  # npm rewrites the lockfile on some installs; that change is never the user's work
+  git -C "$DIR" checkout -- package-lock.json 2>/dev/null || true
   git -C "$DIR" pull --ff-only
 else
   [ -e "$DIR" ] && fail "$DIR exists and isn't a Warren checkout. Pick another folder with --dir."

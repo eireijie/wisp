@@ -774,16 +774,16 @@ function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | und
       <Intro title="Who can ask it">
         <p>
           @{agent.handle} runs directly on {device.mine ? "your" : `${device.ownerName ?? "someone"}'s`} device "{device.name}", where it can reach files.{" "}
-          {device.shared ? "That device is shared with the workspace, so everyone can ask it." : `So only ${owner} can ask it for things, including through other agents.`}
+          {device.shared ? "That device is shared with the organization, so everyone can ask it." : `So only ${owner} can ask it for things, including through other agents.`}
         </p>
       </Intro>
       {device.mine && !device.shared ? (
         <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
           <Choice selected={!open} onClick={() => set(false)} title="Only me" body="Requests from anyone else, or from agents working for them, are turned away." />
-          <Choice selected={open} onClick={() => set(true)} title="Anyone in the workspace" body="People and their agents can ask it. It still can't use your own screen for them." />
+          <Choice selected={open} onClick={() => set(true)} title="Anyone in the organization" body="People and their agents can ask it. It still can't use your own screen for them." />
         </div>
       ) : (
-        <p className="text-sm text-muted">{open ? "Anyone in the workspace can ask it." : `Only ${owner} can ask it.`}</p>
+        <p className="text-sm text-muted">{open ? "Anyone in the organization can ask it." : `Only ${owner} can ask it.`}</p>
       )}
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
     </section>

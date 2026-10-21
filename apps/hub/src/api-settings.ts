@@ -9,6 +9,7 @@ import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
 import { DEFAULT_TOPIC } from "./apns.ts";
+import { featureOn } from "./features.ts";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -44,7 +45,7 @@ export function deviceLabel(ua: string | undefined): string {
  * invites; rules for agents; computer defaults; connection tokens; harnesses on devices; exports.
  */
 export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) {
-  const { store, vault } = hub;
+  const { store } = hub;
   const db = store.db;
   const { need, parse } = h;
 
@@ -266,6 +267,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.post("/api/invites", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
+    if (!featureOn(store, c.workspaceId, "invite")) return reply.code(403).send({ error: "Inviting people is switched off for this organization. Turn on Invite people in Settings → Features first." });
     const body = parse(z.object({ role: ROLE.default("member"), days: z.number().int().min(1).max(30).default(7) }), req.body, reply);
     if (!body) return;
     const code = crypto.randomBytes(18).toString("base64url");
@@ -321,7 +323,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { owner: true });
     if (!c) return;
     const body = parse(
-      z.object({ askBefore: z.array(z.enum(ASK_BEFORE)), maxHops: z.number().int().min(1).max(30), maxRunsPerMinute: z.number().int().min(1).max(200), defaultAccess: z.enum(["read-only", "edit", "full"]) }).partial(),
+      z.object({ askBefore: z.array(z.enum(ASK_BEFORE)), maxHops: z.number().int().min(1).max(30), maxRunsPerMinute: z.number().int().min(1).max(200), defaultAccess: z.enum(["read-only", "edit", "full"]), leadsCreateAgents: z.boolean(), subAgents: z.boolean(), maxAgentMade: z.number().int().min(1).max(50) }).partial(),
       req.body,
       reply,
     );
@@ -330,6 +332,9 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (body.maxHops) store.setSetting(c.workspaceId, "agents.maxHops", String(body.maxHops));
     if (body.maxRunsPerMinute) store.setSetting(c.workspaceId, "agents.maxRunsPerMinute", String(body.maxRunsPerMinute));
     if (body.defaultAccess) store.setSetting(c.workspaceId, "agents.defaultAccess", body.defaultAccess);
+    if (body.leadsCreateAgents !== undefined) store.setSetting(c.workspaceId, "agents.leadsCreateAgents", String(body.leadsCreateAgents));
+    if (body.subAgents !== undefined) store.setSetting(c.workspaceId, "agents.subAgents", String(body.subAgents));
+    if (body.maxAgentMade) store.setSetting(c.workspaceId, "agents.maxAgentMade", String(body.maxAgentMade));
     return agentPolicy(hub, c.workspaceId);
   });
 
@@ -413,7 +418,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const count = (sql: string) => (db.prepare(sql).get(c.workspaceId) as { n: number }).n;
     return {
       dataDir: h.dataDir,
-      notes: vault.list(() => true).length,
+      notes: hub.vault(c.workspaceId).list(() => true).length,
       messages: count("SELECT COUNT(*) AS n FROM messages m JOIN channels ch ON ch.id = m.channel_id WHERE ch.workspace_id = ?"),
       files: count("SELECT COUNT(*) AS n FROM files WHERE workspace_id = ?"),
       agents: count("SELECT COUNT(*) AS n FROM agents WHERE workspace_id = ?"),
@@ -424,7 +429,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.get("/api/export/vault.zip", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
-    const child = spawn("git", ["-C", vault.root, "archive", "--format=zip", "--prefix=memory/", "HEAD"], { stdio: ["ignore", "pipe", "ignore"] });
+    const child = spawn("git", ["-C", hub.vault(c.workspaceId).root, "archive", "--format=zip", "--prefix=memory/", "HEAD"], { stdio: ["ignore", "pipe", "ignore"] });
     reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="warren-memory-${new Date().toISOString().slice(0, 10)}.zip"`);
     return reply.send(child.stdout);
   });

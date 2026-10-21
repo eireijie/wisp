@@ -8,6 +8,7 @@ import { currentSubscription, disablePush, enablePush, pushSupported } from "../
 import { chime, enableNotifications, permission, setNotifyPrefs, show, useNotifyPrefs, type NotifyPrefs } from "../../notifications.ts";
 import { Button, Field, IconButton, Input, Pill, UserAvatar, clockTime, cx, timeAgo } from "../../components/ui.tsx";
 import { Card, PageHeader, Row, SavedNote, Section, Segmented, Toggle, useSavedFlash } from "./parts.tsx";
+import { useFeature } from "../../features.ts";
 
 const ZONES: string[] = (() => {
   try {
@@ -259,6 +260,7 @@ function usePush() {
 
 export function NotificationsPage() {
   const prefs = useNotifyPrefs();
+  const tasksOn = useFeature("tasks");
   const push = usePush();
   const [perm, setPerm] = useState(permission());
   const [starting, setStarting] = useState(false);
@@ -288,6 +290,7 @@ export function NotificationsPage() {
     ["help", "Help on a computer", "An agent needs you to sign in, enter a code or check something on its screen."],
     ["tasks", "Finished tasks", "A task you handed off is done, or couldn't be done."],
   ];
+  const shownEvents = tasksOn ? events : events.filter(([k]) => k !== "tasks");
   return (
     <>
       <PageHeader title="Notifications">Get a notification when something needs you. These settings are for this device and browser.</PageHeader>
@@ -346,7 +349,7 @@ export function NotificationsPage() {
           {on ? "You'll get these on this device." : "These are saved, but you won't get any until notifications are on."}
         </p>
         <Card>
-          {events.map(([k, label, hint]) => (
+          {shownEvents.map(([k, label, hint]) => (
             <Row key={k} label={label} hint={hint}>
               <Toggle label={label} on={!!prefs[k]} onChange={toggle(k)} />
             </Row>

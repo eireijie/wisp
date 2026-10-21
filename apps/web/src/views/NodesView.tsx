@@ -3,6 +3,7 @@ import { ChevronLeft, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Serv
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
+import { useDesktopInfo } from "../desktop.ts";
 import { Toggle } from "./settings/parts.tsx";
 import { AgentAvatar, Button, CopyBlock, DeviceInstall, Empty, Field, Input, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
@@ -51,30 +52,84 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
   return n.lastSeen ? "This device was connected before but is offline now." : "This device hasn't connected yet.";
 }
 
-/** Shown on a device that is not connected: one line, with the how-to folded away until asked for. */
-function ConnectDevice({ node: n }: { node: NodeInfo }) {
+/**
+ * Shown on a device that is not connected: one line, with the how-to folded away until asked for.
+ * One that never connected can get a fresh connection code here, so a lost code or a failed setup
+ * is never a dead end; inside the Warren app it's one button that makes this computer that device.
+ */
+function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
   const [open, setOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const { inDesktop, info } = useDesktopInfo();
   const line = notConnectedLine(n);
   if (!line) return null;
+  const waiting = !n.lastSeen;
+  // the app on this computer isn't a device yet, so it can become this one
+  const canClaim = waiting && inDesktop && info !== null && !info.device;
+
+  const newCode = async () => {
+    setError("");
+    const { token } = await api<{ token: string }>("POST", `/api/nodes/${n.id}/token`);
+    return token;
+  };
+  const showCommand = async () => {
+    try {
+      setToken(await newCode());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  const claim = async () => {
+    setBusy(true);
+    try {
+      await window.warrenDesktop?.connectDevice({ token: await newCode(), name: n.name });
+      onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mt-3 rounded-xl bg-hover/60 px-3 py-2.5 text-sm">
       <div className="flex items-center gap-3">
-        <p className="flex-1 text-muted">{n.lastSeen ? "Open Warren on this computer to bring it back." : "Start Warren on this computer to connect it."}</p>
+        <p className="flex-1 text-muted">{n.lastSeen ? "Open Warren on this computer to bring it back." : canClaim ? "Is this that computer?" : "Start Warren on this computer to connect it."}</p>
+        {canClaim && (
+          <Button variant="primary" disabled={busy} onClick={claim}>
+            {busy ? "Connecting…" : "Connect this computer"}
+          </Button>
+        )}
         <button className="shrink-0 text-xs font-medium text-ink hover:underline" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Hide" : "How?"}
+          {open ? "Hide" : canClaim ? "Another computer?" : "How?"}
         </button>
       </div>
+      {error && <p className="mt-2 text-xs text-bad">{error}</p>}
       {open && (
         <div className="mt-3 space-y-2 text-xs">
           <p>
             <a className="font-medium underline" href="https://github.com/eireijie/warren/releases/latest" target="_blank" rel="noopener noreferrer">
-              Get the Warren app for Mac
+              Get the Warren app
             </a>
             , choose to join a server, and enter:
           </p>
           <CopyBlock text={location.origin} />
           {isLocalOnlyHost(location.hostname) && <p className="text-muted">This address only works on this computer. On another computer, use this computer's network address instead.</p>}
-          <p className="text-muted">Prefer a command? It needs a connection code, shown only when a device is added, so remove this device and add it again.</p>
+          {waiting && <p className="text-muted">Then open Devices there and choose Connect this computer on this card.</p>}
+          {waiting &&
+            (token ? (
+              <DeviceInstall token={token} name={n.name} />
+            ) : (
+              <p className="text-muted">
+                Prefer a command?{" "}
+                <button className="font-medium text-ink underline" onClick={showCommand}>
+                  Show it
+                </button>{" "}
+                (it has a new connection code; an older one stops working).
+              </p>
+            ))}
         </div>
       )}
     </div>
@@ -213,7 +268,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     )}
                   </div>
                   <DeviceAgents handles={n.agents} online={n.online} />
-                  {(n.mine || isOwner) && <ConnectDevice node={n} />}
+                  {(n.mine || isOwner) && <ConnectDevice node={n} onChange={refresh} />}
                   <DeviceAccess node={n} onChange={refresh} />
                   {n.update?.message && (
                     <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
@@ -286,11 +341,11 @@ function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => v
       </span>
       {n.mine ? (
         <label className="inline-flex items-center gap-2 cursor-pointer" title="Off for a personal computer: agents that run directly on it then only take requests from you.">
-          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the workspace add agents and VMs here" />
+          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the organization add agents and VMs here" />
           Shared with workspace
         </label>
       ) : (
-        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
+        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the organization can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
           {n.shared ? <Users size={13} /> : <Lock size={13} />} {n.shared ? "Shared" : "Private"}
         </span>
       )}

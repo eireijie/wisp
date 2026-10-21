@@ -577,7 +577,7 @@ function InstallModal({ entry, agents, onClose, onDone }: { entry: CatalogSkill;
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={busy} onClick={install}>
-            {agentIds.length ? `Install for ${agentIds.length} ${who}${agentIds.length === 1 ? "" : "s"}` : "Add to the workspace"}
+            {agentIds.length ? `Install for ${agentIds.length} ${who}${agentIds.length === 1 ? "" : "s"}` : "Add to the organization"}
           </Button>
         </div>
       </div>

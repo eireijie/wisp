@@ -129,6 +129,24 @@ export async function createWarrenMcp(client: WarrenClient) {
   );
 
   server.registerTool(
+    "agent_create",
+    {
+      description:
+        "Create a new agent to work under you. Leads can do this when their team needs someone it doesn't have; agents a lead made can make sub-agents for pieces of their work. Only works when the organization switched it on (your prompt says so). The new agent joins your channel's team chart under you; then hand it work with task_delegate.",
+      inputSchema: {
+        name: z.string().describe("its name, e.g. Scout"),
+        role: z.string().optional().describe("what it does in a few words, e.g. Researcher"),
+        instructions: z.string().optional().describe("its job and how it should work"),
+        handle: z.string().optional().describe("its @handle; made from the name when left out"),
+      },
+    },
+    safe(async ({ name, role, instructions, handle }) => {
+      const a = (await client.spawnAgent({ name, role, instructions, handle })) as { handle: string };
+      return text(`Created @${a.handle}. Hand it work with task_delegate (to: "@${a.handle}").`);
+    }),
+  );
+
+  server.registerTool(
     "task_update",
     { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason. A task you split into subtasks isn't finished on its own: mark it done once its subtasks are in (results of subtasks come back to you with how many are done).", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional() } },
     safe(async ({ task_id, status, result }) => {

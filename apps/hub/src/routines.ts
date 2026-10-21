@@ -1,4 +1,5 @@
 import { cronMatches, describeCron, parseCron, zonedParts, type Actor, type RecordedStep, type Routine } from "@warren/core";
+import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
 const WARREN = { name: "Warren", email: "warren@localhost" };
@@ -56,6 +57,8 @@ export class Routines {
   async tick(at = new Date()) {
     const minute = new Date(Math.floor(at.getTime() / 60_000) * 60_000);
     for (const r of this.hub.store.scheduledRoutines()) {
+      // schedules rest while the organization has Routines switched off (Settings → Features)
+      if (!featureOn(this.hub.store, r.workspaceId, "routines")) continue;
       try {
         if (!cronMatches(parseCron(r.schedule!), zonedParts(minute, r.timezone))) continue;
       } catch {
@@ -119,7 +122,7 @@ export class Routines {
     const user = this.hub.store.user(o.userId);
     const slug = routineSlug(o.name);
     let base = `agents/${agent.id}/routines/${slug}`;
-    for (let i = 2; this.hub.vault.list((p) => p.toLowerCase() === `${base}.md`.toLowerCase()).length; i++) base = `agents/${agent.id}/routines/${slug}-${i}`;
+    for (let i = 2; this.hub.vault(o.workspaceId).list((p) => p.toLowerCase() === `${base}.md`.toLowerCase()).length; i++) base = `agents/${agent.id}/routines/${slug}-${i}`;
     const computer = o.computerId ? this.hub.store.computer(o.computerId) : undefined;
     const recording = [
       `# Recording: ${o.name}`,
@@ -131,8 +134,8 @@ export class Routines {
       ...o.steps.map(stepLine),
       "",
     ].join("\n");
-    await this.hub.vault.write(`${base}.recording.md`, recording, WARREN, `Recording for routine "${o.name}"`);
-    await this.hub.vault.write(
+    await this.hub.vault(o.workspaceId).write(`${base}.recording.md`, recording, WARREN, `Recording for routine "${o.name}"`);
+    await this.hub.vault(o.workspaceId).write(
       `${base}.md`,
       `# ${o.name}\n\n@${agent.handle} is learning this from [[${base.split("/").pop()}.recording]]. The steps will appear here.\n`,
       WARREN,
@@ -170,9 +173,9 @@ export class Routines {
     const part = trigger.parts.find((p) => p.type === "routine");
     const r = part?.routineId ? this.hub.store.routine(part.routineId) : undefined;
     if (r && r.agentId === agentId) {
-      const note = await this.hub.vault.read(r.notePath).then((n) => n.content, () => "");
+      const note = await this.hub.vault(agent.workspaceId).read(r.notePath).then((n) => n.content, () => "");
       if (r.status === "learning") {
-        const rec = await this.hub.vault.read(r.notePath.replace(/\.md$/, ".recording.md")).then((n) => n.content, () => "");
+        const rec = await this.hub.vault(agent.workspaceId).read(r.notePath.replace(/\.md$/, ".recording.md")).then((n) => n.content, () => "");
         out.push(
           `## Learning a routine: ${r.name} (routine id ${r.id})`,
           `A person did this task once while you watched. Their recording is below; the "screen before" files are screenshots you can look at with file_view.`,

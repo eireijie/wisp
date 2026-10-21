@@ -2,7 +2,9 @@ import { motionReduced } from "./theme.ts";
 
 type Point = { x: number; y: number };
 type Gaze = { root: HTMLElement; face: SVGGElement; body: SVGGElement; strong?: boolean };
-type Registered = Gaze & { pupils: SVGElement[]; shine: SVGElement[]; value: number[] };
+/** sunglasses follow the eyes behind them; hats and neckwear are fixed to the body, so they need nothing here */
+type Worn = { lens: SVGElement[] };
+type Registered = Gaze & Worn & { pupils: SVGElement[]; shine: SVGElement[]; value: number[] };
 const ghosts = new Set<Registered>();
 let users = 0;
 let frame = 0;
@@ -25,6 +27,8 @@ function paint(ghost: Registered) {
   ghost.body.setAttribute("transform", `rotate(${tilt} 60 85)`);
   ghost.pupils.forEach((el) => el.setAttribute("transform", `translate(${px} ${py})`));
   ghost.shine.forEach((el) => el.setAttribute("transform", `translate(${-px * 0.3} ${-py * 0.3})`));
+  // sunglasses cover the pupils, so they carry the pupils' movement or the eyes would look frozen
+  ghost.lens.forEach((el) => el.setAttribute("transform", `translate(${px * 0.8} ${py * 0.8})`));
 }
 
 function tick() {
@@ -126,7 +130,14 @@ export function retainGhostPointer() {
 }
 
 export function registerGhost(gaze: Gaze) {
-  const ghost: Registered = { ...gaze, pupils: Array.from(gaze.face.querySelectorAll("[data-ghost-pupil]")), shine: Array.from(gaze.face.querySelectorAll("[data-ghost-shine]")), value: [0, 0, 0, 0, 0] };
+  const all = (sel: string) => Array.from(gaze.body.querySelectorAll<SVGElement>(sel));
+  const ghost: Registered = {
+    ...gaze,
+    pupils: Array.from(gaze.face.querySelectorAll("[data-ghost-pupil]")),
+    shine: Array.from(gaze.face.querySelectorAll("[data-ghost-shine]")),
+    lens: all("[data-ghost-lens]"),
+    value: [0, 0, 0, 0, 0],
+  };
   ghosts.add(ghost);
   const release = retainGhostPointer();
   refreshGhostGaze();

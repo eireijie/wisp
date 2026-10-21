@@ -1,85 +1,74 @@
 import SwiftUI
 
-/** Warren's ghost (the same outline as the web app's icon), in an agent's own two colors. */
-struct GhostShape: Shape {
-  func path(in rect: CGRect) -> Path {
-    // the outline lives in a 60x86 box at (30,18) in the icon's coordinates
-    let s = min(rect.width / 60, rect.height / 86)
-    let ox = rect.midX - 30 * s - 30 * s, oy = rect.midY - 43 * s - 18 * s
-    func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: ox + x * s, y: oy + y * s) }
-    var path = Path()
-    path.move(to: p(30, 60))
-    path.addCurve(to: p(60, 18), control1: p(30, 32), control2: p(44, 18))
-    path.addCurve(to: p(90, 60), control1: p(76, 18), control2: p(90, 32))
-    path.addLine(to: p(90, 96))
-    var x: CGFloat = 90
-    var down = true
-    while x > 30 {
-      path.addQuadCurve(to: p(x - 10, 96), control: p(x - 5, down ? 104 : 88))
-      x -= 10
-      down.toggle()
-    }
-    path.closeSubpath()
-    return path
-  }
-}
-
+/** Warren's web ghost, painted in its original SVG coordinates. */
 struct GhostView: View {
   var look: GhostLook?
   var seed: String
   var asleep = false
   var size: CGFloat = 36
+  var mood: GhostMood = .awake
+  var interactive = false
+  var animate = true
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.colorScheme) private var colorScheme
+  @State private var pokeAt: Date?
+  @State private var pokeCount = 0
 
-  private static let palettes: [(String, String)] = [
-    ("#8bd4ff", "#ff51bf"), ("#ff26a8", "#fff78a"), ("#e771ff", "#ffd87c"), ("#beffe8", "#ff797b"),
-    ("#b4ffa4", "#26dfff"), ("#97fff3", "#0084ff"), ("#ecca5c", "#fe3c3f"), ("#ff5c43", "#6262ff"),
-    ("#003d60", "#32fffc"), ("#26e2ff", "#ff6666"), ("#ffcd4f", "#fde5ba"), ("#ffad32", "#4169ff"),
-    ("#b4ff32", "#008d58"), ("#ff4f9a", "#36edaa"), ("#ff69db", "#d51c46"), ("#37f0db", "#ff4f64"),
-    ("#7516cf", "#00e8d1"),
-  ]
-
-  private var colors: (Color, Color) {
-    if asleep { return (Color(hex: "#a6aaad"), Color(hex: "#44464a")) }
-    if let look { return (Color(hex: look.color), Color(hex: look.color2 ?? look.color).opacity(look.color2 == nil ? 0.8 : 1)) }
-    // agents that were never customized get a stable palette from their id
-    var h: UInt32 = 2_166_136_261
-    for b in seed.utf8 { h = (h ^ UInt32(b)) &* 16_777_619 }
-    let p = Self.palettes[Int(h % UInt32(Self.palettes.count))]
-    return (Color(hex: p.0), Color(hex: p.1))
-  }
+  private var animated: Bool { animate && !reduceMotion && scenePhase == .active }
 
   var body: some View {
-    let (top, bottom) = colors
-    ZStack {
-      GhostShape()
-        .fill(LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom))
-        .overlay(GhostShape().stroke(.black.opacity(0.08), lineWidth: 0.5))
-      // eyes, closed while asleep
-      HStack(spacing: size * 0.13) {
-        ForEach(0..<2, id: \.self) { _ in
-          if asleep {
-            Capsule().fill(Color(hex: "#1b1b1f")).frame(width: size * 0.12, height: size * 0.035)
-          } else {
-            Circle().fill(Color(hex: "#1b1b1f")).frame(width: size * 0.12, height: size * 0.12)
-          }
-        }
+    let appearance = (look ?? GhostLook.defaultAppearance(seed)).resolved
+    let currentMood = asleep ? GhostMood.asleep : mood
+    let phase = Double(GhostLook.hash(seed) % 10_000) / 1000
+    let overflow = max(12, size * 0.3)
+    let rendered = TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !animated)) { timeline in
+      Canvas { context, _ in
+        var context = context
+        context.translateBy(x: overflow, y: overflow)
+        let time = animated ? timeline.date.timeIntervalSinceReferenceDate + phase : 0
+        let poke = animated ? pokeAt.map { timeline.date.timeIntervalSince($0) } : nil
+        GhostRenderer(look: appearance, mood: currentMood, size: size, time: time, animated: animated,
+          poke: poke, pokeCount: pokeCount, darkMode: colorScheme == .dark).draw(context)
       }
-      .offset(y: -size * 0.08)
+      // SVG overflow is visible on the web, including hats, hops and glow.
+      .frame(width: size + overflow * 2, height: size + overflow * 2)
     }
     .frame(width: size, height: size)
-    .accessibilityHidden(true)
+    if interactive && size >= 24 {
+      rendered
+        .contentShape(Rectangle())
+        .onTapGesture(perform: react)
+        .accessibilityLabel("Ghost, \(currentMood.rawValue)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, react)
+    } else {
+      rendered.allowsHitTesting(false).accessibilityHidden(true)
+    }
+  }
+
+  private func react() {
+    guard animated else { return }
+    let now = Date()
+    pokeCount = pokeAt.map { now.timeIntervalSince($0) < 1.8 } == true ? pokeCount + 1 : 1
+    pokeAt = now
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
   }
 }
 
 struct AgentAvatar: View {
+  @Environment(Store.self) private var store
   var agent: Agent?
   var size: CGFloat = 36
   var showStatus = true
+  var interactive = false
 
   var body: some View {
-    GhostView(look: agent?.settings?.appearance, seed: agent?.id ?? "", asleep: agent?.status == .offline, size: size)
+    let current = agent.flatMap { store.agent($0.id) } ?? agent
+    GhostView(look: current?.settings?.appearance, seed: current?.handle ?? "agent", size: size,
+      mood: store.mood(for: current), interactive: interactive)
       .overlay(alignment: .bottomTrailing) {
-        if showStatus, let s = agent?.status, s != .offline {
+        if showStatus, let s = current?.status, s != .offline {
           StatusDot(status: s).offset(x: 2, y: 1)
         }
       }
@@ -122,10 +111,20 @@ extension Color {
   }
 }
 
-#Preview {
-  HStack {
-    GhostView(look: nil, seed: "agt_1", size: 60)
-    GhostView(look: GhostLook(color: "#ff26a8", color2: "#fff78a"), seed: "", size: 60)
-    GhostView(look: nil, seed: "x", asleep: true, size: 60)
+
+#Preview("Moods and looks") {
+  ScrollView {
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))]) {
+      ForEach(GhostMood.allCases, id: \.self) { mood in
+        VStack {
+          GhostView(look: nil, seed: "warren", size: 100, mood: mood, interactive: true)
+          Text(mood.rawValue).font(.caption)
+        }
+      }
+      ForEach(GhostLook.shapes, id: \.self) { shape in
+        GhostView(look: GhostLook(color: "#7516cf", color2: "#00e8d1", shape: shape,
+          glow: false, hat: "propeller", accessory: "bowtie"), seed: shape, size: 100)
+      }
+    }.padding()
   }
 }

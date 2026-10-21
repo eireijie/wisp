@@ -66,7 +66,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
         <div className="space-y-1.5">
           <h1 className="text-xl font-semibold">{needsSetup ? "Set up Warren" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Warren"}</h1>
           <p className="text-sm text-muted">
-            {needsSetup ? "You'll be the owner of this workspace." : joining ? (invite ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}. Make your account.` : "Checking your invite…") : "Where people and agents work together."}
+            {needsSetup ? "You'll be the owner of this organization." : joining ? (invite ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}. Make your account.` : "Checking your invite…") : "Where people and agents work together."}
           </p>
         </div>
         {needsSetup === null && !error ? (
@@ -83,8 +83,8 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
                 <Field label="Your name">
                   <Input value={form.name} onChange={set("name")} autoComplete="name" required />
                 </Field>
-                <Field label="Workspace name">
-                  <span className="block text-xs text-muted">A workspace is your own Warren: your helpers, notes and settings. Use any name, like 'Home'.</span>
+                <Field label="Organization name">
+                  <span className="block text-xs text-muted">An organization is your own Warren: your helpers, notes and settings. Use any name, like 'Home'.</span>
                   <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder="Home" />
                 </Field>
               </>
@@ -97,7 +97,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
             </Field>
             {error && <p className="text-sm text-bad">{error}</p>}
             <Button variant="primary" className="w-full h-10" disabled={busy || (joining && !invite)}>
-              {needsSetup ? "Create workspace" : joining ? "Join" : "Sign in"}
+              {needsSetup ? "Create organization" : joining ? "Join" : "Sign in"}
             </Button>
             {joining && (
               <button

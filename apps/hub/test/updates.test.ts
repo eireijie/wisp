@@ -63,7 +63,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  token = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", workspaceName: "Test" })).data.token;
+  token = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Test" })).data.token;
   const n = await api("POST", "/api/nodes", { name: "box" });
   nodeId = n.data.node.id;
   nodeToken = n.data.token;

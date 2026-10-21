@@ -44,7 +44,8 @@ export async function api<T = any>(method: string, path: string, body?: unknown,
   } catch {
     data = { error: text };
   }
-  if (res.status === 401 && token) {
+  // only sign out when this token is still the one in use: switching organizations revokes the old one while requests may be in flight
+  if (res.status === 401 && token && getToken() === token) {
     setToken(null);
     location.reload();
   }
