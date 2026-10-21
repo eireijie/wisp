@@ -102,26 +102,7 @@ struct LookEditor: View {
   private var colors: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Colors").font(.headline)
-      LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 12) {
-        ForEach(GhostLook.palettes, id: \.name) { palette in
-          let selected = look.color.lowercased() == palette.top && look.color2?.lowercased() == palette.bottom
-          Button {
-            look.color = palette.top
-            look.color2 = palette.bottom
-          } label: {
-            Circle()
-              .fill(LinearGradient(colors: [Color(hex: palette.top), Color(hex: palette.bottom)], startPoint: .top, endPoint: .bottom))
-              .frame(width: 36, height: 36)
-              .padding(4)
-              .overlay(Circle().stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel(palette.name)
-          .accessibilityAddTraits(selected ? .isSelected : [])
-        }
-      }
-      ColorPicker("Top color", selection: color(bottom: false), supportsOpacity: false)
-      ColorPicker("Bottom color", selection: color(bottom: true), supportsOpacity: false)
+      GhostColors(look: $look, labels: true)
     }
   }
 
@@ -177,15 +158,6 @@ struct LookEditor: View {
   private func flag(_ key: WritableKeyPath<GhostLook, Bool?>) -> Binding<Bool> {
     Binding(get: { look[keyPath: key] ?? false }, set: { look[keyPath: key] = $0 })
   }
-
-  private func color(bottom: Bool) -> Binding<Color> {
-    Binding(get: { Color(hex: bottom ? look.color2 ?? GhostColor.shade(look.color) : look.color) }, set: { color in
-      var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-      guard UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return }
-      let hex = String(format: "#%02x%02x%02x", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
-      if bottom { look.color2 = hex } else { look.color = hex }
-    })
-  }
 }
 
 extension GhostLook {
@@ -196,5 +168,13 @@ extension GhostLook {
       cheeks: Double.random(in: 0..<1) < 0.6, shape: shapes.randomElement(), glow: false,
       hat: Double.random(in: 0..<1) < 0.4 ? hats.dropFirst().randomElement() : "none",
       accessory: Double.random(in: 0..<1) < 0.35 ? accessories.dropFirst().randomElement() : "none", motion: motion ?? "float")
+  }
+
+  /** A new agent's look: plain white, with a random face and outfit. */
+  static func newAgent() -> GhostLook {
+    var look = shuffled()
+    look.color = GhostColors.white
+    look.color2 = GhostColors.white
+    return look
   }
 }

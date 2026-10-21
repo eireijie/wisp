@@ -274,14 +274,14 @@ export function TeamChart({
                         onClick={() => toggleLead(n)}
                         aria-pressed={n.lead}
                         title={n.lead ? "Lead: reads every new message. Click to make it get work from a lead instead." : "Make it a lead"}
-                        className={cx("absolute -top-2.5 left-3 h-5 px-1.5 rounded-full text-[10px] font-semibold inline-flex items-center gap-1 border", n.lead ? "bg-ink text-panel border-ink" : "bg-panel text-muted border-line opacity-0 group-hover:opacity-100 focus:opacity-100")}
+                        className={cx("absolute -top-2.5 left-3 h-5 px-1.5 rounded-full text-[10px] font-semibold inline-flex items-center gap-1 border", n.lead ? "bg-ink text-panel border-ink" : "bg-panel text-muted border-line opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100")}
                       >
                         <Crown size={10} /> {n.lead ? "Lead" : "Make lead"}
                       </button>
-                      <button type="button" onClick={() => remove(n.agentId)} aria-label={`Take ${a.name} off the team`} className="absolute -top-2 -right-2 size-5 rounded-full bg-panel border border-line grid place-items-center text-muted hover:text-bad opacity-0 group-hover:opacity-100 focus:opacity-100">
+                      <button type="button" onClick={() => remove(n.agentId)} aria-label={`Take ${a.name} off the team`} className="absolute -top-2 -right-2 size-5 rounded-full bg-panel border border-line grid place-items-center text-muted hover:text-bad opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100 pointer-coarse:size-6">
                         <X size={11} strokeWidth={3} />
                       </button>
-                      {/* drag from here to whoever it hands work to */}
+                      {/* drag from here to whoever it hands work to (bigger for a finger than for a mouse) */}
                       <button
                         type="button"
                         aria-label={`Draw an arrow from ${a.name} to an agent it hands work to`}
@@ -290,7 +290,8 @@ export function TeamChart({
                           e.stopPropagation();
                           setLink({ from: n.agentId, ...point(e), moved: false });
                         }}
-                        className={cx("absolute left-1/2 -bottom-2 -ml-2 size-4 rounded-full border-2 bg-panel hover:scale-125 transition-transform cursor-crosshair", link?.from === n.agentId ? "border-accent bg-accent" : "border-muted")}
+                        className={cx(
+                          "absolute left-1/2 -bottom-2 -ml-2 size-4 pointer-coarse:-bottom-3 pointer-coarse:-ml-3 pointer-coarse:size-6 rounded-full border-2 bg-panel hover:scale-125 transition-transform cursor-crosshair", link?.from === n.agentId ? "border-accent bg-accent" : "border-muted")}
                       />
                     </>
                   )}
@@ -351,7 +352,8 @@ function AgentRow({ agent, onChart, onAdd }: { agent: Agent; onChart: boolean; o
         e.dataTransfer.setData("text/x-warren-agent", agent.id);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      className={cx("flex items-center gap-2 rounded-xl px-1.5 py-1.5", onChart ? "opacity-55" : "hover:bg-hover cursor-grab")}
+      // an agent already on the chart reads muted; not with opacity, which Android's WebView fails to paint around an animated ghost
+      className={cx("flex items-center gap-2 rounded-xl px-1.5 py-1.5", onChart ? "text-muted" : "hover:bg-hover cursor-grab")}
       title={onChart ? `${agent.name} is on the chart` : `Drag ${agent.name} onto the chart`}
     >
       <AgentAvatar agent={agent} size={28} interactive={false} />

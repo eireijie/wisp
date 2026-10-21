@@ -1,13 +1,18 @@
 import SwiftUI
 
-/** The agents working in a conversation right now, as a pill above the message bar. */
+/**
+ * The agents working in a conversation right now, as a pill above the message bar. In a thread,
+ * the ones working in it or in a sub-thread under it; at the top, everyone in the channel.
+ */
 struct ActivityPill: View {
   @Environment(Store.self) private var store
   var channel: Channel
+  var thread: String? = nil
   @State private var open: Agent?
 
   private var working: [Agent] {
-    store.agents.filter { a in
+    if let thread { return store.working(in: channel.id, thread: thread) }
+    return store.agents.filter { a in
       a.status == .busy && (store.activityChannel[a.id] == channel.id || (store.activityChannel[a.id] == nil && store.dmAgent(channel)?.id == a.id))
     }
   }
@@ -43,7 +48,7 @@ struct ActivityPill: View {
       .padding(.horizontal, 14)
       .transition(.move(edge: .bottom).combined(with: .opacity))
       .accessibilityLabel("\(first.name) \(ActivityText.phrase(store.activity[first.id]))\(list.count > 1 ? ", and \(list.count - 1) more" : ""). Show what it's doing")
-      .sheet(item: $open) { AgentWorkSheet(agentId: $0.id, others: list.map(\.id)) }
+      .sheet(item: $open) { AgentWorkSheet(agentId: $0.id, others: list.map(\.id), hereThread: thread) }
     }
   }
 }
@@ -65,6 +70,8 @@ struct AgentWorkSheet: View {
   @Environment(\.dismiss) private var dismiss
   @State var agentId: String
   var others: [String] = []
+  /** the thread the pill was opened in, which needn't be named again */
+  var hereThread: String? = nil
   @State private var action = FormAction()
   @State private var stopping = false
 
@@ -117,6 +124,12 @@ struct AgentWorkSheet: View {
               .disabled(action.busy)
             }
           }
+          if agent.status == .busy, let spot = place(agent) {
+            Section("Where") {
+              Text(spot.text).font(.subheadline)
+              NavigationLink("Open thread") { ThreadView(ref: ThreadRef(channelId: spot.channelId, rootId: spot.thread)) }
+            }
+          }
           Section("What it's doing") {
             let steps = store.activitySteps[agent.id] ?? []
             if steps.isEmpty {
@@ -155,6 +168,14 @@ struct AgentWorkSheet: View {
     .presentationDragIndicator(.visible)
   }
 
+  /** Which thread it's working in, when that's not the one on screen: "In a sub-thread of “Plan the launch”". */
+  private func place(_ agent: Agent) -> (text: String, channelId: String, thread: String)? {
+    guard let channelId = store.activityChannel[agent.id], let thread = store.activityThread[agent.id], thread != hereThread else { return nil }
+    let path = store.activityPath[agent.id] ?? []
+    let top = path.first ?? thread
+    return ("In \(path.isEmpty ? "" : "a sub-thread of ")“\(ThreadTitle.of(store.message(top, in: channelId)))”", channelId, thread)
+  }
+
   private func answersLabel(_ agent: Agent) -> String {
     switch agent.settings?.respondTo {
     case "me": "Only you"
@@ -183,4 +204,14 @@ private struct StepRow: View {
 
 extension String {
   var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+/** A thread's first words, to say where an agent is working. */
+enum ThreadTitle {
+  static func of(_ message: Message?) -> String {
+    guard let body = message?.body else { return "a thread" }
+    let text = body.replacing(/@[\w-]+\s*/, with: "").replacing(/[*_`#>]/, with: "").replacing(/\s+/, with: " ").trimmed
+    if text.isEmpty { return "a thread" }
+    return text.count > 36 ? String(text.prefix(34)) + "…" : text
+  }
 }

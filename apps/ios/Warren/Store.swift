@@ -51,13 +51,19 @@ final class Store {
   var approvals: [Approval] = []
   /** top-level messages per channel, oldest first */
   var messages: [String: [Message]] = [:]
-  /** replies per thread root */
+  /** replies per thread root (a reply can be the root of a sub-thread) */
   var threads: [String: [Message]] = [:]
+  /** thread roots as loaded with their thread: a sub-thread's root is a reply in another thread */
+  var roots: [String: Message] = [:]
   var replyCounts: [String: Int] = [:]
   /** what each busy agent is doing right now ("Reading the vault…"), from run events */
   var activity: [String: String] = [:]
   /** the channel each working agent is replying in */
   var activityChannel: [String: String] = [:]
+  /** the thread it's working in (none at the top of the channel) */
+  var activityThread: [String: String] = [:]
+  /** the threads above that one, outermost first, so a thread shows who's working in its sub-threads */
+  var activityPath: [String: [String]] = [:]
   /** the steps of each working agent's current run, oldest first */
   var activitySteps: [String: [String]] = [:]
   /** the run each working agent is on, so it can be stopped */
@@ -148,7 +154,8 @@ final class Store {
     skills = []; connectors = []; sessions = []; invites = []; prefs = nil
     taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
     channels = []; agents = []; members = []; computers = []; approvals = []
-    messages = [:]; threads = [:]; replyCounts = [:]; activity = [:]; activityChannel = [:]
+    messages = [:]; threads = [:]; roots = [:]; replyCounts = [:]; activity = [:]; activityChannel = [:]
+    activityThread = [:]; activityPath = [:]
     openChannel = nil
     route = nil
   }
@@ -207,10 +214,13 @@ final class Store {
     if let thread { q["thread"] = thread }
     let page: MessagePage = try await api.get("/api/channels/\(channelId)/messages", q)
     let sorted = page.messages.sorted { $0.createdAt < $1.createdAt }
-    if let thread { threads[thread] = sorted.filter { $0.id != thread } } else {
+    if let thread {
+      threads[thread] = sorted.filter { $0.id != thread }
+      if let root = sorted.first(where: { $0.id == thread }) { roots[thread] = root }
+    } else {
       messages[channelId] = sorted
-      replyCounts.merge(page.replyCounts) { $1 }
     }
+    replyCounts.merge(page.replyCounts) { $1 }
   }
 
   func loadEarlier(_ channelId: String) async -> Bool {
@@ -430,6 +440,9 @@ final class Store {
     var runId: String?
     var agentId: String
     var channelId: String
+    /** where it works: the thread (none at the top of the channel) and the threads above it, outermost first */
+    var threadId: String?
+    var threadPath: [String]?
     var event: E
   }
   private struct FeaturesEvent: Decodable { var features: Features }
@@ -456,6 +469,8 @@ final class Store {
       if e.message.author.kind == .agent {
         activity[e.message.author.id] = nil
         activityChannel[e.message.author.id] = nil
+        activityThread[e.message.author.id] = nil
+        activityPath[e.message.author.id] = nil
       }
       let mine = e.message.author == Actor(kind: .user, id: me?.id ?? "") || e.message.author.id == "system"
       if !mine, let i = channels.firstIndex(where: { $0.id == e.message.channelId }) {
@@ -473,6 +488,8 @@ final class Store {
       if e.status != .busy {
         activity[e.agentId] = nil
         activityChannel[e.agentId] = nil
+        activityThread[e.agentId] = nil
+        activityPath[e.agentId] = nil
         activitySteps[e.agentId] = nil
         activityRun[e.agentId] = nil
         activitySince[e.agentId] = nil
@@ -482,6 +499,8 @@ final class Store {
     case "run_event":
       guard let e = try? d.decode(RunEvent.self, from: data) else { return }
       activityChannel[e.agentId] = e.channelId
+      activityThread[e.agentId] = e.threadId
+      activityPath[e.agentId] = e.threadPath ?? []
       if let run = e.runId, activityRun[e.agentId] != run {
         activityRun[e.agentId] = run
         activitySteps[e.agentId] = []

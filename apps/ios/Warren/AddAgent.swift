@@ -9,11 +9,11 @@ struct AddAgent: View {
   @Environment(\.dismiss) private var dismiss
   var onCreated: (Agent) -> Void
 
-  @State private var look = GhostLook.defaultAppearance("new-agent")
+  // every new agent starts white with a face and outfit of its own, picked once (typing its name doesn't change it)
+  @State private var look = GhostLook.newAgent()
   @State private var editingLook = false
   @State private var name = ""
   @State private var does = ""
-  @State private var template = ""
   @State private var instructions = ""
   @State private var custom = false
   @State private var harness = "claude-code"
@@ -59,7 +59,6 @@ struct AddAgent: View {
         } header: {
           HStack(spacing: 4) { Text("What it does"); Text("· Optional").foregroundStyle(.tertiary) }
         }
-        Section("Start from") { templates }
         Section("Instructions") {
           TextField("What should it do, and how?", text: $instructions, axis: .vertical).lineLimit(4...12)
         }
@@ -85,18 +84,13 @@ struct AddAgent: View {
         if store.agentDefaults?.computer != "none", let node = store.agentDefaults?.nodeId ?? firstNode { computer = "vm:\(node)" }
       }
       .onChange(of: handle) { _, value in handle = ManagementText.handle(value) }
-      .onChange(of: name) { _, value in
-        // the ghost follows the name until someone picks a look on purpose
-        if !lookChosen { look = GhostLook.defaultAppearance(value.isEmpty ? "new-agent" : ManagementText.handle(value)) }
-      }
       .sheet(isPresented: $editingLook) {
-        LookEditor(look: Binding(get: { look }, set: { look = $0; lookChosen = true }), name: name, seed: finalHandle)
+        LookEditor(look: $look, name: name, seed: finalHandle)
       }
       .interactiveDismissDisabled(action.busy)
     }
   }
 
-  @State private var lookChosen = false
   private var firstNode: String? {
     let usable = store.nodes.filter(\.usable)
     return usable.first { $0.online }?.id ?? usable.first?.id
@@ -113,31 +107,10 @@ struct AddAgent: View {
           Text(name.trimmed.isEmpty ? "New agent" : name.trimmed).font(.title3.weight(.semibold))
           Text("@\(finalHandle.isEmpty ? "handle" : finalHandle)").font(.caption).foregroundStyle(.secondary)
         }
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: 10) {
-            ForEach(GhostLook.palettes, id: \.name) { palette in
-              let selected = look.color.lowercased() == palette.top && look.color2?.lowercased() == palette.bottom
-              Button {
-                look.color = palette.top
-                look.color2 = palette.bottom
-                lookChosen = true
-              } label: {
-                Circle()
-                  .fill(LinearGradient(colors: [Color(hex: palette.top), Color(hex: palette.bottom)], startPoint: .top, endPoint: .bottom))
-                  .frame(width: 30, height: 30)
-                  .padding(3)
-                  .overlay(Circle().stroke(selected ? Color.primary : .clear, lineWidth: 2))
-              }
-              .buttonStyle(.plain)
-              .accessibilityLabel(palette.name)
-              .accessibilityAddTraits(selected ? .isSelected : [])
-            }
-          }.padding(.horizontal, 2)
-        }
+        GhostColors(look: $look)
         HStack(spacing: 10) {
           Button("Shuffle", systemImage: "shuffle") {
             look = GhostLook.shuffled()
-            lookChosen = true
           }
           Button("Edit look", systemImage: "paintpalette") { editingLook = true }
         }
@@ -148,37 +121,6 @@ struct AddAgent: View {
     } footer: {
       Text("Give it a name and a job. You can change everything later.")
     }
-  }
-
-  // MARK: start from
-
-  private var templates: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 8) {
-        chip("Blank", selected: template.isEmpty) { template = ""; instructions = "" }
-        ForEach(AgentTemplate.all) { item in
-          chip(item.name, selected: template == item.id) {
-            template = item.id
-            instructions = item.instructions
-            if does.isEmpty || AgentTemplate.all.contains(where: { $0.blurb == does }) { does = item.blurb }
-          }
-        }
-      }
-      .padding(.vertical, 2)
-    }
-  }
-
-  private func chip(_ label: String, selected: Bool, _ pick: @escaping () -> Void) -> some View {
-    Button(action: pick) {
-      Text(label)
-        .font(.subheadline.weight(.medium))
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .foregroundStyle(selected ? Color(.systemBackground) : .primary)
-        .background(Capsule().fill(selected ? Color.primary : Color(.tertiarySystemFill)))
-    }
-    .buttonStyle(.plain)
-    .accessibilityAddTraits(selected ? .isSelected : [])
   }
 
   // MARK: AI and computer
@@ -315,9 +257,6 @@ struct AddAgent: View {
         }
       }
       fields["settings"] = AnyEncodable(settings)
-      if let template = AgentTemplate.all.first(where: { $0.id == template }) {
-        fields["soul"] = AnyEncodable(agentSoul(name: name.trimmed, handle: finalHandle, voice: template.voice))
-      }
       let agent = try await store.createAgent(fields)
       // apps and skills are given to it afterwards; the agent exists either way
       for id in apps {
@@ -332,28 +271,4 @@ struct AddAgent: View {
       onCreated(agent)
     }
   }
-}
-
-func agentSoul(name: String, handle: String, voice: String) -> String {
-  """
-  # \(name)
-
-  Who @\(handle) is. Read at the start of every conversation. Keep it short: every line should change how you behave.
-
-  ## Personality
-  - Curious, direct, and kind.
-  - Has opinions and shares them, then defers to the person who decides.
-
-  ## Voice
-  - \(voice)
-
-  ## Values
-  - Tell the truth, including "I don't know" and "I was wrong".
-  - Leave things better documented than you found them: write what you learn to memory.
-
-  ## Boundaries
-  - Ask before doing anything that's hard to undo.
-  - Never pretend a task is done when it isn't.
-
-  """
 }

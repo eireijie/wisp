@@ -539,7 +539,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
 
             <div className="flex flex-col md:flex-row gap-6 md:gap-7 px-5 sm:px-7 pt-4 pb-6">
               {/* its ghost */}
-              <div className="md:w-60 shrink-0 self-start md:sticky md:top-4 rounded-[1.25rem] bg-bg px-4 py-6 flex flex-col items-center gap-3.5">
+              <div className="md:w-60 shrink-0 self-stretch md:self-start md:sticky md:top-4 rounded-[1.25rem] bg-bg px-4 py-6 flex flex-col items-center gap-3.5">
                 <Ghost look={look} size={140} trackPointer label="Your new agent, looking toward your pointer" />
                 <div className="text-center min-w-0 max-w-full">
                   <div className="text-lg font-semibold truncate">{cleanName || "Your agent"}</div>

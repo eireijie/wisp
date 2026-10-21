@@ -6,7 +6,10 @@ struct MessageRow: View {
   /** the same author a moment ago: no avatar or name again */
   var compact: Bool
   var replies: Int
+  /** the thread this message starts (or would start): any message can have one, a reply too */
   var thread: ThreadRef?
+  /** agents working in that thread, or in a sub-thread under it */
+  var working: [Agent] = []
   @State private var toolsOpen = false
 
   private var tools: [String] {
@@ -75,11 +78,16 @@ struct MessageRow: View {
             }
           }
         }
-        if replies > 0, let thread {
-          NavigationLink(value: thread) {
-            Text(replies == 1 ? "1 reply" : "\(replies) replies")
-              .font(.caption.weight(.semibold))
-              .foregroundStyle(.blue)
+        if let thread, replies > 0 || !working.isEmpty {
+          HStack(spacing: 8) {
+            if replies > 0 {
+              NavigationLink(value: thread) {
+                Text(replies == 1 ? "1 reply" : "\(replies) replies")
+                  .font(.caption.weight(.semibold))
+                  .foregroundStyle(.blue)
+              }
+            }
+            if !working.isEmpty { ThreadWork(agents: working, thread: thread) }
           }
         }
       }
@@ -121,6 +129,40 @@ struct MessageRow: View {
       .foregroundStyle(.secondary)
     }
     .buttonStyle(.plain)
+  }
+}
+
+/** Who's working in a thread (or a sub-thread of it), on the thread's row: "Cy is working in a sub-thread". */
+struct ThreadWork: View {
+  @Environment(Store.self) private var store
+  var agents: [Agent]
+  var thread: ThreadRef
+
+  var body: some View {
+    let deeper = agents.allSatisfy { store.inSubThread($0.id, of: thread.rootId) }
+    let who = agents.count == 1 ? agents[0].name : agents.count == 2 ? "\(agents[0].name) and \(agents[1].name)" : "\(agents[0].name) and \(agents.count - 1) more"
+    NavigationLink(value: thread) {
+      HStack(spacing: 5) {
+        HStack(spacing: -5) {
+          ForEach(agents.prefix(3)) { a in
+            AgentAvatar(agent: a, size: 16, showStatus: false)
+              .padding(1)
+              .background(Circle().fill(Color(.tertiarySystemFill)))
+          }
+        }
+        GlowDot(color: .green)
+        (Text(who).fontWeight(.semibold) + Text(" \(agents.count == 1 ? "is" : "are") working\(deeper ? " in a sub-thread" : "")"))
+          .lineLimit(1)
+      }
+      .font(.caption)
+      .foregroundStyle(.primary)
+      .padding(.leading, 3)
+      .padding(.trailing, 8)
+      .padding(.vertical, 3)
+      .background(Capsule().fill(Color(.tertiarySystemFill)))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("\(who) \(agents.count == 1 ? "is" : "are") working\(deeper ? " in a sub-thread" : " in this thread")")
   }
 }
 

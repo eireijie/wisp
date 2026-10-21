@@ -48,6 +48,30 @@ extension Store {
     return channels.first { $0.id == channel.id } ?? channel
   }
 
+  /**
+   * The agents working in a channel right now. With `thread`, those working in it or in a
+   * sub-thread under it; `topOnly` keeps just the ones at the top of the channel.
+   */
+  func working(in channelId: String, thread: String? = nil, topOnly: Bool = false) -> [Agent] {
+    agents.filter { a in
+      guard a.status == .busy, activityChannel[a.id] == channelId else { return false }
+      let here = activityThread[a.id]
+      if topOnly { return here == nil }
+      guard let thread else { return true }
+      return here == thread || (activityPath[a.id] ?? []).contains(thread)
+    }
+  }
+
+  /** Whether an agent working under `thread` is in a sub-thread of it rather than in it. */
+  func inSubThread(_ agentId: String, of thread: String) -> Bool {
+    activityThread[agentId] != thread
+  }
+
+  /** A thread's root wherever it was loaded: at the top of a channel, as a thread's root, or as a reply. */
+  func message(_ id: String, in channelId: String) -> Message? {
+    messages[channelId]?.first { $0.id == id } ?? roots[id] ?? threads.values.lazy.compactMap { $0.first { $0.id == id } }.first
+  }
+
   func updateChannel(_ id: String, _ fields: Fields) async throws {
     let updated: Channel = try await connection().patch("/api/channels/\(id)", fields)
     if let i = channels.firstIndex(where: { $0.id == id }) {
@@ -165,6 +189,8 @@ extension Store {
     agents.removeAll { $0.id == id }
     activity[id] = nil
     activityChannel[id] = nil
+    activityThread[id] = nil
+    activityPath[id] = nil
     await refreshChannels()
   }
 
