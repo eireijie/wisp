@@ -134,8 +134,9 @@ describe("warren-mcp", () => {
     expect((await call("memory_context")).text).toContain("Likes tea, not coffee");
     const p = saved.text.match(/in (\S+)\.$/)![1];
     expect((await call("memory_forget", { path: p })).text).toBe(`Forgot ${p}.`);
-    await owner.request("POST", "/api/teams", { name: "scouts", leadId: agentId });
-    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ name: "scouts", lead: "@scout", memory: "teams/scouts/" });
+    await owner.request("POST", "/api/channels", { name: "scouts", settings: { team: { nodes: [{ agentId, lead: true, x: 0, y: 0, role: "Scout" }], edges: [], folder: "teams/scouts" } } });
+    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ channel: "#scouts", leads: ["@scout"], memory: "teams/scouts/", members: [{ agent: "@scout", role: "Scout" }] });
+    expect(JSON.parse((await call("agents_list")).text).find((a: any) => a.handle === "@scout").teams).toEqual(["#scouts"]);
   });
 
   it("delegates tasks and moves files", async () => {

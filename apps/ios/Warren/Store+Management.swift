@@ -17,7 +17,7 @@ extension Store {
   }
 
   func isProtected(_ channel: Channel) -> Bool {
-    channel.name == "general" || teams.contains { $0.channelId == channel.id }
+    channel.name == "general"
   }
 
   func refreshManagement() async throws {

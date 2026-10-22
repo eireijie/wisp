@@ -23,10 +23,10 @@ import {
   subjectKey,
   pickReviewer,
   teamChain,
-  wouldLoop,
   teamProblem,
   type AccessRule,
   type Actor,
+  type ChannelTeam,
   type MemoryLevel,
   type Subject,
   type Viewer,
@@ -34,7 +34,6 @@ import {
 import { VaultError, notePath } from "@warren/vault";
 import { MEMORY_KINDS } from "./profile.ts";
 import { MAX_ROUNDS } from "./discussions.ts";
-import { teamSlug } from "./store.ts";
 import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, revokeToken, verifyPassword, type Principal } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
@@ -455,8 +454,19 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
    * channel so it shows up among the members it answers for.
    */
   const CHANNEL_TEAM = z.object({
-    nodes: z.array(z.object({ agentId: z.string().min(1), lead: z.boolean(), x: z.number().finite(), y: z.number().finite() })).max(50),
+    nodes: z
+      .array(z.object({ agentId: z.string().min(1), lead: z.boolean(), x: z.number().finite(), y: z.number().finite(), role: z.string().trim().max(60).optional(), roleNotes: z.string().max(4000).optional() }))
+      .max(50),
     edges: z.array(z.object({ from: z.string().min(1), to: z.string().min(1) })).max(200),
+    folder: z
+      .string()
+      .max(200)
+      .transform((f) => cleanRulePath(f.trim()))
+      .refine((f) => !f.split("/").some((p) => p === ".." || p === "."), "that folder isn't inside memory")
+      .optional(),
+    repo: z.string().trim().max(500).nullable().optional(),
+    baseBranch: z.string().trim().max(100).optional(),
+    reportsTo: z.string().nullable().optional(),
   });
   const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000), team: CHANNEL_TEAM.nullable() }).partial();
   const ours = (c: Caller, agentId: string) => store.agent(agentId)?.workspaceId === c.workspaceId;
@@ -465,19 +475,39 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (settings?.defaultAgentId && !ours(c, settings.defaultAgentId)) return "agent not found";
     const team = settings?.team;
     if (!team) return null;
-    if (team.nodes.some((n) => !ours(c, n.agentId))) return "agent not found";
-    return teamProblem(team);
+    if (team.nodes.some((n) => !ours(c, n.agentId)) || (team.reportsTo && !ours(c, team.reportsTo))) return "agent not found";
+    return team.nodes.length || !(team.folder || team.repo) ? teamProblem(team) : null;
   };
   /** Everyone on a channel's team (and the agent that answers there) is in the channel. */
   const joinTeam = (channelId: string, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined) => {
     for (const n of settings?.team?.nodes ?? []) store.addChannelMember(channelId, { kind: "agent", id: n.agentId });
     if (settings?.defaultAgentId) store.addChannelMember(channelId, { kind: "agent", id: settings.defaultAgentId });
   };
-  /** Channels that can't be archived, made private or deleted: where everyone lands, and a team's own. */
-  const protectedReason = (c: Caller, ch: { id: string; name: string }, what: string) => {
-    if (ch.name === "general") return `#general can't be ${what}: everyone in the workspace lands there`;
-    const team = store.teams(c.workspaceId).find((t) => t.channelId === ch.id);
-    return team ? `#${ch.name} is team ${team.name}'s channel; it can't be ${what} while the team uses it` : null;
+  /**
+   * A chart sent without the team's roles, memory folder, repo or boss (say, from an app that
+   * only draws the chart) keeps the ones it had.
+   */
+  const keepTeamExtras = (next: z.infer<typeof CHANNEL_TEAM>, cur: ChannelTeam | null): z.infer<typeof CHANNEL_TEAM> => {
+    if (!cur) return next;
+    const old = new Map(cur.nodes.map((n) => [n.agentId, n]));
+    return {
+      ...next,
+      nodes: next.nodes.map((n) => ({ ...n, role: n.role ?? old.get(n.agentId)?.role, roleNotes: n.roleNotes ?? old.get(n.agentId)?.roleNotes })),
+      folder: next.folder ?? cur.folder,
+      repo: next.repo !== undefined ? next.repo : cur.repo,
+      baseBranch: next.baseBranch ?? cur.baseBranch,
+      reportsTo: next.reportsTo !== undefined ? next.reportsTo : cur.reportsTo,
+    };
+  };
+  /** Channels that can't be archived, made private or deleted: where everyone lands. */
+  const protectedReason = (_c: Caller, ch: { id: string; name: string }, what: string) => (ch.name === "general" ? `#general can't be ${what}: everyone in the workspace lands there` : null);
+  /** A team that just got a memory folder gets a starter brief there. */
+  const briefFor = async (c: Caller, channelName: string, folder: string | undefined) => {
+    if (!folder) return;
+    const vault = vaultOf(c);
+    const brief = `${folder}/README.md`;
+    if (vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) return;
+    await vault.write(brief, `# Team #${channelName}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, commitAuthor(c), `Brief for #${channelName}`).catch(() => undefined);
   };
 
   app.patch("/api/channels/:id", async (req, reply) => {
@@ -490,6 +520,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.name && body.name !== ch.name && store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.name && body.name !== ch.name && ch.name === "general") return reply.code(409).send({ error: "#general can't be renamed: everyone in the workspace lands there" });
+    if (body.settings?.team) body.settings.team = keepTeamExtras(body.settings.team, ch.settings.team);
     const problem = settingsProblem(c, body.settings);
     if (problem) return reply.code(400).send({ error: problem });
     if (body.private && !ch.private) {
@@ -500,6 +531,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     joinTeam(ch.id, body.settings);
     const updated = store.updateChannel(ch.id, body);
+    if (body.settings?.team?.folder !== ch.settings.team?.folder) await briefFor(c, updated!.name, body.settings?.team?.folder);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return updated;
   });
@@ -557,7 +589,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     });
   }
 
-  /** Delete a channel and everything said in it. Not DMs, #general, or a team's channel. */
+  /** Delete a channel and everything said in it (and its team). Not DMs or #general. */
   app.delete("/api/channels/:id", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
@@ -569,6 +601,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
     for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);
     store.deleteChannel(ch.id);
+    // rules about its team go with it
+    store.removeRulesFor(c.workspaceId, { kind: "team", name: ch.name });
+    for (const role of new Set((ch.settings.team?.nodes ?? []).map((n) => n.role?.trim()).filter((r): r is string => !!r))) store.removeRulesFor(c.workspaceId, { kind: "role", team: ch.name, role });
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return { ok: true };
   });
@@ -817,6 +852,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     store.addChannelMember(ch.id, c.actor);
     for (const m of members) store.addChannelMember(ch.id, m as Actor);
     joinTeam(ch.id, ch.settings);
+    await briefFor(c, ch.name, ch.settings.team?.folder);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return ch;
   });
@@ -925,7 +961,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       computerId = comp.id;
       settings = { runIn: "computer", ...settings };
     } else if (defaults.computer === "none") settings = { headless: true, ...settings };
-    const created = store.createAgent({ workspaceId: c.workspaceId, handle, name: body.name, harness, model: harness === defaults.harness ? defaults.model : maker.model, nodeId: nodeId ?? null, computerId, instructions: body.instructions, groups: [] });
+    const created = store.createAgent({ workspaceId: c.workspaceId, handle, name: body.name, harness, model: harness === defaults.harness ? defaults.model : maker.model, nodeId: nodeId ?? null, computerId, instructions: body.instructions });
     const agent = store.updateAgent(created.id, { settings: settings as never })!;
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
@@ -961,7 +997,6 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         model: z.string().max(100).nullable().optional(),
         nodeId: z.string().nullable().optional(),
         computerId: z.string().nullable().optional(),
-        groups: z.array(z.string()).default([]),
         instructions: z.string().max(20_000).default(""),
         settings: SETTINGS.optional(),
         soul: z.string().max(50_000).optional(),
@@ -1019,7 +1054,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const body = parse(
       z
-        .object({ name: z.string().min(1).max(80), harness: HARNESS, model: z.string().max(100).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), groups: z.array(z.string()), instructions: z.string().max(20_000), settings: SETTINGS })
+        .object({ name: z.string().min(1).max(80), harness: HARNESS, model: z.string().max(100).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
         .partial(),
       req.body,
       reply,
@@ -1227,148 +1262,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return store.agentsOnNode(p.subjectId);
   });
 
-  // --- teams ------------------------------------------------------------------
+  // --- teams: read-only, a channel's team is edited with the channel ---------
 
-  const teamView = (t: NonNullable<ReturnType<typeof store.team>>) => ({ ...t, above: teamChain(t, store.teams(t.workspaceId)) });
-  const ownAgent = (c: Caller, agentId: string | null | undefined) => !agentId || store.agent(agentId)?.workspaceId === c.workspaceId;
-  const COORD = z.number().min(0).max(20_000);
-  const MEMBER = z.object({
-    agentId: z.string(),
-    role: z.string().trim().max(60).optional(),
-    roleNotes: z.string().max(4000).optional(),
-    managerId: z.string().nullable().optional(),
-    x: COORD.nullable().optional(),
-    y: COORD.nullable().optional(),
-  });
-
+  /** Every channel's team, with `above`: who it reports to, nearest first. */
   app.get("/api/teams", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
-    return store.teams(c.workspaceId).map(teamView);
-  });
-
-  /** A team: its own channel and memory pool (with a starter brief), a lead, roles, and who it reports to. */
-  app.post("/api/teams", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const body = parse(
-      z.object({
-        name: z.string().trim().min(1).max(40),
-        emoji: EMOJI.or(z.literal("")).default(""),
-        description: z.string().max(4000).default(""),
-        leadId: z.string().nullable().optional(),
-        reportsTo: z.string().nullable().optional(),
-        members: z.array(MEMBER).max(50).default([]),
-        repo: z.string().trim().max(500).nullable().optional(),
-        baseBranch: z.string().trim().regex(/^[\w./-]{1,100}$/).optional(),
-      }),
-      req.body,
-      reply,
-    );
-    if (!body) return;
-    const name = teamSlug(body.name);
-    if (!name) return reply.code(400).send({ error: "name needs letters or digits" });
-    if (store.teamByName(c.workspaceId, name)) return reply.code(409).send({ error: "a team with that name exists" });
-    if (![body.leadId, body.reportsTo, ...body.members.map((m) => m.agentId)].every((a) => ownAgent(c, a))) return reply.code(404).send({ error: "agent not found" });
-    if (body.leadId && body.leadId === body.reportsTo) return reply.code(400).send({ error: "a lead can't report to itself" });
-    const channel = store.channelByName(c.workspaceId, `team-${name}`) ?? store.createChannel(c.workspaceId, `team-${name}`, "channel", `Team ${name}`);
-    const team = store.createTeam({ workspaceId: c.workspaceId, name, emoji: body.emoji, description: body.description, leadId: body.leadId ?? null, reportsTo: body.reportsTo ?? null, channelId: channel.id, repo: body.repo || null, baseBranch: body.baseBranch });
-    // members report to the lead unless they say otherwise
-    for (const m of body.members) if (m.agentId !== body.leadId) store.setTeamMember(team.id, m.agentId, { ...m, managerId: m.managerId !== undefined ? m.managerId : (body.leadId ?? null) });
-    const fresh = store.team(team.id)!;
-    for (const a of [c.actor, ...fresh.members.map((m) => ({ kind: "agent" as const, id: m.agentId })), ...(fresh.reportsTo ? [{ kind: "agent" as const, id: fresh.reportsTo }] : [])]) store.addChannelMember(channel.id, a);
-    const brief = `# Team ${name}\n\n${body.description || "What this team is for, what it's working on, and how it works. The lead keeps this up to date."}\n\n## How we work\n- Decisions go in \`${fresh.folder}/decisions/\`, one note each.\n- Anything the whole team should know goes in this folder; anything everyone should know goes in \`shared/\`.\n`;
-    await vaultOf(c).write(`${fresh.folder}/README.md`, brief, commitAuthor(c), `Create team ${name}`).catch(() => undefined);
-    hub.broadcast(c.workspaceId, { type: "teams_changed" });
-    hub.broadcast(c.workspaceId, { type: "channels_changed" });
-    return teamView(fresh);
-  });
-
-  app.patch("/api/teams/:id", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const team = store.team((req.params as { id: string }).id);
-    if (!team || team.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "team not found" });
-    const body = parse(
-      z
-        .object({
-          emoji: EMOJI.or(z.literal("")),
-          description: z.string().max(4000),
-          leadId: z.string().nullable(),
-          reportsTo: z.string().nullable(),
-          repo: z.string().trim().max(500).nullable(),
-          baseBranch: z.string().trim().regex(/^[\w./-]{1,100}$/),
-        })
-        .partial(),
-      req.body,
-      reply,
-    );
-    if (!body) return;
-    if (!ownAgent(c, body.leadId) || !ownAgent(c, body.reportsTo)) return reply.code(404).send({ error: "agent not found" });
-    const lead = body.leadId !== undefined ? body.leadId : team.leadId;
-    const boss = body.reportsTo !== undefined ? body.reportsTo : team.reportsTo;
-    if (lead && lead === boss) return reply.code(400).send({ error: "a lead can't report to itself" });
-    const updated = store.updateTeam(team.id, { ...body, repo: body.repo === "" ? null : body.repo })!;
-    if (updated.channelId) for (const a of [updated.leadId, updated.reportsTo]) if (a) store.addChannelMember(updated.channelId, { kind: "agent", id: a });
-    hub.broadcast(c.workspaceId, { type: "teams_changed" });
-    return teamView(updated);
-  });
-
-  app.delete("/api/teams/:id", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const team = store.team((req.params as { id: string }).id);
-    if (!team || team.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "team not found" });
-    store.removeRulesFor(c.workspaceId, { kind: "team", name: team.name });
-    for (const role of new Set(team.members.map((m) => m.role).filter(Boolean))) store.removeRulesFor(c.workspaceId, { kind: "role", team: team.name, role });
-    store.deleteTeam(team.id);
-    hub.broadcast(c.workspaceId, { type: "teams_changed" });
-    return { ok: true };
-  });
-
-  /** Add an agent to a team, or change its role there. */
-  app.put("/api/teams/:id/members/:agentId", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const { id: teamId, agentId } = req.params as { id: string; agentId: string };
-    const team = store.team(teamId);
-    if (!team || team.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "team not found" });
-    if (!ownAgent(c, agentId)) return reply.code(404).send({ error: "agent not found" });
-    const body = parse(MEMBER.omit({ agentId: true }), req.body ?? {}, reply);
-    if (!body) return;
-    if (body.managerId) {
-      if (body.managerId === agentId) return reply.code(400).send({ error: "an agent can't report to itself" });
-      if (!team.members.some((m) => m.agentId === body.managerId)) return reply.code(400).send({ error: "they can only report to someone on the team" });
-      if (wouldLoop(team, agentId, body.managerId)) return reply.code(400).send({ error: "that would make them report to someone who reports to them" });
-    }
-    store.setTeamMember(team.id, agentId, body);
-    if (team.channelId) store.addChannelMember(team.channelId, { kind: "agent", id: agentId });
-    hub.broadcast(c.workspaceId, { type: "teams_changed" });
-    return teamView(store.team(team.id)!);
-  });
-
-  /** Save where cards sit on the team chart (e.g. after tidying it up). */
-  app.put("/api/teams/:id/layout", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const team = store.team((req.params as { id: string }).id);
-    if (!team || team.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "team not found" });
-    const body = parse(z.object({ positions: z.array(z.object({ agentId: z.string(), x: COORD, y: COORD })).max(200) }), req.body, reply);
-    if (!body) return;
-    store.setTeamLayout(team.id, body.positions.filter((p) => team.members.some((m) => m.agentId === p.agentId)));
-    hub.broadcast(c.workspaceId, { type: "teams_changed" });
-    return teamView(store.team(team.id)!);
-  });
-
-  app.delete("/api/teams/:id/members/:agentId", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const { id: teamId, agentId } = req.params as { id: string; agentId: string };
-    const team = store.team(teamId);
-    if (!team || team.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "team not found" });
-    store.removeTeamMember(team.id, agentId);
-    hub.broadcast(c.workspaceId, { type: "teams_changed" });
-    return teamView(store.team(team.id)!);
+    const teams = store.teams(c.workspaceId);
+    return teams.filter((t) => channelVisible(c, t.channelId)).map((t) => ({ ...t, above: teamChain(t, teams) }));
   });
 
   // --- tasks ------------------------------------------------------------------
@@ -1416,8 +1317,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     /** the person this work is for */
     onBehalfOf: string | null;
   }) {
-    // team work is work handed out in the team's channel
-    const team = o.team !== undefined ? o.team : (store.teams(o.workspaceId).find((t) => t.channelId === o.channelId && t.members.some((m) => m.agentId === o.target.id)) ?? null);
+    // team work is work handed out to someone on the chart of the channel it's in
+    const here = o.team !== undefined ? o.team : store.team(o.channelId);
+    const team = here?.members.some((m) => m.agentId === o.target.id) || o.team ? (here ?? null) : null;
     const task = store.createTask({ workspaceId: o.workspaceId, from: o.from, toAgentId: o.target.id, title: o.title, brief: o.brief, channelId: o.channelId, threadId: null, teamId: team?.id ?? null, reviewOf: o.reviewOf ?? null, parentId: o.parentId ?? null });
     let branch = o.branch ?? null;
     if (!branch && team?.repo && !o.reviewOf) branch = `warren/${o.target.handle}/${branchSlug(o.title)}-${task.id.slice(-5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
@@ -1456,9 +1358,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const working = store.taskByThread(running.threadId);
       if (working && working.toAgentId === c.actor.id && (working.status === "open" || working.status === "in_progress")) parent = working;
     }
-    // "auto": the workspace's lead, who splits it up; "team:<name>": that team's lead
-    const teamTo = body.to.startsWith("team:") ? store.teams(c.workspaceId).find((t) => t.name === body.to.slice(5).toLowerCase()) : undefined;
-    if (body.to.startsWith("team:") && !teamTo?.leadId) return reply.code(404).send({ error: teamTo ? `team ${teamTo.name} has no lead yet` : "team not found" });
+    // "auto": the workspace's lead, who splits it up; "team:<channel>" or "#channel": that channel team's lead
+    const toTeam = body.to.startsWith("team:") ? body.to.slice(5) : body.to.startsWith("#") ? body.to : null;
+    const teamTo = toTeam !== null ? store.teamByName(c.workspaceId, toTeam) : undefined;
+    if (toTeam !== null && !teamTo?.leadId) return reply.code(404).send({ error: teamTo ? `#${teamTo.name} has no lead yet` : "no channel with a team called that" });
     const target = body.to === "auto" ? workspaceLead(store, c.workspaceId) : teamTo ? store.agent(teamTo.leadId!) : (store.agentByHandle(c.workspaceId, body.to.replace(/^@/, "")) ?? store.agent(body.to));
     if (!target || target.workspaceId !== c.workspaceId) return reply.code(404).send({ error: body.to === "auto" ? "add an agent first" : "agent not found" });
     if (body.to === "auto")
@@ -1471,7 +1374,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const teams = store.teams(c.workspaceId);
     const shared =
       c.actor.kind === "agent"
-        ? teams.find((t) => t.channelId && t.members.some((m) => m.agentId === target.id) && (t.members.some((m) => m.agentId === c.actor.id) || teamChain(t, teams).includes(c.actor.id)))
+        ? teams.find((t) => t.members.some((m) => m.agentId === target.id) && (t.members.some((m) => m.agentId === c.actor.id) || teamChain(t, teams).includes(c.actor.id)))
         : undefined;
     // an agent handing work to a teammate on the chart of the channel it's working in keeps it
     // there, as a sub-thread of the thread it's in
@@ -1483,8 +1386,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       : onChart
         ? onChart
         : shared
-        ? store.channel(shared.channelId!)
-        : forTeam?.channelId
+        ? store.channel(shared.channelId)
+        : forTeam
           ? store.channel(forTeam.channelId)
           : c.actor.kind === "user"
             ? store.dmChannel(c.workspaceId, c.actor.id, target.id)
@@ -1509,10 +1412,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       [...new Set(ids.filter((id): id is string => !!id))]
         .map((id) => store.agent(id))
         .filter((a): a is NonNullable<typeof a> => !!a && a.workspaceId === task.workspaceId)
-        .map((a) => ({ agentId: a.id, harness: a.harness, role: roles.get(a.id) ?? "", lead: a.id === team.leadId }));
+        .map((a) => ({ agentId: a.id, harness: a.harness, role: roles.get(a.id) ?? "", lead: team.leads.includes(a.id) }));
     // the workspace's lead only steps in when nobody on the team can
     const me = { agentId: builder.id, harness: builder.harness };
-    const reviewerId = pickReviewer(me, candidates([...team.members.map((m) => m.agentId), team.leadId])) ?? pickReviewer(me, candidates([workspaceLead(store, task.workspaceId)?.id]));
+    const reviewerId = pickReviewer(me, candidates(team.members.map((m) => m.agentId))) ?? pickReviewer(me, candidates([workspaceLead(store, task.workspaceId)?.id]));
     const reviewer = reviewerId ? store.agent(reviewerId) : undefined;
     if (!reviewer) return;
     if (store.tasks(task.workspaceId).some((t) => t.reviewOf === task.id && (t.status === "open" || t.status === "in_progress"))) return;
@@ -1607,7 +1510,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const role = team.members.find((m) => m.agentId === me)?.role ?? "";
       if (me === task.toAgentId) return reply.code(403).send({ error: "work gets merged by someone other than whoever built it" });
       const reviewing = store.tasks(c.workspaceId).some((t) => t.reviewOf === task!.id && t.toAgentId === me);
-      if (team.leadId !== me && !reviewing && !/review/i.test(role) && !teamChain(team, store.teams(c.workspaceId)).includes(me)) return reply.code(403).send({ error: "only the team lead, a reviewer, or whoever the team reports to can merge" });
+      if (!team.leads.includes(me) && !reviewing && !/review/i.test(role) && !teamChain(team, store.teams(c.workspaceId)).includes(me)) return reply.code(403).send({ error: "only the team lead, a reviewer, or whoever the team reports to can merge" });
     } else if (c.viewer.role === "guest") return reply.code(403).send({ error: "guests can't merge" });
     const via = c.actor.kind === "agent" ? c.actor.id : (task.toAgentId ?? team.leadId);
     if (!via) return reply.code(409).send({ error: "nobody's device has this repo anymore: the agent that did the work was removed" });
@@ -1645,15 +1548,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     );
     if (!body) return;
     const agentRef = (r: string) => store.agentByHandle(c.workspaceId, r.replace(/^@/, "")) ?? (store.agent(r)?.workspaceId === c.workspaceId ? store.agent(r) : undefined);
+    // a team is a channel's: by the channel's name ("web", "#web") or id
     const team = body.team ? (store.teamByName(c.workspaceId, body.team) ?? (store.team(body.team)?.workspaceId === c.workspaceId ? store.team(body.team) : undefined)) : undefined;
-    if (body.team && !team) return reply.code(404).send({ error: `no team "${body.team}"` });
+    if (body.team && (!team || !channelVisible(c, team.channelId))) return reply.code(404).send({ error: `no channel with a team called "${body.team}"` });
     const ids = body.participants.length ? body.participants.map(agentRef) : (team?.members.map((m) => store.agent(m.agentId)) ?? []);
     if (ids.some((a) => !a)) return reply.code(404).send({ error: "agent not found" });
     const participants = [...new Set(ids.map((a) => a!.id))];
     if (participants.length < 2) return reply.code(400).send({ error: "a discussion needs at least two agents" });
     const moderator = body.moderator ? agentRef(body.moderator) : store.agent(c.actor.kind === "agent" && participants.includes(c.actor.id) ? c.actor.id : (team?.leadId ?? participants[0]));
     if (!moderator) return reply.code(404).send({ error: "moderator not found" });
-    const channel = body.channelId ? channelVisible(c, body.channelId) : team?.channelId ? store.channel(team.channelId) : store.channelByName(c.workspaceId, "general");
+    const channel = body.channelId ? channelVisible(c, body.channelId) : team ? store.channel(team.channelId) : store.channelByName(c.workspaceId, "general");
     if (!channel) return reply.code(404).send({ error: "channel not found" });
     const requester = requesterOf(c);
     for (const a of [...participants, moderator.id]) {
@@ -1663,7 +1567,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       if (why) return reply.code(403).send({ error: why });
     }
     for (const a of [...participants, moderator.id]) store.addChannelMember(channel.id, { kind: "agent", id: a });
-    const d = hub.discussions.start({ workspaceId: c.workspaceId, channelId: channel.id, teamId: team?.id ?? null, topic: body.topic, goal: body.goal, participants, moderatorId: moderator.id, rounds: body.rounds, startedBy: c.actor, requestedBy: requester });
+    const d = hub.discussions.start({ workspaceId: c.workspaceId, channelId: channel.id, topic: body.topic, goal: body.goal, participants, moderatorId: moderator.id, rounds: body.rounds, startedBy: c.actor, requestedBy: requester });
     return discussionView(d);
   });
 
@@ -1938,11 +1842,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const path = rulePathFor(body.path, reply);
     if (path === null) return;
     if (!atLeast(memory(c)(path).level, "manage")) return reply.code(403).send({ error: `you can't change who has access to ${path || "the vault"}` });
-    const s = body.subject;
+    // a team is named by its channel: "#web" and "web" are the same
+    const ruleTeam = body.subject.kind === "team" || body.subject.kind === "role" ? store.teamByName(c.workspaceId, body.subject.kind === "team" ? body.subject.name : body.subject.team) : undefined;
+    const s: Subject = body.subject.kind === "team" && ruleTeam ? { kind: "team", name: ruleTeam.name } : body.subject.kind === "role" && ruleTeam ? { ...body.subject, team: ruleTeam.name } : body.subject;
     const forAgents = s.kind === "agent" || s.kind === "team" || s.kind === "role" || s.kind === "all_agents";
     if (forAgents && body.level === "manage") return reply.code(400).send({ error: "agents can read or edit, but can't manage access" });
     if (s.kind === "agent" && store.agent(s.id)?.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
-    if ((s.kind === "team" || s.kind === "role") && !store.teamByName(c.workspaceId, s.kind === "team" ? s.name : s.team)) return reply.code(404).send({ error: "team not found" });
+    if ((s.kind === "team" || s.kind === "role") && !ruleTeam) return reply.code(404).send({ error: "no channel with a team called that" });
     const role = s.kind === "user" ? store.role(c.workspaceId, s.id) : undefined;
     if (s.kind === "user" && !role) return reply.code(404).send({ error: "person not found" });
     if ((s.kind === "guests" || role === "guest") && atLeast(body.level, "edit")) return reply.code(400).send({ error: "guests can only read" });

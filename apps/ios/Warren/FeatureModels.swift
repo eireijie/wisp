@@ -8,17 +8,16 @@ struct Features: Codable, Hashable {
   var background = true
   var routines = true
   var teach = true
-  var teams = true
   var tasks = true
   var voice = true
   var buddy = true
   var invite = true
 
   static let everything = Features()
-  static let simple = Features(background: false, routines: false, teach: false, teams: false, tasks: false, voice: false, buddy: false, invite: false)
+  static let simple = Features(background: false, routines: false, teach: false, tasks: false, voice: false, buddy: false, invite: false)
 
-  init(background: Bool = true, routines: Bool = true, teach: Bool = true, teams: Bool = true, tasks: Bool = true, voice: Bool = true, buddy: Bool = true, invite: Bool = true) {
-    self.background = background; self.routines = routines; self.teach = teach; self.teams = teams
+  init(background: Bool = true, routines: Bool = true, teach: Bool = true, tasks: Bool = true, voice: Bool = true, buddy: Bool = true, invite: Bool = true) {
+    self.background = background; self.routines = routines; self.teach = teach
     self.tasks = tasks; self.voice = voice; self.buddy = buddy; self.invite = invite
   }
 
@@ -39,7 +38,6 @@ struct Features: Codable, Hashable {
       case .background: background
       case .routines: routines
       case .teach: teach
-      case .teams: teams
       case .tasks: tasks
       case .voice: voice
       case .buddy: buddy
@@ -51,7 +49,6 @@ struct Features: Codable, Hashable {
       case .background: background = newValue
       case .routines: routines = newValue
       case .teach: teach = newValue
-      case .teams: teams = newValue
       case .tasks: tasks = newValue
       case .voice: voice = newValue
       case .buddy: buddy = newValue
@@ -66,7 +63,7 @@ struct Features: Codable, Hashable {
 }
 
 enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
-  case background, routines, teach, teams, tasks, voice, buddy, invite
+  case background, routines, teach, tasks, voice, buddy, invite
   var id: String { rawValue }
 
   enum Group: String, CaseIterable {
@@ -86,7 +83,6 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .background: "Background agents"
     case .routines: "Routines"
     case .teach: "Teach a task"
-    case .teams: "Teams"
     case .tasks: "Tasks board"
     case .voice: "Voice calls"
     case .buddy: "Desk buddy"
@@ -99,7 +95,6 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .background: "Agents check your apps on their own and message you first."
     case .routines: "Run a task on a schedule, like a morning summary."
     case .teach: "Do something once while an agent watches, and it becomes a skill."
-    case .teams: "Group agents under a lead that hands out the work."
     case .tasks: "Give out work and track it from start to done."
     case .voice: "Call an agent and talk instead of typing."
     case .buddy: "A small ghost on your desktop that shows what your agents are up to."
@@ -110,7 +105,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
   var group: Group {
     switch self {
     case .background, .routines, .teach: .own
-    case .teams, .tasks: .many
+    case .tasks: .many
     case .voice, .buddy, .invite: .extras
     }
   }
@@ -120,7 +115,6 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .background: "bell.badge"
     case .routines: "clock"
     case .teach: "record.circle"
-    case .teams: "person.3"
     case .tasks: "checklist"
     case .voice: "phone"
     case .buddy: "theatermask.and.paintbrush"

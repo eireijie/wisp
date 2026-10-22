@@ -1,15 +1,81 @@
-import type { Team } from "./types.ts";
+import type { Channel, ChannelTeam } from "./types.ts";
 
 /**
- * Everyone a team reports to, nearest first: its boss, then whoever the team the boss leads
+ * A channel's team as the rest of Warren reads it: who's on it and in what role, who leads, its
+ * shared memory folder and repo, and who it reports to. A channel is the only kind of team, so a
+ * team's id is its channel's id and its name is the channel's name.
+ */
+export interface Team {
+  id: string;
+  channelId: string;
+  workspaceId: string;
+  name: string;
+  /** the leads, in chart order; `leadId` is the first one */
+  leads: string[];
+  leadId: string | null;
+  reportsTo: string | null;
+  /** the shared memory folder; "" = none */
+  folder: string;
+  repo: string | null;
+  baseBranch: string;
+  members: TeamMember[];
+}
+
+export interface TeamMember {
+  agentId: string;
+  role: string;
+  roleNotes: string;
+  lead: boolean;
+  /** the first agent on the chart that hands it work; null for a lead */
+  managerId: string | null;
+}
+
+/** A channel's team, or null when it has none (or is a DM or archived). */
+export function teamOf(channel: Pick<Channel, "id" | "workspaceId" | "name" | "kind" | "archivedAt" | "settings">): Team | null {
+  const t = channel.settings.team;
+  if (!t?.nodes.length || channel.kind !== "channel" || channel.archivedAt) return null;
+  const leads = t.nodes.filter((n) => n.lead).map((n) => n.agentId);
+  return {
+    id: channel.id,
+    channelId: channel.id,
+    workspaceId: channel.workspaceId,
+    name: channel.name,
+    leads,
+    leadId: leads[0] ?? null,
+    reportsTo: t.reportsTo ?? null,
+    folder: cleanFolder(t.folder ?? ""),
+    repo: t.repo?.trim() || null,
+    baseBranch: t.baseBranch?.trim() || "main",
+    members: t.nodes.map((n) => ({ agentId: n.agentId, role: n.role?.trim() ?? "", roleNotes: n.roleNotes?.trim() ?? "", lead: n.lead, managerId: n.lead ? null : (t.edges.find((e) => e.to === n.agentId)?.from ?? null) })),
+  };
+}
+
+/** Every channel's team. */
+export function channelTeams(channels: Parameters<typeof teamOf>[0][]): Team[] {
+  return channels.map(teamOf).filter((t): t is Team => !!t);
+}
+
+/** A memory folder as a team stores it: forward slashes, no slashes at either end. */
+export function cleanFolder(folder: string): string {
+  return folder.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+/** Is a team's own data (roles, folder, repo, boss) off? Nothing beyond the chart itself. */
+export function plainTeam(t: ChannelTeam): boolean {
+  return !t.folder && !t.repo && !t.reportsTo && t.nodes.every((n) => !n.role && !n.roleNotes);
+}
+
+/**
+ * Everyone a team reports to, nearest first: its boss, then whoever a team the boss leads
  * reports to, and so on. Stops at the top or at a loop.
  */
-export function teamChain(team: Pick<Team, "reportsTo">, teams: Pick<Team, "leadId" | "reportsTo">[]): string[] {
+export function teamChain(team: Pick<Team, "reportsTo">, teams: Pick<Team, "leads" | "reportsTo">[]): string[] {
   const out: string[] = [];
   let boss = team.reportsTo;
   while (boss && !out.includes(boss)) {
     out.push(boss);
-    boss = teams.find((t) => t.leadId === boss && t.reportsTo)?.reportsTo ?? null;
+    const b = boss;
+    boss = teams.find((t) => t.leads.includes(b) && t.reportsTo)?.reportsTo ?? null;
   }
   return out;
 }
@@ -17,22 +83,6 @@ export function teamChain(team: Pick<Team, "reportsTo">, teams: Pick<Team, "lead
 /** Teams that report to this agent, directly or further down the chain. */
 export function teamsBelow(agentId: string, teams: Team[]): Team[] {
   return teams.filter((t) => teamChain(t, teams).includes(agentId));
-}
-
-/** Members at the top of the team chart: nobody on the team above them. */
-export function teamRoots(team: Pick<Team, "members">): Team["members"] {
-  const ids = new Set(team.members.map((m) => m.agentId));
-  return team.members.filter((m) => !m.managerId || !ids.has(m.managerId));
-}
-
-/** Would making `managerId` this agent's manager put it above itself? */
-export function wouldLoop(team: Pick<Team, "members">, agentId: string, managerId: string): boolean {
-  const seen = new Set<string>();
-  for (let cur: string | null = managerId; cur && !seen.has(cur); cur = team.members.find((m) => m.agentId === cur)?.managerId ?? null) {
-    if (cur === agentId) return true;
-    seen.add(cur);
-  }
-  return false;
 }
 
 /** Someone who could review a piece of work: where they run, what the team calls them. */

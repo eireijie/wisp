@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { Agent, AgentEvent, Approval, Channel, ChannelNotify, ClientEvent, Computer, Discussion, Features, Message, LeadStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
+import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@warren/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
@@ -20,8 +20,11 @@ export interface Me {
 /** A discussion plus who has answered in its current round. */
 export type DiscussionInfo = Discussion & { progress: { agentId: string; status: string }[] };
 
-/** A team as the API returns it: `above` is who it reports to, nearest first. */
-export type TeamInfo = Team & { above: string[] };
+/** Every channel's team: a channel is the only kind of team. */
+export function useTeams(): Team[] {
+  const channels = useStore((s) => s.channels);
+  return useMemo(() => channelTeams(channels), [channels]);
+}
 
 export interface Member {
   id: string;
@@ -79,7 +82,6 @@ interface State {
   sections: Section[];
   agents: Agent[];
   members: Member[];
-  teams: TeamInfo[];
   discussions: Record<string, DiscussionInfo>;
   messages: Record<string, Message[]>; // top-level by channel
   threads: Record<string, Message[]>; // replies by thread root id
@@ -116,7 +118,6 @@ interface State {
   loadChannel(id: string): Promise<void>;
   loadThread(channelId: string, rootId: string): Promise<void>;
   refreshAgents(): Promise<void>;
-  refreshTeams(): Promise<void>;
   refreshComputers(): Promise<void>;
   refreshLead(): Promise<void>;
   refreshOrgs(): Promise<void>;
@@ -150,7 +151,6 @@ export const useStore = create<State>((set, get) => ({
   sections: [],
   agents: [],
   members: [],
-  teams: [],
   discussions: {},
   messages: {},
   threads: {},
@@ -173,16 +173,14 @@ export const useStore = create<State>((set, get) => ({
   channelBrowser: null,
 
   async load() {
-    const [me, channels, sections, agents, members, teams] = await Promise.all([
+    const [me, channels, sections, agents, members] = await Promise.all([
       api<Me>("GET", "/api/me"),
       api<ChannelInfo[]>("GET", "/api/channels"),
       api<Section[]>("GET", "/api/sections"),
       api<Agent[]>("GET", "/api/agents"),
       api<Member[]>("GET", "/api/members"),
-      // a hub older than this page has no teams; still load everything else
-      api<TeamInfo[]>("GET", "/api/teams").catch(() => [] as TeamInfo[]),
     ]);
-    set({ me, channels, sections, agents, members, teams });
+    set({ me, channels, sections, agents, members });
     get().refreshComputers();
     get().refreshLead();
     get().refreshOrgs();
@@ -236,11 +234,6 @@ export const useStore = create<State>((set, get) => ({
 
   setDiscussion(d) {
     set((s) => ({ discussions: { ...s.discussions, [d.id]: d } }));
-  },
-
-  async refreshTeams() {
-    const [teams, agents] = await Promise.all([api<TeamInfo[]>("GET", "/api/teams").catch(() => get().teams), api<Agent[]>("GET", "/api/agents")]);
-    set({ teams, agents });
   },
 
   async refreshChannels() {
@@ -307,7 +300,7 @@ export const useStore = create<State>((set, get) => ({
     if (connected) {
       const { activeChannel } = get();
       if (activeChannel) get().loadChannel(activeChannel);
-      get().refreshTeams();
+      get().refreshAgents();
       get().refreshChannels();
       get().refreshComputers();
       get().refreshOrgs();
@@ -360,13 +353,12 @@ export const useStore = create<State>((set, get) => ({
       set((s) => applyReactions(s, e.messageId, e.reactions));
     } else if (e.type === "channels_changed") {
       get().refreshChannels();
+      // with no lead picked, the lead can come from a channel's team
+      get().refreshLead();
     } else if (e.type === "agents_changed") {
       get().refreshAgents();
     } else if (e.type === "sections_changed") {
       get().refreshSections();
-    } else if (e.type === "teams_changed") {
-      get().refreshTeams();
-      get().refreshLead();
     } else if (e.type === "lead_changed") {
       get().refreshLead();
     } else if (e.type === "discussion") {

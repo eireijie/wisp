@@ -112,8 +112,9 @@ export class WarrenClient {
   mergeTask(taskId: string) {
     return this.request<{ ok: boolean; output: string }>("POST", `/api/tasks/${taskId}/merge`);
   }
+  /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
   teams() {
-    return this.request<{ id: string; name: string; description: string; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
+    return this.request<{ id: string; channelId: string; name: string; leads: string[]; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
   }
   /** Give an agent ("@nova"), a team, or "all agents" read access to a note or folder you can edit. */
   shareNote(path: string, withWho: string) {

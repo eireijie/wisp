@@ -128,9 +128,10 @@ final class ManagementTests: XCTestCase {
     XCTAssertTrue(store.canManage)
     store.channels[0].name = "general"
     XCTAssertTrue(store.isProtected(store.channels[0]))
+    // a channel with a team can be archived and deleted like any other
     store.channels[0].name = "team-channel"
-    store.teams = [WorkspaceTeam(channelId: "c1")]
-    XCTAssertTrue(store.isProtected(store.channels[0]))
+    store.channels[0].settings = Channel.Settings(team: ChannelTeam(nodes: [.init(agentId: "a1", lead: true, x: 0, y: 0)], edges: []))
+    XCTAssertFalse(store.isProtected(store.channels[0]))
     reply("DELETE", "/api/sections/s1", #"{"ok":true}"#)
     try await store.deleteSection("s1")
     XCTAssertTrue(store.sections.isEmpty)

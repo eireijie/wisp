@@ -9,11 +9,10 @@ import { MAX_MADE_DEPTH, agentPolicy } from "./policy.ts";
  * down to MAX_MADE_DEPTH. The organization caps how many agent-made agents exist at once.
  */
 
-/** Does this agent lead anything: a channel's team, a team, or the organization (when an owner picked it)? */
+/** Does this agent lead anything: a channel's team, or the organization (when an owner picked it)? */
 export function isLead(hub: Hub, agent: Pick<Agent, "id" | "workspaceId">): boolean {
   const { store } = hub;
   if (store.channels(agent.workspaceId).some((ch) => ch.settings.team?.nodes.some((n) => n.lead && n.agentId === agent.id))) return true;
-  if (store.teams(agent.workspaceId).some((t) => t.leadId === agent.id)) return true;
   return pickedLead(store, agent.workspaceId) === agent.id;
 }
 

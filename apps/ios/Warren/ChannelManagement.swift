@@ -109,7 +109,7 @@ struct ChannelTeamScreen: View {
           : "The leads read every new message in #\(current.name) and hand out the work along the arrows.")
           .font(.subheadline).foregroundStyle(.secondary)
       }
-      ChannelTeamEditor(team: $team, editable: editable, channelId: channel.id)
+      ChannelTeamEditor(team: $team, editable: editable, channelId: channel.id, more: true)
       if !editable {
         Section { Text(current.archivedAt != nil ? "This channel is archived." : "Guests can't change channels.").font(.footnote).foregroundStyle(.secondary) }
       }

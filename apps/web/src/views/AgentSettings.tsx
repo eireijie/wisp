@@ -4,8 +4,8 @@ import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from
 import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { ApiError, api } from "../api.ts";
-import { useStore } from "../store.ts";
-import { go, type AgentTab } from "../router.ts";
+import { useStore, useTeams } from "../store.ts";
+import { go, href, type AgentTab } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
@@ -967,7 +967,7 @@ export function runTitle(trigger: string | null): string {
 function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: NodeInfo[]; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const computers = useStore((s) => s.computers);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [soul, setSoul] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -1055,13 +1055,13 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                 {myTeams.length || bossOf.length ? (
                   <>
                     {myTeams.map((t, i) => {
-                      const role = t.leadId === agent.id ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
+                      const role = t.leads.includes(agent.id) ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
                       return (
                         <span key={t.id}>
                           {i > 0 && ", "}
                           {role ? `${role} on ` : "on "}
-                          <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
-                            {t.name}
+                          <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
+                            #{t.name}
                           </a>
                         </span>
                       );
@@ -1072,8 +1072,8 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                         {bossOf.map((t, i) => (
                           <span key={t.id}>
                             {i > 0 && ", "}
-                            <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
-                              {t.name}
+                            <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
+                              #{t.name}
                             </a>
                           </span>
                         ))}
@@ -1081,12 +1081,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                     )}
                   </>
                 ) : (
-                  <>
-                    Works on its own.{" "}
-                    <a className="text-accent-text hover:underline" href="#/teams">
-                      Put it on a team
-                    </a>
-                  </>
+                  "Works on its own."
                 )}
               </p>
             </>

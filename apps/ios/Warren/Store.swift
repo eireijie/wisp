@@ -526,12 +526,12 @@ final class Store {
     case "channels_changed":
       channelVersion += 1
       Task { await refreshChannels() }
+      // a channel's team may have changed, and with it the automatic lead
+      Task { try? await refreshTeams(); try? await refreshTaskLead() }
     case "sections_changed":
       Task { do { try await refreshSections() } catch { syncError = error.localizedDescription } }
     case "agent_created", "agent_updated", "agent_removed", "agents_changed":
       Task { do { try await refreshAgents() } catch { syncError = error.localizedDescription } }
-    case "teams_changed":
-      Task { do { try await refreshManagement(); try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
     case "lead_changed":
       Task { do { try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
     case "tasks_changed":

@@ -30,7 +30,7 @@ declare global {
 /** Keep the tray current even when the buddy is turned off. With the Desk buddy feature off, the app hears no agents, so no buddy appears. */
 export function useDesktopAgents() {
   const agents = useStore((s) => s.agents);
-  const leadId = useStore((s) => s.teams.find((t) => t.leadId)?.leadId ?? null);
+  const leadId = useStore((s) => s.lead?.lead ?? null);
   const buddy = useFeature("buddy");
   useEffect(() => {
     window.warrenDesktop?.buddy.agents(buddy ? agents.map(({ id, name }) => ({ id, name })) : [], buddy ? leadId : null);

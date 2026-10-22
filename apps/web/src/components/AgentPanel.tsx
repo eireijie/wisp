@@ -4,7 +4,7 @@ import { harnessLabel, type Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
-import { useStore, type ComputerInfo, type LiveRun } from "../store.ts";
+import { useStore, useTeams, type ComputerInfo, type LiveRun } from "../store.ts";
 import { useFeature } from "../features.ts";
 import { go, href, type AgentTab } from "../router.ts";
 import { Advanced, useSimple } from "../experience.tsx";
@@ -148,6 +148,7 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
   const simple = useSimple();
+  const teams = useTeams();
   const voice = useFeature("voice");
   const next = simple ? setupNextStep(agent, devices) : null;
   const device = devices?.find((d) => d.id === agent.nodeId);
@@ -158,7 +159,8 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
   const harnessRow: Row = ["Harness", HARNESS_LABELS[agent.harness]];
   const modelRow: Row = ["Model", agent.model ? `${prettyModel(agent.model)}${agent.settings.effort ? ` · ${effortName(agent.settings.effort)}` : ""}${agent.settings.fast ? " · Fast" : ""}` : "Default"];
   const accessRow: Row = ["Access", ACCESS_LABEL[agent.settings.access ?? "edit"]];
-  const tail: Row[] = [...(agent.groups.length ? [["Teams", agent.groups.join(", ")] as Row] : []), ["Handle", `@${agent.handle}`], ["Joined", timeAgo(agent.createdAt)]];
+  const onTeams = teams.filter((t) => t.members.some((m) => m.agentId === agent.id)).map((t) => `#${t.name}`);
+  const tail: Row[] = [...(onTeams.length ? [["Teams", onTeams.join(", ")] as Row] : []), ["Handle", `@${agent.handle}`], ["Joined", timeAgo(agent.createdAt)]];
   const technical: Row[] = [harnessRow, modelRow, accessRow];
   const table = (list: Row[]) => (
     <dl className="rounded-2xl bg-panel border border-line divide-y divide-line text-sm">

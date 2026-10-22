@@ -91,17 +91,20 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "agents_list",
-    { description: "List agents in the workspace with their harness, status and teams." },
-    safe(async () => json((await client.agents()).map((a) => ({ handle: `@${a.handle}`, name: a.name, harness: a.harness, status: a.status, teams: a.groups })))),
+    { description: "List agents in the workspace with their harness, status and the channel teams they're on." },
+    safe(async () => {
+      const [agents, teams] = await Promise.all([client.agents(), client.teams()]);
+      return json(agents.map((a) => ({ handle: `@${a.handle}`, name: a.name, harness: a.harness, status: a.status, teams: teams.filter((t) => t.members.some((m) => m.agentId === a.id)).map((t) => `#${t.name}`) })));
+    }),
   );
 
   server.registerTool(
     "teams_list",
-    { description: "List teams: their lead, members and roles, who they report to, their channel and their memory folder." },
+    { description: "List channel teams (every team is a channel's): their leads, members and roles, who they report to, and their memory folder and repo." },
     safe(async () => {
       const [teams, agents] = await Promise.all([client.teams(), client.agents()]);
       const h = (id: string | null) => (id ? `@${agents.find((a) => a.id === id)?.handle ?? "?"}` : null);
-      return json(teams.map((t) => ({ name: t.name, description: t.description, lead: h(t.leadId), reportsTo: h(t.reportsTo), memory: `${t.folder}/`, repo: t.repo, members: t.members.map((m) => ({ agent: h(m.agentId), role: m.role || null })) })));
+      return json(teams.map((t) => ({ channel: `#${t.name}`, leads: t.leads.map(h), reportsTo: h(t.reportsTo), memory: t.folder ? `${t.folder}/` : null, repo: t.repo, members: t.members.map((m) => ({ agent: h(m.agentId), role: m.role || null })) })));
     }),
   );
 
@@ -113,7 +116,7 @@ export async function createWarrenMcp(client: WarrenClient) {
       description:
         "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done. Work you hand out while working on a task becomes a subtask of it (or name the parent with parent_task_id); if you're the lead, this is how you assign the pieces of a task to agents by their roles.",
       inputSchema: {
-        to: z.string().describe('agent handle, e.g. @nova, or "team:<name>" for a team\'s lead'),
+        to: z.string().describe('agent handle, e.g. @nova, or "#channel" for the lead of that channel\'s team'),
         title: z.string(),
         brief: z.string().describe("everything they need to do the work"),
         channel: z.string().optional(),
@@ -170,7 +173,7 @@ export async function createWarrenMcp(client: WarrenClient) {
         topic: z.string(),
         goal: z.string().optional().describe("what the discussion should decide"),
         participants: z.array(z.string()).optional().describe("agent handles; default: everyone on the team"),
-        team: z.string().optional().describe("team name; its channel and decisions folder are used"),
+        team: z.string().optional().describe("a channel with a team, e.g. #web; the discussion happens there and its decision goes in the team's memory folder"),
         rounds: z.number().int().min(1).max(5).optional(),
         moderator: z.string().optional(),
       },

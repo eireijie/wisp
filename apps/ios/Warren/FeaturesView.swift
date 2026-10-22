@@ -67,7 +67,6 @@ extension FeatureKey {
     case .background: .purple
     case .routines: .blue
     case .teach: .green
-    case .teams: .orange
     case .tasks: .pink
     case .voice: .teal
     case .buddy: .indigo

@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
  *   #/dashboard (or #/inbox)         the Inbox: what's waiting on you, what agents are doing, new replies
  *   #/vault[/<path>]                 memory vault
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
- *   #/teams[/<teamId>[/<tab>]]       teams, and each team (members, work, settings)
  *   #/about                          what agents remember about you
  *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
@@ -29,7 +28,6 @@ export type Route =
   | { view: "dashboard" }
   | { view: "vault"; path: string | null }
   | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
-  | { view: "teams"; teamId: string | null; tab?: TeamTab | null }
   | { view: "about" }
   | { view: "tasks" }
   | { view: "computers"; computerId: string | null; teach?: string | null }
@@ -47,8 +45,6 @@ export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", 
 export type AgentTab = (typeof AGENT_TABS)[number];
 export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "mobile", "general", "access", "agent-defaults", "features", "people", "agents", "runtimes", "memory", "computers", "apps", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
-export const TEAM_TABS = ["members", "work", "settings"] as const;
-export type TeamTab = (typeof TEAM_TABS)[number];
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
@@ -67,7 +63,8 @@ export function parseRoute(hash: string): Route {
     case "agents":
       return { view: "agents", agentId: parts[1] ?? null, tab: AGENT_TABS.find((t) => t === parts[2]) ?? null };
     case "teams":
-      return { view: "teams", teamId: parts[1] ?? null, tab: TEAM_TABS.find((t) => t === parts[2]) ?? null };
+      // teams are channels now; an old link lands on the channel (a team's id is its channel's)
+      return { view: "chat", channelId: parts[1] ?? null, threadId: null };
     case "about":
       return { view: "about" };
     case "tasks":
@@ -109,8 +106,6 @@ export function href(r: Route): string {
       return "#/vault" + (r.path ? "/" + r.path.split("/").map(encodeURIComponent).join("/") : "");
     case "agents":
       return "#/agents" + (r.agentId ? `/${r.agentId}${r.tab ? `/${r.tab}` : ""}` : "");
-    case "teams":
-      return "#/teams" + (r.teamId ? `/${r.teamId}${r.tab && r.tab !== "members" ? `/${r.tab}` : ""}` : "");
     case "about":
       return "#/about";
     case "tasks":

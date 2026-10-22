@@ -144,46 +144,8 @@ export interface Agent {
   nodeId: string | null;
   /** the computer it sees and uses (computers.ts); null = headless */
   computerId: string | null;
-  /** names of the teams it's on */
-  groups: string[];
   settings: AgentSettings;
   status: "online" | "busy" | "offline";
-  createdAt: string;
-}
-
-/** An agent's place on a team: a role title plus what that role means for how it works. */
-export interface TeamMember {
-  agentId: string;
-  role: string;
-  roleNotes: string;
-  /** the teammate this agent reports to (a line on the team chart); null at the top */
-  managerId: string | null;
-  /** where its card sits on the team chart; null = laid out automatically */
-  x: number | null;
-  y: number | null;
-}
-
-/**
- * Agents who work together: a shared memory pool (`folder`), a channel, a lead, and optionally
- * an agent they report to (their boss). Teams can report up a chain of bosses.
- */
-export interface Team {
-  id: string;
-  workspaceId: string;
-  /** lowercase slug, used in @team mentions, rule subjects and the default folder */
-  name: string;
-  /** a label shown next to the name, e.g. "🛠️" */
-  emoji: string;
-  description: string;
-  leadId: string | null;
-  reportsTo: string | null;
-  channelId: string | null;
-  /** the team's memory pool, e.g. teams/web */
-  folder: string;
-  /** git repository the team codes in (URL or a path on the agents' device); null = no shared repo */
-  repo: string | null;
-  baseBranch: string;
-  members: TeamMember[];
   createdAt: string;
 }
 
@@ -222,6 +184,14 @@ export interface ChannelSettings {
 export interface ChannelTeam {
   nodes: ChannelTeamNode[];
   edges: { from: string; to: string }[];
+  /** a memory folder the whole team reads and writes, e.g. teams/web; missing or "" = none */
+  folder?: string;
+  /** git repository the team codes in (URL or a path on the agents' device); missing or null = none */
+  repo?: string | null;
+  /** the branch its work merges into; "main" when missing */
+  baseBranch?: string;
+  /** an agent outside the team that it reports to (its boss), who can see and steer its work */
+  reportsTo?: string | null;
 }
 
 export interface ChannelTeamNode {
@@ -230,6 +200,9 @@ export interface ChannelTeamNode {
   /** where it sits on the flow chart */
   x: number;
   y: number;
+  /** its role on this team, e.g. "Reviewer", and what that role means for how it works */
+  role?: string;
+  roleNotes?: string;
 }
 
 export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null, replyInThread: false, instructions: "", team: null };
@@ -261,6 +234,7 @@ export function teamProblem(team: ChannelTeam): string | null {
     return loop;
   };
   if (team.nodes.some((n) => walk(n.agentId, new Set()))) return "The arrows go round in a loop.";
+  if (team.reportsTo && ids.has(team.reportsTo)) return "The team can't report to an agent on it.";
   return null;
 }
 
@@ -493,6 +467,7 @@ export interface Discussion {
   channelId: string;
   /** the message that started it; the discussion happens in its thread */
   threadId: string;
+  /** no longer set: a discussion's team is its channel's */
   teamId: string | null;
   topic: string;
   goal: string;

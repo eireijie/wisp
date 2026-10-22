@@ -128,6 +128,9 @@ struct ChannelTeam: Codable, Hashable {
     var lead: Bool
     var x: Double
     var y: Double
+    /** its role on this team and what that role means; nil = none */
+    var role: String? = nil
+    var roleNotes: String? = nil
   }
   struct Edge: Codable, Hashable {
     var from: String
@@ -135,6 +138,13 @@ struct ChannelTeam: Codable, Hashable {
   }
   var nodes: [Node]
   var edges: [Edge]
+  /** a memory folder the whole team shares, e.g. teams/web; nil or "" = none */
+  var folder: String? = nil
+  /** the git repository it codes in, and the branch work merges into */
+  var repo: String? = nil
+  var baseBranch: String? = nil
+  /** an agent outside the team it reports to */
+  var reportsTo: String? = nil
 
   static let empty = ChannelTeam(nodes: [], edges: [])
 }

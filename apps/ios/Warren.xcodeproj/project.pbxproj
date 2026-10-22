@@ -62,7 +62,6 @@
 		8439F5DD9C42AA72FEDB19A3 /* Store+Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D17CB3BB1F2B46607158589 /* Store+Workspace.swift */; };
 		869FDEB84F4FD346692997B4 /* WorkspaceSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C27C3B28D6897C71174A1FAD /* WorkspaceSettingsViews.swift */; };
 		88DD7C0796576B91653C4AFE /* MemoryStorageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA1FF32319B20D4FB6D2F3E /* MemoryStorageView.swift */; };
-		896D9D32A19212480366F514 /* TeamsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99E34DBFBF950C86A81FF9C5 /* TeamsView.swift */; };
 		8E57AEB79D8F5160884273E4 /* Store+Orgs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1159C25520A8D7DE311DF1 /* Store+Orgs.swift */; };
 		8E8238BC2AA81212FCFB0CF9 /* ChannelTeam.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045B8FA3150C4F24FDCE0906 /* ChannelTeam.swift */; };
 		9090DBF9F852BDF0CBF86AF3 /* Ghost.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB970218AAD524154ED3477B /* Ghost.swift */; };
@@ -166,7 +165,6 @@
 		843A08CE0677A119EF12718C /* appearance-fixtures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "appearance-fixtures.json"; sourceTree = "<group>"; };
 		861495D70C68EFBF004B9B8C /* UsageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageView.swift; sourceTree = "<group>"; };
 		92F38491D07907E8444EF1B8 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModels.swift; sourceTree = "<group>"; };
-		99E34DBFBF950C86A81FF9C5 /* TeamsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamsView.swift; sourceTree = "<group>"; };
 		9D2D365DC64E7E62860E1D71 /* GhostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostTests.swift; sourceTree = "<group>"; };
 		A322AFA42BD9D87B68E189DF /* ChannelTeamEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTeamEditor.swift; sourceTree = "<group>"; };
 		A5FB391D2FC97B26EED016CD /* ConnectorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsView.swift; sourceTree = "<group>"; };
@@ -304,7 +302,6 @@
 				4D62FAD8E0A01280D6E11A13 /* Style.swift */,
 				50BE0F256383CCC38F3D6C70 /* TaskModels.swift */,
 				F567995BD9ED382C3A67A778 /* TasksView.swift */,
-				99E34DBFBF950C86A81FF9C5 /* TeamsView.swift */,
 				C1E5317E0C4B1BDFEECBAAFD /* UpdateModels.swift */,
 				05AC05D5D4D884016B651935 /* UpdatesView.swift */,
 				861495D70C68EFBF004B9B8C /* UsageView.swift */,
@@ -552,7 +549,6 @@
 				76BEFA83718096B2F215029F /* Style.swift in Sources */,
 				1009EDAE3F04914E3DC47451 /* TaskModels.swift in Sources */,
 				4F00554B9DB2E00F8D3DDA59 /* TasksView.swift in Sources */,
-				896D9D32A19212480366F514 /* TeamsView.swift in Sources */,
 				57E7E34E29A09572FF2B86A1 /* UpdateModels.swift in Sources */,
 				AA294957C7B80CB7C02A4683 /* UpdatesView.swift in Sources */,
 				5332DAC571003723AEE0BFCC /* UsageView.swift in Sources */,

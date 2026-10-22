@@ -38,7 +38,7 @@ export function addToTeam(team: ChannelTeam, agentId: string, at?: { x: number; 
   const lead = team.nodes.find((n) => n.lead);
   const spot = at ?? freeSpot(team, lead ? 1 : 0);
   const node: ChannelTeamNode = { agentId, lead: !lead, x: spot.x, y: spot.y };
-  return { nodes: [...team.nodes, node], edges: lead ? [...team.edges, { from: lead.agentId, to: agentId }] : team.edges };
+  return { ...team, nodes: [...team.nodes, node], edges: lead ? [...team.edges, { from: lead.agentId, to: agentId }] : team.edges };
 }
 
 /** A cubic curve between two points that leaves `a` heading down, right or left, with its midpoint (for the remove button). */
@@ -82,7 +82,7 @@ export function TeamChart({
   const byId = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const nodes = team.nodes.filter((n) => byId.has(n.agentId));
   const edges = team.edges.filter((e) => byId.has(e.from) && byId.has(e.to));
-  const live: ChannelTeam = { nodes, edges };
+  const live: ChannelTeam = { ...team, nodes, edges };
   const canvas = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ agentId: string; dx: number; dy: number } | null>(null);
   const [link, setLink] = useState<{ from: string; x: number; y: number; moved: boolean } | null>(null);
@@ -104,7 +104,7 @@ export function TeamChart({
   const connect = (from: string, to: string) => {
     const why = arrowProblem(live, from, to);
     if (why) return setFlash(why);
-    if (!edges.some((e) => e.from === from && e.to === to)) set({ nodes: team.nodes, edges: [...team.edges, { from, to }] });
+    if (!edges.some((e) => e.from === from && e.to === to)) set({ ...team, edges: [...team.edges, { from, to }] });
   };
 
   // drawing an arrow: follow the pointer, and drop it on the agent under it
@@ -157,14 +157,15 @@ export function TeamChart({
   const toggleLead = (n: ChannelTeamNode) => {
     const lead = !n.lead;
     set({
+      ...team,
       nodes: team.nodes.map((m) => (m.agentId === n.agentId ? { ...m, lead } : m)),
       // a lead reads everything, so nobody hands it work
       edges: lead ? team.edges.filter((e) => e.to !== n.agentId) : team.edges,
     });
   };
-  const remove = (agentId: string) => set({ nodes: team.nodes.filter((n) => n.agentId !== agentId), edges: team.edges.filter((e) => e.from !== agentId && e.to !== agentId) });
+  const remove = (agentId: string) => set({ ...team, nodes: team.nodes.filter((n) => n.agentId !== agentId), edges: team.edges.filter((e) => e.from !== agentId && e.to !== agentId) });
   const add = (agentId: string, at?: { x: number; y: number }) => {
-    set(addToTeam({ nodes, edges }, agentId, at));
+    set(addToTeam({ ...team, nodes, edges }, agentId, at));
   };
 
   const width = Math.max(...nodes.map((n) => n.x + W + PAD), 0);
@@ -219,7 +220,7 @@ export function TeamChart({
                 return (
                   <g key={`${e.from}>${e.to}`} className={cx(busy ? "text-ok" : hoverEdge === i ? "text-muted" : "text-faint")}>
                     <path d={c.d} fill="none" stroke="currentColor" strokeWidth={hoverEdge === i ? 2.5 : 2} markerEnd="url(#team-arrow)" strokeDasharray={busy ? "6 5" : undefined} className={busy ? "team-flow" : undefined} />
-                    {!readOnly && <path d={c.d} fill="none" stroke="transparent" strokeWidth={16} className="pointer-events-auto cursor-pointer" onPointerEnter={() => setHoverEdge(i)} onPointerLeave={() => setHoverEdge((h) => (h === i ? null : h))} onClick={() => set({ nodes: team.nodes, edges: team.edges.filter((x) => !(x.from === e.from && x.to === e.to)) })} />}
+                    {!readOnly && <path d={c.d} fill="none" stroke="transparent" strokeWidth={16} className="pointer-events-auto cursor-pointer" onPointerEnter={() => setHoverEdge(i)} onPointerLeave={() => setHoverEdge((h) => (h === i ? null : h))} onClick={() => set({ ...team, edges: team.edges.filter((x) => !(x.from === e.from && x.to === e.to)) })} />}
                   </g>
                 );
               })}
@@ -259,7 +260,7 @@ export function TeamChart({
                   <AgentAvatar agent={a} size={34} live={!!busy} interactive={false} />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold truncate agent-ink">{a.name}</div>
-                    <div className="text-[11px] text-muted truncate">{busy ? <span className="text-ok font-medium">{busy}</span> : a.settings.role?.trim() || `@${a.handle}`}</div>
+                    <div className="text-[11px] text-muted truncate">{busy ? <span className="text-ok font-medium">{busy}</span> : n.role?.trim() || a.settings.role?.trim() || `@${a.handle}`}</div>
                   </div>
                   {readOnly ? (
                     n.lead && (
@@ -387,6 +388,6 @@ export function TeamRules({ className }: { className?: string }) {
 export function liveTeam(team: ChannelTeam | null, agents: Pick<Agent, "id">[]): ChannelTeam | null {
   if (!team) return null;
   const ids = new Set(agents.map((a) => a.id));
-  return { nodes: team.nodes.filter((n) => ids.has(n.agentId)), edges: team.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
+  return { ...team, nodes: team.nodes.filter((n) => ids.has(n.agentId)), edges: team.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, Inbox, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, Users, RefreshCw, X } from "lucide-react";
+import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, Inbox, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useInboxCount, useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -16,7 +16,6 @@ import { NodesView } from "./views/NodesView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
 import { WelcomeView } from "./views/WelcomeView.tsx";
-import { TeamsView } from "./views/TeamsView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
 import { NewTask, TasksView } from "./views/TasksView.tsx";
@@ -142,8 +141,6 @@ function Workspace() {
         return <VaultView path={route.path} />;
       case "agents":
         return <AgentsView agentId={route.agentId} tab={route.tab ?? null} />;
-      case "teams":
-        return <TeamsView teamId={route.teamId} tab={route.tab ?? null} onBack={phone ? toYou : undefined} />;
       case "about":
         return <AboutView onBack={phone ? toYou : undefined} />;
       case "tasks":
@@ -244,7 +241,7 @@ function TabBar({ route }: { route: Route }) {
       {label}
     </a>
   );
-  const youViews = ["you", "settings", "nodes", "welcome", "teams", "about", "vault", "connectors", "skills", "tasks", "help", "dashboard"];
+  const youViews = ["you", "settings", "nodes", "welcome", "about", "vault", "connectors", "skills", "tasks", "help", "dashboard"];
   const inbox = useInboxCount();
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-2 pointer-events-none safe-bottom">
@@ -328,7 +325,6 @@ function YouPage() {
         <div className="rounded-3xl bg-bg overflow-hidden">
           {row(<BookOpen size={17} strokeWidth={2.4} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share", "#af52de")}
           {row(<Brain size={17} strokeWidth={2.4} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you", "#ff2d55")}
-          {features.teams && row(<Users size={17} strokeWidth={2.4} />, "Teams", href({ view: "teams", teamId: null }), undefined, "Groups of helpers that work together", "#5856d6")}
           {row(<Plug size={17} strokeWidth={2.4} />, "Connected apps", href({ view: "connectors" }), undefined, "Gmail, Slack and other apps helpers can use", "#ff9500")}
           {row(<Wand2 size={17} strokeWidth={2.4} />, "Skills", href({ view: "skills" }), undefined, "Things helpers know how to do", "#ffcc00")}
           {row(<Server size={17} strokeWidth={2.4} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren", "#64748b")}

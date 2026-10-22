@@ -18,6 +18,7 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
+import { foldTeams } from "./fold-teams.ts";
 import type { Store } from "./store.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -96,21 +97,15 @@ export class Hub {
     return this.vaults.get(workspaceId);
   }
 
-  /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
-  async ensureTeams() {
-    const rows = this.store.db.prepare("SELECT id, workspace_id FROM teams WHERE channel_id IS NULL").all() as { id: string; workspace_id: string }[];
-    for (const r of rows) {
-      const team = this.store.team(r.id)!;
-      const name = `team-${team.name}`;
-      const channel = this.store.channelByName(r.workspace_id, name) ?? this.store.createChannel(r.workspace_id, name, "channel", `Team ${team.name}`);
-      this.store.updateTeam(team.id, { channelId: channel.id });
-      for (const m of team.members) this.store.addChannelMember(channel.id, { kind: "agent", id: m.agentId });
-      for (const p of this.store.members(r.workspace_id).filter((m) => m.role === "owner")) this.store.addChannelMember(channel.id, { kind: "user", id: p.id });
-      const brief = `${team.folder}/README.md`;
-      const vault = this.vault(r.workspace_id);
+  /** Old teams (and v0.1 groups) become their channel's team; each memory folder keeps a brief. */
+  async foldTeams() {
+    for (const t of foldTeams(this.store)) {
+      if (!t.folder) continue;
+      const brief = `${t.folder}/README.md`;
+      const vault = this.vault(t.workspaceId);
       if (!vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
         await vault
-          .write(brief, `# Team ${team.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for team ${team.name}`)
+          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for #${t.name}`)
           .catch(() => undefined);
       }
     }
@@ -821,10 +816,9 @@ export class Hub {
     const me = team?.nodes.find((n) => n.agentId === agentId);
     if (!team || !me) return "";
     const live = team.nodes.filter((n) => this.store.agent(n.agentId));
-    const describe = (id: string) => {
-      const a = this.store.agent(id)!;
-      return `${this.handleOf(id)} (${a.name}${a.settings.role?.trim() ? `, ${a.settings.role.trim()}` : ""})`;
-    };
+    // its role on this team, else the one in its own settings
+    const roleOf = (id: string) => team.nodes.find((n) => n.agentId === id)?.role?.trim() || this.store.agent(id)?.settings.role?.trim() || "";
+    const describe = (id: string) => `${this.handleOf(id)} (${this.store.agent(id)!.name}${roleOf(id) ? `, ${roleOf(id)}` : ""})`;
     const handles = (ids: string[]) => ids.filter((id) => this.store.agent(id)).map(describe).join(", ");
     const leads = live.filter((n) => n.lead).map((n) => n.agentId);
     const fromMe = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
@@ -848,7 +842,8 @@ export class Hub {
           fromMe.length ? `You can hand pieces of your work to ${handles(fromMe)} with task_delegate.` : "",
           "When you finish a task, report the result with task_update so whoever handed it to you hears back.",
         ];
-    return [`## Your team in #${channel.name}`, ...job.filter(Boolean), `The whole team:\n${chart}`].join("\n");
+    const role = me.role?.trim() ? `Your role here: ${me.role.trim()}.${me.roleNotes?.trim() ? ` ${me.roleNotes.trim()}` : ""}` : "";
+    return [`## Your team in #${channel.name}`, role, ...job.filter(Boolean), `The whole team:\n${chart}`].filter(Boolean).join("\n");
   }
 
   /**

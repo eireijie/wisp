@@ -12,6 +12,8 @@ struct ChannelTeamEditor: View {
   var editable = true
   /** the channel it's the team of, to show who's working there */
   var channelId: String? = nil
+  /** show More: roles, a memory folder, a repo and who the team reports to */
+  var more = false
   @State private var creating = false
 
   private var others: [Agent] { store.agents.filter { !team.contains($0.id) } }
@@ -60,6 +62,9 @@ struct ChannelTeamEditor: View {
         if others.isEmpty && store.agents.isEmpty { Text("You don't have any agents yet. Create one for this team.") }
       }
     }
+    if more && !team.nodes.isEmpty {
+      Section { TeamMore(team: $team, editable: editable) }
+    }
     Section {
       DisclosureGroup("How the team works") {
         VStack(alignment: .leading, spacing: 8) {
@@ -79,6 +84,46 @@ struct ChannelTeamEditor: View {
       // back to the team with the new agent on it
       AddAgent { agent in team = team.adding(agent.id) }
     }
+  }
+}
+
+/** The rest of a team, out of the way until it's wanted: each agent's role, a shared memory folder, a repo, and who it reports to. */
+private struct TeamMore: View {
+  @Environment(Store.self) private var store
+  @Binding var team: ChannelTeam
+  var editable: Bool
+
+  var body: some View {
+    DisclosureGroup("More") {
+      ForEach(team.nodes, id: \.agentId) { n in
+        VStack(alignment: .leading, spacing: 6) {
+          Text(store.agent(n.agentId)?.name ?? "Agent").font(.subheadline.weight(.medium))
+          TextField("Role, e.g. Backend", text: nodeText(n.agentId, \.role))
+          if !(n.role ?? "").isEmpty || !(n.roleNotes ?? "").isEmpty {
+            TextField("What it owns and what to send its way. The agent reads this.", text: nodeText(n.agentId, \.roleNotes), axis: .vertical).font(.footnote)
+          }
+        }
+      }
+      LabeledContent("Memory folder") { TextField("teams/web", text: text(\.folder)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never) }
+      LabeledContent("Code repository") { TextField("git@github.com:you/app.git", text: text(\.repo)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never) }
+      LabeledContent("Base branch") { TextField("main", text: text(\.baseBranch)).multilineTextAlignment(.trailing).autocorrectionDisabled().textInputAutocapitalization(.never) }
+      Picker("Reports to", selection: Binding(get: { team.reportsTo ?? "" }, set: { team.reportsTo = $0.isEmpty ? nil : $0 })) {
+        Text("Nobody").tag("")
+        ForEach(store.agents.filter { !team.contains($0.id) || $0.id == team.reportsTo }) { Text("@\($0.handle)").tag($0.id) }
+      }
+    }
+    .disabled(!editable)
+  }
+
+  private func text(_ key: WritableKeyPath<ChannelTeam, String?>) -> Binding<String> {
+    Binding(get: { team[keyPath: key] ?? "" }, set: { team[keyPath: key] = $0 })
+  }
+
+  private func nodeText(_ agentId: String, _ key: WritableKeyPath<ChannelTeam.Node, String?>) -> Binding<String> {
+    Binding(
+      get: { team.node(agentId)?[keyPath: key] ?? "" },
+      set: { value in if let i = team.nodes.firstIndex(where: { $0.agentId == agentId }) { team.nodes[i][keyPath: key] = value } }
+    )
   }
 }
 

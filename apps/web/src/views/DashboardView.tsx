@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, Plus, ShieldQuestion, Users } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, Plus, ShieldQuestion } from "lucide-react";
 import type { Actor, Agent } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore, useWaitingOnYou, type LiveRun } from "../store.ts";
+import { useStore, useTeams, useWaitingOnYou, type LiveRun } from "../store.ts";
 import { useFeatures } from "../features.ts";
 import { allowanceText, useAllowance } from "../changes.ts";
 import { go, href } from "../router.ts";
@@ -39,7 +39,7 @@ const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", 
 export function DashboardView({ onBack }: { onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const live = useStore((s) => s.live);
   const computers = useStore((s) => s.computers);
   const channels = useStore((s) => s.channels);
@@ -263,23 +263,18 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             )}
           </Section>
 
-          {features.teams && (
-          <Section title="Teams" count={teams.length} more={{ label: "All teams", to: href({ view: "teams", teamId: null }) }}>
-            {teams.length === 0 ? (
-              <Blank>
-                No teams yet. <a className="text-accent-text underline" href={href({ view: "teams", teamId: null })}>Make a team</a> to group agents who work together.
-              </Blank>
-            ) : (
+          {/* each channel's team */}
+          {teams.length > 0 && (
+          <Section title="Teams" count={teams.length}>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {teams.map((t) => {
                   const members = t.members.map((m) => agents.find((a) => a.id === m.agentId)).filter((a): a is Agent => !!a);
                   const teamTasks = (tasks ?? []).filter((x) => x.teamId === t.id && (x.status === "in_progress" || x.status === "open"));
                   const active = members.some((a) => a.status === "busy") || teamTasks.some((x) => x.status === "in_progress");
                   return (
-                    <a key={t.id} href={href({ view: "teams", teamId: t.id })} className="rounded-xl border border-line bg-panel p-3 hover:shadow-panel transition-shadow space-y-2 min-w-0 block">
+                    <a key={t.id} href={href({ view: "chat", channelId: t.channelId, threadId: null })} className="rounded-xl border border-line bg-panel p-3 hover:shadow-panel transition-shadow space-y-2 min-w-0 block">
                       <div className="flex items-center gap-2">
-                        {t.emoji && <span>{t.emoji}</span>}
-                        <span className="text-sm font-medium truncate flex-1">{t.name}</span>
+                        <span className="text-sm font-medium truncate flex-1">#{t.name}</span>
                         {active ? <Pill tone="info">working</Pill> : <Pill>quiet</Pill>}
                       </div>
                       <div className="flex items-center gap-1">
@@ -288,7 +283,6 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                             <AgentAvatar agent={a} size={20} badge />
                           </span>
                         ))}
-                        {members.length === 0 && <span className="text-xs text-muted">No members</span>}
                         {members.length > 8 && <span className="text-xs text-muted">+{members.length - 8}</span>}
                       </div>
                       {teamTasks.length > 0 && (
@@ -306,7 +300,6 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                   );
                 })}
               </div>
-            )}
           </Section>
           )}
 

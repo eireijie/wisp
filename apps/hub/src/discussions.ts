@@ -24,7 +24,7 @@ const slug = (t: string) =>
 export class Discussions {
   constructor(private hub: Hub) {}
 
-  start(o: { workspaceId: string; channelId: string; teamId: string | null; topic: string; goal: string; participants: string[]; moderatorId: string; rounds: number; startedBy: Actor; requestedBy: string | null }): Discussion {
+  start(o: { workspaceId: string; channelId: string; topic: string; goal: string; participants: string[]; moderatorId: string; rounds: number; startedBy: Actor; requestedBy: string | null }): Discussion {
     const { store } = this.hub;
     const did = id("disc");
     const names = o.participants.map((a) => this.hub.handleOf(a)).join(", ");
@@ -35,7 +35,7 @@ export class Discussions {
       parts: [{ type: "discussion", discussionId: did }],
       route: false,
     });
-    const d = store.createDiscussion({ id: did, workspaceId: o.workspaceId, channelId: o.channelId, threadId: root.id, teamId: o.teamId, topic: o.topic, goal: o.goal, participants: o.participants, moderatorId: o.moderatorId, rounds: o.rounds, startedBy: o.startedBy, requestedBy: o.requestedBy });
+    const d = store.createDiscussion({ id: did, workspaceId: o.workspaceId, channelId: o.channelId, threadId: root.id, teamId: null, topic: o.topic, goal: o.goal, participants: o.participants, moderatorId: o.moderatorId, rounds: o.rounds, startedBy: o.startedBy, requestedBy: o.requestedBy });
     this.next(d, 1);
     return store.discussion(d.id)!;
   }
@@ -142,12 +142,12 @@ export class Discussions {
     this.broadcast(d.id);
   }
 
-  /** The decision note goes in the team's decisions folder (or shared/decisions), written by the moderator. */
+  /** The decision note goes in the decisions folder of the channel team's memory (or shared/decisions), written by the moderator. */
   private async saveDecision(d: Discussion, text: string): Promise<string> {
     const { store } = this.hub;
     const vault = this.hub.vault(d.workspaceId);
-    const team = d.teamId ? store.team(d.teamId) : undefined;
-    const dir = `${team?.folder ?? "shared"}/${d.kind === "plan" ? "plans" : "decisions"}`;
+    const team = store.team(d.channelId);
+    const dir = `${team?.folder || "shared"}/${d.kind === "plan" ? "plans" : "decisions"}`;
     const date = new Date().toISOString().slice(0, 10);
     let path = `${dir}/${date}-${slug(d.topic)}.md`;
     for (let n = 2; vault.list((p) => p.toLowerCase() === path.toLowerCase()).length; n++) path = `${dir}/${date}-${slug(d.topic)}-${n}.md`;
@@ -170,12 +170,12 @@ export class Discussions {
     const d = run.discussionId ? store.discussion(run.discussionId) : undefined;
     if (!d || !run.phase) return "";
     if (d.kind === "plan") return this.planSection(d, run.phase);
-    const team = d.teamId ? store.team(d.teamId) : undefined;
+    const team = store.team(d.channelId);
     const role = (a: string) => team?.members.find((m) => m.agentId === a)?.role;
     const people = d.participants.map((a) => `${this.hub.handleOf(a)}${role(a) ? ` (${role(a)})` : ""}`).join(", ");
     const goal = d.goal ? `\nGoal: ${d.goal}` : "";
     if (run.phase === "summary") {
-      return `## Wrap up the discussion\nYou moderated a discussion on: ${d.topic}${goal}\nParticipants: ${people}.\nThe rounds are over; read the thread above. Your reply is saved as the decision note in ${team?.folder ?? "shared"}/decisions/, so write it as that note: what was decided and why, what's still open, and the next tasks with an owner for each. Then hand those tasks out with task_delegate so the work starts.`;
+      return `## Wrap up the discussion\nYou moderated a discussion on: ${d.topic}${goal}\nParticipants: ${people}.\nThe rounds are over; read the thread above. Your reply is saved as the decision note in ${team?.folder || "shared"}/decisions/, so write it as that note: what was decided and why, what's still open, and the next tasks with an owner for each. Then hand those tasks out with task_delegate so the work starts.`;
     }
     const n = Number(run.phase.split(":")[1]);
     return `## You're in a discussion\nTopic: ${d.topic}${goal}\nParticipants: ${people}. ${this.hub.handleOf(d.moderatorId)} writes up the decision after round ${d.rounds}.\nThis is round ${n} of ${d.rounds}. ${

@@ -29,7 +29,7 @@ struct AgentPolicyView: View {
           Toggle(isOn: $leadsCreate) {
             VStack(alignment: .leading, spacing: 2) {
               Text("Leads can create agents")
-              Text("A channel's lead (or a team's) can create an agent its team is missing. It joins the team chart under the lead.").font(.caption).foregroundStyle(.secondary)
+              Text("A channel's lead can create an agent its team is missing. It joins the team chart under the lead.").font(.caption).foregroundStyle(.secondary)
             }
           }
           Toggle(isOn: $subAgents) {

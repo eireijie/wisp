@@ -27,6 +27,7 @@ extension ChannelTeam {
     if edges.contains(where: { leads.contains($0.to) }) { return "Leads hear every message already; arrows can't point at a lead." }
     if nodes.contains(where: { n in !n.lead && !edges.contains { $0.to == n.agentId } }) { return "Connect every agent that isn't a lead to whoever hands it work." }
     if hasLoop { return "The arrows go round in a loop." }
+    if let boss = reportsTo, ids.contains(boss) { return "The team can't report to an agent on it." }
     return nil
   }
 
@@ -83,7 +84,11 @@ extension ChannelTeam {
     team.edges = edges.filter { $0.from != agentId && $0.to != agentId }
     for a in above { for b in below where !team.edges.contains(Edge(from: a, to: b)) { team.edges.append(Edge(from: a, to: b)) } }
     let fed = Set(team.edges.map(\.to))
-    team.nodes = team.nodes.map { n in fed.contains(n.agentId) || n.lead ? n : Node(agentId: n.agentId, lead: true, x: n.x, y: n.y) }
+    team.nodes = team.nodes.map { n in
+      var n = n
+      if !fed.contains(n.agentId) { n.lead = true }
+      return n
+    }
     return team
   }
 
@@ -120,7 +125,10 @@ extension ChannelTeam {
 
   /** Take agents that no longer exist off the chart (the hub does the same when an agent goes). */
   func live(_ agentIds: Set<String>) -> ChannelTeam {
-    ChannelTeam(nodes: nodes.filter { agentIds.contains($0.agentId) }, edges: edges.filter { agentIds.contains($0.from) && agentIds.contains($0.to) })
+    var team = self
+    team.nodes = nodes.filter { agentIds.contains($0.agentId) }
+    team.edges = edges.filter { agentIds.contains($0.from) && agentIds.contains($0.to) }
+    return team
   }
 
   /**
