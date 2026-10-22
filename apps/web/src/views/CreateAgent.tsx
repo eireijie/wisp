@@ -680,6 +680,15 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
                             />
                             <datalist id="new-agent-models">{defaults && defaults !== "error" && defaults.model && <option value={defaults.model} />}</datalist>
                           </label>
+                          {/* only ask which device when there's a real choice */}
+                          {usable.length < 2 ? (
+                            <div className="space-y-1.5">
+                              <span className="block text-[13px] font-semibold text-muted">Device</span>
+                              <div className="h-10 flex items-center text-sm">
+                                {usable[0] ? `${usable[0].name}${usable[0].online ? "" : " (offline)"}` : "None yet. Connect one under Devices."}
+                              </div>
+                            </div>
+                          ) : (
                           <label className="space-y-1.5">
                             <span className="block text-[13px] font-semibold text-muted">Device</span>
                             <select
@@ -699,6 +708,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
                               ))}
                             </select>
                           </label>
+                          )}
                         </div>
                         {selectedHarness.protocol !== "mcp" && <ComputerPicker value={computer} onChange={chooseComputer} node={node} nodes={nodes} />}
                         {node && !runsInVm(harness) && !installed.has(harness) && selectedHarness.protocol !== "mcp" && (
