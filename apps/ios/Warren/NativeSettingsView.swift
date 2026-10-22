@@ -8,6 +8,7 @@ struct NativeSettingsView: View {
         NavigationLink("Profile") { ProfileSettingsView() }.accessibilityIdentifier("settings-profile")
         NavigationLink("App behavior") { PreferencesView() }
         NavigationLink("Notifications") { NotificationSettingsView() }
+        NavigationLink("Usage") { UsageView() }.accessibilityIdentifier("settings-usage")
         if store.features.voice { NavigationLink("Voice") { VoiceSettingsView() } }
         NavigationLink("Appearance") { Form { ModePicker(); Text("Text size and reduced motion follow this iPhone's Accessibility settings.").font(.footnote) }.navigationTitle("Appearance") }
         NavigationLink("Security") { SecuritySettingsView() }
@@ -18,7 +19,7 @@ struct NativeSettingsView: View {
         if store.features.invite || store.members.count > 1 {
           NavigationLink("People") { PeopleSettingsView() }.accessibilityIdentifier("settings-people")
         }
-        NavigationLink("Features") { FeaturesView() }.accessibilityIdentifier("settings-features")
+        NavigationLink("Mods") { FeaturesView() }.accessibilityIdentifier("settings-mods")
         if store.canManage {
           NavigationLink("Agent defaults") { AgentDefaultsView() }.accessibilityIdentifier("settings-agent-defaults")
           NavigationLink("Agents") { AgentPolicyView() }

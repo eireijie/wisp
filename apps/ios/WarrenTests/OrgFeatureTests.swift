@@ -75,6 +75,28 @@ final class OrgFeatureTests: XCTestCase {
     XCTAssertEqual(store.features, before)
   }
 
+  func testChangesAndAllowance() async throws {
+    let store = makeStore()
+    let part = try Wire.decoder.decode(MessagePart.self, from: Data(#"{"type":"change","changeId":"ch1"}"#.utf8))
+    XCTAssertEqual(part, .change(changeId: "ch1"))
+    reply("GET", "/api/changes", #"[{"id":"ch1","userId":"u1","agentId":"a1","lines":["Checks: every hour → every 2 hours"],"createdAt":"2026-10-22T12:00:00Z","undoneAt":null}]"#)
+    try await store.refreshChanges()
+    XCTAssertNil(store.changes?.first?.undoneAt)
+    reply("POST", "/api/changes/ch1/undo", #"{"ok":true}"#)
+    reply("GET", "/api/changes", #"[{"id":"ch1","userId":"u1","agentId":"a1","lines":["Checks: every hour → every 2 hours"],"createdAt":"2026-10-22T12:00:00Z","undoneAt":"2026-10-22T12:05:00Z"}]"#)
+    try await store.undoChange("ch1")
+    XCTAssertNotNil(store.changes?.first?.undoneAt)
+
+    reply("PUT", "/api/background/allowance", #"{"dailyTokens":null,"todayTokens":412000,"estimated":false,"agents":[{"agentId":"a1","tokens":268000,"checks":7}]}"#)
+    try await store.saveAllowance(nil)
+    XCTAssertTrue(try body("PUT", "/api/background/allowance")["dailyTokens"] is NSNull)
+    XCTAssertNil(store.allowance?.dailyTokens)
+    XCTAssertEqual(store.allowance?.agents.first?.checks, 7)
+    XCTAssertEqual([300_000, 1_000_000, 1_250_000, 400].map(Allowance.text), ["300k", "1M", "1.3M", "1k"])
+    XCTAssertEqual(BackgroundView.clock("22:00"), "10pm")
+    XCTAssertEqual(BackgroundView.clock("07:30"), "7:30am")
+  }
+
   func testRunStepsAndStop() async throws {
     let store = makeStore()
     store.agents = [Agent(id: "a1", handle: "nova", name: "Nova", harness: "claude-code", status: .busy)]
@@ -112,7 +134,7 @@ final class OrgFeatureTests: XCTestCase {
     store.agents = [Agent(id: "a1", handle: "nova", name: "Nova", harness: "claude-code", status: .busy)]
     store.activitySteps["a1"] = ["Opened the site repo", "Editing the pricing page"]
     let screens: [(String, AnyView)] = [
-      ("Features", AnyView(NavigationStack { FeaturesView() }.environment(store))),
+      ("Mods", AnyView(NavigationStack { FeaturesView() }.environment(store))),
       ("Agent defaults", AnyView(NavigationStack { AgentDefaultsView() }.environment(store))),
       ("New organization", AnyView(NewOrgSheet().environment(store))),
       ("Agent work", AnyView(AgentWorkSheet(agentId: "a1").environment(store))),

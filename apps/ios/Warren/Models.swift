@@ -151,9 +151,10 @@ enum MessagePart: Codable, Hashable {
   case notice(String)
   case computer(computerId: String, request: String?)
   case approval(approvalId: String)
+  case change(changeId: String)
   case other(String)
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId }
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -165,6 +166,7 @@ enum MessagePart: Codable, Hashable {
     case "notice": self = .notice((try? c.decode(String.self, forKey: .text)) ?? "")
     case "computer": self = .computer(computerId: (try? c.decode(String.self, forKey: .computerId)) ?? "", request: try? c.decode(String.self, forKey: .request))
     case "approval": self = .approval(approvalId: (try? c.decode(String.self, forKey: .approvalId)) ?? "")
+    case "change": self = .change(changeId: (try? c.decode(String.self, forKey: .changeId)) ?? "")
     default: self = .other(type)
     }
   }

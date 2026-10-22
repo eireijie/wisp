@@ -57,7 +57,7 @@ struct NewOrgSheet: View {
         Section {
           VStack(spacing: 10) {
             IconTile(symbol: "building.2", color: .indigo, size: 56)
-            Text("A fresh place with its own agents, channels and memory. It starts simple; turn on more in Settings → Features.")
+            Text("A fresh place with its own agents, channels and memory. It starts simple; turn on more in Settings → Mods.")
               .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
           }.frame(maxWidth: .infinity).padding(.vertical, 8)
         }

@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * The optional features an organization switches on in Settings → Features (packages/core/src/features.ts).
+ * The optional features an organization switches on in Settings → Mods (packages/core/src/features.ts).
  * A hub that doesn't send features (older hubs, older organizations) means everything is on.
  */
 struct Features: Codable, Hashable {
