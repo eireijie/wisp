@@ -776,15 +776,17 @@ export function CreateAgent({
                 </div>
               ) : (
                 <>
+                  {/* only ask which device when there's a real choice */}
+                  {usable.length < 2 ? (
+                    <p className="text-sm text-muted">
+                      {usable[0]
+                        ? `Runs on ${usable[0].name}${usable[0].online ? "" : " (offline)"}.`
+                        : "No device yet. Connect one under Devices and pick it then."}
+                    </p>
+                  ) : (
                   <Field
                     label="Device"
-                    hint={
-                      usable.length
-                        ? simple
-                          ? "The computer that runs this helper."
-                          : "Where Warren starts its harness."
-                        : "You can connect a device later under Devices."
-                    }
+                    hint={simple ? "The computer that runs this helper." : "Where Warren starts its harness."}
                   >
                     <select
                       value={nodeId}
@@ -807,6 +809,7 @@ export function CreateAgent({
                       ))}
                     </select>
                   </Field>
+                  )}
                   <ComputerPicker
                     value={computer}
                     onChange={chooseComputer}
