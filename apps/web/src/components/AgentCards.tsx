@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, ListChecks, ShieldQuestion, X } from "lucide-react";
+import { CalendarClock, Check, ListChecks, RotateCcw, ShieldQuestion, X } from "lucide-react";
 import { describeCron, type Agent, type Routine } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
+import { undoChange, useChanges } from "../changes.ts";
 import { href } from "../router.ts";
 import { ComputerMini } from "../views/ComputersView.tsx";
 import { AgentAvatar, Button, Pill, Textarea, agentVar, cx, timeAgo } from "./ui.tsx";
@@ -200,5 +201,44 @@ export function HandoffPill({ agent, text, with: targets }: { agent?: Agent; tex
         <AgentAvatar key={t.id} agent={t} size={18} badge={false} />
       ))}
     </span>
+  );
+}
+
+/** What an agent changed for you (a setting, a mod), one line each, with Undo. */
+export function ChangeCard({ id }: { id: string }) {
+  const change = useChanges()?.find((c) => c.id === id);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!change) return null;
+  const undo = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await undoChange(id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-1.5 max-w-md rounded-2xl border border-line bg-panel px-3.5 py-3 space-y-1.5">
+      {change.lines.map((l) => (
+        <div key={l} className={cx("flex items-start gap-2 text-sm", change.undoneAt && "text-muted line-through")}>
+          <Check size={15} className="mt-0.5 shrink-0 text-ok" />
+          <span>{l}</span>
+        </div>
+      ))}
+      <div className="pt-1 flex items-center gap-2">
+        {change.undoneAt ? (
+          <span className="text-xs text-muted">Undone</span>
+        ) : (
+          <Button className="h-8 px-3 text-xs" onClick={undo} disabled={busy}>
+            <RotateCcw size={13} /> Undo
+          </Button>
+        )}
+        {error && <span className="text-xs text-bad">{error}</span>}
+      </div>
+    </div>
   );
 }

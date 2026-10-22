@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Globe, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, Plug, RefreshCw, Shield, SlidersHorizontal, Smartphone, ToggleRight, User, Users, Wand2 } from "lucide-react";
+import { Bell, Blocks, Gauge, Globe, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, Plug, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users, Wand2 } from "lucide-react";
 import { resolveFeatures, type Features } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -13,7 +13,9 @@ import { RuntimesPage } from "./settings/runtimes.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
-import { FeaturesPage } from "./settings/features.tsx";
+import { ModsPage } from "./settings/features.tsx";
+import { UsagePage } from "./settings/usage.tsx";
+import { AskAndChanges } from "./settings/changes.tsx";
 import { AgentDefaultsPage } from "./settings/defaults.tsx";
 import { ConnectorsView } from "./ConnectorsView.tsx";
 import { AccessPanel } from "../components/Access.tsx";
@@ -33,6 +35,7 @@ const NAV: NavGroup[] = [
       { id: "preferences", label: "App behavior", icon: <SlidersHorizontal size={16} /> },
       { id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
       { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
+      { id: "usage", label: "Usage", icon: <Gauge size={16} />, feature: "background" },
       { id: "voice", label: "Voice", icon: <Mic size={16} />, feature: "voice" },
       { id: "security", label: "Security", icon: <Lock size={16} /> },
       { id: "mobile", label: "Mobile", icon: <Smartphone size={16} /> },
@@ -48,7 +51,7 @@ const NAV: NavGroup[] = [
       { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
       { id: "memory", label: "Memory", icon: <Shield size={16} /> },
       { id: "apps", label: "Connected apps", icon: <Plug size={16} />, noGuests: true },
-      { id: "features", label: "Features", icon: <ToggleRight size={16} /> },
+      { id: "features", label: "Mods", icon: <Blocks size={16} /> },
       { id: "people", label: "People", icon: <Users size={16} />, feature: "invite" },
       { id: "runtimes", label: "Agent runtimes", icon: <Cpu size={16} />, noGuests: true },
       { id: "connections", label: "Connections", icon: <Link2 size={16} />, noGuests: true },
@@ -82,7 +85,13 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   appearance: () => <AppearancePage />,
   security: () => <SecurityPage />,
   mobile: () => <MobilePage />,
-  general: () => <GeneralPage />,
+  usage: () => <UsagePage />,
+  general: () => (
+    <>
+      <AskAndChanges />
+      <GeneralPage />
+    </>
+  ),
   access: () => (
     <>
       <PageHeader title="Access">Use Warren from anywhere: on your phone, at work, or from a friend's computer. Tailscale gives it a private address that only your own devices can open.</PageHeader>
@@ -90,7 +99,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
     </>
   ),
   "agent-defaults": () => <AgentDefaultsPage />,
-  features: () => <FeaturesPage />,
+  features: () => <ModsPage />,
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,

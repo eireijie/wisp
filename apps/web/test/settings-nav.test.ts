@@ -10,7 +10,7 @@ describe("settings navigation", () => {
   it("keeps every page in place in Advanced, yours first, then the organization's", () => {
     const groups = settingsNav(false, false);
     expect(groups.map((g) => g.group)).toEqual(["You", "Organization"]);
-    expect(groups[0].pages.map((p) => p.id)).toEqual(["profile", "preferences", "appearance", "notifications", "voice", "security", "mobile"]);
+    expect(groups[0].pages.map((p) => p.id)).toEqual(["profile", "preferences", "appearance", "notifications", "usage", "voice", "security", "mobile"]);
     expect(groups[1].pages.map((p) => p.id)).toEqual(["general", "access", "agent-defaults", "agents", "computers", "memory", "apps", "features", "people", "runtimes", "connections", "data", "updates"]);
   });
 
