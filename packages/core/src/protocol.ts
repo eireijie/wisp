@@ -200,6 +200,8 @@ export type ClientEvent =
   | { type: "approval"; approval: import("./types.ts").Approval }
   | { type: "routines_changed" }
   | { type: "background_changed"; agentId: string }
+  /** an agent changed a setting or mod for someone, or someone undid one */
+  | { type: "changes_changed" }
   | { type: "tasks_changed" }
   /** notes were changed outside Warren (Obsidian, a git pull or push) */
   | { type: "memory_changed" }

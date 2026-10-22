@@ -219,6 +219,12 @@ CREATE TABLE IF NOT EXISTS pins (
   pinned_by_kind TEXT NOT NULL, pinned_by_id TEXT NOT NULL, created_at TEXT NOT NULL,
   PRIMARY KEY (channel_id, message_id)
 );
+CREATE TABLE IF NOT EXISTS changes (
+  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, lines_json TEXT NOT NULL, undo_json TEXT NOT NULL,
+  created_at TEXT NOT NULL, undone_at TEXT
+);
+CREATE INDEX IF NOT EXISTS changes_by_user ON changes(workspace_id, user_id, created_at);
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   keys_json TEXT NOT NULL, created_at TEXT NOT NULL

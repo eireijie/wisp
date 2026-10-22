@@ -317,6 +317,50 @@ export async function createWarrenMcp(client: WarrenClient) {
   );
 
   server.registerTool(
+    "settings_read",
+    {
+      description:
+        "See how Warren is set up for the person you work for: your background work for them (on or off, how often, quiet hours, what to keep an eye on), which mods are on, and how much of their daily allowance background work used today. Read it before settings_change.",
+      inputSchema: {},
+    },
+    safe(async () => {
+      const s = await client.mySettings();
+      const b = s.background;
+      const a = s.allowance;
+      const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
+      return text(
+        [
+          b ? `Background work: ${b.enabled ? "on" : "off"}, every ${b.everyMinutes} minutes, quiet ${b.quietStart}–${b.quietEnd}, keeping an eye on: ${b.focus || "everything you can reach"}.` : "Background work: never turned on for them.",
+          `Mods (${s.canChangeMods ? "you can change these for them" : "only an owner can change these"}):`,
+          ...s.mods.map((m) => `- ${m.key}: ${m.name} (${m.on ? "on" : "off"}): ${m.description}`),
+          `Allowance: ${a.dailyTokens ? `${k(a.todayTokens)} of ${k(a.dailyTokens)} tokens used today` : `no limit, ${k(a.todayTokens)} tokens used today`}. They change the allowance themselves in Settings → Usage.`,
+        ].join("\n"),
+      );
+    }),
+  );
+
+  server.registerTool(
+    "settings_change",
+    {
+      description:
+        "Change how Warren works for the person you work for, when they ask in plain words (\"check less often\", \"don't message me after 10pm\", \"turn on voice calls\"). Background fields change your own background work for them; mods switch optional parts of Warren on or off (owners only). Only change what they asked for. They see what changed in your DM with an Undo button, so just confirm in a few words.",
+      inputSchema: {
+        enabled: z.boolean().optional().describe("background work on or off"),
+        every_minutes: z.number().int().min(10).max(1440).optional().describe("how often to check, 10–1440 minutes"),
+        quiet_start: z.string().optional().describe("quiet hours start, 'HH:MM' 24-hour on their clock"),
+        quiet_end: z.string().optional().describe("quiet hours end, 'HH:MM'; same as start = no quiet hours"),
+        focus: z.string().optional().describe("what to keep an eye on, in their words; empty = everything you can reach"),
+        mods: z.record(z.string(), z.boolean()).optional().describe("mod key → on/off, keys from settings_read"),
+      },
+    },
+    safe(async ({ enabled, every_minutes, quiet_start, quiet_end, focus, mods }) => {
+      const background = Object.fromEntries(Object.entries({ enabled, everyMinutes: every_minutes, quietStart: quiet_start, quietEnd: quiet_end, focus }).filter(([, v]) => v !== undefined));
+      const r = await client.changeSettings({ ...(Object.keys(background).length ? { background } : {}), ...(mods && Object.keys(mods).length ? { mods } : {}) });
+      return text(r.changed.length ? `Changed:\n${r.changed.map((l) => `- ${l}`).join("\n")}\nThey can see it in your DM and undo it.` : (r.note ?? "Nothing changed."));
+    }),
+  );
+
+  server.registerTool(
     "next_check",
     {
       description:

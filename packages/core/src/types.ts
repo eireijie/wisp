@@ -313,7 +313,9 @@ export type MessagePart =
   /** a routine was taught, changed or run */
   | { type: "routine"; routineId: string }
   /** this message hands out a task: people see a task card; the assignee gets its id and how to report back */
-  | { type: "task"; taskId: string };
+  | { type: "task"; taskId: string }
+  /** an agent changed a setting or a mod for the person it works for; they see what changed and can undo it */
+  | { type: "change"; changeId: string };
 
 /** An agent asking a person's OK before it acts ("Send these 3 intros?"). */
 export interface Approval {
@@ -391,6 +393,31 @@ export interface BackgroundWork {
   effort: string | null;
   /** most regular checks a day on the person's clock; null = no limit */
   dailyCap: number | null;
+}
+
+/** How much of a person's AI usage background checks may use each day, across all their agents. */
+export interface Allowance {
+  /** tokens a day; null = no limit */
+  dailyTokens: number | null;
+  /** used since midnight on the person's clock, across every agent */
+  todayTokens: number;
+  /** some checks didn't say what they used, so part of `todayTokens` is a guess */
+  estimated: boolean;
+  /** used, per agent, biggest first */
+  agents: { agentId: string; tokens: number; checks: number }[];
+}
+
+/** A setting or mod an agent changed for someone, kept so they can see it and undo it. */
+export interface Change {
+  id: string;
+  /** the person it was changed for */
+  userId: string;
+  /** the agent that changed it */
+  agentId: string;
+  /** one line per thing that changed, e.g. "Checks: every 30 min → every 2 hours" */
+  lines: string[];
+  createdAt: string;
+  undoneAt: string | null;
 }
 
 /** What background checks used, from the token counts harnesses report. Null = no check reported any. */

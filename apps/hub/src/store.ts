@@ -1,4 +1,4 @@
-import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup } from "@warren/core";
+import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup, type Change } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -1248,6 +1248,41 @@ export class Store {
       .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ?, model = ?, effort = ?, daily_cap = ? WHERE agent_id = ? AND user_id = ?")
       .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, v.model, v.effort, v.dailyCap, agentId, userId);
     return this.background(agentId, userId)!;
+  }
+
+  /** Background checks for one person since `since`, by every agent in a workspace: what each used. */
+  backgroundRunsFor(workspaceId: string, userId: string, since: string) {
+    const rows = this.db
+      .prepare("SELECT r.agent_id AS agentId, r.usage_json AS usage FROM runs r JOIN agents a ON a.id = r.agent_id WHERE a.workspace_id = ? AND r.requested_by = ? AND r.kind = 'background' AND r.status != 'queued' AND r.created_at >= ?")
+      .all(workspaceId, userId, since) as { agentId: string; usage: string | null }[];
+    return rows.map((r) => {
+      const u = r.usage ? (JSON.parse(r.usage) as Omit<ContextUsage, "at">) : null;
+      const tokens = u && (u.inputTokens !== undefined || u.outputTokens !== undefined) ? (u.inputTokens ?? 0) + (u.outputTokens ?? 0) : null;
+      return { agentId: r.agentId, tokens };
+    });
+  }
+
+  private changeSql = "SELECT id, user_id AS userId, agent_id AS agentId, lines_json AS lines, undo_json AS undo, created_at AS createdAt, undone_at AS undoneAt FROM changes";
+  private toChange = (r: Record<string, unknown>): Change & { undo: unknown } => ({ ...(r as unknown as Change), lines: JSON.parse(r.lines as string), undo: JSON.parse(r.undo as string) });
+
+  createChange(c: { workspaceId: string; userId: string; agentId: string; lines: string[]; undo: unknown }) {
+    const cid = id("chg");
+    this.db.prepare("INSERT INTO changes (id, workspace_id, user_id, agent_id, lines_json, undo_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(cid, c.workspaceId, c.userId, c.agentId, JSON.stringify(c.lines), JSON.stringify(c.undo), now());
+    return this.change(cid)!;
+  }
+
+  change(changeId: string) {
+    const r = this.db.prepare(`${this.changeSql} WHERE id = ?`).get(changeId) as Record<string, unknown> | undefined;
+    return r && this.toChange(r);
+  }
+
+  /** What agents changed for one person, newest first. */
+  changes(workspaceId: string, userId: string, limit = 30) {
+    return (this.db.prepare(`${this.changeSql} WHERE workspace_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?`).all(workspaceId, userId, limit) as Record<string, unknown>[]).map(this.toChange);
+  }
+
+  markChangeUndone(changeId: string) {
+    this.db.prepare("UPDATE changes SET undone_at = ? WHERE id = ?").run(now(), changeId);
   }
 
   private followupSql = "SELECT id, agent_id AS agentId, user_id AS userId, due_at AS dueAt, note, status, created_at AS createdAt FROM followups";

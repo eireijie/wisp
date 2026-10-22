@@ -304,6 +304,81 @@ describe("what a check costs", () => {
   });
 });
 
+describe("one allowance for all background work", () => {
+  it("adds up every agent's checks today, guessing for ones that didn't report", async () => {
+    const ws = hub.store.agent(agentId)!.workspaceId;
+    const a = await owner.request("GET", "/api/background/allowance");
+    expect(a.dailyTokens).toBe(1_000_000);
+    expect(a.todayTokens).toBeGreaterThan(0);
+    expect(a.estimated).toBe(true);
+    expect(a.agents[0]).toMatchObject({ agentId });
+    expect(a.todayTokens).toBe(hub.background.allowance(ws, me).todayTokens);
+  });
+
+  it("holds regular checks once it's used up, and lets them go when it's raised", async () => {
+    onCheck = async () => "ok";
+    const used = (await owner.request("GET", "/api/background/allowance")).todayTokens;
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: Math.max(10_000, used) });
+    hub.store.setBackground(agentId, me, { enabled: true, quietStart: "00:00", quietEnd: "00:00", nextAt: null, nextReason: "", dailyCap: null });
+    const n = calls.length;
+    hub.background.tick(new Date());
+    expect(calls.length).toBe(n);
+    expect(hub.store.background(agentId, me)!.nextReason).toBe("allowance used up");
+
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: null });
+    expect((await owner.request("GET", "/api/background/allowance")).dailyTokens).toBeNull();
+    expect(hub.store.background(agentId, me)!.nextAt).toBeNull();
+    hub.store.setBackground(agentId, me, { enabled: false, quietStart: "22:00", quietEnd: "07:00" });
+  });
+
+  it("checks half as often once most of it is used", async () => {
+    const used = (await owner.request("GET", "/api/background/allowance")).todayTokens;
+    // used is 90% of this amount
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: Math.max(10_000, Math.round(used / 0.9)) });
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    hub.store.setBackground(agentId, me, { enabled: true });
+    const r = await agent.nextCheck(30, "calm");
+    expect(r.minutes).toBe(60);
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: null });
+    hub.store.setBackground(agentId, me, { enabled: false });
+  });
+});
+
+describe("agents changing Warren for their person", () => {
+  it("changes its own background work, shows what changed in the DM, and the person can undo it", async () => {
+    hub.store.setBackground(agentId, me, { enabled: false, everyMinutes: 30, quietStart: "23:00", quietEnd: "07:00" });
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    expect((await agent.mySettings()).background).toMatchObject({ enabled: false, everyMinutes: 30 });
+    const r = await agent.changeSettings({ background: { everyMinutes: 120, quietStart: "22:00" } });
+    expect(r.changed).toEqual(["Checks: every 30 min → every 2 hours", "Quiet hours: 10pm – 7am"]);
+    expect(hub.store.background(agentId, me)).toMatchObject({ everyMinutes: 120, quietStart: "22:00" });
+    const card = hub.store.messages(dm().id).find((m) => m.parts.some((p) => p.type === "change" && p.changeId === r.changeId));
+    expect(card?.body).toBe("Checks: every 30 min → every 2 hours\nQuiet hours: 10pm – 7am");
+
+    const list = await owner.request("GET", "/api/changes");
+    expect(list[0]).toMatchObject({ id: r.changeId, agentId, lines: r.changed, undoneAt: null });
+    expect(list[0].undo).toBeUndefined();
+    await owner.request("POST", `/api/changes/${r.changeId}/undo`);
+    expect(hub.store.background(agentId, me)).toMatchObject({ everyMinutes: 30, quietStart: "23:00" });
+    expect((await owner.request("GET", "/api/changes"))[0].undoneAt).not.toBeNull();
+    await expect(owner.request("POST", `/api/changes/${r.changeId}/undo`)).rejects.toThrow();
+    // asking for what's already set changes nothing
+    expect((await agent.changeSettings({ background: { everyMinutes: 30 } })).changed).toEqual([]);
+  });
+
+  it("turns mods on and off for an owner, and back", async () => {
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const s = await agent.mySettings();
+    expect(s.canChangeMods).toBe(true);
+    expect(s.mods.find((m) => m.key === "voice")?.on).toBe(true);
+    const r = await agent.changeSettings({ mods: { voice: false } });
+    expect(r.changed).toEqual(["Mod Voice calls: off"]);
+    expect((await owner.request("GET", "/api/features")).features.voice).toBe(false);
+    await owner.request("POST", `/api/changes/${r.changeId}/undo`);
+    expect((await owner.request("GET", "/api/features")).features.voice).toBe(true);
+  });
+});
+
 describe("times", () => {
   it("finds the start of the day on the person's clock", () => {
     expect(startOfDay(new Date("2026-10-15T03:00:00Z"), "America/New_York").toISOString()).toBe("2026-10-14T04:00:00.000Z");
