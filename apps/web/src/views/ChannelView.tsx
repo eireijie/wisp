@@ -42,7 +42,6 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const role = useStore((s) => s.me?.role);
   const names = useNames();
   const voice = useFeature("voice");
-  const backgroundOn = useFeature("background");
   const [calling, setCalling] = useState(!!route.call);
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
@@ -132,21 +131,6 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
               </div>
               <ChannelSubtitle channel={channel} onAgents={() => setSettings(channel.settings.team?.nodes.length ? "team" : "agents")} />
             </div>
-          )}
-          {dmAgent && (
-            <nav aria-label={dmAgent.name} className="hidden md:flex items-center gap-0.5 rounded-xl bg-chip p-[3px] text-[13px] font-bold">
-              <span aria-current="page" className="h-7 px-3 rounded-[9px] bg-panel shadow-sm grid place-items-center">
-                Chat
-              </span>
-              {backgroundOn && (
-                <a href={href({ view: "agents", agentId: dmAgent.id, tab: "background" })} className="h-7 px-3 rounded-[9px] grid place-items-center text-ink/70 hover:text-ink">
-                  Background
-                </a>
-              )}
-              <a href={href({ view: "agents", agentId: dmAgent.id })} className="h-7 px-3 rounded-[9px] grid place-items-center text-ink/70 hover:text-ink">
-                Settings
-              </a>
-            </nav>
           )}
           {dmAgent?.computerId && (
             <button onClick={() => (dmPanel === "computer" ? setSide(null) : openAgent(dmAgent.id, "computer"))} className={cx("size-9 rounded-full hover:bg-hover grid place-items-center hover:text-ink", dmPanel === "computer" ? "text-ink bg-hover" : "text-muted")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>

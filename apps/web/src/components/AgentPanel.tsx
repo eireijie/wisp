@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, Check, MessageSquare, ChevronRight, Square, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
+import { Activity, BookOpen, Check, MessageSquare, ChevronRight, Square, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, Radar, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
 import { harnessLabel, type Agent } from "@warren/core";
 import { soulPath } from "@warren/core/src/soul.ts";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
@@ -31,6 +31,7 @@ const SECTIONS: { id: AgentTab; label: string; body: string; icon: ReactNode }[]
   { id: "model", label: "Model", body: "Model, effort and fast mode", icon: <Cpu size={16} /> },
   { id: "device", label: "Device", body: "Where its harness runs", icon: <Server size={16} /> },
   { id: "computer", label: "Computer", body: "Which computer it uses", icon: <Monitor size={16} /> },
+  { id: "background", label: "Background", body: "What it does while you're away", icon: <Radar size={16} /> },
   { id: "routines", label: "Routines", body: "Tasks it does on a schedule", icon: <ListChecks size={16} /> },
   { id: "permissions", label: "Permissions", body: "What it may do without asking", icon: <Shield size={16} /> },
   { id: "connect", label: "Connect", body: "Apps and connectors", icon: <Plug size={16} /> },
@@ -284,10 +285,11 @@ export function SetupIncomplete({ problem }: { problem: string | null }) {
 }
 
 function SettingsTab({ agent }: { agent: Agent }) {
+  const background = useFeature("background");
   return (
     <div className="rounded-2xl bg-panel border border-line divide-y divide-line overflow-hidden">
       <SettingRow icon={<LayoutGrid size={16} />} label="Overview" body="Everything at a glance" onClick={() => go({ view: "agents", agentId: agent.id, tab: "overview" })} />
-      {SECTIONS.map((s) => (
+      {SECTIONS.filter((s) => s.id !== "background" || background).map((s) => (
         <SettingRow key={s.id} icon={s.icon} label={s.label} body={s.body} onClick={() => go({ view: "agents", agentId: agent.id, tab: s.id })} />
       ))}
     </div>
