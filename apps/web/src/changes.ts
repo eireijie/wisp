@@ -3,16 +3,21 @@ import type { Allowance, Change } from "@warren/core";
 import { api } from "./api.ts";
 import { useStore } from "./store.ts";
 
+/** One fetch per version, shared by every change card on screen. */
+const cache = new Map<number, Promise<Change[]>>();
+
 /** What agents changed for you (settings, mods), newest first; stays current through "changes_changed". */
 export function useChanges(): Change[] | null {
   const version = useStore((s) => s.changesVersion);
   const [list, setList] = useState<Change[] | null>(null);
   useEffect(() => {
+    let p = cache.get(version);
+    if (!p) {
+      cache.clear();
+      cache.set(version, (p = api<Change[]>("GET", "/api/changes").catch(() => [])));
+    }
     let live = true;
-    api<Change[]>("GET", "/api/changes").then(
-      (l) => live && setList(l),
-      () => live && setList([]),
-    );
+    p.then((l) => live && setList(l));
     return () => {
       live = false;
     };

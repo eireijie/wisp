@@ -18,7 +18,8 @@ const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "a time like 22:00");
 type BackgroundPatch = Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd">>;
 /** How to put things back the way they were before an agent changed them. */
 interface Undo {
-  background?: { agentId: string; patch: BackgroundPatch };
+  /** `patch` puts things back; `after` is what the change set, so undo leaves alone anything changed since */
+  background?: { agentId: string; patch: BackgroundPatch; after?: BackgroundPatch };
   mods?: Partial<Record<FeatureKey, boolean>>;
 }
 
@@ -254,8 +255,10 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
       const before: BackgroundPatch = was ? { enabled: was.enabled, everyMinutes: was.everyMinutes, focus: was.focus, quietStart: was.quietStart, quietEnd: was.quietEnd } : { enabled: false };
       lines.push(...backgroundLines(before, body.background));
       // background work that didn't exist yet goes back to off
-      undo.background = { agentId: agent.id, patch: Object.fromEntries(Object.keys(body.background).map((k) => [k, before[k as keyof BackgroundPatch] ?? (k === "enabled" ? false : undefined)]).filter(([, v]) => v !== undefined)) };
-      applyBackground(agent.id, userId, c.workspaceId, body.background);
+      // changing how often or what to watch for someone who never turned it on keeps it off
+      const patch: BackgroundPatch = !was && body.background.enabled === undefined ? { ...body.background, enabled: false } : body.background;
+      undo.background = { agentId: agent.id, after: patch, patch: Object.fromEntries(Object.keys(patch).map((k) => [k, before[k as keyof BackgroundPatch] ?? (k === "enabled" ? false : undefined)]).filter(([, v]) => v !== undefined)) };
+      applyBackground(agent.id, userId, c.workspaceId, patch);
     }
     if (body.mods && Object.keys(body.mods).length) {
       if (!store.members(c.workspaceId).some((m) => m.id === userId && m.role === "owner")) return reply.code(403).send({ error: "only an owner can turn mods on or off; ask them to" });
@@ -290,8 +293,18 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     if (ch.undoneAt) return reply.code(409).send({ error: "already undone" });
     const undo = ch.undo as Undo;
     if (undo.mods && c.viewer.role !== "owner") return reply.code(403).send({ error: "only an owner can turn mods on or off" });
-    if (undo.background) applyBackground(undo.background.agentId, c.actor.id, c.workspaceId, undo.background.patch);
-    if (undo.mods) hub.broadcast(c.workspaceId, { type: "features", features: setWorkspaceFeatures(store, c.workspaceId, undo.mods) });
+    // only what still is as the change left it goes back; anything changed since stays
+    if (undo.background) {
+      const { agentId, patch, after } = undo.background;
+      const now = store.background(agentId, c.actor.id);
+      const keep = Object.fromEntries(Object.entries(patch).filter(([k]) => !after || !now || now[k as keyof BackgroundPatch] === after[k as keyof BackgroundPatch]));
+      if (Object.keys(keep).length) applyBackground(agentId, c.actor.id, c.workspaceId, keep);
+    }
+    if (undo.mods) {
+      const now = workspaceFeatures(store, c.workspaceId);
+      const keep = Object.fromEntries((Object.keys(undo.mods) as FeatureKey[]).filter((k) => now[k] !== undo.mods![k]).map((k) => [k, undo.mods![k]]));
+      if (Object.keys(keep).length) hub.broadcast(c.workspaceId, { type: "features", features: setWorkspaceFeatures(store, c.workspaceId, keep) });
+    }
     store.markChangeUndone(ch.id);
     hub.broadcast(c.workspaceId, { type: "changes_changed" });
     return { ok: true };

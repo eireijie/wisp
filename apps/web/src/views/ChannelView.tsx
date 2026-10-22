@@ -924,7 +924,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
             </span>
           </a>
         ))}
-        <Parts parts={m.parts} />
+        <Parts parts={m.parts} body={m.body} />
         <Reactions messageId={m.id} reactions={m.reactions ?? []} />
         {(!!replies || working.length > 0) && onReplies && (
           <div className="mt-1 -ml-1 flex flex-wrap items-center gap-1.5">
@@ -1105,7 +1105,7 @@ function linkCards(body: string) {
   return out.slice(0, 3);
 }
 
-function Parts({ parts }: { parts: MessagePart[] }) {
+function Parts({ parts, body = "" }: { parts: MessagePart[]; body?: string }) {
   const tools = parts.filter((p) => p.type === "tool_call");
   const files = parts.filter((p) => p.type === "file");
   const status = parts.filter((p) => p.type === "status");
@@ -1119,7 +1119,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
       {parts.map((p) => p.type === "approval" && <ApprovalCard key={p.approvalId} id={p.approvalId} />)}
       {parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
       {parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
-      {parts.map((p) => p.type === "change" && <ChangeCard key={p.changeId} id={p.changeId} />)}
+      {parts.map((p) => p.type === "change" && <ChangeCard key={p.changeId} id={p.changeId} fallback={body} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
       {files.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-2">

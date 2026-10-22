@@ -205,11 +205,14 @@ export function HandoffPill({ agent, text, with: targets }: { agent?: Agent; tex
 }
 
 /** What an agent changed for you (a setting, a mod), one line each, with Undo. */
-export function ChangeCard({ id }: { id: string }) {
-  const change = useChanges()?.find((c) => c.id === id);
+export function ChangeCard({ id, fallback }: { id: string; fallback: string }) {
+  const changes = useChanges();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!change) return null;
+  if (!changes) return null;
+  // too old to be in the list: show what changed, without Undo
+  const change = changes.find((c) => c.id === id) ?? { id, lines: fallback.split("\n").filter(Boolean), undoneAt: null, old: true };
+  const old = "old" in change;
   const undo = async () => {
     setBusy(true);
     setError(null);
@@ -230,7 +233,7 @@ export function ChangeCard({ id }: { id: string }) {
         </div>
       ))}
       <div className="pt-1 flex items-center gap-2">
-        {change.undoneAt ? (
+        {old ? null : change.undoneAt ? (
           <span className="text-xs text-muted">Undone</span>
         ) : (
           <Button className="h-8 px-3 text-xs" onClick={undo} disabled={busy}>

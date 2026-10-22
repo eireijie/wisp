@@ -28,7 +28,6 @@ interface TaskLite {
 
 const RECENT_MS = 60_000;
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", "Help me write a polite note to my landlord about a repair", "Summarize a document I'll paste in"];
 
@@ -118,9 +117,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
     .sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0) || (b.lastReadAt ?? "").localeCompare(a.lastReadAt ?? ""))
     .slice(0, 5);
   const chatName = (c: (typeof channels)[number]) => (c.kind === "dm" ? agentName(c.name.split(":").pop()!) : `#${c.name}`);
-  const busyCount = agents.filter((a) => a.status === "busy").length;
   const activeAgents = sortedAgents.filter((a) => doing[a.id] || a.status === "busy");
-  const onlineCount = agents.filter((a) => a.status !== "offline").length;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">

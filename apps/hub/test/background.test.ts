@@ -362,8 +362,24 @@ describe("agents changing Warren for their person", () => {
     expect(hub.store.background(agentId, me)).toMatchObject({ everyMinutes: 30, quietStart: "23:00" });
     expect((await owner.request("GET", "/api/changes"))[0].undoneAt).not.toBeNull();
     await expect(owner.request("POST", `/api/changes/${r.changeId}/undo`)).rejects.toThrow();
+    // undo leaves alone what was changed again since
+    const again = await agent.changeSettings({ background: { everyMinutes: 240 } });
+    hub.store.setBackground(agentId, me, { everyMinutes: 60 });
+    await owner.request("POST", `/api/changes/${again.changeId}/undo`);
+    expect(hub.store.background(agentId, me)!.everyMinutes).toBe(60);
+    hub.store.setBackground(agentId, me, { everyMinutes: 30 });
     // asking for what's already set changes nothing
     expect((await agent.changeSettings({ background: { everyMinutes: 30 } })).changed).toEqual([]);
+  });
+
+  it("keeps background work off when changing it for someone who never turned it on", async () => {
+    const saved = hub.store.background(agentId, me)!;
+    hub.store.db.prepare("DELETE FROM background WHERE agent_id = ? AND user_id = ?").run(agentId, me);
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const r = await agent.changeSettings({ background: { everyMinutes: 120 } });
+    expect(hub.store.background(agentId, me)).toMatchObject({ enabled: false, everyMinutes: 120 });
+    expect(r.changed).toEqual(["Checks: every 2 hours"]);
+    hub.store.setBackground(agentId, me, { enabled: saved.enabled, everyMinutes: saved.everyMinutes });
   });
 
   it("turns mods on and off for an owner, and back", async () => {
