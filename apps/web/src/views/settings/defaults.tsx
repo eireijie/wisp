@@ -33,7 +33,7 @@ export function AgentDefaultsPage() {
         setSaved(d);
         setForm(d);
       },
-      (e) => setError(e instanceof ApiError && e.status === 404 ? "This hub doesn't have agent defaults yet. Update it from Updates & about." : (e as Error).message),
+      (e) => setError(e instanceof ApiError && e.status === 404 ? "This hub doesn't have agent defaults yet. Update it from Settings → Advanced → About." : (e as Error).message),
     );
   }, []);
 
@@ -60,7 +60,7 @@ export function AgentDefaultsPage() {
 
   return (
     <>
-      <PageHeader title="Agent defaults">What a new agent starts with when you pick "Use my defaults". You can still change any of it for one agent.</PageHeader>
+      <PageHeader title="Agent defaults">What a new agent starts with when you pick "Use my defaults".</PageHeader>
       <OwnersOnly show={!isOwner} />
       <Section title="AI and model">
         <Card>

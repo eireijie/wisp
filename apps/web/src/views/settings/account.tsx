@@ -293,7 +293,7 @@ export function NotificationsPage() {
   const shownEvents = tasksOn ? events : events.filter(([k]) => k !== "tasks");
   return (
     <>
-      <PageHeader title="Notifications">Get a notification when something needs you. These settings are for this device and browser.</PageHeader>
+      <PageHeader title="Notifications">Get a notification when something needs you, on this device.</PageHeader>
       <Section title="Notify me when a task finishes or needs me">
         <Card>
           <Row

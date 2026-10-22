@@ -64,7 +64,7 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
     return info.publicUrl ? (
       <Done url={info.publicUrl} body={`Open Warren at this address from anywhere. Your devices need Tailscale, signed in to ${t.tailnet ?? "the same Tailscale network"}.`} />
     ) : (
-      <p className="text-sm text-muted">Warren only works on its home network for now. The owner can turn on Tailscale under Settings → Access.</p>
+      <p className="text-sm text-muted">Warren only works on its home network for now. The owner can turn on Tailscale under Settings → Devices → Access.</p>
     );
 
   return (

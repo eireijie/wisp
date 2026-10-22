@@ -1,11 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Blocks, Gauge, Globe, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, Plug, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users, Wand2 } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, Gauge, Monitor, Palette, Settings, SlidersHorizontal, Users } from "lucide-react";
 import { resolveFeatures, type Features } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { appHashBeforeSettings, go, href, type SettingsPage } from "../router.ts";
 import { Button, Pill, cx } from "../components/ui.tsx";
-import { useSimple } from "../experience.tsx";
 import { useFeatures } from "../features.ts";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
@@ -22,59 +21,69 @@ import { AccessPanel } from "../components/Access.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
 /**
- * Settings, split into pages: yours first ("You"), then the organization's. A page can need a
- * feature (Voice, People), and some aren't for guests.
+ * Settings: a short list of sections. A section with more than one page lists them under it
+ * while it's open. A page can need a feature (Voice, People, Usage), and some aren't for guests.
+ * Page ids are the routes (SETTINGS_PAGES), so old links still open the same page.
  */
-type NavPage = { id: SettingsPage; label: string; icon: ReactNode; noGuests?: boolean; feature?: keyof Features };
-type NavGroup = { group: string; hint?: string; pages: NavPage[] };
-const NAV: NavGroup[] = [
+type NavPage = { id: SettingsPage; label: string; noGuests?: boolean; feature?: keyof Features };
+type NavSection = { section: string; icon: ReactNode; pages: NavPage[] };
+const NAV: NavSection[] = [
   {
-    group: "You",
+    section: "General",
+    icon: <Settings size={16} />,
     pages: [
-      { id: "profile", label: "Profile", icon: <User size={16} /> },
-      { id: "preferences", label: "App behavior", icon: <SlidersHorizontal size={16} /> },
-      { id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
-      { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
-      { id: "usage", label: "Usage", icon: <Gauge size={16} />, feature: "background" },
-      { id: "voice", label: "Voice", icon: <Mic size={16} />, feature: "voice" },
-      { id: "security", label: "Security", icon: <Lock size={16} /> },
-      { id: "mobile", label: "Mobile", icon: <Smartphone size={16} /> },
+      { id: "general", label: "Workspace" },
+      { id: "profile", label: "Profile" },
+      { id: "preferences", label: "App behavior" },
+      { id: "features", label: "Mods" },
+    ],
+  },
+  { section: "Usage", icon: <Gauge size={16} />, pages: [{ id: "usage", label: "Usage", feature: "background" }] },
+  {
+    section: "People",
+    icon: <Users size={16} />,
+    pages: [
+      { id: "people", label: "People", feature: "invite" },
+      { id: "agents", label: "Agents", noGuests: true },
     ],
   },
   {
-    group: "Organization",
+    section: "Notifications",
+    icon: <Bell size={16} />,
     pages: [
-      { id: "general", label: "General", icon: <Building2 size={16} /> },
-      { id: "access", label: "Access", icon: <Globe size={16} /> },
-      { id: "agent-defaults", label: "Agent defaults", icon: <Wand2 size={16} />, noGuests: true },
-      { id: "agents", label: "Agents", icon: <Bot size={16} />, noGuests: true },
-      { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
-      { id: "memory", label: "Memory", icon: <Shield size={16} /> },
-      { id: "apps", label: "Connected apps", icon: <Plug size={16} />, noGuests: true },
-      { id: "features", label: "Mods", icon: <Blocks size={16} /> },
-      { id: "people", label: "People", icon: <Users size={16} />, feature: "invite" },
-      { id: "runtimes", label: "Agent runtimes", icon: <Cpu size={16} />, noGuests: true },
-      { id: "connections", label: "Connections", icon: <Link2 size={16} />, noGuests: true },
-      { id: "data", label: "Data & export", icon: <Database size={16} /> },
-      { id: "updates", label: "Updates & about", icon: <RefreshCw size={16} /> },
+      { id: "notifications", label: "Notifications" },
+      { id: "voice", label: "Voice", feature: "voice" },
+    ],
+  },
+  { section: "Appearance", icon: <Palette size={16} />, pages: [{ id: "appearance", label: "Appearance" }] },
+  {
+    section: "Devices",
+    icon: <Monitor size={16} />,
+    pages: [
+      { id: "computers", label: "Computers", noGuests: true },
+      { id: "mobile", label: "Mobile" },
+      { id: "access", label: "Access" },
+    ],
+  },
+  {
+    section: "Advanced",
+    icon: <SlidersHorizontal size={16} />,
+    pages: [
+      { id: "agent-defaults", label: "Agent defaults", noGuests: true },
+      { id: "memory", label: "Memory" },
+      { id: "apps", label: "Connected apps", noGuests: true },
+      { id: "runtimes", label: "Agent runtimes", noGuests: true },
+      { id: "connections", label: "Connections", noGuests: true },
+      { id: "security", label: "Security" },
+      { id: "data", label: "Data" },
+      { id: "updates", label: "About" },
     ],
   },
 ];
 
-/** Pages most people never need; in Simple they sit under "Advanced" at the bottom of the list. */
-const ADVANCED_PAGES: SettingsPage[] = ["runtimes", "connections"];
-
-/**
- * The settings list for Simple or Advanced, for a guest or not, with the organization's features.
- * Simple moves the technical pages to the end, still reachable. Pages for a feature that's off
- * are left out.
- */
-export function settingsNav(simple: boolean, guest: boolean, features: Features = resolveFeatures(null)): NavGroup[] {
-  const groups = NAV.map((g) => ({ ...g, pages: g.pages.filter((p) => !(guest && p.noGuests) && (!p.feature || features[p.feature])) }));
-  if (!simple) return groups;
-  const advanced = groups.flatMap((g) => g.pages.filter((p) => ADVANCED_PAGES.includes(p.id)));
-  const out = groups.map((g) => ({ ...g, pages: g.pages.filter((p) => !ADVANCED_PAGES.includes(p.id)) }));
-  return advanced.length ? [...out, { group: "Advanced", hint: "For setting up agent tools by hand.", pages: advanced }] : out;
+/** The settings sections for a guest or not, with the organization's features. Pages that don't apply, and sections left empty, are left out. */
+export function settingsNav(guest: boolean, features: Features = resolveFeatures(null)): NavSection[] {
+  return NAV.map((s) => ({ ...s, pages: s.pages.filter((p) => !(guest && p.noGuests) && (!p.feature || features[p.feature])) })).filter((s) => s.pages.length);
 }
 
 const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
@@ -94,7 +103,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   ),
   access: () => (
     <>
-      <PageHeader title="Access">Use Warren from anywhere: on your phone, at work, or from a friend's computer. Tailscale gives it a private address that only your own devices can open.</PageHeader>
+      <PageHeader title="Access">Open Warren from anywhere with Tailscale, privately.</PageHeader>
       <AccessPanel />
     </>
   ),
@@ -117,50 +126,80 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
 export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage | null; onBack?: () => void; fullWindow?: boolean }) {
   const me = useStore((s) => s.me)!;
   const guest = me.role === "guest";
-  const simple = useSimple();
   const features = useFeatures();
-  const nav = settingsNav(simple, guest, features);
-  const all = nav.flatMap((g) => g.pages);
-  // a page whose feature is off (or that a guest can't use) isn't shown; fall back to Profile
+  const nav = settingsNav(guest, features);
+  const all = nav.flatMap((s) => s.pages);
+  // a page whose feature is off (or that a guest can't use) isn't shown; fall back to the first page
   const known = page && all.some((p) => p.id === page) ? page : null;
-  const current = known ?? (fullWindow ? "profile" : null);
+  const current = known ?? (fullWindow ? all[0].id : null);
   const label = all.find((p) => p.id === current)?.label;
+  const open = nav.find((s) => s.pages.some((p) => p.id === current));
 
   const list = (
-    <nav className="space-y-5" aria-label="Settings">
-      {nav.map((g) => (
-        <div key={g.group}>
-          <div className={cx("px-2.5 mb-1 text-[13px] font-bold", fullWindow ? "text-muted" : "text-faint")}>{g.group}</div>
-          {g.hint && <p className="px-2.5 mb-1.5 text-xs text-muted">{g.hint}</p>}
-          <div className="space-y-px">
-            {g.pages.map((p) => (
-              <a
-                key={p.id}
-                href={href({ view: "settings", page: p.id })}
-                aria-current={current === p.id ? "page" : undefined}
-                className={cx(
-                  "flex items-center gap-2.5 rounded-lg px-2.5 text-[15px]",
-                  fullWindow ? "h-[34px] md:text-sm" : "h-9",
-                  current === p.id ? (fullWindow ? "bg-side-active text-ink font-bold" : "bg-hover text-ink font-medium") : fullWindow ? "text-ink/80 font-medium hover:text-ink hover:bg-side-hover" : "text-muted hover:text-ink hover:bg-hover",
-                )}
-              >
-                <span className="shrink-0 opacity-80">{p.icon}</span>
-                <span className="flex-1 truncate">{p.label}</span>
-                {!fullWindow && <ChevronRight size={14} className="text-faint" />}
-              </a>
-            ))}
+    <nav className="space-y-px" aria-label="Settings">
+      {nav.map((s) => {
+        const isOpen = s === open;
+        return (
+          <div key={s.section}>
+            <a
+              href={href({ view: "settings", page: s.pages[0].id })}
+              aria-current={isOpen && s.pages.length === 1 ? "page" : undefined}
+              className={cx(
+                "flex items-center gap-2.5 rounded-lg px-2.5 text-[15px]",
+                fullWindow ? "h-[34px] md:text-sm" : "h-11",
+                isOpen ? (fullWindow ? "bg-side-active text-ink font-bold" : "bg-hover text-ink font-medium") : fullWindow ? "text-ink/80 font-medium hover:text-ink hover:bg-side-hover" : "text-ink hover:bg-hover",
+              )}
+            >
+              <span className="shrink-0 opacity-80">{s.icon}</span>
+              <span className="flex-1 truncate">{s.section}</span>
+              {!fullWindow && <ChevronRight size={14} className="text-faint" />}
+            </a>
+            {fullWindow && isOpen && s.pages.length > 1 && (
+              <div className="ml-[18px] my-1 pl-3 border-l border-line space-y-px">
+                {s.pages.map((p) => (
+                  <a
+                    key={p.id}
+                    href={href({ view: "settings", page: p.id })}
+                    aria-current={current === p.id ? "page" : undefined}
+                    className={cx("flex items-center h-[30px] px-2.5 rounded-lg text-sm truncate", current === p.id ? "text-ink font-bold bg-side-hover" : "text-muted hover:text-ink hover:bg-side-hover")}
+                  >
+                    {p.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
+
+  // phones: a section's other pages as a row of chips above the page
+  const siblings =
+    !fullWindow && open && open.pages.length > 1 ? (
+      <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 mb-5" aria-label={`${open.section} pages`}>
+        {open.pages.map((p) => (
+          <a
+            key={p.id}
+            href={href({ view: "settings", page: p.id })}
+            aria-current={current === p.id ? "page" : undefined}
+            className={cx("shrink-0 h-8 px-3.5 rounded-full inline-flex items-center text-[13px] font-bold", current === p.id ? "bg-ink text-bg" : "bg-chip text-muted hover:text-ink")}
+          >
+            {p.label}
+          </a>
+        ))}
+      </div>
+    ) : null;
 
   const body = (id: SettingsPage) =>
     id === "apps" ? (
       <ConnectorsView />
     ) : (
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className={cx("max-w-3xl pb-16", fullWindow ? "mx-auto px-7 py-10" : "p-4")}>{PAGES[id]()}</div>
+        <div className={cx("max-w-3xl pb-16", fullWindow ? "mx-auto px-7 py-10" : "p-4")}>
+          {siblings}
+          {PAGES[id]()}
+        </div>
       </div>
     );
 
@@ -196,7 +235,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
           )}
           <h1 className="text-lg font-bold tracking-tight truncate">
             Settings
-            {label && <span className="text-muted font-normal normal-case tracking-normal"> / {label}</span>}
+            {open && <span className="text-muted font-normal normal-case tracking-normal"> / {open.section}</span>}
           </h1>
         </header>
       )}
@@ -270,7 +309,7 @@ function UpdatesPage() {
   const u = info?.update;
   return (
     <>
-    <PageHeader title="Updates & about">Warren is free and open source (Apache-2.0). Your data stays on this hub.</PageHeader>
+    <PageHeader title="About">Free and open source. Your data stays on this hub.</PageHeader>
     <section className="space-y-3 mb-10">
       <div className="flex items-center justify-between gap-3">
         <div>

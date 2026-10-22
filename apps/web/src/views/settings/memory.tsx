@@ -24,10 +24,10 @@ export function MemoryPage() {
     <>
       <PageHeader title="Memory">
         {simple ? (
-          <>Everything your helpers and people remember is kept as notes you can read and write in Warren. Warren keeps track of who changed what and who is allowed to see each note.</>
+          <>What your helpers and people remember, and who can see each note.</>
         ) : (
           <>
-            Everything your agents and people remember is kept as plain markdown notes in one folder. Use <b>Obsidian</b> to read and write them; Warren keeps track of who changed what and who is allowed to see each note.
+            Plain markdown notes in one folder. Open them in <b>Obsidian</b> if you like.
           </>
         )}
       </PageHeader>

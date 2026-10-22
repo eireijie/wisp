@@ -22,7 +22,7 @@ export function GeneralPage() {
   const [saved, flash] = useSavedFlash();
   return (
     <>
-      <PageHeader title="General">The organization everyone here shares: people, agents, devices and memory.</PageHeader>
+      <PageHeader title="Workspace">The organization everyone here shares.</PageHeader>
       <OwnersOnly show={!isOwner} />
       <Section title="Organization name">
         <form
@@ -49,7 +49,7 @@ export function GeneralPage() {
         </form>
         {error && <p className="mt-2 text-sm text-bad">{error}</p>}
       </Section>
-      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp. Settings → Access gives it an address that works from anywhere.">
+      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
         <CopyBlock text={shareOrigin(access)} />
       </Section>
     </>
@@ -138,7 +138,7 @@ export function PeoplePage() {
                 <p className="text-xs text-warn">
                   {originReach(made.url) === "this-computer" ? "This link only works on this computer." : "This link only works on this Wi-Fi."} To invite someone elsewhere, turn on an address that works from anywhere in{" "}
                   <a href={href({ view: "settings", page: "access" })} className="underline">
-                    Settings → Access
+                    Settings → Devices → Access
                   </a>{" "}
                   first, then make a new link.
                 </p>
@@ -630,7 +630,7 @@ export function ComputersPage() {
   return (
     <>
       <PageHeader title="Computers">
-        Computers agents can use: their own virtual computers, your screen, or cloud computers. Manage each one under{" "}
+        Computers agents can use. Manage them in{" "}
         <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
           Computers
         </a>{" "}
@@ -739,7 +739,7 @@ export function ConnectionsPage() {
   ];
   return (
     <>
-      <PageHeader title="Connections">Keys that let agents running somewhere else reach this hub. Most people never need these. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
+      <PageHeader title="Connections">Keys for agents running somewhere else. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {groups.map(([title, description, items]) => (
         <Section key={title} title={title} description={description}>
