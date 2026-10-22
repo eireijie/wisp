@@ -33,6 +33,8 @@ final class Store {
   var agentPolicy: AgentPolicy?
   var routinesVersion = 0
   var backgroundVersion = 0
+  var allowance: Allowance?
+  var changes: [Change]?
   var simple = false
   /** the optional features this organization has on (all on when the hub doesn't say) */
   var features: Features = .everything
@@ -542,6 +544,9 @@ final class Store {
       if let event = try? JSONSerialization.jsonObject(with: data) as? [String: String], let id = event["agentId"], backgrounds[id] != nil {
         Task { do { try await refreshBackground(id) } catch { syncError = error.localizedDescription } }
       }
+      if allowance != nil { Task { try? await refreshAllowance() } }
+    case "changes_changed":
+      Task { try? await refreshChanges() }
     case "memory_changed":
       memoryVersion += 1
       Task { do { try await refreshNotes() } catch { syncError = error.localizedDescription } }

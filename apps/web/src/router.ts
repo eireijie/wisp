@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
  *   #/join/<code>                    accept an invite (signed out)
  *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Warren is" and Simple or Advanced
  *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
+ *   #/mods                           mods: optional parts of Warren, switched on or off
  *   #/                               the dashboard on desktops, the chats list on phones (App.tsx)
  *   #/chats                          channel list (phones; desktops go to the dashboard)
  *   #/you                            account menu (phones)
@@ -38,12 +39,13 @@ export type Route =
   | { view: "settings"; page?: SettingsPage | null }
   | { view: "welcome"; intro?: boolean }
   | { view: "help" }
+  | { view: "mods" }
   | { view: "chats" }
   | { view: "you" };
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "mobile", "general", "access", "agent-defaults", "features", "people", "agents", "runtimes", "memory", "computers", "apps", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "mobile", "general", "access", "agent-defaults", "features", "people", "agents", "runtimes", "memory", "computers", "apps", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["members", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
@@ -80,6 +82,8 @@ export function parseRoute(hash: string): Route {
       return { view: "welcome", ...(parts[1] === "intro" ? { intro: true } : {}) };
     case "help":
       return { view: "help" };
+    case "mods":
+      return { view: "mods" };
     case "chats":
       return { view: "chats" };
     case "you":
@@ -121,6 +125,8 @@ export function href(r: Route): string {
       return r.intro ? "#/welcome/intro" : "#/welcome";
     case "help":
       return "#/help";
+    case "mods":
+      return "#/mods";
     case "chats":
       return "#/chats";
     case "you":

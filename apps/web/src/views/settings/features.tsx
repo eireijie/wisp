@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Bell, CircleDot, Clock, Ghost, ListChecks, Phone, UserPlus, Users } from "lucide-react";
-import { FEATURE_INFO, FEATURE_PRESETS, type FeatureKey, type Features } from "@warren/core";
+import { FEATURE_INFO, FEATURE_KEYS, type FeatureKey, type Features } from "@warren/core";
 import { useStore } from "../../store.ts";
-import { FEATURE_GROUPS, featurePreset, featuresIn, setFeatures, useFeatures } from "../../features.ts";
-import { cx } from "../../components/ui.tsx";
-import { PageHeader } from "./parts.tsx";
+import { setFeatures, useFeatures } from "../../features.ts";
+import { AskAgent } from "../../components/AskAgent.tsx";
+import { Button, cx } from "../../components/ui.tsx";
 
 const ICONS: Record<FeatureKey, ReactNode> = {
   background: <Bell size={18} />,
@@ -17,12 +17,14 @@ const ICONS: Record<FeatureKey, ReactNode> = {
   invite: <UserPlus size={18} />,
 };
 
-/** Settings → Features: switch the optional parts of Warren on or off for the whole organization. Owners change them; everyone else can see them. */
-export function FeaturesPage() {
+/**
+ * Mods: the optional parts of Warren, switched on or off for the whole organization. Owners
+ * change them (or ask an agent to); everyone else can see them.
+ */
+export function ModsPage() {
   const features = useFeatures();
   const isOwner = useStore((s) => s.me?.role) === "owner";
   const [error, setError] = useState<string | null>(null);
-  const preset = featurePreset(features);
 
   const save = async (patch: Partial<Features>) => {
     setError(null);
@@ -33,63 +35,52 @@ export function FeaturesPage() {
     }
   };
 
-  return (
-    <>
-      <PageHeader title="Features">Turn on only what you use. Everything here is off until you want it, and you can change it any time.</PageHeader>
-      <div className="space-y-7">
-        {!isOwner && <p className="rounded-xl border border-dashed border-line px-4 py-3 text-sm text-muted">Only owners can change which features are on.</p>}
-
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-bg px-4.5 py-4">
-          <div className="min-w-[200px] flex-1">
-            <div className="font-extrabold">Quick start</div>
-            <div className="text-[13px] text-muted">Simple turns everything below off. Everything turns it all on.</div>
-          </div>
-          <div role="group" aria-label="Quick start" className="flex rounded-xl bg-chip p-[3px]">
-            {(
-              [
-                ["simple", "Simple"],
-                ["everything", "Everything"],
-                ["custom", "Custom"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={preset === id}
-                disabled={!isOwner || id === "custom"}
-                onClick={() => id !== "custom" && save(FEATURE_PRESETS[id])}
-                className={cx("h-[34px] px-4 rounded-[9px] text-[13px] font-bold transition-colors", preset === id ? "bg-panel shadow-sm text-ink" : "text-ink/70", isOwner && id !== "custom" && preset !== id && "hover:text-ink", "disabled:cursor-default")}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {FEATURE_GROUPS.map((g) => (
-          <section key={g.id} className="space-y-2" aria-labelledby={`fg-${g.id}`}>
-            <h2 id={`fg-${g.id}`} className="text-[15px] font-extrabold text-ink/85">
-              {g.title}
-            </h2>
-            <div className="rounded-2xl border border-line overflow-hidden divide-y divide-line">
-              {featuresIn(g.id).map((k) => (
-                <div key={k} className="flex items-center gap-4 px-4.5 py-3.5">
-                  <span className="size-9 shrink-0 rounded-[11px] bg-chip text-ink/80 grid place-items-center" aria-hidden>
-                    {ICONS[k]}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-bold">{FEATURE_INFO[k].name}</div>
-                    <div className="text-[13px] leading-snug text-muted">{FEATURE_INFO[k].description}</div>
-                  </div>
-                  <Switch on={features[k]} label={FEATURE_INFO[k].name} disabled={!isOwner} onChange={(on) => save({ [k]: on })} />
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-        {error && <p className="text-sm text-bad">{error}</p>}
+  const on = FEATURE_KEYS.filter((k) => features[k]);
+  const off = FEATURE_KEYS.filter((k) => !features[k]);
+  const card = (k: FeatureKey, control: ReactNode) => (
+    <div key={k} className="rounded-2xl border border-line p-4 flex flex-col gap-2.5">
+      <div className="flex items-center gap-2.5">
+        <span className="size-9 shrink-0 rounded-[11px] bg-chip text-ink/80 grid place-items-center" aria-hidden>
+          {ICONS[k]}
+        </span>
+        <span className="flex-1 min-w-0 text-[15px] font-bold">{FEATURE_INFO[k].name}</span>
+        {control}
       </div>
-    </>
+      <p className="text-sm leading-snug text-ink/75">{FEATURE_INFO[k].description}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-8">
+      <h2 className="text-2xl font-extrabold">Mods</h2>
+      {isOwner ? <AskAgent placeholder={`Ask {name}, like "turn on voice calls"`} /> : <p className="text-sm text-muted">Only owners can turn mods on or off.</p>}
+      {on.length > 0 && (
+        <section className="space-y-2.5" aria-labelledby="mods-on">
+          <h3 id="mods-on" className="text-[15px] font-extrabold text-muted">
+            On
+          </h3>
+          <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(250px,1fr))]">{on.map((k) => card(k, <Switch on label={FEATURE_INFO[k].name} disabled={!isOwner} onChange={(v) => save({ [k]: v })} />))}</div>
+        </section>
+      )}
+      {off.length > 0 && (
+        <section className="space-y-2.5" aria-labelledby="mods-more">
+          <h3 id="mods-more" className="text-[15px] font-extrabold text-muted">
+            More mods
+          </h3>
+          <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(250px,1fr))]">
+            {off.map((k) =>
+              card(
+                k,
+                <Button className="h-8 px-3.5 text-[13px]" disabled={!isOwner} onClick={() => save({ [k]: true })}>
+                  Add
+                </Button>,
+              ),
+            )}
+          </div>
+        </section>
+      )}
+      {error && <p className="text-sm text-bad">{error}</p>}
+    </div>
   );
 }
 

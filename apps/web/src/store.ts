@@ -93,6 +93,8 @@ interface State {
   routinesVersion: number;
   /** bumped when an agent's background work or follow-ups change */
   backgroundVersion: number;
+  /** bumps when an agent changes a setting or mod for someone, or someone undoes one */
+  changesVersion: number;
   /** bumps when tasks change, so the Tasks page refetches */
   tasksVersion: number;
   /** bumps when notes change outside Warren, so Memory reloads */
@@ -159,6 +161,7 @@ export const useStore = create<State>((set, get) => ({
   approvals: {},
   routinesVersion: 0,
   backgroundVersion: 0,
+  changesVersion: 0,
   tasksVersion: 0,
   memoryVersion: 0,
   newTaskOpen: false,
@@ -388,6 +391,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ routinesVersion: s.routinesVersion + 1 }));
     } else if (e.type === "background_changed") {
       set((s) => ({ backgroundVersion: s.backgroundVersion + 1 }));
+    } else if (e.type === "changes_changed") {
+      set((s) => ({ changesVersion: s.changesVersion + 1 }));
     } else if (e.type === "tasks_changed") {
       set((s) => ({ tasksVersion: s.tasksVersion + 1 }));
     } else if (e.type === "memory_changed") {

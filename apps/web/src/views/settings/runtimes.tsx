@@ -72,7 +72,7 @@ export function RuntimesPage() {
 
   return (
     <>
-      <PageHeader title="Agent runtimes">The AI tools (like Claude Code or Codex) each of your devices can run for agents. Most people set this up once. Agents on a virtual computer get Claude Code, Codex, Hermes and Kimi CLI built in.</PageHeader>
+      <PageHeader title="Agent runtimes">The AI tools, like Claude Code or Codex, each device can run for agents.</PageHeader>
       {devices === null ? (
         <p className="text-sm text-muted">Loading devices…</p>
       ) : !device ? (

@@ -136,7 +136,7 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Studio" maxLength={60} />
         </Field>
-        <Field label="Start with" hint={start === "simple" ? "Just chat, agents and memory. Turn on more in Settings → Features." : "Every feature on: teams, tasks, routines, voice and more."}>
+        <Field label="Start with" hint={start === "simple" ? "Just chat, agents and memory. Turn on more in Mods." : "Every feature on: teams, tasks, routines, voice and more."}>
           <div role="radiogroup" aria-label="Start with" className="flex rounded-xl bg-chip p-0.5">
             {(
               [

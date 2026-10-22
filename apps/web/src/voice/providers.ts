@@ -125,7 +125,7 @@ export function createListener(engine: VoiceSettings["listen"], callbacks: Liste
     stop,
     async start() {
       if (active) return;
-      if (engine === "device" && !canRecognize()) throw new Error("This browser doesn't offer speech recognition. Try Chrome or Safari, or choose OpenAI in Settings → Voice.");
+      if (engine === "device" && !canRecognize()) throw new Error("This browser doesn't offer speech recognition. Try Chrome or Safari, or choose OpenAI in Settings → Notifications → Voice.");
       active = true;
       const current = ++generation;
       try {
@@ -214,7 +214,7 @@ export function createListener(engine: VoiceSettings["listen"], callbacks: Liste
           rec.onerror = (e) => {
             if (!active || current !== generation || rec !== recognition) return;
             if (["aborted", "no-speech"].includes(e.error)) return;
-            fail(e.error === "not-allowed" || e.error === "service-not-allowed" ? "Microphone or speech access was denied. Allow it in your browser settings, then call again." : "Speech recognition isn't available right now. Try again, or choose OpenAI in Settings → Voice.");
+            fail(e.error === "not-allowed" || e.error === "service-not-allowed" ? "Microphone or speech access was denied. Allow it in your browser settings, then call again." : "Speech recognition isn't available right now. Try again, or choose OpenAI in Settings → Notifications → Voice.");
           };
           rec.onend = () => { if (active && current === generation) { flush(); restart = setTimeout(boot, 150); } };
           try { rec.start(); } catch { fail("Couldn't start speech recognition. Please try calling again."); }

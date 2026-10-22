@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { FEATURE_INFO, FEATURE_KEYS, type BackgroundWork, type FeatureKey } from "@warren/core";
 import type { Caller } from "./api.ts";
 import { DEFAULT_DAILY_CAP, parseWhen } from "./background.ts";
+import { setWorkspaceFeatures, workspaceFeatures } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
 interface Helpers {
@@ -11,6 +13,40 @@ interface Helpers {
 }
 
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "a time like 22:00");
+
+/** What an agent may change about its own background work for someone. */
+type BackgroundPatch = Partial<Pick<BackgroundWork, "enabled" | "everyMinutes" | "focus" | "quietStart" | "quietEnd">>;
+/** How to put things back the way they were before an agent changed them. */
+interface Undo {
+  /** `patch` puts things back; `after` is what the change set, so undo leaves alone anything changed since */
+  background?: { agentId: string; patch: BackgroundPatch; after?: BackgroundPatch };
+  mods?: Partial<Record<FeatureKey, boolean>>;
+}
+
+/** "every 30 min", "every hour", "every 2 hours" */
+export function everyText(minutes: number) {
+  if (minutes < 60) return `every ${minutes} min`;
+  if (minutes % 60) return `every ${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return minutes === 60 ? "every hour" : `every ${minutes / 60} hours`;
+}
+
+/** "22:00" → "10pm", "07:30" → "7:30am" */
+export function clockText(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "am" : "pm"}`;
+}
+
+/** One line per thing that's different, e.g. "Checks: every 30 min → every 2 hours". */
+function backgroundLines(was: BackgroundPatch, now: BackgroundPatch): string[] {
+  const out: string[] = [];
+  if (now.enabled !== undefined && now.enabled !== was.enabled) out.push(`Works in the background: ${now.enabled ? "on" : "off"}`);
+  if (now.everyMinutes !== undefined && now.everyMinutes !== was.everyMinutes) out.push(`Checks: ${was.everyMinutes ? `${everyText(was.everyMinutes)} → ` : ""}${everyText(now.everyMinutes)}`);
+  const qs = now.quietStart ?? was.quietStart;
+  const qe = now.quietEnd ?? was.quietEnd;
+  if ((now.quietStart !== undefined && now.quietStart !== was.quietStart) || (now.quietEnd !== undefined && now.quietEnd !== was.quietEnd)) out.push(qs === qe ? "Quiet hours: none" : `Quiet hours: ${clockText(qs!)} – ${clockText(qe!)}`);
+  if (now.focus !== undefined && now.focus !== was.focus) out.push(now.focus ? `Keeps an eye on: ${now.focus}` : "Keeps an eye on: everything it can reach");
+  return out;
+}
 
 /**
  * Background work (an agent checking in on its own for a person), follow-ups (one-off "come
@@ -144,6 +180,134 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const files = body.fileIds.map((f) => store.file(f)).filter((f) => f?.workspaceId === c.workspaceId);
     const msg = hub.postMessage({ channelId: channel.id, author: c.actor, body: body.text, parts: files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), route: false, onBehalfOf: userId });
     return { messageId: msg.id, channelId: channel.id };
+  });
+
+  // --- one allowance for all of a person's background work -----------------------------------------
+
+  app.get("/api/background/allowance", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    return hub.background.allowance(c.workspaceId, c.actor.id);
+  });
+
+  app.put("/api/background/allowance", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const body = parse(z.object({ dailyTokens: z.number().int().min(10_000).max(1_000_000_000).nullable() }).strict(), req.body, reply);
+    if (!body) return;
+    hub.background.setDailyTokens(c.workspaceId, c.actor.id, body.dailyTokens);
+    hub.broadcast(c.workspaceId, { type: "background_changed", agentId: "" });
+    return hub.background.allowance(c.workspaceId, c.actor.id);
+  });
+
+  // --- agents changing settings and mods for their person, and undoing that -------------------------
+
+  /** Apply a background patch for one agent and person: turning it on or off starts or stops checks like the Background tab does. */
+  const applyBackground = (agentId: string, userId: string, workspaceId: string, patch: BackgroundPatch) => {
+    const was = store.background(agentId, userId);
+    store.setBackground(agentId, userId, { ...patch, ...(patch.enabled && !was?.enabled ? { nextAt: null, nextReason: "" } : {}) });
+    hub.broadcast(workspaceId, { type: "background_changed", agentId });
+    if (patch.enabled && !was?.enabled) hub.background.wake(agentId, userId);
+    if (patch.enabled === false && was?.enabled) hub.background.turnedOff(agentId, userId);
+  };
+
+  app.get("/api/agent/settings", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
+    const userId = personFor(c);
+    if (!userId) return reply.code(409).send({ error: "nobody to work for" });
+    const b = store.background(c.actor.id, userId);
+    const features = workspaceFeatures(store, c.workspaceId);
+    return {
+      background: b ? { enabled: b.enabled, everyMinutes: b.everyMinutes, quietStart: b.quietStart, quietEnd: b.quietEnd, focus: b.focus } : null,
+      mods: FEATURE_KEYS.map((k) => ({ key: k, name: FEATURE_INFO[k].name, description: FEATURE_INFO[k].description, on: features[k] })),
+      canChangeMods: store.members(c.workspaceId).some((m) => m.id === userId && m.role === "owner"),
+      allowance: hub.background.allowance(c.workspaceId, userId),
+    };
+  });
+
+  app.post("/api/agent/settings", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
+    const agent = store.agent(c.actor.id)!;
+    const body = parse(
+      z
+        .object({
+          background: z.object({ enabled: z.boolean(), everyMinutes: z.number().int().min(10).max(1440), focus: z.string().trim().max(2000), quietStart: HHMM, quietEnd: HHMM }).partial().strict(),
+          mods: z.object(Object.fromEntries(FEATURE_KEYS.map((k) => [k, z.boolean()])) as Record<FeatureKey, z.ZodBoolean>).partial().strict(),
+        })
+        .partial()
+        .strict(),
+      req.body,
+      reply,
+    );
+    if (!body) return;
+    const userId = personFor(c);
+    if (!userId) return reply.code(409).send({ error: "nobody to work for" });
+    const undo: Undo = {};
+    const lines: string[] = [];
+    if (body.background && Object.keys(body.background).length) {
+      const notAllowed = hub.whyNotAllowed(agent, userId);
+      if (notAllowed) return reply.code(403).send({ error: notAllowed });
+      const was = store.background(agent.id, userId);
+      const before: BackgroundPatch = was ? { enabled: was.enabled, everyMinutes: was.everyMinutes, focus: was.focus, quietStart: was.quietStart, quietEnd: was.quietEnd } : { enabled: false };
+      lines.push(...backgroundLines(before, body.background));
+      // background work that didn't exist yet goes back to off
+      // changing how often or what to watch for someone who never turned it on keeps it off
+      const patch: BackgroundPatch = !was && body.background.enabled === undefined ? { ...body.background, enabled: false } : body.background;
+      undo.background = { agentId: agent.id, after: patch, patch: Object.fromEntries(Object.keys(patch).map((k) => [k, before[k as keyof BackgroundPatch] ?? (k === "enabled" ? false : undefined)]).filter(([, v]) => v !== undefined)) };
+      applyBackground(agent.id, userId, c.workspaceId, patch);
+    }
+    if (body.mods && Object.keys(body.mods).length) {
+      if (!store.members(c.workspaceId).some((m) => m.id === userId && m.role === "owner")) return reply.code(403).send({ error: "only an owner can turn mods on or off; ask them to" });
+      const was = workspaceFeatures(store, c.workspaceId);
+      const changed = (Object.keys(body.mods) as FeatureKey[]).filter((k) => was[k] !== body.mods![k]);
+      if (changed.length) {
+        undo.mods = Object.fromEntries(changed.map((k) => [k, was[k]]));
+        lines.push(...changed.map((k) => `Mod ${FEATURE_INFO[k].name}: ${body.mods![k] ? "on" : "off"}`));
+        hub.broadcast(c.workspaceId, { type: "features", features: setWorkspaceFeatures(store, c.workspaceId, body.mods) });
+      }
+    }
+    if (!lines.length) return { changed: [], note: "Nothing was different, so nothing changed." };
+    const change = store.createChange({ workspaceId: c.workspaceId, userId, agentId: agent.id, lines, undo });
+    // the person sees what changed in your DM, with an Undo
+    const channel = store.dmChannel(c.workspaceId, userId, agent.id);
+    hub.postMessage({ channelId: channel.id, author: c.actor, body: lines.join("\n"), parts: [{ type: "change", changeId: change.id }], route: false, onBehalfOf: userId });
+    hub.broadcast(c.workspaceId, { type: "changes_changed" });
+    return { changed: lines, changeId: change.id };
+  });
+
+  app.get("/api/changes", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    return store.changes(c.workspaceId, c.actor.id).map(({ undo: _, ...ch }) => ch);
+  });
+
+  app.post("/api/changes/:id/undo", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const ch = store.change((req.params as { id: string }).id);
+    if (!ch || ch.userId !== c.actor.id || store.agent(ch.agentId)?.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "change not found" });
+    if (ch.undoneAt) return reply.code(409).send({ error: "already undone" });
+    const undo = ch.undo as Undo;
+    if (undo.mods && c.viewer.role !== "owner") return reply.code(403).send({ error: "only an owner can turn mods on or off" });
+    // only what still is as the change left it goes back; anything changed since stays
+    if (undo.background) {
+      const { agentId, patch, after } = undo.background;
+      const now = store.background(agentId, c.actor.id);
+      const keep = Object.fromEntries(Object.entries(patch).filter(([k]) => !after || !now || now[k as keyof BackgroundPatch] === after[k as keyof BackgroundPatch]));
+      if (Object.keys(keep).length) applyBackground(agentId, c.actor.id, c.workspaceId, keep);
+    }
+    if (undo.mods) {
+      const now = workspaceFeatures(store, c.workspaceId);
+      const keep = Object.fromEntries((Object.keys(undo.mods) as FeatureKey[]).filter((k) => now[k] !== undo.mods![k]).map((k) => [k, undo.mods![k]]));
+      if (Object.keys(keep).length) hub.broadcast(c.workspaceId, { type: "features", features: setWorkspaceFeatures(store, c.workspaceId, keep) });
+    }
+    store.markChangeUndone(ch.id);
+    hub.broadcast(c.workspaceId, { type: "changes_changed" });
+    return { ok: true };
   });
 
   // --- web push ----------------------------------------------------------------------------------

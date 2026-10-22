@@ -32,6 +32,16 @@ extension Store {
     try await connection().put("/api/agents/\(id)/background", fields)
     try await refreshBackground(id)
   }
+  func refreshAllowance() async throws { allowance = try await connection().get("/api/background/allowance") }
+  func saveAllowance(_ dailyTokens: Int?) async throws {
+    let data = try await connection().put("/api/background/allowance", ["dailyTokens": dailyTokens.map(AnyEncodable.init) ?? .null])
+    allowance = try Wire.decoder.decode(Allowance.self, from: data)
+  }
+  func refreshChanges() async throws { changes = try await connection().get("/api/changes") }
+  func undoChange(_ id: String) async throws {
+    try await connection().post("/api/changes/\(id)/undo", Empty())
+    try await refreshChanges()
+  }
   func checkBackground(_ id: String) async throws {
     try await connection().post("/api/agents/\(id)/background/check", Empty())
     try await refreshBackground(id)

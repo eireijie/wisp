@@ -384,7 +384,7 @@ export function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
 }
 
 /** An anchored panel with any content. Closes on outside click or Escape; opens upward by default (composer). */
-export function Popover({ trigger, children, align = "left", up = true, className }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; align?: "left" | "right"; up?: boolean; className?: string }) {
+export function Popover({ trigger, children, align = "left", up = true, className, inline }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; align?: "left" | "right"; up?: boolean; className?: string; inline?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -414,7 +414,7 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
     setShift(left < gutter ? gutter - left : right > window.innerWidth - gutter ? window.innerWidth - gutter - right : 0);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={inline ? "relative inline-block" : "relative"}>
       {trigger(open, () => setOpen((o) => !o))}
       {open && (
         <div ref={panel} role="dialog" style={shift ? { transform: `translateX(${shift}px)` } : undefined} className={cx("glass absolute z-50 max-w-[calc(100vw-1rem)] rounded-2xl", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-2" : "top-full mt-2", className)}>

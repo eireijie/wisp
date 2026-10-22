@@ -9,7 +9,7 @@ import { renderMarkdown } from "../markdown.ts";
 import { ChannelIcon, ChannelMembers, ChannelSettings, NOTIFY, isProtected, setArchived, setChannelPrefs, type ChannelMember, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
-import { ApprovalCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
+import { ApprovalCard, ChangeCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
 import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
@@ -42,6 +42,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const role = useStore((s) => s.me?.role);
   const names = useNames();
   const voice = useFeature("voice");
+  const backgroundOn = useFeature("background");
   const [calling, setCalling] = useState(!!route.call);
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
@@ -131,6 +132,21 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
               </div>
               <ChannelSubtitle channel={channel} onAgents={() => setSettings(channel.settings.team?.nodes.length ? "team" : "agents")} />
             </div>
+          )}
+          {dmAgent && (
+            <nav aria-label={dmAgent.name} className="hidden md:flex items-center gap-0.5 rounded-xl bg-chip p-[3px] text-[13px] font-bold">
+              <span aria-current="page" className="h-7 px-3 rounded-[9px] bg-panel shadow-sm grid place-items-center">
+                Chat
+              </span>
+              {backgroundOn && (
+                <a href={href({ view: "agents", agentId: dmAgent.id, tab: "background" })} className="h-7 px-3 rounded-[9px] grid place-items-center text-ink/70 hover:text-ink">
+                  Background
+                </a>
+              )}
+              <a href={href({ view: "agents", agentId: dmAgent.id })} className="h-7 px-3 rounded-[9px] grid place-items-center text-ink/70 hover:text-ink">
+                Settings
+              </a>
+            </nav>
           )}
           {dmAgent?.computerId && (
             <button onClick={() => (dmPanel === "computer" ? setSide(null) : openAgent(dmAgent.id, "computer"))} className={cx("size-9 rounded-full hover:bg-hover grid place-items-center hover:text-ink", dmPanel === "computer" ? "text-ink bg-hover" : "text-muted")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>
@@ -895,7 +911,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
         ) : editing ? (
           <EditBox m={m} onDone={() => setEditing(false)} />
         ) : (
-          html && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: m.editedAt ? withEditedMark(html, clockTime(m.editedAt, clock)) : html }} />
+          html && !m.parts.some((p) => p.type === "change") && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: m.editedAt ? withEditedMark(html, clockTime(m.editedAt, clock)) : html }} />
         )}
         {cards.map((c) => (
           <a key={c.url} href={c.url} target="_blank" rel="noreferrer" className="mt-1.5 flex max-w-sm items-center gap-3 rounded-xl border border-line bg-panel px-3 py-2 hover:bg-hover">
@@ -908,7 +924,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
             </span>
           </a>
         ))}
-        <Parts parts={m.parts} />
+        <Parts parts={m.parts} body={m.body} />
         <Reactions messageId={m.id} reactions={m.reactions ?? []} />
         {(!!replies || working.length > 0) && onReplies && (
           <div className="mt-1 -ml-1 flex flex-wrap items-center gap-1.5">
@@ -1089,7 +1105,7 @@ function linkCards(body: string) {
   return out.slice(0, 3);
 }
 
-function Parts({ parts }: { parts: MessagePart[] }) {
+function Parts({ parts, body = "" }: { parts: MessagePart[]; body?: string }) {
   const tools = parts.filter((p) => p.type === "tool_call");
   const files = parts.filter((p) => p.type === "file");
   const status = parts.filter((p) => p.type === "status");
@@ -1103,6 +1119,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
       {parts.map((p) => p.type === "approval" && <ApprovalCard key={p.approvalId} id={p.approvalId} />)}
       {parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
       {parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
+      {parts.map((p) => p.type === "change" && <ChangeCard key={p.changeId} id={p.changeId} fallback={body} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
       {files.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-2">

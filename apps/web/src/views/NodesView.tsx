@@ -119,7 +119,7 @@ function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => 
             , choose to join a server, and enter:
           </p>
           <CopyBlock text={shareOrigin()} />
-          {originReach(shareOrigin()) !== "anywhere" && <p className="text-muted">This address only works on {originReach(shareOrigin()) === "this-computer" ? "this computer" : "this Wi-Fi"}. For a computer somewhere else, turn on Settings → Access first.</p>}
+          {originReach(shareOrigin()) !== "anywhere" && <p className="text-muted">This address only works on {originReach(shareOrigin()) === "this-computer" ? "this computer" : "this Wi-Fi"}. For a computer somewhere else, turn on Settings → Devices → Access first.</p>}
           {waiting && <p className="text-muted">Then open Devices there and choose Connect this computer on this card.</p>}
           {waiting &&
             (token ? (

@@ -4,6 +4,7 @@ import type { Actor, Agent } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, useWaitingOnYou, type LiveRun } from "../store.ts";
 import { useFeatures } from "../features.ts";
+import { allowanceText, useAllowance } from "../changes.ts";
 import { go, href } from "../router.ts";
 import { AgentAvatar, Button, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
@@ -27,7 +28,6 @@ interface TaskLite {
 
 const RECENT_MS = 60_000;
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", "Help me write a polite note to my landlord about a repair", "Summarize a document I'll paste in"];
 
@@ -117,9 +117,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
     .sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0) || (b.lastReadAt ?? "").localeCompare(a.lastReadAt ?? ""))
     .slice(0, 5);
   const chatName = (c: (typeof channels)[number]) => (c.kind === "dm" ? agentName(c.name.split(":").pop()!) : `#${c.name}`);
-  const busyCount = agents.filter((a) => a.status === "busy").length;
   const activeAgents = sortedAgents.filter((a) => doing[a.id] || a.status === "busy");
-  const onlineCount = agents.filter((a) => a.status !== "offline").length;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -130,11 +128,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
           </button>
         )}
         <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Inbox</h1>
-        {agents.length > 0 && !simple && (
-          <span className="text-xs text-muted tabular-nums">
-            {busyCount} working · {onlineCount} online · {plural(agents.length, "agent")}
-          </span>
-        )}
+        {features.background && <AllowancePill />}
         {/* phones have no sidebar button for this, so start a task from here */}
         {!isGuest && features.tasks && agents.length > 0 && (
           <Button variant="primary" className="md:hidden" onClick={() => useStore.setState({ newTaskOpen: true })}>
@@ -493,4 +487,21 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "ba
 
 function Blank({ children }: { children: ReactNode }) {
   return <p className="rounded-xl border border-dashed border-line px-3 py-4 text-sm text-muted">{children}</p>;
+}
+
+/** How much of today's background allowance is used, linking to Settings → Usage. */
+function AllowancePill() {
+  const [a] = useAllowance();
+  if (!a) return null;
+  const share = a.dailyTokens ? Math.min(100, (a.todayTokens / a.dailyTokens) * 100) : 0;
+  return (
+    <a href={href({ view: "settings", page: "usage" })} className="h-9 px-3.5 rounded-full bg-chip hover:bg-hover inline-flex items-center gap-2.5 text-[13px] font-bold">
+      {a.dailyTokens && (
+        <span className="w-14 h-1.5 rounded-full bg-line overflow-hidden" aria-hidden>
+          <span className="block h-full bg-accent" style={{ width: `${share}%` }} />
+        </span>
+      )}
+      {allowanceText(a)}
+    </a>
+  );
 }

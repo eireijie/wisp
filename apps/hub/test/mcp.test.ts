@@ -90,6 +90,8 @@ describe("warren-mcp", () => {
       "next_check",
       "routine_list",
       "routine_save",
+      "settings_change",
+      "settings_read",
       "task_delegate",
       "task_list",
       "task_update",

@@ -1,4 +1,4 @@
-import type { Agent, Approval, Channel, ComputerAction, Message, Routine, Followup } from "@warren/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, Message, Routine, Followup } from "@warren/core";
 
 export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -155,6 +155,19 @@ export class WarrenClient {
   /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
   messagePerson(text: string, fileIds: string[] = []) {
     return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds });
+  }
+  /** This agent's background settings for the person it works for, the organization's mods, and today's allowance. */
+  mySettings() {
+    return this.request<{
+      background: { enabled: boolean; everyMinutes: number; quietStart: string; quietEnd: string; focus: string } | null;
+      mods: { key: string; name: string; description: string; on: boolean }[];
+      canChangeMods: boolean;
+      allowance: Allowance;
+    }>("GET", "/api/agent/settings");
+  }
+  /** Change background settings or mods for the person this agent works for; they see what changed and can undo it. */
+  changeSettings(patch: { background?: Partial<{ enabled: boolean; everyMinutes: number; quietStart: string; quietEnd: string; focus: string }>; mods?: Record<string, boolean> }) {
+    return this.request<{ changed: string[]; changeId?: string; note?: string }>("POST", "/api/agent/settings", patch);
   }
   /** When this agent's next background check should be. */
   nextCheck(minutes: number, reason = "") {

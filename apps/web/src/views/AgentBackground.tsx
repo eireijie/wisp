@@ -1,16 +1,15 @@
-import { useEffect, useState } from "react";
-import { AppWindow, BellRing, Clock, FolderOpen, Monitor, Moon, RefreshCw, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { AppWindow, BellRing, Check, ChevronRight, FolderOpen, Monitor, RefreshCw, X } from "lucide-react";
 import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, Followup, HarnessCatalog } from "@warren/core";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
-import { useSimple, Advanced } from "../experience.tsx";
 import { pathLabel } from "../components/AccessDialog.tsx";
 import { pushOnHere } from "../push.ts";
-import { Intro } from "./SettingsParts.tsx";
+import { tokensText, useAllowance } from "../changes.ts";
 import { Toggle } from "./settings/parts.tsx";
-import { Button, Pill, Textarea, timeAgo } from "../components/ui.tsx";
+import { Button, Pill, Popover, Textarea, agentColor, cx, timeAgo } from "../components/ui.tsx";
 
 const PACES = [
   [15, "every 15 minutes"],
@@ -46,17 +45,51 @@ const at = (iso: string) => {
   return d.toLocaleString([], today ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
 };
 
+/** "10pm", "7:30am" */
+const clock = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "am" : "pm"}`;
+};
+
+/** A word in the sentence that opens a small picker right under it. */
+function Word({ label, children }: { label: string; children: (close: () => void) => ReactNode }) {
+  return (
+    <Popover
+      inline
+      up={false}
+      className="w-72 p-1.5"
+      trigger={(open, toggle) => (
+        <button type="button" onClick={toggle} aria-expanded={open} className={cx("rounded-lg px-1.5 font-extrabold underline decoration-faint decoration-2 underline-offset-[5px] hover:bg-chip", open ? "bg-chip" : "bg-chip/60")}>
+          {label}
+        </button>
+      )}
+    >
+      {children}
+    </Popover>
+  );
+}
+
+function Pick({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className={cx("w-full h-10 px-3 rounded-lg flex items-center justify-between text-left text-[15px] font-semibold hover:bg-hover", on && "bg-chip")}>
+      {children}
+      {on && <Check size={15} />}
+    </button>
+  );
+}
+
 /**
  * An agent working in the background for you: it checks in on its own, looks at what it can
- * reach, and writes to you only when something needs you. You turn it on; it picks its pace.
+ * reach, and writes to you only when something needs you. The settings read as one sentence;
+ * each underlined word opens a picker. Anything else is under More, or you just tell the agent.
  */
 export function BackgroundPanel({ agent, active }: { agent: Agent; active: boolean }) {
-  const simple = useSimple();
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
   const timezone = useStore((s) => s.me?.user.timezone);
   const version = useStore((s) => s.backgroundVersion);
   const offline = useStore((s) => s.agents.find((a) => a.id === agent.id)?.status === "offline");
+  const [allowance] = useAllowance();
   const [state, setState] = useState<{ background: BackgroundWork | null; followups: Followup[]; notAllowed: string | null; sources: BackgroundSource[]; usage: BackgroundUsage; defaultDailyCap: number } | null>(null);
   const [catalog, setCatalog] = useState<HarnessCatalog | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -93,16 +126,20 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
   const models = catalog?.models ?? [];
   const chosen = models.find((m) => m.id === (b?.model ?? agent.model));
   const efforts = chosen?.efforts ?? catalog?.efforts ?? [];
-  const apps = state?.sources.filter((x) => x.kind === "app") ?? [];
   const on = !!b?.enabled;
+  const every = b?.everyMinutes ?? 60;
+  const quietStart = b?.quietStart ?? "22:00";
+  const quietEnd = b?.quietEnd ?? "07:00";
+  const watch = (b?.focus ?? "").trim().replace(/[.\s]+$/, "") || "everything it can reach";
+  const mine = allowance?.agents.find((a) => a.agentId === agent.id);
+  const share = allowance?.dailyTokens && mine ? Math.round((mine.tokens / allowance.dailyTokens) * 100) : null;
+
   return (
-    <div className="max-w-3xl space-y-5">
-      <Intro title="Background">
-        <p>
-          @{agent.handle} keeps an eye on everything it can reach for you, on its own: your connected apps (email, calendars, drives, projects, to-do lists…), its computer, your memory and your conversations. It writes to you only when something needs you, with
-          the work done and ready for your OK, and decides by itself when to look again.
-        </p>
-      </Intro>
+    <div className="max-w-2xl space-y-7">
+      <div className="flex items-center gap-3">
+        <h2 className="flex-1 text-2xl font-extrabold">Background</h2>
+        {state && !state.notAllowed && <Toggle label="Work in the background for you" on={on} onChange={(v) => void save({ enabled: v })} />}
+      </div>
       {error && <p className="text-sm text-bad">{error}</p>}
       {state === null ? (
         <p className="text-sm text-muted">Loading…</p>
@@ -110,196 +147,176 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
         <p className="rounded-xl border border-line p-4 text-sm text-muted">{state.notAllowed}.</p>
       ) : (
         <>
-          {simple && <p className="text-sm">{backgroundSummary({ name: agent.name, scope: focus ?? b?.focus ?? "", everyMinutes: b?.everyMinutes ?? 60, dailyCap: b ? b.dailyCap : state.defaultDailyCap, enabled: on })}</p>}
-          <div className="rounded-xl border border-line divide-y divide-line">
-            <div className="px-4 py-3 flex items-center gap-3">
-              <div className="flex-1">
-                <div className="font-medium">Work in the background for you</div>
-                <div className="text-xs text-muted">
-                  {simple
-                    ? "Each check uses your AI account like a normal message, so your AI provider may charge for each one. The daily limit counts checks, not money."
-                    : `Each check is a run of ${agent.name}, so it uses your harness's plan like any other message.`}
+          <div className={cx("text-[21px] leading-[1.9] font-semibold", !on && "text-muted")}>
+            While you're away, {agent.name} checks{" "}
+            <Word label={watch}>
+              {(close) => (
+                <div className="p-1.5 space-y-2">
+                  <Textarea rows={3} autoFocus placeholder="Everything it can reach. Or: my inbox and calendar, anything from my landlord." value={focus ?? b?.focus ?? ""} onChange={(e) => setFocus(e.target.value)} />
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={() => {
+                      if (focus !== null) void save({ focus }).then(() => setFocus(null));
+                      close();
+                    }}
+                  >
+                    Save
+                  </Button>
                 </div>
-              </div>
-              <Toggle label="Work in the background for you" on={on} onChange={(v) => void save({ enabled: v })} />
-            </div>
-            {b && (on || b.lastAt) && (
-              <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-                <div className="flex-1 min-w-56 space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    {b.checking ? <Pill tone={offline ? "warn" : "info"}>{offline ? "waiting for its device to come online" : "checking now"}</Pill> : b.lastAt ? <span className="text-muted">Last checked {timeAgo(b.lastAt)}</span> : <span className="text-muted">Hasn't checked yet</span>}
-                    {on && !b.checking && b.nextAt && (
-                      <span className="text-muted inline-flex items-center gap-1">
-                        <Clock size={13} /> next {at(b.nextAt)}
-                        {b.nextReason && <span>({b.nextReason})</span>}
-                      </span>
-                    )}
+              )}
+            </Word>{" "}
+            <Word label={PACES.find(([m]) => m === every)?.[1] ?? `every ${every} minutes`}>
+              {(close) =>
+                PACES.map(([m, label]) => (
+                  <Pick
+                    key={m}
+                    on={m === every}
+                    onClick={() => {
+                      void save({ everyMinutes: m });
+                      close();
+                    }}
+                  >
+                    {label}
+                  </Pick>
+                ))
+              }
+            </Word>
+            , stays quiet{" "}
+            <Word label={quietStart === quietEnd ? "never" : `${clock(quietStart)}–${clock(quietEnd)}`}>
+              {(close) => (
+                <div className="p-1.5 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <input type="time" className="h-9 flex-1 rounded-lg border border-line bg-panel px-2" value={quietStart} onChange={(e) => e.target.value && void save({ quietStart: e.target.value })} aria-label="Quiet hours start" />
+                    <span className="text-muted">to</span>
+                    <input type="time" className="h-9 flex-1 rounded-lg border border-line bg-panel px-2" value={quietEnd} onChange={(e) => e.target.value && void save({ quietEnd: e.target.value })} aria-label="Quiet hours end" />
                   </div>
-                  {b.lastNote && <div className="text-muted">Its note from last time: {b.lastNote}</div>}
-                  <UsageLine usage={state.usage} cap={b.dailyCap} simple={simple} />
+                  <Pick
+                    on={quietStart === quietEnd}
+                    onClick={() => {
+                      void save({ quietEnd: quietStart });
+                      close();
+                    }}
+                  >
+                    No quiet hours
+                  </Pick>
+                  {!timezone && (
+                    <a className="block px-3 text-xs text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
+                      Set your time zone (now UTC)
+                    </a>
+                  )}
                 </div>
-                <Button onClick={() => void checkNow()} disabled={b.checking}>
-                  <RefreshCw size={14} /> Check now
-                </Button>
-              </div>
-            )}
-            {on && b && (
-              <>
-                <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
-                  <div className="flex-1 min-w-56">
-                    <div className="font-medium">When it doesn't say</div>
-                    <div className="text-xs text-muted">It picks its own pace after each check, sooner while something's happening. This is the pace otherwise.</div>
-                  </div>
-                  <select className="h-8 rounded-lg border border-line bg-panel px-2" value={b.everyMinutes} onChange={(e) => void save({ everyMinutes: Number(e.target.value) })}>
-                    {PACES.map(([m, label]) => (
-                      <option key={m} value={m}>
-                        {label}
-                      </option>
-                    ))}
-                    {!PACES.some(([m]) => m === b.everyMinutes) && <option value={b.everyMinutes}>every {b.everyMinutes} minutes</option>}
-                  </select>
-                </div>
-                <Advanced title="Model for checks" className="px-4 py-2.5">
-                <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
-                  <div className="flex-1 min-w-56">
-                    <div className="font-medium">Model for background checks</div>
-                    <div className="text-xs text-muted">
-                      Looking around is usually fine on a smaller, faster model, which costs a lot less over a day of checks. It can still do real work in the same check: write the draft, find the answer. Leave it on {agent.name}'s own model if you'd rather.
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      aria-label="Model for background checks"
-                      className="h-8 rounded-lg border border-line bg-panel px-2 max-w-52"
-                      value={b.model ?? ""}
-                      onChange={(e) => void save({ model: e.target.value || null, effort: null })}
-                    >
-                      <option value="">{agent.model ? `${agent.name}'s own (${prettyModel(models.find((m) => m.id === agent.model)?.label ?? agent.model)})` : `${agent.name}'s own model`}</option>
-                      {models.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {prettyModel(m.label)}
-                        </option>
-                      ))}
-                      {b.model && !models.some((m) => m.id === b.model) && <option value={b.model}>{b.model}</option>}
-                    </select>
-                    <select aria-label="Reasoning effort for background checks" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.effort ?? ""} onChange={(e) => void save({ effort: e.target.value || null })}>
-                      <option value="">Default effort</option>
-                      {efforts.map((x) => (
-                        <option key={x} value={x}>
-                          {effortName(x)} effort
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                </Advanced>
-                <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
-                  <div className="flex-1 min-w-56">
-                    <div className="font-medium">Most checks a day</div>
-                    <div className="text-xs text-muted">
-                      {state.usage.capReached ? "Reached for today: regular checks resume tomorrow." : "After that, regular checks wait until tomorrow."} Follow-ups you asked for still happen.
-                    </div>
-                  </div>
-                  <select aria-label="Most checks a day" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.dailyCap ?? ""} onChange={(e) => void save({ dailyCap: e.target.value ? Number(e.target.value) : null })}>
-                    {[...new Set<number>([...CAPS, ...(b.dailyCap ? [b.dailyCap] : [])])]
-                      .sort((x, y) => x - y)
-                      .map((n) => (
-                        <option key={n} value={n}>
-                          {n} a day
-                        </option>
-                      ))}
-                    <option value="">No limit</option>
-                  </select>
-                </div>
-                <div className="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
-                  <div className="flex-1 min-w-56">
-                    <div className="font-medium inline-flex items-center gap-1.5">
-                      <Moon size={14} /> Quiet hours
-                    </div>
-                    <div className="text-xs text-muted">No checks, and it only writes for something that can't wait. Follow-ups you asked for still happen.</div>
-                  </div>
-                  <input type="time" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.quietStart} onChange={(e) => e.target.value && void save({ quietStart: e.target.value })} aria-label="Quiet hours start" />
-                  <span className="text-muted">to</span>
-                  <input type="time" className="h-8 rounded-lg border border-line bg-panel px-2" value={b.quietEnd} onChange={(e) => e.target.value && void save({ quietEnd: e.target.value })} aria-label="Quiet hours end" />
-                  <span className="text-xs text-muted">
-                    {timezone ? (
-                      `(${timezone})`
-                    ) : (
-                      <>
-                        UTC ·{" "}
-                        <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
-                          set your time zone
-                        </a>
-                      </>
-                    )}
-                  </span>
-                </div>
-              </>
-            )}
+              )}
+            </Word>
+            , and messages you when something needs you.
           </div>
 
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold">What to keep an eye on</h4>
-            <Textarea
-              rows={2}
-              placeholder="Everything it can reach. Or say what matters most, like: my inbox and calendar, the launch project in Linear, anything from my landlord."
-              value={focus ?? b?.focus ?? ""}
-              onChange={(e) => setFocus(e.target.value)}
-              onBlur={() => focus !== null && focus !== (b?.focus ?? "") && void save({ focus }).then(() => setFocus(null))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold">What it can see</h4>
-            <div className="rounded-xl border border-line divide-y divide-line text-sm">
-              {state.sources.map((x) => (
-                <div key={`${x.kind}:${x.name}`} className="px-4 py-2 flex items-center gap-2.5">
-                  {x.kind === "app" ? <AppWindow size={14} className="text-muted" /> : x.kind === "computer" ? <Monitor size={14} className="text-muted" /> : <FolderOpen size={14} className="text-muted" />}
-                  <span className="font-medium">{x.kind === "memory" ? folderName(x.name, agents, members) : x.name}</span>
-                  <span className="text-muted truncate">{x.kind === "memory" ? "memory" : x.detail}</span>
-                </div>
-              ))}
-              <div className="px-4 py-2 text-muted">
-                {apps.length ? "Connect more apps" : "No apps yet. Connect your email, calendar, drive or project tools"} on{" "}
-                <a className="text-accent-text hover:underline" href={href({ view: "connectors" })}>
-                  Connectors
-                </a>{" "}
-                and let @{agent.handle} use them.{agent.computerId ? " It can also check sites you've signed in to on its computer." : ""}
-              </div>
-            </div>
-          </div>
-
-          {on && !pushOnHere() && (
-            <p className="rounded-xl border border-line p-4 text-sm flex items-start gap-2">
-              <BellRing size={15} className="mt-0.5 shrink-0 text-accent-text" />
-              <span>
-                To get its messages when Warren is closed, turn on{" "}
-                <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "notifications" })}>
-                  push notifications
-                </a>{" "}
-                on your phone and computers.
+          {b && (on || b.lastAt) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+              <span className="flex-1 min-w-56 text-muted">
+                {b.checking ? (
+                  <Pill tone={offline ? "warn" : "info"}>{offline ? "waiting for its device" : "checking now"}</Pill>
+                ) : b.lastAt ? (
+                  <>
+                    Checked {timeAgo(b.lastAt)}
+                    {b.lastNote && `: ${b.lastNote}`}
+                  </>
+                ) : (
+                  "Hasn't checked yet"
+                )}
+                {on && !b.checking && b.nextAt && ` · next ${at(b.nextAt)}`}
               </span>
-            </p>
+              <Button onClick={() => void checkNow()} disabled={b.checking}>
+                <RefreshCw size={14} /> Check now
+              </Button>
+            </div>
           )}
 
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold">Follow-ups</h4>
-            {state.followups.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">None. Ask it to remind you of something, or to check back on something later, and it sets one.</p>
-            ) : (
-              <div className="rounded-xl border border-line divide-y divide-line">
-                {state.followups.map((f) => (
-                  <div key={f.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                    <span className="text-muted w-28 shrink-0">{at(f.dueAt)}</span>
-                    <span className="flex-1">{f.note}</span>
-                    <button type="button" className="p-1 rounded-md text-muted hover:text-ink hover:bg-hover" onClick={() => void cancel(f)} aria-label="Cancel this follow-up">
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+          {allowance && (
+            <a href={href({ view: "settings", page: "usage" })} className="flex items-center gap-3 rounded-2xl bg-bg px-4 py-3.5 text-sm font-bold hover:bg-hover">
+              <span className="w-24 h-2 rounded-full bg-chip overflow-hidden">
+                <span className="block h-full rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: agentColor(agent) }} />
+              </span>
+              <span className="flex-1">{share !== null ? `${agent.name} used ${share}% of today's allowance` : mine ? `${agent.name} used ${tokensText(mine.tokens)} today` : `${agent.name} hasn't used any of today's allowance`}</span>
+              <ChevronRight size={16} className="text-muted" />
+            </a>
+          )}
+
+          {state.followups.length > 0 && (
+            <section className="space-y-1">
+              <h3 className="text-[15px] font-extrabold text-muted">Coming up</h3>
+              {state.followups.map((f) => (
+                <div key={f.id} className="flex items-center gap-3 h-10 border-b border-line text-sm">
+                  <span className="text-muted w-28 shrink-0 font-bold text-[13px]">{at(f.dueAt)}</span>
+                  <span className="flex-1 truncate">{f.note}</span>
+                  <button type="button" className="p-1 rounded-md text-muted hover:text-ink hover:bg-hover" onClick={() => void cancel(f)} aria-label="Cancel this follow-up">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </section>
+          )}
+
+          <details className="border-t border-line pt-3.5 group">
+            <summary className="cursor-pointer text-sm font-bold text-muted hover:text-ink">More</summary>
+            <div className="pt-3 space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-32 font-semibold">Model for checks</span>
+                <select aria-label="Model for background checks" className="h-8 rounded-lg border border-line bg-panel px-2 max-w-52" value={b?.model ?? ""} onChange={(e) => void save({ model: e.target.value || null, effort: null })}>
+                  <option value="">{agent.model ? `${agent.name}'s own (${prettyModel(models.find((m) => m.id === agent.model)?.label ?? agent.model)})` : `${agent.name}'s own model`}</option>
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {prettyModel(m.label)}
+                    </option>
+                  ))}
+                  {b?.model && !models.some((m) => m.id === b.model) && <option value={b.model}>{b.model}</option>}
+                </select>
+                <select aria-label="Reasoning effort for background checks" className="h-8 rounded-lg border border-line bg-panel px-2" value={b?.effort ?? ""} onChange={(e) => void save({ effort: e.target.value || null })}>
+                  <option value="">Default effort</option>
+                  {efforts.map((x) => (
+                    <option key={x} value={x}>
+                      {effortName(x)} effort
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
-          </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-32 font-semibold">Most checks a day</span>
+                <select aria-label="Most checks a day" className="h-8 rounded-lg border border-line bg-panel px-2" value={b ? (b.dailyCap ?? "") : state.defaultDailyCap} onChange={(e) => void save({ dailyCap: e.target.value ? Number(e.target.value) : null })}>
+                  {[...new Set<number>([...CAPS, ...(b?.dailyCap ? [b.dailyCap] : [])])]
+                    .sort((x, y) => x - y)
+                    .map((n) => (
+                      <option key={n} value={n}>
+                        {n} a day
+                      </option>
+                    ))}
+                  <option value="">No limit</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <span className="font-semibold">Can see</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {state.sources.map((x) => (
+                    <span key={`${x.kind}:${x.name}`} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-chip text-[13px]">
+                      {x.kind === "app" ? <AppWindow size={13} /> : x.kind === "computer" ? <Monitor size={13} /> : <FolderOpen size={13} />}
+                      {x.kind === "memory" ? folderName(x.name, agents, members) : x.name}
+                    </span>
+                  ))}
+                  <a href={href({ view: "connectors" })} className="inline-flex items-center h-7 px-2.5 rounded-full border border-line text-[13px] hover:bg-hover">
+                    Connect an app
+                  </a>
+                </div>
+              </div>
+              <UsageLine usage={state.usage} cap={b?.dailyCap ?? null} simple={false} />
+              {on && !pushOnHere() && (
+                <a className="inline-flex items-center gap-1.5 text-accent-text hover:underline" href={href({ view: "settings", page: "notifications" })}>
+                  <BellRing size={14} /> Get its messages on your phone
+                </a>
+              )}
+            </div>
+          </details>
+
+          <p className="text-sm text-muted">Or just tell {agent.name}, like "check less on weekends".</p>
         </>
       )}
     </div>

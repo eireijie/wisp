@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BellOff, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Sun, SunMoon, Trash2, UserPlus } from "lucide-react";
+import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plug, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Sun, SunMoon, Trash2, UserPlus, Users, Wand2 } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useInboxCount, useStore, useWaitingOnYou, type ChannelInfo } from "../store.ts";
@@ -48,6 +48,9 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const waiting = useWaitingOnYou();
   const inboxCount = useInboxCount();
   const invite = useFeature("invite");
+  const teamsOn = useFeature("teams");
+  const tasksOn = useFeature("tasks");
+  const moreViews: Route["view"][] = ["agents", "vault", "teams", "tasks", "connectors", "skills", "about", "nodes", "help"];
   const [editing, setEditing] = useState<Section | "new" | null>(null);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const { done } = useOnboarding();
@@ -122,16 +125,6 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           <div className="space-y-px">
             <Item href={href({ view: "dashboard" })} active={route.view === "dashboard" || (route.view === "chat" && !route.channelId)} count={inboxCount} strongCount>
               <Inbox size={16} className="shrink-0" /> Inbox
-            </Item>
-            <Item href={href({ view: "agents", agentId: null })} active={route.view === "agents" || route.view === "teams" || route.view === "tasks" || route.view === "skills" || route.view === "connectors"}>
-              <Ghost size={16} className="shrink-0" /> Agents
-            </Item>
-            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers" || route.view === "nodes"}>
-              <Monitor size={16} className="shrink-0" /> Computers
-              {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
-            </Item>
-            <Item href={href({ view: "vault", path: null })} active={route.view === "vault" || route.view === "about"}>
-              <BookOpen size={16} className="shrink-0" /> Memory
             </Item>
             {showGetStarted && (
               <Item href={href({ view: "welcome" })} active={route.view === "welcome"}>
@@ -268,6 +261,41 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         </Group>
       </div>
 
+      {/* the rest of Warren: a short list, and everything else under More */}
+      {!page && (
+        <div className="shrink-0 pt-2 space-y-px border-t border-line">
+          <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
+            <Monitor size={16} className="shrink-0" /> Computers
+            {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
+          </Item>
+          <Item href={href({ view: "mods" })} active={route.view === "mods"}>
+            <Blocks size={16} className="shrink-0" /> Mods
+          </Item>
+          <Item href={href({ view: "settings", page: null })} active={route.view === "settings"}>
+            <SlidersHorizontal size={16} className="shrink-0" /> Settings
+          </Item>
+          <Menu
+            up
+            trigger={(_o, t) => (
+              <Item onClick={t} active={moreViews.includes(route.view)}>
+                <MoreHorizontal size={16} className="shrink-0" /> More
+              </Item>
+            )}
+            items={[
+              { label: "Agents", icon: <Ghost size={14} />, onSelect: () => go({ view: "agents", agentId: null }) },
+              { label: "Memory", icon: <BookOpen size={14} />, onSelect: () => go({ view: "vault", path: null }) },
+              ...(teamsOn ? [{ label: "Teams", icon: <Users size={14} />, onSelect: () => go({ view: "teams", teamId: null }) }] : []),
+              ...(tasksOn ? [{ label: "Tasks", icon: <ListChecks size={14} />, onSelect: () => go({ view: "tasks" }) }] : []),
+              { label: "Connected apps", icon: <Plug size={14} />, onSelect: () => go({ view: "connectors" }) },
+              { label: "Skills", icon: <Wand2 size={14} />, onSelect: () => go({ view: "skills" }) },
+              { label: "About you", icon: <CircleUser size={14} />, onSelect: () => go({ view: "about" }) },
+              { label: "Devices", icon: <Server size={14} />, onSelect: () => go({ view: "nodes" }) },
+              { label: "Help", icon: <LifeBuoy size={14} />, onSelect: () => go({ view: "help" }) },
+            ]}
+          />
+        </div>
+      )}
+
       {!page && (
         <div className="shrink-0 p-2 safe-bottom">
           <div className="flex items-center gap-1 rounded-xl bg-side-active p-1">
@@ -298,9 +326,6 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
                 ]}
               />
             </div>
-            <a href={href({ view: "settings", page: null })} className="size-8 shrink-0 grid place-items-center rounded-lg text-ink/70 hover:text-ink hover:bg-side-hover" aria-label="Settings" title="Settings">
-              <SlidersHorizontal size={17} />
-            </a>
           </div>
         </div>
       )}

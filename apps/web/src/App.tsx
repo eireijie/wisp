@@ -23,6 +23,7 @@ import { NewTask, TasksView } from "./views/TasksView.tsx";
 import { DashboardView } from "./views/DashboardView.tsx";
 import { ConnectorsView } from "./views/ConnectorsView.tsx";
 import { SkillsView } from "./views/SkillsView.tsx";
+import { ModsPage } from "./views/settings/features.tsx";
 import { HelpView } from "./views/HelpView.tsx";
 import { primeTasks } from "./notifications.ts";
 import { Loader, UserAvatar, cx } from "./components/ui.tsx";
@@ -157,6 +158,14 @@ function Workspace() {
         return <WelcomeView intro={route.intro} />;
       case "help":
         return <HelpView onBack={phone ? toYou : undefined} />;
+      case "mods":
+        return (
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-4xl mx-auto px-4 md:px-8 pt-10 pb-8">
+              <ModsPage />
+            </div>
+          </div>
+        );
     }
   })();
   // conversations use the whole screen on phones; everything else keeps the tab bar

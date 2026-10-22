@@ -1,6 +1,6 @@
 import SwiftUI
 
-/** Settings → Features: turn on only what you use. Owners change it; everyone sees what's on. */
+/** Settings → Mods: the optional parts of Warren; turn on only what you use. Owners change it; everyone sees what's on. */
 struct FeaturesView: View {
   @Environment(Store.self) private var store
   @State private var action = FormAction()
@@ -48,10 +48,10 @@ struct FeaturesView: View {
         }
       }
       if !store.isOwner {
-        Section { Text("Only owners can change which features are on.").font(.footnote).foregroundStyle(.secondary) }
+        Section { Text("Only owners can turn mods on or off.").font(.footnote).foregroundStyle(.secondary) }
       }
     }
-    .sectionScreen("Features", id: "features")
+    .sectionScreen("Mods", id: "mods")
     .task { await store.refreshFeatures() }
     .managementAlert(action)
   }
