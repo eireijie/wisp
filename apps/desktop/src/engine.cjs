@@ -249,9 +249,46 @@ function lanAddresses(port) {
   return out;
 }
 
-/** A Warren process this app started; it stops when the app quits. */
 /** what `warren node start` exits with when the hub turns its token down ($WARREN_EXIT_IF_REJECTED) */
 const REJECTED_CODE = 78;
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+};
+
+/** A process's command line, or "" when it can't be read. */
+function commandOf(pid) {
+  try {
+    if (isWin)
+      return execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`], { encoding: "utf8", timeout: 5000, windowsHide: true }).trim();
+    return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8", timeout: 3000 }).trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The process an earlier run of the app started and never stopped (it crashed, or was force
+ * quit), when it's still running: still that Warren command, not some other process that got its id.
+ */
+function leftover(pidFile, args) {
+  let pid;
+  try {
+    pid = Number(fs.readFileSync(pidFile, "utf8").trim());
+  } catch {
+    return null;
+  }
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid || !alive(pid)) return null;
+  const cmd = commandOf(pid);
+  return cmd.includes("warren.mjs") && cmd.includes(args.join(" ")) ? pid : null;
+}
+
+/** A Warren process this app started; it stops when the app quits. */
 
 class Child {
   constructor(name, logDir, onChange) {
@@ -264,14 +301,42 @@ class Child {
     this.wanted = false;
     this.restarts = 0;
     this.stopping = null;
+    this.pidFile = path.join(logDir, `${name}.pid`);
+    this.reaping = false;
   }
 
-  /** Start it, or, while a stopped one is still exiting, start it again as soon as that one has. */
+  /**
+   * Start it, or, while a stopped one is still exiting, start it again as soon as that one has.
+   * One an earlier run of the app left running is stopped first: a second device with the same
+   * token would fight it for the hub, and nothing would stop the old one on Quit or Disconnect.
+   */
   start(node, warrenDir, args, extraEnv = {}) {
     this.wanted = true;
     this.spec = { node, warrenDir, args, extraEnv };
-    if (this.proc) return;
-    this.launch();
+    if (this.proc || this.reaping) return;
+    const old = leftover(this.pidFile, args);
+    if (!old) return this.launch();
+    this.reaping = true;
+    try {
+      process.kill(old, "SIGTERM");
+    } catch {}
+    const until = Date.now() + 8000;
+    const wait = () => {
+      if (alive(old) && Date.now() < until) return void setTimeout(wait, 200);
+      try {
+        if (alive(old)) process.kill(old, "SIGKILL");
+      } catch {}
+      this.reaping = false;
+      if (this.wanted && !this.proc) this.launch();
+    };
+    wait();
+  }
+
+  /** Forget the process id saved for `proc`, once it has exited. */
+  forget(proc) {
+    try {
+      if (fs.readFileSync(this.pidFile, "utf8").trim() === String(proc.pid)) fs.rmSync(this.pidFile, { force: true });
+    } catch {}
   }
 
   launch() {
@@ -291,6 +356,10 @@ class Child {
       return this.set("error", `couldn't start (${err.message}); see ${this.log}`);
     }
     this.proc = proc;
+    if (proc.pid)
+      try {
+        fs.writeFileSync(this.pidFile, String(proc.pid));
+      } catch {}
     this.set("starting", "");
     const startedAt = Date.now();
     // spawning failed (no such Node, no permission): there's no process, and maybe no 'exit' either
@@ -303,6 +372,7 @@ class Child {
       this.set("error", `couldn't start (${err.message}); see ${this.log}`);
     });
     proc.on("exit", (code, signal) => {
+      this.forget(proc);
       if (this.proc !== proc) return;
       this.proc = null;
       const stopped = this.stopping === proc;
