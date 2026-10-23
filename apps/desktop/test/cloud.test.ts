@@ -26,6 +26,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
   let polls = 0;
   let serverPolls = 0;
   let setupKey = "";
+  let upAfter = hubAfter;
   const fetchImpl = async (url: URL, init: RequestInit = {}) => {
     const method = init.method || "GET";
     const headers = Object.fromEntries(Object.entries((init.headers as Record<string, string>) || {}).map(([k, v]) => [k.toLowerCase(), v]));
@@ -52,7 +53,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
     // the new server: the IP address has no certificate (unless ipCert), the sslip.io name does
     if (url.host === "203.0.113.7" && !ipCert) throw certError();
     if (url.pathname === "/api/setup" && method === "GET") {
-      if (++polls < hubAfter) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+      if (++polls < upAfter) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
       return json({ needsSetup: true });
     }
     if (url.pathname === "/api/setup" && method === "POST") {
@@ -62,7 +63,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
     if (url.pathname === "/api/me") return json({ ok: true });
     throw new Error(`unexpected ${method} ${url.href}`);
   };
-  return { calls, fetchImpl, key: () => setupKey };
+  return { calls, fetchImpl, key: () => setupKey, comeUp: () => (upAfter = 0) };
 }
 
 const sleep = async () => {};
@@ -152,6 +153,19 @@ describe("creating a Warren in the person's Hetzner project", () => {
     expect(err.server).toMatchObject({ id: 42, ip: "203.0.113.7" });
     await cloud.deleteServer("good-token", err.server.id, { fetchImpl: mock.fetchImpl });
     expect(mock.calls.at(-1)).toMatchObject({ method: "DELETE", url: "https://api.hetzner.cloud/v1/servers/42" });
+  });
+
+  it("keeps the setup key of a server that didn't finish, so the same server can be picked up again", async () => {
+    const mock = mockCloud({ hubAfter: Infinity });
+    const err = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
+    expect(err.key).toBe(mock.key());
+
+    mock.comeUp();
+    const steps: string[] = [];
+    const r = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s), resume: { server: err.server, key: err.key } });
+    expect(steps).toEqual(["boot", "https", "account"]);
+    expect(r).toMatchObject({ session: "session-token", server: { id: 42 } });
+    expect(mock.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v1/servers"))).toHaveLength(1);
   });
 
   it("puts a fresh key into the real cloud-init script", () => {

@@ -9,7 +9,7 @@ There are three kinds of computer:
 | Kind | What it is | Needs |
 | --- | --- | --- |
 | **VM on a device** | A Debian 13 desktop with a dock (Google Chrome, Terminal, Files) on one of your devices. Its own screen, files and sign-ins, so agents never touch yours. | Apple's `container` (Macs with Apple silicon), Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman. `warren setup` installs one. |
-| **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, and agents use it only while you lend it. | macOS, Windows, or Linux with X11 (see below) |
+| **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, it opens with a code you pick there, and agents use it only while you lend it. | macOS, Windows, or Linux with X11 (see below) |
 | **Orgo cloud computer** | A Linux desktop from [orgo.ai](https://orgo.ai) that keeps running when your devices are off. | An Orgo API key in **Settings → Computers** |
 
 Several agents can share one computer. They share its files, browser and sign-ins, so they can hand work to each other.
@@ -51,6 +51,15 @@ A device's own screen is its owner's: the person who connected the device. It's 
 warren node screen on     # on that device; `warren node screen off` turns it off again
 ```
 
+Turning it on asks you to pick a **code**: a 6-digit PIN or a password (8 characters or more). Opening the screen from Warren needs it, and so does lending it to agents or approving an agent's request to borrow it. So someone who gets into your Warren account still can't see or use your computer. The code is checked on the device, which keeps only a hash of it. The hub passes it along and never saves it. After 5 wrong codes in a row the device stops taking codes for 15 minutes (twice as long each time after that, up to a day), even after a restart, and you get a notification. One code entry opens the screen for a day at most.
+
+```bash
+warren node screen code        # pick a new code (only at the device)
+warren node screen code off    # no code: your Warren sign-in alone opens the screen
+```
+
+In the desktop app it's the menu bar menu: **Let Me Use This Screen from Warren** asks for a code when there isn't one, and **Change Screen Code…** picks a new one.
+
 Then **Computers → Add computer → Your own screen**. Agents can't use it until you **Lend it to agents** (for an hour, four hours, the rest of the day, or until you stop), and even then only for things you asked for, directly or through other agents. Or an agent can ask for it mid-task, and you approve just that ([below](#borrowing-your-device-mid-task)). An agent working on someone else's request is turned away. Everything done on it shows under **Activity** on its page.
 
 Use it when a task needs an app or file that only lives on your computer. For everything else, agents have their own VMs.
@@ -59,7 +68,19 @@ Use it when a task needs an app or file that only lives on your computer. For ev
 - **Windows**: works out of the box (a PowerShell helper drives the mouse and keyboard).
 - **Linux**: an X11 session with `xdotool` and ImageMagick (`import`). Wayland isn't supported yet; use a VM instead.
 
-Live view streams screenshots (about two a second). If the device already runs a VNC server, set its port on the computer and Warren relays that instead.
+Live view streams screenshots (about two a second), unless you turn on **Remote Desktop**.
+
+### Remote Desktop
+
+`warren node screen on` offers it, or run `warren node screen remote` any time. It sets up a real VNC server for the screen, so live view is smooth instead of a few pictures a second:
+
+- **Linux (X11)**: installs `x11vnc` with your package manager (it shows the command and asks; sudo asks for your password), and `warren node` keeps it running while the screen is on.
+- **Windows**: installs TightVNC with `winget` as a Windows service (Windows asks for permission once). If TightVNC is already installed with its own settings, Warren leaves it alone.
+- **macOS**: not yet, because Screen Sharing can't be made to listen on the Mac alone. Live view uses screenshots, and the code still protects the screen.
+
+The server only listens on the device itself (127.0.0.1), on port 5931, and gets a random password that never leaves the device. Warren's device program signs in with it and relays the connection to the hub, and only after your code checks out. `warren node screen remote off` goes back to screenshots (the VNC server stays installed; Warren just stops running and using it). `warren doctor` shows whether it's answering.
+
+If the device already runs a VNC server of its own, you can set its port on the computer instead, and Warren relays that.
 
 `"noScreen": true` in `node.json` stops a device from ever offering its screen, whatever `warren node screen on` says. Shell commands from Warren (`computer_run`) only run on a device's own screen when the device opted in with `--allow-full-access`.
 
@@ -67,7 +88,7 @@ Live view streams screenshots (about two a second). If the device already runs a
 
 An agent works on its own VM and asks for your device only when a task needs it, say a Windows POS app that exists only on the shop PC. The agent calls `device_request` ("I need the shop PC to enter today's sales in the POS") and you get an **Approve / Deny** card in your chat with that agent (and a push notification, like any approval). You pick how long it gets: 15 minutes, 1 hour, or until it hands the device back (never more than 12 hours).
 
-- **Only the device's owner can say yes.** Nobody else in the workspace can approve it, and an agent can't approve its own request.
+- **Only the device's owner can say yes**, with the screen's code if it has one. Nobody else in the workspace can approve it, and an agent can't approve its own request.
 - **The screen has to be on.** If `warren node screen on` was never run at the device, the agent is told the owner has to turn it on there; Warren can't do that remotely. A device that is paused (`warren node pause`) or offline can't be asked either, and pausing during a loan stops the agent at once.
 - **One agent, one loan, a screen and no shell.** Only the agent you approved can use the device; other agents are turned away, and `computer_run` is refused on a borrowed device. This works even if the agent is doing a task for someone else, because you decided. The loan is separate from **Lend it to agents**, which lets agents use the screen for things you ask them.
 - **It always ends.** When the time is up, when the agent calls `device_return`, when you press **Take back**, when you press **Stop lending it**, or when the screen is turned off at the device. The agent is told in the conversation it was working in (except when it handed the device back itself), and the loan can't outlive its limit: every use is checked against it, whether or not anything has cleaned up yet. Taking control and handing back works as before and leaves the loan alone; agents wait while you have control.

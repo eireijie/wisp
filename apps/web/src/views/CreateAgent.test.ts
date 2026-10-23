@@ -109,7 +109,7 @@ const deferred = <T = any>() => {
 const tick = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 const agent = { id: "a", name: "Agent", handle: "agent", harness: "claude-code", settings: {}, nodeId: "node" } as Agent;
 const device = (id: string, role: NodeInfo["role"] = "vms"): NodeInfo => ({ id, name: id, mine: true, online: true, agents: [], role, capabilities: { platform: "linux", arch: "arm64", screen: { ok: false, detail: "off" }, vm: { ok: true, detail: "ready" } } });
-const computer: ComputerInfo = { id: "desk", name: "Desk", nodeId: "node", kind: "vm", online: true, transport: "vnc", agents: [], workspaceId: "ws", config: {}, status: "ready", statusText: "", controller: null, help: null, createdAt: "2026-01-01", ownerId: null, paused: false, activity: null };
+const computer = { id: "desk", name: "Desk", nodeId: "node", kind: "vm", online: true, transport: "vnc", agents: [], workspaceId: "ws", config: {}, status: "ready", statusText: "", controller: null, help: null, createdAt: "2026-01-01", ownerId: null, paused: false, activity: null } as unknown as ComputerInfo;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("window", Object.assign(new EventTarget(), { matchMedia: () => ({ matches: true }) }));

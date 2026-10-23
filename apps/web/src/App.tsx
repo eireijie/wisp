@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, Inbox, LogOut, Plug, Wand2, MessageSquare, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, RefreshCw, X } from "lucide-react";
+import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, Inbox, LogOut, MessageSquare, Store, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useInboxCount, useStore } from "./store.ts";
 import { go, href, useRoute, type Route } from "./router.ts";
@@ -20,8 +20,7 @@ import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
 import { NewTask, TasksView } from "./views/TasksView.tsx";
 import { DashboardView } from "./views/DashboardView.tsx";
-import { ConnectorsView } from "./views/ConnectorsView.tsx";
-import { SkillsView } from "./views/SkillsView.tsx";
+import { MarketplaceView } from "./views/MarketplaceView.tsx";
 import { ModsPage } from "./views/settings/features.tsx";
 import { HelpView } from "./views/HelpView.tsx";
 import { primeTasks } from "./notifications.ts";
@@ -133,10 +132,13 @@ function Workspace() {
         return <YouPage />;
       case "dashboard":
         return <DashboardView />;
+      case "marketplace":
+        return <MarketplaceView section={route.section ?? "all"} onBack={phone ? toYou : undefined} />;
+      // older addresses: a sign-in coming back lands on what's installed
       case "connectors":
-        return <ConnectorsView onBack={phone ? toYou : undefined} />;
+        return <MarketplaceView section={new URLSearchParams(location.search).has("signin") ? "installed" : "apps"} onBack={phone ? toYou : undefined} />;
       case "skills":
-        return <SkillsView onBack={phone ? toYou : undefined} />;
+        return <MarketplaceView section="skills" onBack={phone ? toYou : undefined} />;
       case "vault":
         return <VaultView path={route.path} />;
       case "agents":
@@ -241,7 +243,7 @@ function TabBar({ route }: { route: Route }) {
       {label}
     </a>
   );
-  const youViews = ["you", "settings", "nodes", "welcome", "about", "vault", "connectors", "skills", "tasks", "help", "dashboard"];
+  const youViews = ["you", "settings", "nodes", "welcome", "about", "vault", "marketplace", "connectors", "skills", "tasks", "help", "dashboard"];
   const inbox = useInboxCount();
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-2 pointer-events-none safe-bottom">
@@ -325,8 +327,7 @@ function YouPage() {
         <div className="rounded-3xl bg-bg overflow-hidden">
           {row(<BookOpen size={17} strokeWidth={2.4} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share", "#af52de")}
           {row(<Brain size={17} strokeWidth={2.4} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you", "#ff2d55")}
-          {row(<Plug size={17} strokeWidth={2.4} />, "Connected apps", href({ view: "connectors" }), undefined, "Gmail, Slack and other apps helpers can use", "#ff9500")}
-          {row(<Wand2 size={17} strokeWidth={2.4} />, "Skills", href({ view: "skills" }), undefined, "Things helpers know how to do", "#ffcc00")}
+          {row(<Store size={17} strokeWidth={2.4} />, "Marketplace", href({ view: "marketplace" }), undefined, "Apps and skills for your helpers", "#ff9500")}
           {row(<Server size={17} strokeWidth={2.4} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren", "#64748b")}
         </div>
         <div className="rounded-3xl bg-bg overflow-hidden">

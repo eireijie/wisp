@@ -9,6 +9,9 @@ import type { Hub } from "./hub.ts";
 import { computerDefaults } from "./policy.ts";
 /** Viewer links are single-use and short-lived, since they travel in a URL. */
 const TICKET_MS = 60_000;
+/** How long one code entry opens a screen for a viewer (the device caps every opening at a day). */
+const VIEW_UNLOCK_MS = 12 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
 /** How long a person has to leave a computer alone before an agent that needs it takes it back. */
 const AGENT_RECLAIM_MS = 30_000;
 /** The same thing done again within this long is one line in a computer's activity. */
@@ -30,6 +33,8 @@ export type ComputerView = Computer & {
   ownerId: string | null;
   /** its device was paused there (`warren node pause`) */
   paused: boolean;
+  /** a device's own screen that opens with the code picked at the device: which kind it is */
+  code: "pin" | "password" | null;
   transport: "vnc" | "frames";
   agents: string[];
   /** the last thing an agent did on it, for "Working" badges */
@@ -51,7 +56,11 @@ interface Frame {
 }
 
 interface Ticket {
+  id: string;
   computerId: string;
+  /** the screen's code, for the device to check again when the viewer connects; kept for the ticket's minute only */
+  code?: string;
+  redeemed?: boolean;
   userId: string;
   workspaceId: string;
   kind: "vnc" | "frames";
@@ -90,7 +99,51 @@ export class Computers {
   // --- views ------------------------------------------------------------------------------------
 
   transport(c: Computer): "vnc" | "frames" {
-    return c.kind === "device" && !c.config.vncPort ? "frames" : "vnc";
+    return c.kind === "device" && !c.config.vncPort && !this.screenCaps(c)?.remote ? "frames" : "vnc";
+  }
+
+  /** What a device's own screen offers, as its device last said. */
+  private screenCaps(c: Computer) {
+    return c.kind === "device" && c.nodeId ? this.hub.store.nodeCapabilities(c.nodeId)?.screen : undefined;
+  }
+
+  /** The kind of code a device's own screen opens with, if it has one. */
+  codeKind(c: Computer): "pin" | "password" | null {
+    return this.screenCaps(c)?.code ?? null;
+  }
+
+  /**
+   * Open a device's own screen with its code, for `purpose` until `until`. The device checks the
+   * code (and counts wrong ones); the hub only passes it along. Returns when the opening ends, which
+   * the device may make sooner. Screens without a code open as they always have.
+   */
+  async unlockScreen(c: Computer, purpose: string, code: string | undefined, until: number): Promise<number> {
+    const kind = this.codeKind(c);
+    if (!kind) return until;
+    const label = kind === "pin" ? "PIN" : "password";
+    if (!code) throw new ComputerError(`Enter ${c.name}'s ${label}. It was picked at the device, and Warren doesn't keep it.`, 403);
+    if (!c.nodeId || !this.hub.isNodeOnline(c.nodeId)) throw new ComputerError(`${c.name} is offline: its device isn't connected`, 503);
+    try {
+      const r = (await this.nodeRequest(c.nodeId, (requestId) => ({ type: "screen_unlock", requestId, purpose, code, until: new Date(until).toISOString() }), 20_000)) as { until?: string };
+      return Date.parse(r?.until ?? "") || until;
+    } catch (err) {
+      if (err instanceof ComputerError && err.status === 422) throw new ComputerError(err.message, 403);
+      throw err;
+    }
+  }
+
+  /** Close what a code opened for `purpose`, when there's a code at all. */
+  lockScreen(c: Computer, purpose: string) {
+    if (c.kind === "device" && c.nodeId && this.codeKind(c)) this.hub.sendToNode(c.nodeId, { type: "screen_lock", purpose });
+  }
+
+  /** Something about a screen's code its owner should hear about (wrong codes, a lockout). */
+  onScreenEvent(nodeId: string, msg: Extract<NodeToHub, { type: "screen_event" }>) {
+    const screen = this.hub.store.computersOnNode(nodeId).find((x) => x.kind === "device");
+    if (!screen) return;
+    this.log(screen, { kind: "user", id: "system" }, msg.text);
+    const owner = this.ownerOf(screen);
+    if (msg.alert && owner) void this.hub.apns.sendTo(owner, { aps: { alert: { title: screen.name, body: msg.text } }, warren: { kind: "computer", computerId: screen.id } }).catch(() => {});
   }
 
   online(c: Computer): boolean {
@@ -113,6 +166,7 @@ export class Computers {
       ...c,
       controller: ctl ? { kind: "user", id: ctl.id, since: ctl.since } : null,
       ownerId: this.ownerOf(c),
+      code: this.codeKind(c),
       paused: this.hub.isNodePaused(c.nodeId),
       online: this.online(c),
       transport: this.transport(c),
@@ -275,11 +329,21 @@ export class Computers {
   }
 
   /** Lend a device's screen to agents for `minutes`, until the owner stops it (null), or stop lending (false). */
-  lend(c: Computer, userId: string, minutes: number | null | false) {
-    if (minutes === false) this.endLoan(c, "taken back", { kind: "user", id: userId });
+  async lend(c: Computer, userId: string, minutes: number | null | false, code?: string) {
+    let until: string | null = minutes === false || minutes === null ? null : new Date(Date.now() + minutes * 60_000).toISOString();
+    if (minutes !== false && this.codeKind(c)) {
+      // the device opens the screen for this long, a day at most, whatever the hub says later
+      const opened = await this.unlockScreen(c, "lend", code, until ? Date.parse(until) : Date.now() + DAY_MS);
+      until = new Date(opened).toISOString();
+      if (minutes === null) minutes = Math.round((opened - Date.now()) / 60_000);
+    }
+    if (minutes === false) {
+      this.endLoan(c, "taken back", { kind: "user", id: userId });
+      this.lockScreen(c, "lend");
+    }
     const config = { ...(this.hub.store.computer(c.id) ?? c).config };
     if (minutes === false) delete config.lend;
-    else config.lend = { until: minutes === null ? null : new Date(Date.now() + minutes * 60_000).toISOString() };
+    else config.lend = { until };
     this.hub.store.updateComputer(c.id, { config });
     const span = (m: number) => (m % 60 ? `${m} minute${m === 1 ? "" : "s"}` : `${m / 60} hour${m === 60 ? "" : "s"}`);
     const what = minutes === false ? "Stopped lending it to agents" : minutes === null ? "Lent it to agents until they stop it" : `Lent it to agents for ${span(minutes)}`;
@@ -375,7 +439,7 @@ export class Computers {
   }
 
   /** Lend the screen to the agent that asked, for `minutes` (null: as long as allowed). Only the device's owner gets here. */
-  startLoan(approval: Approval, ownerId: string, minutes: number | null): DeviceLoan {
+  async startLoan(approval: Approval, ownerId: string, minutes: number | null, code?: string): Promise<DeviceLoan> {
     const req = approval.loan;
     if (!req) throw new ComputerError("that isn't a request to borrow a device", 400);
     if (req.ownerId !== ownerId) throw new ComputerError(`Only ${this.hub.store.user(req.ownerId)?.name ?? "its owner"} can lend ${req.deviceName}`, 403);
@@ -386,11 +450,16 @@ export class Computers {
     const problem = this.whyNotBorrowable(node, screen, approval.agentId);
     if (problem) throw new ComputerError(problem, 409);
     if (!screen) screen = store.createComputer({ workspaceId: node.workspaceId, name: req.deviceName, kind: "device", nodeId: node.id, config: {} });
-    const span = Math.min(minutes ?? LOAN_MAX_MINUTES, LOAN_MAX_MINUTES);
+    let span = Math.min(minutes ?? LOAN_MAX_MINUTES, LOAN_MAX_MINUTES);
+    let until = Date.now() + span * 60_000;
+    if (this.codeKind(screen)) {
+      until = await this.unlockScreen(screen, "loan", code, until);
+      span = Math.max(1, Math.round((until - Date.now()) / 60_000));
+    }
     const loan: DeviceLoan = {
       agentId: approval.agentId,
       since: now(),
-      until: new Date(Date.now() + span * 60_000).toISOString(),
+      until: new Date(until).toISOString(),
       approvedBy: ownerId,
       approvalId: approval.id,
       channelId: req.channelId,
@@ -425,6 +494,7 @@ export class Computers {
     if (!fresh || !loan) return;
     const config = { ...fresh.config };
     delete config.loan;
+    this.lockScreen(fresh, "loan");
     store.updateComputer(c.id, { config });
     const agent = store.agent(loan.agentId);
     const handle = agent ? `@${agent.handle}` : "the agent";
@@ -459,7 +529,8 @@ export class Computers {
 
   /** The screen as it looks now (or within `maxAgeMs`), for thumbnails. */
   async latest(c: Computer, maxAgeMs = 5000): Promise<Frame> {
-    const f = this.frames.get(c.id);
+    // a screen with a code is asked every time, so a picture from while it was open isn't served once it's closed
+    const f = this.codeKind(c) ? undefined : this.frames.get(c.id);
     if (f && Date.now() - f.at < maxAgeMs) return f;
     let p = this.shooting.get(c.id);
     if (!p) {
@@ -556,17 +627,29 @@ export class Computers {
       this.control.delete(computerId);
       this.changed(computerId);
     }
-    for (const [t, ticket] of this.tickets) if (ticket.expires < Date.now()) this.tickets.delete(t);
+    for (const [t, ticket] of this.tickets)
+      if (ticket.expires < Date.now()) {
+        this.tickets.delete(t);
+        // opened with the code but never watched: close it again
+        const c = this.hub.store.computer(ticket.computerId);
+        if (c) this.lockScreen(c, `view:${t}`);
+      }
     this.sweepLoans();
   }
 
   // --- live view --------------------------------------------------------------------------------------
 
-  ticket(c: Computer, userId: string): string {
+  /**
+   * A one-time link to watch a computer. A device's own screen with a code opens with the code
+   * first, while the viewer watches; the device checks it again when the viewer connects.
+   */
+  async ticket(c: Computer, userId: string, code?: string): Promise<string> {
     if (!this.canSee(c, userId)) throw new ComputerError("only its owner can watch this screen", 403);
-    this.log(c, { kind: "user", id: userId }, "Opened the live view");
     const t = crypto.randomBytes(24).toString("base64url");
-    this.tickets.set(t, { computerId: c.id, userId, workspaceId: c.workspaceId, kind: this.transport(c), expires: Date.now() + TICKET_MS });
+    const locked = !!this.codeKind(c);
+    if (locked) await this.unlockScreen(c, `view:${t}`, code, Date.now() + VIEW_UNLOCK_MS);
+    this.log(c, { kind: "user", id: userId }, "Opened the live view");
+    this.tickets.set(t, { id: t, computerId: c.id, userId, workspaceId: c.workspaceId, kind: this.transport(c), code: locked ? code : undefined, expires: Date.now() + TICKET_MS });
     return t;
   }
 
@@ -576,6 +659,11 @@ export class Computers {
     this.tickets.delete(ticket!);
     if (t.expires < Date.now() || t.computerId !== computerId) return null;
     return t;
+  }
+
+  /** The viewer a ticket was for left: what its code opened closes. */
+  viewerGone(c: Computer, ticket: Ticket) {
+    this.lockScreen(c, `view:${ticket.id}`);
   }
 
   /** A browser watching a screen through frames; it can send input once it has control. */
@@ -622,7 +710,7 @@ export class Computers {
   }
 
   /** Relay a browser's VNC connection to a computer on a device. */
-  openTunnel(c: Computer, socket: WebSocket) {
+  openTunnel(c: Computer, socket: WebSocket, code?: string) {
     if (!c.nodeId) return socket.close(4400, "no device");
     const tunnelId = id("tun");
     const t = { socket, nodeId: c.nodeId, computerId: c.id, ready: false, queue: [] as Uint8Array[] };
@@ -635,7 +723,7 @@ export class Computers {
     socket.on("close", () => {
       if (this.tunnels.delete(tunnelId)) this.hub.sendToNode(t.nodeId, { type: "tunnel_close", tunnelId });
     });
-    if (!this.hub.sendToNode(c.nodeId, { type: "tunnel_open", tunnelId, computer: this.spec(c) })) {
+    if (!this.hub.sendToNode(c.nodeId, { type: "tunnel_open", tunnelId, computer: this.spec(c), code })) {
       this.tunnels.delete(tunnelId);
       socket.close(4503, "device offline");
     }

@@ -1,9 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Loader2, MonitorOff, RefreshCw, Sparkle } from "lucide-react";
+import { KeyRound, Loader2, MonitorOff, RefreshCw, Sparkle } from "lucide-react";
 import type { ComputerAction, RecordedStep } from "@warren/core";
 import { ApiError, api, getToken } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { cx } from "./ui.tsx";
+import { CodePrompt, screenCode } from "./ScreenCode.tsx";
 
 /** The screen as a still image that refreshes while it's on screen (cards, chat, lists). */
 export function ScreenThumb({ computer, refreshMs = 4000, className }: { computer: ComputerInfo; refreshMs?: number; className?: string }) {
@@ -64,7 +65,13 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
               <MonitorOff size={14} /> Paused at the device
             </>
           ) : failed ? (
-            "Screen unavailable"
+            computer.code ? (
+              <>
+                <KeyRound size={14} /> Opens with its {computer.code === "pin" ? "PIN" : "password"}
+              </>
+            ) : (
+              "Screen unavailable"
+            )
           ) : (
             <Loader2 size={14} className="animate-spin" />
           )}
@@ -101,7 +108,7 @@ interface Props {
  * screen streams frames through the hub. Input only goes through while you have control.
  */
 export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput, compact, onTakeControl, onActivity }, ref) {
-  const [state, setState] = useState<"connecting" | "live" | "closed" | "error">("connecting");
+  const [state, setState] = useState<"connecting" | "live" | "closed" | "error" | "code">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const holder = useRef<HTMLDivElement>(null);
@@ -140,10 +147,28 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
       return;
     }
     let disposed = false;
+    // a screen with a code: ask for it first (once per tab), and the device checks it
+    const code = computer.code ? screenCode.get(computer.id) : undefined;
+    if (computer.code && !code) {
+      setState("code");
+      return;
+    }
     setState("connecting");
     setError(null);
     (async () => {
-      const view = await api<{ transport: "vnc" | "frames"; url: string; direct: boolean }>("POST", `/api/computers/${computer.id}/view`);
+      let view: { transport: "vnc" | "frames"; url: string; direct: boolean };
+      try {
+        view = await api("POST", `/api/computers/${computer.id}/view`, code ? { code } : {});
+      } catch (e) {
+        if (disposed) return;
+        if (code && (e as ApiError).status === 403) {
+          // wrong (or locked out): ask again, with what the device said
+          screenCode.forget(computer.id);
+          setState("code");
+        } else setState("error");
+        setError((e as ApiError).message);
+        return;
+      }
       if (disposed) return;
       const wsUrl = view.direct ? view.url : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${view.url}`;
       if (view.transport === "vnc") {
@@ -199,7 +224,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
       ws.current?.close();
       ws.current = null;
     };
-  }, [computer.id, computer.online, computer.paused, transport, attempt]);
+  }, [computer.id, computer.online, computer.paused, computer.code, transport, attempt]);
 
   // control toggles input
   useEffect(() => {
@@ -335,7 +360,16 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
       )}
       {state !== "live" && (
         <div className="absolute inset-0 grid place-items-center text-sm text-white/70 p-6 text-center">
-          {state === "connecting" ? (
+          {state === "code" ? (
+            <CodePrompt
+              computer={computer}
+              error={error}
+              onSubmit={(c) => {
+                screenCode.set(computer.id, c);
+                setAttempt((n) => n + 1);
+              }}
+            />
+          ) : state === "connecting" ? (
             <span className="flex items-center gap-2">
               <Loader2 size={16} className="animate-spin" /> Connecting to {computer.name}…
             </span>

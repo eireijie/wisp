@@ -1,17 +1,14 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
-import { SKILL_CATALOG, catalogSkill, everydaySkills, type Agent, type CatalogSkill, type Skill } from "@warren/core";
+import { catalogSkill, type Agent, type CatalogSkill, type Skill } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore } from "../store.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { Advanced, useSimple } from "../experience.tsx";
 import { openDm } from "../openDm.ts";
-import { AgentAvatar, Button, Empty, Field, Input, Loader, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
-import { AgentPicker, AgentStack, Group, CatalogIcon, IconTile, SearchBox, ShopHeader, Tabs } from "../components/ShopParts.tsx";
+import { AgentAvatar, Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { AgentPicker, Group, CatalogIcon } from "../components/ShopParts.tsx";
 
-const SOURCE: Record<Skill["source"], string> = { catalog: "From the library", custom: "Made here", taught: "Taught" };
-// tags shared by a few skills; one-off tags would just be noise as filters
-const TAGS = ["All", ...[...new Set(SKILL_CATALOG.flatMap((s) => s.tags))].filter((t) => SKILL_CATALOG.filter((s) => s.tags.includes(t)).length >= 2).sort()];
+export const SOURCE: Record<Skill["source"], string> = { catalog: "From the library", custom: "Made here", taught: "Taught" };
 
 const NEW_SKILL = `# <What this skill does>
 
@@ -91,241 +88,21 @@ export function plainSkill(skill: Pick<Skill, "description" | "content" | "catal
 }
 
 /** What the detail panel shows: an installed skill, or a shop item not installed yet. */
-type Open = { skill: Skill } | { entry: CatalogSkill };
+export type Open = { skill: Skill } | { entry: CatalogSkill };
 
-/**
- * The skill shop: ready-made "how to do X" instructions agents can learn, plus your own. An
- * installed skill is written into each agent's memory folder (me/skills/<name>/SKILL.md) and
- * listed in its prompt, so whichever harness it runs in reads and follows it.
- */
-export function SkillsView({ onBack }: { onBack?: () => void }) {
-  const me = useStore((s) => s.me)!;
-  const agents = useStore((s) => s.agents);
-  const simple = useSimple();
-  const canEdit = me.role !== "guest";
-  const [skills, setSkills] = useState<Skill[] | null>(null);
-  const [tab, setTab] = useState<"shop" | "installed">("shop");
-  const [q, setQ] = useState("");
-  const [tag, setTag] = useState("All");
-  const [open, setOpen] = useState<Open | null>(null);
-  const [installing, setInstalling] = useState<CatalogSkill | null>(null);
-  const [editing, setEditing] = useState<Skill | "new" | null>(null);
+const HARNESS_NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", hermes: "Hermes" };
+const STORE_NAMES: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI" };
 
-  const load = () => api<Skill[]>("GET", "/api/skills").then((s) => (setSkills(s), s), () => (setSkills([]), []));
-  useEffect(() => {
-    load();
-  }, []);
-
-  const tags = useMemo(() => (simple ? ["All", ...TAGS.filter((t) => t === "everyday"), ...TAGS.filter((t) => t !== "All" && t !== "everyday")] : TAGS), [simple]);
-  const needle = q.trim().toLowerCase();
-  const match = (...s: string[]) => !needle || s.some((x) => x.toLowerCase().includes(needle));
-  const byCatalog = useMemo(() => new Map((skills ?? []).filter((s) => s.catalogId).map((s) => [s.catalogId!, s])), [skills]);
-  const shop = SKILL_CATALOG.filter((s) => (tag === "All" || s.tags.includes(tag)) && match(s.name, s.description, ...s.tags));
-  const everyday = simple && !needle && tag === "All";
-  const everydayIds = new Set(everydaySkills().map((s) => s.id));
-  const rest = everyday ? shop.filter((e) => !everydayIds.has(e.id)) : shop;
-  const card = (e: CatalogSkill) => {
-    const have = byCatalog.get(e.id);
-    return <LibraryCard key={e.id} e={e} have={have} agents={agents} simple={simple} canEdit={canEdit} onOpen={() => setOpen(have ? { skill: have } : { entry: e })} onInstall={() => (have ? setOpen({ skill: have }) : setInstalling(e))} />;
-  };
-  const installed = (skills ?? []).filter((s) => match(s.name, s.description, ...s.tags));
-
-  // keep the open panel in step with the latest data
-  const refresh = async (focus?: string) => {
-    const list = await load();
-    if (focus) {
-      const s = list.find((x) => x.id === focus);
-      setOpen(s ? { skill: s } : null);
-    }
-  };
-
-  return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <ShopHeader
-        title="Skills"
-        onBack={onBack}
-        action={
-          canEdit && (
-            <Button variant="primary" onClick={() => setEditing("new")}>
-              <Plus size={16} /> <span className="hidden sm:inline">Create a skill</span>
-              <span className="sm:hidden">Create</span>
-            </Button>
-          )
-        }
-      />
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl px-4 md:px-6 py-5 space-y-4">
-          <p className="text-sm text-muted">
-            {simple
-              ? "A skill teaches your helper how to do one kind of job well. Add one and your helper follows it whenever a request fits."
-              : "Skills are step-by-step instructions for kinds of work. Install one and your agents follow it whenever a request fits, whatever harness they run in."}
-          </p>
-          <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-3 border-b border-line">
-            <div className="flex-1">
-              <Tabs
-                value={tab}
-                onChange={setTab}
-                tabs={[
-                  { id: "shop", label: "Skill library", count: SKILL_CATALOG.length },
-                  { id: "installed", label: "Installed", count: skills?.length },
-                ]}
-              />
-            </div>
-            <div className="sm:pb-2">
-              <SearchBox value={q} onChange={setQ} placeholder="Search skills" />
-            </div>
-          </div>
-          {!canEdit && <p className="text-xs text-muted">Guests can browse; members install and create skills.</p>}
-
-          {tab === "shop" ? (
-            <>
-              <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap pb-1">
-                {tags.map((t) => (
-                  <button key={t} onClick={() => setTag(t)} className={cx("h-7 px-2.5 rounded-full text-xs whitespace-nowrap border capitalize", tag === t ? "bg-accent text-accent-ink border-transparent" : "border-line text-muted hover:text-ink hover:bg-hover")}>
-                    {t}
-                  </button>
-                ))}
-              </div>
-              {shop.length === 0 ? (
-                <p className="text-sm text-muted py-8 text-center">No skills match. You can create your own.</p>
-              ) : (
-                <>
-                  {everyday && (
-                    <section className="space-y-2" aria-labelledby="skills-everyday">
-                      <h2 id="skills-everyday" className="text-[13px] font-semibold text-muted">
-                        Everyday
-                      </h2>
-                      <p className="text-sm text-muted">You don't need a skill for ordinary requests. Just ask your helper. A skill helps when you want something done the same way every time.</p>
-                      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{everydaySkills().map(card)}</div>
-                    </section>
-                  )}
-                  <section className="space-y-2">
-                    {everyday && rest.length > 0 && <h2 className="text-[13px] font-semibold text-muted">More skills</h2>}
-                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{rest.map(card)}</div>
-                  </section>
-                </>
-              )}
-            </>
-          ) : skills === null ? (
-            <Loader />
-          ) : skills.length === 0 ? (
-            <div className="py-6">
-              <Empty icon={<Wand2 size={24} />} title="No skills installed yet">
-                <p>Install one from the library, or write your own: how your team does a weekly report, a deploy, a customer reply.</p>
-                <Button onClick={() => setTab("shop")}>Browse the skill library</Button>
-              </Empty>
-            </div>
-          ) : installed.length === 0 ? (
-            <p className="text-sm text-muted py-8 text-center">No installed skills match "{q}".</p>
-          ) : (
-            <div className="rounded-xl border border-line divide-y divide-line bg-panel">
-              {installed.map((s) => (
-                <button key={s.id} className="w-full flex items-center gap-3 px-3 sm:px-4 py-3 text-left hover:bg-hover/60" onClick={() => setOpen({ skill: s })}>
-                  <IconTile>
-                    <CatalogIcon name={catalogSkill(s.catalogId ?? "")?.icon} fallback={Wand2} />
-                  </IconTile>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{s.name}</span>
-                      <span className="hidden sm:inline">
-                        <Pill tone={s.source === "custom" ? "accent" : s.source === "taught" ? "info" : "neutral"}>{SOURCE[s.source]}</Pill>
-                      </span>
-                    </span>
-                    <span className="block text-xs text-muted truncate mt-0.5">{simple ? whatItsFor(s.description) || "No description" : s.description || "No description"}</span>
-                    {simple && <span className="block text-xs text-faint truncate">{helperLine(agents, s.agentIds)}</span>}
-                  </span>
-                  <span className="hidden md:block w-40 shrink-0">
-                    {!simple && <AgentStack agents={agents} ids={s.agentIds} />}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {open && (
-        <SkillPanel
-          open={open}
-          agents={agents}
-          canEdit={canEdit}
-          onClose={() => setOpen(null)}
-          onInstall={(e) => setInstalling(e)}
-          onEdit={(s) => setEditing(s)}
-          onChanged={(id) => refresh(id)}
-        />
-      )}
-      {installing && (
-        <InstallModal
-          entry={installing}
-          agents={agents}
-          onClose={() => setInstalling(null)}
-          onDone={async (s) => {
-            setInstalling(null);
-            await refresh(s.id);
-          }}
-        />
-      )}
-      {editing && (
-        <SkillEditor
-          skill={editing === "new" ? null : editing}
-          agents={agents}
-          onClose={() => setEditing(null)}
-          onSaved={async (s) => {
-            setEditing(null);
-            setTab("installed");
-            await refresh(s.id);
-          }}
-        />
-      )}
-    </div>
-  );
+/** Where an installed skill came from, in a few words. */
+export function skillOrigin(s: Pick<Skill, "source" | "catalogId">): string {
+  const id = s.catalogId ?? "";
+  if (id.startsWith("device:")) return `From ${HARNESS_NAMES[id.split(":")[2]] ?? "a device"}`;
+  const store = /^([a-z]+):/.exec(id)?.[1];
+  if (s.source === "catalog" && store && STORE_NAMES[store]) return `From ${STORE_NAMES[store]}`;
+  return SOURCE[s.source];
 }
 
-function LibraryCard({ e, have, agents, simple, canEdit, onOpen, onInstall }: { e: CatalogSkill; have: Skill | undefined; agents: Agent[]; simple: boolean; canEdit: boolean; onOpen: () => void; onInstall: () => void }) {
-  return (
-    <div className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
-      <button className="flex items-start gap-3 text-left" onClick={onOpen}>
-        <IconTile>
-          <CatalogIcon name={e.icon} fallback={Wand2} />
-        </IconTile>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">{e.name}</span>
-          <span className="block text-sm text-muted mt-1 line-clamp-3">{simple ? (e.plain?.does ?? whatItsFor(e.description)) : e.description.replace(/^Use (when|for) /, (m) => (m === "Use for " ? "For " : "When "))}</span>
-        </span>
-      </button>
-      <div className="flex flex-wrap gap-1">
-        {e.tags.map((t) => (
-          <span key={t} className="text-[11px] px-1.5 rounded bg-chip text-muted">
-            {t}
-          </span>
-        ))}
-      </div>
-      <div className="flex items-center gap-2 mt-auto">
-        {simple ? <span className="text-xs text-muted">{helperLine(agents, have?.agentIds ?? [])}</span> : have ? <AgentStack agents={agents} ids={have.agentIds} max={4} /> : <span className="text-xs text-faint">Not installed</span>}
-        <span className="flex-1" />
-        <Button className="h-8" variant="ghost" onClick={onOpen}>
-          Read
-        </Button>
-        {canEdit && (
-          <Button className="h-8" onClick={onInstall}>
-            {have ? (
-              <>
-                <Check size={14} /> Installed
-              </>
-            ) : (
-              <>
-                <Plus size={14} /> Install
-              </>
-            )}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChanged }: { open: Open; agents: Agent[]; canEdit: boolean; onClose: () => void; onInstall: (e: CatalogSkill) => void; onEdit: (s: Skill) => void; onChanged: (id?: string) => void }) {
+export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChanged }: { open: Open; agents: Agent[]; canEdit: boolean; onClose: () => void; onInstall: (e: CatalogSkill) => void; onEdit: (s: Skill) => void; onChanged: (id?: string) => void }) {
   const skill = "skill" in open ? open.skill : null;
   const entry = "entry" in open ? open.entry : catalogSkill(skill?.catalogId ?? "");
   const name = skill?.name ?? entry!.name;
@@ -379,7 +156,7 @@ function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, onChang
         <div className="space-y-2">
           {!(simple && plain.does) && <p className="text-sm text-muted">{description}</p>}
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-            {skill ? <Pill tone={skill.source === "custom" ? "accent" : "neutral"}>{SOURCE[skill.source]}</Pill> : <Pill>In the library</Pill>}
+            {skill ? <Pill tone={skill.source === "custom" && !skill.catalogId ? "accent" : "neutral"}>{skillOrigin(skill)}</Pill> : <Pill>In the library</Pill>}
             {skill && simple && <span>{helperLine(agents, skill.agentIds)}</span>}
             {skill && !simple && <span className="font-mono">me/skills/{skill.slug}/SKILL.md</span>}
             {skill && <span>{simple ? "" : "· "}updated {timeAgo(skill.updatedAt)}</span>}
@@ -551,7 +328,8 @@ function TryIt({ skill, agents, onClose }: { skill: Skill; agents: Agent[]; onCl
   );
 }
 
-function InstallModal({ entry, agents, onClose, onDone }: { entry: CatalogSkill; agents: Agent[]; onClose: () => void; onDone: (s: Skill) => void }) {
+/** Give a skill to agents: one from the library (`catalogId`), the store (`storeId`) or a device (`nodeId`, `harness`, `skillId`). */
+export function InstallModal({ entry, body, agents, onClose, onDone }: { entry: { name: string; description: string }; body: Record<string, string>; agents: Agent[]; onClose: () => void; onDone: (s: Skill) => void }) {
   const [agentIds, setAgentIds] = useState<string[]>(agents.length === 1 ? [agents[0].id] : []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -560,16 +338,16 @@ function InstallModal({ entry, agents, onClose, onDone }: { entry: CatalogSkill;
     setBusy(true);
     setError(null);
     try {
-      onDone(await api<Skill>("POST", "/api/skills", { catalogId: entry.id, agentIds }));
+      onDone(await api<Skill>("POST", "/api/skills", { ...body, agentIds }));
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
     }
   }
   return (
-    <Modal title={`Install "${entry.name}"`} onClose={onClose}>
+    <Modal title={`Add "${entry.name}"`} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-muted">{entry.description}</p>
+        <p className="text-sm text-muted line-clamp-4">{entry.description}</p>
         <Group label={`Which ${who}s learn it`} hint={`You can give it to more ${who}s later.`}>
           <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} />
         </Group>
@@ -577,7 +355,7 @@ function InstallModal({ entry, agents, onClose, onDone }: { entry: CatalogSkill;
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={busy} onClick={install}>
-            {agentIds.length ? `Install for ${agentIds.length} ${who}${agentIds.length === 1 ? "" : "s"}` : "Add to the organization"}
+            {agentIds.length ? `Add for ${agentIds.length} ${who}${agentIds.length === 1 ? "" : "s"}` : "Add to the organization"}
           </Button>
         </div>
       </div>
@@ -592,7 +370,7 @@ const GUIDE_HINTS = {
   result: "For example: One page or less, decisions first, each next step with a name.",
 };
 
-function SkillEditor({ skill, agents, onClose, onSaved }: { skill: Skill | null; agents: Agent[]; onClose: () => void; onSaved: (s: Skill) => void }) {
+export function SkillEditor({ skill, agents, onClose, onSaved }: { skill: Skill | null; agents: Agent[]; onClose: () => void; onSaved: (s: Skill) => void }) {
   const simple = useSimple();
   const guided = simple && !skill;
   const ids = useId();

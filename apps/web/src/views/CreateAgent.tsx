@@ -695,6 +695,12 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
                           ) : (
                           <label className="space-y-1.5">
                             <span className="block text-[13px] font-semibold text-muted">Device</span>
+                            {/* only ask which device when there's a real choice */}
+                            {usable.length < 2 ? (
+                              <p className="h-10 flex items-center text-sm text-muted">
+                                {usable[0] ? `Runs on ${usable[0].name}${usable[0].online ? "" : " (offline)"}.` : "No device yet. Connect one under Devices and pick it then."}
+                              </p>
+                            ) : (
                             <select
                               value={nodeId}
                               onChange={(e) => {
@@ -711,6 +717,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
                                 </option>
                               ))}
                             </select>
+                            )}
                           </label>
                           )}
                         </div>

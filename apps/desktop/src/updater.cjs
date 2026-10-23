@@ -13,6 +13,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 
 const REPO = "eireijie/warren";
 // WARREN_UPDATE_FEED points a build at another list of releases (for trying an update locally)
@@ -58,6 +60,74 @@ function fileDigest(file) {
     const h = crypto.createHash("sha256");
     fs.createReadStream(file).on("data", (d) => h.update(d)).on("end", () => resolve(`sha256:${h.digest("hex")}`)).on("error", reject);
   });
+}
+
+/**
+ * Download a release file to `dest` and check it: exactly `size` bytes, and the sha256 `digest`
+ * GitHub publishes. A build without a digest isn't installed, since nothing else vouches for it.
+ * Anything wrong (a write error, a short or long file, another digest) throws and removes the file.
+ */
+async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, headers = {} } = {}) {
+  if (!/^sha256:[0-9a-f]{64}$/.test(String(digest || ""))) throw new Error("the release has no checksum for this build, so it wasn't downloaded");
+  const res = await fetchImpl(url, { headers });
+  if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`);
+  let bytes = 0;
+  try {
+    await pipeline(
+      Readable.fromWeb(res.body),
+      async function* (source) {
+        for await (const chunk of source) {
+          bytes += chunk.length;
+          if (typeof size === "number" && bytes > size) throw new Error("the download is bigger than the release says");
+          yield chunk;
+        }
+      },
+      fs.createWriteStream(dest),
+    );
+    if (typeof size === "number" && bytes !== size) throw new Error("the download was cut short");
+    if ((await fileDigest(dest)) !== digest) throw new Error("the download didn't match the release, so it was thrown away");
+  } catch (e) {
+    fs.rmSync(dest, { force: true });
+    throw e;
+  }
+  return dest;
+}
+
+/**
+ * The script that swaps a new Mac build in once Warren (`pid`) has quit. If the new app can't be
+ * moved into place, the old one goes back where it was, so Warren is never left missing.
+ */
+function macScript({ pid, file, unpacked, bundle, dir, relaunch }) {
+  const b = q(bundle);
+  const old = q(`${bundle}.old`);
+  const open = relaunch ? `/usr/bin/open ${b}` : ":";
+  return [
+    "#!/bin/sh",
+    `while kill -0 ${pid} 2>/dev/null; do sleep 0.3; done`,
+    `rm -rf ${q(unpacked)} && mkdir -p ${q(unpacked)} || { ${open}; exit 1; }`,
+    `/usr/bin/ditto -x -k ${q(file)} ${q(unpacked)} || { ${open}; exit 1; }`,
+    `NEW=$(/usr/bin/find ${q(unpacked)} -maxdepth 1 -name '*.app' | head -n 1)`,
+    `[ -n "$NEW" ] || { ${open}; exit 1; }`,
+    `/usr/bin/xattr -dr com.apple.quarantine "$NEW" 2>/dev/null`,
+    `rm -rf ${old}`,
+    `mv ${b} ${old} || { ${open}; exit 1; }`,
+    `if ! mv "$NEW" ${b}; then rm -rf ${b}; mv ${old} ${b}; ${open}; exit 1; fi`,
+    `rm -rf ${old} ${q(dir)}`,
+    open,
+    "",
+  ].join("\n");
+}
+
+/** The same for an AppImage: copy next to it first, so the swap itself is one rename. */
+function linuxScript({ pid, file, target, relaunch }) {
+  const next = q(`${target}.new`);
+  return [
+    "#!/bin/sh",
+    `while kill -0 ${pid} 2>/dev/null; do sleep 0.3; done`,
+    `if cp -f ${q(file)} ${next} && chmod 755 ${next} && mv -f ${next} ${q(target)}; then rm -f ${q(file)}; else rm -f ${next}; fi`,
+    relaunch ? `nohup ${q(target)} >/dev/null 2>&1 &` : "",
+    "",
+  ].join("\n");
 }
 
 /** The .app bundle this process runs from (…/Warren.app/Contents/MacOS/Warren). */
@@ -128,18 +198,7 @@ function createUpdater(o) {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
     const dest = path.join(dir, name);
-    const res = await fetch(update.url, { headers: { "user-agent": `Warren/${app.getVersion()}` } });
-    if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`);
-    const out = fs.createWriteStream(dest);
-    for await (const chunk of res.body) if (!out.write(chunk)) await new Promise((r) => out.once("drain", r));
-    await new Promise((resolve, reject) => out.end((err) => (err ? reject(err) : resolve())));
-    if (update.digest) {
-      const got = await fileDigest(dest);
-      if (got !== update.digest) {
-        fs.rmSync(dest, { force: true });
-        throw new Error("the download didn't match the release, so it was thrown away");
-      }
-    }
+    await downloadTo(update.url, dest, update, { headers: { "user-agent": `Warren/${app.getVersion()}` } });
     file = dest;
     set("ready", update.version);
     o.log(`update ${update.version} downloaded to ${dest}`);
@@ -153,32 +212,12 @@ function createUpdater(o) {
     const pid = process.pid;
     try {
       if (process.platform === "darwin") {
-        const bundle = macBundle();
-        const unpacked = path.join(dir, "unpacked");
-        const script = [
-          "#!/bin/sh",
-          `while kill -0 ${pid} 2>/dev/null; do sleep 0.3; done`,
-          `rm -rf ${q(unpacked)} && mkdir -p ${q(unpacked)}`,
-          `/usr/bin/ditto -x -k ${q(file)} ${q(unpacked)} || exit 1`,
-          `NEW=$(/usr/bin/find ${q(unpacked)} -maxdepth 1 -name '*.app' | head -n 1)`,
-          `[ -n "$NEW" ] || exit 1`,
-          `/usr/bin/xattr -dr com.apple.quarantine "$NEW" 2>/dev/null`,
-          `rm -rf ${q(bundle)}.old && mv ${q(bundle)} ${q(bundle)}.old && mv "$NEW" ${q(bundle)} && rm -rf ${q(bundle)}.old ${q(dir)}`,
-          relaunch ? `/usr/bin/open ${q(bundle)}` : "",
-        ].join("\n");
-        runDetached(script);
+        runDetached("/bin/sh", [writeScript(macScript({ pid, file, unpacked: path.join(dir, "unpacked"), bundle: macBundle(), dir, relaunch }))]);
       } else if (process.platform === "win32") {
         // electron-builder's one-click installer: /S is silent, --force-run opens Warren when done
-        spawn(file, relaunch ? ["/S", "--force-run"] : ["/S"], { detached: true, stdio: "ignore" }).unref();
+        runDetached(file, relaunch ? ["/S", "--force-run"] : ["/S"]);
       } else {
-        const target = process.env.APPIMAGE;
-        const script = [
-          "#!/bin/sh",
-          `while kill -0 ${pid} 2>/dev/null; do sleep 0.3; done`,
-          `chmod 755 ${q(file)} && mv -f ${q(file)} ${q(target)}`,
-          relaunch ? `nohup ${q(target)} >/dev/null 2>&1 &` : "",
-        ].join("\n");
-        runDetached(script);
+        runDetached("/bin/sh", [writeScript(linuxScript({ pid, file, target: process.env.APPIMAGE, relaunch }))]);
       }
       return true;
     } catch (e) {
@@ -189,10 +228,21 @@ function createUpdater(o) {
     }
   }
 
-  function runDetached(script) {
+  function writeScript(script) {
     const sh = path.join(os.tmpdir(), `warren-update-${process.pid}.sh`);
     fs.writeFileSync(sh, script, { mode: 0o755 });
-    spawn("/bin/sh", [sh], { detached: true, stdio: "ignore" }).unref();
+    return sh;
+  }
+
+  /** Start the installer on its own; if it can't start, say so instead of crashing Warren. */
+  function runDetached(cmd, args) {
+    const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+    child.on("error", (e) => {
+      installing = false;
+      o.log(`update install failed: ${e.message}`);
+      set("error", `couldn't install the update (${e.message})`);
+    });
+    child.unref();
   }
 
   function restart() {
@@ -236,4 +286,4 @@ function canReplace(bundle) {
 /** Quote a path for /bin/sh. */
 const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
-module.exports = { createUpdater, compareVersions, assetName, pickUpdate, macBundle, canReplace };
+module.exports = { createUpdater, compareVersions, assetName, pickUpdate, macBundle, canReplace, downloadTo, macScript, linuxScript };
