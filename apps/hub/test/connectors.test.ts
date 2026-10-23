@@ -47,6 +47,19 @@ const promptFor = async (agentId: string) => {
 };
 
 describe("connectors", () => {
+  it("includes current device warnings when listing connectors", async () => {
+    const { node } = (await api("POST", "/api/nodes", { name: "Laptop" })).data;
+    hub.store.setNodeCapabilities(node.id, { platform: "linux", arch: "x64", screen: { ok: false, detail: "" }, vm: { ok: false, detail: "" }, commands: { uvx: false } });
+    const agent = (await api("POST", "/api/agents", { handle: "local", name: "Local", harness: "custom", nodeId: node.id })).data;
+    const conn = (await api("POST", "/api/connectors", { kind: "mcp-stdio", name: "Local tools", command: "uvx", agentIds: [agent.id] })).data;
+    expect(conn.warnings).toHaveLength(1);
+    const list = (await api<any[]>("GET", "/api/connectors")).data;
+    expect(list.find((c) => c.id === conn.id)?.warnings).toEqual(conn.warnings);
+    await api("DELETE", `/api/connectors/${conn.id}/agents/${agent.id}`);
+    expect((await api<any[]>("GET", "/api/connectors")).data.find((c) => c.id === conn.id)?.warnings).toEqual([]);
+    await api("DELETE", `/api/connectors/${conn.id}`);
+  });
+
   it("keeps secrets masked, fills templates for the agent's runs, and respects enable and detach", async () => {
     const gh = await api("POST", "/api/connectors", {
       kind: "mcp-http",

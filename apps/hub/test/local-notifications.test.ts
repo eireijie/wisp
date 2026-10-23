@@ -3,7 +3,7 @@ import type { Actor, ClientEvent } from "@warren/core";
 
 vi.mock("../../web/src/router.ts", () => ({ go: vi.fn() }));
 const { pushOnHere } = vi.hoisted(() => ({ pushOnHere: vi.fn(() => false) }));
-vi.mock("../../web/src/push.ts", () => ({ pushOnHere }));
+vi.mock("../../web/src/push.ts", () => ({ pushOnHere, syncPushPrefs: vi.fn(async () => {}) }));
 
 // Load the browser module at runtime so the hub's TypeScript project needn't compile the web store and JSX.
 let notify: { notifyOn: (event: ClientEvent, before: any, after: any) => void; setNotifyPrefs: (prefs: Record<string, boolean>) => void };

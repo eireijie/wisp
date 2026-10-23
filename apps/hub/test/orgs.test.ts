@@ -133,6 +133,13 @@ describe("agent defaults", () => {
     // without defaults a harness is still needed
     expect((await api("POST", "/api/agents", { handle: "nohar", name: "No" })).status).toBe(400);
   });
+
+  it("saves model IDs up to the shared catalog limit", async () => {
+    const model = "m".repeat(150);
+    expect((await api("PUT", "/api/settings/agent-defaults", { model })).status).toBe(200);
+    expect((await api("GET", "/api/settings/agent-defaults")).data.model).toBe(model);
+    expect((await api("PUT", "/api/settings/agent-defaults", { model: "m".repeat(201) })).status).toBe(400);
+  });
 });
 
 describe("who an agent answers", () => {

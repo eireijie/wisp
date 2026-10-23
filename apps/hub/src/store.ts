@@ -2,6 +2,14 @@ import { channelTeams, cleanRulePath, parseSubjectKey, subjectKey, teamOf, type 
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
+export interface PushPrefs {
+  dms?: boolean;
+  replies?: boolean;
+  approvals?: boolean;
+  help?: boolean;
+  tasks?: boolean;
+}
+
 /** Typed data access. Keeps SQL in one place. */
 export class Store {
   constructor(readonly db: Db) {}
@@ -1205,16 +1213,16 @@ export class Store {
 
   // --- web push ---------------------------------------------------------------------------------
 
-  savePushSubscription(userId: string, endpoint: string, keys: { p256dh: string; auth: string }) {
-    this.db.prepare("INSERT INTO push_subscriptions (endpoint, user_id, keys_json, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, keys_json = excluded.keys_json").run(endpoint, userId, JSON.stringify(keys), now());
+  savePushSubscription(userId: string, endpoint: string, keys: { p256dh: string; auth: string }, prefs: PushPrefs = {}) {
+    this.db.prepare("INSERT INTO push_subscriptions (endpoint, user_id, keys_json, prefs_json, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, keys_json = excluded.keys_json, prefs_json = excluded.prefs_json").run(endpoint, userId, JSON.stringify(keys), JSON.stringify(prefs), now());
   }
 
   deletePushSubscription(endpoint: string) {
     this.db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(endpoint);
   }
 
-  pushSubscriptions(userId: string): { endpoint: string; keys: { p256dh: string; auth: string } }[] {
-    return (this.db.prepare("SELECT endpoint, keys_json FROM push_subscriptions WHERE user_id = ?").all(userId) as { endpoint: string; keys_json: string }[]).map((r) => ({ endpoint: r.endpoint, keys: JSON.parse(r.keys_json) }));
+  pushSubscriptions(userId: string): { endpoint: string; keys: { p256dh: string; auth: string }; prefs: PushPrefs }[] {
+    return (this.db.prepare("SELECT endpoint, keys_json, prefs_json FROM push_subscriptions WHERE user_id = ?").all(userId) as { endpoint: string; keys_json: string; prefs_json: string }[]).map((r) => ({ endpoint: r.endpoint, keys: JSON.parse(r.keys_json), prefs: JSON.parse(r.prefs_json) }));
   }
 }
 

@@ -152,7 +152,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { user: true });
     if (!c) return;
     if (!hub.apns.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key first" });
-    return hub.apns.sendTo(c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test" } });
+    return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test", category: "other" } });
   });
 
   /** The APNs key, without the key itself. */

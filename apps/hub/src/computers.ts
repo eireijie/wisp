@@ -143,7 +143,7 @@ export class Computers {
     if (!screen) return;
     this.log(screen, { kind: "user", id: "system" }, msg.text);
     const owner = this.ownerOf(screen);
-    if (msg.alert && owner) void this.hub.apns.sendTo(owner, { aps: { alert: { title: screen.name, body: msg.text } }, warren: { kind: "computer", computerId: screen.id } }).catch(() => {});
+    if (msg.alert && owner) void this.hub.apns.sendTo(screen.workspaceId, owner, { aps: { alert: { title: screen.name, body: msg.text } }, warren: { kind: "computer", category: "help", computerId: screen.id } }).catch(() => {});
   }
 
   online(c: Computer): boolean {

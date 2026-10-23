@@ -75,7 +75,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
   app.get("/api/connectors", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return connectors.list(c.workspaceId);
+    return connectors.list(c.workspaceId).map((conn) => withWarnings(conn.id));
   });
 
   app.post("/api/connectors", async (req, reply) => {

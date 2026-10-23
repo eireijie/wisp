@@ -318,14 +318,18 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     return { publicKey: hub.push.keys(c.workspaceId).publicKey };
   });
 
-  const SUB = z.object({ endpoint: z.string().url().max(2000), keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }) });
+  const SUB = z.object({
+    endpoint: z.string().url().max(2000),
+    keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
+    prefs: z.object({ dms: z.boolean().optional(), replies: z.boolean().optional(), approvals: z.boolean().optional(), help: z.boolean().optional(), tasks: z.boolean().optional() }).optional(),
+  });
 
   app.post("/api/push/subscribe", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
     const body = parse(SUB, req.body, reply);
     if (!body) return;
-    store.savePushSubscription(c.actor.id, body.endpoint, body.keys);
+    store.savePushSubscription(c.actor.id, body.endpoint, body.keys, body.prefs);
     return { ok: true };
   });
 

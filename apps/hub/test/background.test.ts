@@ -9,6 +9,8 @@ import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 import { afterQuietHours, inQuietHours, parseWhen, startOfDay } from "../src/background.ts";
 import type { Hub } from "../src/hub.ts";
+import { openDb } from "../src/db.ts";
+import { Store } from "../src/store.ts";
 
 let dir: string;
 let close: () => Promise<void>;
@@ -198,6 +200,90 @@ describe("background work", () => {
     const approval = hub.store.createApproval({ workspaceId: hub.store.agent(agentId)!.workspaceId, agentId, channelId: dm().id, threadId: null, summary: "Reply to Sam", details: "Hi Sam, Friday works." });
     const m = hub.postMessage({ channelId: dm().id, author: { kind: "agent", id: agentId }, body: "Can I go ahead? Reply to Sam", parts: [{ type: "approval", approvalId: approval.id }], route: false });
     expect(hub.historyLine(m)).toBe("Can I go ahead? Reply to Sam\nHi Sam, Friday works.\n(not answered yet)");
+  });
+});
+
+describe("web push preferences", () => {
+  it("stores optional boolean preferences and filters each subscription by the message category", async () => {
+    const workspaceId = hub.store.agent(agentId)!.workspaceId;
+    const endpoint = "https://push.example.com/quiet";
+    const keys = { p256dh: "BNcR", auth: "tBHI" };
+    const prefs = { dms: false, replies: false, approvals: false, help: false, tasks: false };
+    expect(hub.store.pushSubscriptions(me)[0].prefs).toEqual({});
+    await expect(owner.request("POST", "/api/push/subscribe", { endpoint, keys, prefs: { dms: "no" } })).rejects.toThrow();
+    await owner.request("POST", "/api/push/subscribe", { endpoint, keys, prefs });
+    expect(hub.store.pushSubscriptions(me).find((s) => s.endpoint === endpoint)?.prefs).toEqual(prefs);
+    const note = { title: "Warren", body: "Hello" };
+    const sentTo = () => pushed.splice(0).map((p) => p.endpoint).sort();
+    pushed.length = 0;
+    try {
+      for (const category of ["dm", "reply", "approval"] as const) {
+        expect(await hub.push.notify(workspaceId, [me], note, category)).toBe(1);
+        expect(sentTo()).toEqual(["https://push.example.com/abc"]);
+      }
+      expect(await hub.push.notify(workspaceId, [me], note, "channel")).toBe(2);
+      expect(sentTo()).toEqual(["https://push.example.com/abc", endpoint].sort());
+      expect(await owner.request("POST", "/api/push/test")).toEqual({ sent: 2 });
+      expect(sentTo()).toEqual(["https://push.example.com/abc", endpoint].sort());
+
+      // Re-subscribing updates this device's preferences, including partial and omitted prefs.
+      await owner.request("POST", "/api/push/subscribe", { endpoint, keys, prefs: { dms: true } });
+      expect(await hub.push.notify(workspaceId, [me], note, "reply")).toBe(2);
+      sentTo();
+      await owner.request("POST", "/api/push/subscribe", { endpoint, keys });
+      expect(hub.store.pushSubscriptions(me).find((s) => s.endpoint === endpoint)?.prefs).toEqual({});
+    } finally {
+      hub.store.deletePushSubscription(endpoint);
+    }
+  });
+
+  it("classifies approvals before DMs and replies, and notify-all recipients as channel messages", () => {
+    const workspaceId = hub.store.agent(agentId)!.workspaceId;
+    const general = hub.store.channelByName(workspaceId, "general")!;
+    const watcher = hub.store.createUser("watcher@example.com", "Watcher", "");
+    hub.store.addMember(workspaceId, watcher.id, "member");
+    hub.store.addChannelMember(general.id, { kind: "user", id: watcher.id });
+    hub.store.setChannelPrefs(watcher.id, general.id, { notify: "all" });
+    const keys = { p256dh: "BNcR", auth: "tBHI" };
+    const quiet = "https://push.example.com/quiet";
+    const watching = "https://push.example.com/watching";
+    hub.store.savePushSubscription(me, quiet, keys, { dms: false, replies: false, approvals: true });
+    hub.store.savePushSubscription(watcher.id, watching, keys, { replies: false, approvals: false });
+    const send = (channel: ReturnType<typeof dm>, approval = false) => {
+      const msg = hub.store.insertMessage({ channelId: channel.id, author: { kind: "agent", id: agentId }, body: "An update", parts: approval ? [{ type: "approval", approvalId: "apv_test" }] : [] });
+      pushed.length = 0;
+      hub.push.onMessage(msg, channel, me);
+      return pushed.map((p) => p.endpoint).sort();
+    };
+    try {
+      expect(send(dm())).toEqual(["https://push.example.com/abc"]);
+      expect(send(dm(), true)).toEqual(["https://push.example.com/abc", quiet].sort());
+      expect(send(general)).toEqual(["https://push.example.com/abc", watching].sort());
+      expect(send(general, true)).toEqual(["https://push.example.com/abc", quiet].sort());
+    } finally {
+      hub.store.deletePushSubscription(quiet);
+      hub.store.deletePushSubscription(watching);
+      hub.store.setChannelPrefs(watcher.id, general.id, { notify: "default" });
+    }
+  });
+
+  it("migrates existing subscriptions with allowed preferences by default", () => {
+    const file = path.join(dir, "old-push.sqlite");
+    let db = openDb(file);
+    try {
+      const store = new Store(db);
+      const user = store.createUser("old@example.com", "Old", "");
+      store.savePushSubscription(user.id, "https://push.example.com/old", { p256dh: "key", auth: "auth" });
+      db.exec("ALTER TABLE push_subscriptions DROP COLUMN prefs_json");
+      db.close();
+      db = openDb(file);
+      expect(new Store(db).pushSubscriptions(user.id)).toEqual([{ endpoint: "https://push.example.com/old", keys: { p256dh: "key", auth: "auth" }, prefs: {} }]);
+      db.close();
+      db = openDb(file);
+      expect(new Store(db).pushSubscriptions(user.id)[0].prefs).toEqual({});
+    } finally {
+      db.close();
+    }
   });
 });
 

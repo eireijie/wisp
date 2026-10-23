@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { FEATURE_KEYS, FEATURE_PRESETS, type Features } from "@warren/core";
+import { FEATURE_KEYS, FEATURE_PRESETS, MAX_MODEL_ID_LENGTH, type Features } from "@warren/core";
 import type { Caller } from "./api.ts";
 import { bearer, issueToken, revokeToken } from "./auth.ts";
 import { deviceLabel } from "./api-settings.ts";
@@ -151,7 +151,7 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (!c) return;
     const body = parse(
       z
-        .object({ harness: HARNESS.nullable(), model: z.string().max(100).nullable(), computer: z.enum(["own-vm", "none"]), nodeId: z.string().nullable() })
+        .object({ harness: HARNESS.nullable(), model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), computer: z.enum(["own-vm", "none"]), nodeId: z.string().nullable() })
         .partial()
         .strict(),
       req.body,

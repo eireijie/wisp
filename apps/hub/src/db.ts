@@ -233,6 +233,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 /** Columns added after a table first shipped. CREATE TABLE IF NOT EXISTS won't add them to existing databases. */
 const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
+  ["push_subscriptions", "prefs_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["agents", "settings_json", "TEXT NOT NULL DEFAULT '{}'"],
   ["nodes", "catalog_json", "TEXT NOT NULL DEFAULT '[]'"],
   ["channels", "section_id", "TEXT"],
