@@ -119,7 +119,7 @@ export function nextStep(done: Record<StepId, boolean>): StepId | null {
   return STEPS.find((s) => !done[s]) ?? null;
 }
 
-type AgentLike = Pick<Agent, "id" | "name" | "nodeId" | "harness">;
+type AgentLike = Pick<Agent, "id" | "name" | "nodeId" | "harness" | "settings" | "computerId">;
 
 /** The helper to talk about on Home and in Help: a ready one first, then one with a device, then any. */
 export function pickHelper<A extends AgentLike>(agents: A[], devices: DeviceInfo[] | null): A | null {
@@ -200,7 +200,7 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
   out.push({ id: "online", status: "ok", label: `${device.name} is on and connected`, fix: null, to: null });
   const label = harnessLabel(agent.harness);
   const reported = device.harnesses ?? [];
-  if (runsInVm(agent.harness)) out.push({ id: "harness", status: "ok", label: `${label} runs inside ${agent.name}'s computer`, fix: null, to: null });
+  if (runsInVm(agent.harness) && agent.settings?.runIn === "computer" && agent.computerId) out.push({ id: "harness", status: "ok", label: `${label} runs inside ${agent.name}'s computer`, fix: null, to: null });
   else if (!reported.length) out.push(unknown("harness", `${label} is installed on ${device.name}`));
   else if (reported.some((h) => h.id === agent.harness)) out.push({ id: "harness", status: "ok", label: `${label} is installed on ${device.name}`, fix: null, to: null });
   else out.push({ id: "harness", status: "bad", label: `${label} is installed on ${device.name}`, fix: `Install ${label} on ${device.name}, or pick an AI that's already there.`, to: agentRoute("model") });

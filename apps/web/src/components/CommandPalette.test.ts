@@ -99,3 +99,21 @@ describe.each(cases)("$name search", ({ queryIndex, resultIndex, component, resu
     if (name !== "marketplace") expect(h.latest()).toBeNull();
   });
 });
+
+
+it.each([null, "thread"])("opens the selected search message in its conversation (%s)", (threadId) => {
+  const palette = (CommandPalette() as any).props.children[0];
+  let index = 0;
+  const states = ["needle", { channels: [], agents: [], notes: [], messages: [{ id: "message", channelId: "channel", channelName: "general", threadId, body: "needle", parts: [] }] }, 0];
+  vi.mocked(useState).mockImplementation((): [any, any] => [states[index++], vi.fn()]);
+  const tree = palette.type({ ...palette.props, onClose: vi.fn() });
+  function find(node: any): any {
+    if (!node || typeof node !== "object") return null;
+    if (node.props?.id === "palette-opt-0") return node;
+    return [node.props?.children].flat(Infinity).map(find).find(Boolean);
+  }
+  const option = find(tree);
+  expect(option).toBeTruthy();
+  option.props.onClick();
+  expect(location.hash).toBe(`#/c/channel${threadId ? "/t/thread" : ""}/m/message`);
+});

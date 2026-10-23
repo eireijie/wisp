@@ -1,4 +1,4 @@
-import type { ClientEvent } from "@warren/core";
+import type { ClientEvent, Message } from "@warren/core";
 import type { ListenCallbacks, VoiceListener, VoiceSpeaker } from "./providers.ts";
 import { isSpeechEcho, spokenReply } from "./text.ts";
 
@@ -25,13 +25,18 @@ export class VoiceCall {
   private long?: ReturnType<typeof setTimeout>;
   private micHint?: ReturnType<typeof setTimeout>;
   private seen = new Set<string>();
+  private lastSeen: string | null = null;
+  private lastSeenAt = "";
   constructor(private options: {
     agentId: string; channelId: string; cloudListening: boolean;
     listener(callbacks: ListenCallbacks): VoiceListener;
     speaker: VoiceSpeaker;
     send(text: string): Promise<unknown>;
     update(state: CallState): void;
+    messages?(): Message[];
+    refresh?(): Promise<void>;
   }) {
+    this.markSeen(this.conversation().at(-1));
     this.listener = options.listener({
       level: (micLevel) => this.update({ micLevel }),
       activity: (talking) => {
@@ -65,8 +70,13 @@ export class VoiceCall {
     this.update({ error: "", muted: false, ready: false, needsMic: false, talking: false, micLevel: 0 });
     this.micHint = setTimeout(() => { if (capture === this.capture) this.update({ needsMic: true }); }, 4000);
     try {
+      if (this.pending) await this.options.refresh?.();
+      if (capture !== this.capture || this.stopped) return;
       await this.listener.start();
-      if (capture === this.capture && !this.state.error) this.update({ ready: true, needsMic: false, startedAt: this.state.startedAt ?? Date.now() });
+      if (capture === this.capture && !this.state.error) {
+        this.update({ ready: true, needsMic: false, startedAt: this.state.startedAt ?? Date.now() });
+        this.reconcile();
+      }
     } catch (e) {
       if (capture === this.capture) this.update({ error: (e as Error).message, needsMic: true, ready: false });
     } finally { if (capture === this.capture) clearTimeout(this.micHint); }
@@ -118,8 +128,38 @@ export class VoiceCall {
       this.update({ error: `Couldn't send your voice message: ${(e as Error).message}`, waiting: this.pending > 0 });
     }
   }
+  private conversation() {
+    return (this.options.messages?.() ?? []).filter((m) => m.channelId === this.options.channelId && !m.threadId);
+  }
+  private markSeen(m: Message | undefined) {
+    if (m) { this.lastSeen = m.id; this.lastSeenAt = m.createdAt; }
+  }
+  private reconcile() {
+    const messages = this.conversation();
+    const index = messages.findIndex((m) => m.id === this.lastSeen);
+    const fresh = index >= 0 ? messages.slice(index + 1) : messages.filter((m) => m.createdAt >= this.lastSeenAt);
+    const replies = fresh.filter((m) => m.author.kind === "agent" && m.author.id === this.options.agentId && !this.seen.has(m.id));
+    const pending = this.pending;
+    this.pending = Math.max(0, pending - replies.length);
+    const lastAgent = messages.map((m) => m.author.kind === "agent" && m.author.id === this.options.agentId).lastIndexOf(true);
+    const lastPerson = messages.map((m) => m.author.kind === "user" && m.author.id !== "system").lastIndexOf(true);
+    if (lastAgent > lastPerson) this.pending = 0;
+    replies.forEach((m) => this.seen.add(m.id));
+    this.markSeen(messages.at(-1));
+    this.update({ waiting: this.pending > 0, longWork: false });
+    if (this.pending) this.timers();
+    else { clearTimeout(this.filler); clearTimeout(this.long); }
+    const newest = replies.at(-1);
+    if (pending && newest) {
+      const failed = newest.parts.find((p) => p.type === "status" && p.text.startsWith("Run failed:"));
+      if (failed?.type === "status") this.update({ error: failed.text });
+      else void this.say(spokenReply(newest.body) || "I've put the details in our chat.");
+    }
+  }
   event(e: ClientEvent) {
-    if (this.stopped || !this.pending) return;
+    if (this.stopped || !this.state.ready) return;
+    if (e.type === "message" && e.message.channelId === this.options.channelId && !e.message.threadId) this.markSeen(e.message);
+    if (!this.pending) return;
     if (e.type === "run_event" && e.agentId === this.options.agentId && e.channelId === this.options.channelId && e.event.type === "text") {
       if (this.streamRun !== e.runId) { this.streamed = ""; this.streamRun = e.runId; }
       this.streamed = (this.streamed + e.event.text).slice(0, 40_000);

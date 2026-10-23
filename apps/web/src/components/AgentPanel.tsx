@@ -269,7 +269,7 @@ function AnswersRow({ agent }: { agent: Agent }) {
 }
 
 /** The one thing to do about an unfinished helper, in plain words. Mirrors agentReadiness's order of checks; null when ready. */
-export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "name">, devices: DeviceInfo[] | null): { text: string; href: string; action: string } | null {
+export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "name" | "settings" | "computerId">, devices: DeviceInfo[] | null): { text: string; href: string; action: string } | null {
   if (agentReadiness(agent, devices).ready) return null;
   if (!agent.nodeId) return { text: `Choose the computer that runs ${agent.name}.`, href: href({ view: "agents", agentId: agent.id, tab: "device" }), action: "Choose a device" };
   const device = devices?.find((d) => d.id === agent.nodeId);

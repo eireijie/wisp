@@ -207,7 +207,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
         icon: <MessageSquare size={15} />,
         label: cleanPreview(m.body, 100) || `Untitled ${kind.toLowerCase()}`,
         sub: messageLocation(m.channelName, lookup.agents),
-        run: () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId }),
+        run: () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId, messageId: m.id }),
       });
     }
     for (const n of results?.notes ?? []) {

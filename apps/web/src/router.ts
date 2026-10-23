@@ -3,7 +3,7 @@ import { useMemo, useSyncExternalStore } from "react";
 /**
  * Hash routes:
  *   #/buddy                          desktop ghost (no workspace chrome)
- *   #/c/<channelId>[/t/<threadId>]   chat
+ *   #/c/<channelId>[/t/<threadId>][/m/<messageId>]   chat
  *   #/dashboard (or #/inbox)         the Inbox: what's waiting on you, what agents are doing, new replies
  *   #/vault[/<path>]                 memory vault
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
@@ -24,7 +24,7 @@ import { useMemo, useSyncExternalStore } from "react";
  */
 export type Route =
   | { view: "buddy" }
-  | { view: "chat"; channelId: string | null; threadId: string | null; call?: boolean }
+  | { view: "chat"; channelId: string | null; threadId: string | null; messageId?: string; call?: boolean }
   | { view: "dashboard" }
   | { view: "vault"; path: string | null }
   | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
@@ -95,8 +95,11 @@ export function parseRoute(hash: string): Route {
       return { view: "chats" };
     case "you":
       return { view: "you" };
-    case "c":
-      return { view: "chat", channelId: parts[1] ?? null, threadId: parts[2] === "t" ? (parts[3] ?? null) : null, ...(parts[2] === "call" ? { call: true } : {}) };
+    case "c": {
+      const messageIndex = parts[2] === "t" ? 4 : parts[2] === "call" ? 3 : 2;
+      const messageId = parts[messageIndex] === "m" ? parts[messageIndex + 1] : undefined;
+      return { view: "chat", channelId: parts[1] ?? null, threadId: parts[2] === "t" ? (parts[3] ?? null) : null, ...(parts[2] === "call" ? { call: true } : {}), ...(messageId ? { messageId } : {}) };
+    }
     default:
       return { view: "chat", channelId: null, threadId: null };
   }
@@ -139,7 +142,7 @@ export function href(r: Route): string {
     case "you":
       return "#/you";
     case "chat":
-      return r.channelId ? `#/c/${r.channelId}${r.call ? "/call" : r.threadId ? `/t/${r.threadId}` : ""}` : "#/";
+      return r.channelId ? `#/c/${r.channelId}${r.call ? "/call" : r.threadId ? `/t/${r.threadId}` : ""}${r.messageId ? `/m/${encodeURIComponent(r.messageId)}` : ""}` : "#/";
   }
 }
 

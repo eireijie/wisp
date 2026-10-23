@@ -35,6 +35,8 @@ export function CallScreen({ agent, channelId, onClose }: { agent: Agent; channe
         speaker: createSpeaker(settings.speak, agent.settings.voice, agent.handle),
         send: (body) => api("POST", `/api/channels/${channelId}/messages`, { body, voice: true }),
         update: setState,
+        messages: () => useStore.getState().messages[channelId] ?? [],
+        refresh: () => useStore.getState().loadChannel(channelId),
       });
       call.current = session;
       if (useStore.getState().connected) await session.start(); else session.disconnect();
@@ -49,7 +51,10 @@ export function CallScreen({ agent, channelId, onClose }: { agent: Agent; channe
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, [state.startedAt, offline]);
-  useEffect(() => { if (!connected) call.current?.disconnect(); }, [connected]);
+  useEffect(() => {
+    if (!connected) call.current?.disconnect();
+    else if (call.current && !call.current.state.ready) void call.current.start();
+  }, [connected]);
   const close = () => { call.current?.stop(); onClose(); };
   const retry = () => { if (call.current) void call.current.start(); else setAttempt((n) => n + 1); };
   const label = offline ? `${agent.name} is asleep. Wake their computer to talk.` : !connected ? "Reconnecting…" : state.needsMic ? "A little help with the microphone?" : state.error && !state.ready ? "Couldn't connect just yet" : !state.ready ? "Calling…" : state.muted ? "Microphone muted" : state.talking ? "I'm listening" : state.speaking ? "Speaking" : state.waiting ? "Thinking…" : "Go ahead, I'm listening";

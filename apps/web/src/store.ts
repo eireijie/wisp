@@ -91,6 +91,10 @@ interface State {
   replyCounts: Record<string, number>;
   /** thread roots as loaded with their thread (a sub-thread's root is a reply in another thread) */
   roots: Record<string, Message>;
+  hasEarlier: Record<string, boolean>;
+  loadErrors: Record<string, { message: string; earlier: boolean } | null>;
+  loadingMessages: Record<string, boolean>;
+  removedRoots: Record<string, boolean>;
   live: Record<string, LiveRun>; // by runId
   computers: ComputerInfo[];
   approvals: Record<string, Approval>;
@@ -120,6 +124,7 @@ interface State {
   load(): Promise<void>;
   loadChannel(id: string): Promise<void>;
   loadThread(channelId: string, rootId: string): Promise<void>;
+  loadEarlier(channelId: string, threadId?: string): Promise<void>;
   refreshAgents(): Promise<void>;
   refreshComputers(): Promise<void>;
   refreshLead(): Promise<void>;
@@ -160,6 +165,10 @@ export const useStore = create<State>((set, get) => ({
   threadChannels: {},
   replyCounts: {},
   roots: {},
+  hasEarlier: {},
+  loadErrors: {},
+  loadingMessages: {},
+  removedRoots: {},
   live: {},
   computers: [],
   approvals: {},
@@ -214,16 +223,16 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async loadChannel(id) {
-    const r = await api<{ messages: Message[]; replyCounts: Record<string, number> }>("GET", `/api/channels/${id}/messages?limit=100`);
-    set((s) => ({ messages: { ...s.messages, [id]: r.messages }, replyCounts: { ...s.replyCounts, ...r.replyCounts } }));
+    await loadMessages(id);
   },
 
   async loadThread(channelId, rootId) {
     set((s) => ({ threadChannels: { ...s.threadChannels, [rootId]: channelId } }));
-    const r = await api<{ messages: Message[]; replyCounts?: Record<string, number> }>("GET", `/api/channels/${channelId}/messages?thread=${rootId}&limit=200`);
-    // the root comes too: a sub-thread's root is a reply in another thread, which may not be loaded
-    const root = r.messages.find((m) => m.id === rootId);
-    set((s) => ({ threads: { ...s.threads, [rootId]: r.messages.filter((m) => m.id !== rootId) }, replyCounts: { ...s.replyCounts, ...r.replyCounts }, ...(root ? { roots: { ...s.roots, [rootId]: root } } : {}) }));
+    await loadMessages(channelId, rootId);
+  },
+
+  async loadEarlier(channelId, threadId) {
+    await loadMessages(channelId, threadId, true);
   },
 
   async refreshAgents() {
@@ -354,10 +363,13 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({
         messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [k, patch(v)])),
         threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, patch(v)])),
+        roots: s.roots[m.id] ? { ...s.roots, [m.id]: m } : s.roots,
       }));
     } else if (e.type === "message_removed") {
       const drop = (list: Message[] | undefined) => list?.filter((m) => m.id !== e.messageId);
       set((s) => ({
+        roots: Object.fromEntries(Object.entries(s.roots).filter(([id]) => id !== e.messageId)),
+        removedRoots: { ...s.removedRoots, [e.messageId]: true },
         messages: s.messages[e.channelId] ? { ...s.messages, [e.channelId]: drop(s.messages[e.channelId])! } : s.messages,
         threads: e.threadId && s.threads[e.threadId] ? { ...s.threads, [e.threadId]: drop(s.threads[e.threadId])! } : s.threads,
         replyCounts: e.threadId && s.replyCounts[e.threadId] ? { ...s.replyCounts, [e.threadId]: Math.max(0, s.replyCounts[e.threadId] - 1) } : s.replyCounts,
@@ -411,6 +423,59 @@ export const useStore = create<State>((set, get) => ({
     if (notify) notifyOn(e, before, get());
   },
 }));
+
+/** A channel and each of its threads have independent history and load errors. */
+export const conversationKey = (channelId: string, threadId?: string) => threadId ? `${channelId}/t/${threadId}` : channelId;
+
+const messageLoads = new Map<string, { promise: Promise<void>; earlier: boolean }>();
+async function loadMessages(channelId: string, threadId?: string, earlier = false): Promise<void> {
+  const key = conversationKey(channelId, threadId);
+  const pending = messageLoads.get(key);
+  if (pending) {
+    await pending.promise;
+    if (!earlier && pending.earlier) await loadMessages(channelId, threadId);
+    return;
+  }
+  const promise = fetchMessages(channelId, threadId, earlier);
+  messageLoads.set(key, { promise, earlier });
+  try { await promise; } finally { messageLoads.delete(key); }
+}
+
+async function fetchMessages(channelId: string, threadId?: string, earlier = false) {
+  const key = conversationKey(channelId, threadId);
+  const state = useStore.getState();
+  if (earlier && !state.hasEarlier[key]) return;
+  const previous = threadId ? state.threads[threadId] : state.messages[channelId];
+  // the hub's cursor is a time: everything written before the oldest message loaded
+  const before = earlier ? previous?.[0]?.createdAt : undefined;
+  if (earlier && !before) return;
+  const limit = threadId ? 200 : 100;
+  useStore.setState((s) => ({ loadingMessages: { ...s.loadingMessages, [key]: true }, loadErrors: { ...s.loadErrors, [key]: null } }));
+  try {
+    const path = `/api/channels/${channelId}/messages?${threadId ? `thread=${encodeURIComponent(threadId)}&` : ""}limit=${limit}`;
+    type Page = { messages: Message[]; replyCounts?: Record<string, number> };
+    const r = await api<Page>("GET", `${path}${before ? `&before=${encodeURIComponent(before)}` : ""}`);
+    const root = threadId ? r.messages.find((m) => m.id === threadId) : undefined;
+    const page = r.messages.filter((m) => m.id !== threadId);
+    useStore.setState((s) => {
+      const current = (threadId ? s.threads[threadId] : s.messages[channelId]) ?? [];
+      const merged = earlier ? dedupe([...page, ...current]) : [...new Map([...current, ...page].map((m) => [m.id, m])).values()].sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+      // Refreshing the latest page must not discard already loaded earlier history.
+      const keptEarlier = !earlier && current.length > 0 && page.length > 0 && current[0].id !== page[0].id;
+      return {
+        ...(threadId ? { threads: { ...s.threads, [threadId]: merged } } : { messages: { ...s.messages, [channelId]: merged } }),
+        replyCounts: { ...s.replyCounts, ...r.replyCounts },
+        ...(root && !s.removedRoots[root.id] ? { roots: { ...s.roots, [root.id]: root } } : {}),
+        hasEarlier: { ...s.hasEarlier, [key]: keptEarlier ? (s.hasEarlier[key] ?? r.messages.length === limit) : r.messages.length === limit },
+      };
+    });
+  } catch (e) {
+    useStore.setState((s) => ({ loadErrors: { ...s.loadErrors, [key]: { message: (e as Error).message, earlier } } }));
+    throw e;
+  } finally {
+    useStore.setState((s) => ({ loadingMessages: { ...s.loadingMessages, [key]: false } }));
+  }
+}
 
 function applyReactions(s: State, messageId: string, reactions: Reaction[]): Partial<State> {
   const patch = (list: Message[]) => (list.some((m) => m.id === messageId) ? list.map((m) => (m.id === messageId ? { ...m, reactions } : m)) : list);

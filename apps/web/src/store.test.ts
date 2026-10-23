@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent, Approval, Message } from "@warren/core";
 import { api } from "./api.ts";
-import { useStore, type DiscussionInfo, type LiveRun } from "./store.ts";
+import { conversationKey, useStore, type DiscussionInfo, type LiveRun } from "./store.ts";
 
 vi.mock("./api.ts", () => ({ api: vi.fn() }));
 vi.mock("./notifications.ts", () => ({ notifyOn: vi.fn() }));
@@ -9,7 +9,8 @@ vi.mock("./components/ui.tsx", () => ({ agentColor: () => "" }));
 vi.mock("./orgs.ts", () => ({ listOrgs: async () => [] }));
 
 const initial = useStore.getState();
-const message = (id: string, threadId: string | null = null) => ({ id, channelId: "channel", threadId, body: id } as Message);
+let clock = 0;
+const message = (id: string, threadId: string | null = null) => ({ id, channelId: "channel", threadId, body: id, createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 0, clock++)).toISOString() } as Message);
 const run: LiveRun = { runId: "run", agentId: "agent", channelId: "channel", threadId: null, threadPath: [], text: "", tools: [], last: null, usedComputer: false };
 const event = (event: AgentEvent) => useStore.getState().handle({ type: "run_event", runId: "run", agentId: "agent", channelId: "channel", event }, false);
 
@@ -93,5 +94,96 @@ describe("live events", () => {
     event({ type: "notice", text: "Still working" });
     event({ type: "text", text: "More" });
     expect(useStore.getState().live.run).toMatchObject({ text: "Hello world\nStill working\nMore", tools: ["computer_click"], last: { name: "computer_click", input: { x: 1 } }, usedComputer: true });
+  });
+});
+
+
+describe("conversation history", () => {
+  it.each([undefined, "root"])("prepends and deduplicates pages independently (%s)", async (threadId) => {
+    const key = conversationKey("channel", threadId);
+    const limit = threadId ? 200 : 100;
+    const latest = Array.from({ length: limit }, (_, i) => message(`m${i}`, threadId));
+    vi.mocked(api).mockResolvedValueOnce({ messages: latest });
+    const load = () => threadId ? useStore.getState().loadThread("channel", threadId) : useStore.getState().loadChannel("channel");
+    await load();
+    expect(useStore.getState().hasEarlier[key]).toBe(true);
+    expect(useStore.getState().hasEarlier[conversationKey("other")]).toBeUndefined();
+    const older = { ...message("older", threadId), createdAt: "2025-12-31T00:00:00.000Z" };
+    vi.mocked(api).mockResolvedValueOnce({ messages: [...(threadId ? [message(threadId)] : []), older, latest[0]], replyCounts: { older: 2 } });
+    await useStore.getState().loadEarlier("channel", threadId);
+    // the cursor is the oldest loaded message's time, which is what the hub compares against
+    expect(api).toHaveBeenLastCalledWith("GET", `/api/channels/channel/messages?${threadId ? "thread=root&" : ""}limit=${limit}&before=${encodeURIComponent(latest[0].createdAt)}`);
+    const state = useStore.getState();
+    expect(threadId ? state.threads[threadId] : state.messages.channel).toEqual([older, ...latest]);
+    expect(state.hasEarlier[key]).toBe(false);
+    expect(state.replyCounts.older).toBe(2);
+    // A reconnect's latest page preserves the history already loaded.
+    vi.mocked(api).mockResolvedValueOnce({ messages: latest });
+    await load();
+    expect(useStore.getState().hasEarlier[key]).toBe(false);
+    expect((threadId ? useStore.getState().threads[threadId] : useStore.getState().messages.channel)[0]).toEqual(older);
+  });
+
+  it.each([undefined, "root"])("preserves the earlier flag and messages after a transient failure, then retries (%s)", async (threadId) => {
+    const key = conversationKey("channel", threadId);
+    const latest = [message("latest", threadId)];
+    useStore.setState({ hasEarlier: { [key]: true }, ...(threadId ? { threads: { [threadId]: latest } } : { messages: { channel: latest } }) });
+    vi.mocked(api).mockRejectedValueOnce(new Error("Offline"));
+    await expect(useStore.getState().loadEarlier("channel", threadId)).rejects.toThrow("Offline");
+    expect(useStore.getState().hasEarlier[key]).toBe(true);
+    expect(useStore.getState().loadErrors[key]).toEqual({ message: "Offline", earlier: true });
+    expect(useStore.getState().loadingMessages[key]).toBe(false);
+    expect(threadId ? useStore.getState().threads[threadId] : useStore.getState().messages.channel).toEqual(latest);
+    vi.mocked(api).mockResolvedValueOnce({ messages: [] });
+    await useStore.getState().loadEarlier("channel", threadId);
+    expect(useStore.getState().hasEarlier[key]).toBe(false);
+    expect(useStore.getState().loadErrors[key]).toBeNull();
+  });
+
+  it.each([undefined, "root"])("tracks initial load errors without turning them into an empty conversation (%s)", async (threadId) => {
+    const key = conversationKey("channel", threadId);
+    const load = () => threadId ? useStore.getState().loadThread("channel", threadId) : useStore.getState().loadChannel("channel");
+    vi.mocked(api).mockRejectedValueOnce(new Error("Can't connect"));
+    await expect(load()).rejects.toThrow("Can't connect");
+    expect(useStore.getState().loadErrors[key]).toEqual({ message: "Can't connect", earlier: false });
+    expect(threadId ? useStore.getState().threads[threadId] : useStore.getState().messages.channel).toBeUndefined();
+    vi.mocked(api).mockResolvedValueOnce({ messages: [] });
+    await load();
+    expect(useStore.getState().loadErrors[key]).toBeNull();
+  });
+
+  it("lets reconnect recovery await an already running history request", async () => {
+    let resolve!: (value: unknown) => void;
+    vi.mocked(api).mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    const first = useStore.getState().loadChannel("channel");
+    let done = false;
+    const second = useStore.getState().loadChannel("channel").then(() => { done = true; });
+    await Promise.resolve();
+    expect(done).toBe(false);
+    const reply = message("reply");
+    resolve({ messages: [reply] });
+    await Promise.all([first, second]);
+    expect(api).toHaveBeenCalledOnce();
+    expect(useStore.getState().messages.channel).toEqual([reply]);
+  });
+});
+
+describe("cached thread roots", () => {
+  it("updates roots edited elsewhere, including roots only in the separate cache", () => {
+    const root = message("root", "outer");
+    useStore.setState({ roots: { root }, threads: { outer: [root], root: [] } });
+    const edited = { ...root, body: "Edited elsewhere" };
+    useStore.getState().handle({ type: "message_updated", message: edited }, false);
+    expect(useStore.getState().roots.root).toEqual(edited);
+    expect(useStore.getState().threads.outer).toEqual([edited]);
+  });
+
+  it("drops a removed sub-thread root everywhere and marks its panel as deleted", () => {
+    const root = message("root", "outer");
+    useStore.setState({ roots: { root }, threads: { outer: [root], root: [message("reply", "root")] } });
+    useStore.getState().handle({ type: "message_removed", channelId: "channel", threadId: "outer", messageId: "root" }, false);
+    expect(useStore.getState().roots.root).toBeUndefined();
+    expect(useStore.getState().threads.outer).toEqual([]);
+    expect(useStore.getState().removedRoots.root).toBe(true);
   });
 });

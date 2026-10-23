@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Wrench, Pin, PinOff, Square, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
-import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
+import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
@@ -83,7 +83,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
     if (!channel) return;
     setReadMark({ channelId: channel.id, at: channel.lastReadAt });
     setActive(channel.id);
-    loadChannel(channel.id);
+    void loadChannel(channel.id).catch(() => {});
     return () => {
       setActive(null);
     };
@@ -156,11 +156,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           )}
         </header>
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
-          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "members" })} />
+          <MessageList messageId={!route.threadId ? route.messageId : undefined} channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "members" })} />
         </SoloAgent.Provider>
         {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} onDetails={openAgent} />}
       </div>
-      {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
+      {route.threadId && <ThreadPanel key={route.threadId} messageId={route.messageId} channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
       {sideAgent && side?.kind === "agent" && (
         <AgentPanel
           key={sideAgent.id}
@@ -698,12 +698,62 @@ const CardAuthor = createContext<{ agentId: string; channelId: string; threadId:
 /** In a DM the agent lives in the pill at the top, so its messages don't repeat its ghost and name. */
 const SoloAgent = createContext<string | null>(null);
 
-function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: ChannelInfo; readMark: string | null; onAddAgent: () => void; onMembers: () => void }) {
+/** Shared paging, retry and search positioning for a channel or thread. */
+function useMessageHistory(channelId: string, threadId: string | undefined, messageId: string | undefined, ref: RefObject<HTMLDivElement | null>, messages: Message[] | undefined) {
+  const key = conversationKey(channelId, threadId);
+  const earlier = useStore((s) => s.hasEarlier[key]);
+  const error = useStore((s) => s.loadErrors[key]);
+  const loading = useStore((s) => s.loadingMessages[key]);
+  const snapshot = useRef<{ height: number; top: number } | null>(null);
+  const prepended = useRef(false);
+  const search = useRef({ key: "", pages: 0, found: false });
+  const highlight = useRef<(() => void) | null>(null);
+  const loadEarlier = async () => {
+    if (ref.current) snapshot.current = { height: ref.current.scrollHeight, top: ref.current.scrollTop };
+    try { await useStore.getState().loadEarlier(channelId, threadId); } catch { snapshot.current = null; }
+  };
+  useLayoutEffect(() => {
+    prepended.current = !!snapshot.current;
+    if (ref.current && snapshot.current) ref.current.scrollTop = snapshot.current.top + ref.current.scrollHeight - snapshot.current.height;
+    snapshot.current = null;
+  }, [messages]);
+  useEffect(() => {
+    const searchKey = `${key}/${messageId ?? ""}`;
+    if (search.current.key !== searchKey) search.current = { key: searchKey, pages: 0, found: false };
+    if (!messageId || !messages || loading || error || search.current.found) return;
+    const row = Array.from(ref.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === messageId);
+    if (row) {
+      search.current.found = true;
+      row.scrollIntoView({ block: "center" });
+      highlight.current?.();
+      row.classList.add("bg-accent-soft");
+      const timer = setTimeout(() => row.classList.remove("bg-accent-soft"), 2000);
+      highlight.current = () => { clearTimeout(timer); row.classList.remove("bg-accent-soft"); };
+    } else if (earlier && search.current.pages < 10) {
+      search.current.pages++;
+      void loadEarlier();
+    }
+  }, [key, messageId, messages, loading, error, earlier]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => highlight.current?.(), []);
+  const retry = () => {
+    const state = useStore.getState();
+    if (error?.earlier) void loadEarlier();
+    else void (threadId ? state.loadThread(channelId, threadId) : state.loadChannel(channelId)).catch(() => {});
+  };
+  const controls = <>
+    {earlier && <div className="px-5 py-1 text-center"><button className="text-xs text-muted hover:text-ink hover:underline" disabled={loading} onClick={() => void loadEarlier()}>Show earlier messages</button></div>}
+    {error && <p role="alert" className="px-5 py-2 text-xs text-bad">Couldn't load messages: {error.message} <button className="underline" disabled={loading} onClick={retry}>Try again</button></p>}
+  </>;
+  return { controls, error, prepended };
+}
+
+function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { messageId?: string; channel: ChannelInfo; readMark: string | null; onAddAgent: () => void; onMembers: () => void }) {
   const messages = useStore((s) => s.messages[channel.id]);
   const replyCounts = useStore((s) => s.replyCounts);
   const live = useStore((s) => s.live);
   const me = useStore((s) => s.me);
   const ref = useRef<HTMLDivElement>(null);
+  const history = useMessageHistory(channel.id, undefined, messageId, ref, messages);
   const dividerRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [newSince, setNewSince] = useState(0);
@@ -729,6 +779,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
       else el.scrollTop = el.scrollHeight;
       return;
     }
+    if (history.prepended.current) { history.prepended.current = false; lastCount.current = messages.length; return; }
     const added = messages.length - lastCount.current;
     lastCount.current = messages.length;
     if (atBottom) el.scrollTop = el.scrollHeight;
@@ -740,7 +791,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
     setAtBottom(true);
   }, [channel.id]);
 
-  if (!messages) return <div className="flex-1 grid place-items-center text-sm text-muted">Loading…</div>;
+  if (!messages) return <div className="flex-1 grid place-items-center text-sm text-muted">{history.error ? history.controls : "Loading…"}</div>;
 
   return (
     <div className="relative flex-1 min-h-0">
@@ -754,7 +805,8 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
           if (bottom) setNewSince(0);
         }}
       >
-        {messages.length < 100 && <ChannelIntro channel={channel} empty={!messages.some((m) => m.author.id !== "system")} onAddAgent={onAddAgent} onMembers={onMembers} />}
+        {history.controls}
+        {!history.error && messages.length < 100 && <ChannelIntro channel={channel} empty={!messages.some((m) => m.author.id !== "system")} onAddAgent={onAddAgent} onMembers={onMembers} />}
         {messages.map((m, i) => (
           <div key={m.id}>
             {m.id === firstNew && (
@@ -891,6 +943,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
   return (
     <div
       ref={row}
+      data-message-id={m.id}
       className={cx("group relative px-3 md:px-5 flex gap-3 hover:bg-hover/70", grouped ? "py-0.5" : "pt-2.5 pb-0.5", touched && "bg-hover/70")}
       onClick={(e) => {
         // phones have no hover: a tap on the message shows its actions (buttons and links in it still do their own thing)
@@ -1271,20 +1324,23 @@ function StreamingItem({ run }: { run: LiveRun }) {
 
 // --- thread -------------------------------------------------------------------------------------
 
-function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId: string; agentId?: string }) {
+function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: string; rootId: string; agentId?: string; messageId?: string }) {
   const root = useStore((s) => s.messages[channelId]?.find((m) => m.id === rootId) ?? s.roots[rootId] ?? Object.values(s.threads).flat().find((m) => m.id === rootId));
+  const removed = useStore((s) => s.removedRoots[rootId]);
   const replies = useStore((s) => s.threads[rootId]);
   const replyCounts = useStore((s) => s.replyCounts);
   const live = useStore((s) => s.live);
   const loadThread = useStore((s) => s.loadThread);
   const ref = useRef<HTMLDivElement>(null);
+  const history = useMessageHistory(channelId, rootId, messageId, ref, replies);
   const streaming = Object.values(live).filter((r) => r.channelId === channelId && r.threadId === rootId && (r.text || r.usedComputer));
   const below = Object.values(live).filter((r) => r.channelId === channelId && r.threadPath.includes(rootId));
 
   useEffect(() => {
-    loadThread(channelId, rootId);
+    void loadThread(channelId, rootId).catch(() => {});
   }, [channelId, rootId, loadThread]);
   useLayoutEffect(() => {
+    if (history.prepended.current) { history.prepended.current = false; return; }
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
   }, [replies?.length, streaming.map((r) => r.text.length).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1304,9 +1360,11 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
         </button>
       </header>
       <div ref={ref} className="flex-1 overflow-y-auto py-3">
-        {root && <MessageItem m={root} inThread />}
+        {history.controls}
+        {removed && <p role="status" className="px-5 py-2 text-xs text-muted">This message was deleted.</p>}
+        {!removed && root && <MessageItem m={root} inThread />}
         <div className="flex items-center gap-3 px-5 py-2 text-xs text-muted">
-          {replies ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Loading…"}
+          {history.error ? "" : replies ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Loading…"}
           <span className="h-px flex-1 bg-line" />
         </div>
         {replies?.map((m, i) => (
@@ -1316,7 +1374,7 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
           <StreamingItem key={r.runId} run={r} />
         ))}
       </div>
-      <Composer channelId={channelId} threadId={rootId} agentId={agentId} placeholder="Reply…" />
+      {!removed && <Composer channelId={channelId} threadId={rootId} agentId={agentId} placeholder="Reply…" />}
     </RightPane>
   );
 }

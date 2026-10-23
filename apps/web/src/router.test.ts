@@ -27,6 +27,12 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("hash routing", () => {
+  it.each([null, "thread"])("round trips a selected message in a channel or thread (%s)", (threadId) => {
+    const route = { view: "chat" as const, channelId: "channel", threadId, messageId: "message /1" };
+    expect(router.href(route)).toBe(`#/c/channel${threadId ? "/t/thread" : ""}/m/message%20%2F1`);
+    expect(router.parseRoute(router.href(route))).toEqual(route);
+  });
+
   it("recovers from malformed percent encodings and still decodes valid paths", () => {
     for (const hash of ["#/vault/%", "#/c/%E0%A4%A", "#/agents/%FF"])
       expect(router.parseRoute(hash)).toEqual({ view: "chat", channelId: null, threadId: null });

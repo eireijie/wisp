@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { ClientEvent } from "@warren/core";
 import { api } from "./api.ts";
 import { go } from "./router.ts";
-import { pushOnHere } from "./push.ts";
+import { pushOnHere, reconcilePush, syncPushPrefs } from "./push.ts";
 import type { useStore } from "./store.ts";
 
 /**
@@ -41,13 +41,17 @@ function load(): NotifyPrefs {
 let prefs = load();
 let snap = JSON.stringify(prefs);
 
+export const getNotifyPrefs = () => prefs;
+
 export function setNotifyPrefs(patch: Partial<NotifyPrefs>) {
+  const categoriesChanged = (["dms", "replies", "approvals", "help", "tasks"] as const).some((key) => patch[key] !== undefined && patch[key] !== prefs[key]);
   prefs = { ...prefs, ...patch };
   snap = JSON.stringify(prefs);
   try {
     localStorage.setItem(KEY, snap);
   } catch {}
   listeners.forEach((l) => l());
+  if (categoriesChanged) void syncPushPrefs();
 }
 
 export function useNotifyPrefs(): NotifyPrefs {
@@ -109,6 +113,7 @@ const taskStatus = new Map<string, string>();
 
 /** Remember where your tasks stand now, so a later change can be told apart. */
 export function primeTasks() {
+  void reconcilePush();
   void api<{ id: string; status: string }[]>("GET", "/api/tasks").then((tasks) => tasks.forEach((t) => taskStatus.set(t.id, t.status)), () => {});
 }
 

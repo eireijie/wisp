@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { agentReadiness, type DeviceInfo } from "../src/devices.ts";
 
 const dev = (o: Partial<DeviceInfo> = {}): DeviceInfo => ({ id: "n1", name: "my-mac", online: true, agents: [], ...o });
-const agent = (o: { nodeId?: string | null; harness?: string } = {}) => ({ nodeId: "n1", harness: "gemini", ...o }) as Parameters<typeof agentReadiness>[0];
+const agent = (o: Partial<Parameters<typeof agentReadiness>[0]> = {}) => ({ nodeId: "n1", harness: "gemini", settings: {}, computerId: null, ...o }) as Parameters<typeof agentReadiness>[0];
 
 describe("agentReadiness", () => {
   it("is ready when its device is online and has the harness", () => {
@@ -28,9 +28,17 @@ describe("agentReadiness", () => {
     expect(agentReadiness(agent(), [dev()]).ready).toBe(true);
     expect(agentReadiness(agent(), [dev({ harnesses: [] })]).ready).toBe(true);
   });
-  it("skips the harness check for harnesses that can run in a VM or connect themselves", () => {
+  it.each([
+    { settings: {}, computerId: null },
+    { settings: { runIn: "device" as const }, computerId: "vm" },
+    { settings: { runIn: "computer" as const }, computerId: null },
+    { settings: {}, computerId: "vm" },
+  ])("checks the host install when it isn't actually placed in a computer (%j)", (placement) => {
+    expect(agentReadiness(agent({ harness: "claude-code", ...placement }), [dev({ harnesses: [{ id: "gemini", version: null }] })])).toEqual({ ready: false, problem: "Claude Code isn't installed on my-mac" });
+  });
+  it("skips the harness check only for agents placed in a computer or connecting themselves", () => {
     const others = [{ id: "gemini", version: null }];
-    expect(agentReadiness(agent({ harness: "claude-code" }), [dev({ harnesses: others })]).ready).toBe(true);
+    expect(agentReadiness(agent({ harness: "claude-code", settings: { runIn: "computer" }, computerId: "vm" }), [dev({ harnesses: others })]).ready).toBe(true);
     expect(agentReadiness(agent({ harness: "custom", nodeId: null }), [dev()]).ready).toBe(true);
   });
 });

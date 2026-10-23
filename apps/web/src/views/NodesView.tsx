@@ -174,6 +174,7 @@ function DeviceAgents({ handles, online }: { handles: string[]; online: boolean 
 export function NodesView({ onBack }: { onBack?: () => void }) {
   const [nodes, setNodes] = useState<NodeInfo[] | null>(null);
   const [creating, setCreating] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [hubCommit, setHubCommit] = useState<string | null>(null);
   const isOwner = useStore((s) => s.me)?.role === "owner";
   const refresh = () => api<NodeInfo[]>("GET", "/api/nodes").then(setNodes);
@@ -194,8 +195,13 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
   };
   const remove = async (n: NodeInfo) => {
     if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
-    await api("DELETE", `/api/nodes/${n.id}`);
-    refresh();
+    setRemoveError(null);
+    try {
+      await api("DELETE", `/api/nodes/${n.id}`);
+      await refresh();
+    } catch (e) {
+      setRemoveError(`Couldn't remove ${n.name}: ${(e as Error).message}`);
+    }
   };
   const online = nodes?.filter((n) => n.online).length ?? 0;
 
@@ -212,6 +218,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
           <Plus size={16} /> Add device
         </Button>
       </header>
+      {removeError && <p role="alert" className="px-4 md:px-6 py-2 text-xs text-bad">{removeError}</p>}
       <div className="flex-1 overflow-y-auto">
         {nodes && nodes.length === 0 ? (
           <Empty icon={<Server />} title="Connect a device">
