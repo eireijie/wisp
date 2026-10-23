@@ -1,4 +1,6 @@
 import XCTest
+import Security
+import Synchronization
 @testable import Warren
 
 @MainActor
@@ -9,7 +11,7 @@ final class ChatTests: XCTestCase {
   private func makeStore() -> Store {
     ManagementHTTPStub.responses.withLock { $0 = [:] }; ManagementHTTPStub.requests.withLock { $0 = [] }
     let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [ManagementHTTPStub.self]
-    let store = Store(loadSession: false)
+    let store = Store(loadSession: false, persistToken: { _ in })
     store.api = API(base: URL(string: "https://management.test")!, token: "test", session: URLSession(configuration: configuration))
     store.role = "member"; store.me = User(id: "u1", email: "sam@example.test", name: "Sam")
     store.channels = [try! Wire.decoder.decode(Channel.self, from: Data(#"{"id":"c1","name":"general","kind":"channel","topic":"","createdAt":"2026-10-22T10:00:00Z"}"#.utf8))]
@@ -141,4 +143,325 @@ final class ChatTests: XCTestCase {
     do { try await store.send("hi", in: "c1"); XCTFail() } catch {}
     do { _ = try await store.dm(with: Agent(id: "a1", handle: "a", name: "A", harness: "codex", status: .online)); XCTFail() } catch {}
   }
+
+  func testFailedSendPreservesNewComposerText() {
+    XCTAssertEqual(Composer.restoringFailedText("failed", current: "new draft"), "new draft")
+    XCTAssertEqual(Composer.restoringFailedText("failed", current: ""), "failed")
+    XCTAssertEqual(Composer.restoringFailedText("failed", current: " "), " ")
+  }
+
+  func testReplyCountsKeepServerTotalAndDeduplicateEvents() async throws {
+    let store = makeStore()
+    store.replyCounts["m1"] = 120
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[\#(message("r1", thread: "m1"))],"replyCounts":{}}"#)
+    try await store.loadMessages("c1", thread: "m1")
+    XCTAssertEqual(store.replyCounts["m1"], 120)
+    func incoming(_ id: String, root: String) {
+      store.handle(Data(#"{"type":"message","message":\#(message(id, thread: root))}"#.utf8))
+    }
+    incoming("r1", root: "m1")
+    XCTAssertEqual(store.replyCounts["m1"], 120)
+    incoming("r2", root: "m1")
+    incoming("r2", root: "m1")
+    XCTAssertEqual(store.replyCounts["m1"], 121)
+    XCTAssertEqual(store.threads["m1"]?.map(\.id), ["r1", "r2"])
+    store.replyCounts["uncached"] = 90
+    incoming("r3", root: "uncached")
+    incoming("r3", root: "uncached")
+    XCTAssertNil(store.threads["uncached"])
+    XCTAssertEqual(store.replyCounts["uncached"], 91)
+    store.remove("r2", channel: "c1", thread: "m1")
+    store.remove("r2", channel: "c1", thread: "m1")
+    XCTAssertEqual(store.replyCounts["m1"], 120)
+    incoming("r2", root: "m1")
+    XCTAssertEqual(store.replyCounts["m1"], 120)
+  }
+
+  func testEarlierHistoryFailureCanRetryAndExhaustionIsSeparate() async throws {
+    let store = makeStore()
+    store.messages["c1"] = [msg("latest")]
+    store.threads["m1"] = [msg("recent", thread: "m1")]
+    reply("GET", "/api/channels/c1/messages", #"{"error":"Try later"}"#, status: 503)
+    for thread: String? in [nil, "m1"] {
+      do { _ = try await store.loadEarlier("c1", thread: thread); XCTFail("failure must throw") }
+      catch let e as API.Failure { XCTAssertEqual(e.status, 503) }
+    }
+    XCTAssertFalse(store.noEarlierThreads.contains("m1"))
+    XCTAssertEqual(store.messages["c1"]?.map(\.id), ["latest"])
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[\#(message("older"))],"replyCounts":{"older":4}}"#)
+    let loaded = try await store.loadEarlier("c1")
+    XCTAssertTrue(loaded)
+    XCTAssertEqual(store.messages["c1"]?.map(\.id), ["older", "latest"])
+    XCTAssertEqual(store.replyCounts["older"], 4)
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[],"replyCounts":{}}"#)
+    let moreChannel = try await store.loadEarlier("c1")
+    let moreThread = try await store.loadEarlier("c1", thread: "m1")
+    XCTAssertFalse(moreChannel)
+    XCTAssertFalse(moreThread)
+    XCTAssertTrue(store.noEarlierThreads.contains("m1"))
+  }
+
+  func testThreadPaginationKeepsRootSeparateAndUsesReplyCursor() async throws {
+    let store = makeStore()
+    let root = message("sub", thread: "parent").replacingOccurrences(of: "10:00:00", with: "08:00:00")
+    let latest = (0..<80).map { message("r\($0)", thread: "sub") }.joined(separator: ",")
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[\#(latest)],"replyCounts":{"r1":3}}"#)
+    try await store.loadMessages("c1", thread: "sub")
+    XCTAssertFalse(store.noEarlierThreads.contains("sub"))
+    XCTAssertEqual(store.replyCounts["sub"], 80)
+    XCTAssertEqual(store.replyCounts["r1"], 3)
+    let older = message("early", thread: "sub").replacingOccurrences(of: "10:00:00", with: "09:00:00")
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[\#(root),\#(older)],"replyCounts":{}}"#)
+    let loaded = try await store.loadEarlier("c1", thread: "sub")
+    XCTAssertTrue(loaded)
+    XCTAssertEqual(store.threads["sub"]?.first?.id, "early")
+    XCTAssertFalse(store.threads["sub"]!.contains { $0.id == "sub" })
+    XCTAssertEqual(store.roots["sub"]?.threadId, "parent")
+    // A loaded sub-thread root is already a known reply in its parent, even if that parent isn't cached.
+    store.replyCounts["parent"] = 40
+    store.handle(Data(#"{"type":"message","message":\#(root)}"#.utf8))
+    XCTAssertEqual(store.replyCounts["parent"], 40)
+    XCTAssertEqual(store.message("sub", in: "c1")?.id, "sub")
+    XCTAssertNil(store.messages["c1"])
+    let request = try XCTUnwrap(ManagementHTTPStub.requests.withLock { $0.last })
+    let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+    XCTAssertEqual(query.first { $0.name == "thread" }?.value, "sub")
+    XCTAssertEqual(query.first { $0.name == "before" }?.value, "2026-10-22T10:00:00Z")
+    // A root-only page finishes pagination without adding the root as a reply.
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[\#(root)],"replyCounts":{}}"#)
+    let more = try await store.loadEarlier("c1", thread: "sub")
+    XCTAssertFalse(more)
+    XCTAssertTrue(store.noEarlierThreads.contains("sub"))
+    XCTAssertEqual(store.threads["sub"]?.count, 81)
+  }
+
+  func testApprovalLoadDistinguishesDecidedMissingAndFailed() async throws {
+    let store = makeStore()
+    let approval = #"{"id":"a1","agentId":"agent","channelId":"c1","summary":"Run it","details":"","status":"approved","note":"","createdAt":"now"}"#
+    reply("GET", "/api/approvals/a1", approval)
+    let found = try await store.loadApproval("a1")
+    XCTAssertTrue(found)
+    XCTAssertEqual(store.approvals.first?.status, "approved")
+    reply("GET", "/api/approvals/missing", #"{"error":"not found"}"#, status: 404)
+    let missing = try await store.loadApproval("missing")
+    XCTAssertFalse(missing)
+    reply("GET", "/api/approvals/missing", #"{"error":"offline"}"#, status: 503)
+    do { _ = try await store.loadApproval("missing"); XCTFail("failure must remain retryable") }
+    catch let e as API.Failure { XCTAssertEqual(e.status, 503) }
+    reply("GET", "/api/approvals/missing", approval.replacingOccurrences(of: "a1", with: "missing"))
+    let retried = try await store.loadApproval("missing")
+    XCTAssertTrue(retried)
+  }
+
+  func testExpiredForegroundAuthenticationSignsOutAndKeepsHub() async throws {
+    let store = makeStore()
+    let savedHub = Session.hub
+    defer { Session.hub = savedHub }
+    Session.hub = store.api?.base
+    store.phase = .ready
+    store.connected = true
+    reply("GET", "/api/tasks", #"{"error":"unauthorized"}"#, status: 401)
+    do { try await store.refreshTasks(); XCTFail("expected auth expiry") } catch {}
+    XCTAssertEqual(store.phase, .signedOut)
+    XCTAssertNil(store.api)
+    XCTAssertNil(store.me)
+    XCTAssertFalse(store.connected)
+    XCTAssertEqual(store.sessionMessage, "Signed out: sign in again")
+    XCTAssertEqual(Session.hub?.host(), "management.test")
+    XCTAssertNil(store.syncError)
+  }
+
+  func testAPISendsTypedAuthenticationErrorAndUsefulDecodingDiagnostics() async throws {
+    let store = makeStore()
+    let api = try XCTUnwrap(store.api)
+    reply("GET", "/expired", "{}", status: 401)
+    do { let _: Empty = try await api.get("/expired"); XCTFail() }
+    catch { XCTAssertTrue(error is API.AuthenticationExpired) }
+    struct Payload: Decodable { struct Child: Decodable { var count: Int }; var child: Child }
+    let body = #"{"child":{"count":"bad"},"padding":""# + String(repeating: "x", count: 250) + #""}"#
+    reply("GET", "/bad-json", body)
+    do { let _: Payload = try await api.get("/bad-json"); XCTFail() }
+    catch let e as API.Failure {
+      XCTAssertTrue(e.description.contains("child.count"))
+      XCTAssertTrue(e.description.contains(String(body.prefix(200))))
+      XCTAssertFalse(e.description.contains(String(repeating: "x", count: 201)))
+      XCTAssertFalse(e.localizedDescription.contains("padding"))
+    }
+  }
+
+  func testSocketAuthFailuresDifferFromNetworkDrops() {
+    XCTAssertTrue(Store.isSocketAuthenticationFailure(code: 4401, reason: "unauthorized", status: nil))
+    XCTAssertTrue(Store.isSocketAuthenticationFailure(code: 0, reason: nil, status: 401))
+    XCTAssertFalse(Store.isSocketAuthenticationFailure(code: 4401, reason: "auth timeout", status: nil))
+    XCTAssertFalse(Store.isSocketAuthenticationFailure(code: 1006, reason: nil, status: nil))
+    let store = makeStore()
+    let generation = store.session
+    store.signOut()
+    store.api = API(base: URL(string: "https://management.test")!, token: "new")
+    store.phase = .ready
+    store.authenticationExpired(generation: generation)
+    XCTAssertEqual(store.api?.token, "new")
+    XCTAssertEqual(store.phase, .ready)
+  }
+
+  func testKeychainFailuresPreventSessionAdoption() throws {
+    var added = false
+    XCTAssertThrowsError(try Session.saveToken("new", delete: { _ in errSecAuthFailed }, add: { _ in added = true; return errSecSuccess }))
+    XCTAssertFalse(added)
+    XCTAssertThrowsError(try Session.saveToken("new", delete: { _ in errSecItemNotFound }, add: { _ in errSecNotAvailable }))
+    XCTAssertNoThrow(try Session.saveToken("new", delete: { _ in errSecItemNotFound }, add: { _ in errSecSuccess }))
+    let store = Store(loadSession: false, persistToken: { _ in throw Session.PersistenceFailure(status: errSecNotAvailable) })
+    XCTAssertThrowsError(try store.adopt(hub: URL(string: "https://management.test")!, token: "new"))
+    XCTAssertEqual(store.phase, .signedOut)
+    XCTAssertNil(store.api)
+    store.api = makeStore().api
+    store.phase = .ready
+    XCTAssertThrowsError(try store.switchSession(token: "new"))
+    XCTAssertNil(store.api)
+    XCTAssertEqual(store.phase, .signedOut)
+  }
+
+  func testManagementAndOtherLoadsRejectOldSessionResults() async throws {
+    let loaders: [(String, String, (Store) async throws -> Void)] = [
+      ("/api/agents", #"[{"id":"old","handle":"old","name":"Old","harness":"codex","status":"online"}]"#, { try await $0.refreshAgents() }),
+      ("/api/nodes", #"[{"id":"old","name":"Old","online":true}]"#, { try await $0.refreshNodes() }),
+      ("/api/tasks", #"[{"id":"old","title":"Old","brief":"","status":"open","from":{"kind":"user","id":"u1"},"channelId":"c1","createdAt":"now"}]"#, { try await $0.refreshTasks() }),
+      ("/api/vault/notes", #"[{"path":"old.md"}]"#, { try await $0.refreshNotes() }),
+      ("/api/routines", #"[{"id":"old","agentId":"a1","name":"Old","notePath":"old.md"}]"#, { try await $0.refreshRoutines() }),
+      ("/api/skills", #"[{"id":"old","name":"Old"}]"#, { try await $0.refreshSkills() }),
+      ("/api/connectors", #"[{"id":"old","name":"Old","kind":"mcp-http"}]"#, { try await $0.refreshConnectors() }),
+      ("/api/me/sessions", #"[{"id":"old"}]"#, { try await $0.refreshSessions() }),
+      ("/api/orgs", #"[{"id":"old","name":"Old","role":"member","members":1,"agents":0,"unread":false}]"#, { await $0.refreshOrgs() }),
+      ("/api/channels/c1/messages", #"{"messages":[],"replyCounts":{}}"#, { try await $0.loadMessages("c1", thread: "root") })
+    ]
+    for (path, body, loader) in loaders {
+      let store = makeStore()
+      let configuration = URLSessionConfiguration.ephemeral
+      configuration.protocolClasses = [ChatHTTPGate.self]
+      let api = API(base: URL(string: "https://chat-session.test")!, token: "old", session: URLSession(configuration: configuration))
+      store.api = api
+      let load = Task { try await loader(store) }
+      let pending = await ChatHTTPGate.next()
+      XCTAssertEqual(pending.request.url?.path, path)
+      store.signOut()
+      var newer = api; newer.token = "new"
+      store.api = newer
+      store.phase = .ready
+      pending.respond(body)
+      do { try await load.value } catch { XCTAssertTrue(error is Store.Stale, "\(path): \(error)") }
+      XCTAssertTrue(store.agents.isEmpty)
+      XCTAssertTrue(store.nodes.isEmpty)
+      XCTAssertTrue(store.tasks.isEmpty)
+      XCTAssertTrue(store.notes.isEmpty)
+      XCTAssertTrue(store.routines.isEmpty)
+      XCTAssertTrue(store.skills.isEmpty)
+      XCTAssertTrue(store.connectors.isEmpty)
+      XCTAssertTrue(store.sessions.isEmpty)
+      XCTAssertTrue(store.orgs.isEmpty)
+      XCTAssertNil(store.threads["root"], path)
+      XCTAssertFalse(store.noEarlierThreads.contains("root"), path)
+    }
+  }
+
+  func testManagementBatchAndOldUnauthorizedReplyCannotChangeNewSession() async throws {
+    let store = makeStore()
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [ChatHTTPGate.self]
+    let api = API(base: URL(string: "https://chat-session.test")!, token: "old", session: URLSession(configuration: configuration))
+    store.api = api
+    let load = Task { try await store.refreshManagement() }
+    var pending: [ChatHTTPGate] = []
+    for _ in 0..<4 { pending.append(await ChatHTTPGate.next()) }
+    store.signOut()
+    var newer = api; newer.token = "new"
+    store.api = newer
+    store.phase = .ready
+    for request in pending { request.respond("[]") }
+    do { try await load.value; XCTFail("old management batch should throw") }
+    catch { XCTAssertTrue(error is Store.Stale) }
+    XCTAssertTrue(store.sections.isEmpty)
+    XCTAssertTrue(store.members.isEmpty)
+    let oldRequest = Task { try await store.refreshAgents() }
+    let unauthorized = await ChatHTTPGate.next()
+    store.signOut()
+    store.api = api
+    store.phase = .ready
+    unauthorized.respond("{}", status: 401)
+    do { try await oldRequest.value; XCTFail() } catch { XCTAssertTrue(error is Store.Stale) }
+    XCTAssertEqual(store.api?.token, "old")
+    XCTAssertEqual(store.phase, .ready)
+    XCTAssertNil(store.sessionMessage)
+  }
+
+  func testReconnectRefreshesEveryEventDrivenCollection() async throws {
+    let store = makeStore()
+    for path in ["/api/agents", "/api/sections", "/api/nodes", "/api/teams", "/api/members", "/api/channels", "/api/computers", "/api/approvals", "/api/tasks", "/api/routines", "/api/vault/notes", "/api/changes", "/api/orgs"] {
+      reply("GET", path, "[]")
+    }
+    reply("GET", "/api/me", #"{"kind":"user","user":{"id":"u1","email":"sam@example.test","name":"Sam"},"workspace":{"id":"w1","name":"Warren"}}"#)
+    reply("GET", "/api/settings/lead", #"{"lead":null,"leadId":null}"#)
+    store.openChannel = "c1"
+    store.openThreads["root"] = "c1"
+    store.backgrounds["a1"] = AgentBackground(notAllowed: "old")
+    store.allowance = Allowance(todayTokens: 1, agents: [])
+    store.profiles["me"] = MemoryProfile(person: .init(id: "u1", name: "Old"), level: "read", items: [])
+    reply("GET", "/api/agents/a1/background", #"{"notAllowed":"new"}"#)
+    reply("GET", "/api/background/allowance", #"{"todayTokens":2,"agents":[]}"#)
+    reply("GET", "/api/memory/profile", #"{"person":{"id":"u1","name":"New"},"level":"read","items":[]}"#)
+    reply("GET", "/api/channels/c1/messages", #"{"messages":[],"replyCounts":{}}"#)
+    await store.refreshAfterReconnect()
+    let paths = Set(ManagementHTTPStub.requests.withLock { $0.compactMap { $0.url?.path } })
+    for path in ["/api/computers", "/api/approvals", "/api/tasks", "/api/settings/lead", "/api/routines", "/api/vault/notes", "/api/changes", "/api/channels/c1/messages", "/api/agents/a1/background", "/api/background/allowance", "/api/memory/profile"] {
+      XCTAssertTrue(paths.contains(path), path)
+    }
+    XCTAssertNotNil(store.threads["root"])
+    XCTAssertEqual(store.backgrounds["a1"]?.notAllowed, "new")
+    XCTAssertEqual(store.allowance?.todayTokens, 2)
+    XCTAssertEqual(store.profiles["me"]?.person.name, "New")
+    XCTAssertNil(store.syncError)
+    XCTAssertEqual(store.memoryVersion, 1)
+    XCTAssertEqual(store.routinesVersion, 1)
+    XCTAssertEqual(store.backgroundVersion, 1)
+  }
+
+}
+
+
+/** A request gate: release responses only after the test has changed the session. */
+private final class ChatHTTPGate: URLProtocol, @unchecked Sendable {
+  private struct State {
+    var queued: [ChatHTTPGate] = []
+    var waiter: CheckedContinuation<Void, Never>?
+  }
+  private static let state = Mutex(State())
+  override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "chat-session.test" }
+  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override func startLoading() {
+    if request.url?.path == "/api/auth/logout" { respond("{}"); return }
+    let waiter = Self.state.withLock { state in
+      let waiter = state.waiter
+      state.queued.append(self)
+      state.waiter = nil
+      return waiter
+    }
+    waiter?.resume()
+  }
+  static func next() async -> ChatHTTPGate {
+    await withCheckedContinuation { continuation in
+      let ready = state.withLock { state in
+        if !state.queued.isEmpty { return true }
+        state.waiter = continuation
+        return false
+      }
+      if ready { continuation.resume() }
+    }
+    return state.withLock { $0.queued.removeFirst() }
+  }
+  func respond(_ json: String, status: Int = 200) {
+    let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+    client?.urlProtocol(self, didLoad: Data(json.utf8))
+    client?.urlProtocolDidFinishLoading(self)
+  }
+  override func stopLoading() {}
 }

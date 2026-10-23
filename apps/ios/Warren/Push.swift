@@ -42,14 +42,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
   }
 
   func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-    print("Warren: couldn't register for push: \(error.localizedDescription)")
+    store.pushRegistrationFailed(error)
   }
 
   /** In the app: show it, unless it's about the chat already on screen. */
   nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
     let payload = notification.request.content.userInfo["warren"] as? [String: Any]
     let kind = payload?["kind"] as? String
-    let hasThread = payload?["threadId"] is String
+    let preference = PushPreference.key(category: payload?["category"] as? String, kind: kind, hasThread: payload?["threadId"] is String)
     let route = Route(notification.request.content.userInfo)
     return await MainActor.run {
       if kind == "test" { return [.banner, .list, .sound] }
@@ -59,14 +59,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
       }
       guard on("enabled", true) else { return [] }
       if case .chat(let channel, _) = route, channel == store.openChannel { return [] }
-      let category: String
-      switch kind {
-      case "approval": category = "approvals"
-      case "computer": category = "help"
-      case "task": category = "tasks"
-      default: category = hasThread ? "replies" : "dms"
-      }
-      guard on(category, true) else { return [] }
+      guard on(preference, true) else { return [] }
       return on("sound", false) ? [.banner, .list, .sound] : [.banner, .list]
     }
   }
@@ -81,11 +74,15 @@ extension Store {
   /** After sign-in: if you already allowed notifications, make sure the hub has this phone. */
   func setUpPush() async {
     struct Status: Decodable { var available: Bool }
-    pushAvailable = ((try? await api?.get("/api/me/push")) as Status?)?.available ?? false
+    let gen = session
+    let status: Status? = try? await fetch { try await $0.get("/api/me/push") }
+    guard gen == session else { return }
+    pushAvailable = status?.available ?? false
     let settings = await UNUserNotificationCenter.current().notificationSettings()
+    guard gen == session else { return }
     notificationStatus = settings.authorizationStatus
     if settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional {
-      UIApplication.shared.registerForRemoteNotifications()
+      retryPushRegistration()
     }
   }
 
@@ -108,18 +105,71 @@ extension Store {
     return granted
   }
 
-  func pushTokenReceived(_ hex: String) {
+  func pushRegistrationFailed(_ error: Error) {
+    pushRegistrationError = "Couldn't register this phone"
+    print("Warren: couldn't register for push: \(error.localizedDescription)")
+  }
+
+  func retryPushRegistration() {
+    UIApplication.shared.registerForRemoteNotifications()
+    if let pushToken { pushTokenReceived(pushToken) }
+  }
+
+  func pushTokenReceived(_ hex: String, retryDelay: Duration = .seconds(2)) {
+    pushToken = hex
+    pushUploadTask?.cancel()
+    guard api != nil else { return }
+    let gen = session
+    pushUploadTask = Task {
+      for attempt in 0...1 {
+        guard !Task.isCancelled, gen == session else { return }
+        do {
+          try await uploadPushToken(hex)
+          guard !Task.isCancelled, gen == session else { return }
+          pushRegistrationError = nil
+          return
+        } catch {
+          guard !Task.isCancelled, gen == session else { return }
+          pushRegistrationFailed(error)
+          if attempt == 0 {
+            do { try await Task.sleep(for: retryDelay) } catch { return }
+          }
+        }
+      }
+    }
+  }
+
+  func uploadPushToken(_ hex: String) async throws {
     struct Body: Encodable { var token: String; var bundleId: String?; var environment: String }
     #if DEBUG
       let env = "sandbox" // development builds get tokens from APNs' sandbox
     #else
       let env = "production"
     #endif
-    Task { try? await api?.post("/api/me/push", Body(token: hex, bundleId: Bundle.main.bundleIdentifier, environment: env)) }
+    try await fetch { try await $0.post("/api/me/push", Body(token: hex, bundleId: Bundle.main.bundleIdentifier, environment: env)) }
   }
 
   /** The app icon's badge: unread messages, the same count the hub puts on pushes. */
   func updateBadge() {
     UNUserNotificationCenter.current().setBadgeCount(phase == .ready ? unreadTotal : 0)
+  }
+}
+
+enum PushPreference {
+  nonisolated static func key(category: String?, kind: String?, hasThread: Bool) -> String {
+    if let category {
+      switch category {
+      case "approval": return "approvals"
+      case "help": return "help"
+      case "reply": return "replies"
+      default: return "dms"
+      }
+    }
+    switch kind {
+    case "approval": return "approvals"
+    case "computer": return "help"
+    case "task": return "tasks"
+    default: return hasThread ? "replies" : "dms"
+    }
   }
 }

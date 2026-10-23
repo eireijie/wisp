@@ -159,7 +159,7 @@ struct AgentEditor: View {
         if saved { Text("Saved").foregroundStyle(.secondary) }
         if store.canManage && panel != .who {
           Button(action.busy ? "Saving…" : "Save") { save() }
-            .disabled(!loaded || action.busy || name.count > 80 || (panel == .identity && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || (panel == .instructions && text.count > 20000) || model.count > 100)
+            .disabled(!loaded || action.busy || name.count > 80 || (panel == .identity && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || (panel == .instructions && text.count > 20000) || model.count > 200)
         }
       }
     }
@@ -328,9 +328,12 @@ struct AgentEditor: View {
         try await store.updateAgent(current.id, fields)
         savedRole = role; savedRoleNotes = roleNotes
       case .model:
-        let validEffort = efforts.contains(effort) ? effort : ""
-        try await store.updateAgent(current.id, ["model": .nullable(model), "settings": AnyEncodable(["effort": AnyEncodable.nullable(validEffort), "fast": AnyEncodable(fast && selectedModel?.fast != nil)])])
-        effort = validEffort; fast = current.settings?.fast ?? false
+        var fields: Fields = ["model": .nullable(model)]
+        if let settings = models?.settings(model: model, effort: effort, fast: fast) {
+          fields["settings"] = AnyEncodable(settings)
+        }
+        try await store.updateAgent(current.id, fields)
+        effort = current.settings?.effort ?? ""; fast = current.settings?.fast ?? false
       case .device:
         try await store.updateAgent(current.id, ["nodeId": .nullable(nodeId)])
         saved = true

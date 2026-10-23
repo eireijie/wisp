@@ -31,10 +31,14 @@ struct ChannelView: View {
           Button(loadingEarlier ? "Loading…" : "Show earlier messages") {
             loadingEarlier = true
             Task {
-              noEarlier = !(await store.loadEarlier(channel.id))
+              do {
+                noEarlier = !(try await store.loadEarlier(channel.id))
+                error = nil
+              } catch { self.error = error.localizedDescription }
               loadingEarlier = false
             }
           }
+          .disabled(loadingEarlier)
           .font(.footnote)
           .frame(maxWidth: .infinity)
           .padding(.vertical, 10)
@@ -150,6 +154,10 @@ struct ThreadView: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
   var ref: ThreadRef
+  @State private var loading = false
+  @State private var loadingEarlier = false
+  @State private var earlierFailed = false
+  @State private var error: String?
 
   private var root: Message? { store.message(ref.rootId, in: ref.channelId) }
   private var replies: [Message] { store.threads[ref.rootId] ?? [] }
@@ -162,6 +170,24 @@ struct ThreadView: View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 0) {
         if let parent { upLink(parent) }
+        if loading {
+          ProgressView().frame(maxWidth: .infinity).padding(.vertical, 10)
+        }
+        if let error {
+          HStack {
+            Text(error).foregroundStyle(.secondary)
+            Button("Try again") { Task { if earlierFailed { await loadEarlier() } else { await load() } } }.disabled(loading || loadingEarlier)
+          }.font(.footnote).padding(.horizontal, 16).padding(.vertical, 10)
+        }
+        if store.threads[ref.rootId] != nil && !store.noEarlierThreads.contains(ref.rootId) {
+          Button(loadingEarlier ? "Loading…" : "Show earlier messages") {
+            Task { await loadEarlier() }
+          }
+          .disabled(loadingEarlier || loading)
+          .font(.footnote)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 10)
+        }
         if let root {
           MessageRow(message: root, compact: false, replies: 0, thread: nil)
           HStack {
@@ -196,9 +222,31 @@ struct ThreadView: View {
     .toolbar(.hidden, for: .tabBar)
     .navigationTitle(parent == nil ? "Thread" : "Sub-thread")
     .navigationBarTitleDisplayMode(.inline)
-    .task { try? await store.loadMessages(ref.channelId, thread: ref.rootId) }
+    .task(id: ref) { await load() }
     .onAppear { store.openThreads[ref.rootId] = ref.channelId }
     .onDisappear { store.openThreads[ref.rootId] = nil }
+  }
+
+  private func loadEarlier() async {
+    loadingEarlier = true
+    error = nil
+    do {
+      _ = try await store.loadEarlier(ref.channelId, thread: ref.rootId)
+      earlierFailed = false
+    } catch {
+      earlierFailed = true
+      self.error = "Couldn't load earlier messages."
+    }
+    loadingEarlier = false
+  }
+
+  private func load() async {
+    loading = true
+    earlierFailed = false
+    error = nil
+    do { try await store.loadMessages(ref.channelId, thread: ref.rootId) }
+    catch { self.error = "Couldn't load this thread." }
+    loading = false
   }
 
   /** Back to the thread this one came from: just back, when that's where it was opened from. */
@@ -389,6 +437,10 @@ struct Composer: View {
     return (data, "\(type?.conforms(to: .movie) == true ? "Video" : "Photo") \(stamp).\(ext)", type?.preferredMIMEType)
   }
 
+  static func restoringFailedText(_ failed: String, current: String) -> String {
+    current.isEmpty ? failed : current
+  }
+
   private func submit() {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !blocked else { return }
@@ -400,7 +452,7 @@ struct Composer: View {
     Task {
       do { try await send(body, attached.map(\.id)) } catch {
         self.error = error.localizedDescription
-        text = body
+        text = Self.restoringFailedText(body, current: text)
         files = attached + files
       }
       sending = false

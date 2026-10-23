@@ -32,6 +32,9 @@ struct PairView: View {
         }
         .padding(.top, 48)
 
+        if let message = store.sessionMessage {
+          Text(message).font(.callout).foregroundStyle(.secondary)
+        }
         switch step {
         case .start, .failed:
           instructions
@@ -95,10 +98,13 @@ struct PairView: View {
       .frame(maxWidth: .infinity)
     }
     .sheet(isPresented: $scanning) {
-      QRScanner { text in
+      QRScanner(found: { text in
         scanning = false
         use(text)
-      }
+      }, failed: { message in
+        scanning = false
+        step = .failed(message)
+      })
       .ignoresSafeArea()
       .overlay(alignment: .topTrailing) {
         Button("Close") { scanning = false }
@@ -151,7 +157,7 @@ struct PairView: View {
         let claimed = try await Pairing.claim(link, at: hub)
         step = .code(claimed.code, workspace: claimed.workspaceName)
         let token = try await Pairing.waitForConfirm(link, at: hub)
-        store.adopt(hub: hub, token: token)
+        try store.adopt(hub: hub, token: token)
       } catch is CancellationError {
       } catch {
         step = .failed(error.localizedDescription)
@@ -187,24 +193,37 @@ private struct StepRow: View {
 /** The camera, reading QR codes (VisionKit's live scanner). */
 struct QRScanner: UIViewControllerRepresentable {
   var found: (String) -> Void
+  var failed: (String) -> Void
 
   @MainActor static var available: Bool { DataScannerViewController.isSupported && DataScannerViewController.isAvailable }
 
   func makeUIViewController(context: Context) -> DataScannerViewController {
     let vc = DataScannerViewController(recognizedDataTypes: [.barcode(symbologies: [.qr])], qualityLevel: .balanced, isHighlightingEnabled: true)
     vc.delegate = context.coordinator
-    try? vc.startScanning()
+    do { try vc.startScanning() }
+    catch {
+      // Report after presentation so the pairing screen can dismiss the scanner and show the error.
+      Task { @MainActor in failed("Couldn't start the camera. Check camera access in Settings, or paste a pairing link.") }
+    }
     return vc
   }
 
   func updateUIViewController(_ vc: DataScannerViewController, context: Context) {}
 
-  func makeCoordinator() -> Coordinator { Coordinator(found: found) }
+  func makeCoordinator() -> Coordinator { Coordinator(found: found, failed: failed) }
 
   final class Coordinator: NSObject, DataScannerViewControllerDelegate {
     let found: (String) -> Void
+    let failed: (String) -> Void
     private var done = false
-    init(found: @escaping (String) -> Void) { self.found = found }
+    init(found: @escaping (String) -> Void, failed: @escaping (String) -> Void) { self.found = found; self.failed = failed }
+
+    func dataScanner(_ scanner: DataScannerViewController, becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable) {
+      guard !done else { return }
+      done = true
+      scanner.stopScanning()
+      failed("Couldn't use the camera. Check camera access in Settings, or paste a pairing link.")
+    }
 
     func dataScanner(_ scanner: DataScannerViewController, didAdd items: [RecognizedItem], allItems: [RecognizedItem]) {
       guard !done else { return }

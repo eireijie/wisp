@@ -301,15 +301,47 @@ struct ChangeCard: View {
 struct ApprovalCard: View {
   @Environment(Store.self) private var store
   var approvalId: String
+  var refresh = false
+  @State private var loading = true
+  @State private var error: String?
 
   private var approval: Approval? { store.approvals.first { $0.id == approvalId } }
 
   var body: some View {
-    if let a = approval {
-      ApprovalBox(approval: a)
-    } else {
-      ProgressView().task { await store.refreshApprovals() }
+    Group {
+      if let a = approval {
+        ApprovalBox(approval: a)
+      } else if loading {
+        ProgressView()
+      } else {
+        HStack {
+          Text(error ?? "Approval not found.").foregroundStyle(.secondary)
+          Button("Try again") { Task { await load() } }
+        }.font(.footnote)
+      }
     }
+    .task(id: approvalId) { if approval == nil || refresh { await load() } }
+  }
+
+  private func load() async {
+    loading = true
+    error = nil
+    do { _ = try await store.loadApproval(approvalId) }
+    catch { self.error = "Couldn't load this approval." }
+    loading = false
+  }
+}
+
+/** An approval opened from a notification, even after it has been decided. */
+struct ApprovalDetail: View {
+  var approvalId: String
+
+  var body: some View {
+    ScrollView {
+      ApprovalCard(approvalId: approvalId, refresh: true).padding(16)
+    }
+    .navigationTitle("Approval")
+    .navigationBarTitleDisplayMode(.inline)
   }
 }
 

@@ -79,7 +79,7 @@ struct ScreenThumb: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemBackground))
-      if let image {
+      if let image, computer.status == "ready", computer.code == nil {
         Image(uiImage: image).resizable().scaledToFit()
       } else {
         Image(systemName: computer.code != nil ? "lock" : computer.status == "ready" ? "display" : "moon.zzz")
@@ -90,12 +90,20 @@ struct ScreenThumb: View {
     .aspectRatio(16 / 10, contentMode: .fit)
     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(.separator).opacity(0.5)))
-    .task(id: computer.status) {
+    .task(id: "\(computer.id):\(computer.status):\(computer.code ?? ""):\(store.session)") {
+      image = nil
       // a screen with a code opens only with it, from its own page
       guard computer.status == "ready", computer.code == nil else { return }
       while !Task.isCancelled {
-        if let f = try? await store.screen(computer, maxAge: 5000), let img = UIImage(data: f.image) { image = img }
-        try? await Task.sleep(for: .seconds(5))
+        do {
+          let f = try await store.screen(computer, maxAge: 5000)
+          try Task.checkCancellation()
+          image = UIImage(data: f.image)
+        } catch {
+          if Task.isCancelled { return }
+          image = nil
+        }
+        do { try await Task.sleep(for: .seconds(5)) } catch { return }
       }
     }
   }
@@ -109,6 +117,8 @@ struct ComputerDetail: View {
   @State private var error: String?
   @State private var busy = false
   @State private var typing = ""
+  @State private var sendingTyping = false
+  @State private var imageCode: String?
   @State private var lastTap: CGPoint?
 
   private var computer: Computer? { store.computers.first { $0.id == computerId } }
@@ -163,7 +173,7 @@ struct ComputerDetail: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) } }
       .toolbar(.hidden, for: .tabBar)
-      .task(id: "\(c.status) \(c.code ?? "") \(codeTry)") { await stream(c) }
+      .task(id: "\(c.status) \(c.code ?? "") \(codeTry) \(store.session)") { await stream(c) }
     } else {
       ContentUnavailableView("Computer not found", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
     }
@@ -186,6 +196,7 @@ struct ComputerDetail: View {
             .autocorrectionDisabled()
             .focused($typingFocused)
             .submitLabel(.send)
+            .disabled(sendingTyping)
             .onSubmit { sendTyping(c, enter: true) }
             .padding(.leading, 16)
             .padding(.vertical, 12)
@@ -193,7 +204,7 @@ struct ComputerDetail: View {
             Image(systemName: "arrow.up").font(.body.weight(.bold)).foregroundStyle(Color(.systemBackground)).frame(width: 34, height: 34).background(Circle().fill(Color.primary))
           }
           .buttonStyle(.plain)
-          .disabled(typing.isEmpty)
+          .disabled(typing.isEmpty || sendingTyping)
           .opacity(typing.isEmpty ? 0.25 : 1)
           .padding(5)
         }
@@ -270,7 +281,7 @@ struct ComputerDetail: View {
   @ViewBuilder private func screen(_ c: Computer) -> some View {
     ZStack {
       RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black)
-      if let image {
+      if let image, c.status == "ready", !needCode, imageCode == c.code {
         GeometryReader { geo in
           let fit = fitted(in: geo.size)
           Image(uiImage: image)
@@ -329,18 +340,23 @@ struct ComputerDetail: View {
 
   /** About two frames a second while it's on screen; faster feels no better on a phone. */
   private func stream(_ c: Computer) async {
+    image = nil; frame = nil; lastTap = nil
+    imageCode = c.code
     guard c.status == "ready" else { return }
     if c.code != nil { return await streamWithCode(c) }
     needCode = false
     while !Task.isCancelled {
       do {
         let f = try await store.screen(c, maxAge: 1000)
+        try Task.checkCancellation()
         if let img = UIImage(data: f.image) {
           frame = f.width > 0 ? f : Frame(image: f.image, width: Int(img.size.width), height: Int(img.size.height))
           image = img
           error = nil
         }
       } catch {
+        if Task.isCancelled { return }
+        image = nil; frame = nil
         self.error = error.localizedDescription
         try? await Task.sleep(for: .seconds(2))
       }
@@ -365,6 +381,7 @@ struct ComputerDetail: View {
       do {
         (view, ws) = try await store.openView(c, code: code)
       } catch let f as API.Failure where f.status == 403 {
+        guard !Task.isCancelled else { return }
         // a wrong code, or too many: ask again with what the device said
         store.screenCodes[c.id] = nil
         image = nil
@@ -373,42 +390,52 @@ struct ComputerDetail: View {
         return
       } catch {
         if Task.isCancelled { return }
+        image = nil; frame = nil
         self.error = error.localizedDescription
         try? await Task.sleep(for: .seconds(2))
         continue
       }
-      ws.resume()
-      error = nil
-      if view.transport == "frames" {
-        struct Msg: Decodable { var type: String; var image: String?; var width: Int?; var height: Int?; var message: String? }
-        while !Task.isCancelled {
-          guard let m = try? await ws.receive() else { break }
-          guard case .string(let text) = m, let msg = try? JSONDecoder().decode(Msg.self, from: Data(text.utf8)) else { continue }
-          if msg.type == "error" { self.error = msg.message }
-          guard msg.type == "frame", let b64 = msg.image, let data = Data(base64Encoded: b64), let img = UIImage(data: data) else { continue }
-          frame = Frame(image: data, width: msg.width ?? Int(img.size.width), height: msg.height ?? Int(img.size.height))
-          image = img
-        }
-      } else {
-        let drain = Task { while (try? await ws.receive()) != nil {} }
-        while !Task.isCancelled, ws.state == .running {
-          do {
-            let f = try await store.screen(c, maxAge: 1000)
-            if let img = UIImage(data: f.image) {
-              frame = f.width > 0 ? f : Frame(image: f.image, width: Int(img.size.width), height: Int(img.size.height))
-              image = img
-              error = nil
-            }
-          } catch {
-            self.error = error.localizedDescription
-            try? await Task.sleep(for: .seconds(2))
+      await withTaskCancellationHandler {
+        guard !Task.isCancelled else { return }
+        ws.resume()
+        error = nil
+        if view.transport == "frames" {
+          struct Msg: Decodable { var type: String; var image: String?; var width: Int?; var height: Int?; var message: String? }
+          while !Task.isCancelled {
+            guard let m = try? await ws.receive(), !Task.isCancelled else { break }
+            guard case .string(let text) = m, let msg = try? JSONDecoder().decode(Msg.self, from: Data(text.utf8)) else { continue }
+            if msg.type == "error" { self.error = msg.message; image = nil; frame = nil; break }
+            guard msg.type == "frame", let b64 = msg.image, let data = Data(base64Encoded: b64), let img = UIImage(data: data) else { continue }
+            frame = Frame(image: data, width: msg.width ?? Int(img.size.width), height: msg.height ?? Int(img.size.height))
+            image = img
           }
-          try? await Task.sleep(for: .milliseconds(450))
+        } else {
+          let drain = Task { while (try? await ws.receive()) != nil {} }
+          while !Task.isCancelled, ws.state == .running {
+            do {
+              let f = try await store.screen(c, maxAge: 1000)
+              try Task.checkCancellation()
+              if let img = UIImage(data: f.image) {
+                frame = f.width > 0 ? f : Frame(image: f.image, width: Int(img.size.width), height: Int(img.size.height))
+                image = img
+                error = nil
+              }
+            } catch {
+              if Task.isCancelled { break }
+              image = nil; frame = nil
+              self.error = error.localizedDescription
+              try? await Task.sleep(for: .seconds(2))
+            }
+            try? await Task.sleep(for: .milliseconds(450))
+          }
+          drain.cancel()
         }
-        drain.cancel()
+      } onCancel: {
+        ws.cancel(with: .goingAway, reason: nil)
       }
       ws.cancel(with: .goingAway, reason: nil)
       if Task.isCancelled { return }
+      image = nil; frame = nil
       try? await Task.sleep(for: .seconds(1))
     }
   }
@@ -429,11 +456,17 @@ struct ComputerDetail: View {
   }
 
   private func sendTyping(_ c: Computer, enter: Bool) {
+    guard !sendingTyping else { return }
     let text = typing
-    typing = ""
+    sendingTyping = true
     Task {
-      if !text.isEmpty { try? await store.act(c, ["action": AnyEncodable("type"), "text": AnyEncodable(text)]) }
-      if enter { try? await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable("Enter")]) }
+      defer { sendingTyping = false }
+      do {
+        if !text.isEmpty { try await store.act(c, ["action": AnyEncodable("type"), "text": AnyEncodable(text)]) }
+        typing = ""
+        if enter { try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable("Enter")]) }
+        error = nil
+      } catch { self.error = error.localizedDescription }
     }
   }
 

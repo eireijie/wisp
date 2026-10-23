@@ -19,6 +19,7 @@ struct AddAgent: View {
   @State private var harness = "claude-code"
   @State private var model = ""
   @State private var computer = "none"
+  @State private var computerDraft = AgentComputerDraft()
   @State private var advanced = false
   @State private var handle = ""
   @State private var respondTo = "me"
@@ -32,7 +33,7 @@ struct AddAgent: View {
   private var valid: Bool {
     !name.trimmed.isEmpty && name.count <= 80 && does.count <= 200 &&
     finalHandle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !handleTaken &&
-    instructions.count <= 20000 && model.count <= 100
+    instructions.count <= 20000 && model.count <= 200
   }
   private var choices: [HarnessChoice] {
     let custom = Set(store.nodes.filter(\.usable).flatMap { $0.harnesses ?? [] }.map(\.id).filter { $0.hasPrefix("acp:") })
@@ -234,10 +235,11 @@ struct AddAgent: View {
         fields["model"] = .nullable(model.trimmed)
         if external {
           fields["nodeId"] = .null
-          fields["computer"] = AnyEncodable("none")
         } else if computer.hasPrefix("vm:") {
-          fields["nodeId"] = AnyEncodable(String(computer.dropFirst(3)))
-          fields["computer"] = AnyEncodable("own-vm")
+          let node = String(computer.dropFirst(3))
+          fields["nodeId"] = AnyEncodable(node)
+          fields["computerId"] = AnyEncodable(try await computerDraft.resolveVM(node: node, name: name.trimmed, store: store))
+          settings["runIn"] = AnyEncodable("computer")
         } else if computer.hasPrefix("share:"), let c = store.computers.first(where: { $0.id == String(computer.dropFirst(6)) }) {
           fields["computerId"] = AnyEncodable(c.id)
           let node = c.nodeId.flatMap { id in store.nodes.first { $0.id == id && $0.usable }?.id } ?? firstNode
@@ -245,7 +247,6 @@ struct AddAgent: View {
           if c.kind == "vm", c.nodeId == node, ["claude-code", "codex", "hermes", "kimi"].contains(harness) { settings["runIn"] = AnyEncodable("computer") }
         } else {
           fields["nodeId"] = .nullable(firstNode ?? "")
-          fields["computer"] = AnyEncodable("none")
           settings["headless"] = AnyEncodable(true)
         }
       } else {
@@ -270,5 +271,20 @@ struct AddAgent: View {
       dismiss()
       onCreated(agent)
     }
+  }
+}
+
+/** Keep a newly created VM when agent creation fails, so retrying doesn't create another. */
+@MainActor
+final class AgentComputerDraft {
+  private var createdVMs: [String: String] = [:]
+
+  func resolveVM(node: String, name: String, store: Store) async throws -> String {
+    if let id = createdVMs[node] { return id }
+    let computer: Computer = try await store.fetch {
+      try await $0.post("/api/computers", ["kind": "vm", "nodeId": node, "name": "\(name)'s desk"])
+    }
+    createdVMs[node] = computer.id
+    return computer.id
   }
 }

@@ -15,6 +15,11 @@ extension Store {
     if let channelId { request.setValue(channelId, forHTTPHeaderField: "x-channel-id") }
     request.httpBody = data
     let (body, response) = try await api.session.data(for: request)
+    guard gen == session else { throw Stale() }
+    if (response as? HTTPURLResponse)?.statusCode == 401 {
+      authenticationExpired(generation: gen)
+      throw API.AuthenticationExpired()
+    }
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
       let error = (try? JSONDecoder().decode([String: String].self, from: body))?["error"]
       throw API.Failure(status: (response as? HTTPURLResponse)?.statusCode ?? 0, message: error ?? "Couldn't upload this file. Try again.")

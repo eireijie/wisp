@@ -82,6 +82,10 @@ struct NotificationSettingsView: View {
         LabeledContent("This iPhone", value: store.notificationStatus == .authorized ? "On" : "Off")
         if !store.pushAvailable { Text("This Warren isn't set up to send notifications. Its owner can add an Apple push key.").font(.footnote) }
         Button("Turn on notifications") { Task { await store.enableNotifications() } }.disabled(!store.pushAvailable)
+        if let error = store.pushRegistrationError {
+          Text(error).font(.footnote).foregroundStyle(.red)
+          Button("Try again") { store.retryPushRegistration() }
+        }
         Button("iPhone notification settings") { if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) } }
         Button("Send a test notification") { action.run { try await store.connection().post("/api/me/push/test", Empty()); sent = true } }.disabled(!store.pushAvailable || action.busy)
         if sent { Text("Sent. You should see it now.") }

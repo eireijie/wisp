@@ -7,11 +7,24 @@ struct API {
   var token: String?
   var session: URLSession = .shared
   var timeout: TimeInterval = 30
+  var authenticationExpired: (@MainActor @Sendable () -> Void)?
 
-  struct Failure: LocalizedError {
+  /** A longer allowance for a single slow hub operation. */
+  func withTimeout(_ seconds: TimeInterval) -> API {
+    var api = self; api.timeout = seconds
+    return api
+  }
+
+  struct AuthenticationExpired: LocalizedError {
+    var errorDescription: String? { "Signed out: sign in again" }
+  }
+
+  struct Failure: LocalizedError, CustomStringConvertible {
     var status: Int
     var message: String
+    var diagnostic: String? = nil
     var errorDescription: String? { message }
+    var description: String { diagnostic.map { "\(message) \($0)" } ?? message }
   }
 
   func get<T: Decodable>(_ path: String, _ query: [String: String] = [:]) async throws -> T {
@@ -46,7 +59,17 @@ struct API {
     do {
       return try Wire.decoder.decode(T.self, from: data)
     } catch {
-      throw Failure(status: 0, message: "The hub sent something this app doesn't understand. Is Warren up to date?")
+      let context: DecodingError.Context?
+      var missing: String? = nil
+      switch error {
+      case DecodingError.keyNotFound(let key, let c): context = c; missing = key.stringValue
+      case DecodingError.typeMismatch(_, let c), DecodingError.valueNotFound(_, let c), DecodingError.dataCorrupted(let c): context = c
+      default: context = nil
+      }
+      let path = ((context?.codingPath.map(\.stringValue) ?? []) + (missing.map { [$0] } ?? [])).joined(separator: ".")
+      let body = String(String(decoding: data, as: UTF8.self).prefix(200))
+      throw Failure(status: 0, message: "The hub sent something this app doesn't understand. Is Warren up to date?",
+        diagnostic: "Decoding at \(path.isEmpty ? "<root>" : path): \(context?.debugDescription ?? String(describing: error)). Body: \(body)")
     }
   }
 
@@ -73,6 +96,10 @@ struct API {
       throw Failure(status: 0, message: "Couldn't reach Warren at \(base.host() ?? base.absoluteString). \(e.localizedDescription)")
     }
     let http = resp as! HTTPURLResponse
+    if http.statusCode == 401 {
+      await authenticationExpired?()
+      throw AuthenticationExpired()
+    }
     guard (200..<300).contains(http.statusCode) else {
       let msg = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
       throw Failure(status: http.statusCode, message: msg ?? "Warren said \(http.statusCode)")
@@ -118,14 +145,26 @@ enum Session {
       guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
       return String(data: d, encoding: .utf8)
     }
-    set {
-      let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
-      SecItemDelete(q as CFDictionary)
-      guard let newValue else { return }
-      var add = q
-      add[kSecValueData as String] = Data(newValue.utf8)
-      add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-      SecItemAdd(add as CFDictionary, nil)
-    }
+  }
+
+  /** Do not adopt a session unless both Keychain operations succeeded. */
+  static func saveToken(_ token: String?,
+    delete: (CFDictionary) -> OSStatus = { SecItemDelete($0) },
+    add: (CFDictionary) -> OSStatus = { SecItemAdd($0, nil) }
+  ) throws {
+    let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
+    let removed = delete(q as CFDictionary)
+    guard removed == errSecSuccess || removed == errSecItemNotFound else { throw PersistenceFailure(status: removed) }
+    guard let token else { return }
+    var item = q
+    item[kSecValueData as String] = Data(token.utf8)
+    item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+    let saved = add(item as CFDictionary)
+    guard saved == errSecSuccess else { throw PersistenceFailure(status: saved) }
+  }
+
+  struct PersistenceFailure: LocalizedError {
+    var status: OSStatus
+    var errorDescription: String? { "Couldn't save your sign-in on this iPhone. Try pairing again. (\(status))" }
   }
 }

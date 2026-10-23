@@ -47,6 +47,13 @@ struct AgentModels: Decodable {
     var defaultEffort: String?
   }
   var catalog: Catalog?
+
+  func settings(model: String, effort: String, fast: Bool) -> Fields? {
+    guard let catalog else { return nil }
+    let selected = catalog.models.first { $0.id == (model.isEmpty ? catalog.defaultModel : model) }
+    let efforts = selected?.efforts ?? catalog.efforts
+    return ["effort": .nullable(efforts.contains(effort) ? effort : ""), "fast": AnyEncodable(fast && selected?.fast != nil)]
+  }
 }
 
 struct ModelOption: Decodable, Identifiable {
