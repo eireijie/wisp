@@ -6,11 +6,79 @@
 
 Free and open source (Apache-2.0). Self-hosted: your messages, memory and files stay on your server.
 
-## Download
+## Get started
 
-**[Download Warren for Mac](https://github.com/eireijie/warren/releases/latest/download/Warren-mac-arm64.dmg)** (Apple silicon, preview) · [Windows](https://github.com/eireijie/warren/releases/latest/download/Warren-win-x64.exe) · [Linux AppImage](https://github.com/eireijie/warren/releases/latest/download/Warren-linux-x86_64.AppImage) · [Android preview](https://github.com/eireijie/warren/releases/latest/download/Warren-android.apk) · [all releases](https://github.com/eireijie/warren/releases)
+Warren has two parts: a **hub** (your workspace: chats, agents, memory and the web app) and **devices** (computers your agents work on). One computer can be both, and that's how most people start.
 
-Open the .dmg and drag Warren to Applications. The preview isn't signed by Apple yet, so the first time, right-click Warren and choose **Open**. The app can create a server on your Mac or join one someone already runs. Windows and Linux builds are coming; until then, [build them yourself](apps/desktop#build-the-app) or use the [one-line install](#quick-start).
+> **The repository is private for now.** Until it's public, the download links and one-line commands below only work for people with access, signed in to GitHub. In a terminal, use the GitHub CLI instead. Sign in once with `gh auth login` and `gh auth setup-git` (so the installer's `git clone` can reach the private repository too), then:
+>
+> ```bash
+> gh api repos/eireijie/warren/contents/install.sh -H "Accept: application/vnd.github.raw" | bash -s -- --hub-server
+> ```
+
+### 1. Install
+
+Pick one.
+
+**The desktop app (easiest).** Download it, open it, and choose **Create a server**. It runs Warren on this computer, makes this computer a device for your agents, and stays in the menu bar.
+
+| Mac (Apple silicon) | Mac (Intel) | Windows | Linux |
+| --- | --- | --- | --- |
+| [Warren-mac-arm64.dmg](https://github.com/eireijie/warren/releases/latest/download/Warren-mac-arm64.dmg) | [Warren-mac-x64.dmg](https://github.com/eireijie/warren/releases/latest/download/Warren-mac-x64.dmg) | [Warren-win-x64.exe](https://github.com/eireijie/warren/releases/latest/download/Warren-win-x64.exe) | [AppImage](https://github.com/eireijie/warren/releases/latest/download/Warren-linux-x86_64.AppImage) · [.deb](https://github.com/eireijie/warren/releases/latest/download/Warren-linux-amd64.deb) |
+
+The app isn't signed yet. On a Mac, drag it to Applications, then right-click it and choose **Open** the first time. On Windows, click **More info → Run anyway**. On Linux, make the AppImage executable (`chmod +x Warren-linux-x86_64.AppImage`) and run it.
+
+**One command (for a computer that stays on).** On macOS or Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash -s -- --hub-server
+```
+
+On Windows, in PowerShell:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1))) -HubServer
+```
+
+It needs git and Node 22 (it offers to install Node with Homebrew or winget), puts Warren in `~/warren`, keeps it running from then on, makes this computer a device for your agents, and opens Warren in your browser at http://localhost:4747. Nothing is installed with sudo.
+
+**Docker (a server or NAS).**
+
+```bash
+docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/eireijie/warren
+```
+
+A hub in Docker isn't a device itself; connect a computer for your agents in step 2.
+
+### 2. Set up in the browser (about five minutes)
+
+Warren opens on **Set up Warren**, and **Get started** walks you through the rest:
+
+1. **Make your account.** You're the owner of your organization.
+2. **Use Warren from anywhere.** Warren checks [Tailscale](https://tailscale.com) (free) on the hub's computer and walks you through it with buttons: install, sign in, turn on. Warren then has an `https://…ts.net` address that works on your phone and other computers from anywhere, and every link it gives out uses it. Choose **Only on this Wi-Fi for now** to skip it.
+3. **Your device.** With the desktop app or the one-command install, this computer is already connected. Otherwise, download the app on the computer that should run your agents and choose **Join a server**, or copy the command Warren shows.
+4. **Give agents computers.** Agents work on their own computer (a VM), not yours. Warren tells you what's missing; on a Mac with Apple silicon, `warren setup` installs Apple's `container` for it.
+5. **Make your first agent.** Pick Claude Code, Codex, Hermes or another harness, sign it in once, and say hello in `#general`.
+
+### 3. Add more
+
+- **Another computer:** **Devices → Add device**. On the same Wi-Fi it just works; elsewhere, turn on Tailscale in step 2 first.
+- **Your phone:** the [Android app](https://github.com/eireijie/warren/releases/latest/download/Warren-android.apk) (preview), or the [iPhone app](apps/ios) built with Xcode for now. Pair it in **Settings → Mobile** by scanning a QR code. Any phone can also open Warren's address in the browser and add it to the home screen.
+- **A friend:** turn on **Invite people** in **Settings → Features**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
+
+### Start over or remove Warren
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/uninstall.sh | bash
+```
+
+While the repository is private: `gh api repos/eireijie/warren/contents/uninstall.sh -H "Accept: application/vnd.github.raw" | bash`. To only see what it would remove, end either command with `| bash -s -- --dry-run` instead. It asks before each step and removes only Warren's own things: its services, agents' VMs and their image, the desktop app and its settings, the `warren` commands, `~/.warren`, and `~/warren` (a hub's chats, memory and files live in `~/warren/data`).
+
+On Windows: uninstall Warren in **Settings → Apps**, run `warren service uninstall hub` and `warren service uninstall node` (or delete the **Warren hub** and **Warren node** tasks in Task Scheduler), then delete `%USERPROFILE%\warren`, `%USERPROFILE%\.warren` and `%APPDATA%\Warren`.
+
+Having an AI agent install it for you? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents. For HTTPS, phones and your own domain, see [Deploying](docs/deploy.md). For VMs, your own screen, taking control and teaching tasks, see [Computers](docs/computers.md).
+
+## What Warren does
 
 - **Agents from any harness.** Claude Code and Codex have their own adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and any other agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) run through one ACP adapter, and a device can add its own. Anything that speaks MCP can join through `warren-mcp`.
 - **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop; `warren setup` installs what it needs, like Apple's `container` on a Mac) or an [Orgo](https://orgo.ai) cloud computer. Claude Code, Codex, Hermes and Kimi CLI agents run entirely inside their VM, so they can't touch your device, and every agent works websites through page-element browser tools (Playwright MCP) on the browser you watch. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
@@ -29,35 +97,7 @@ Open the .dmg and drag Warren to Applications. The preview isn't signed by Apple
 - **Feels like a team chat.** Channels grouped into sections, DMs, threads, reactions, unread state that follows you across devices, ⌘K to search everything, and agents that react 👀 when they pick up your message and show what they're doing while they work.
 - **Works everywhere.** A desktop app for Mac, Windows and Linux runs the hub for you, connects that computer as a device with one click, and stays in the menu bar ([apps/desktop](apps/desktop)). It updates itself from GitHub releases. A native iPhone and iPad app ([apps/ios](apps/ios)) and an Android app ([apps/android](apps/android)) cover chats, agents, approvals and watching or taking over computers; you pair a phone by scanning a QR code in **Settings → Mobile**, with no address or password to type. The web app is also an installable PWA for any browser.
 
-## Quick start
-
-Warren has two parts: a **hub** (one per workspace: chat, memory, the web app) and **devices** (computers that run your agents and their VMs). One computer can be both.
-
-**1. Install the hub.** On macOS or Linux:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash
-```
-
-On Windows, in PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1 | iex
-```
-
-It needs git and Node 22 or newer (and offers to install Node with Homebrew or winget), puts Warren in `~/warren`, and asks what this computer should do. Pick **Run the hub**, and it keeps running from then on, at http://localhost:4747. Open it and create your workspace.
-
-Or run the hub with Docker:
-
-```bash
-docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/eireijie/warren
-```
-
-**2. Connect a device.** In Warren, **Get started** (or **Devices → Add device**) gives you one command to paste on the computer that should run your agents. It installs Warren there, gets it ready for VMs (asking before it installs anything), and keeps it connected. Devices connect *out* to the hub, so they work behind routers and firewalls.
-
-**3. Add an agent.** **Get started** walks you through creating your agents' computer (a VM on that device) and adding an agent; Claude Code, Codex, Hermes and Kimi CLI run inside the VM, and you sign them in there once. Then say `@atlas what's in our memory about the launch?` in `#general`, and open **Computers** to watch it work.
-
-Having an AI agent install it for you? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents. For HTTPS and phones (Tailscale, your own domain, Cloudflare Tunnel), see [Deploying](docs/deploy.md). For VMs, your own screen, Orgo, taking control and teaching tasks, see [Computers](docs/computers.md).
+## More ways to run it
 
 ### From source
 
@@ -181,9 +221,9 @@ Agents connected through `warren-mcp` get the same when their session starts, an
 
 ### Teams and coding together
 
-- **Teams** (sidebar → Teams) have a channel (`#team-<name>`), a memory pool, and members with roles. **New team** starts from a template (Build team, Research team, Solo + reviewer) or blank; for each role you choose which agent fills it, or make a new one on any harness. A role's suggested harness is only a suggestion. The team page lists the lead first, then the members, and you edit each role in place. A role's notes go into that member's prompt.
-- **The lead:** every task nobody assigned goes to the workspace's lead (pick one on the Teams page; otherwise a team's lead), who is told who has which role and splits the task into subtasks with `task_delegate`. Workspaces that picked a dispatcher in the old Orchestration add-on keep it as their lead.
-- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in the team's channel get a branch like `warren/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
+- **Teams** are channels: every channel has its team, drawn as a chart in its **Team** tab (leads read new messages and hand work along the arrows). Under **More** each agent can have a role (its notes go into that agent's prompt), and the team can share a memory folder, a repo and a boss it reports to.
+- **The lead:** every task nobody assigned goes to the workspace's lead (pick one in Settings → Agents; otherwise a channel team's lead), who is told who has which role and splits the task into subtasks with `task_delegate`. Workspaces that picked a dispatcher in the old Orchestration add-on keep it as their lead.
+- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in that channel get a branch like `warren/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
 
 ## Docs
 

@@ -10,6 +10,7 @@ let dir: string;
 let base: string;
 let hub: Hub;
 let close: () => Promise<void>;
+let orgId: string;
 let owner: string;
 let other: string;
 let agentId: string;
@@ -34,7 +35,10 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", workspaceName: "Lab" }, null)).data.token;
+  const setup = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", workspaceName: "Lab" }, null)).data;
+  owner = setup.token;
+  orgId = setup.workspace.id;
+  await api("PUT", "/api/features", { invite: true });
   const invite = (await api("POST", "/api/invites", { role: "member", days: 1 })).data;
   other = (await api("POST", "/api/invites/accept", { code: invite.code, email: "you@example.com", name: "You", password: "password123" }, null)).data.token;
   expect(other).toBeTruthy();
@@ -125,7 +129,7 @@ describe("public skills", () => {
     expect(added.data).toMatchObject({ name: "Linear", source: "catalog", catalogId: "openai:linear", agentIds: [agentId], tags: ["openai"] });
     expect(added.data.content).toContain("](https://raw.githubusercontent.com/openai/skills/main/skills/.curated/linear/reference.md)");
     expect(added.data.content).toContain("From OpenAI's public skills: https://github.com/openai/skills/tree/main/skills/.curated/linear (Apache-2.0)");
-    const file = await hub.vault.read(`agents/${agentId}/skills/${added.data.slug}/SKILL.md`);
+    const file = await hub.vault(orgId).read(`agents/${agentId}/skills/${added.data.slug}/SKILL.md`);
     expect(file.content).toContain("# linear");
     // adding it again gives the same skill
     expect((await api("POST", "/api/skills", { storeId: "openai:linear", agentIds: [] })).data.id).toBe(added.data.id);

@@ -38,7 +38,7 @@ const SKILL_BODY = z.object({ name: NAME, description: z.string().trim().max(500
  * come back out: they're masked on read, and sending a masked value back keeps the saved one.
  */
 export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers) {
-  const { store, vault, connectors, skills } = hub;
+  const { store, connectors, skills } = hub;
   const { need, parse, commitAuthor } = h;
   registerShopApi(app, hub, h);
 
@@ -214,6 +214,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     for (const agentId of agentIds) {
       const p = agentSkillPath(agentId, s.slug);
       const handle = store.agent(agentId)?.handle ?? agentId;
+      const vault = hub.vault(c.workspaceId);
       if (on) await vault.write(p, skillFile(s), commitAuthor(c), `Skill "${s.name}" for @${handle}`);
       else await vault.remove(p, commitAuthor(c)).catch(() => {});
     }

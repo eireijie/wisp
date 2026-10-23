@@ -78,11 +78,13 @@ beforeAll(async () => {
   close = () => app.close();
   const post = (p: string, body: unknown) => fetch(url + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
   owner = new WarrenClient({ url, token: (await post("/api/setup", { email: "me@example.com", name: "Me", password: "password123" })).token });
+  await owner.request("PUT", "/api/features", { invite: true });
   const inv = await owner.request<{ code: string }>("POST", "/api/invites", { role: "member", days: 1 });
   sam = new WarrenClient({ url, token: (await post("/api/invites/accept", { code: inv.code, name: "Sam", email: "sam@example.com", password: "password123" })).token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeId = node.id;
-  atlasId = (await owner.request<{ id: string }>("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "hermes", nodeId })).id;
+  // answers anyone, so Sam can ask it too (and be refused by the device check, not by who it answers)
+  atlasId = (await owner.request<{ id: string }>("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "hermes", nodeId, settings: { respondTo: "anyone" } })).id;
   daemon = new NodeDaemon({ hub: url, token, name: "box", dir: path.join(dir, "node"), harnessHome: home, noPrepare: true }, () => {}, { hermes });
   daemon.start();
   await waitFor(async () => (await owner.agents()).find((a) => a.status === "online"));

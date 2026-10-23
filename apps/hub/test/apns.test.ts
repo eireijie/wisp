@@ -66,7 +66,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   await new Promise<void>((r) => apns.listen(0, "127.0.0.1", r));
   hub.apns.origin = `http://127.0.0.1:${(apns.address() as { port: number }).port}`;
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
 });
 
 afterAll(async () => {

@@ -6,6 +6,8 @@ export interface MemoryStorage {
   /** the folder on the hub's machine; owners only */
   path: string | null;
   source: "env" | "setting" | "default";
+  /** false for organizations other than the first: their memory lives in Warren's data folder and can't be moved (older hubs leave it out) */
+  movable?: boolean;
   setting: string | null;
   pendingRestart: boolean;
   nextPath: string | null;

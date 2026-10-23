@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
 import { api, getToken } from "../../api.ts";
-import { useStore } from "../../store.ts";
+import { useStore, useTeams } from "../../store.ts";
 import { href } from "../../router.ts";
+import { originReach, shareOrigin, useAccess } from "../../access.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
-import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, useSavedFlash } from "./parts.tsx";
+import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, Toggle, useSavedFlash } from "./parts.tsx";
 
 const useIsOwner = () => useStore((s) => s.me)?.role === "owner";
 
@@ -14,15 +15,16 @@ const useIsOwner = () => useStore((s) => s.me)?.role === "owner";
 
 export function GeneralPage() {
   const me = useStore((s) => s.me)!;
+  const access = useAccess();
   const isOwner = useIsOwner();
   const [name, setName] = useState(me.workspace.name);
   const [error, setError] = useState<string | null>(null);
   const [saved, flash] = useSavedFlash();
   return (
     <>
-      <PageHeader title="General">The workspace everyone here shares: people, agents, devices and memory.</PageHeader>
+      <PageHeader title="Workspace">The organization everyone here shares.</PageHeader>
       <OwnersOnly show={!isOwner} />
-      <Section title="Workspace name">
+      <Section title="Organization name">
         <form
           className="flex flex-wrap items-center gap-2 max-w-md"
           onSubmit={async (e) => {
@@ -47,8 +49,8 @@ export function GeneralPage() {
         </form>
         {error && <p className="mt-2 text-sm text-bad">{error}</p>}
       </Section>
-      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp.">
-        <CopyBlock text={location.origin} />
+      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
+        <CopyBlock text={shareOrigin(access)} />
       </Section>
     </>
   );
@@ -72,6 +74,7 @@ const ROLE_HINT: Record<string, string> = {
 
 export function PeoplePage() {
   const me = useStore((s) => s.me)!;
+  useAccess();
   const members = useStore((s) => s.members);
   const isOwner = useIsOwner();
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -118,7 +121,7 @@ export function PeoplePage() {
               onClick={() =>
                 run(async () => {
                   const r = await api<Invite & { code: string }>("POST", "/api/invites", { role: inviteRole, days: Number(days) });
-                  setMade({ url: `${location.origin}/#/join/${r.code}`, role: r.role, expiresAt: r.expiresAt });
+                  setMade({ url: `${shareOrigin()}/#/join/${r.code}`, role: r.role, expiresAt: r.expiresAt });
                 })
               }
             >
@@ -131,6 +134,15 @@ export function PeoplePage() {
           {made && (
             <div className="mt-3 space-y-1.5">
               <CopyBlock text={made.url} />
+              {originReach(made.url) !== "anywhere" && (
+                <p className="text-xs text-warn">
+                  {originReach(made.url) === "this-computer" ? "This link only works on this computer." : "This link only works on this Wi-Fi."} To invite someone elsewhere, turn on an address that works from anywhere in{" "}
+                  <a href={href({ view: "settings", page: "access" })} className="underline">
+                    Settings → Devices → Access
+                  </a>{" "}
+                  first, then make a new link.
+                </p>
+              )}
               <p className="text-xs text-muted">
                 For a {made.role}, until {new Date(made.expiresAt).toLocaleDateString()}. It's shown only now; make a new one if you lose it.
               </p>
@@ -287,6 +299,9 @@ interface AgentPolicy {
   maxHops: number;
   maxRunsPerMinute: number;
   defaultAccess: "read-only" | "edit" | "full";
+  leadsCreateAgents: boolean;
+  subAgents: boolean;
+  maxAgentMade: number;
 }
 
 const ASK: [string, string, string][] = [
@@ -297,6 +312,43 @@ const ASK: [string, string, string][] = [
   ["signup", "Signing up for new accounts or services", "New logins, free trials, newsletters"],
   ["share", "Sharing files or private information outside Warren", "Uploads, links, forms with personal details"],
 ];
+
+/** Who takes tasks nobody assigned: pick one, or leave it to Warren (a channel team's lead, else the first agent). */
+function WorkspaceLead({ isOwner }: { isOwner: boolean }) {
+  const agents = useStore((s) => s.agents);
+  const lead = useStore((s) => s.lead);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    useStore.getState().refreshLead();
+  }, []);
+  if (!agents.length) return null;
+  const current = agents.find((a) => a.id === lead?.lead);
+  const save = async (leadId: string | null) => {
+    setError(null);
+    try {
+      useStore.setState({ lead: await api("PUT", "/api/settings/lead", { leadId }) });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Section title="Lead">
+      <Card>
+        <Row label="Lead" hint="Takes every task nobody assigned, splits it up and hands the pieces to agents by role.">
+          <Select label="Lead agent" value={lead?.leadId ?? ""} disabled={!isOwner} onChange={(v) => save(v || null)} className="max-w-60">
+            <option value="">{current ? `Automatic (${current.name})` : "Automatic"}</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                @{a.handle} ({a.name})
+              </option>
+            ))}
+          </Select>
+        </Row>
+      </Card>
+      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+    </Section>
+  );
+}
 
 export function AgentsPolicyPage() {
   const isOwner = useIsOwner();
@@ -326,6 +378,7 @@ export function AgentsPolicyPage() {
         <SavedNote shown={saved} />
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
+      <WorkspaceLead isOwner={isOwner} />
       <Section title="Ask before" description="Checked actions need your OK (Approve / Deny in the conversation). If you ask Nova to email Sam, it just does it. If it decides on its own to email someone, it asks first.">
         <Card>
           {ASK.map(([k, label, hint]) => (
@@ -359,6 +412,25 @@ export function AgentsPolicyPage() {
                 ["full", "Full"],
               ]}
             />
+          </Row>
+        </Card>
+      </Section>
+      <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">
+        <Card>
+          <Row label="Leads can create agents" hint="A channel's lead can create an agent its team is missing. It joins the team chart under the lead.">
+            <Toggle on={p.leadsCreateAgents} onChange={(v) => save({ leadsCreateAgents: v })} label="Leads can create agents" disabled={!isOwner} />
+          </Row>
+          <Row label="Those agents can make sub-agents" hint={p.leadsCreateAgents ? "An agent a lead made can make sub-agents for pieces of its own work, up to 3 levels down." : "Needs “Leads can create agents” on first."}>
+            <Toggle on={p.subAgents} onChange={(v) => save({ subAgents: v })} label="Agents a lead made can make sub-agents" disabled={!isOwner || !p.leadsCreateAgents} />
+          </Row>
+          <Row label="Most agents made by agents" hint="Once there are this many, agents can't make more until you remove some.">
+            <Select label="Most agents made by agents" value={String(p.maxAgentMade)} disabled={!isOwner || !p.leadsCreateAgents} onChange={(v) => save({ maxAgentMade: Number(v) })}>
+              {[3, 5, 10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
           </Row>
         </Card>
       </Section>
@@ -455,7 +527,7 @@ export function MemoryRules() {
 function AddRule({ onClose }: { onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const [folders, setFolders] = useState<string[]>([]);
   const [path, setPath] = useState("");
   const [who, setWho] = useState("all_agents");
@@ -596,7 +668,7 @@ export function ComputersPage() {
   return (
     <>
       <PageHeader title="Computers">
-        Computers agents can use: their own virtual computers, your screen, or cloud computers. Manage each one under{" "}
+        Computers agents can use. Manage them in{" "}
         <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
           Computers
         </a>{" "}
@@ -705,7 +777,7 @@ export function ConnectionsPage() {
   ];
   return (
     <>
-      <PageHeader title="Connections">Keys that let agents running somewhere else reach this hub. Most people never need these. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
+      <PageHeader title="Connections">Keys for agents running somewhere else. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {groups.map(([title, description, items]) => (
         <Section key={title} title={title} description={description}>
@@ -796,8 +868,8 @@ export function DataPage() {
   const memoryElsewhere = !!(info && memoryPath && !isInside(memoryPath, info.dataDir));
   return (
     <>
-      <PageHeader title="Data">Back up your workspace, or take a copy of your notes and conversations.</PageHeader>
-      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this workspace. Copy that folder and you have a full backup.">
+      <PageHeader title="Data">Back up your organization, or take a copy of your notes and conversations.</PageHeader>
+      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this organization. Copy that folder and you have a full backup.">
         {isOwner && info ? (
           <>
             <Card>
@@ -820,7 +892,7 @@ export function DataPage() {
             )}
           </>
         ) : (
-          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask a workspace owner to back up the hub.</p>
+          <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">Ask an organization owner to back up the hub.</p>
         )}
       </Section>
       <Section title="What is not in it">
@@ -847,7 +919,7 @@ export function DataPage() {
           <li>Start Warren again. Your devices reconnect by themselves when they are online.</li>
         </ol>
       </Section>
-      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore a workspace on their own. The folder backup does.">
+      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.">
         {error && <p className="mb-2 text-sm text-bad">{error}</p>}
         <Card>
           {isOwner && (

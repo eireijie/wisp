@@ -37,8 +37,9 @@ export const GHOST_PALETTES: { name: string; color: string; color2: string }[] =
 /** What a ghost wears while its agent is offline: the same gray for everyone. */
 export const GHOST_ASLEEP = { color: "#a6aaad", color2: "#44464a" };
 
-/** Single body colors from before gradients; still valid, shown with a gentle shade. */
+/** Plain body colors (one color, top to bottom). White is the default for a new agent. */
 export const GHOST_COLORS: { name: string; hex: string }[] = [
+  { name: "White", hex: "#ffffff" },
   { name: "Mist", hex: "#f4f1ff" },
   { name: "Mint", hex: "#b8f0d8" },
   { name: "Sky", hex: "#b9dcff" },
@@ -50,6 +51,9 @@ export const GHOST_COLORS: { name: string; hex: string }[] = [
   { name: "Slate", hex: "#64748b" },
   { name: "Midnight", hex: "#2e2a4f" },
 ];
+
+/** A new agent's ghost starts plain white. */
+export const GHOST_WHITE = { color: "#ffffff", color2: "#ffffff" };
 
 export type GhostShape = (typeof GHOST_SHAPES)[number];
 export type GhostEyes = (typeof GHOST_EYES)[number];
@@ -63,7 +67,8 @@ export interface GhostAppearance {
   color: string; // #rrggbb, the top of the body
   /** the bottom of the body; without it the ghost is one color with a gentle shade */
   color2?: string;
-  glow: boolean;
+  /** no longer shown (glow was removed); older saved looks may still carry it */
+  glow?: boolean;
   eyes: GhostEyes;
   mouth: GhostMouth;
   cheeks: boolean;
@@ -96,7 +101,6 @@ export function defaultAppearance(seed: string): GhostAppearance {
     shape: pick(GHOST_SHAPES),
     color: palette.color,
     color2: palette.color2,
-    glow: false,
     eyes: pick(GHOST_EYES.filter((e) => e !== "wink")),
     mouth: pick(["smile", "open", "cat", "smile"] as const),
     cheeks: roll() < 0.6,
@@ -108,5 +112,5 @@ export function defaultAppearance(seed: string): GhostAppearance {
 
 /** A random look, for the editor's shuffle button. */
 export function randomAppearance(): GhostAppearance {
-  return { ...defaultAppearance(Math.random().toString(36)), glow: Math.random() < 0.25, hat: GHOST_HATS[Math.floor(Math.random() * GHOST_HATS.length)] };
+  return { ...defaultAppearance(Math.random().toString(36)), hat: GHOST_HATS[Math.floor(Math.random() * GHOST_HATS.length)] };
 }

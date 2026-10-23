@@ -10,7 +10,7 @@ final class WorkspaceTests: XCTestCase {
   private let background = ##"{"background":{"agentId":"a1","userId":"u1","enabled":true,"everyMinutes":60,"focus":"Inbox","quietStart":"22:00","quietEnd":"08:00","nextAt":null,"nextReason":"","lastAt":null,"lastNote":"","checking":false,"model":null,"effort":null,"dailyCap":24},"followups":[{"id":"f1","agentId":"a1","userId":"u1","dueAt":"2026-10-19T08:00:00Z","note":"Check replies","status":"pending"}],"notAllowed":null,"sources":[{"kind":"app","name":"Gmail","detail":"Connected"}],"usage":{"lastTokens":100,"todayTokens":200,"weekTokens":400,"checksToday":2,"capReached":false},"defaultDailyCap":24}"##
   private let skill = ##"{"id":"s1","name":"Meeting notes","description":"Use when meetings end","content":"# Notes","source":"custom","catalogId":null,"tags":["work"],"agentIds":["a1"]}"##
   private let connector = ##"{"id":"co1","name":"Notion","kind":"mcp-http","url":"https://mcp.notion.com/mcp","headers":{},"env":{"KEY":"••••1234"},"enabled":true,"agentIds":["a1"],"auth":{"required":true,"signedIn":false,"error":null},"warnings":[]}"##
-  private let team = ##"{"id":"te1","name":"research","emoji":"","description":"Sources","leadId":"a1","reportsTo":null,"channelId":"c1","folder":"teams/research","repo":null,"baseBranch":"main","members":[{"agentId":"a1","role":"Lead","roleNotes":"Coordinate","managerId":null}]}"##
+  private let team = ##"{"id":"c1","name":"research","leads":["a1"],"leadId":"a1","reportsTo":null,"channelId":"c1","folder":"teams/research","repo":null,"baseBranch":"main","members":[{"agentId":"a1","role":"Lead","roleNotes":"Coordinate","lead":true,"managerId":null}]}"##
   private let storage = ##"{"path":"/data/vault","source":"setting","setting":"/data/vault","pendingRestart":false,"nextPath":"/data/vault","restartable":true,"previous":null,"moved":{"how":"copied","files":2},"sync":{"allowed":true,"reason":null,"urlPath":"/memory.git","branch":"main"},"tokens":[{"id":"vtk1","label":"Obsidian","createdAt":"2026-10-18","lastUsed":null}]}"##
   private let person = ##"{"id":"u1","name":"Sam","email":"sam@example.test","preferredName":null,"timezone":"UTC","role":"owner"}"##
   private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T { try Wire.decoder.decode(type, from: Data(json.utf8)) }
@@ -164,10 +164,10 @@ final class WorkspaceTests: XCTestCase {
   }
 
   func testTeamsAndDevicesRoundTrips() async throws {
-    let store = makeStore(); reply("POST", "/api/teams", team)
-    try await store.saveTeam(nil, ["name": AnyEncodable("research"), "leadId": AnyEncodable("a1")])
+    let store = makeStore(); reply("GET", "/api/teams", "[\(team)]")
+    try await store.refreshTeams()
     XCTAssertEqual(store.teams.first?.channelId, "c1")
-    XCTAssertEqual(try body("POST", "/api/teams")["leadId"] as? String, "a1")
+    XCTAssertEqual(store.teams.first?.leads, ["a1"])
     reply("PATCH", "/api/nodes/n1", ##"{"ok":true}"##)
     reply("GET", "/api/nodes", ##"[{"id":"n1","name":"Mac","online":true,"mine":true,"shared":true}]"##)
     try await store.updateNode("n1", ["shared": AnyEncodable(true)])

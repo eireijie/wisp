@@ -29,6 +29,8 @@ struct Me: Codable {
   var user: User?
   var role: String?
   var workspace: Workspace?
+  /** resolved by the hub for the current organization; missing on older hubs (everything on) */
+  var features: Features?
 }
 
 struct Member: Codable, Identifiable, Hashable {
@@ -64,6 +66,11 @@ struct Agent: Codable, Identifiable, Hashable {
     var roleNotes: String?
     var runIn: String?
     var headless: Bool?
+    /** who it answers: "me" (its creator), "anyone", or "people" (respondPeople); unset is anyone */
+    var respondTo: String?
+    var respondPeople: [String]?
+    /** the person who made it; they (or an owner) decide who it answers */
+    var createdBy: String?
   }
   enum Status: String, Codable { case online, busy, offline }
 
@@ -96,6 +103,8 @@ struct Channel: Codable, Identifiable, Hashable {
     var defaultAgentId: String?
     var replyInThread: Bool?
     var instructions: String?
+    /** the channel's agent team, drawn as a flow chart; nil = no team (only @mentioned agents, or defaultAgentId, answer) */
+    var team: ChannelTeam?
   }
   var `private`: Bool?
   var archivedAt: String?
@@ -107,6 +116,37 @@ struct Channel: Codable, Identifiable, Hashable {
   var isDM: Bool { kind == "dm" }
   var isMuted: Bool { notify == "mute" }
   var badge: Int { isMuted || archivedAt != nil || joined == false ? 0 : unread ?? 0 }
+}
+
+/**
+ * A channel's agent team (ChannelTeam in packages/core/src/types.ts). Leads read every new message;
+ * an edge means "hands work to". x and y are where each agent sits on the web's flow chart.
+ */
+struct ChannelTeam: Codable, Hashable {
+  struct Node: Codable, Hashable {
+    var agentId: String
+    var lead: Bool
+    var x: Double
+    var y: Double
+    /** its role on this team and what that role means; nil = none */
+    var role: String? = nil
+    var roleNotes: String? = nil
+  }
+  struct Edge: Codable, Hashable {
+    var from: String
+    var to: String
+  }
+  var nodes: [Node]
+  var edges: [Edge]
+  /** a memory folder the whole team shares, e.g. teams/web; nil or "" = none */
+  var folder: String? = nil
+  /** the git repository it codes in, and the branch work merges into */
+  var repo: String? = nil
+  var baseBranch: String? = nil
+  /** an agent outside the team it reports to */
+  var reportsTo: String? = nil
+
+  static let empty = ChannelTeam(nodes: [], edges: [])
 }
 
 struct Reaction: Codable, Hashable {
@@ -121,9 +161,10 @@ enum MessagePart: Codable, Hashable {
   case notice(String)
   case computer(computerId: String, request: String?)
   case approval(approvalId: String)
+  case change(changeId: String)
   case other(String)
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId }
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -135,6 +176,7 @@ enum MessagePart: Codable, Hashable {
     case "notice": self = .notice((try? c.decode(String.self, forKey: .text)) ?? "")
     case "computer": self = .computer(computerId: (try? c.decode(String.self, forKey: .computerId)) ?? "", request: try? c.decode(String.self, forKey: .request))
     case "approval": self = .approval(approvalId: (try? c.decode(String.self, forKey: .approvalId)) ?? "")
+    case "change": self = .change(changeId: (try? c.decode(String.self, forKey: .changeId)) ?? "")
     default: self = .other(type)
     }
   }
@@ -157,6 +199,7 @@ struct Message: Codable, Identifiable, Hashable {
 
 struct MessagePage: Codable {
   var messages: [Message]
+  /** replies per message; in a thread, per reply (any reply can start a sub-thread) */
   var replyCounts: [String: Int]
 }
 

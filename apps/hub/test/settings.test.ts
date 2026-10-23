@@ -32,7 +32,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
 });
 
 afterAll(async () => {
@@ -122,7 +122,7 @@ describe("workspace settings", () => {
   });
 
   it("sets what agents ask about first, how far they can ping each other, and new agents' access", async () => {
-    expect((await api("GET", "/api/settings/agents")).data).toEqual({ askBefore: ["send", "spend", "delete", "post", "signup", "share"], maxHops: 6, maxRunsPerMinute: 20, defaultAccess: "edit" });
+    expect((await api("GET", "/api/settings/agents")).data).toEqual({ askBefore: ["send", "spend", "delete", "post", "signup", "share"], maxHops: 6, maxRunsPerMinute: 20, defaultAccess: "edit", leadsCreateAgents: false, subAgents: false, maxAgentMade: 10 });
     await api("PUT", "/api/settings/agents", { askBefore: ["spend", "signup"], maxHops: 2, defaultAccess: "read-only" });
     const agent = (await api("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom" })).data;
     expect(agent.settings.access).toBe("read-only");

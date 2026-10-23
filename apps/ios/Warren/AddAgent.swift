@@ -1,26 +1,38 @@
 import SwiftUI
 
+/**
+ * New agent, on one screen: its look, a name and a job, and where it runs (your defaults unless
+ * you customize). Everything else waits under Advanced.
+ */
 struct AddAgent: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
   var onCreated: (Agent) -> Void
-  @State private var step = 0
+
+  // every new agent starts white with a face and outfit of its own, picked once (typing its name doesn't change it)
+  @State private var look = GhostLook.newAgent()
+  @State private var editingLook = false
   @State private var name = ""
-  @State private var handle = ""
-  @State private var harness = "claude-code"
-  @State private var template: String = ""
+  @State private var does = ""
   @State private var instructions = ""
-  @State private var nodeId = ""
-  @State private var computerId = ""
-  @State private var headless = false
+  @State private var custom = false
+  @State private var harness = "claude-code"
   @State private var model = ""
+  @State private var computer = "none"
+  @State private var advanced = false
+  @State private var handle = ""
+  @State private var respondTo = "me"
+  @State private var respondPeople: Set<String> = []
+  @State private var apps: Set<String> = []
+  @State private var skills: Set<String> = []
   @State private var action = FormAction()
 
   private var finalHandle: String { handle.isEmpty ? ManagementText.handle(name) : handle }
+  private var handleTaken: Bool { store.agents.contains { $0.handle == finalHandle } }
   private var valid: Bool {
-    !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && name.count <= 80 &&
-    finalHandle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil &&
-    !store.agents.contains { $0.handle == finalHandle }
+    !name.trimmed.isEmpty && name.count <= 80 && does.count <= 200 &&
+    finalHandle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !handleTaken &&
+    instructions.count <= 20000 && model.count <= 100
   }
   private var choices: [HarnessChoice] {
     let custom = Set(store.nodes.filter(\.usable).flatMap { $0.harnesses ?? [] }.map(\.id).filter { $0.hasPrefix("acp:") })
@@ -28,218 +40,235 @@ struct AddAgent: View {
       HarnessChoice(id: $0, label: HarnessChoice.label($0), blurb: "Available on a connected device", account: "", protocolName: "acp")
     } + HarnessChoice.all.filter { $0.id == "custom" }
   }
-  private var selectedHarness: HarnessChoice? { choices.first { $0.id == harness } }
-  private var external: Bool { selectedHarness?.protocolName == "mcp" }
+  private var external: Bool { choices.first { $0.id == harness }?.protocolName == "mcp" }
+  /** more than one person here: who the agent answers is a real choice */
+  private var askWho: Bool { store.features.invite || store.otherPeople.count > 0 }
 
   var body: some View {
     NavigationStack {
       Form {
-        Section {
-          Text("\(["Name", "Harness", "Configure"][step]) · \(step + 1) of 3").font(.caption).foregroundStyle(.secondary)
+        lookSection
+        Section("Name") {
+          TextField("Nova", text: $name).textInputAutocapitalization(.words)
+          if handleTaken {
+            Text("@\(finalHandle) is taken. Pick another name, or change the handle under Advanced.").font(.caption).foregroundStyle(.red)
+          }
         }
-        if step == 0 { nameStep }
-        if step == 1 { harnessStep }
-        if step == 2 { configureStep }
+        Section {
+          TextField("Builds and ships websites", text: $does)
+        } header: {
+          HStack(spacing: 4) { Text("What it does"); Text("· Optional").foregroundStyle(.tertiary) }
+        }
+        Section("Instructions") {
+          TextField("What should it do, and how?", text: $instructions, axis: .vertical).lineLimit(4...12)
+        }
+        aiSection
+        advancedSection
         Section { InlineError(error: action.error) }
       }
-      .navigationTitle("Add agent")
+      .navigationTitle("New agent")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button(step == 0 ? "Cancel" : "Back") { if step == 0 { dismiss() } else { step -= 1 } }.disabled(action.busy)
-        }
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(action.busy) }
         ToolbarItem(placement: .confirmationAction) {
-          Button(step == 2 ? "Add agent" : "Next") {
-            if step < 2 { step += 1 } else { create() }
-          }.disabled(!valid || action.busy || instructions.count > 20000 || model.count > 100)
+          Button("Create") { create() }.bold().disabled(!valid || action.busy)
         }
       }
       .task {
-        do {
-          try await store.refreshManagement()
-          let usable = store.nodes.filter(\.usable)
-          nodeId = usable.first { $0.online }?.id ?? usable.first?.id ?? ""
-          headless = store.nodes.first { $0.id == nodeId }?.role == "headless"
-        } catch { action.error = error.localizedDescription }
+        await store.refreshAgentDefaults()
+        do { try await store.refreshManagement() } catch { action.error = error.localizedDescription }
+        try? await store.refreshSkills()
+        try? await store.refreshConnectors()
+        harness = store.agentDefaults?.harness ?? "claude-code"
+        model = store.agentDefaults?.model ?? ""
+        if store.agentDefaults?.computer != "none", let node = store.agentDefaults?.nodeId ?? firstNode { computer = "vm:\(node)" }
       }
       .onChange(of: handle) { _, value in handle = ManagementText.handle(value) }
+      .sheet(isPresented: $editingLook) {
+        LookEditor(look: $look, name: name, seed: finalHandle)
+      }
       .interactiveDismissDisabled(action.busy)
     }
   }
 
-  private var nameStep: some View {
-    Group {
-      Section {
-        GhostView(look: nil, seed: finalHandle.isEmpty ? "new-agent" : finalHandle, size: 96).frame(maxWidth: .infinity)
-        Text(store.simple ? "Name your helper" : "Who’s joining?").font(.title2.bold())
-        Text("A name first. Their setup comes next.").foregroundStyle(.secondary)
-        TextField("Agent name (e.g. Darnold)", text: $name)
-        Text("@\(finalHandle.isEmpty ? "your-agent" : finalHandle)").font(.caption).foregroundStyle(.secondary)
-        TechnicalDetails(title: "More options") {
-          TextField("Handle", text: $handle).textInputAutocapitalization(.never).autocorrectionDisabled()
-          Text("@\(finalHandle)").font(.caption).foregroundStyle(.secondary)
+  private var firstNode: String? {
+    let usable = store.nodes.filter(\.usable)
+    return usable.first { $0.online }?.id ?? usable.first?.id
+  }
+
+  // MARK: look
+
+  private var lookSection: some View {
+    Section {
+      VStack(spacing: 14) {
+        GhostView(look: look, seed: finalHandle, size: 96, interactive: true)
+          .padding(.top, 8)
+        VStack(spacing: 2) {
+          Text(name.trimmed.isEmpty ? "New agent" : name.trimmed).font(.title3.weight(.semibold))
+          Text("@\(finalHandle.isEmpty ? "handle" : finalHandle)").font(.caption).foregroundStyle(.secondary)
         }
-        if store.agents.contains(where: { $0.handle == finalHandle }) {
-          Text("@\(finalHandle) is already taken. Choose another name or use an available handle.").font(.caption).foregroundStyle(.red)
-          Button("Use an available handle") {
-            let base = ManagementText.handle(name)
-            var number = 2
-            var candidate = String(base.prefix(28)) + "-\(number)"
-            while store.agents.contains(where: { $0.handle == candidate }) {
-              number += 1
-              candidate = String(base.prefix(28)) + "-\(number)"
-            }
-            handle = candidate
+        GhostColors(look: $look)
+        HStack(spacing: 10) {
+          Button("Shuffle", systemImage: "shuffle") {
+            look = GhostLook.shuffled()
           }
+          Button("Edit look", systemImage: "paintpalette") { editingLook = true }
         }
-        if !name.isEmpty && finalHandle.isEmpty { Text("Choose a handle starting with a lowercase letter under More options.").font(.caption).foregroundStyle(.red) }
+        .secondaryButton()
       }
-      Section("Give it a job") {
-        Button("Start from scratch") { template = ""; instructions = "" }
-        ForEach(AgentTemplate.all.filter { !store.simple || ["chief", "inbox", "research", template].contains($0.id) }) { templateChoice($0) }
-        if store.simple {
-          DisclosureGroup("More jobs") {
-            ForEach(AgentTemplate.all.filter { !["chief", "inbox", "research", template].contains($0.id) }) { templateChoice($0) }
+      .frame(maxWidth: .infinity)
+      .padding(.bottom, 6)
+    } footer: {
+      Text("Give it a name and a job. You can change everything later.")
+    }
+  }
+
+  // MARK: AI and computer
+
+  private var aiSection: some View {
+    Section {
+      Picker("AI and computer", selection: $custom) {
+        Text("Use my defaults").tag(false)
+        Text("Customize").tag(true)
+      }
+      .pickerStyle(.segmented)
+      .listRowSeparator(.hidden)
+      if custom {
+        Picker("Runs on", selection: $harness) {
+          ForEach(choices) { Text($0.label).tag($0.id) }
+        }
+        TextField("Model", text: $model, prompt: Text("Automatic"))
+          .textInputAutocapitalization(.never).autocorrectionDisabled()
+        if !external {
+          Picker("Computer", selection: $computer) {
+            ForEach(store.nodes.filter(\.usable)) { Text("New VM on \($0.name)").tag("vm:\($0.id)") }
+            ForEach(store.computers) { c in Text("Share \(c.name)").tag("share:\(c.id)") }
+            Text("No computer").tag("none")
           }
-        }
-      }
-    }
-  }
-
-  private func templateChoice(_ item: AgentTemplate) -> some View {
-    Button {
-      template = item.id
-      instructions = item.instructions
-    } label: {
-      HStack {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("\(item.emoji) \(item.name)").foregroundStyle(.primary)
-          Text(item.blurb).font(.caption).foregroundStyle(.secondary)
-        }
-        Spacer()
-        if template == item.id { Image(systemName: "checkmark") }
-      }
-    }
-  }
-
-  private var harnessStep: some View {
-    Group {
-      Section {
-        Text(store.simple ? "Which AI do you use?" : "Choose a harness").font(.title2.bold())
-        Text("A harness is the AI program that does the work. You need an account with it; it may charge separately.").foregroundStyle(.secondary)
-        ForEach(choices.filter { !store.simple || ["claude-code", "codex", "gemini", harness].contains($0.id) }) { harnessChoice($0) }
-      }
-      if store.simple {
-        Section {
-          DisclosureGroup("More harnesses") {
-            ForEach(choices.filter { !["claude-code", "codex", "gemini", harness].contains($0.id) }) { harnessChoice($0) }
-          }
-        }
-      }
-    }
-  }
-
-  private func harnessChoice(_ choice: HarnessChoice) -> some View {
-    Button { harness = choice.id } label: {
-      HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: 6) {
-          Text(choice.label).font(.headline).foregroundStyle(.primary)
-          Text(choice.blurb)
-          Text(choice.account)
-          Text(choice.protocolName == "acp" ? "Can't use connected apps like Gmail yet" : "Can use connected apps like Gmail")
-        }.font(.caption).foregroundStyle(.secondary)
-        Spacer()
-        if harness == choice.id { Image(systemName: "checkmark.circle.fill") }
-      }.padding(.vertical, 6)
-    }
-  }
-
-  private var configureStep: some View {
-    Group {
-      Section("Device") {
-        Picker("Device", selection: $nodeId) {
-          Text("No device").tag("")
-          ForEach(store.nodes.filter(\.usable)) { Text("\($0.name) · \($0.online ? "online" : "offline")").tag($0.id) }
-        }.disabled(external)
-        if external {
+        } else {
           Text("Set up where it already runs. It connects to Warren through the API or warren-mcp.").font(.footnote).foregroundStyle(.secondary)
-        } else if nodeId.isEmpty {
-          Text("It can't answer @mentions until it has a device.").font(.footnote).foregroundStyle(.secondary)
-        } else if let node = store.nodes.first(where: { $0.id == nodeId }), !(node.harnesses ?? []).contains(where: { $0.id == harness }) {
-          Text("\(HarnessChoice.label(harness)) isn't installed on \(node.name). Install it and sign in on that device.").font(.footnote).foregroundStyle(.secondary)
+        }
+      } else {
+        let summary = store.defaultsSummary
+        LabeledContent("AI", value: summary.ai)
+        LabeledContent("Computer", value: summary.computer)
+        if store.isOwner {
+          NavigationLink("Change defaults") { AgentDefaultsView() }
         }
       }
-      if !external {
-        Section("Where should it work?") {
-          Picker("Computer", selection: $computerId) {
-            Text("Decide later").tag("")
-            ForEach(store.computers) { Text($0.name).tag($0.id) }
-          }
-          TechnicalDetails(title: "More options") {
-            Toggle("No desktop (answers only)", isOn: $headless).disabled(!computerId.isEmpty)
-          }
-        }
-      }
-      Section("Model") {
-        TextField("Harness default", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
-        Text("Leave blank to let the harness pick. You can choose from the device's models on the agent's page.").font(.caption).foregroundStyle(.secondary)
-      }
-      Section("Instructions") { TextField("What should it do?", text: $instructions, axis: .vertical).lineLimit(4...12) }
-      Section {
-        TechnicalDetails(title: "More options") {
-          TextField("Handle", text: $handle).textInputAutocapitalization(.never).autocorrectionDisabled()
-          Text("Mentions use @\(finalHandle).").font(.caption).foregroundStyle(.secondary)
-        }
-      }
-    }
-    .onChange(of: computerId) { _, id in
-      if !id.isEmpty { headless = false }
-      if let computer = store.computers.first(where: { $0.id == id }), computer.kind == "vm", let node = computer.nodeId,
-         store.nodes.contains(where: { $0.id == node && $0.usable }) { nodeId = node }
+    } header: {
+      Text("AI and computer")
     }
   }
+
+  // MARK: advanced
+
+  private var advancedSection: some View {
+    Section {
+      DisclosureGroup(isExpanded: $advanced) {
+        TextField("Handle", text: $handle, prompt: Text(ManagementText.handle(name).isEmpty ? "handle" : ManagementText.handle(name)))
+          .textInputAutocapitalization(.never).autocorrectionDisabled()
+        if askWho {
+          Picker("Answers", selection: $respondTo) {
+            Text("Only me").tag("me")
+            Text("Anyone").tag("anyone")
+            Text("Picked people").tag("people")
+          }
+          if respondTo == "people" {
+            ForEach(store.otherPeople) { person in
+              Toggle(person.preferredName ?? person.name, isOn: Binding(
+                get: { respondPeople.contains(person.id) },
+                set: { if $0 { respondPeople.insert(person.id) } else { respondPeople.remove(person.id) } }))
+            }
+            if store.otherPeople.isEmpty { Text("Nobody else is here yet.").font(.footnote).foregroundStyle(.secondary) }
+          }
+        }
+        if !store.connectors.isEmpty {
+          Menu {
+            ForEach(store.connectors) { app in
+              Toggle(app.name, isOn: member(app.id, of: $apps))
+            }
+          } label: {
+            LabeledContent("Connected apps", value: summary(apps, names: store.connectors.map { ($0.id, $0.name) }))
+          }
+        }
+        if !store.skills.isEmpty {
+          Menu {
+            ForEach(store.skills) { skill in
+              Toggle(skill.name, isOn: member(skill.id, of: $skills))
+            }
+          } label: {
+            LabeledContent("Skills", value: summary(skills, names: store.skills.map { ($0.id, $0.name) }))
+          }
+        }
+      } label: {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Advanced")
+          Text(askWho ? "Handle, who it answers, apps and skills" : "Handle, apps and skills").font(.caption).foregroundStyle(.secondary)
+        }
+      }
+    }
+  }
+
+  private func member(_ id: String, of set: Binding<Set<String>>) -> Binding<Bool> {
+    Binding(get: { set.wrappedValue.contains(id) }, set: { if $0 { set.wrappedValue.insert(id) } else { set.wrappedValue.remove(id) } })
+  }
+
+  private func summary(_ ids: Set<String>, names: [(String, String)]) -> String {
+    let picked = names.filter { ids.contains($0.0) }.map(\.1)
+    return picked.isEmpty ? "None" : picked.count <= 2 ? picked.joined(separator: ", ") : "\(picked.count)"
+  }
+
+  // MARK: create
 
   private func create() {
     action.run {
-      var settings: Fields = [:]
-      if !external && headless { settings["headless"] = AnyEncodable(true) }
-      if !external, let computer = store.computers.first(where: { $0.id == computerId }), computer.kind == "vm", computer.nodeId == nodeId,
-         ["claude-code", "codex", "hermes", "kimi"].contains(harness) { settings["runIn"] = AnyEncodable("computer") }
+      var settings: Fields = ["appearance": AnyEncodable(look.resolved), "respondTo": AnyEncodable(askWho ? respondTo : "me")]
+      if !does.trimmed.isEmpty { settings["description"] = AnyEncodable(does.trimmed) }
+      if askWho && respondTo == "people" { settings["respondPeople"] = AnyEncodable(Array(respondPeople).sorted()) }
       var fields: Fields = [
-        "name": AnyEncodable(name.trimmingCharacters(in: .whitespacesAndNewlines)), "handle": AnyEncodable(finalHandle),
-        "harness": AnyEncodable(harness), "nodeId": .nullable(external ? "" : nodeId), "model": .nullable(model),
-        "computerId": .nullable(external ? "" : computerId), "instructions": AnyEncodable(instructions), "settings": AnyEncodable(settings)
+        "name": AnyEncodable(name.trimmed), "handle": AnyEncodable(finalHandle), "instructions": AnyEncodable(instructions),
       ]
-      if let template = AgentTemplate.all.first(where: { $0.id == template }) {
-        fields["soul"] = AnyEncodable(agentSoul(name: name, handle: finalHandle, voice: template.voice))
+      if custom {
+        fields["harness"] = AnyEncodable(harness)
+        fields["model"] = .nullable(model.trimmed)
+        if external {
+          fields["nodeId"] = .null
+          fields["computer"] = AnyEncodable("none")
+        } else if computer.hasPrefix("vm:") {
+          fields["nodeId"] = AnyEncodable(String(computer.dropFirst(3)))
+          fields["computer"] = AnyEncodable("own-vm")
+        } else if computer.hasPrefix("share:"), let c = store.computers.first(where: { $0.id == String(computer.dropFirst(6)) }) {
+          fields["computerId"] = AnyEncodable(c.id)
+          let node = c.nodeId.flatMap { id in store.nodes.first { $0.id == id && $0.usable }?.id } ?? firstNode
+          fields["nodeId"] = .nullable(node ?? "")
+          if c.kind == "vm", c.nodeId == node, ["claude-code", "codex", "hermes", "kimi"].contains(harness) { settings["runIn"] = AnyEncodable("computer") }
+        } else {
+          fields["nodeId"] = .nullable(firstNode ?? "")
+          fields["computer"] = AnyEncodable("none")
+          settings["headless"] = AnyEncodable(true)
+        }
+      } else {
+        fields["useDefaults"] = AnyEncodable(true)
+        // hubs without agent defaults still need a harness and a device
+        if store.agentDefaults == nil {
+          fields["harness"] = AnyEncodable("claude-code")
+          fields["nodeId"] = .nullable(firstNode ?? "")
+        }
       }
+      fields["settings"] = AnyEncodable(settings)
       let agent = try await store.createAgent(fields)
+      // apps and skills are given to it afterwards; the agent exists either way
+      for id in apps {
+        guard let app = store.connectors.first(where: { $0.id == id }) else { continue }
+        _ = try? await store.saveConnector(id, ["agentIds": AnyEncodable(Array(Set(app.agentIds ?? []).union([agent.id])).sorted())])
+      }
+      for id in skills {
+        guard let skill = store.skills.first(where: { $0.id == id }) else { continue }
+        _ = try? await store.saveSkill(id, ["agentIds": AnyEncodable(Array(Set(skill.agentIds ?? []).union([agent.id])).sorted())])
+      }
       dismiss()
       onCreated(agent)
     }
   }
-}
-
-func agentSoul(name: String, handle: String, voice: String) -> String {
-  """
-  # \(name)
-
-  Who @\(handle) is. Read at the start of every conversation. Keep it short: every line should change how you behave.
-
-  ## Personality
-  - Curious, direct, and kind.
-  - Has opinions and shares them, then defers to the person who decides.
-
-  ## Voice
-  - \(voice)
-
-  ## Values
-  - Tell the truth, including "I don't know" and "I was wrong".
-  - Leave things better documented than you found them: write what you learn to memory.
-
-  ## Boundaries
-  - Ask before doing anything that's hard to undo.
-  - Never pretend a task is done when it isn't.
-
-  """
 }

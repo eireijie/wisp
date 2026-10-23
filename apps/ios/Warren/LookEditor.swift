@@ -1,19 +1,38 @@
 import SwiftUI
 
-/** Preview and save the same wardrobe offered by Warren on the web. */
+/**
+ * Preview and save the same wardrobe offered by Warren on the web: every palette, shape, face,
+ * hat, accessory and motion, with cheeks, and a mood to preview it in.
+ */
 struct LookEditor: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
-  var agent: Agent
+  private var agent: Agent?
+  private var draft: Binding<GhostLook>?
+  private var name: String
+  private var seed: String
   @State private var look: GhostLook
   @State private var mood: GhostMood = .awake
   @State private var saving = false
   @State private var error: String?
 
+  /** Edits an agent's look and saves it to the hub. */
   init(agent: Agent) {
     self.agent = agent
+    name = agent.name
+    seed = agent.handle
     _look = State(initialValue: (agent.settings?.appearance ?? GhostLook.defaultAppearance(agent.handle)).resolved)
   }
+
+  /** Edits the look of an agent that doesn't exist yet (New agent); Done hands it back. */
+  init(look: Binding<GhostLook>, name: String, seed: String) {
+    draft = look
+    self.name = name.isEmpty ? "New agent" : name
+    self.seed = seed
+    _look = State(initialValue: look.wrappedValue.resolved)
+  }
+
+  static let previewMoods: [(GhostMood, String)] = [(.awake, "Awake"), (.working, "Working"), (.asleep, "Asleep")]
 
   var body: some View {
     NavigationStack {
@@ -24,21 +43,27 @@ struct LookEditor: View {
           options("Shape", values: GhostLook.shapes, key: \.shape)
           options("Eyes", values: GhostLook.eyeStyles, key: \.eyes)
           options("Mouth", values: GhostLook.mouths, key: \.mouth)
-          Toggle("Cheeks", isOn: flag(\.cheeks))
           options("Hat", values: GhostLook.hats, key: \.hat)
           options("Accessory", values: GhostLook.accessories, key: \.accessory)
           options("Motion", values: GhostLook.motions, key: \.motion)
+          switches
           if let error { Text(error).foregroundStyle(.red).font(.footnote).accessibilityLabel("Could not save: \(error)") }
         }
         .padding(20)
         .disabled(saving)
       }
-      .navigationTitle("\(agent.name)’s look")
+      .navigationTitle("\(name)’s look")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
         ToolbarItem(placement: .confirmationAction) {
           Button {
+            if let draft {
+              draft.wrappedValue = look.resolved
+              dismiss()
+              return
+            }
+            guard let agent else { return }
             Task {
               saving = true
               error = nil
@@ -47,7 +72,7 @@ struct LookEditor: View {
               saving = false
             }
           } label: {
-            if saving { ProgressView() } else { Text("Save").bold() }
+            if saving { ProgressView() } else { Text(draft == nil ? "Save" : "Done").bold() }
           }.disabled(saving)
         }
       }
@@ -57,51 +82,41 @@ struct LookEditor: View {
 
   private var stage: some View {
     VStack(spacing: 12) {
-      GhostView(look: look, seed: agent.handle, size: 180, mood: mood, interactive: true)
+      GhostView(look: look, seed: seed, size: 180, mood: mood, interactive: true)
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 24))
-      Picker("Preview mood", selection: $mood) {
-        ForEach(GhostMood.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      Picker("Preview a mood", selection: $mood) {
+        ForEach(Self.previewMoods, id: \.0) { Text($0.1).tag($0.0) }
       }
-      .pickerStyle(.menu)
+      .pickerStyle(.segmented)
+      .accessibilityLabel("Preview a mood")
       HStack {
-        Button("Shuffle", systemImage: "shuffle") {
-          look = GhostLook.defaultAppearance(UUID().uuidString)
-          look.glow = Double.random(in: 0..<1) < 0.25
-          look.hat = GhostLook.hats.randomElement()
-        }
+        Button("Shuffle", systemImage: "shuffle") { look = GhostLook.shuffled(keeping: look.motion) }
         Spacer()
-        Button("Reset", systemImage: "arrow.counterclockwise") { look = GhostLook.defaultAppearance(agent.handle) }
-      }.buttonStyle(.bordered)
+        Button("Reset", systemImage: "arrow.counterclockwise") { look = GhostLook.defaultAppearance(seed) }
+      }.secondaryButton()
     }
   }
 
   private var colors: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Colors").font(.headline)
-      LazyVGrid(columns: [GridItem(.adaptive(minimum: 44))], spacing: 12) {
-        ForEach(GhostLook.palettes, id: \.name) { palette in
-          let selected = look.color.lowercased() == palette.top && look.color2?.lowercased() == palette.bottom
-          Button {
-            look.color = palette.top
-            look.color2 = palette.bottom
-          } label: {
-            Circle()
-              .fill(LinearGradient(colors: [Color(hex: palette.top), Color(hex: palette.bottom)], startPoint: .top, endPoint: .bottom))
-              .frame(width: 36, height: 36)
-              .padding(4)
-              .overlay(Circle().stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel(palette.name)
-          .accessibilityAddTraits(selected ? .isSelected : [])
-        }
-      }
-      ColorPicker("Top color", selection: color(bottom: false), supportsOpacity: false)
-      ColorPicker("Bottom color", selection: color(bottom: true), supportsOpacity: false)
-      Toggle("Glow", isOn: flag(\.glow))
+      GhostColors(look: $look, labels: true)
     }
+  }
+
+  private var switches: some View {
+    VStack(spacing: 0) {
+      Toggle(isOn: flag(\.cheeks)) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Rosy cheeks")
+          Text("A little blush under the eyes.").font(.caption).foregroundStyle(.secondary)
+        }
+      }.padding(.vertical, 10)
+    }
+    .padding(.horizontal, 16)
+    .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
   }
 
   private func options(_ title: String, values: [String], key: WritableKeyPath<GhostLook, String?>) -> some View {
@@ -112,7 +127,7 @@ struct LookEditor: View {
           let selected = look[keyPath: key] == value
           Button { look[keyPath: key] = value } label: {
             VStack(spacing: 4) {
-              GhostView(look: preview(value, key: key), seed: agent.handle, size: 56, animate: title == "Motion")
+              GhostView(look: preview(value, key: key), seed: seed, size: 56, animate: title == "Motion")
               Text(label(value)).font(.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
@@ -143,13 +158,23 @@ struct LookEditor: View {
   private func flag(_ key: WritableKeyPath<GhostLook, Bool?>) -> Binding<Bool> {
     Binding(get: { look[keyPath: key] ?? false }, set: { look[keyPath: key] = $0 })
   }
+}
 
-  private func color(bottom: Bool) -> Binding<Color> {
-    Binding(get: { Color(hex: bottom ? look.color2 ?? GhostColor.shade(look.color) : look.color) }, set: { color in
-      var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-      guard UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return }
-      let hex = String(format: "#%02x%02x%02x", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
-      if bottom { look.color2 = hex } else { look.color = hex }
-    })
+extension GhostLook {
+  /** A random look from every option, like Shuffle on the web. */
+  static func shuffled(keeping motion: String? = nil) -> GhostLook {
+    let palette = palettes.randomElement()!
+    return GhostLook(color: palette.top, color2: palette.bottom, eyes: eyeStyles.randomElement(), mouth: mouths.dropLast().randomElement(),
+      cheeks: Double.random(in: 0..<1) < 0.6, shape: shapes.randomElement(), glow: false,
+      hat: Double.random(in: 0..<1) < 0.4 ? hats.dropFirst().randomElement() : "none",
+      accessory: Double.random(in: 0..<1) < 0.35 ? accessories.dropFirst().randomElement() : "none", motion: motion ?? "float")
+  }
+
+  /** A new agent's look: plain white, with a random face and outfit. */
+  static func newAgent() -> GhostLook {
+    var look = shuffled()
+    look.color = GhostColors.white
+    look.color2 = GhostColors.white
+    return look
   }
 }

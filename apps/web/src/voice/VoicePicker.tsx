@@ -142,7 +142,7 @@ export function VoicePicker({ agent, value, onChange, onLevel }: { agent: Agent;
 
   return <section id="voice-picker" className="space-y-3">
     <h4 className="text-sm font-semibold">Voice</h4>
-    <p className="text-xs text-muted">Choose how {agent.name} sounds. Press Listen to hear a voice before you pick it. Calls use the voice type you choose in <a href="#/settings/voice" className="underline">Settings → Voice</a>.</p>
+    <p className="text-xs text-muted">Choose how {agent.name} sounds. Press Listen to hear a voice before you pick it. Calls use the voice type you choose in <a href="#/settings/voice" className="underline">Settings → Notifications → Voice</a>.</p>
     <Select label="Voice type to choose from" value={engine} disabled={playing !== null} onChange={(v) => switchEngine(v as VoiceSettings["speak"])}><option value="device">On this device (free)</option><option value="openai">OpenAI (online)</option><option value="elevenlabs">ElevenLabs (online)</option></Select>
     {engine === "device" && <h5 className="text-xs font-medium text-muted">Recommended for you</h5>}
     <Choices label={`${agent.name}'s voice`} choices={choices} selected={selected} playing={playing} onSelect={(id) => onChange({ ...value, [engine]: id })} onListen={preview} />

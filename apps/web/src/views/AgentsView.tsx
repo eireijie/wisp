@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { Bot, MessageSquare, Plus } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Bot, ListTodo, MessageSquare, Plug, Plus, Server, Wand2 } from "lucide-react";
 import { api } from "../api.ts";
-import { useStore } from "../store.ts";
-import { go, type AgentTab } from "../router.ts";
+import { useStore, useTeams } from "../store.ts";
+import { go, href, type AgentTab } from "../router.ts";
+import { useFeatures } from "../features.ts";
 import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
 import { useSimple } from "../experience.tsx";
 import { agentReadiness, useDevices } from "../devices.ts";
@@ -14,9 +15,19 @@ export { freeHandle, importFound } from "./CreateAgent.tsx";
 
 export function AgentsView({ agentId, tab }: { agentId: string | null; tab: AgentTab | null }) {
   const agents = useStore((s) => s.agents);
+  const teams = useTeams();
+  const teamsOf = (agentId: string) => teams.filter((t) => t.members.some((m) => m.agentId === agentId)).map((t) => `#${t.name}`);
   const computers = useStore((s) => s.computers);
   const me = useStore((s) => s.me);
   const [creating, setCreating] = useState(false);
+  const features = useFeatures();
+  // "New agent" from the sidebar or ⌘K opens it here
+  const newAgentOpen = useStore((s) => s.newAgentOpen);
+  useEffect(() => {
+    if (!newAgentOpen) return;
+    useStore.setState({ newAgentOpen: false });
+    if (me?.role !== "guest") setCreating(true);
+  }, [newAgentOpen, me?.role]);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const devices = useDevices();
   const simple = useSimple();
@@ -40,6 +51,13 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
     <div className="flex-1 min-h-0 flex flex-col">
       <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
         <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Agents</h1>
+        {/* the pages that used to sit in the sidebar */}
+        <nav aria-label="More about agents" className="flex items-center gap-0.5 overflow-x-auto">
+          {features.tasks && <HeaderLink to={href({ view: "tasks" })} icon={<ListTodo size={15} />} label="Tasks" />}
+          <HeaderLink to={href({ view: "skills" })} icon={<Wand2 size={15} />} label="Skills" />
+          <HeaderLink to={href({ view: "connectors" })} icon={<Plug size={15} />} label="Connected apps" />
+          <HeaderLink to={href({ view: "nodes" })} icon={<Server size={15} />} label="Devices" />
+        </nav>
       </header>
       <div className="flex-1 overflow-y-auto @container">
         {agents.length === 0 ? (
@@ -87,7 +105,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                       <AgentAvatar agent={a} size={32} live />
                       <span className="min-w-0 flex-1 @3xl:flex-none @3xl:w-56">
                         <span className={cx("block text-sm truncate", a.status === "offline" && "text-muted")}>{a.name}</span>
-                        <span className="block text-xs text-muted truncate mt-0.5">{["@" + a.handle, ...a.groups.slice(0, 2)].join(" · ")}</span>
+                        <span className="block text-xs text-muted truncate mt-0.5">{["@" + a.handle, ...teamsOf(a.id).slice(0, 2)].join(" · ")}</span>
                         {!readiness.ready && (
                           <span className="mt-1 block">
                             <SetupIncomplete problem={readiness.problem} />
@@ -119,5 +137,14 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
       </div>
       {creating && <CreateAgent nodes={nodes} onClose={() => setCreating(false)} />}
     </div>
+  );
+}
+
+function HeaderLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
+  return (
+    <a href={to} title={label} className="shrink-0 h-8 px-2 rounded-lg inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink hover:bg-hover">
+      {icon}
+      <span className="hidden lg:inline">{label}</span>
+    </a>
   );
 }

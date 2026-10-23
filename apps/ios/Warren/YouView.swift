@@ -18,14 +18,15 @@ struct YouView: View {
             }.padding(.vertical, 4)
           }
         }
+        if store.features.tasks {
         Section {
           NavigationLink { TasksView() } label: { YouRow("Tasks", "Work you handed to a helper", "list.bullet.rectangle", .cyan) }.accessibilityIdentifier("you-tasks")
           if store.canManage { Button { newTask = true } label: { YouRow("New task", nil, "square.and.pencil", .green) }.accessibilityIdentifier("you-new-task") }
         }
+        }
         Section {
           NavigationLink { MemoryView() } label: { YouRow("Memory", "Notes you and your helpers share", "book.fill", .purple) }.accessibilityIdentifier("you-memory")
           NavigationLink { AboutYouView() } label: { YouRow("About you", "What helpers should know about you", "brain", .pink) }.accessibilityIdentifier("you-about")
-          if !store.simple { NavigationLink { TeamsView() } label: { YouRow("Teams", "Groups of helpers that work together", "person.3.fill", .indigo) }.accessibilityIdentifier("you-teams") }
           NavigationLink { ConnectorsView() } label: { YouRow("Connected apps", "Gmail, Slack and other apps helpers can use", "powerplug.fill", .orange) }.accessibilityIdentifier("you-connectors")
           NavigationLink { SkillsView() } label: { YouRow("Skills", "Things helpers know how to do", "wand.and.stars", .yellow) }.accessibilityIdentifier("you-skills")
           NavigationLink { DevicesView() } label: { YouRow("Devices", "Computers running Warren", "server.rack", .gray) }.accessibilityIdentifier("you-devices")

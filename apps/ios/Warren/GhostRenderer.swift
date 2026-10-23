@@ -10,20 +10,12 @@ struct GhostRenderer {
   var pokeCount: Int
   var darkMode: Bool
 
+  /** worn clipped to the side of the head rather than on top of it */
+  static let clipped: Set<String> = ["bow", "flower"]
+  /** how far each hat's brim sits down into the head (the same for every shape, at its hat scale) */
+  static let hatSink: [String: Double] = ["tophat": 3, "party": 2, "beanie": 4.5, "crown": 2.5, "witch": 3, "headphones": 0, "bow": 0, "halo": 0, "flower": 0, "propeller": 4]
+
   func draw(_ context: GraphicsContext) {
-    if look.glow == true {
-      let bottom = mood == .asleep ? "#44464a" : look.color2 ?? GhostColor.shade(look.color)
-      let pulse = animated ? GhostAnimation.wave(time, 2.8) : 0.5
-      var glow = context
-      glow.addFilter(.shadow(color: Color(hex: bottom), radius: 2 + 2 * pulse))
-      glow.addFilter(.shadow(color: Color(hex: bottom), radius: 5 + 5 * pulse))
-      glow.drawLayer { layer in
-        var ghost = self
-        ghost.look.glow = false
-        ghost.draw(layer)
-      }
-      return
-    }
     let g = GhostGeometry.shapes[look.shape ?? "classic"]!
     let sleeping = mood == .asleep, details = size >= 26
     let top = sleeping ? "#a6aaad" : look.color
@@ -112,8 +104,16 @@ struct GhostRenderer {
     }
     if sleeping && details { face.moved(63.5, g.mouth + 2.2).path("M0 0 q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z", fill: Color(hex: "#e8f6ff").opacity(0.95)) }
     // glasses and the mustache ride on the face, so they follow its mood shifts; neckwear stays with the body
-    (["glasses", "sunglasses", "monocle", "mustache"].contains(look.accessory!) ? face : p).accessory(look.accessory!, geometry: g)
-    p.moved(60, g.top, scaleX: g.hatScale, scaleY: g.hatScale).hat(look.hat!, time: time, animated: animated)
+    // sunglasses also follow the eyes' glance
+    let glance = mood == .thinking ? CGPoint(x: 0.8, y: -1) : mood == .working && !happy ? CGPoint(x: 0, y: 1.5) : .zero
+    (["glasses", "sunglasses", "monocle", "mustache"].contains(look.accessory!) ? face : p).accessory(look.accessory!, geometry: g, eyeShift: glance)
+    // hats stay fixed to the body: on top of the head, its brim sunk in a little, or clipped to its side
+    let hat = look.hat!
+    if Self.clipped.contains(hat) {
+      p.moved(g.clip.x, g.clip.y, scaleX: g.hatScale, scaleY: g.hatScale).hat(hat, time: time, animated: animated)
+    } else {
+      p.moved(60, g.top + (Self.hatSink[hat] ?? 2.5), scaleX: g.hatScale, scaleY: g.hatScale).hat(hat, time: time, animated: animated)
+    }
     if mood == .error && details {
       p.moved(g.eyeX[1] + 5, g.top + 8).path("M0 0 c-1 4 -5 7 -4 10 c1 4 7 4 7 0 c0 -3 -2 -7 -3 -10 Z", fill: Color(hex: "#a9dfff"), stroke: Color(hex: "#e4f6ff"), width: 0.7)
     }

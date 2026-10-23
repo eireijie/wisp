@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, Plus, ShieldQuestion, Users } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, Plus, ShieldQuestion } from "lucide-react";
 import type { Actor, Agent } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore, type LiveRun } from "../store.ts";
+import { useStore, useTeams, useWaitingOnYou, type LiveRun } from "../store.ts";
+import { useFeatures } from "../features.ts";
+import { allowanceText, useAllowance } from "../changes.ts";
 import { go, href } from "../router.ts";
 import { AgentAvatar, Button, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
@@ -11,7 +13,7 @@ import { agentReadiness, useDevices } from "../devices.ts";
 import { openDm as openHelperDm } from "../openDm.ts";
 import { setupNextStep } from "../components/AgentPanel.tsx";
 
-/** The fields of a task the dashboard reads (GET /api/tasks). */
+/** The fields of a task the Inbox reads (GET /api/tasks). */
 interface TaskLite {
   id: string;
   from: Actor;
@@ -26,27 +28,28 @@ interface TaskLite {
 
 const RECENT_MS = 60_000;
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", "Help me write a polite note to my landlord about a repair", "Summarize a document I'll paste in"];
 
 /**
- * A bit of everything: what each agent is doing, which teams are at work, where tasks stand,
- * and anything waiting on you. Everything here is fed live by the store's websocket events.
+ * The Inbox (route: dashboard): what's waiting on you first, then what agents are doing, then new
+ * replies in your chats; in Advanced also teams and tasks (when those features are on).
+ * Everything here is fed live by the store's websocket events.
  */
 export function DashboardView({ onBack }: { onBack?: () => void }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const live = useStore((s) => s.live);
   const computers = useStore((s) => s.computers);
-  const approvals = useStore((s) => s.approvals);
   const channels = useStore((s) => s.channels);
   const version = useStore((s) => s.tasksVersion);
+  const features = useFeatures();
   // null = not loaded or tasks are unavailable; the section hides then
   const [tasks, setTasks] = useState<TaskLite[] | null>(null);
 
   useEffect(() => {
+    if (!features.tasks) return setTasks(null);
     let off = false;
     api<TaskLite[]>("GET", "/api/tasks").then(
       (list) => !off && setTasks(Array.isArray(list) ? list : null),
@@ -55,13 +58,13 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
     return () => {
       off = true;
     };
-  }, [version]);
+  }, [version, features.tasks]);
 
   const simple = useSimple();
   const isGuest = me.role === "guest";
-  // a request to borrow a device is only the owner's to answer
-  const pending = Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me?.user.id));
-  const helpNeeded = computers.filter((c) => c.help);
+  const waiting = useWaitingOnYou();
+  const pending = waiting.approvals;
+  const helpNeeded = waiting.help;
   const working = (tasks ?? []).filter((t) => t.status === "in_progress");
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "Agent";
   const channelLabel = (id: string | null) => {
@@ -103,14 +106,18 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
   for (const t of tasks ?? []) counts[t.status]++;
   // tasks this person handed off that haven't started or didn't finish
   const mineToCheck = (tasks ?? []).filter((t) => t.from.kind === "user" && t.from.id === me.user.id && (t.status === "open" || t.status === "failed"));
+  // new replies: DMs first, then channels, most unread first
+  const unreadChats = channels
+    .filter((c) => (c.joined || c.kind === "dm") && c.unread > 0)
+    .sort((a, b) => Number(b.kind === "dm") - Number(a.kind === "dm") || b.unread - a.unread)
+    .slice(0, 8);
   // unread first, then most recently read
   const recentChats = channels
     .filter((c) => c.joined || c.kind === "dm")
     .sort((a, b) => Number(b.unread > 0) - Number(a.unread > 0) || (b.lastReadAt ?? "").localeCompare(a.lastReadAt ?? ""))
     .slice(0, 5);
   const chatName = (c: (typeof channels)[number]) => (c.kind === "dm" ? agentName(c.name.split(":").pop()!) : `#${c.name}`);
-  const busyCount = agents.filter((a) => a.status === "busy").length;
-  const onlineCount = agents.filter((a) => a.status !== "offline").length;
+  const activeAgents = sortedAgents.filter((a) => doing[a.id] || a.status === "busy");
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -120,14 +127,10 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             <ChevronLeft size={22} />
           </button>
         )}
-        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Dashboard</h1>
-        {agents.length > 0 && !simple && (
-          <span className="text-xs text-muted tabular-nums">
-            {busyCount} working · {onlineCount} online · {plural(agents.length, "agent")}
-          </span>
-        )}
+        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Inbox</h1>
+        {features.background && <AllowancePill />}
         {/* phones have no sidebar button for this, so start a task from here */}
-        {!isGuest && agents.length > 0 && (
+        {!isGuest && features.tasks && agents.length > 0 && (
           <Button variant="primary" className="md:hidden" onClick={() => useStore.setState({ newTaskOpen: true })}>
             <Plus size={16} /> New task
           </Button>
@@ -136,9 +139,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 md:p-6 space-y-8 max-w-6xl">
-          {!isGuest && <ReadinessCard advanced={!simple} />}
-
-          {!isGuest && pending.length + helpNeeded.length > 0 && (
+          {pending.length + helpNeeded.length > 0 && (
             <Section title="Waiting on you" count={pending.length + helpNeeded.length}>
               <div className="rounded-xl border border-accent/50 bg-panel divide-y divide-line overflow-hidden">
                 {helpNeeded.map((c) => (
@@ -155,10 +156,45 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
 
+          {!isGuest && <ReadinessCard advanced={!simple} />}
+
+          {/* Simple: only the agents at work, one line each (Advanced shows every agent below) */}
+          {simple && activeAgents.length > 0 && (
+            <Section title="What agents are doing" count={activeAgents.length}>
+              <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
+                {activeAgents.map((a) => {
+                  const now = doing[a.id];
+                  return (
+                    <button key={a.id} onClick={() => openDm(a)} className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left hover:bg-hover min-w-0">
+                      <AgentAvatar agent={a} size={22} live />
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-medium">{a.name}</span> <span className="text-muted">{now ? `· ${now.text}${now.where ? ` ${now.where}` : ""}` : "· working"}</span>
+                      </span>
+                      <ChevronRight size={14} className="text-faint shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            </Section>
+          )}
+
+          {unreadChats.length > 0 && (
+            <Section title="New replies" count={unreadChats.reduce((n, c) => n + c.unread, 0)}>
+              <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
+                {unreadChats.map((c) => (
+                  <Row key={c.id} to={href({ view: "chat", channelId: c.id, threadId: null })} icon={<MessageSquare size={16} className="text-muted" />}>
+                    <span className="font-medium">{chatName(c)}</span>
+                    <span className="text-accent-text"> · {c.unread} new</span>
+                  </Row>
+                ))}
+              </div>
+            </Section>
+          )}
+
           {/* guests only see conversations here, so say so rather than leave the page blank */}
           {simple && isGuest && recentChats.length === 0 && <Blank>Conversations you're invited to show up here.</Blank>}
 
-          {simple && recentChats.length > 0 && (
+          {simple && unreadChats.length === 0 && recentChats.length > 0 && (
             <Section title="Recent conversations">
               <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
                 {recentChats.map((c) => (
@@ -171,7 +207,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
 
-          {simple && !isGuest && mineToCheck.length > 0 && (
+          {simple && !isGuest && features.tasks && mineToCheck.length > 0 && (
             <Section title="Tasks to check" count={mineToCheck.length}>
               <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
                 {mineToCheck.map((t) => (
@@ -194,7 +230,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
           {/* the rest is for people who run teams of agents */}
           <Advanced hide>
             <div className="space-y-8">
-          <Section title="Agents" count={agents.length} more={{ label: "All agents", to: href({ view: "agents", agentId: null }) }}>
+          <Section title="What agents are doing" count={agents.length} more={{ label: "All agents", to: href({ view: "agents", agentId: null }) }}>
             {agents.length === 0 ? (
               <Blank>
                 No agents yet. <a className="text-accent-text underline" href={href({ view: "agents", agentId: null })}>Add your first agent</a> and it shows up here with what it's working on.
@@ -227,22 +263,18 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             )}
           </Section>
 
-          <Section title="Teams" count={teams.length} more={{ label: "All teams", to: href({ view: "teams", teamId: null }) }}>
-            {teams.length === 0 ? (
-              <Blank>
-                No teams yet. <a className="text-accent-text underline" href={href({ view: "teams", teamId: null })}>Make a team</a> to group agents who work together.
-              </Blank>
-            ) : (
+          {/* each channel's team */}
+          {teams.length > 0 && (
+          <Section title="Teams" count={teams.length}>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {teams.map((t) => {
                   const members = t.members.map((m) => agents.find((a) => a.id === m.agentId)).filter((a): a is Agent => !!a);
                   const teamTasks = (tasks ?? []).filter((x) => x.teamId === t.id && (x.status === "in_progress" || x.status === "open"));
                   const active = members.some((a) => a.status === "busy") || teamTasks.some((x) => x.status === "in_progress");
                   return (
-                    <a key={t.id} href={href({ view: "teams", teamId: t.id })} className="rounded-xl border border-line bg-panel p-3 hover:shadow-panel transition-shadow space-y-2 min-w-0 block">
+                    <a key={t.id} href={href({ view: "chat", channelId: t.channelId, threadId: null })} className="rounded-xl border border-line bg-panel p-3 hover:shadow-panel transition-shadow space-y-2 min-w-0 block">
                       <div className="flex items-center gap-2">
-                        {t.emoji && <span>{t.emoji}</span>}
-                        <span className="text-sm font-medium truncate flex-1">{t.name}</span>
+                        <span className="text-sm font-medium truncate flex-1">#{t.name}</span>
                         {active ? <Pill tone="info">working</Pill> : <Pill>quiet</Pill>}
                       </div>
                       <div className="flex items-center gap-1">
@@ -251,7 +283,6 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                             <AgentAvatar agent={a} size={20} badge />
                           </span>
                         ))}
-                        {members.length === 0 && <span className="text-xs text-muted">No members</span>}
                         {members.length > 8 && <span className="text-xs text-muted">+{members.length - 8}</span>}
                       </div>
                       {teamTasks.length > 0 && (
@@ -269,8 +300,8 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                   );
                 })}
               </div>
-            )}
           </Section>
+          )}
 
           {tasks && (
             <Section title="Tasks" count={tasks.length} more={{ label: "Open Tasks", to: href({ view: "tasks" }) }}>
@@ -449,4 +480,21 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "ba
 
 function Blank({ children }: { children: ReactNode }) {
   return <p className="rounded-xl border border-dashed border-line px-3 py-4 text-sm text-muted">{children}</p>;
+}
+
+/** How much of today's background allowance is used, linking to Settings → Usage. */
+function AllowancePill() {
+  const [a] = useAllowance();
+  if (!a) return null;
+  const share = a.dailyTokens ? Math.min(100, (a.todayTokens / a.dailyTokens) * 100) : 0;
+  return (
+    <a href={href({ view: "settings", page: "usage" })} className="h-9 px-3.5 rounded-full bg-chip hover:bg-hover inline-flex items-center gap-2.5 text-[13px] font-bold">
+      {a.dailyTokens && (
+        <span className="w-14 h-1.5 rounded-full bg-line overflow-hidden" aria-hidden>
+          <span className="block h-full bg-accent" style={{ width: `${share}%` }} />
+        </span>
+      )}
+      {allowanceText(a)}
+    </a>
+  );
 }

@@ -67,9 +67,11 @@ export function pairingAddresses(origin: string | null, port: number, interfaces
   }
   const lan: string[] = [];
   const tailnet: string[] = [];
-  for (const list of Object.values(interfaces))
+  for (const [name, list] of Object.entries(interfaces))
     for (const a of list ?? []) {
       if (a.family !== "IPv4" || a.internal || a.address.startsWith("169.254.")) continue;
+      // virtual networks for VMs and containers aren't reachable from a phone
+      if (!isTailscale(a.address) && /^(bridge|vmnet|docker|veth|br-|virbr|vEthernet)/i.test(name)) continue;
       (isTailscale(a.address) ? tailnet : lan).push(`http://${a.address}:${port}`);
     }
   for (const a of [...lan, ...tailnet]) if (!out.includes(a)) out.push(a);
@@ -127,7 +129,9 @@ export function registerPairingApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     pairings.set(p.id, p);
     const body = (req.body ?? {}) as { origin?: unknown };
     const origin = typeof body.origin === "string" ? body.origin : null;
-    const addresses = pairingAddresses(origin, req.socket.localPort ?? 4747);
+    // the Tailscale address (when it's on) works from anywhere, so it goes first
+    const anywhere = await hub.reach.publicUrl().catch(() => null);
+    const addresses = [...new Set([...(anywhere ? [anywhere] : []), ...pairingAddresses(origin, req.socket.localPort ?? 4747)])];
     return { ...view(p), addresses, link: pairingLink({ id: p.id, secret: p.secret, addresses }) };
   });
 

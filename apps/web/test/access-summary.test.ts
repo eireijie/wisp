@@ -16,7 +16,7 @@ describe("accessSummary", () => {
 
   it("uses plain group words when everyone / every helper is included", () => {
     const info = { people: [person("u1", "Yug", "manage"), person("u2", "Alex", "edit")], agents: [agent("a1", "helper", "edit"), agent("a2", "res", "read")] };
-    expect(accessSummary(info, opts)).toEqual({ read: "everyone in the workspace, all helpers", change: "everyone in the workspace, Everyday Helper" });
+    expect(accessSummary(info, opts)).toEqual({ read: "everyone in the organization, all helpers", change: "everyone in the organization, Everyday Helper" });
   });
 
   it("follows an inherited folder rule and an override on the note", () => {

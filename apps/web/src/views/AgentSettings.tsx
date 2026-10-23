@@ -4,8 +4,8 @@ import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from
 import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { ApiError, api } from "../api.ts";
-import { useStore } from "../store.ts";
-import { go, type AgentTab } from "../router.ts";
+import { useStore, useTeams } from "../store.ts";
+import { go, href, type AgentTab } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
@@ -774,16 +774,16 @@ function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | und
       <Intro title="Who can ask it">
         <p>
           @{agent.handle} runs directly on {device.mine ? "your" : `${device.ownerName ?? "someone"}'s`} device "{device.name}", where it can reach files.{" "}
-          {device.shared ? "That device is shared with the workspace, so everyone can ask it." : `So only ${owner} can ask it for things, including through other agents.`}
+          {device.shared ? "That device is shared with the organization, so everyone can ask it." : `So only ${owner} can ask it for things, including through other agents.`}
         </p>
       </Intro>
       {device.mine && !device.shared ? (
         <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
           <Choice selected={!open} onClick={() => set(false)} title="Only me" body="Requests from anyone else, or from agents working for them, are turned away." />
-          <Choice selected={open} onClick={() => set(true)} title="Anyone in the workspace" body="People and their agents can ask it. It still can't use your own screen for them." />
+          <Choice selected={open} onClick={() => set(true)} title="Anyone in the organization" body="People and their agents can ask it. It still can't use your own screen for them." />
         </div>
       ) : (
-        <p className="text-sm text-muted">{open ? "Anyone in the workspace can ask it." : `Only ${owner} can ask it.`}</p>
+        <p className="text-sm text-muted">{open ? "Anyone in the organization can ask it." : `Only ${owner} can ask it.`}</p>
       )}
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
     </section>
@@ -967,7 +967,7 @@ export function runTitle(trigger: string | null): string {
 function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: NodeInfo[]; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const computers = useStore((s) => s.computers);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [soul, setSoul] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -1055,13 +1055,13 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                 {myTeams.length || bossOf.length ? (
                   <>
                     {myTeams.map((t, i) => {
-                      const role = t.leadId === agent.id ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
+                      const role = t.leads.includes(agent.id) ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
                       return (
                         <span key={t.id}>
                           {i > 0 && ", "}
                           {role ? `${role} on ` : "on "}
-                          <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
-                            {t.name}
+                          <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
+                            #{t.name}
                           </a>
                         </span>
                       );
@@ -1072,8 +1072,8 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                         {bossOf.map((t, i) => (
                           <span key={t.id}>
                             {i > 0 && ", "}
-                            <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
-                              {t.name}
+                            <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
+                              #{t.name}
                             </a>
                           </span>
                         ))}
@@ -1081,12 +1081,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                     )}
                   </>
                 ) : (
-                  <>
-                    Works on its own.{" "}
-                    <a className="text-accent-text hover:underline" href="#/teams">
-                      Put it on a team
-                    </a>
-                  </>
+                  "Works on its own."
                 )}
               </p>
             </>

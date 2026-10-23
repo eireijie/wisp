@@ -219,12 +219,15 @@ export type ClientEvent =
   /** a deleted message, or a system notice that no longer applies (the "queued until its device reconnects" line once the run starts) */
   | { type: "message_removed"; messageId: string; channelId: string; threadId: string | null }
   | { type: "agent_status"; agentId: string; status: "online" | "busy" | "offline" }
-  | { type: "run_event"; runId: string; agentId: string; channelId: string; event: AgentEvent }
+  /**
+   * An agent's run event. `threadId` is the thread it works in (null at the top of the channel) and
+   * `threadPath` every thread above it, outermost first, so a parent thread can show who's working in its sub-threads.
+   */
+  | { type: "run_event"; runId: string; agentId: string; channelId: string; threadId?: string | null; threadPath?: string[]; event: AgentEvent }
   | { type: "reactions"; messageId: string; channelId: string; threadId: string | null; reactions: import("./types.ts").Reaction[] }
   | { type: "sections_changed" }
   | { type: "channels_changed" }
   | { type: "agents_changed" }
-  | { type: "teams_changed" }
   | { type: "lead_changed" }
   | { type: "discussion"; discussion: import("./types.ts").Discussion }
   | { type: "computer"; computer: import("./computers.ts").Computer }
@@ -232,9 +235,13 @@ export type ClientEvent =
   | { type: "approval"; approval: import("./types.ts").Approval }
   | { type: "routines_changed" }
   | { type: "background_changed"; agentId: string }
+  /** an agent changed a setting or mod for someone, or someone undid one */
+  | { type: "changes_changed" }
   | { type: "tasks_changed" }
   /** notes were changed outside Warren (Obsidian, a git pull or push) */
-  | { type: "memory_changed" };
+  | { type: "memory_changed" }
+  /** an owner switched optional features on or off (Settings → Features) */
+  | { type: "features"; features: import("./features.ts").Features };
 
 /**
  * Tunnel bytes travel as binary WebSocket frames: one byte with the tunnel id's length, the id,

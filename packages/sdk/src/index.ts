@@ -1,4 +1,4 @@
-import type { Agent, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@warren/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@warren/core";
 
 export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -65,6 +65,10 @@ export class WarrenClient {
   react(messageId: string, emoji: string, on?: boolean) {
     return this.request("POST", `/api/messages/${messageId}/reactions`, { emoji, on });
   }
+  /** Make an agent (a lead) or a sub-agent (an agent a lead made), when the organization allows it. */
+  spawnAgent(a: { name: string; role?: string; instructions?: string; handle?: string }) {
+    return this.request("POST", "/api/agents/spawn", a);
+  }
   delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[]; parentTaskId?: string } = {}) {
     return this.request("POST", "/api/tasks", { to, title, brief, ...opts });
   }
@@ -108,8 +112,9 @@ export class WarrenClient {
   mergeTask(taskId: string) {
     return this.request<{ ok: boolean; output: string }>("POST", `/api/tasks/${taskId}/merge`);
   }
+  /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
   teams() {
-    return this.request<{ id: string; name: string; description: string; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
+    return this.request<{ id: string; channelId: string; name: string; leads: string[]; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
   }
   /** Give an agent ("@nova"), a team, or "all agents" read access to a note or folder you can edit. */
   shareNote(path: string, withWho: string) {
@@ -159,6 +164,19 @@ export class WarrenClient {
   /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
   messagePerson(text: string, fileIds: string[] = []) {
     return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds });
+  }
+  /** This agent's background settings for the person it works for, the organization's mods, and today's allowance. */
+  mySettings() {
+    return this.request<{
+      background: { enabled: boolean; everyMinutes: number; quietStart: string; quietEnd: string; focus: string } | null;
+      mods: { key: string; name: string; description: string; on: boolean }[];
+      canChangeMods: boolean;
+      allowance: Allowance;
+    }>("GET", "/api/agent/settings");
+  }
+  /** Change background settings or mods for the person this agent works for; they see what changed and can undo it. */
+  changeSettings(patch: { background?: Partial<{ enabled: boolean; everyMinutes: number; quietStart: string; quietEnd: string; focus: string }>; mods?: Record<string, boolean> }) {
+    return this.request<{ changed: string[]; changeId?: string; note?: string }>("POST", "/api/agent/settings", patch);
   }
   /** When this agent's next background check should be. */
   nextCheck(minutes: number, reason = "") {

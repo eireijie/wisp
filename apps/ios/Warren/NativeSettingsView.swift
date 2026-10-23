@@ -8,15 +8,20 @@ struct NativeSettingsView: View {
         NavigationLink("Profile") { ProfileSettingsView() }.accessibilityIdentifier("settings-profile")
         NavigationLink("App behavior") { PreferencesView() }
         NavigationLink("Notifications") { NotificationSettingsView() }
-        NavigationLink("Voice") { VoiceSettingsView() }
+        NavigationLink("Usage") { UsageView() }.accessibilityIdentifier("settings-usage")
+        if store.features.voice { NavigationLink("Voice") { VoiceSettingsView() } }
         NavigationLink("Appearance") { Form { ModePicker(); Text("Text size and reduced motion follow this iPhone's Accessibility settings.").font(.footnote) }.navigationTitle("Appearance") }
         NavigationLink("Security") { SecuritySettingsView() }
         NavigationLink("Mobile") { Form { Text("This iPhone is connected to \(store.workspace?.name ?? "Warren")."); Text("To connect another phone, open Settings → Mobile on the computer, scan its QR code, then match the code."); NavigationLink("Where you're signed in") { SecuritySettingsView() } }.navigationTitle("Mobile") }
       }
-      Section("Workspace") {
-        NavigationLink("Workspace") { WorkspaceSettingsView() }.accessibilityIdentifier("settings-workspace")
-        NavigationLink("People") { PeopleSettingsView() }.accessibilityIdentifier("settings-people")
+      Section("Organization") {
+        NavigationLink("Organization") { WorkspaceSettingsView() }.accessibilityIdentifier("settings-workspace")
+        if store.features.invite || store.members.count > 1 {
+          NavigationLink("People") { PeopleSettingsView() }.accessibilityIdentifier("settings-people")
+        }
+        NavigationLink("Mods") { FeaturesView() }.accessibilityIdentifier("settings-mods")
         if store.canManage {
+          NavigationLink("Agent defaults") { AgentDefaultsView() }.accessibilityIdentifier("settings-agent-defaults")
           NavigationLink("Agents") { AgentPolicyView() }
           NavigationLink("Computers") { ComputerSettingsView() }
           if !store.simple { advanced }
@@ -63,10 +68,10 @@ struct WorkspaceSettingsView: View {
   @State private var action = FormAction()
   var body: some View {
     Form {
-      Section("Workspace name") {
+      Section("Organization name") {
         TextField("Name", text: $name).disabled(!store.isOwner)
         if store.isOwner { Button("Save") { action.run { try await store.renameWorkspace(name.trimmed); saved = true } }.disabled(action.busy || name.trimmed.isEmpty || name.count > 60) }
-        else { Text("Only owners can change workspace settings.").font(.footnote) }
+        else { Text("Only owners can change organization settings.").font(.footnote) }
         if saved { Text("Saved.").foregroundStyle(.green) }
       }
       Section("Hub address") { Text(store.api?.base.absoluteString ?? "").textSelection(.enabled) }
@@ -77,6 +82,6 @@ struct WorkspaceSettingsView: View {
         LabeledContent("Agents", value: String(store.agents.count))
       }
       InlineError(error: action.error)
-    }.sectionScreen("Workspace", id: "workspace").onAppear { name = store.workspace?.name ?? "" }
+    }.sectionScreen("Organization", id: "workspace").onAppear { name = store.workspace?.name ?? "" }
   }
 }

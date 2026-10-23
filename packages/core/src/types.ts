@@ -70,6 +70,20 @@ export interface AgentSettings {
   role?: string;
   /** what the role means for how it works: what it owns, what to send its way */
   roleNotes?: string;
+  /**
+   * Whose messages wake it: only its creator ("me"; the organization's owners when it has no
+   * creator), anyone in the organization, or the people in `respondPeople` (plus its creator).
+   * Unset means anyone, as agents did before this existed; new agents start at "me".
+   */
+  respondTo?: "me" | "anyone" | "people";
+  /** user ids it answers when respondTo is "people" */
+  respondPeople?: string[];
+  /** the person who made it (set by the hub when it's created; older agents don't have one) */
+  createdBy?: string;
+  /** the agent that made it, when a lead or another agent created it (Settings → Agents allows that) */
+  parentAgentId?: string;
+  /** how many agents up the chain it was made: 1 = by a lead, 2 = a sub-agent of that one, … */
+  madeDepth?: number;
 }
 
 /**
@@ -146,46 +160,8 @@ export interface Agent {
   nodeId: string | null;
   /** the computer it sees and uses (computers.ts); null = headless */
   computerId: string | null;
-  /** names of the teams it's on */
-  groups: string[];
   settings: AgentSettings;
   status: "online" | "busy" | "offline";
-  createdAt: string;
-}
-
-/** An agent's place on a team: a role title plus what that role means for how it works. */
-export interface TeamMember {
-  agentId: string;
-  role: string;
-  roleNotes: string;
-  /** the teammate this agent reports to (a line on the team chart); null at the top */
-  managerId: string | null;
-  /** where its card sits on the team chart; null = laid out automatically */
-  x: number | null;
-  y: number | null;
-}
-
-/**
- * Agents who work together: a shared memory pool (`folder`), a channel, a lead, and optionally
- * an agent they report to (their boss). Teams can report up a chain of bosses.
- */
-export interface Team {
-  id: string;
-  workspaceId: string;
-  /** lowercase slug, used in @team mentions, rule subjects and the default folder */
-  name: string;
-  /** a label shown next to the name, e.g. "🛠️" */
-  emoji: string;
-  description: string;
-  leadId: string | null;
-  reportsTo: string | null;
-  channelId: string | null;
-  /** the team's memory pool, e.g. teams/web */
-  folder: string;
-  /** git repository the team codes in (URL or a path on the agents' device); null = no shared repo */
-  repo: string | null;
-  baseBranch: string;
-  members: TeamMember[];
   createdAt: string;
 }
 
@@ -213,9 +189,70 @@ export interface ChannelSettings {
   replyInThread: boolean;
   /** standing notes every agent reads when it works here ("use the web repo", "keep replies short") */
   instructions: string;
+  /** the channel's agent team, drawn as a flow chart; null = no team (the older rules above apply) */
+  team: ChannelTeam | null;
 }
 
-export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null, replyInThread: false, instructions: "" };
+/**
+ * A channel's agent team. Leads read every new message in the channel; when there's more than one
+ * they talk it over and agree on a plan before handing out work. An arrow means "hands work to".
+ */
+export interface ChannelTeam {
+  nodes: ChannelTeamNode[];
+  edges: { from: string; to: string }[];
+  /** a memory folder the whole team reads and writes, e.g. teams/web; missing or "" = none */
+  folder?: string;
+  /** git repository the team codes in (URL or a path on the agents' device); missing or null = none */
+  repo?: string | null;
+  /** the branch its work merges into; "main" when missing */
+  baseBranch?: string;
+  /** an agent outside the team that it reports to (its boss), who can see and steer its work */
+  reportsTo?: string | null;
+}
+
+export interface ChannelTeamNode {
+  agentId: string;
+  lead: boolean;
+  /** where it sits on the flow chart */
+  x: number;
+  y: number;
+  /** its role on this team, e.g. "Reviewer", and what that role means for how it works */
+  role?: string;
+  roleNotes?: string;
+}
+
+export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null, replyInThread: false, instructions: "", team: null };
+
+/** What's wrong with a team's chart, in plain words, or null when it's fine. */
+export function teamProblem(team: ChannelTeam): string | null {
+  if (!team.nodes.length) return "Add at least one agent to the team.";
+  if (!team.nodes.some((n) => n.lead)) return "Make at least one agent a lead.";
+  const ids = new Set(team.nodes.map((n) => n.agentId));
+  if (ids.size !== team.nodes.length) return "An agent is on the chart twice.";
+  for (const e of team.edges) {
+    if (!ids.has(e.from) || !ids.has(e.to)) return "An arrow points at an agent that isn't on the chart.";
+    if (e.from === e.to) return "An agent can't hand work to itself.";
+  }
+  const lead = new Set(team.nodes.filter((n) => n.lead).map((n) => n.agentId));
+  if (team.edges.some((e) => lead.has(e.to))) return "Leads hear every message already; arrows can't point at a lead.";
+  // every agent that isn't a lead gets work from someone
+  if (team.nodes.some((n) => !n.lead && !team.edges.some((e) => e.to === n.agentId))) return "Connect every agent that isn't a lead to whoever hands it work.";
+  // and no loops
+  const next = (id: string) => team.edges.filter((e) => e.from === id).map((e) => e.to);
+  const seen = new Set<string>();
+  const walk = (id: string, path: Set<string>): boolean => {
+    if (path.has(id)) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    path.add(id);
+    const loop = next(id).some((n) => walk(n, path));
+    path.delete(id);
+    return loop;
+  };
+  if (team.nodes.some((n) => walk(n.agentId, new Set()))) return "The arrows go round in a loop.";
+  if (team.reportsTo && ids.has(team.reportsTo)) return "The team can't report to an agent on it.";
+  return null;
+}
 
 /** One person's own setting for a channel: how loud it is. */
 export type ChannelNotify = "all" | "default" | "mute";
@@ -268,7 +305,9 @@ export type MessagePart =
   /** this message hands out a task: people see a task card; the assignee gets its id and how to report back */
   | { type: "task"; taskId: string }
   /** an agent's answer to /context: how full its conversation is */
-  | { type: "context"; usage: ContextUsage | null };
+  | { type: "context"; usage: ContextUsage | null }
+  /** an agent changed a setting or a mod for the person it works for; they see what changed and can undo it */
+  | { type: "change"; changeId: string };
 
 /** An agent asking a person's OK before it acts ("Send these 3 intros?"). */
 export interface Approval {
@@ -348,6 +387,31 @@ export interface BackgroundWork {
   dailyCap: number | null;
 }
 
+/** How much of a person's AI usage background checks may use each day, across all their agents. */
+export interface Allowance {
+  /** tokens a day; null = no limit */
+  dailyTokens: number | null;
+  /** used since midnight on the person's clock, across every agent */
+  todayTokens: number;
+  /** some checks didn't say what they used, so part of `todayTokens` is a guess */
+  estimated: boolean;
+  /** used, per agent, biggest first */
+  agents: { agentId: string; tokens: number; checks: number }[];
+}
+
+/** A setting or mod an agent changed for someone, kept so they can see it and undo it. */
+export interface Change {
+  id: string;
+  /** the person it was changed for */
+  userId: string;
+  /** the agent that changed it */
+  agentId: string;
+  /** one line per thing that changed, e.g. "Checks: every 30 min → every 2 hours" */
+  lines: string[];
+  createdAt: string;
+  undoneAt: string | null;
+}
+
 /** What background checks used, from the token counts harnesses report. Null = no check reported any. */
 export interface BackgroundUsage {
   /** tokens in the latest finished check */
@@ -421,6 +485,7 @@ export interface Discussion {
   channelId: string;
   /** the message that started it; the discussion happens in its thread */
   threadId: string;
+  /** no longer set: a discussion's team is its channel's */
   teamId: string | null;
   topic: string;
   goal: string;
@@ -434,6 +499,8 @@ export interface Discussion {
   startedBy: Actor;
   /** the person it's for (who started it, or who asked the agent that did) */
   requestedBy?: string | null;
+  /** "plan": a channel's leads agreeing on a plan for a request before they hand out the work */
+  kind?: "plan" | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import type { Agent, AgentEvent, Approval, Channel, ChannelNotify, ClientEvent, Computer, Discussion, Message, LeadStatus, Reaction, Section, Team, User, UserPrefs } from "@warren/core";
+import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@warren/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
+import { listOrgs, type Org } from "./orgs.ts";
 
 export interface Me {
   kind: "user";
@@ -12,13 +13,18 @@ export interface Me {
   prefs: UserPrefs;
   role: "owner" | "member" | "guest";
   workspace: { id: string; name: string };
+  /** the organization's optional features (features.ts); missing from older hubs, which means all on */
+  features?: Features;
 }
 
 /** A discussion plus who has answered in its current round. */
 export type DiscussionInfo = Discussion & { progress: { agentId: string; status: string }[] };
 
-/** A team as the API returns it: `above` is who it reports to, nearest first. */
-export type TeamInfo = Team & { above: string[] };
+/** Every channel's team: a channel is the only kind of team. */
+export function useTeams(): Team[] {
+  const channels = useStore((s) => s.channels);
+  return useMemo(() => channelTeams(channels), [channels]);
+}
 
 export interface Member {
   id: string;
@@ -46,6 +52,9 @@ export interface LiveRun {
   runId: string;
   agentId: string;
   channelId: string;
+  /** the thread it works in (null at the top of the channel), and the threads above that one, outermost first */
+  threadId: string | null;
+  threadPath: string[];
   text: string;
   tools: string[];
   /** the latest tool call with its input, for "Sending to @chief…" */
@@ -75,11 +84,12 @@ interface State {
   sections: Section[];
   agents: Agent[];
   members: Member[];
-  teams: TeamInfo[];
   discussions: Record<string, DiscussionInfo>;
   messages: Record<string, Message[]>; // top-level by channel
   threads: Record<string, Message[]>; // replies by thread root id
   replyCounts: Record<string, number>;
+  /** thread roots as loaded with their thread (a sub-thread's root is a reply in another thread) */
+  roots: Record<string, Message>;
   live: Record<string, LiveRun>; // by runId
   computers: ComputerInfo[];
   approvals: Record<string, Approval>;
@@ -87,6 +97,8 @@ interface State {
   routinesVersion: number;
   /** bumped when an agent's background work or follow-ups change */
   backgroundVersion: number;
+  /** bumps when an agent changes a setting or mod for someone, or someone undoes one */
+  changesVersion: number;
   /** bumps when tasks change, so the Tasks page refetches */
   tasksVersion: number;
   /** bumps when notes change outside Warren, so Memory reloads */
@@ -97,14 +109,20 @@ interface State {
   lead: LeadStatus | null;
   activeChannel: string | null;
   paletteOpen: boolean;
+  /** every organization you're in; null until loaded. A hub without organizations gives just this one. */
+  orgs: Org[] | null;
+  /** the New agent screen should open (sidebar +, ⌘K); the Agents page picks it up */
+  newAgentOpen: boolean;
+  /** the channel browser is open, adding to this section (or none) */
+  channelBrowser: { sectionId: string | null } | null;
 
   load(): Promise<void>;
   loadChannel(id: string): Promise<void>;
   loadThread(channelId: string, rootId: string): Promise<void>;
   refreshAgents(): Promise<void>;
-  refreshTeams(): Promise<void>;
   refreshComputers(): Promise<void>;
   refreshLead(): Promise<void>;
+  refreshOrgs(): Promise<void>;
   loadApproval(id: string): Promise<void>;
   loadDiscussion(id: string): Promise<void>;
   setDiscussion(d: DiscussionInfo): void;
@@ -135,37 +153,48 @@ export const useStore = create<State>((set, get) => ({
   sections: [],
   agents: [],
   members: [],
-  teams: [],
   discussions: {},
   messages: {},
   threads: {},
   replyCounts: {},
+  roots: {},
   live: {},
   computers: [],
   approvals: {},
   routinesVersion: 0,
   backgroundVersion: 0,
+  changesVersion: 0,
   tasksVersion: 0,
   memoryVersion: 0,
   newTaskOpen: false,
   lead: null,
   activeChannel: null,
   paletteOpen: false,
+  orgs: null,
+  newAgentOpen: false,
+  channelBrowser: null,
 
   async load() {
-    const [me, channels, sections, agents, members, teams] = await Promise.all([
+    const [me, channels, sections, agents, members] = await Promise.all([
       api<Me>("GET", "/api/me"),
       api<ChannelInfo[]>("GET", "/api/channels"),
       api<Section[]>("GET", "/api/sections"),
       api<Agent[]>("GET", "/api/agents"),
       api<Member[]>("GET", "/api/members"),
-      // a hub older than this page has no teams; still load everything else
-      api<TeamInfo[]>("GET", "/api/teams").catch(() => [] as TeamInfo[]),
     ]);
-    set({ me, channels, sections, agents, members, teams });
+    set({ me, channels, sections, agents, members });
     get().refreshComputers();
     get().refreshLead();
+    get().refreshOrgs();
     api<Approval[]>("GET", "/api/approvals?status=pending").then((list) => set((s) => ({ approvals: { ...s.approvals, ...Object.fromEntries(list.map((a) => [a.id, a])) } })), () => {});
+  },
+
+  async refreshOrgs() {
+    const list = await listOrgs();
+    const { me, members, agents } = get();
+    if (list && list.length) return set({ orgs: list });
+    // no organizations on this hub (or it couldn't say): just the one you're in
+    if (me) set({ orgs: [{ id: me.workspace.id, name: me.workspace.name, role: me.role, members: Math.max(1, members.length), agents: agents.length, current: true, unread: false }] });
   },
 
   async refreshLead() {
@@ -188,8 +217,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async loadThread(channelId, rootId) {
-    const r = await api<{ messages: Message[] }>("GET", `/api/channels/${channelId}/messages?thread=${rootId}&limit=200`);
-    set((s) => ({ threads: { ...s.threads, [rootId]: r.messages.filter((m) => m.id !== rootId) } }));
+    const r = await api<{ messages: Message[]; replyCounts?: Record<string, number> }>("GET", `/api/channels/${channelId}/messages?thread=${rootId}&limit=200`);
+    // the root comes too: a sub-thread's root is a reply in another thread, which may not be loaded
+    const root = r.messages.find((m) => m.id === rootId);
+    set((s) => ({ threads: { ...s.threads, [rootId]: r.messages.filter((m) => m.id !== rootId) }, replyCounts: { ...s.replyCounts, ...r.replyCounts }, ...(root ? { roots: { ...s.roots, [rootId]: root } } : {}) }));
   },
 
   async refreshAgents() {
@@ -205,11 +236,6 @@ export const useStore = create<State>((set, get) => ({
 
   setDiscussion(d) {
     set((s) => ({ discussions: { ...s.discussions, [d.id]: d } }));
-  },
-
-  async refreshTeams() {
-    const [teams, agents] = await Promise.all([api<TeamInfo[]>("GET", "/api/teams").catch(() => get().teams), api<Agent[]>("GET", "/api/agents")]);
-    set({ teams, agents });
   },
 
   async refreshChannels() {
@@ -276,14 +302,20 @@ export const useStore = create<State>((set, get) => ({
     if (connected) {
       const { activeChannel } = get();
       if (activeChannel) get().loadChannel(activeChannel);
-      get().refreshTeams();
+      get().refreshAgents();
       get().refreshChannels();
       get().refreshComputers();
+      get().refreshOrgs();
     }
   },
 
   handle(e, notify = true) {
     const before = get();
+    // features changed for this organization (an owner flipped one in Settings → Features)
+    if (e.type === "features") {
+      set((s) => (s.me ? { me: { ...s.me, features: e.features } } : {}));
+      return;
+    }
     if (e.type === "message") {
       const m = e.message;
       // the agent's reply replaces its live preview
@@ -323,13 +355,12 @@ export const useStore = create<State>((set, get) => ({
       set((s) => applyReactions(s, e.messageId, e.reactions));
     } else if (e.type === "channels_changed") {
       get().refreshChannels();
+      // with no lead picked, the lead can come from a channel's team
+      get().refreshLead();
     } else if (e.type === "agents_changed") {
       get().refreshAgents();
     } else if (e.type === "sections_changed") {
       get().refreshSections();
-    } else if (e.type === "teams_changed") {
-      get().refreshTeams();
-      get().refreshLead();
     } else if (e.type === "lead_changed") {
       get().refreshLead();
     } else if (e.type === "discussion") {
@@ -354,13 +385,15 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ routinesVersion: s.routinesVersion + 1 }));
     } else if (e.type === "background_changed") {
       set((s) => ({ backgroundVersion: s.backgroundVersion + 1 }));
+    } else if (e.type === "changes_changed") {
+      set((s) => ({ changesVersion: s.changesVersion + 1 }));
     } else if (e.type === "tasks_changed") {
       set((s) => ({ tasksVersion: s.tasksVersion + 1 }));
     } else if (e.type === "memory_changed") {
       set((s) => ({ memoryVersion: s.memoryVersion + 1 }));
     } else if (e.type === "run_event") {
       set((s) => {
-        const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, text: "", tools: [], last: null, usedComputer: false };
+        const cur = s.live[e.runId] ?? { runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId ?? null, threadPath: e.threadPath ?? [], text: "", tools: [], last: null, usedComputer: false };
         return { live: { ...s.live, [e.runId]: applyEvent(cur, e.event) } };
       });
     }
@@ -408,4 +441,25 @@ export function useHandleNames(): Map<string, string> {
 export function useHandleColors(): Map<string, string> {
   const agents = useStore((s) => s.agents);
   return useMemo(() => new Map(agents.map((a) => [a.handle, agentColor(a)])), [agents]);
+}
+
+/** What agents are waiting on you for: approvals (a device loan only for its owner) and help on their computers. Guests answer none. */
+export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[] } {
+  const me = useStore((s) => s.me);
+  const approvals = useStore((s) => s.approvals);
+  const computers = useStore((s) => s.computers);
+  return useMemo(() => {
+    if (!me || me.role === "guest") return { approvals: [], help: [] };
+    return {
+      approvals: Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me.user.id)),
+      help: computers.filter((c) => c.help),
+    };
+  }, [me, approvals, computers]);
+}
+
+/** The Inbox badge: everything waiting on you plus unread messages in your channels and DMs. */
+export function useInboxCount(): number {
+  const waiting = useWaitingOnYou();
+  const unread = useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
+  return waiting.approvals.length + waiting.help.length + unread;
 }

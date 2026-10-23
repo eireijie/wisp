@@ -11,3 +11,12 @@ export async function openDm(agentId: string, draft?: string) {
   if (draft) setDraft(id, draft);
   go({ view: "chat", channelId: id, threadId: null });
 }
+
+/** Send an agent a message in your DM with it and go there, so you watch it answer. */
+export async function askAgent(agentId: string, text: string) {
+  const existing = useStore.getState().channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agentId}`));
+  const id = existing?.id ?? (await api<{ id: string }>("POST", `/api/dm/${agentId}`)).id;
+  if (!existing) await useStore.getState().refreshChannels();
+  await api("POST", `/api/channels/${id}/messages`, { body: text, threadId: null, fileIds: [] });
+  go({ view: "chat", channelId: id, threadId: null });
+}

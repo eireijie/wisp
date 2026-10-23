@@ -94,7 +94,7 @@ struct PersonEditor: View {
   var body: some View {
     EditorSheet(title: member.name, action: action, save: { action.run { try await store.updateMember(member.id, role: role); dismiss() } }) {
       Picker("Role", selection: $role) { Text("Owner").tag("owner"); if !lastOwner { Text("Member").tag("member"); Text("Guest").tag("guest") } }
-      if lastOwner { Text("A workspace needs at least one owner; make someone else an owner first.").font(.footnote) }
+      if lastOwner { Text("An organization needs at least one owner; make someone else an owner first.").font(.footnote) }
       if member.id != store.me?.id {
         Section("Reset password") {
           SecureField("Temporary password", text: $password)

@@ -15,7 +15,11 @@ param(
   [string]$Name = "",
   [string]$Dir = $(if ($env:WARREN_DIR) { $env:WARREN_DIR } else { Join-Path $HOME "warren" }),
   [switch]$Yes,
-  [switch]$NoService
+  [switch]$NoService,
+  # with -HubServer: don't also make this computer a device for agents
+  [switch]$NoDevice,
+  # don't open the browser at the end
+  [switch]$NoOpen
 )
 $ErrorActionPreference = "Stop"
 $Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "https://github.com/eireijie/warren.git" }
@@ -85,12 +89,34 @@ npm link --no-audit --no-fund --loglevel=error | Out-Null
 
 # 6. start it
 if ($Mode -eq "hub") {
-  if ($NoService) { Bold "Start the hub with: warren hub start" }
-  else {
+  $Port = if ($env:PORT) { $env:PORT } else { "4747" }
+  if ($NoService) {
+    Bold "Start the hub with: warren hub start"
+    Write-Host "Then open http://localhost:$Port in a browser to make your account."
+  } else {
     warren service install hub
-    Bold "Warren is running at http://localhost:4747"
+    $up = $false
+    foreach ($i in 1..30) {
+      try { Invoke-WebRequest "http://127.0.0.1:$Port/healthz" -UseBasicParsing -TimeoutSec 2 | Out-Null; $up = $true; break } catch { Start-Sleep -Seconds 1 }
+    }
+    if (-not $up) { Fail "Warren didn't start. Its log is in $HOME\.warren\hub.log; 'warren service status' shows what's running. Run the installer again once it's fixed." }
+    # the hub's own computer runs agents too, so one computer is enough to start
+    if (-not $NoDevice) {
+      Bold "Making this computer a device for your agents"
+      $local = @("--local")
+      if ($Name) { $local += @("--name", $Name) }
+      $eap = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
+      warren service install node @local
+      if ($LASTEXITCODE -ne 0) { Write-Host "Couldn't set up this computer as a device; add it later in Warren -> Devices." }
+      $ErrorActionPreference = $eap; $global:LASTEXITCODE = 0
+      Write-Host "To give agents their own computers (VMs) here, run: warren setup"
+    }
+    Bold "Warren is running: http://localhost:$Port"
+    $lan = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -in @("Dhcp", "Manual") -and $_.IPAddress -notmatch '^(127\.|169\.254\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)' } | Select-Object -First 1 -ExpandProperty IPAddress
+    if ($lan) { Write-Host "On other devices on this Wi-Fi: http://${lan}:$Port" }
+    Write-Host "Open it to make your account. Setup then helps you use Warren from anywhere with Tailscale (free)."
+    if (-not $NoOpen) { Start-Process "http://localhost:$Port" }
   }
-  Write-Host "Open it in a browser to create your workspace. For HTTPS and phones, see $Dir\docs\deploy.md."
 } elseif ($Mode -eq "device") {
   Bold "Checking this device"
   # like install.sh: setup's advice (a VM engine, harnesses) is optional, so a non-zero exit code

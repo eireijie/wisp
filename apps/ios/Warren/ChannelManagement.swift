@@ -1,5 +1,9 @@
 import SwiftUI
 
+/**
+ * New channel, in two steps like the web: what it's for (name, description, private), then its
+ * team. Agents on the team join the channel; its leads read every new message.
+ */
 struct NewChannel: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
@@ -8,53 +12,135 @@ struct NewChannel: View {
   @State private var topic = ""
   @State private var section = ""
   @State private var isPrivate = false
-  @State private var answerer = ""
-  @State private var selected: Set<Actor> = []
+  @State private var team = ChannelTeam.empty
+  @State private var step2 = false
   @State private var action = FormAction()
 
   private var slug: String { ManagementText.channelName(name) }
+  private var exists: Bool { store.channels.contains { $0.name == slug } }
+  private var validName: Bool { slug.range(of: "^[a-z0-9][a-z0-9_-]{0,79}$", options: .regularExpression) != nil && !exists && topic.count <= 250 }
 
   var body: some View {
     NavigationStack {
       Form {
         Section {
           TextField("Name", text: $name).textInputAutocapitalization(.never).autocorrectionDisabled()
-          if !slug.isEmpty { Text("#\(slug)").foregroundStyle(.secondary) }
-          TextField("Topic", text: $topic, axis: .vertical)
-          SectionPicker(selection: $section)
-        }
-        MemberChoices(selected: $selected)
+          if !slug.isEmpty { Text(exists ? "#\(slug) already exists." : "#\(slug)").foregroundStyle(exists ? .red : .secondary) }
+        } header: { StepsHeader(at: 1) }
         Section {
-          AnswerPicker(selection: $answerer)
-        } footer: { Text("Pick an agent to make this its channel: it answers anything nobody @mentions.") }
+          TextField("e.g. Plan and ship the new website", text: $topic, axis: .vertical).lineLimit(2...6)
+        } header: { Text("Description") } footer: { Text("The agents read this too, so say what the channel is for.") }
+        Section { SectionPicker(selection: $section) }
         Section {
           Toggle("Private", isOn: $isPrivate)
         } footer: { Text("Only people and agents you add can see it.") }
-        InlineError(error: action.error)
       }
       .navigationTitle("New channel")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button("Create") {
-            action.run {
-              let channel = try await store.createChannel([
-                "name": AnyEncodable(slug), "topic": AnyEncodable(topic), "sectionId": .nullable(section),
-                "private": AnyEncodable(isPrivate), "members": AnyEncodable(Array(selected)),
-                "settings": AnyEncodable(["defaultAgentId": AnyEncodable.nullable(answerer)])
-              ])
-              dismiss()
-              onCreated(channel)
-            }
-          }.disabled(action.busy || slug.range(of: "^[a-z0-9][a-z0-9_-]{0,79}$", options: .regularExpression) == nil || topic.count > 250)
+          Button("Next") { step2 = true }.disabled(!validName)
         }
       }
-      .onChange(of: answerer) { _, id in if !id.isEmpty { selected.insert(Actor(kind: .agent, id: id)) } }
-      .onChange(of: selected) { _, people in
-        if !answerer.isEmpty && !people.contains(Actor(kind: .agent, id: answerer)) { answerer = "" }
-      }
+      .navigationDestination(isPresented: $step2) { teamStep }
       .interactiveDismissDisabled(action.busy)
+    }
+  }
+
+  private var teamStep: some View {
+    Form {
+      Section {
+        Text("Pick who works in #\(slug), make one or more of them leads, and say who hands each of the others work.")
+          .font(.subheadline).foregroundStyle(.secondary)
+      } header: { StepsHeader(at: 2) }
+      ChannelTeamEditor(team: $team)
+      Section { InlineError(error: action.error) }
+    }
+    .navigationTitle("#\(slug): its team")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .confirmationAction) {
+        Button("Create") { create() }.bold().disabled(action.busy || team.problem != nil)
+      }
+    }
+  }
+
+  private func create() {
+    action.run {
+      let channel = try await store.createChannel([
+        "name": AnyEncodable(slug), "topic": AnyEncodable(topic), "sectionId": .nullable(section),
+        "private": AnyEncodable(isPrivate),
+        "settings": AnyEncodable(["team": AnyEncodable(team), "replyInThread": AnyEncodable(true)]),
+      ])
+      dismiss()
+      onCreated(channel)
+    }
+  }
+}
+
+/** "Step 1 of 2 · Name and description" over each step of making a channel. */
+private struct StepsHeader: View {
+  var at: Int
+  var body: some View {
+    Text("Step \(at) of 2 · \(at == 1 ? "Name and description" : "Its team")")
+  }
+}
+
+/** A channel's team, from its details: edit the chart and save it, or remove the team. */
+struct ChannelTeamScreen: View {
+  @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  var channel: Channel
+  @State private var team = ChannelTeam.empty
+  @State private var loaded = false
+  @State private var removing = false
+  @State private var action = FormAction()
+
+  private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
+  private var saved: ChannelTeam { current.team(agents: store.agents) ?? .empty }
+  private var editable: Bool { store.canManage && current.archivedAt == nil }
+
+  var body: some View {
+    Form {
+      Section {
+        Text(saved.nodes.isEmpty
+          ? "#\(current.name) has no team yet, so only agents someone @mentions (or the one that answers here) reply. Build one: add agents and make one of them a lead."
+          : "The leads read every new message in #\(current.name) and hand out the work along the arrows.")
+          .font(.subheadline).foregroundStyle(.secondary)
+      }
+      ChannelTeamEditor(team: $team, editable: editable, channelId: channel.id, more: true)
+      if !editable {
+        Section { Text(current.archivedAt != nil ? "This channel is archived." : "Guests can't change channels.").font(.footnote).foregroundStyle(.secondary) }
+      }
+      if editable && !saved.nodes.isEmpty {
+        Section {
+          Button("Remove the team", role: .destructive) { removing = true }
+        } footer: { Text("Back to agents answering only when someone @mentions them.") }
+      }
+      Section { InlineError(error: action.error) }
+    }
+    .navigationTitle("Team")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      if editable {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") { save(team) }.bold().disabled(action.busy || team == saved || team.nodes.isEmpty || team.problem != nil)
+        }
+      }
+    }
+    .onAppear { if !loaded { team = saved; loaded = true } }
+    .confirmationDialog("Remove the team from #\(current.name)?", isPresented: $removing, titleVisibility: .visible) {
+      Button("Remove the team", role: .destructive) { save(nil) }
+    } message: { Text("The agents stay in the channel, but only answer when someone @mentions them.") }
+  }
+
+  private func save(_ next: ChannelTeam?) {
+    action.run {
+      var settings: Fields = ["team": next.map { AnyEncodable($0) } ?? .null]
+      if next != nil { settings["replyInThread"] = AnyEncodable(true) }
+      try await store.updateChannel(channel.id, ["settings": AnyEncodable(settings)])
+      dismiss()
     }
   }
 }
@@ -147,8 +233,19 @@ struct ChannelDetails: View {
         SectionPicker(selection: $section)
         Toggle("Private", isOn: $isPrivate).disabled(store.isProtected(current))
       }.disabled(!store.canManage || action.busy)
+      Section {
+        NavigationLink {
+          ChannelTeamScreen(channel: current)
+        } label: {
+          LabeledContent("Team", value: teamSummary)
+        }
+      } footer: { Text("Who works here: the leads read every new message and hand out the work.") }
       Section("Agents") {
-        AnswerPicker(selection: $answerer)
+        if current.team(agents: store.agents) != nil {
+          Text("The team's leads read every new message here (see Team), so they answer what nobody @mentions.").font(.footnote).foregroundStyle(.secondary)
+        } else {
+          AnswerPicker(selection: $answerer)
+        }
         Toggle("Answer in a thread", isOn: $replyInThread)
         TechnicalDetails {
           TextField("Notes for agents here", text: $instructions, axis: .vertical).lineLimit(4...12)
@@ -256,6 +353,13 @@ struct ChannelDetails: View {
     } message: {
       Text(confirm == "delete" ? "Every message and thread is deleted for everyone. This can't be undone." : confirm == "archive" ? "It leaves everyone's sidebar and becomes read-only. Agents working here are stopped." : "You can find public channels again in Browse channels.")
     }
+  }
+
+  /** "Atlas leads · 3 agents", or "None yet" */
+  private var teamSummary: String {
+    guard let team = current.team(agents: store.agents) else { return "None yet" }
+    let leads = team.leads.compactMap { store.agent($0)?.name }
+    return "\(ChannelTeam.list(leads)) \(leads.count > 1 ? "lead" : "leads") · \(team.nodes.count) \(team.nodes.count == 1 ? "agent" : "agents")"
   }
 
   private func reset() {

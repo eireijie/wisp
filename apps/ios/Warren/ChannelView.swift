@@ -3,6 +3,8 @@ import SwiftUI
 struct ThreadRef: Hashable {
   var channelId: String
   var rootId: String
+  /** the thread it was opened from, when it's a sub-thread opened from its parent (so "back up" just goes back) */
+  var from: String? = nil
 }
 
 struct ChannelView: View {
@@ -16,6 +18,8 @@ struct ChannelView: View {
   private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
 
   private var list: [Message] { store.messages[channel.id] ?? [] }
+  /** agents working in some thread here, to show on that thread's row */
+  private var inThreads: [Agent] { store.working(in: channel.id).filter { store.activityThread[$0.id] != nil } }
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -39,10 +43,10 @@ struct ChannelView: View {
           EmptyChannel(channel: channel)
         }
         ForEach(Array(list.enumerated()), id: \.element.id) { i, m in
-          MessageRow(message: m, compact: continues(m, after: i > 0 ? list[i - 1] : nil), replies: store.replyCounts[m.id] ?? 0, thread: ThreadRef(channelId: channel.id, rootId: m.id))
+          MessageRow(message: m, compact: continues(m, after: i > 0 ? list[i - 1] : nil), replies: store.replyCounts[m.id] ?? 0,
+            thread: ThreadRef(channelId: channel.id, rootId: m.id), working: inThreads.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
           .id(m.id)
         }
-        WorkingNow(channel: channel)
         Color.clear.frame(height: 1).id(Bottom.id)
       }
       .padding(.bottom, 8)
@@ -55,9 +59,13 @@ struct ChannelView: View {
       if current.archivedAt != nil {
         Text("#\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
       } else {
-        Composer(placeholder: placeholder) { text in
-          try await store.send(text, in: channel.id)
+        VStack(spacing: 6) {
+          ActivityPill(channel: current)
+          Composer(placeholder: placeholder) { text in
+            try await store.send(text, in: channel.id)
+          }
         }
+        .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
     }
     .toolbar(.hidden, for: .tabBar)
@@ -81,7 +89,17 @@ struct ChannelView: View {
           NavigationLink {
             ChannelDetails(channel: current)
           } label: {
-            Label(current.name, systemImage: current.private == true ? "lock" : "number").font(.subheadline.weight(.semibold))
+            VStack(spacing: 0) {
+              HStack(spacing: 4) {
+                Image(systemName: current.private == true ? "lock" : "number")
+                Text(current.name).lineLimit(1)
+              }
+              .font(.subheadline.weight(.semibold))
+              // who leads here, from the channel's team: "Atlas and Nova lead here"
+              if let leads = current.leadLine(agents: store.agents) {
+                Text(leads).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+              }
+            }
           }.buttonStyle(.plain)
         }
       }
@@ -122,17 +140,26 @@ struct ChannelView: View {
   }
 }
 
+/**
+ * A thread. Any reply in it can start a thread of its own (a sub-thread), which shows its reply
+ * count and who's working in it; a sub-thread links back up to the thread it came from.
+ */
 struct ThreadView: View {
   @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
   var ref: ThreadRef
 
-  private var root: Message? { store.messages[ref.channelId]?.first { $0.id == ref.rootId } }
+  private var root: Message? { store.message(ref.rootId, in: ref.channelId) }
   private var replies: [Message] { store.threads[ref.rootId] ?? [] }
+  /** the thread this one branched off from */
+  private var parent: String? { root?.threadId }
+  private var below: [Agent] { store.working(in: ref.channelId, thread: ref.rootId).filter { store.activityThread[$0.id] != ref.rootId } }
 
   var body: some View {
     ScrollViewReader { proxy in
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 0) {
+        if let parent { upLink(parent) }
         if let root {
           MessageRow(message: root, compact: false, replies: 0, thread: nil)
           HStack {
@@ -142,8 +169,11 @@ struct ThreadView: View {
           .padding(.horizontal, 16)
           .padding(.vertical, 6)
         }
-        ForEach(replies) { m in MessageRow(message: m, compact: false, replies: 0, thread: nil) }
-        if let ch = store.channels.first(where: { $0.id == ref.channelId }) { WorkingNow(channel: ch) }
+        ForEach(replies) { m in
+          MessageRow(message: m, compact: false, replies: store.replyCounts[m.id] ?? 0,
+            thread: ThreadRef(channelId: ref.channelId, rootId: m.id, from: ref.rootId),
+            working: below.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
+        }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
     }
@@ -155,13 +185,34 @@ struct ThreadView: View {
       if store.channels.first(where: { $0.id == ref.channelId })?.archivedAt != nil {
         Text("This channel is archived").font(.footnote).foregroundStyle(.secondary).padding()
       } else {
-        Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+        VStack(spacing: 6) {
+          if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch, thread: ref.rootId) }
+          Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+        }
       }
     }
     .toolbar(.hidden, for: .tabBar)
-    .navigationTitle("Thread")
+    .navigationTitle(parent == nil ? "Thread" : "Sub-thread")
     .navigationBarTitleDisplayMode(.inline)
     .task { try? await store.loadMessages(ref.channelId, thread: ref.rootId) }
+  }
+
+  /** Back to the thread this one came from: just back, when that's where it was opened from. */
+  @ViewBuilder private func upLink(_ parent: String) -> some View {
+    let label = HStack(spacing: 6) {
+      Image(systemName: "arrow.turn.left.up")
+      Text("Sub-thread of “\(ThreadTitle.of(store.message(parent, in: ref.channelId)))”").lineLimit(1)
+      Spacer(minLength: 0)
+    }
+    .font(.caption.weight(.semibold))
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 16)
+    .padding(.top, 10)
+    if ref.from == parent {
+      Button { dismiss() } label: { label }.buttonStyle(.plain).accessibilityHint("Back to the thread it came from")
+    } else {
+      NavigationLink(value: ThreadRef(channelId: ref.channelId, rootId: parent)) { label }.buttonStyle(.plain).accessibilityHint("Opens the thread it came from")
+    }
   }
 }
 
@@ -170,31 +221,6 @@ enum Bottom {
   static let id = "bottom"
   static func follow(_ proxy: ScrollViewProxy) {
     withAnimation(.snappy) { proxy.scrollTo(id, anchor: .bottom) }
-  }
-}
-
-/** Agents working on something in this channel right now, and what they're doing. */
-struct WorkingNow: View {
-  @Environment(Store.self) private var store
-  var channel: Channel
-
-  var body: some View {
-    let working = store.agents.filter { a in
-      store.activityChannel[a.id] == channel.id || (a.status == .busy && store.dmAgent(channel)?.id == a.id)
-    }
-    ForEach(working) { a in
-      HStack(spacing: 8) {
-        AgentAvatar(agent: a, size: 22, showStatus: false)
-          .phaseAnimator([0, -2]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: 0.8) }
-        Text("**\(a.name)** \(store.activity[a.id].map { $0.prefix(1).lowercased() + $0.dropFirst() } ?? "is working…")")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 6)
-      .transition(.opacity)
-    }
   }
 }
 
@@ -209,6 +235,11 @@ struct EmptyChannel: View {
       } else {
         Text("#\(channel.name)").font(.title3.bold())
         Text(channel.topic.isEmpty ? "No messages yet." : channel.topic).font(.subheadline).foregroundStyle(.secondary)
+        if let team = channel.team(agents: store.agents) {
+          let leads = team.leads.compactMap { store.agent($0)?.name }
+          Text("\(ChannelTeam.list(leads)) \(leads.count > 1 ? "read every new message here, plan it together and hand" : "reads every new message here, plans it and hands") the work to the team in a thread. @mention an agent to ask it directly.")
+            .font(.footnote).foregroundStyle(.secondary)
+        }
       }
     }
     .multilineTextAlignment(.center)

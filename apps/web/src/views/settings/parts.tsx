@@ -57,7 +57,7 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
       onClick={() => onChange(!on)}
       className={cx("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-40", on ? "bg-accent" : "bg-chip border border-line")}
     >
-      <span className={cx("inline-block size-4 rounded-full bg-white shadow transition-transform", on ? "translate-x-[18px]" : "translate-x-0.5")} />
+      <span className={cx("inline-block size-4 rounded-full shadow transition-transform", on ? "translate-x-[18px] bg-accent-ink" : "translate-x-0.5 bg-white")} />
     </button>
   );
 }

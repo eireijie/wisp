@@ -91,17 +91,20 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "agents_list",
-    { description: "List agents in the workspace with their harness, status and teams." },
-    safe(async () => json((await client.agents()).map((a) => ({ handle: `@${a.handle}`, name: a.name, harness: a.harness, status: a.status, teams: a.groups })))),
+    { description: "List agents in the workspace with their harness, status and the channel teams they're on." },
+    safe(async () => {
+      const [agents, teams] = await Promise.all([client.agents(), client.teams()]);
+      return json(agents.map((a) => ({ handle: `@${a.handle}`, name: a.name, harness: a.harness, status: a.status, teams: teams.filter((t) => t.members.some((m) => m.agentId === a.id)).map((t) => `#${t.name}`) })));
+    }),
   );
 
   server.registerTool(
     "teams_list",
-    { description: "List teams: their lead, members and roles, who they report to, their channel and their memory folder." },
+    { description: "List channel teams (every team is a channel's): their leads, members and roles, who they report to, and their memory folder and repo." },
     safe(async () => {
       const [teams, agents] = await Promise.all([client.teams(), client.agents()]);
       const h = (id: string | null) => (id ? `@${agents.find((a) => a.id === id)?.handle ?? "?"}` : null);
-      return json(teams.map((t) => ({ name: t.name, description: t.description, lead: h(t.leadId), reportsTo: h(t.reportsTo), memory: `${t.folder}/`, repo: t.repo, members: t.members.map((m) => ({ agent: h(m.agentId), role: m.role || null })) })));
+      return json(teams.map((t) => ({ channel: `#${t.name}`, leads: t.leads.map(h), reportsTo: h(t.reportsTo), memory: t.folder ? `${t.folder}/` : null, repo: t.repo, members: t.members.map((m) => ({ agent: h(m.agentId), role: m.role || null })) })));
     }),
   );
 
@@ -113,7 +116,7 @@ export async function createWarrenMcp(client: WarrenClient) {
       description:
         "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done. Work you hand out while working on a task becomes a subtask of it (or name the parent with parent_task_id); if you're the lead, this is how you assign the pieces of a task to agents by their roles.",
       inputSchema: {
-        to: z.string().describe('agent handle, e.g. @nova, or "team:<name>" for a team\'s lead'),
+        to: z.string().describe('agent handle, e.g. @nova, or "#channel" for the lead of that channel\'s team'),
         title: z.string(),
         brief: z.string().describe("everything they need to do the work"),
         channel: z.string().optional(),
@@ -125,6 +128,24 @@ export async function createWarrenMcp(client: WarrenClient) {
       const ch = channel ? await resolveChannel(channel) : undefined;
       const t = (await client.delegate(to, title, brief, { channelId: ch?.id, fileIds: file_ids, parentTaskId: parent_task_id })) as { id: string; parentId?: string | null };
       return text(`Created task ${t.id} for ${to}${t.parentId ? ` (a subtask of ${t.parentId})` : ""}.`);
+    }),
+  );
+
+  server.registerTool(
+    "agent_create",
+    {
+      description:
+        "Create a new agent to work under you. Leads can do this when their team needs someone it doesn't have; agents a lead made can make sub-agents for pieces of their work. Only works when the organization switched it on (your prompt says so). The new agent joins your channel's team chart under you; then hand it work with task_delegate.",
+      inputSchema: {
+        name: z.string().describe("its name, e.g. Scout"),
+        role: z.string().optional().describe("what it does in a few words, e.g. Researcher"),
+        instructions: z.string().optional().describe("its job and how it should work"),
+        handle: z.string().optional().describe("its @handle; made from the name when left out"),
+      },
+    },
+    safe(async ({ name, role, instructions, handle }) => {
+      const a = (await client.spawnAgent({ name, role, instructions, handle })) as { handle: string };
+      return text(`Created @${a.handle}. Hand it work with task_delegate (to: "@${a.handle}").`);
     }),
   );
 
@@ -152,7 +173,7 @@ export async function createWarrenMcp(client: WarrenClient) {
         topic: z.string(),
         goal: z.string().optional().describe("what the discussion should decide"),
         participants: z.array(z.string()).optional().describe("agent handles; default: everyone on the team"),
-        team: z.string().optional().describe("team name; its channel and decisions folder are used"),
+        team: z.string().optional().describe("a channel with a team, e.g. #web; the discussion happens there and its decision goes in the team's memory folder"),
         rounds: z.number().int().min(1).max(5).optional(),
         moderator: z.string().optional(),
       },
@@ -295,6 +316,50 @@ export async function createWarrenMcp(client: WarrenClient) {
     safe(async ({ text: t, file_ids }) => {
       await client.messagePerson(t, file_ids ?? []);
       return text("Sent.");
+    }),
+  );
+
+  server.registerTool(
+    "settings_read",
+    {
+      description:
+        "See how Warren is set up for the person you work for: your background work for them (on or off, how often, quiet hours, what to keep an eye on), which mods are on, and how much of their daily allowance background work used today. Read it before settings_change.",
+      inputSchema: {},
+    },
+    safe(async () => {
+      const s = await client.mySettings();
+      const b = s.background;
+      const a = s.allowance;
+      const k = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
+      return text(
+        [
+          b ? `Background work: ${b.enabled ? "on" : "off"}, every ${b.everyMinutes} minutes, quiet ${b.quietStart}–${b.quietEnd}, keeping an eye on: ${b.focus || "everything you can reach"}.` : "Background work: never turned on for them.",
+          `Mods (${s.canChangeMods ? "you can change these for them" : "only an owner can change these"}):`,
+          ...s.mods.map((m) => `- ${m.key}: ${m.name} (${m.on ? "on" : "off"}): ${m.description}`),
+          `Allowance: ${a.dailyTokens ? `${k(a.todayTokens)} of ${k(a.dailyTokens)} tokens used today` : `no limit, ${k(a.todayTokens)} tokens used today`}. They change the allowance themselves in Settings → Usage.`,
+        ].join("\n"),
+      );
+    }),
+  );
+
+  server.registerTool(
+    "settings_change",
+    {
+      description:
+        "Change how Warren works for the person you work for, when they ask in plain words (\"check less often\", \"don't message me after 10pm\", \"turn on voice calls\"). Background fields change your own background work for them; mods switch optional parts of Warren on or off (owners only). Only change what they asked for. They see what changed in your DM with an Undo button, so just confirm in a few words.",
+      inputSchema: {
+        enabled: z.boolean().optional().describe("background work on or off"),
+        every_minutes: z.number().int().min(10).max(1440).optional().describe("how often to check, 10–1440 minutes"),
+        quiet_start: z.string().optional().describe("quiet hours start, 'HH:MM' 24-hour on their clock"),
+        quiet_end: z.string().optional().describe("quiet hours end, 'HH:MM'; same as start = no quiet hours"),
+        focus: z.string().optional().describe("what to keep an eye on, in their words; empty = everything you can reach"),
+        mods: z.record(z.string(), z.boolean()).optional().describe("mod key → on/off, keys from settings_read"),
+      },
+    },
+    safe(async ({ enabled, every_minutes, quiet_start, quiet_end, focus, mods }) => {
+      const background = Object.fromEntries(Object.entries({ enabled, everyMinutes: every_minutes, quietStart: quiet_start, quietEnd: quiet_end, focus }).filter(([, v]) => v !== undefined));
+      const r = await client.changeSettings({ ...(Object.keys(background).length ? { background } : {}), ...(mods && Object.keys(mods).length ? { mods } : {}) });
+      return text(r.changed.length ? `Changed:\n${r.changed.map((l) => `- ${l}`).join("\n")}\nThey can see it in your DM and undo it.` : (r.note ?? "Nothing changed."));
     }),
   );
 

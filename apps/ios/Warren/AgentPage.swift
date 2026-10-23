@@ -41,8 +41,17 @@ struct AgentPage: View {
         }
         NavigationLink("Personality") { AgentEditor(agent: current, panel: .personality) }
         NavigationLink("Instructions") { AgentEditor(agent: current, panel: .instructions) }
-        NavigationLink("Routines") { RoutinesView(agent: current) }.accessibilityIdentifier("agent-routines")
-        NavigationLink("Background") { BackgroundView(agent: current) }.accessibilityIdentifier("agent-background")
+        if store.features.routines { NavigationLink("Routines") { RoutinesView(agent: current) }.accessibilityIdentifier("agent-routines") }
+        if store.features.background { NavigationLink("Background") { BackgroundView(agent: current) }.accessibilityIdentifier("agent-background") }
+        if (store.isOwner || current.settings?.createdBy == store.me?.id) && (store.features.invite || store.members.count > 1) {
+          Picker("Answers", selection: Binding(get: { current.settings?.respondTo ?? "anyone" }, set: { value in
+            action.run { try await store.updateAgent(current.id, ["settings": AnyEncodable(["respondTo": value])]) }
+          })) {
+            Text("Only me").tag("me")
+            Text("Anyone").tag("anyone")
+            Text("Picked people").tag("people")
+          }.disabled(action.busy)
+        }
         NavigationLink("Model") { AgentEditor(agent: current, panel: .model) }
         NavigationLink("Device") { AgentEditor(agent: current, panel: .device) }
         if device != nil && store.harnessOnDevice(current) {
@@ -276,10 +285,10 @@ struct AgentEditor: View {
             action.run { try await store.updateAgent(current.id, ["settings": AnyEncodable(["anyoneCanAsk": value])]) }
           })) {
             Text("Only me").tag(false)
-            Text("Anyone in the workspace").tag(true)
+            Text("Anyone in the organization").tag(true)
           }.disabled(action.busy)
         } else {
-          Text(device.shared == true || current.settings?.anyoneCanAsk == true ? "Anyone in the workspace can ask it." : "Only \(device.ownerName ?? "its owner") can ask it.").foregroundStyle(.secondary)
+          Text(device.shared == true || current.settings?.anyoneCanAsk == true ? "Anyone in the organization can ask it." : "Only \(device.ownerName ?? "its owner") can ask it.").foregroundStyle(.secondary)
         }
       }
     }

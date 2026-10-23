@@ -58,7 +58,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   const url = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123" }) })).json();
+  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WarrenClient({ url, token: setup.token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
@@ -108,8 +108,8 @@ describe("background work", () => {
     const ws = hub.store.agent(agentId)!.workspaceId;
     const notion = hub.connectors.create(ws, me, { kind: "mcp-http", name: "Notion", catalogId: "notion", url: "https://mcp.notion.com/mcp", headers: {}, env: {} });
     hub.connectors.attach(notion.id, agentId, true);
-    await hub.vault.write("Projects/launch.md", "# Launch", { name: "t", email: "t@example.com" }, "add");
-    await hub.vault.write(`agents/${agentId}/background/${me}.md`, "Notion: last saw page 'Q4 plan' edited 9am", { name: "t", email: "t@example.com" }, "add");
+    await hub.vaults.primary.write("Projects/launch.md", "# Launch", { name: "t", email: "t@example.com" }, "add");
+    await hub.vaults.primary.write(`agents/${agentId}/background/${me}.md`, "Notion: last saw page 'Q4 plan' edited 9am", { name: "t", email: "t@example.com" }, "add");
     await owner.request("PUT", `/api/agents/${agentId}/background`, { focus: "the launch project and anything from my landlord" });
     const sources = (await owner.request("GET", `/api/agents/${agentId}/background`)).sources;
     expect(sources.map((x: { kind: string; name: string }) => `${x.kind}:${x.name}`)).toEqual(expect.arrayContaining(["app:Notion", "memory:shared/"]));
@@ -301,6 +301,97 @@ describe("what a check costs", () => {
     expect(hub.store.background(agentId, me)!.dailyCap).toBeNull();
     expect((await owner.request("GET", `/api/agents/${agentId}/background`)).usage.capReached).toBe(false);
     hub.store.setBackground(agentId, me, { enabled: false, quietStart: "22:00", quietEnd: "07:00" });
+  });
+});
+
+describe("one allowance for all background work", () => {
+  it("adds up every agent's checks today, guessing for ones that didn't report", async () => {
+    const ws = hub.store.agent(agentId)!.workspaceId;
+    const a = await owner.request("GET", "/api/background/allowance");
+    expect(a.dailyTokens).toBe(1_000_000);
+    expect(a.todayTokens).toBeGreaterThan(0);
+    expect(a.estimated).toBe(true);
+    expect(a.agents[0]).toMatchObject({ agentId });
+    expect(a.todayTokens).toBe(hub.background.allowance(ws, me).todayTokens);
+  });
+
+  it("holds regular checks once it's used up, and lets them go when it's raised", async () => {
+    onCheck = async () => "ok";
+    const used = (await owner.request("GET", "/api/background/allowance")).todayTokens;
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: Math.max(10_000, used) });
+    hub.store.setBackground(agentId, me, { enabled: true, quietStart: "00:00", quietEnd: "00:00", nextAt: null, nextReason: "", dailyCap: null });
+    const n = calls.length;
+    hub.background.tick(new Date());
+    expect(calls.length).toBe(n);
+    expect(hub.store.background(agentId, me)!.nextReason).toBe("allowance used up");
+
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: null });
+    expect((await owner.request("GET", "/api/background/allowance")).dailyTokens).toBeNull();
+    expect(hub.store.background(agentId, me)!.nextAt).toBeNull();
+    hub.store.setBackground(agentId, me, { enabled: false, quietStart: "22:00", quietEnd: "07:00" });
+  });
+
+  it("checks half as often once most of it is used", async () => {
+    const used = (await owner.request("GET", "/api/background/allowance")).todayTokens;
+    // used is 90% of this amount
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: Math.max(10_000, Math.round(used / 0.9)) });
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    hub.store.setBackground(agentId, me, { enabled: true });
+    const r = await agent.nextCheck(30, "calm");
+    expect(r.minutes).toBe(60);
+    await owner.request("PUT", "/api/background/allowance", { dailyTokens: null });
+    hub.store.setBackground(agentId, me, { enabled: false });
+  });
+});
+
+describe("agents changing Warren for their person", () => {
+  it("changes its own background work, shows what changed in the DM, and the person can undo it", async () => {
+    hub.store.setBackground(agentId, me, { enabled: false, everyMinutes: 30, quietStart: "23:00", quietEnd: "07:00" });
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    expect((await agent.mySettings()).background).toMatchObject({ enabled: false, everyMinutes: 30 });
+    const r = await agent.changeSettings({ background: { everyMinutes: 120, quietStart: "22:00" } });
+    expect(r.changed).toEqual(["Checks: every 30 min → every 2 hours", "Quiet hours: 10pm – 7am"]);
+    expect(hub.store.background(agentId, me)).toMatchObject({ everyMinutes: 120, quietStart: "22:00" });
+    const card = hub.store.messages(dm().id).find((m) => m.parts.some((p) => p.type === "change" && p.changeId === r.changeId));
+    expect(card?.body).toBe("Checks: every 30 min → every 2 hours\nQuiet hours: 10pm – 7am");
+
+    const list = await owner.request("GET", "/api/changes");
+    expect(list[0]).toMatchObject({ id: r.changeId, agentId, lines: r.changed, undoneAt: null });
+    expect(list[0].undo).toBeUndefined();
+    await owner.request("POST", `/api/changes/${r.changeId}/undo`);
+    expect(hub.store.background(agentId, me)).toMatchObject({ everyMinutes: 30, quietStart: "23:00" });
+    expect((await owner.request("GET", "/api/changes"))[0].undoneAt).not.toBeNull();
+    await expect(owner.request("POST", `/api/changes/${r.changeId}/undo`)).rejects.toThrow();
+    // undo leaves alone what was changed again since
+    const again = await agent.changeSettings({ background: { everyMinutes: 240 } });
+    hub.store.setBackground(agentId, me, { everyMinutes: 60 });
+    await owner.request("POST", `/api/changes/${again.changeId}/undo`);
+    expect(hub.store.background(agentId, me)!.everyMinutes).toBe(60);
+    hub.store.setBackground(agentId, me, { everyMinutes: 30 });
+    // asking for what's already set changes nothing
+    expect((await agent.changeSettings({ background: { everyMinutes: 30 } })).changed).toEqual([]);
+  });
+
+  it("keeps background work off when changing it for someone who never turned it on", async () => {
+    const saved = hub.store.background(agentId, me)!;
+    hub.store.db.prepare("DELETE FROM background WHERE agent_id = ? AND user_id = ?").run(agentId, me);
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const r = await agent.changeSettings({ background: { everyMinutes: 120 } });
+    expect(hub.store.background(agentId, me)).toMatchObject({ enabled: false, everyMinutes: 120 });
+    expect(r.changed).toEqual(["Checks: every 2 hours"]);
+    hub.store.setBackground(agentId, me, { enabled: saved.enabled, everyMinutes: saved.everyMinutes });
+  });
+
+  it("turns mods on and off for an owner, and back", async () => {
+    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const s = await agent.mySettings();
+    expect(s.canChangeMods).toBe(true);
+    expect(s.mods.find((m) => m.key === "voice")?.on).toBe(true);
+    const r = await agent.changeSettings({ mods: { voice: false } });
+    expect(r.changed).toEqual(["Mod Voice calls: off"]);
+    expect((await owner.request("GET", "/api/features")).features.voice).toBe(false);
+    await owner.request("POST", `/api/changes/${r.changeId}/undo`);
+    expect((await owner.request("GET", "/api/features")).features.voice).toBe(true);
   });
 });
 

@@ -14,7 +14,7 @@ import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
 import { discoverAgents } from "./discover.ts";
 import { installService, isService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
-import { RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
+import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
 const HELP = `warren — run a Warren hub, or connect this device to one
 
@@ -23,9 +23,11 @@ Usage:
       Run the hub (the workspace and web app) in this terminal, on PORT (default 4747) with
       its data in WARREN_DATA_DIR (default ./data in the Warren folder).
   warren service install hub
-  warren service install node [--hub URL --token TOKEN] [--name NAME]
+  warren service install node [--hub URL --token TOKEN | --local] [--name NAME]
       Keep the hub or this device running, started at login (macOS LaunchAgent, systemd on
       Linux, a task at sign-in on Windows). Uses this terminal's PATH so agents' CLIs are found.
+      --local makes this computer a device of the hub running on it, once its first account
+      exists: no token needed (the installer does this).
   warren service uninstall hub|node
   warren service status
   warren setup [--yes]
@@ -74,6 +76,7 @@ const { values, positionals } = parseArgs({
     name: { type: "string" },
     dir: { type: "string" },
     "allow-full-access": { type: "boolean" },
+    local: { type: "boolean" },
     check: { type: "boolean" },
     yes: { type: "boolean", short: "y" },
     help: { type: "boolean", short: "h" },
@@ -119,7 +122,7 @@ if (values.help || !cmd) {
 } else if (cmd === "service") {
   await service(sub, positionals[2]);
 } else if (cmd === "node" && sub === "start") {
-  const cfg = saveNodeConfig();
+  let cfg = saveNodeConfig();
   const kept = underKeeper();
   // two daemons with one token would take turns replacing each other on the hub
   const service = process.env.WARREN_SERVICE ? null : serviceStatus("node", dir);
@@ -127,6 +130,7 @@ if (values.help || !cmd) {
     console.error(`This device is already connected by its service (${service.name}), so there's nothing to start. To run it in this terminal instead: warren service uninstall node`);
     process.exit(1);
   }
+  if (cfg.local && !cfg.token) cfg = await waitForLocalHub(cfg);
   const daemon = new NodeDaemon(cfg);
   // the desktop app asks for this, so it can add this computer again instead of leaving a dead device running
   if (process.env.WARREN_EXIT_IF_REJECTED) daemon.onRejected = () => process.exit(REJECTED_CODE);
@@ -321,10 +325,18 @@ function saveNodeConfig(): NodeConfig {
     ...saved,
     hub: values.hub ?? process.env.WARREN_HUB ?? saved.hub ?? "",
     token: values.token ?? process.env.WARREN_NODE_TOKEN ?? saved.token ?? "",
-    name: values.name ?? saved.name ?? os.hostname(),
+    // "Mac.fios-router.home" → "Mac": the network's domain isn't part of the computer's name
+    name: values.name ?? saved.name ?? (os.hostname().split(".")[0] || os.hostname()),
     allowFullAccess: values["allow-full-access"] ?? saved.allowFullAccess ?? false,
     dir,
   };
+  // --local: the hub on this computer hands over the connection once its first account exists
+  if (!cfg.token && (values.local || saved.local)) {
+    const { dir: _d, ...keep } = { ...cfg, local: true };
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(keep, null, 2), { mode: 0o600 });
+    return { ...cfg, local: true };
+  }
   if (!cfg.hub || !cfg.token) {
     console.error("Missing --hub and --token. Get them in Warren → Devices → Add device.");
     process.exit(1);
@@ -339,6 +351,34 @@ function saveNodeConfig(): NodeConfig {
   const { dir: _dir, ...keep } = cfg;
   fs.writeFileSync(configFile, JSON.stringify(keep, null, 2), { mode: 0o600 });
   return cfg;
+}
+
+/** Where the hub on this computer keeps its data (the same default as the hub itself). */
+function hubDataDir(): string {
+  return path.resolve(process.env.WARREN_DATA_DIR ?? path.join(REPO_ROOT, "data"));
+}
+
+/**
+ * `--local`: ask the hub on this computer to make it a device, then wait (as long as it takes,
+ * since the first account is made in the browser) for it to hand over the connection.
+ */
+async function waitForLocalHub(cfg: NodeConfig): Promise<NodeConfig> {
+  const data = hubDataDir();
+  const grant = path.join(data, "local-device.json");
+  const request = path.join(data, "local-device.request");
+  if (!fs.existsSync(grant)) {
+    fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(request, JSON.stringify({ name: values.name ?? cfg.name }), { mode: 0o600 });
+    console.log("[warren] waiting for the hub on this computer: this computer becomes a device once you've made your account in the browser");
+  }
+  while (!fs.existsSync(grant)) await new Promise((r) => setTimeout(r, 2000));
+  const got = JSON.parse(fs.readFileSync(grant, "utf8")) as { hub: string; token: string; name: string };
+  const next: NodeConfig = { ...cfg, hub: got.hub, token: got.token, name: got.name, local: false };
+  const { dir: _d, ...keep } = next;
+  fs.writeFileSync(configFile, JSON.stringify(keep, null, 2), { mode: 0o600 });
+  // the token now lives only in this device's own settings
+  fs.rmSync(grant, { force: true });
+  return next;
 }
 
 /** `warren service`: start the hub or this device at login and keep it running. */
@@ -362,6 +402,12 @@ async function service(action: string | undefined, kind: string | undefined) {
     return;
   }
   const cfg = k === "node" ? saveNodeConfig() : undefined;
+  if (cfg?.local && !cfg.token) {
+    // a fresh request even if one is there, so the hub answers this install
+    const data = hubDataDir();
+    fs.mkdirSync(data, { recursive: true });
+    if (!fs.existsSync(path.join(data, "local-device.json"))) fs.writeFileSync(path.join(data, "local-device.request"), JSON.stringify({ name: cfg.name }), { mode: 0o600 });
+  }
   const log = path.join(dir, `${k}.log`);
   const from = fs.existsSync(log) ? fs.statSync(log).size : 0;
   let s;
@@ -380,6 +426,8 @@ async function service(action: string | undefined, kind: string | undefined) {
     if (k === "hub") {
       const ok = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok, () => false);
       if (ok) return console.log(`The hub is up at http://localhost:${port}`);
+    } else if (cfg?.local && !cfg.token) {
+      return console.log("This computer becomes a device as soon as you've made your account in the browser.");
     } else if (fs.existsSync(s.log)) {
       const recent = fs.readFileSync(s.log, "utf8").slice(from).split("\n").slice(-50).join("\n");
       if (recent.includes(`connected to ${cfg!.hub} as`)) return console.log(`Connected to ${cfg!.hub} as "${cfg!.name}".`);

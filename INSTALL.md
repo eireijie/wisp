@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | b
 curl -fsSL <hub URL>/install.sh | bash -s -- --hub <hub URL> --token <token> --name "<device name>"
 ```
 
-It clones to `~/warren` (`--dir` to change it), installs dependencies, links `warren` into `~/.local/bin`, and runs `warren service install hub|node`, which starts it at login: a LaunchAgent on macOS, a systemd user service on Linux (or a system service when run as root), a task at sign-in on Windows. On a dedicated Linux server, follow the steps below instead so the hub runs as its own user.
+It clones to `~/warren` (`--dir` to change it), installs dependencies, links `warren` into `~/.local/bin`, and runs `warren service install hub|node`, which starts it at login. With `--hub-server` it also runs `warren service install node --local`, so the hub's own computer becomes the owner's device as soon as they make their account (no token; `--no-device` skips it), prints the computer's Wi-Fi address and opens the browser (`--no-open` skips it). Setup in the browser then starts with Tailscale, so Warren works from anywhere: a LaunchAgent on macOS, a systemd user service on Linux (or a system service when run as root), a task at sign-in on Windows. On a dedicated Linux server, follow the steps below instead so the hub runs as its own user.
 
 ## Ground rules
 

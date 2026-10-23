@@ -1,3 +1,4 @@
+import { watchLocalDevice } from "./local-device.ts";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -12,6 +13,7 @@ import { Hub } from "./hub.ts";
 import { registerVaultGit } from "./vault-git.ts";
 import { carryOverVault, rememberVaultDir, resolveVaultLocation } from "./vault-location.ts";
 import { Store } from "./store.ts";
+import { Vaults } from "./vaults.ts";
 
 export interface HubOptions {
   dataDir: string;
@@ -30,8 +32,13 @@ export async function buildHub(opts: HubOptions) {
   if (moved && moved.files > 0) await vault.syncFromDisk({ name: "Warren", email: "warren@localhost" }, "Brought over memory from the earlier folder");
   rememberVaultDir(opts.dataDir, location.path);
   const store = new Store(db);
-  const hub = new Hub(store, vault);
-  await hub.ensureTeams();
+  // each organization's memory: the first keeps this vault, the others get their own under <data>/orgs
+  let hubRef: Hub | null = null;
+  const vaults = new Vaults(path.resolve(opts.dataDir), vault, store, (wsId) => hubRef?.broadcast(wsId, { type: "memory_changed" }));
+  await vaults.openAll();
+  const hub = new Hub(store, vaults);
+  hubRef = hub;
+  await hub.foldTeams();
   hub.routines.start();
   hub.background.start();
   // edits made in Obsidian on this machine show up in Warren
@@ -53,6 +60,8 @@ export async function buildHub(opts: HubOptions) {
     restart: () => app.close().then(() => process.exit(RESTART_CODE)),
   });
   registerVaultGit(app, hub, { dataDir: path.resolve(opts.dataDir) });
+  // the hub's own computer becomes a device once someone asks for it and there's an owner
+  const stopLocalDevice = watchLocalDevice(hub, path.resolve(opts.dataDir));
 
   if (opts.webDir && fs.existsSync(opts.webDir)) {
     // wildcard serving picks up rebuilt assets without a restart
@@ -74,9 +83,13 @@ export async function buildHub(opts: HubOptions) {
 
   app.addHook("preClose", async () => {
     stopWatching();
+    stopLocalDevice();
     await hub.shutdown();
   });
-  app.addHook("onClose", async () => db.close());
+  app.addHook("onClose", async () => {
+    vaults.close();
+    db.close();
+  });
   return { app, hub };
 }
 

@@ -1,9 +1,10 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
+import { HubToNode, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
 import { Apns } from "./apns.ts";
+import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
 import { Push } from "./push.ts";
@@ -13,10 +14,13 @@ import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
+import type { Vaults } from "./vaults.ts";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
+import { spawnSection } from "./spawn.ts";
+import { foldTeams } from "./fold-teams.ts";
 import type { Store } from "./store.ts";
 
 const CONTEXT_MESSAGES = 20;
@@ -67,6 +71,8 @@ export class Hub {
   readonly skills: SkillStore;
   /** iOS push notifications (optional; needs an APNs key) */
   readonly apns: Apns;
+  /** how people and devices reach this hub from elsewhere (home network, Tailscale) */
+  reach = new Reach(Number(process.env.PORT ?? 4747));
   /** how the hub reaches outside services (Orgo); tests swap it */
   fetchImpl: typeof fetch = (...args) => fetch(...args);
   /** where Orgo computers' screens are (websockify); tests point it at a fake */
@@ -76,10 +82,10 @@ export class Hub {
 
   constructor(
     readonly store: Store,
-    readonly vault: Vault,
+    readonly vaults: Vaults,
   ) {
     this.access = new MemoryAccess(store);
-    this.memory = new AgentMemory(store, vault, this.access);
+    this.memory = new AgentMemory(store, (wsId) => this.vault(wsId), this.access);
     this.discussions = new Discussions(this);
     this.computers = new Computers(this);
     this.routines = new Routines(this);
@@ -94,20 +100,20 @@ export class Hub {
     this.apns = new Apns(this);
   }
 
-  /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
-  async ensureTeams() {
-    const rows = this.store.db.prepare("SELECT id, workspace_id FROM teams WHERE channel_id IS NULL").all() as { id: string; workspace_id: string }[];
-    for (const r of rows) {
-      const team = this.store.team(r.id)!;
-      const name = `team-${team.name}`;
-      const channel = this.store.channelByName(r.workspace_id, name) ?? this.store.createChannel(r.workspace_id, name, "channel", `Team ${team.name}`);
-      this.store.updateTeam(team.id, { channelId: channel.id });
-      for (const m of team.members) this.store.addChannelMember(channel.id, { kind: "agent", id: m.agentId });
-      for (const p of this.store.members(r.workspace_id).filter((m) => m.role === "owner")) this.store.addChannelMember(channel.id, { kind: "user", id: p.id });
-      const brief = `${team.folder}/README.md`;
-      if (!this.vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
-        await this.vault
-          .write(brief, `# Team ${team.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for team ${team.name}`)
+  /** An organization's memory vault (each organization has its own). */
+  vault(workspaceId: string): Vault {
+    return this.vaults.get(workspaceId);
+  }
+
+  /** Old teams (and v0.1 groups) become their channel's team; each memory folder keeps a brief. */
+  async foldTeams() {
+    for (const t of foldTeams(this.store)) {
+      if (!t.folder) continue;
+      const brief = `${t.folder}/README.md`;
+      const vault = this.vault(t.workspaceId);
+      if (!vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
+        await vault
+          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for #${t.name}`)
           .catch(() => undefined);
       }
     }
@@ -213,6 +219,20 @@ export class Hub {
     if (!node?.ownerId || node.shared || node.ownerId === requestedBy) return null;
     const owner = this.store.user(node.ownerId)?.name ?? "its owner";
     return `@${agent.handle} runs directly on ${owner}'s device "${node.name}", so only ${owner} can ask it for things. ${owner} can open it up to everyone on its page`;
+  }
+
+  /**
+   * Does this agent answer `personId`? Its "Who it answers" setting: only its creator ("me"; the
+   * organization's owners when nobody is recorded as its creator, or they left), chosen people
+   * (and its creator), or anyone. Unset is anyone, as agents did before the setting existed. Work
+   * nobody asked for (a schedule, the system) always goes through.
+   */
+  answers(agent: Pick<Agent, "workspaceId" | "settings">, personId: string | null): boolean {
+    const mode = agent.settings.respondTo ?? "anyone";
+    if (mode === "anyone" || !personId || personId === "system") return true;
+    const creator = agent.settings.createdBy && this.store.role(agent.workspaceId, agent.settings.createdBy) ? agent.settings.createdBy : null;
+    if (creator ? creator === personId : this.store.role(agent.workspaceId, personId) === "owner") return true;
+    return mode === "people" && (agent.settings.respondPeople ?? []).includes(personId);
   }
 
   agentStatus(agent: { id: string; nodeId: string | null }): "online" | "busy" | "offline" {
@@ -333,7 +353,7 @@ export class Hub {
         collect(live, msg.event);
         this.live.set(run.id, live);
         // a background check works quietly: nothing shows in the DM unless it messages the person
-        if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, event: msg.event }, this.audience(run.channelId));
+        if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: run.agentId, channelId: run.channelId, ...this.whereRuns(run), event: msg.event }, this.audience(run.channelId));
         return;
       }
       case "run_done":
@@ -454,6 +474,9 @@ export class Hub {
       for (const m of store.channelMembers(channel.id)) if (m.kind === "agent") out.add(m.id);
     }
     if (!out.size && msg.author.kind === "user" && msg.author.id !== "system") {
+      // with a team, only the leads read a new message at the top of the channel
+      const leads = channel?.kind === "channel" && !msg.threadId ? this.leads(channel) : [];
+      for (const l of leads) out.add(l);
       // a plain reply in a thread goes to the agent already in it: the last one that spoke, or
       // else the one that started it or was asked at the start
       if (msg.threadId) {
@@ -473,12 +496,60 @@ export class Hub {
     return [...out];
   }
 
+  /** A channel's team leads that still exist, in chart order. */
+  leads(channel: { settings: { team: ChannelTeam | null } }): string[] {
+    return (channel.settings.team?.nodes ?? []).filter((n) => n.lead && this.store.agent(n.agentId)).map((n) => n.agentId);
+  }
+
+  /** Where a run works: its thread, and every thread above that one (outermost first). */
+  whereRuns(run: { threadId: string | null }): { threadId: string | null; threadPath: string[] } {
+    return { threadId: run.threadId, threadPath: run.threadId ? this.threadPath(run.threadId) : [] };
+  }
+
+  /** The threads a thread sits in, outermost first (empty for a thread at the top of a channel). */
+  threadPath(threadId: string): string[] {
+    const path: string[] = [];
+    let cur = this.store.message(threadId)?.threadId ?? null;
+    while (cur && path.length < 20 && !path.includes(cur)) {
+      path.unshift(cur);
+      cur = this.store.message(cur)?.threadId ?? null;
+    }
+    return path;
+  }
+
   private route(msg: Message, workspaceId: string, replyInThread: boolean, requestedBy: string | null) {
-    // a channel can ask agents to answer people in a thread under their message
-    const tidy = msg.author.kind === "user" && this.store.channel(msg.channelId)?.settings.replyInThread;
-    const threadId = msg.threadId ?? (replyInThread || tidy ? msg.id : null);
-    for (const agentId of this.targets(msg, workspaceId)) {
+    const channel = this.store.channel(msg.channelId);
+    const fromPerson = msg.author.kind === "user" && msg.author.id !== "system";
+    // a channel can ask agents to answer people in a thread under their message; a team always does
+    const tidy = fromPerson && (channel?.settings.replyInThread || !!channel?.settings.team);
+    // a hand-off asks for its own thread, even inside another thread (a sub-thread)
+    const threadId = replyInThread ? msg.id : (msg.threadId ?? (tidy ? msg.id : null));
+    let targets = this.targets(msg, workspaceId);
+    // two or more leads read a new request: they plan it together before anyone starts
+    const leads = channel && fromPerson && !msg.threadId && !parseMentions(msg.body).length ? this.leads(channel) : [];
+    if (leads.length > 1 && targets.length === leads.length && targets.every((t) => leads.includes(t))) {
+      const here = leads.filter((l) => this.answers(this.store.agent(l)!, msg.author.id) && !this.whyNotAllowed(this.store.agent(l)!, requestedBy));
+      const online = here.filter((l) => this.agentAvailable(this.store.agent(l)!));
+      if (online.length > 1) {
+        const policy = agentPolicy(this, workspaceId);
+        const verdict = this.guard.allow(msg.channelId, msg.hop, Date.now(), { maxHops: policy.maxHops, maxRunsPerWindow: policy.maxRunsPerMinute });
+        if (!verdict.ok) {
+          this.postSystem(msg, `Not waking the leads: ${verdict.reason}.`);
+          return;
+        }
+        const d = this.discussions.plan({ workspaceId, request: msg, leads: here, requestedBy, startedBy: msg.author });
+        this.discussions.broadcast(d.id);
+        return;
+      }
+      // with only one lead around, it plans alone rather than two leads handing out the same work
+      const solo = online[0] ?? here[0];
+      if (solo && here.length > 1) this.postSystem({ ...msg, threadId }, `${here.filter((l) => l !== solo).map((l) => this.handleOf(l)).join(" and ")} ${here.length > 2 ? "are" : "is"} away, so ${this.handleOf(solo)} plans this on its own.`);
+      targets = solo ? [solo] : [];
+    }
+    for (const agentId of targets) {
       const agent = this.store.agent(agentId)!;
+      // an agent that only answers certain people stays quiet for everyone else
+      if (!this.answers(agent, msg.author.kind === "user" ? msg.author.id : requestedBy)) continue;
       const notAllowed = this.whyNotAllowed(agent, requestedBy);
       if (notAllowed) {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${notAllowed}.`);
@@ -560,7 +631,7 @@ export class Hub {
     // working again, so an earlier "needs you on my computer" no longer stands
     if (agent.computerId) this.computers.dropHelp(agent.computerId, agent.id);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
-    if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, event: { type: "status", text: "started" } }, this.audience(run.channelId));
+    if (run.kind !== "background") this.broadcast(conn.workspaceId, { type: "run_event", runId: run.id, agentId: agent.id, channelId: run.channelId, ...this.whereRuns(run), event: { type: "status", text: "started" } }, this.audience(run.channelId));
     this.buildPrompt(agent.id, run.channelId, run.threadId, run.triggerMessageId, run).then(
       async (prompt) => {
         // sign-ins to remote connectors that are about to expire are refreshed first
@@ -617,7 +688,8 @@ export class Hub {
     const only = this.audience(channel.id);
     const pinned = this.store.pinnedIds([channel.id])[channel.id]?.includes(msg.id);
     let kept = false;
-    if (!msg.threadId && (this.store.replyCounts([msg.id])[msg.id] ?? 0) > 0) {
+    // a message with replies (a thread, or a sub-thread in one) stays as a blank so its replies keep their place
+    if ((this.store.replyCounts([msg.id])[msg.id] ?? 0) > 0) {
       this.broadcast(channel.workspaceId, { type: "message_updated", message: { ...this.store.blankMessage(msg.id)!, reactions: [] } }, only);
       kept = true;
     } else {
@@ -626,7 +698,7 @@ export class Hub {
       const root = msg.threadId ? this.store.message(msg.threadId) : undefined;
       if (root?.deletedAt && !this.store.replyCounts([root.id])[root.id]) {
         this.store.deleteMessage(root.id);
-        this.broadcast(channel.workspaceId, { type: "message_removed", messageId: root.id, channelId: root.channelId, threadId: null }, only);
+        this.broadcast(channel.workspaceId, { type: "message_removed", messageId: root.id, channelId: root.channelId, threadId: root.threadId }, only);
       }
     }
     if (pinned) this.broadcast(channel.workspaceId, { type: "channels_changed" });
@@ -771,10 +843,52 @@ export class Hub {
   /** The agent's SOUL.md from its private vault folder, or "" if it doesn't have one. */
   async soul(agentId: string): Promise<string> {
     try {
-      return (await this.vault.read(soulPath(agentId))).content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+      const agent = this.store.agent(agentId);
+      if (!agent) return "";
+      return (await this.vault(agent.workspaceId).read(soulPath(agentId))).content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
     } catch {
       return "";
     }
+  }
+
+  /**
+   * The channel's team, as this agent sees it: who leads, who hands work to whom, and what that
+   * means for it. Everyone on the team knows everyone else on it. Empty when the channel has no
+   * team or the agent isn't on it.
+   */
+  teamSection(channel: { name: string; settings: { team: ChannelTeam | null } }, agentId: string): string {
+    const team = channel.settings.team;
+    const me = team?.nodes.find((n) => n.agentId === agentId);
+    if (!team || !me) return "";
+    const live = team.nodes.filter((n) => this.store.agent(n.agentId));
+    // its role on this team, else the one in its own settings
+    const roleOf = (id: string) => team.nodes.find((n) => n.agentId === id)?.role?.trim() || this.store.agent(id)?.settings.role?.trim() || "";
+    const describe = (id: string) => `${this.handleOf(id)} (${this.store.agent(id)!.name}${roleOf(id) ? `, ${roleOf(id)}` : ""})`;
+    const handles = (ids: string[]) => ids.filter((id) => this.store.agent(id)).map(describe).join(", ");
+    const leads = live.filter((n) => n.lead).map((n) => n.agentId);
+    const fromMe = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
+    const toMe = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
+    const chart = live
+      .map((n) => {
+        const gives = team.edges.filter((e) => e.from === n.agentId).map((e) => this.handleOf(e.to));
+        return `- ${describe(n.agentId)}${n.lead ? ", lead" : ""}${gives.length ? `; hands work to ${gives.join(", ")}` : ""}`;
+      })
+      .join("\n");
+    const coLeads = leads.filter((l) => l !== agentId);
+    const job = me.lead
+      ? [
+          `You ${coLeads.length ? `lead #${channel.name} together with ${handles(coLeads)}` : `lead #${channel.name}`}. New messages in the channel come to the leads${coLeads.length ? "; when they do, the leads first talk it over and agree on a plan in the thread, and only then hand out work" : ""}.`,
+          fromMe.length
+            ? `Plan the work, then hand each piece to the agent it fits with task_delegate (${handles(fromMe)} get work from you). Each hand-off opens its own sub-thread under the thread you're in, so people can follow it. Keep the thread posted: who's doing what, and the result when the pieces are in.`
+            : "Nobody on the chart gets work from you, so do the work yourself.",
+        ]
+      : [
+          `You get work in #${channel.name} from ${handles(toMe) || "the leads"}. Messages at the top of the channel go to the leads, not to you; you're woken when you're handed a task or someone @mentions you.`,
+          fromMe.length ? `You can hand pieces of your work to ${handles(fromMe)} with task_delegate.` : "",
+          "When you finish a task, report the result with task_update so whoever handed it to you hears back.",
+        ];
+    const role = me.role?.trim() ? `Your role here: ${me.role.trim()}.${me.roleNotes?.trim() ? ` ${me.roleNotes.trim()}` : ""}` : "";
+    return [`## Your team in #${channel.name}`, role, ...job.filter(Boolean), `The whole team:\n${chart}`].filter(Boolean).join("\n");
   }
 
   /**
@@ -816,6 +930,10 @@ export class Hub {
             .filter(Boolean)
             .join("\n")
         : "";
+    const teamNotes = channel.kind === "channel" && !background ? this.teamSection(channel, agent.id) : "";
+    // a sub-thread branched off another thread: what was said there, so the agent isn't lost
+    const parentId = threadId ? store.message(threadId)?.threadId : null;
+    const parentThread = parentId && !background ? store.messages(channelId, { threadId: parentId, limit: 10 }).filter((m) => m.author.id !== "system" && m.id !== threadId) : [];
     const forUser = background && run?.requestedBy ? store.user(run.requestedBy) : undefined;
     const person = forUser ? { id: forUser.id, name: forUser.name } : this.memory.personFor(agent.workspaceId, channelId, threadId, triggerId);
     // the person's own clock, so "tomorrow morning" means theirs
@@ -827,6 +945,7 @@ export class Hub {
     const asks = agentPolicy(this, agent.workspaceId).askBefore.map((k) => ASK_BEFORE_TEXT[k]);
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
     const leading = leadSection(store, agent);
+    const making = background ? "" : spawnSection(this, agent);
     const skills = this.skills.promptSection(agent.id);
     const connectors = this.connectors.promptSection(agent.id);
     const soulNote = agent.settings.soulLocked
@@ -841,16 +960,19 @@ export class Hub {
       agent.settings.role?.trim() ? `\n## Your role\nYou are the workspace's ${agent.settings.role.trim()}.${agent.settings.roleNotes?.trim() ? ` ${agent.settings.roleNotes.trim()}` : ""}` : "",
       agent.instructions ? `\n## Your instructions (from your owner): your job\n${agent.instructions}` : "",
       leading ? `\n${leading}` : "",
+      making ? `\n${making}` : "",
       memory ? `\n${memory}` : "",
       `\n## Where you are`,
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       channelNotes ? `\n## This channel\n${channelNotes}` : "",
+      teamNotes ? `\n${teamNotes}` : "",
       `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
       background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
+      background ? "" : `When someone asks you to change how Warren works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
       localTime,
       this.computerSection(agent.id),
       this.borrowSection(agent.id),
@@ -859,6 +981,7 @@ export class Hub {
       routines ? `\n${routines}` : "",
       discussion ? `\n${discussion}` : "",
       background,
+      parentThread.length ? `\nThis is a sub-thread. Earlier, in the thread it branched off from:\n${parentThread.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${command?.via === "prompt" ? skillRequest(command.name, command.args) : trigger.body}${taskInstructions(store, agent.id, trigger)}`,
     ]

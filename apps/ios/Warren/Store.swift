@@ -33,7 +33,14 @@ final class Store {
   var agentPolicy: AgentPolicy?
   var routinesVersion = 0
   var backgroundVersion = 0
+  var allowance: Allowance?
+  var changes: [Change]?
   var simple = false
+  /** the optional features this organization has on (all on when the hub doesn't say) */
+  var features: Features = .everything
+  /** every organization you belong to, for the switcher at the top of Chats */
+  var orgs: [OrgSummary] = []
+  var agentDefaults: AgentDefaults?
   var syncError: String?
   var channelVersion = 0
   var memoryVersion = 0
@@ -46,13 +53,24 @@ final class Store {
   var approvals: [Approval] = []
   /** top-level messages per channel, oldest first */
   var messages: [String: [Message]] = [:]
-  /** replies per thread root */
+  /** replies per thread root (a reply can be the root of a sub-thread) */
   var threads: [String: [Message]] = [:]
+  /** thread roots as loaded with their thread: a sub-thread's root is a reply in another thread */
+  var roots: [String: Message] = [:]
   var replyCounts: [String: Int] = [:]
   /** what each busy agent is doing right now ("Reading the vault…"), from run events */
   var activity: [String: String] = [:]
   /** the channel each working agent is replying in */
   var activityChannel: [String: String] = [:]
+  /** the thread it's working in (none at the top of the channel) */
+  var activityThread: [String: String] = [:]
+  /** the threads above that one, outermost first, so a thread shows who's working in its sub-threads */
+  var activityPath: [String: [String]] = [:]
+  /** the steps of each working agent's current run, oldest first */
+  var activitySteps: [String: [String]] = [:]
+  /** the run each working agent is on, so it can be stopped */
+  var activityRun: [String: String] = [:]
+  var activitySince: [String: Date] = [:]
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
@@ -107,17 +125,41 @@ final class Store {
     socket?.cancel(with: .goingAway, reason: nil)
     socket = nil
     api = nil
+    clearData()
+    phase = .signedOut
+    // the hub forgets this phone's push token along with the sign-in
+    updateBadge()
+  }
+
+  /** Moves this phone to another organization with a session token scoped to it, then reloads everything. */
+  func switchSession(token: String) {
+    guard let base = api?.base else { return }
+    // the hub revoked the old token when it issued this one: keep the new one before anything else
+    Session.hub = base
+    Session.token = token
+    api = API(base: base, token: token)
+    socket?.cancel(with: .goingAway, reason: nil)
+    socket = nil
+    connected = false
+    clearData()
+    phase = .loading
+    Task { await load() }
+  }
+
+  private func clearData() {
     me = nil
+    workspace = nil
+    features = .everything; orgs = []; agentDefaults = nil
+    activitySteps = [:]; activityRun = [:]; activitySince = [:]
     sections = []; nodes = []; teams = []; syncError = nil
     tasks = []; notes = []; profiles = [:]; routines = []; backgrounds = [:]
     skills = []; connectors = []; sessions = []; invites = []; prefs = nil
     taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
     channels = []; agents = []; members = []; computers = []; screenCodes = [:]; approvals = []
-    messages = [:]; threads = [:]; activity = [:]; activityChannel = [:]
+    messages = [:]; threads = [:]; roots = [:]; replyCounts = [:]; activity = [:]; activityChannel = [:]
+    activityThread = [:]; activityPath = [:]
+    openChannel = nil
     route = nil
-    phase = .signedOut
-    // the hub forgets this phone's push token along with the sign-in
-    updateBadge()
   }
 
   // MARK: loading
@@ -131,6 +173,7 @@ final class Store {
       self.prefs = me.prefs
       self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
+      self.features = me.features ?? .everything
       async let ch: [Channel] = api.get("/api/channels")
       async let ag: [Agent] = api.get("/api/agents")
       channels = try await ch
@@ -140,9 +183,11 @@ final class Store {
       connect()
       await refreshComputers()
       await refreshApprovals()
+      await refreshOrgs()
       await setUpPush()
     } catch let e as API.Failure where e.status == 401 {
-      signOut()
+      // a token revoked by switching organizations isn't a sign-out if a newer one is in use
+      if self.api?.token == api.token { signOut() }
     } catch {
       if phase != .ready { phase = .failed(error.localizedDescription) }
       else { syncError = error.localizedDescription }
@@ -171,10 +216,13 @@ final class Store {
     if let thread { q["thread"] = thread }
     let page: MessagePage = try await api.get("/api/channels/\(channelId)/messages", q)
     let sorted = page.messages.sorted { $0.createdAt < $1.createdAt }
-    if let thread { threads[thread] = sorted.filter { $0.id != thread } } else {
+    if let thread {
+      threads[thread] = sorted.filter { $0.id != thread }
+      if let root = sorted.first(where: { $0.id == thread }) { roots[thread] = root }
+    } else {
       messages[channelId] = sorted
-      replyCounts.merge(page.replyCounts) { $1 }
     }
+    replyCounts.merge(page.replyCounts) { $1 }
   }
 
   func loadEarlier(_ channelId: String) async -> Bool {
@@ -426,6 +474,7 @@ final class Store {
         prefs = me.prefs
         simple = me.prefs?.experience == "simple"
         role = me.role ?? "member"
+        features = me.features ?? .everything
         try await refreshAgents()
         try await refreshManagement()
         syncError = nil
@@ -433,6 +482,7 @@ final class Store {
       if let open = openChannel { try? await loadMessages(open) }
       await refreshComputers()
       await refreshApprovals()
+      await refreshOrgs()
     }
   }
 
@@ -441,10 +491,15 @@ final class Store {
   private struct StatusEvent: Decodable { var agentId: String; var status: Agent.Status }
   private struct RunEvent: Decodable {
     struct E: Decodable { var type: String; var text: String?; var name: String? }
+    var runId: String?
     var agentId: String
     var channelId: String
+    /** where it works: the thread (none at the top of the channel) and the threads above it, outermost first */
+    var threadId: String?
+    var threadPath: [String]?
     var event: E
   }
+  private struct FeaturesEvent: Decodable { var features: Features }
   private struct ReactionsEvent: Decodable { var messageId: String; var channelId: String; var threadId: String?; var reactions: [Reaction] }
   private struct ComputerEvent: Decodable { var computer: Computer }
   private struct RemovedEvent: Decodable { var computerId: String }
@@ -468,6 +523,8 @@ final class Store {
       if e.message.author.kind == .agent {
         activity[e.message.author.id] = nil
         activityChannel[e.message.author.id] = nil
+        activityThread[e.message.author.id] = nil
+        activityPath[e.message.author.id] = nil
       }
       let mine = e.message.author == Actor(kind: .user, id: me?.id ?? "") || e.message.author.id == "system"
       if !mine, let i = channels.firstIndex(where: { $0.id == e.message.channelId }) {
@@ -485,28 +542,48 @@ final class Store {
       if e.status != .busy {
         activity[e.agentId] = nil
         activityChannel[e.agentId] = nil
+        activityThread[e.agentId] = nil
+        activityPath[e.agentId] = nil
+        activitySteps[e.agentId] = nil
+        activityRun[e.agentId] = nil
+        activitySince[e.agentId] = nil
+      } else if activitySince[e.agentId] == nil {
+        activitySince[e.agentId] = Date()
       }
     case "run_event":
       guard let e = try? d.decode(RunEvent.self, from: data) else { return }
       activityChannel[e.agentId] = e.channelId
+      activityThread[e.agentId] = e.threadId
+      activityPath[e.agentId] = e.threadPath ?? []
+      if let run = e.runId, activityRun[e.agentId] != run {
+        activityRun[e.agentId] = run
+        activitySteps[e.agentId] = []
+        activitySince[e.agentId] = Date()
+      }
       switch e.event.type {
-      case "status": activity[e.agentId] = e.event.text
-      case "tool_call": activity[e.agentId] = "Using \(e.event.name ?? "a tool")"
+      case "status":
+        activity[e.agentId] = e.event.text
+        if let text = e.event.text, text != "started" { addStep(text, for: e.agentId) }
+      case "tool_call":
+        activity[e.agentId] = "Using \(e.event.name ?? "a tool")"
+        addStep("Used \(e.event.name ?? "a tool")", for: e.agentId)
       case "text": activity[e.agentId] = "Writing…"
       default: break
       }
+    case "features":
+      if let e = try? d.decode(FeaturesEvent.self, from: data) { features = e.features }
     case "reactions":
       guard let e = try? d.decode(ReactionsEvent.self, from: data) else { return }
       update(e.messageId, channel: e.channelId, thread: e.threadId) { $0.reactions = e.reactions }
     case "channels_changed":
       channelVersion += 1
       Task { await refreshChannels() }
+      // a channel's team may have changed, and with it the automatic lead
+      Task { try? await refreshTeams(); try? await refreshTaskLead() }
     case "sections_changed":
       Task { do { try await refreshSections() } catch { syncError = error.localizedDescription } }
     case "agent_created", "agent_updated", "agent_removed", "agents_changed":
       Task { do { try await refreshAgents() } catch { syncError = error.localizedDescription } }
-    case "teams_changed":
-      Task { do { try await refreshManagement(); try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
     case "lead_changed":
       Task { do { try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
     case "tasks_changed":
@@ -519,6 +596,9 @@ final class Store {
       if let event = try? JSONSerialization.jsonObject(with: data) as? [String: String], let id = event["agentId"], backgrounds[id] != nil {
         Task { do { try await refreshBackground(id) } catch { syncError = error.localizedDescription } }
       }
+      if allowance != nil { Task { try? await refreshAllowance() } }
+    case "changes_changed":
+      Task { try? await refreshChanges() }
     case "memory_changed":
       memoryVersion += 1
       Task { do { try await refreshNotes() } catch { syncError = error.localizedDescription } }
@@ -531,6 +611,13 @@ final class Store {
     default:
       break
     }
+  }
+
+  private func addStep(_ text: String, for agentId: String) {
+    var steps = activitySteps[agentId] ?? []
+    guard steps.last != text else { return }
+    steps.append(text)
+    activitySteps[agentId] = Array(steps.suffix(30))
   }
 
   private func insert(_ m: Message) {

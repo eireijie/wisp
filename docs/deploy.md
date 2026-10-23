@@ -243,11 +243,13 @@ A hub in Docker can't update itself: pull the new image and recreate the contain
 
 ## Reaching it from your phone
 
-The Warren apps for iPhone and Android pair with your hub by QR code: in Warren on a computer, open **Settings → Mobile → Start pairing** and scan the code with the app. The code carries the address you opened Warren at plus the hub machine's Wi-Fi and Tailscale addresses, and the phone uses the first one it can reach. So on the same Wi-Fi it just works; away from home, the phone needs one of the ways below. Open Warren at that address (say your `ts.net` name) before you pair, so the phone gets it too.
+**Tailscale is built in.** Setup's first step, **Use Warren from anywhere**, and **Settings → Access** walk the owner through it with buttons: install Tailscale on the computer running Warren, sign in, then **Turn on the address**, which runs `tailscale serve` for the hub and gives it `https://<computer>.<tailnet>.ts.net`. From then on every link Warren hands out (invites, devices joining, install commands, phone pairing) uses that address. **Let people without Tailscale in** turns on Tailscale Funnel for the same address, for a friend who isn't on your tailnet. On Linux, if Tailscale refuses Warren's changes, run `sudo tailscale set --operator=$USER` once. A hub in Docker can't see Tailscale on its host; use one of the other ways below.
+
+The Warren apps for iPhone and Android pair with your hub by QR code: in Warren on a computer, open **Settings → Mobile → Start pairing** and scan the code with the app. The code carries Warren's Tailscale address when it's on, then the address you opened Warren at plus the hub machine's Wi-Fi and Tailscale addresses, and the phone uses the first one it can reach.
 
 The PWA needs HTTPS to install on iPhone and to use notifications. Pick one:
 
-- **Tailscale (private, easiest):** install Tailscale on the hub, then run `tailscale serve --bg 4747`. Open `https://<hub>.<tailnet>.ts.net` on any device in your tailnet.
+- **Tailscale (private, easiest):** use Settings → Access (above), or by hand: install Tailscale on the hub, then run `tailscale serve --bg 4747`. Open `https://<hub>.<tailnet>.ts.net` on any device in your tailnet.
 - **Your own domain:** put Caddy or nginx in front of port 4747. Caddy example: `warren.example.com { reverse_proxy localhost:4747 }`. WebSockets (`/ws`, `/ws/node`) must be proxied too; Caddy does that automatically.
 - **Cloudflare Tunnel:** `cloudflared tunnel --url http://localhost:4747`.
 

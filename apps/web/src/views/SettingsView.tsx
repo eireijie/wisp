@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users, Wrench } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, Gauge, Monitor, Palette, Settings, SlidersHorizontal, Users } from "lucide-react";
+import { resolveFeatures, type Features } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { go, href, type SettingsPage } from "../router.ts";
+import { appHashBeforeSettings, go, href, type SettingsPage } from "../router.ts";
 import { Button, Pill, cx } from "../components/ui.tsx";
-import { useSimple } from "../experience.tsx";
+import { useFeatures } from "../features.ts";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
@@ -12,53 +13,82 @@ import { HarnessesPage } from "./settings/harnesses.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
+import { ModsPage } from "./settings/features.tsx";
+import { UsagePage } from "./settings/usage.tsx";
+import { AskAndChanges } from "./settings/changes.tsx";
+import { AgentDefaultsPage } from "./settings/defaults.tsx";
+import { MarketplaceView } from "./MarketplaceView.tsx";
+import { AccessPanel } from "../components/Access.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
-/** Settings, split into pages like Linear's and Paperclip's: yours first, then the workspace's. */
-type NavGroup = { group: string; hint?: string; pages: { id: SettingsPage; label: string; icon: ReactNode; ownerOnly?: boolean; noGuests?: boolean }[] };
-const NAV: NavGroup[] = [
+/**
+ * Settings: a short list of sections. A section with more than one page lists them under it
+ * while it's open. A page can need a feature (Voice, People, Usage), and some aren't for guests.
+ * Page ids are the routes (SETTINGS_PAGES), so old links still open the same page.
+ */
+type NavPage = { id: SettingsPage; label: string; noGuests?: boolean; feature?: keyof Features };
+type NavSection = { section: string; icon: ReactNode; pages: NavPage[] };
+const NAV: NavSection[] = [
   {
-    group: "Account",
+    section: "General",
+    icon: <Settings size={16} />,
     pages: [
-      { id: "profile", label: "Profile", icon: <User size={16} /> },
-      { id: "preferences", label: "App behavior", icon: <SlidersHorizontal size={16} /> },
-      { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
-      { id: "voice", label: "Voice", icon: <Mic size={16} /> },
-      { id: "appearance", label: "Appearance", icon: <Palette size={16} /> },
-      { id: "security", label: "Security", icon: <Lock size={16} /> },
-      { id: "mobile", label: "Mobile", icon: <Smartphone size={16} /> },
+      { id: "general", label: "Workspace" },
+      { id: "profile", label: "Profile" },
+      { id: "preferences", label: "App behavior" },
+      { id: "features", label: "Mods" },
+    ],
+  },
+  { section: "Usage", icon: <Gauge size={16} />, pages: [{ id: "usage", label: "Usage", feature: "background" }] },
+  {
+    section: "People",
+    icon: <Users size={16} />,
+    pages: [
+      { id: "people", label: "People", feature: "invite" },
+      { id: "agents", label: "Agents", noGuests: true },
     ],
   },
   {
-    group: "Workspace",
+    section: "Notifications",
+    icon: <Bell size={16} />,
     pages: [
-      { id: "general", label: "General", icon: <Building2 size={16} /> },
-      { id: "people", label: "People", icon: <Users size={16} /> },
-      { id: "agents", label: "Agents", icon: <Bot size={16} />, noGuests: true },
-      { id: "runtimes", label: "Agent runtimes", icon: <Cpu size={16} />, noGuests: true },
-      { id: "harnesses", label: "Harnesses", icon: <Wrench size={16} />, noGuests: true },
-      { id: "memory", label: "Memory", icon: <Shield size={16} /> },
-      { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
-      { id: "connections", label: "Connections", icon: <Link2 size={16} />, noGuests: true },
-      { id: "data", label: "Data & export", icon: <Database size={16} /> },
-      { id: "updates", label: "Updates & about", icon: <RefreshCw size={16} /> },
+      { id: "notifications", label: "Notifications" },
+      { id: "voice", label: "Voice", feature: "voice" },
+    ],
+  },
+  { section: "Appearance", icon: <Palette size={16} />, pages: [{ id: "appearance", label: "Appearance" }] },
+  {
+    section: "Devices",
+    icon: <Monitor size={16} />,
+    pages: [
+      { id: "computers", label: "Computers", noGuests: true },
+      { id: "mobile", label: "Mobile" },
+      { id: "access", label: "Access" },
+    ],
+  },
+  {
+    section: "Advanced",
+    icon: <SlidersHorizontal size={16} />,
+    pages: [
+      { id: "agent-defaults", label: "Agent defaults", noGuests: true },
+      { id: "memory", label: "Memory" },
+      { id: "apps", label: "Connected apps", noGuests: true },
+      { id: "runtimes", label: "Agent runtimes", noGuests: true },
+      { id: "harnesses", label: "Harnesses", noGuests: true },
+      { id: "connections", label: "Connections", noGuests: true },
+      { id: "security", label: "Security" },
+      { id: "data", label: "Data" },
+      { id: "updates", label: "About" },
     ],
   },
 ];
 
-/** Pages most people never need; in Simple they sit under "Advanced" at the bottom of the list. */
-const ADVANCED_PAGES: SettingsPage[] = ["runtimes", "connections"];
-
-/** The settings list for Simple or Advanced. Simple moves the technical pages to the end, still reachable. */
-export function settingsNav(simple: boolean, guest: boolean): NavGroup[] {
-  const groups = NAV.map((g) => ({ ...g, pages: g.pages.filter((p) => !(guest && p.noGuests)) }));
-  if (!simple) return groups;
-  const advanced = groups.flatMap((g) => g.pages.filter((p) => ADVANCED_PAGES.includes(p.id)));
-  const out = groups.map((g) => ({ ...g, pages: g.pages.filter((p) => !ADVANCED_PAGES.includes(p.id)) }));
-  return advanced.length ? [...out, { group: "Advanced", hint: "For setting up agent tools by hand.", pages: advanced }] : out;
+/** The settings sections for a guest or not, with the organization's features. Pages that don't apply, and sections left empty, are left out. */
+export function settingsNav(guest: boolean, features: Features = resolveFeatures(null)): NavSection[] {
+  return NAV.map((s) => ({ ...s, pages: s.pages.filter((p) => !(guest && p.noGuests) && (!p.feature || features[p.feature])) })).filter((s) => s.pages.length);
 }
 
-const PAGES: Record<SettingsPage, () => ReactNode> = {
+const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   profile: () => <ProfilePage />,
   preferences: () => <PreferencesPage />,
   notifications: () => <NotificationsPage />,
@@ -66,7 +96,21 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   appearance: () => <AppearancePage />,
   security: () => <SecurityPage />,
   mobile: () => <MobilePage />,
-  general: () => <GeneralPage />,
+  usage: () => <UsagePage />,
+  general: () => (
+    <>
+      <AskAndChanges />
+      <GeneralPage />
+    </>
+  ),
+  access: () => (
+    <>
+      <PageHeader title="Access">Open Warren from anywhere with Tailscale, privately.</PageHeader>
+      <AccessPanel />
+    </>
+  ),
+  "agent-defaults": () => <AgentDefaultsPage />,
+  features: () => <ModsPage />,
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,
@@ -78,78 +122,135 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   updates: () => <UpdatesPage />,
 };
 
-export function SettingsView({ page, onBack }: { page: SettingsPage | null; onBack?: () => void }) {
+/**
+ * On larger screens (`fullWindow`) Settings replaces the whole app, sidebar included: its own list
+ * on the left with "Back to app", the page on the right. On phones it's a list, then a page.
+ */
+export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage | null; onBack?: () => void; fullWindow?: boolean }) {
   const me = useStore((s) => s.me)!;
   const guest = me.role === "guest";
-  const simple = useSimple();
-  const nav = settingsNav(simple, guest);
-  // desktops open on Profile; phones show the list first
-  const [wide, setWide] = useState(() => window.matchMedia("(min-width: 768px)").matches);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const on = () => setWide(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  const current = page ?? (wide ? "profile" : null);
-  const label = nav.flatMap((g) => g.pages).find((p) => p.id === current)?.label;
+  const features = useFeatures();
+  const nav = settingsNav(guest, features);
+  const all = nav.flatMap((s) => s.pages);
+  // a page whose feature is off (or that a guest can't use) isn't shown; fall back to the first page
+  const known = page && all.some((p) => p.id === page) ? page : null;
+  const current = known ?? (fullWindow ? all[0].id : null);
+  const label = all.find((p) => p.id === current)?.label;
+  const open = nav.find((s) => s.pages.some((p) => p.id === current));
 
   const list = (
-    <nav className="space-y-5" aria-label="Settings">
-      {nav.map((g) => (
-        <div key={g.group}>
-          <div className="px-2 mb-1 text-[13px] font-semibold text-faint">{g.group}</div>
-          {g.hint && <p className="px-2 mb-1.5 text-xs text-muted">{g.hint}</p>}
-          <div className="space-y-px">
-            {g.pages.map((p) => (
-              <a
-                key={p.id}
-                href={href({ view: "settings", page: p.id })}
-                aria-current={current === p.id ? "page" : undefined}
-                className={cx("flex items-center gap-2.5 rounded-lg px-2 h-9 md:h-8 text-[15px] md:text-[13px]", current === p.id ? "bg-hover text-ink font-medium" : "text-muted hover:text-ink hover:bg-hover")}
-              >
-                <span className="shrink-0">{p.icon}</span>
-                <span className="flex-1 truncate">{p.label}</span>
-                <ChevronRight size={14} className="md:hidden text-faint" />
-              </a>
-            ))}
+    <nav className="space-y-px" aria-label="Settings">
+      {nav.map((s) => {
+        const isOpen = s === open;
+        return (
+          <div key={s.section}>
+            <a
+              href={href({ view: "settings", page: s.pages[0].id })}
+              aria-current={isOpen && s.pages.length === 1 ? "page" : undefined}
+              className={cx(
+                "flex items-center gap-2.5 rounded-lg px-2.5 text-[15px]",
+                fullWindow ? "h-[34px] md:text-sm" : "h-11",
+                isOpen ? (fullWindow ? "bg-side-active text-ink font-bold" : "bg-hover text-ink font-medium") : fullWindow ? "text-ink/80 font-medium hover:text-ink hover:bg-side-hover" : "text-ink hover:bg-hover",
+              )}
+            >
+              <span className="shrink-0 opacity-80">{s.icon}</span>
+              <span className="flex-1 truncate">{s.section}</span>
+              {!fullWindow && <ChevronRight size={14} className="text-faint" />}
+            </a>
+            {fullWindow && isOpen && s.pages.length > 1 && (
+              <div className="ml-[18px] my-1 pl-3 border-l border-line space-y-px">
+                {s.pages.map((p) => (
+                  <a
+                    key={p.id}
+                    href={href({ view: "settings", page: p.id })}
+                    aria-current={current === p.id ? "page" : undefined}
+                    className={cx("flex items-center h-[30px] px-2.5 rounded-lg text-sm truncate", current === p.id ? "text-ink font-bold bg-side-hover" : "text-muted hover:text-ink hover:bg-side-hover")}
+                  >
+                    {p.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 
-  return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        {(onBack || (!wide && current)) && (
-          <button
-            className="md:hidden h-9 pl-0.5 pr-2 -ml-1.5 rounded-md hover:bg-hover inline-flex items-center gap-0.5 text-sm text-muted hover:text-ink"
-            onClick={() => (current && !wide ? go({ view: "settings", page: null }) : onBack?.())}
-            aria-label={current && !wide ? "Back to all settings" : "Back"}
+  // phones: a section's other pages as a row of chips above the page
+  const siblings =
+    !fullWindow && open && open.pages.length > 1 ? (
+      <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 mb-5" aria-label={`${open.section} pages`}>
+        {open.pages.map((p) => (
+          <a
+            key={p.id}
+            href={href({ view: "settings", page: p.id })}
+            aria-current={current === p.id ? "page" : undefined}
+            className={cx("shrink-0 h-8 px-3.5 rounded-full inline-flex items-center text-[13px] font-bold", current === p.id ? "bg-ink text-bg" : "bg-chip text-muted hover:text-ink")}
           >
-            <ChevronLeft size={22} aria-hidden />
-            <span aria-hidden>Back</span>
-          </button>
-        )}
-        <a
-          href={href({ view: "dashboard" })}
-          className="hidden md:inline-flex shrink-0 h-8 pl-1 pr-2.5 -ml-1.5 mr-1 rounded-md items-center gap-1 text-sm text-muted hover:text-ink hover:bg-hover"
-        >
-          <ChevronLeft size={16} aria-hidden /> Back to Warren
-        </a>
-        <span aria-hidden className="hidden md:block h-5 w-px bg-line mr-2" />
-        <h1 className="text-lg font-bold tracking-tight truncate">
-          Settings
-          {label && <span className="text-muted font-normal normal-case tracking-normal"> / {label}</span>}
-        </h1>
-      </header>
-      <div className="flex-1 min-h-0 flex">
-        <aside className="hidden md:block w-56 shrink-0 border-r border-line overflow-y-auto p-3">{list}</aside>
-        <main className="flex-1 min-w-0 overflow-y-auto">
-          <div className="max-w-3xl p-4 md:p-8 pb-16">{current ? PAGES[current]() : <div className="md:hidden">{list}</div>}</div>
+            {p.label}
+          </a>
+        ))}
+      </div>
+    ) : null;
+
+  const body = (id: SettingsPage) =>
+    id === "apps" ? (
+      <MarketplaceView section="installed" />
+    ) : (
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className={cx("max-w-3xl pb-16", fullWindow ? "mx-auto px-7 py-10" : "p-4")}>
+          {siblings}
+          {PAGES[id]()}
+        </div>
+      </div>
+    );
+
+  if (fullWindow)
+    return (
+      <div className="flex-1 min-w-0 flex gap-2 p-2">
+        <aside className="w-60 shrink-0 overflow-y-auto flex flex-col gap-4 px-1.5 py-2.5 safe-top">
+          <a href={appHashBeforeSettings()} className="flex items-center gap-2 h-9 px-2.5 rounded-lg font-bold text-[15px] hover:bg-side-hover">
+            <ChevronLeft size={16} strokeWidth={2.4} aria-hidden /> Back to app
+          </a>
+          {list}
+        </aside>
+        <main className="flex-1 min-w-0 flex flex-col bg-panel rounded-3xl border border-line shadow-panel overflow-hidden" aria-label={label ? `${label} settings` : "Settings"}>
+          {body(current!)}
         </main>
       </div>
+    );
+
+  // phones: the list first, then a page with Back
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {current !== "apps" && (
+        <header className="h-15 shrink-0 px-4 flex items-center gap-2 border-b border-line safe-top">
+          {(onBack || current) && (
+            <button
+              className="h-9 pl-0.5 pr-2 -ml-1.5 rounded-md hover:bg-hover inline-flex items-center gap-0.5 text-sm text-muted hover:text-ink"
+              onClick={() => (current ? go({ view: "settings", page: null }) : onBack?.())}
+              aria-label={current ? "Back to all settings" : "Back"}
+            >
+              <ChevronLeft size={22} aria-hidden />
+              <span aria-hidden>Back</span>
+            </button>
+          )}
+          <h1 className="text-lg font-bold tracking-tight truncate">
+            Settings
+            {open && <span className="text-muted font-normal normal-case tracking-normal"> / {open.section}</span>}
+          </h1>
+        </header>
+      )}
+      {current === "apps" ? (
+        <MarketplaceView section="installed" onBack={() => go({ view: "settings", page: null })} />
+      ) : current ? (
+        body(current)
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-4 pb-16">{list}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -211,7 +312,7 @@ function UpdatesPage() {
   const u = info?.update;
   return (
     <>
-    <PageHeader title="Updates & about">Warren is free and open source (Apache-2.0). Your data stays on this hub.</PageHeader>
+    <PageHeader title="About">Free and open source. Your data stays on this hub.</PageHeader>
     <section className="space-y-3 mb-10">
       <div className="flex items-center justify-between gap-3">
         <div>

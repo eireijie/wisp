@@ -1,10 +1,17 @@
-import { CONNECTOR_CATALOG, zonedParts, type BackgroundSource, type BackgroundUsage, type Followup } from "@warren/core";
+import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, type BackgroundUsage, type Followup } from "@warren/core";
+import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
 /** The device sees background checks as their own conversation, so they don't mix into the DM's. */
 export const BACKGROUND_THREAD = "background";
 /** Regular checks a day, per agent and person, until they pick another number. */
 export const DEFAULT_DAILY_CAP = 24;
+/** Tokens a day background checks may use for one person, across all their agents, until they pick another amount. */
+export const DEFAULT_ALLOWANCE = 1_000_000;
+/** What a check that didn't report its usage is counted as. */
+export const ESTIMATED_CHECK_TOKENS = 25_000;
+/** Past this share of the allowance, checks come half as often. */
+export const SLOW_DOWN_AT = 0.8;
 const MIN_MINUTES = 10;
 const MAX_MINUTES = 24 * 60;
 
@@ -85,12 +92,19 @@ export class Background {
     }
     for (const b of store.activeBackground()) {
       if (b.checking || (b.nextAt && new Date(b.nextAt) > at)) continue;
+      // no checks while the organization has Background agents switched off (Settings → Features)
+      const ws = store.agent(b.agentId)?.workspaceId;
+      if (!ws || !featureOn(store, ws, "background")) continue;
       const tz = this.timezone(b.userId);
       if (inQuietHours(at, tz, b.quietStart, b.quietEnd)) {
         store.setBackground(b.agentId, b.userId, { nextAt: afterQuietHours(at, tz, b.quietStart, b.quietEnd).toISOString(), nextReason: "after quiet hours" });
         continue;
       }
-      // a regular check waits for tomorrow once today's are used up; follow-ups above never wait
+      // a regular check waits for tomorrow once the person's allowance or this agent's limit is used up; follow-ups above never wait
+      if (this.allowanceShare(ws, b.userId, at) >= 1) {
+        store.setBackground(b.agentId, b.userId, { nextAt: startOfDay(at, tz, 1).toISOString(), nextReason: "allowance used up" });
+        continue;
+      }
       if (this.capReached(b.agentId, b.userId, b.dailyCap, at)) {
         store.setBackground(b.agentId, b.userId, { nextAt: startOfDay(at, tz, 1).toISOString(), nextReason: "daily limit reached" });
         continue;
@@ -106,6 +120,47 @@ export class Background {
 
   private capReached(agentId: string, userId: string, cap: number | null, at: Date) {
     return cap !== null && this.checksToday(agentId, userId, at) >= cap;
+  }
+
+  private allowanceKey = (userId: string) => `allowance:${userId}`;
+
+  /** Tokens a day this person lets background checks use in a workspace; null = no limit. */
+  dailyTokens(workspaceId: string, userId: string): number | null {
+    const v = this.hub.store.setting(workspaceId, this.allowanceKey(userId));
+    if (v === null) return DEFAULT_ALLOWANCE;
+    return v === "none" ? null : Number(v) || DEFAULT_ALLOWANCE;
+  }
+
+  setDailyTokens(workspaceId: string, userId: string, tokens: number | null) {
+    const { store } = this.hub;
+    store.setSetting(workspaceId, this.allowanceKey(userId), tokens === null ? "none" : String(tokens));
+    // checks that were waiting for tomorrow because of the old amount can go ahead if there's room now
+    if (this.allowanceShare(workspaceId, userId) < 1)
+      for (const b of store.activeBackground()) {
+        if (b.userId !== userId || b.nextReason !== "allowance used up" || store.agent(b.agentId)?.workspaceId !== workspaceId) continue;
+        store.setBackground(b.agentId, userId, { nextAt: null, nextReason: "" });
+        this.hub.broadcast(workspaceId, { type: "background_changed", agentId: b.agentId });
+      }
+  }
+
+  /** What every agent's checks used today for one person, against their allowance. */
+  allowance(workspaceId: string, userId: string, at = new Date()): Allowance {
+    const runs = this.hub.store.backgroundRunsFor(workspaceId, userId, startOfDay(at, this.timezone(userId)).toISOString());
+    const per = new Map<string, { agentId: string; tokens: number; checks: number }>();
+    for (const r of runs) {
+      const a = per.get(r.agentId) ?? { agentId: r.agentId, tokens: 0, checks: 0 };
+      a.tokens += r.tokens ?? ESTIMATED_CHECK_TOKENS;
+      a.checks += 1;
+      per.set(r.agentId, a);
+    }
+    const agents = [...per.values()].sort((a, b) => b.tokens - a.tokens);
+    return { dailyTokens: this.dailyTokens(workspaceId, userId), todayTokens: agents.reduce((n, a) => n + a.tokens, 0), estimated: runs.some((r) => r.tokens === null), agents };
+  }
+
+  /** How much of today's allowance is used (1 = all of it); 0 when there's no limit. */
+  allowanceShare(workspaceId: string, userId: string, at = new Date()): number {
+    const a = this.allowance(workspaceId, userId, at);
+    return a.dailyTokens ? a.todayTokens / a.dailyTokens : 0;
   }
 
   /** What this person's checks used, from the token counts the harness reported. */
@@ -138,7 +193,7 @@ export class Background {
   wake(agentId: string, userId: string, followups: Followup[] = [], at = new Date()): string | null {
     const { store } = this.hub;
     const agent = store.agent(agentId);
-    if (!agent || !store.user(userId) || this.hub.whyNotAllowed(agent, userId)) return null;
+    if (!agent || !store.user(userId) || this.hub.whyNotAllowed(agent, userId) || !this.hub.answers(agent, userId)) return null;
     if (this.checking(agentId, userId)) return null;
     const channel = store.dmChannel(agent.workspaceId, userId, agentId);
     // queued until its device takes it: not a check yet, so it isn't counted, listed or shown as "last checked"
@@ -155,8 +210,9 @@ export class Background {
     const agent = store.agent(run.agentId);
     if (!agent || !run.requestedBy) return;
     const b = store.background(run.agentId, run.requestedBy);
-    // the default pace until the agent says otherwise during the check
-    if (b) store.setBackground(run.agentId, run.requestedBy, { lastAt: at.toISOString(), nextAt: new Date(at.getTime() + b.everyMinutes * 60_000).toISOString(), nextReason: "" });
+    // the default pace until the agent says otherwise during the check; half as often once most of the allowance is used
+    const slow = this.allowanceShare(agent.workspaceId, run.requestedBy, at) >= SLOW_DOWN_AT;
+    if (b) store.setBackground(run.agentId, run.requestedBy, { lastAt: at.toISOString(), nextAt: new Date(at.getTime() + b.everyMinutes * (slow ? 2 : 1) * 60_000).toISOString(), nextReason: slow ? "saving allowance" : "" });
     this.hub.broadcast(agent.workspaceId, { type: "background_changed", agentId: agent.id });
   }
 
@@ -177,7 +233,10 @@ export class Background {
 
   /** The agent picked when to look again (from `next_check`). */
   setNext(agentId: string, userId: string, inMinutes: number, reason: string) {
-    const m = Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, Math.round(inMinutes)));
+    const ws = this.hub.store.agent(agentId)?.workspaceId;
+    // near the end of the allowance, the agent's own pick stretches too
+    const slow = !!ws && this.allowanceShare(ws, userId) >= SLOW_DOWN_AT;
+    const m = Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, Math.round(inMinutes * (slow ? 2 : 1))));
     const nextAt = new Date(Date.now() + m * 60_000).toISOString();
     const b = this.hub.store.background(agentId, userId);
     if (b) this.hub.store.setBackground(agentId, userId, { nextAt, nextReason: reason.slice(0, 300) });
@@ -200,9 +259,10 @@ export class Background {
    * memory folders it can read, and Warren itself. Shown on its Background tab and in each check.
    */
   sources(agentId: string): BackgroundSource[] {
-    const { store, vault, access } = this.hub;
+    const { store, access } = this.hub;
     const agent = store.agent(agentId);
     if (!agent) return [];
+    const vault = this.hub.vault(agent.workspaceId);
     const out: BackgroundSource[] = [];
     const connectors = store.db
       .prepare("SELECT c.name, c.catalog_id AS catalogId FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 ORDER BY c.created_at")
@@ -243,7 +303,7 @@ export class Background {
     const later = store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === user?.id);
     const sources = this.sources(agent.id);
     const notesPath = user ? this.watchNotesPath(agent.id, user.id) : null;
-    const notes = notesPath ? await this.hub.vault.read(notesPath).then((n) => n.content.trim(), () => "") : "";
+    const notes = notesPath ? await this.hub.vault(agent.workspaceId).read(notesPath).then((n) => n.content.trim(), () => "") : "";
     const sourceLine = (x: BackgroundSource) => `- ${x.kind === "app" ? `${x.name} (connected app: ${x.detail})` : x.kind === "computer" ? `${x.name}, ${x.detail}` : `${x.name} (memory folder)`}`;
     const approvals = store.db.prepare("SELECT summary, created_at AS createdAt FROM approvals WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 10").all(agent.id) as { summary: string; createdAt: string }[];
 
@@ -267,6 +327,7 @@ export class Background {
         : "",
       `- If something does, tell them with message_person: short, specific, and readable on a phone's lock screen. If you can do the work, do it first (write the draft, find the answer), then show it. Before sending, buying or deleting anything for them, ask with approval_request and include the draft.`,
       `- If nothing does, don't message. Saying nothing is usually right. Never message just to say you checked, and don't repeat what you already told them unless it's become urgent.`,
+      user && this.allowanceShare(agent.workspaceId, user.id) >= SLOW_DOWN_AT ? `- Most of ${name}'s daily allowance for background work is used. Keep this check short: look only at what matters most.` : "",
       quiet ? `- It's quiet hours for ${name} (${b!.quietStart}–${b!.quietEnd}). Only message for something that can't wait until morning.` : "",
       `- Before you finish, call next_check with when to look again and why: soon (10–30 minutes) while something is moving, like waiting on a reply; a few hours when it's calm. For a set time ("8am tomorrow, before the assignment is due"), use followup_set.`,
       `Your final reply isn't posted anywhere. Make it a one-line note to yourself about what you looked at and decided; you'll see it next time.`,

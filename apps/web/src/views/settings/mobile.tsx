@@ -109,7 +109,7 @@ export function MobilePage() {
 
   return (
     <>
-      <PageHeader title="Mobile">Use Warren on your phone. Open the Warren app on your iPhone or Android phone and scan the code here. No address or password to type.</PageHeader>
+      <PageHeader title="Mobile">Scan the code with the Warren app on your phone.</PageHeader>
 
       <div className="rounded-xl border border-line p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row gap-6 sm:items-center">

@@ -21,7 +21,7 @@ beforeAll(async () => {
   const url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
 
-  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123" }) })).json();
+  const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   owner = new WarrenClient({ url, token: setup.token });
   const agent = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "claude-code" });
   await owner.request("POST", "/api/agents", { handle: "helper", name: "Helper", harness: "codex" });
@@ -50,6 +50,7 @@ describe("warren-mcp", () => {
   it("exposes the tool set", async () => {
     const names = (await mcp.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([
+      "agent_create",
       "agents_list",
       "approval_request",
       "branch_merge",
@@ -91,6 +92,8 @@ describe("warren-mcp", () => {
       "next_check",
       "routine_list",
       "routine_save",
+      "settings_change",
+      "settings_read",
       "task_delegate",
       "task_list",
       "task_update",
@@ -133,8 +136,9 @@ describe("warren-mcp", () => {
     expect((await call("memory_context")).text).toContain("Likes tea, not coffee");
     const p = saved.text.match(/in (\S+)\.$/)![1];
     expect((await call("memory_forget", { path: p })).text).toBe(`Forgot ${p}.`);
-    await owner.request("POST", "/api/teams", { name: "scouts", leadId: agentId });
-    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ name: "scouts", lead: "@scout", memory: "teams/scouts/" });
+    await owner.request("POST", "/api/channels", { name: "scouts", settings: { team: { nodes: [{ agentId, lead: true, x: 0, y: 0, role: "Scout" }], edges: [], folder: "teams/scouts" } } });
+    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ channel: "#scouts", leads: ["@scout"], memory: "teams/scouts/", members: [{ agent: "@scout", role: "Scout" }] });
+    expect(JSON.parse((await call("agents_list")).text).find((a: any) => a.handle === "@scout").teams).toEqual(["#scouts"]);
   });
 
   it("delegates tasks and moves files", async () => {

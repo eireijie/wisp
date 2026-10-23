@@ -3,23 +3,7 @@ import Foundation
 extension Store {
   var isOwner: Bool { role == "owner" }
   func refreshTeams() async throws { teams = try await connection().get("/api/teams") }
-  func saveTeam(_ id: String?, _ fields: Fields) async throws {
-    let team: WorkspaceTeam = try await connection().send(id == nil ? "POST" : "PATCH", id.map { "/api/teams/\($0)" } ?? "/api/teams", body: fields)
-    upsertTeam(team)
-    await refreshChannels()
-  }
-  private func upsertTeam(_ team: WorkspaceTeam) {
-    if let i = teams.firstIndex(where: { $0.id == team.id }) { teams[i] = team } else { teams.append(team) }
-  }
-  func deleteTeam(_ id: String) async throws {
-    try await connection().delete("/api/teams/\(id)")
-    teams.removeAll { $0.id == id }
-  }
-  func setTeamAgent(_ team: String, agent: String, fields: Fields?) async throws {
-    let path = "/api/teams/\(team)/members/\(agent)"
-    let updated: WorkspaceTeam = try await connection().send(fields == nil ? "DELETE" : "PUT", path, body: fields)
-    upsertTeam(updated)
-  }
+
   func refreshNodes() async throws { nodes = try await connection().get("/api/nodes") }
   func updateNode(_ id: String, _ fields: Fields) async throws {
     try await connection().raw("PATCH", "/api/nodes/\(id)", body: fields)

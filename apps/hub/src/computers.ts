@@ -185,6 +185,24 @@ export class Computers {
     for (const v of this.viewers.get(computerId) ?? []) send(v.socket, { type: "computer", computer: this.view(c) });
   }
 
+  /** Start a new VM or cloud computer, with its status kept up to date while it comes up. */
+  startInBackground(comp: Computer) {
+    if (comp.kind === "device") return;
+    const { store } = this.hub;
+    store.updateComputer(comp.id, { status: "starting", statusText: comp.kind === "vm" ? "Setting up the VM…" : "Starting…" });
+    this.changed(comp.id);
+    this.act(comp, { action: "start" }, { kind: "user", id: "system" }).then(
+      () => {
+        store.updateComputer(comp.id, { status: "ready", statusText: "" });
+        this.changed(comp.id);
+      },
+      (err) => {
+        store.updateComputer(comp.id, { status: "error", statusText: (err as Error).message.slice(0, 500) });
+        this.changed(comp.id);
+      },
+    );
+  }
+
   spec(c: Computer): ComputerSpec {
     if (c.kind === "orgo") throw new ComputerError("cloud computers don't run on a device");
     return { id: c.id, name: c.name, kind: c.kind, config: c.config as Record<string, unknown> };

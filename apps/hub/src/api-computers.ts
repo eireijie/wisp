@@ -66,7 +66,7 @@ const WARREN = { name: "Warren", email: "warren@localhost" };
  * importing agents that already exist on a device.
  */
 export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) {
-  const { store, vault, computers } = hub;
+  const { store, computers } = hub;
   const { need, parse, channelVisible } = h;
 
   const fail = (reply: FastifyReply, err: unknown) => {
@@ -90,21 +90,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return true;
   };
 
-  const startInBackground = (comp: Computer) => {
-    if (comp.kind === "device") return;
-    store.updateComputer(comp.id, { status: "starting", statusText: comp.kind === "vm" ? "Setting up the VM…" : "Starting…" });
-    computers.changed(comp.id);
-    computers.act(comp, { action: "start" }, { kind: "user", id: "system" }).then(
-      () => {
-        store.updateComputer(comp.id, { status: "ready", statusText: "" });
-        computers.changed(comp.id);
-      },
-      (err) => {
-        store.updateComputer(comp.id, { status: "error", statusText: (err as Error).message.slice(0, 500) });
-        computers.changed(comp.id);
-      },
-    );
-  };
+  const startInBackground = (comp: Computer) => computers.startInBackground(comp);
 
   // --- computers ------------------------------------------------------------------------------
 
@@ -672,7 +658,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown agent" });
     if (body.channelId && store.channel(body.channelId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown channel" });
     const notePath = `agents/${agent.id}/routines/${routineSlug(body.name)}-${Date.now().toString(36)}.md`;
-    await vault.write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${body.name}\n\n${body.steps}\n`, h.commitAuthor(c), `Routine "${body.name}" for @${agent.handle}`);
+    await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${body.name}\n\n${body.steps}\n`, h.commitAuthor(c), `Routine "${body.name}" for @${agent.handle}`);
     const r = store.createRoutine({ workspaceId: c.workspaceId, agentId: agent.id, name: body.name, notePath, schedule: body.schedule, timezone: body.timezone, channelId: body.channelId, status: "ready", createdBy: c.actor });
     hub.broadcast(c.workspaceId, { type: "routines_changed" });
     return r;
@@ -740,7 +726,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!r && !body.name) return reply.code(400).send({ error: "name a new routine" });
     const notePath = r?.notePath ?? `agents/${agent.id}/routines/${routineSlug(body.name!)}-${Date.now().toString(36)}.md`;
     const name = body.name ?? r!.name;
-    await vault.write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${name}\n\n${body.steps}\n`, { name: `@${agent.handle}`, email: `${agent.handle}@agents.warren` }, `Routine "${name}"`);
+    await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${name}\n\n${body.steps}\n`, { name: `@${agent.handle}`, email: `${agent.handle}@agents.warren` }, `Routine "${name}"`);
     if (r) r = store.updateRoutine(r.id, { name, status: "ready", ...(body.schedule !== undefined ? { schedule: body.schedule } : {}), ...(body.timezone ? { timezone: body.timezone } : {}) })!;
     else r = store.createRoutine({ workspaceId: c.workspaceId, agentId: agent.id, name, notePath, schedule: body.schedule ?? null, timezone: body.timezone ?? "UTC", channelId: null, status: "ready", createdBy: c.actor });
     hub.broadcast(c.workspaceId, { type: "routines_changed" });
@@ -828,14 +814,15 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
     const harness = body.harness ?? found.harness;
     const agent = store.createAgent({ workspaceId: c.workspaceId, handle: body.handle, name: body.name ?? found.name.slice(0, 80), harness, model: found.model ?? null, nodeId: node.id, computerId: body.computerId, instructions: (found.instructions ?? "").slice(0, 20_000) });
-    if (body.headless || body.runIn) store.updateAgent(agent.id, { settings: { ...(body.headless ? { headless: true } : {}), ...(body.runIn ? { runIn: body.runIn } : {}) } });
+    // like any new agent, it remembers who brought it in and answers only them to start with
+    store.updateAgent(agent.id, { settings: { respondTo: "me", createdBy: c.actor.id, ...(body.headless ? { headless: true } : {}), ...(body.runIn ? { runIn: body.runIn } : {}) } });
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
     const author = h.commitAuthor(c);
-    await vault.write(soulPath(agent.id), found.soul?.trim() ? found.soul : soulTemplate(agent.name, agent.handle), author, `Import @${agent.handle} from ${node.name}`);
+    await hub.vault(c.workspaceId).write(soulPath(agent.id), found.soul?.trim() ? found.soul : soulTemplate(agent.name, agent.handle), author, `Import @${agent.handle} from ${node.name}`);
     for (const m of found.memories ?? []) {
       const name = m.name.replace(/[^\w.-]+/g, "-").replace(/\.md$/i, "");
-      await vault.write(`agents/${agent.id}/imported/${name}.md`, m.content, author, `Import ${m.name} for @${agent.handle}`);
+      await hub.vault(c.workspaceId).write(`agents/${agent.id}/imported/${name}.md`, m.content, author, `Import ${m.name} for @${agent.handle}`);
     }
     return h.agentView(store.agent(agent.id)!);
   });

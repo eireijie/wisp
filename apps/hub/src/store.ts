@@ -1,4 +1,4 @@
-import { cleanRulePath, parseSubjectKey, subjectKey, teamRoots, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup } from "@warren/core";
+import { channelTeams, cleanRulePath, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup, type Change } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -241,20 +241,18 @@ export class Store {
 
   // --- agents ---------------------------------------------------------------
 
-  createAgent(a: { workspaceId: string; handle: string; name: string; harness: HarnessId; model?: string | null; nodeId?: string | null; computerId?: string | null; groups?: string[]; instructions?: string }) {
+  createAgent(a: { workspaceId: string; handle: string; name: string; harness: HarnessId; model?: string | null; nodeId?: string | null; computerId?: string | null; instructions?: string }) {
     const agentId = id("agt");
     this.db
       .prepare("INSERT INTO agents (id, workspace_id, handle, name, harness, model, node_id, computer_id, groups_json, instructions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?)")
       .run(agentId, a.workspaceId, a.handle.toLowerCase(), a.name, a.harness, a.model ?? null, a.nodeId ?? null, a.computerId ?? null, a.instructions ?? "", now());
-    if (a.groups?.length) this.setAgentTeams(agentId, a.groups);
     return this.agent(agentId)!;
   }
 
   /** `settings` is merged key by key, so callers can change one setting at a time. */
-  updateAgent(agentId: string, patch: Partial<{ name: string; model: string | null; nodeId: string | null; computerId: string | null; groups: string[]; instructions: string; harness: HarnessId; settings: AgentSettings }>) {
+  updateAgent(agentId: string, patch: Partial<{ name: string; model: string | null; nodeId: string | null; computerId: string | null; instructions: string; harness: HarnessId; settings: AgentSettings }>) {
     const cur = this.agentRow(agentId);
     if (!cur) return undefined;
-    if (patch.groups) this.setAgentTeams(agentId, patch.groups);
     this.db
       .prepare("UPDATE agents SET name = ?, model = ?, node_id = ?, computer_id = ?, instructions = ?, harness = ?, settings_json = ? WHERE id = ?")
       .run(
@@ -469,143 +467,27 @@ export class Store {
     return this.db.prepare("DELETE FROM vault_tokens WHERE id = ? AND user_id = ?").run(tokenId, userId).changes > 0;
   }
 
-  /** Rows to agents, with `groups` filled from the teams they're on. */
   private toAgents(rows: (AgentRow | undefined)[]): (Agent & { instructions: string })[] {
-    const list = rows.filter((r): r is AgentRow => !!r);
-    if (!list.length) return [];
-    const ids = list.map((r) => r.id);
-    const memberships = this.db
-      .prepare(`SELECT tm.agent_id, t.name FROM team_members tm JOIN teams t ON t.id = tm.team_id WHERE tm.agent_id IN (${ids.map(() => "?").join(",")}) ORDER BY t.name`)
-      .all(...ids) as { agent_id: string; name: string }[];
-    return list.map((r) => toAgent(r, memberships.filter((m) => m.agent_id === r.id).map((m) => m.name)));
+    return rows.filter((r): r is AgentRow => !!r).map(toAgent);
   }
 
-  // --- teams ----------------------------------------------------------------
+  // --- teams: a channel's team is the only kind ----------------------------
 
+  /** Every channel's team (archived channels and DMs have none). */
   teams(workspaceId: string): Team[] {
-    return this.withMembers(this.db.prepare("SELECT * FROM teams WHERE workspace_id = ? ORDER BY name").all(workspaceId) as TeamRow[]);
+    return channelTeams(this.channels(workspaceId));
   }
 
-  team(teamId: string): Team | undefined {
-    return this.withMembers([this.db.prepare("SELECT * FROM teams WHERE id = ?").get(teamId) as TeamRow | undefined].filter((r): r is TeamRow => !!r))[0];
+  /** A channel's team, by the channel's id (which is also the team's id). */
+  team(channelId: string): Team | undefined {
+    const ch = this.channel(channelId);
+    return (ch && teamOf(ch)) ?? undefined;
   }
 
+  /** A team by its channel's name ("web" or "#web"). */
   teamByName(workspaceId: string, name: string): Team | undefined {
-    return this.withMembers([this.db.prepare("SELECT * FROM teams WHERE workspace_id = ? AND name = ?").get(workspaceId, name.toLowerCase()) as TeamRow | undefined].filter((r): r is TeamRow => !!r))[0];
-  }
-
-  createTeam(t: { workspaceId: string; name: string; emoji?: string; description?: string; leadId?: string | null; reportsTo?: string | null; channelId?: string | null; folder?: string; repo?: string | null; baseBranch?: string }): Team {
-    const teamId = id("team");
-    const name = teamSlug(t.name);
-    this.db
-      .prepare("INSERT INTO teams (id, workspace_id, name, emoji, description, lead_id, reports_to, channel_id, folder, repo, base_branch, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(teamId, t.workspaceId, name, t.emoji ?? "", t.description ?? "", t.leadId ?? null, t.reportsTo ?? null, t.channelId ?? null, t.folder ?? `teams/${name}`, t.repo ?? null, t.baseBranch ?? "main", now());
-    if (t.leadId) this.setTeamMember(teamId, t.leadId, {});
-    return this.team(teamId)!;
-  }
-
-  updateTeam(teamId: string, patch: Partial<{ emoji: string; description: string; leadId: string | null; reportsTo: string | null; channelId: string | null; repo: string | null; baseBranch: string }>) {
-    const cur = this.team(teamId);
-    if (!cur) return undefined;
-    const pick = <K extends keyof typeof patch>(k: K, fallback: (typeof patch)[K]) => (patch[k] !== undefined ? patch[k] : fallback);
-    this.db
-      .prepare("UPDATE teams SET emoji = ?, description = ?, lead_id = ?, reports_to = ?, channel_id = ?, repo = ?, base_branch = ? WHERE id = ?")
-      .run(pick("emoji", cur.emoji), pick("description", cur.description), pick("leadId", cur.leadId), pick("reportsTo", cur.reportsTo), pick("channelId", cur.channelId), pick("repo", cur.repo), pick("baseBranch", cur.baseBranch), teamId);
-    if (patch.leadId) {
-      // the lead is the top of the chart: it reports to no one on the team, and whoever was at the top now reports to it
-      this.setTeamMember(teamId, patch.leadId, { managerId: null });
-      for (const r of teamRoots(this.team(teamId)!)) if (r.agentId !== patch.leadId) this.setTeamMember(teamId, r.agentId, { managerId: patch.leadId });
-    }
-    return this.team(teamId);
-  }
-
-  deleteTeam(teamId: string) {
-    this.db.prepare("DELETE FROM teams WHERE id = ?").run(teamId);
-  }
-
-  /** Add an agent to a team, or change its role, who it reports to, or where it sits on the chart. Left-out fields stay as they are. */
-  setTeamMember(teamId: string, agentId: string, m: { role?: string; roleNotes?: string; managerId?: string | null; x?: number | null; y?: number | null }) {
-    const cur = this.db.prepare("SELECT role, role_notes, manager_id, x, y FROM team_members WHERE team_id = ? AND agent_id = ?").get(teamId, agentId) as
-      | { role: string; role_notes: string; manager_id: string | null; x: number | null; y: number | null }
-      | undefined;
-    const next = {
-      role: m.role ?? cur?.role ?? "",
-      notes: m.roleNotes ?? cur?.role_notes ?? "",
-      manager: m.managerId !== undefined ? m.managerId : (cur?.manager_id ?? null),
-      x: m.x !== undefined ? m.x : (cur?.x ?? null),
-      y: m.y !== undefined ? m.y : (cur?.y ?? null),
-    };
-    this.db
-      .prepare(
-        `INSERT INTO team_members (team_id, agent_id, role, role_notes, manager_id, x, y) VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (team_id, agent_id) DO UPDATE SET role = excluded.role, role_notes = excluded.role_notes, manager_id = excluded.manager_id, x = excluded.x, y = excluded.y`,
-      )
-      .run(teamId, agentId, next.role, next.notes, next.manager, next.x, next.y);
-    if (!cur || m.managerId !== undefined) this.settleLead(teamId);
-  }
-
-  /** Remove an agent from a team; whoever reported to it now reports to its manager. */
-  removeTeamMember(teamId: string, agentId: string) {
-    this.db.transaction(() => {
-      const gone = this.db.prepare("SELECT manager_id FROM team_members WHERE team_id = ? AND agent_id = ?").get(teamId, agentId) as { manager_id: string | null } | undefined;
-      this.db.prepare("UPDATE team_members SET manager_id = ? WHERE team_id = ? AND manager_id = ?").run(gone?.manager_id ?? null, teamId, agentId);
-      this.db.prepare("DELETE FROM team_members WHERE team_id = ? AND agent_id = ?").run(teamId, agentId);
-      this.db.prepare("UPDATE teams SET lead_id = NULL WHERE id = ? AND lead_id = ?").run(teamId, agentId);
-    })();
-    this.settleLead(teamId);
-  }
-
-  /** Save where cards sit on the team chart. */
-  setTeamLayout(teamId: string, positions: { agentId: string; x: number; y: number }[]) {
-    const upd = this.db.prepare("UPDATE team_members SET x = ?, y = ? WHERE team_id = ? AND agent_id = ?");
-    this.db.transaction(() => positions.forEach((p) => upd.run(p.x, p.y, teamId, p.agentId)))();
-  }
-
-  /**
-   * The lead is whoever sits alone at the top of the chart. With several agents at the top,
-   * the lead stays who it was (or the first of them, if it left).
-   */
-  private settleLead(teamId: string) {
-    const team = this.team(teamId);
-    if (!team) return;
-    const roots = teamRoots(team);
-    const lead = roots.length === 1 ? roots[0].agentId : team.members.some((m) => m.agentId === team.leadId) ? team.leadId : (roots[0]?.agentId ?? null);
-    if (lead !== team.leadId) this.db.prepare("UPDATE teams SET lead_id = ? WHERE id = ?").run(lead, teamId);
-  }
-
-  /** Put an agent on exactly these teams (by name), creating teams that don't exist yet. */
-  setAgentTeams(agentId: string, names: string[]) {
-    const row = this.agentRow(agentId);
-    if (!row) return;
-    const wanted = new Set(names.map(teamSlug).filter(Boolean));
-    for (const t of this.teams(row.workspace_id)) if (!wanted.has(t.name) && t.members.some((m) => m.agentId === agentId)) this.removeTeamMember(t.id, agentId);
-    for (const name of wanted) {
-      const team = this.teamByName(row.workspace_id, name) ?? this.createTeam({ workspaceId: row.workspace_id, name });
-      this.setTeamMember(team.id, agentId, {});
-    }
-  }
-
-  private withMembers(rows: TeamRow[]): Team[] {
-    if (!rows.length) return [];
-    const ids = rows.map((r) => r.id);
-    const members = this.db
-      .prepare(`SELECT tm.team_id, tm.agent_id, tm.role, tm.role_notes, tm.manager_id, tm.x, tm.y FROM team_members tm JOIN agents a ON a.id = tm.agent_id WHERE tm.team_id IN (${ids.map(() => "?").join(",")}) ORDER BY a.handle`)
-      .all(...ids) as { team_id: string; agent_id: string; role: string; role_notes: string; manager_id: string | null; x: number | null; y: number | null }[];
-    return rows.map((r) => ({
-      id: r.id,
-      workspaceId: r.workspace_id,
-      name: r.name,
-      emoji: r.emoji ?? "",
-      description: r.description,
-      leadId: r.lead_id,
-      reportsTo: r.reports_to,
-      channelId: r.channel_id,
-      folder: r.folder,
-      repo: r.repo,
-      baseBranch: r.base_branch,
-      members: members.filter((m) => m.team_id === r.id).map((m) => ({ agentId: m.agent_id, role: m.role, roleNotes: m.role_notes, managerId: m.manager_id, x: m.x, y: m.y })),
-      createdAt: r.created_at,
-    }));
+    const ch = this.channelByName(workspaceId, name.trim().replace(/^#/, "").toLowerCase());
+    return (ch && teamOf(ch)) ?? undefined;
   }
 
   // --- channels -------------------------------------------------------------
@@ -643,6 +525,8 @@ export class Store {
   updateChannel(channelId: string, patch: { name?: string; topic?: string; sectionId?: string | null; private?: boolean; archivedAt?: string | null; settings?: Partial<ChannelSettings> }) {
     const cur = this.channel(channelId);
     if (!cur) return undefined;
+    // rules about a channel's team name it by the channel's name, so they follow a rename
+    if (patch.name && patch.name !== cur.name) this.renameTeamRules(cur.workspaceId, cur.name, patch.name);
     this.db
       .prepare("UPDATE channels SET name = ?, topic = ?, section_id = ?, private = ?, archived_at = ?, settings_json = ? WHERE id = ?")
       .run(
@@ -657,10 +541,28 @@ export class Store {
     return this.channel(channelId);
   }
 
-  /** Channels whose default agent is this one go back to "only @mentioned agents" (the agent is gone, or left). */
+  /**
+   * The agent is gone, or left: channels whose default agent it was go back to "only @mentioned
+   * agents", and it comes off their team chart (with its arrows; whoever it handed work to now
+   * gets work from whoever handed it work).
+   */
   clearDefaultAgent(agentId: string, channelId?: string) {
     const rows = this.db.prepare(`SELECT id, settings_json FROM channels WHERE settings_json LIKE ?${channelId ? " AND id = ?" : ""}`).all(`%${agentId}%`, ...(channelId ? [channelId] : [])) as { id: string; settings_json: string }[];
-    for (const r of rows) if (this.channel(r.id)?.settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
+    for (const r of rows) {
+      const settings = this.channel(r.id)?.settings;
+      if (!settings) continue;
+      if (settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
+      const team = settings.team;
+      if (team?.nodes.some((n) => n.agentId === agentId)) {
+        const above = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
+        const below = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
+        const edges = [...team.edges.filter((e) => e.from !== agentId && e.to !== agentId), ...above.flatMap((from) => below.map((to) => ({ from, to })))];
+        const nodes = team.nodes.filter((n) => n.agentId !== agentId);
+        // with its lead gone, whoever it handed work to leads now
+        const fed = new Set(edges.map((e) => e.to));
+        this.updateChannel(r.id, { settings: { team: nodes.length ? { nodes: nodes.map((n) => (n.lead || fed.has(n.agentId) ? n : { ...n, lead: true })), edges } : null } });
+      }
+    }
   }
 
   // --- one person's channel settings and pins -------------------------------
@@ -965,10 +867,10 @@ export class Store {
     const ts = now();
     this.db
       .prepare(
-        `INSERT INTO discussions (id, workspace_id, channel_id, thread_id, team_id, topic, goal, participants_json, moderator_id, rounds, round, status, started_by_kind, started_by_id, requested_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?)`,
+        `INSERT INTO discussions (id, workspace_id, channel_id, thread_id, team_id, topic, goal, participants_json, moderator_id, rounds, round, status, started_by_kind, started_by_id, requested_by, kind, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'running', ?, ?, ?, ?, ?, ?)`,
       )
-      .run(did, d.workspaceId, d.channelId, d.threadId, d.teamId, d.topic, d.goal, JSON.stringify(d.participants), d.moderatorId, d.rounds, d.startedBy.kind, d.startedBy.id, d.requestedBy ?? null, ts, ts);
+      .run(did, d.workspaceId, d.channelId, d.threadId, d.teamId, d.topic, d.goal, JSON.stringify(d.participants), d.moderatorId, d.rounds, d.startedBy.kind, d.startedBy.id, d.requestedBy ?? null, d.kind ?? null, ts, ts);
     return this.discussion(did)!;
   }
 
@@ -1170,6 +1072,15 @@ export class Store {
   }
 
   /** Drop every rule naming someone who is gone. */
+  /** Point rules about one team (and roles on it) at its new name. */
+  renameTeamRules(workspaceId: string, from: string, to: string) {
+    // names match the way rules do: ignoring case
+    this.db.prepare("UPDATE OR REPLACE access_rules SET subject = ? WHERE workspace_id = ? AND lower(subject) = lower(?)").run(`team:${to}`, workspaceId, `team:${from}`);
+    this.db
+      .prepare("UPDATE OR REPLACE access_rules SET subject = ? || substr(subject, ?) WHERE workspace_id = ? AND lower(substr(subject, 1, ?)) = lower(?)")
+      .run(`role:${to}/`, `role:${from}/`.length + 1, workspaceId, `role:${from}/`.length, `role:${from}/`);
+  }
+
   removeRulesFor(workspaceId: string, subject: Subject) {
     this.db.prepare("DELETE FROM access_rules WHERE workspace_id = ? AND subject = ?").run(workspaceId, subjectKey(subject));
   }
@@ -1230,6 +1141,41 @@ export class Store {
       .prepare("UPDATE background SET enabled = ?, every_minutes = ?, focus = ?, quiet_start = ?, quiet_end = ?, next_at = ?, next_reason = ?, last_at = ?, last_note = ?, model = ?, effort = ?, daily_cap = ? WHERE agent_id = ? AND user_id = ?")
       .run(v.enabled ? 1 : 0, v.everyMinutes, v.focus, v.quietStart, v.quietEnd, v.nextAt, v.nextReason, v.lastAt, v.lastNote, v.model, v.effort, v.dailyCap, agentId, userId);
     return this.background(agentId, userId)!;
+  }
+
+  /** Background checks for one person since `since`, by every agent in a workspace: what each used. */
+  backgroundRunsFor(workspaceId: string, userId: string, since: string) {
+    const rows = this.db
+      .prepare("SELECT r.agent_id AS agentId, r.usage_json AS usage FROM runs r JOIN agents a ON a.id = r.agent_id WHERE a.workspace_id = ? AND r.requested_by = ? AND r.kind = 'background' AND r.status != 'queued' AND r.created_at >= ?")
+      .all(workspaceId, userId, since) as { agentId: string; usage: string | null }[];
+    return rows.map((r) => {
+      const u = r.usage ? (JSON.parse(r.usage) as Omit<ContextUsage, "at">) : null;
+      const tokens = u && (u.inputTokens !== undefined || u.outputTokens !== undefined) ? (u.inputTokens ?? 0) + (u.outputTokens ?? 0) : null;
+      return { agentId: r.agentId, tokens };
+    });
+  }
+
+  private changeSql = "SELECT id, user_id AS userId, agent_id AS agentId, lines_json AS lines, undo_json AS undo, created_at AS createdAt, undone_at AS undoneAt FROM changes";
+  private toChange = (r: Record<string, unknown>): Change & { undo: unknown } => ({ ...(r as unknown as Change), lines: JSON.parse(r.lines as string), undo: JSON.parse(r.undo as string) });
+
+  createChange(c: { workspaceId: string; userId: string; agentId: string; lines: string[]; undo: unknown }) {
+    const cid = id("chg");
+    this.db.prepare("INSERT INTO changes (id, workspace_id, user_id, agent_id, lines_json, undo_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(cid, c.workspaceId, c.userId, c.agentId, JSON.stringify(c.lines), JSON.stringify(c.undo), now());
+    return this.change(cid)!;
+  }
+
+  change(changeId: string) {
+    const r = this.db.prepare(`${this.changeSql} WHERE id = ?`).get(changeId) as Record<string, unknown> | undefined;
+    return r && this.toChange(r);
+  }
+
+  /** What agents changed for one person, newest first. */
+  changes(workspaceId: string, userId: string, limit = 30) {
+    return (this.db.prepare(`${this.changeSql} WHERE workspace_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?`).all(workspaceId, userId, limit) as Record<string, unknown>[]).map(this.toChange);
+  }
+
+  markChangeUndone(changeId: string) {
+    this.db.prepare("UPDATE changes SET undone_at = ? WHERE id = ?").run(now(), changeId);
   }
 
   private followupSql = "SELECT id, agent_id AS agentId, user_id AS userId, due_at AS dueAt, note, status, created_at AS createdAt FROM followups";
@@ -1400,7 +1346,7 @@ function toRoutine(r: RoutineRow): Routine {
   };
 }
 
-function toAgent(r: AgentRow, teams: string[]): Agent & { instructions: string } {
+function toAgent(r: AgentRow): Agent & { instructions: string } {
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -1410,32 +1356,11 @@ function toAgent(r: AgentRow, teams: string[]): Agent & { instructions: string }
     model: r.model,
     nodeId: r.node_id,
     computerId: r.computer_id ?? null,
-    groups: teams,
     settings: JSON.parse(r.settings_json ?? "{}"),
     instructions: r.instructions,
     status: "offline",
     createdAt: r.created_at,
   };
-}
-
-type TeamRow = {
-  id: string;
-  workspace_id: string;
-  name: string;
-  emoji: string;
-  description: string;
-  lead_id: string | null;
-  reports_to: string | null;
-  channel_id: string | null;
-  folder: string;
-  repo: string | null;
-  base_branch: string;
-  created_at: string;
-};
-
-/** Team names are lowercase slugs: "Web Team" → "web-team". */
-export function teamSlug(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 }
 
 type MessageRow = {
@@ -1505,6 +1430,7 @@ type DiscussionRow = {
   started_by_kind: "user" | "agent";
   started_by_id: string;
   requested_by: string | null;
+  kind: "plan" | null;
   created_at: string;
   updated_at: string;
 };
@@ -1526,6 +1452,7 @@ function toDiscussion(r: DiscussionRow): Discussion {
     decisionPath: r.decision_path,
     startedBy: { kind: r.started_by_kind, id: r.started_by_id } as Actor,
     requestedBy: r.requested_by,
+    kind: r.kind ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

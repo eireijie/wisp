@@ -1,3 +1,5 @@
+import { originReach, shareOrigin, useAccess } from "../access.ts";
+import { desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
 import type { DeviceCapabilities, DeviceRole } from "@warren/core";
@@ -58,6 +60,7 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
  * is never a dead end; inside the Warren app it's one button that makes this computer that device.
  */
 function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+  useAccess();
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -110,13 +113,13 @@ function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => 
       {open && (
         <div className="mt-3 space-y-2 text-xs">
           <p>
-            <a className="font-medium underline" href="https://github.com/eireijie/warren/releases/latest" target="_blank" rel="noopener noreferrer">
+            <a className="font-medium underline" href={downloadsFor(desktopOs()).href} target="_blank" rel="noopener noreferrer">
               Get the Warren app
             </a>
             , choose to join a server, and enter:
           </p>
-          <CopyBlock text={location.origin} />
-          {isLocalOnlyHost(location.hostname) && <p className="text-muted">This address only works on this computer. On another computer, use this computer's network address instead.</p>}
+          <CopyBlock text={shareOrigin()} />
+          {originReach(shareOrigin()) !== "anywhere" && <p className="text-muted">This address only works on {originReach(shareOrigin()) === "this-computer" ? "this computer" : "this Wi-Fi"}. For a computer somewhere else, turn on Settings → Devices → Access first.</p>}
           {waiting && <p className="text-muted">Then open Devices there and choose Connect this computer on this card.</p>}
           {waiting &&
             (token ? (
@@ -341,11 +344,11 @@ function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => v
       </span>
       {n.mine ? (
         <label className="inline-flex items-center gap-2 cursor-pointer" title="Off for a personal computer: agents that run directly on it then only take requests from you.">
-          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the workspace add agents and VMs here" />
+          <Toggle on={n.shared} onChange={(shared) => patch({ shared })} label="Let others in the organization add agents and VMs here" />
           Shared with workspace
         </label>
       ) : (
-        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the workspace can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
+        <span className="inline-flex items-center gap-1.5" title={n.shared ? "Anyone in the organization can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}>
           {n.shared ? <Users size={13} /> : <Lock size={13} />} {n.shared ? "Shared" : "Private"}
         </span>
       )}

@@ -15,3 +15,4 @@ export * from "./marketplace.ts";
 export * from "./commands.ts";
 export * from "./harness-settings.ts";
 export * from "./shop.ts";
+export * from "./features.ts";

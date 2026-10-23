@@ -12,20 +12,27 @@ const initial = useStore.getState();
 afterEach(() => useStore.setState(initial, true));
 
 describe("add agent onboarding", () => {
-  it("starts with a name and an external-agent entry point, deferring configuration", () => {
+  it("is one screen: ghost, name, job, instructions, AI and computer, with Advanced and Bring it in", () => {
     const html = renderToStaticMarkup(
       createElement(CreateAgent, { nodes: [], onClose() {} }),
     );
-    expect(html).toContain("Who’s joining?");
-    expect(html).toContain("Agent name");
-    expect(html).toContain("Send an invitation");
+    expect(html).toContain("New agent");
     expect(html).toContain("looking toward your pointer");
-    expect(html).toContain('aria-label="Add agent steps"');
-    expect(html).toMatch(/disabled=""[^>]*>Next: choose harness/);
-    expect(html).not.toContain("Instructions");
-    expect(html).not.toContain("Starting role");
-    expect(html).not.toContain("New VM on");
-    expect(html).not.toContain('aria-label="Agent harness"');
+    expect(html).toContain("Shuffle");
+    expect(html).toContain("Edit look");
+    expect(html).toContain("What it does");
+    // templates live on their own page now, not in this form
+    expect(html).not.toContain("Start from");
+    expect(html).toContain("Instructions");
+    expect(html).toContain("AI and computer");
+    expect(html).toContain("Use my defaults");
+    expect(html).toContain("Customize");
+    expect(html).toContain("Advanced");
+    expect(html).toContain("Already running somewhere? Bring it in");
+    // nothing to create until it has a name
+    expect(html).toMatch(/disabled=""[^>]*>(<!-- -->)?Create agent/);
+    // no emoji tiles for roles
+    for (const t of ["🧭", "📥"]) expect(html).not.toContain(t);
   });
 
   it("can open before any device or agent is connected", () => {

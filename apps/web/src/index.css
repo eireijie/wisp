@@ -42,6 +42,13 @@
   --status-working: #2563eb;
   --status-paused: #f59e0b;
   --status-error: #dc2626;
+  /* organization tiles in the rail and switcher (orgs.ts orgTone): white initials on each */
+  --org-1: oklch(0.5 0.1 180);
+  --org-2: oklch(0.5 0.17 295);
+  --org-3: oklch(0.52 0.15 255);
+  --org-4: oklch(0.55 0.15 45);
+  --org-5: oklch(0.52 0.16 350);
+  --org-6: oklch(0.5 0.11 145);
   color-scheme: light;
 }
 
@@ -65,6 +72,12 @@
   --info: #60a5fa;
   --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.4);
   --ghost-shadow: oklch(0 0 0 / 0.42);
+  --org-1: oklch(0.58 0.1 180);
+  --org-2: oklch(0.58 0.16 295);
+  --org-3: oklch(0.6 0.14 255);
+  --org-4: oklch(0.62 0.14 45);
+  --org-5: oklch(0.6 0.15 350);
+  --org-6: oklch(0.58 0.11 145);
   color-scheme: dark;
 }
 
@@ -306,6 +319,13 @@ body {
 .ghost svg text {
   transform-box: fill-box;
 }
+/* what a ghost wears is placed with SVG transforms in the ghost's own coordinates (fitted per shape),
+   so those groups keep plain SVG transform geometry; the halo and propeller keep their own spin */
+.ghost svg .ghost-worn,
+.ghost svg .ghost-worn g:not(.ghost-spin) {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
 .ghost-float { animation: ghost-float 3.2s ease-in-out infinite; transform-origin: center bottom; }
 .ghost-bounce { animation: ghost-bounce 1.7s ease-in-out infinite; transform-origin: center bottom; }
 .ghost-sway { animation: ghost-sway 3s ease-in-out infinite; transform-origin: center bottom; }
@@ -316,8 +336,6 @@ body {
 .ghost-think { animation: ghost-think 1.2s ease-in-out infinite; }
 .ghost-halo { animation: ghost-halo 2.4s ease-in-out infinite; transform-origin: center; }
 .ghost-spin { animation: ghost-spin 0.9s linear infinite; transform-origin: center; }
-.ghost-glow { filter: drop-shadow(0 0 3px var(--glow)) drop-shadow(0 0 7px var(--glow)); animation: ghost-glow 2.8s ease-in-out infinite; }
-.ghost-glow-still { animation: none; }
 .ghost-poke, .ghost-poke-spin, .ghost-startle, .ghost-greeting, .ghost-waiting, .ghost-error { transform-origin: 60px 85px; }
 .ghost-poke { animation: ghost-poke 800ms ease-out; }
 .ghost-poke-spin { animation: ghost-poke-spin 800ms ease-out; }
@@ -364,7 +382,6 @@ body {
 @keyframes ghost-think { 0%, 100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-1.5px); } }
 @keyframes ghost-halo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
 @keyframes ghost-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@keyframes ghost-glow { 0%, 100% { filter: drop-shadow(0 0 2px var(--glow)) drop-shadow(0 0 5px var(--glow)); } 50% { filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 10px var(--glow)); } }
 
 /* --- ghost arms --------------------------------------------------------------------------------
  * Each moving arm part is one element: <path class="ga-arm ga-{mood} ga-{l|r}" style="--ga-f: …">.
@@ -544,3 +561,19 @@ body {
   .agent-pill-arrow { transition: none; }
 }
 :root[data-motion="reduce"] .agent-pill:hover .ghost { animation: none; }
+
+/* a team chart's arrow between two agents that are both working: the work flowing down it */
+.team-flow {
+  animation: team-flow 0.9s linear infinite;
+}
+@keyframes team-flow {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-flow {
+    animation: none;
+  }
+}
+

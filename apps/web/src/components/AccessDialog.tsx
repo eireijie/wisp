@@ -56,7 +56,7 @@ export function subjectLabel(s: Subject, agents: Pick<Agent, "id" | "handle">[],
 /** "you, Alex, Everyday Helper": a plain list, or the group in words when every person / helper is in it. */
 function audience(people: { name: string; me: boolean; ok: boolean }[], helpers: { name: string; ok: boolean }[]): string {
   const parts: string[] = [];
-  if (people.length > 1 && people.every((p) => p.ok)) parts.push("everyone in the workspace");
+  if (people.length > 1 && people.every((p) => p.ok)) parts.push("everyone in the organization");
   else parts.push(...people.filter((p) => p.me && p.ok).map(() => "you"), ...people.filter((p) => !p.me && p.ok).map((p) => p.name));
   if (helpers.length > 1 && helpers.every((h) => h.ok)) parts.push("all helpers");
   else parts.push(...helpers.filter((h) => h.ok).map((h) => h.name));
@@ -175,7 +175,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                 <b>Who can change this {noun}:</b> {summary.change}
               </span>
             </p>
-            {isShared(path) && <p className="text-xs text-muted">Shared is the common folder. By default everyone in the workspace and all helpers can use what is in it, so don't keep private things there.</p>}
+            {isShared(path) && <p className="text-xs text-muted">Shared is the common folder. By default everyone in the organization and all helpers can use what is in it, so don't keep private things there.</p>}
           </div>
         )}
         <Advanced title="How these rules work">
