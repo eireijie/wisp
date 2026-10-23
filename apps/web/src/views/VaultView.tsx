@@ -57,6 +57,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   const [notes, setNotes] = useState<NoteMeta[] | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
+  const searchGeneration = useRef(0);
   const [showTree, setShowTree] = useState(true);
   const [activity, setActivity] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
@@ -82,9 +83,13 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   }, [refresh, memoryVersion]);
 
   useEffect(() => {
+    const generation = ++searchGeneration.current;
     if (!query.trim()) return setHits(null);
-    const t = setTimeout(() => api<Hit[]>("GET", `/api/vault/search?q=${encodeURIComponent(query)}&limit=30`).then(setHits), 150);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => api<Hit[]>("GET", `/api/vault/search?q=${encodeURIComponent(query)}&limit=30`).then((r) => generation === searchGeneration.current && setHits(r), () => {}), 150);
+    return () => {
+      searchGeneration.current++;
+      clearTimeout(t);
+    };
   }, [query]);
   // while viewing as an agent, only show hits it could open
   const visibleHits = useMemo(() => (hits && viewAs && notes ? hits.filter((h) => notes.some((n) => n.path === h.path)) : hits), [hits, viewAs, notes]);

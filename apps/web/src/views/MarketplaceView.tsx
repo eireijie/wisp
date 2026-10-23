@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode, useRef } from "react";
 import {
   AudioLines,
   ChevronLeft,
@@ -178,22 +178,29 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
     api<{ skills: StoreSkill[]; errors: string[] }>("GET", "/api/skill-store").then(setStore, (e) => setStore({ skills: [], errors: [(e as Error).message] }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const searchGeneration = useRef(0);
   // the MCP Registry, searched on the hub (popular ones until someone types)
   useEffect(() => {
     const query = q.trim();
+    // only the latest search may fill the list: an older, slower answer must not overwrite it
+    const generation = ++searchGeneration.current;
     setMarket((m) => ({ ...m, entries: m.q === query ? m.entries : null, error: null }));
     const t = setTimeout(
       () =>
         api<{ entries: StoreApp[] }>("GET", `/api/marketplace?q=${encodeURIComponent(query)}`).then(
           (r) => {
+            if (generation !== searchGeneration.current) return;
             setMarket({ q: query, entries: r.entries, error: null });
             if (!query) setFeatured(r.entries);
           },
-          (e) => setMarket({ q: query, entries: [], error: (e as Error).message }),
+          (e) => generation === searchGeneration.current && setMarket({ q: query, entries: [], error: (e as Error).message }),
         ),
       query ? 350 : 0,
     );
-    return () => clearTimeout(t);
+    return () => {
+      searchGeneration.current++;
+      clearTimeout(t);
+    };
   }, [q, retry]);
 
   const needle = q.trim().toLowerCase();

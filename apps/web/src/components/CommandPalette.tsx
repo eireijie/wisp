@@ -152,11 +152,16 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
   const [results, setResults] = useState<Results | null>(null);
   const [sel, setSel] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchGeneration = useRef(0);
 
   useEffect(() => {
+    const generation = ++searchGeneration.current;
     if (!q.trim()) return setResults(null);
-    const t = setTimeout(() => api<Results>("GET", `/api/search?q=${encodeURIComponent(q)}`).then(setResults, () => {}), 120);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => api<Results>("GET", `/api/search?q=${encodeURIComponent(q)}`).then((r) => generation === searchGeneration.current && setResults(r), () => {}), 120);
+    return () => {
+      searchGeneration.current++;
+      clearTimeout(t);
+    };
   }, [q]);
 
   const openDm = async (agentId: string) => {

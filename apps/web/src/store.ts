@@ -87,6 +87,7 @@ interface State {
   discussions: Record<string, DiscussionInfo>;
   messages: Record<string, Message[]>; // top-level by channel
   threads: Record<string, Message[]>; // replies by thread root id
+  threadChannels: Record<string, string>; // channel for each loaded thread, even an empty one
   replyCounts: Record<string, number>;
   /** thread roots as loaded with their thread (a sub-thread's root is a reply in another thread) */
   roots: Record<string, Message>;
@@ -156,6 +157,7 @@ export const useStore = create<State>((set, get) => ({
   discussions: {},
   messages: {},
   threads: {},
+  threadChannels: {},
   replyCounts: {},
   roots: {},
   live: {},
@@ -217,6 +219,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async loadThread(channelId, rootId) {
+    set((s) => ({ threadChannels: { ...s.threadChannels, [rootId]: channelId } }));
     const r = await api<{ messages: Message[]; replyCounts?: Record<string, number> }>("GET", `/api/channels/${channelId}/messages?thread=${rootId}&limit=200`);
     // the root comes too: a sub-thread's root is a reply in another thread, which may not be loaded
     const root = r.messages.find((m) => m.id === rootId);
@@ -297,15 +300,23 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setConnected(connected) {
+    const wasConnected = get().connected;
     set({ connected });
     // after a reconnect, catch up on anything missed
-    if (connected) {
-      const { activeChannel } = get();
-      if (activeChannel) get().loadChannel(activeChannel);
-      get().refreshAgents();
-      get().refreshChannels();
-      get().refreshComputers();
-      get().refreshOrgs();
+    if (connected && !wasConnected) {
+      const { activeChannel, threadChannels } = get();
+      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, memoryVersion: s.memoryVersion + 1 }));
+      if (activeChannel) get().loadChannel(activeChannel).catch(() => {});
+      for (const [rootId, channelId] of Object.entries(threadChannels)) get().loadThread(channelId, rootId).catch(() => {});
+      get().refreshAgents().catch(() => {});
+      get().refreshChannels().catch(() => {});
+      get().refreshSections().catch(() => {});
+      get().refreshComputers().catch(() => {});
+      get().refreshOrgs().catch(() => {});
+      api<Me>("GET", "/api/me").then((me) => set({ me }), () => {});
+      api<Member[]>("GET", "/api/members").then((members) => set({ members }), () => {});
+      api<Approval[]>("GET", "/api/approvals").then((list) => set({ approvals: Object.fromEntries(list.map((a) => [a.id, a])) }), () => {});
+      api<DiscussionInfo[]>("GET", "/api/discussions").then((list) => set({ discussions: Object.fromEntries(list.map((d) => [d.id, d])) }), () => {});
     }
   },
 
@@ -412,7 +423,20 @@ function applyReactions(s: State, messageId: string, reactions: Reaction[]): Par
 function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
   if (ev.type === "text") return { ...r, text: r.text + ev.text };
   if (ev.type === "tool_call") return { ...r, tools: [...r.tools, ev.name], last: { name: ev.name, input: ev.input }, usedComputer: r.usedComputer || /computer_/.test(ev.name) };
-  return r;
+  // The existing streaming view renders text; give non-text events their own lines.
+  let text: string;
+  if (ev.type === "status" || ev.type === "notice") text = ev.text;
+  else if (ev.type === "error") text = `Error: ${ev.message}`;
+  else if (ev.type === "tool_result") {
+    // tool output can be a whole file; the live view only needs a glimpse
+    const out = typeof ev.output === "string" ? ev.output : (JSON.stringify(ev.output) ?? "");
+    text = `${ev.name}: ${out.length > 300 ? out.slice(0, 300) + "…" : out}`;
+  }
+  else if (ev.type === "usage") {
+    const { type: _, ...usage } = ev;
+    text = `Usage: ${Object.entries(usage).map(([key, value]) => `${key}: ${value}`).join(", ")}`;
+  } else return r;
+  return { ...r, text: r.text + (r.text && !r.text.endsWith("\n") ? "\n" : "") + text + "\n" };
 }
 
 function dedupe(list: Message[]): Message[] {

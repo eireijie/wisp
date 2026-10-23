@@ -376,8 +376,11 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   };
 
   // leaving the desk gives the computer back, so agents aren't stuck waiting on a closed view
+  useEffect(() => () => {
+    const current = useStore.getState().computers.find((computer) => computer.id === c.id);
+    if (current?.controller?.id === me.user.id) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
+  }, [c.id, me.user.id]);
   const leave = () => {
-    if (mine) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
     go({ view: "computers", computerId: null });
   };
 
