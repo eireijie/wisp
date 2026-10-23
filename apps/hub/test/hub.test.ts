@@ -1163,7 +1163,11 @@ describe("runs that go wrong", () => {
     const n = node.held.length;
     await api("POST", `/api/channels/${ch}/messages`, { body: "@nova hold on" });
     const runId = await waitFor(async () => node.held[n]);
+    const client = await clientSocket(token);
     expect((await api("POST", `/api/runs/${runId}/cancel`)).data).toEqual({ ok: true });
+    // the web clears its "writing…" preview on this, since the device's own report comes too late to count
+    await waitFor(async () => client.events.find((e) => e.type === "agent_status" && e.agentId === nova.id && e.status === "online"));
+    client.close();
     node.send({ type: "run_done", runId, finalText: "too late" });
     node.send({ type: "run_failed", runId, error: "also too late" });
     await new Promise((r) => setTimeout(r, 200));
