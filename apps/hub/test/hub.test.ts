@@ -1131,6 +1131,9 @@ describe("runs that go wrong", () => {
     expect(note?.body).toContain("@atlas");
     // which wakes atlas, who handed it out
     await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id && r.run.prompt.includes("Crash test")));
+    // and not nova, whose failure it reports (an @mention of nova would start it again)
+    expect(note?.body).not.toContain("@nova");
+    expect(node.runs.slice(before).filter((r) => r.type === "run" && r.run.agentId === nova.id)).toHaveLength(1);
   });
 
   it("explains a harness that needs signing in, in the channel and on the agent's page", async () => {
