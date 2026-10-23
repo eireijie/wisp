@@ -1061,6 +1061,15 @@ describe("privacy", () => {
     dm = (await api("POST", `/api/dm/${nova.id}`)).data;
   });
 
+  it("keeps a task in someone's DM off other people's task list", async () => {
+    const task = (await api<any>("POST", "/api/tasks", { to: "nova", title: "My private errand", brief: "the secret plan" })).data;
+    expect(task.channelId).toBe(dm.id);
+    expect((await api<any[]>("GET", "/api/tasks")).data.some((t) => t.id === task.id)).toBe(true);
+    const hers = (await api<any[]>("GET", "/api/tasks", undefined, eve)).data;
+    expect(hers.some((t) => t.id === task.id)).toBe(false);
+    expect(JSON.stringify(hers)).not.toContain("secret plan");
+  });
+
   it("never sends a DM, its run events or its reactions to someone else's socket", async () => {
     const mine = await clientSocket(token);
     const hers = await clientSocket(eve);
