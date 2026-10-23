@@ -124,24 +124,32 @@ const sleepFor = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * Create a Warren in the person's Hetzner project and make its first account. `onStep(id)` hears
  * "create", "boot", "https" and "account" as each starts. On failure after the server exists, the
- * error carries it (`err.server`), so the person can delete it or keep waiting.
+ * error carries it (`err.server`) and its setup key (`err.key`), so the person can delete it, or keep
+ * waiting: `resume: { server, key }` picks the same server up again instead of creating another,
+ * since only that key can make its first account.
  */
-async function createWarren({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template } = {}) {
+async function createWarren({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template, resume } = {}) {
   const opts = { fetchImpl };
-  const key = crypto.randomBytes(24).toString("base64url");
-  const name = `warren-${crypto.randomBytes(3).toString("hex")}`;
-
-  onStep("create");
-  const created = await hetzner(token, "POST", "/servers", {
-    name,
-    server_type: type,
-    location,
-    image: IMAGE,
-    user_data: userData(key, template),
-    labels: { "managed-by": "warren" },
-    public_net: { enable_ipv4: true, enable_ipv6: true },
-  }, opts);
-  const server = { id: created.server.id, name, ip: created.server.public_net?.ipv4?.ip || "", location, type };
+  let key;
+  let server;
+  if (resume?.server?.id && resume.key) {
+    key = resume.key;
+    server = { ...resume.server };
+  } else {
+    key = crypto.randomBytes(24).toString("base64url");
+    const name = `warren-${crypto.randomBytes(3).toString("hex")}`;
+    onStep("create");
+    const created = await hetzner(token, "POST", "/servers", {
+      name,
+      server_type: type,
+      location,
+      image: IMAGE,
+      user_data: userData(key, template),
+      labels: { "managed-by": "warren" },
+      public_net: { enable_ipv4: true, enable_ipv6: true },
+    }, opts);
+    server = { id: created.server.id, name, ip: created.server.public_net?.ipv4?.ip || "", location, type };
+  }
 
   try {
     onStep("boot");
@@ -163,6 +171,7 @@ async function createWarren({ token, type, location, account }, { fetchImpl = fe
     return { url, session, server };
   } catch (err) {
     err.server = server;
+    err.key = key;
     throw err;
   }
 }

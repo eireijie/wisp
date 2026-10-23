@@ -408,7 +408,7 @@ const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
 
 /** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
-function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
+function EasiestWay({ name, token, connected }: { name: string; token: string; connected: boolean }) {
   const { inDesktop, info, connect } = useDesktopInfo();
   const [busy, setBusy] = useState(false);
   useAccess();
@@ -428,7 +428,7 @@ function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
             onClick={async () => {
               setBusy(true);
               try {
-                await connect();
+                await connect({ token, name });
               } finally {
                 setBusy(false);
               }
@@ -474,7 +474,7 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
       <>
         <Heading title={`Connect ${created.name}`}>Warren needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
         <div className="space-y-5">
-          <EasiestWay name={created.name} connected={!!live} />
+          <EasiestWay name={created.name} token={created.token} connected={!!live} />
           <details className="rounded-xl border border-line p-4">
             <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
             <div className="mt-3 space-y-3">

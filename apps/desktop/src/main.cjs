@@ -7,20 +7,22 @@ const os = require("node:os");
 const path = require("node:path");
 const engine = require("./engine.cjs");
 const cloud = require("./cloud.cjs");
+const { onOrigin, isPage, mainFrameUrl } = require("./trust.cjs");
 
 const PORT = Number(process.env.PORT || 4747);
 const LOCAL_HUB = `http://localhost:${PORT}`;
 const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
+const SETUP_PAGE = path.join(__dirname, "setup.html");
 
-/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
+/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
 } catch {}
 const save = () => {
   fs.mkdirSync(path.dirname(CONFIG), { recursive: true });
-  fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2));
+  fs.writeFileSync(CONFIG, JSON.stringify(config, null, 2), { mode: 0o600 });
 };
 
 /** @type {BrowserWindow | null} */
@@ -38,7 +40,7 @@ const buddy = require("./buddy.cjs")({
   open: (route) => {
     if (!hubOrigin) return;
     showWindow();
-    if (win.webContents.getURL().startsWith(hubOrigin + "/")) win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(route)}`);
+    if (onOrigin(win.webContents.getURL(), hubOrigin)) win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(route)}`);
     else win.loadURL(`${hubOrigin}/${route}`);
   },
 });
@@ -96,17 +98,17 @@ function createWindow() {
     if (process.platform === "darwin") app.dock?.hide();
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (hubOrigin && url.startsWith(hubOrigin)) return { action: "allow" };
+    if (onOrigin(url, hubOrigin)) return { action: "allow" };
     if (/^https?:|^mailto:/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => {
-    if (url.startsWith("file:") || (hubOrigin && url.startsWith(hubOrigin))) return;
+    if (isPage(url, SETUP_PAGE) || onOrigin(url, hubOrigin)) return;
     e.preventDefault();
     if (/^https?:/.test(url)) shell.openExternal(url);
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    if (code === -3 || !hubOrigin || !url.startsWith(hubOrigin)) return; // -3: aborted by a navigation
+    if (code === -3 || !onOrigin(url, hubOrigin)) return; // -3: aborted by a navigation
     showSetup({ step: "unreachable", hubUrl: hubOrigin, error: desc });
   });
 }
@@ -121,7 +123,7 @@ function showWindow() {
 
 function showSetup(state = {}) {
   if (!win) createWindow();
-  win.loadFile(path.join(__dirname, "setup.html"), { query: { state: JSON.stringify(state) } });
+  win.loadFile(SETUP_PAGE, { query: { state: JSON.stringify(state) } });
   showWindow();
 }
 
@@ -185,7 +187,7 @@ function needs() {
 
 /** The session token the web app keeps, so the app can add this device for the person signed in. */
 async function sessionToken() {
-  if (!win || !hubOrigin || !win.webContents.getURL().startsWith(hubOrigin)) return null;
+  if (!win || !onOrigin(win.webContents.getURL(), hubOrigin)) return null;
   try {
     return await win.webContents.executeJavaScript('localStorage.getItem("warren.token")', true);
   } catch {
@@ -418,7 +420,7 @@ function appMenu() {
   const go = (route) => () => {
     if (!hubOrigin) return;
     showWindow();
-    if (win.webContents.getURL().startsWith(hubOrigin)) win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`#/${route}`)}`);
+    if (onOrigin(win.webContents.getURL(), hubOrigin)) win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`#/${route}`)}`);
     else win.loadURL(`${hubOrigin}/#/${route}`);
   };
   const mac = process.platform === "darwin";
@@ -470,8 +472,10 @@ function makeTray() {
 
 // ---------------------------------------------------------------- setup page and the web app
 
-/** Setup calls only from the app's own setup page, never from a hub's pages. */
-const fromSetup = (e) => (e.senderFrame?.url ?? "").startsWith("file:");
+/** Setup calls only from the app's own setup page in the main window, never from a hub's pages. */
+const fromSetup = (e) => isPage(mainFrameUrl(e, win) ?? "", SETUP_PAGE);
+/** Device calls only from the hub the window opened, in its main frame. */
+const fromHub = (e) => onOrigin(mainFrameUrl(e, win) ?? "", hubOrigin);
 const setup = (name, fn) => ipcMain.handle(name, (e, ...args) => (fromSetup(e) ? fn(...args) : null));
 
 setup("setup:check", () => {
@@ -513,25 +517,40 @@ setup("setup:cloud-plans", async (token) => {
   }
 });
 
-setup("setup:cloud-create", async (token, { type, location, account, device: asDevice = true } = {}) => {
+/**
+ * A server that was created but didn't finish setting up keeps its setup key here (`cloudPending`),
+ * even across restarts: only that key can make its first account, so "Keep waiting" (`resume`, the
+ * server's id) picks it up again instead of leaving it unusable.
+ */
+setup("setup:cloud-create", async (token, { type, location, account, device: asDevice = true, resume = null } = {}) => {
+  const pending = resume != null && config.cloudPending?.server?.id === resume ? config.cloudPending : undefined;
   try {
     const r = await cloud.createWarren(
       { token: String(token || "").trim(), type, location, account },
-      { onStep: (step) => win?.webContents.send("setup:cloud-step", step) },
+      { onStep: (step) => win?.webContents.send("setup:cloud-step", step), resume: pending },
     );
     const { id, name, ip } = r.server;
+    config.cloudPending = undefined;
     switchTo({ mode: "remote", hubUrl: r.url, device: !!asDevice, cloud: { provider: "hetzner", id, name, ip, location, type } });
     signInOnOpen(r.url, r.session);
     connect();
     return { ok: true, url: r.url };
   } catch (err) {
-    return { ok: false, error: err.message, server: err.server ?? null };
+    if (err.server && err.key) {
+      config.cloudPending = { server: { id: err.server.id, name: err.server.name, ip: err.server.ip, location: err.server.location, type: err.server.type }, key: err.key };
+      save();
+    }
+    return { ok: false, error: err.message, server: err.server ? { id: err.server.id, name: err.server.name, ip: err.server.ip } : null };
   }
 });
 
 setup("setup:cloud-delete", async (token, id) => {
   try {
     await cloud.deleteServer(String(token || "").trim(), id);
+    if (config.cloudPending?.server?.id === id) {
+      config.cloudPending = undefined;
+      save();
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -543,7 +562,7 @@ function signInOnOpen(url, session) {
   if (!win) createWindow();
   const origin = new URL(url).origin;
   win.webContents.once("did-finish-load", () => {
-    if (!win.webContents.getURL().startsWith(origin)) return;
+    if (!onOrigin(win.webContents.getURL(), origin)) return;
     win.webContents.executeJavaScript(`localStorage.setItem("warren.token", ${JSON.stringify(session)}); location.hash = "#/welcome/intro"; location.reload();`);
   });
 }
@@ -568,7 +587,7 @@ ipcMain.on("badge", (_e, n) => {
   if (process.platform === "darwin") app.dock?.setBadge(count ? String(count) : "");
 });
 ipcMain.handle("desktop:info", () => ({ version: app.getVersion(), platform: process.platform, device: deviceBy === "service" || device.running() }));
-ipcMain.handle("desktop:connect-device", (_e, claim) => startDevice({ confirmed: !!claim, claim: claim && typeof claim.token === "string" ? { token: claim.token, name: String(claim.name || "") } : null }));
+ipcMain.handle("desktop:connect-device", (e, claim) => (fromHub(e) ? startDevice({ confirmed: !!claim, claim: claim && typeof claim.token === "string" ? { token: claim.token, name: String(claim.name || "") } : null }) : null));
 
 // ---------------------------------------------------------------- lifecycle
 
