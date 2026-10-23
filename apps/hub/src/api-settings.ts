@@ -87,6 +87,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     store.updateUser(c.actor.id, { passwordHash: hashPassword(body.next) });
     const mine = sha(bearer(req.headers.authorization) ?? "");
     db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND hash != ?").run(c.actor.id, mine);
+    hub.disconnectRevokedSessions(c.actor.id);
     return { ok: true };
   });
 
@@ -101,6 +102,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { user: true });
     if (!c) return;
     if (!store.revokeTokenById("session", (req.params as { id: string }).id, { subjectId: c.actor.id })) return reply.code(404).send({ error: "sign-in not found" });
+    hub.disconnectRevokedSessions(c.actor.id);
     return { ok: true };
   });
 
@@ -109,6 +111,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const mine = sha(bearer(req.headers.authorization) ?? "");
     const n = db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND hash != ?").run(c.actor.id, mine).changes;
+    hub.disconnectRevokedSessions(c.actor.id);
     return { signedOut: n };
   });
 
@@ -252,6 +255,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     store.updateUser(m.id, { passwordHash: hashPassword(body.password) });
     db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ?").run(m.id);
+    hub.disconnectRevokedSessions(m.id);
     return { ok: true };
   });
 

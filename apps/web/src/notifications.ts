@@ -118,10 +118,17 @@ export function notifyOn(e: ClientEvent, before: State, after: State) {
   const me = after.me.user.id;
   const agentName = (id: string | null) => after.agents.find((a) => a.id === id)?.name ?? "An agent";
 
-  if (e.type === "message" && e.message.author.kind === "agent" && e.message.body.trim()) {
+  if (e.type === "message" && e.message.body.trim()) {
     const m = e.message;
     const ch = after.channels.find((c) => c.id === m.channelId);
+    if (ch?.notify === "mute") return;
     const open = () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId });
+    if (ch?.notify === "all" && ch.joined) {
+      if (m.author.id === "system" || (m.author.kind === "user" && m.author.id === me) || (m.author.kind === "agent" && pushOnHere())) return;
+      const from = m.author.kind === "agent" ? agentName(m.author.id) : after.members.find((u) => u.id === m.author.id)?.name ?? "Someone";
+      return show(ch.kind === "dm" ? from : `${from} in #${ch.name}`, m.body, open);
+    }
+    if (m.author.kind !== "agent") return;
     // with push on here, the hub's push notification covers DMs
     if (ch?.kind === "dm") return prefs.dms && !pushOnHere() ? show(agentName(m.author.id), m.body, open) : undefined;
     if (m.threadId && prefs.replies) {

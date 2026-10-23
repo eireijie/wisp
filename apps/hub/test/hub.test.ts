@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import type { HubToNode, Message, NodeToHub } from "@warren/core";
+import { MAX_MODEL_ID_LENGTH, type HubToNode, type Message, type NodeToHub } from "@warren/core";
 import Database from "better-sqlite3";
 import { fileName, limitParam } from "../src/api.ts";
 import { buildHub } from "../src/app.ts";
@@ -766,6 +766,22 @@ describe("agent settings", () => {
     expect(r.device).toMatchObject({ name: "test-node", online: true });
     expect(r.catalog.models).toEqual([{ id: "opus", label: "Opus" }]);
     expect((await api("GET", `/api/agents/${nova.id}/models`)).data.catalog).toBeNull(); // no codex on this device
+  });
+
+  it("accepts catalog model ids at the shared limit when creating and updating agents", async () => {
+    const model = "m".repeat(MAX_MODEL_ID_LENGTH);
+    const catalog = { harness: "claude-code", version: "2.1", efforts: [], models: [{ id: model, label: "Long model" }] };
+    node.send({ type: "catalog", catalog: [catalog] });
+    await waitFor(async () => (await api("GET", `/api/agents/${atlas.id}/models`)).data.catalog?.models[0]?.id === model ? true : undefined);
+    const created = await api("POST", "/api/agents", { handle: "long-model", name: "Long model", harness: "claude-code", model });
+    expect(created.status).toBe(200);
+    expect(created.data.model).toBe(model);
+    expect((await api("PATCH", `/api/agents/${created.data.id}`, { model })).data.model).toBe(model);
+    expect((await api("POST", "/api/agents", { handle: "too-long-model", name: "Long model", harness: "claude-code", model: model + "x" })).status).toBe(400);
+    expect((await api("PATCH", `/api/agents/${created.data.id}`, { model: model + "x" })).status).toBe(400);
+    await api("DELETE", `/api/agents/${created.data.id}`);
+    node.send({ type: "catalog", catalog: [{ ...catalog, models: [{ id: "opus", label: "Opus" }] }] });
+    await waitFor(async () => (await api("GET", `/api/agents/${atlas.id}/models`)).data.catalog?.models[0]?.id === "opus" ? true : undefined);
   });
 
   it("guests can't change agents", async () => {

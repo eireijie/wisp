@@ -29,6 +29,7 @@ interface ClientConn {
   socket: WebSocket;
   workspaceId: string;
   userId: string;
+  sessionHash: string;
 }
 
 interface NodeConn {
@@ -133,8 +134,8 @@ export class Hub {
 
   // --- browser clients ------------------------------------------------------
 
-  addClient(socket: WebSocket, workspaceId: string, userId: string) {
-    const c = { socket, workspaceId, userId };
+  addClient(socket: WebSocket, workspaceId: string, userId: string, sessionHash: string) {
+    const c = { socket, workspaceId, userId, sessionHash };
     this.clients.add(c);
     socket.on("close", () => this.clients.delete(c));
   }
@@ -163,6 +164,16 @@ export class Hub {
       if (c.userId !== userId) continue;
       this.clients.delete(c);
       c.socket.close(4401, "removed from the workspace");
+    }
+  }
+
+  /** Stop sending events to sign-ins whose tokens were revoked. */
+  disconnectRevokedSessions(userId?: string) {
+    const session = this.store.db.prepare("SELECT 1 FROM tokens WHERE kind = 'session' AND hash = ?");
+    for (const c of this.clients) {
+      if ((userId && c.userId !== userId) || session.get(c.sessionHash)) continue;
+      this.clients.delete(c);
+      c.socket.close(4401, "session revoked");
     }
   }
 

@@ -11,6 +11,7 @@ import {
   GHOST_MOTIONS,
   GHOST_MOUTHS,
   GHOST_SHAPES,
+  MAX_MODEL_ID_LENGTH,
   accessChecker,
   atLeast,
   cleanRulePath,
@@ -364,7 +365,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
 
   app.post("/api/auth/logout", async (req) => {
     const t = bearer(req.headers.authorization);
-    if (t) revokeToken(db, t);
+    if (t) {
+      revokeToken(db, t);
+      hub.disconnectRevokedSessions();
+    }
     return { ok: true };
   });
 
@@ -994,7 +998,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         name: z.string().min(1).max(80),
         /** optional with useDefaults: the organization's defaults fill it in */
         harness: HARNESS.optional(),
-        model: z.string().max(100).nullable().optional(),
+        model: z.string().max(MAX_MODEL_ID_LENGTH).nullable().optional(),
         nodeId: z.string().nullable().optional(),
         computerId: z.string().nullable().optional(),
         instructions: z.string().max(20_000).default(""),
@@ -1054,7 +1058,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const body = parse(
       z
-        .object({ name: z.string().min(1).max(80), harness: HARNESS, model: z.string().max(100).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
+        .object({ name: z.string().min(1).max(80), harness: HARNESS, model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
         .partial(),
       req.body,
       reply,
@@ -2008,7 +2012,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       } catch {}
       const c = caller({ headers: { authorization: `Bearer ${token}` } } as FastifyRequest);
       if (!c || c.actor.kind !== "user") return socket.close(4401, "unauthorized");
-      hub.addClient(socket, c.workspaceId, c.actor.id);
+      hub.addClient(socket, c.workspaceId, c.actor.id, crypto.createHash("sha256").update(token!).digest("hex"));
       socket.send(JSON.stringify({ type: "ready" }));
     });
   });
