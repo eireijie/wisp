@@ -7,6 +7,8 @@ import { ConnectorSpec } from "./connectors.ts";
  * authenticate with a node token, so they work behind NAT.
  */
 
+export const MAX_MODEL_ID_LENGTH = 200;
+
 export const AgentEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("tool_call"), name: z.string(), input: z.unknown() }),
@@ -18,7 +20,7 @@ export const AgentEvent = z.discriminatedUnion("type", [
   /** what a run actually used: reported by the harness once the reply is done */
   z.object({
     type: z.literal("usage"),
-    model: z.string().max(200).optional(),
+    model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
     effort: z.string().max(32).nullable().optional(),
     /** tokens in the conversation's context after this reply */
     contextUsed: z.number().int().nonnegative().optional(),
@@ -40,7 +42,7 @@ export const HarnessCatalogSchema = z.object({
   models: z
     .array(
       z.object({
-        id: z.string(),
+        id: z.string().max(MAX_MODEL_ID_LENGTH),
         label: z.string(),
         description: z.string().optional(),
         efforts: z.array(z.string()).optional(),
@@ -51,7 +53,7 @@ export const HarnessCatalogSchema = z.object({
     )
     .max(200),
   efforts: z.array(z.string()),
-  defaultModel: z.string().optional(),
+  defaultModel: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   defaultEffort: z.string().optional(),
 });
 
@@ -82,7 +84,7 @@ export const DiscoveredAgent = z.object({
   harness: z.string().max(60),
   name: z.string().max(120),
   description: z.string().max(2000).optional(),
-  model: z.string().max(200).optional(),
+  model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   soul: z.string().max(50_000).optional(),
   instructions: z.string().max(50_000).optional(),
   /** notes it kept (MEMORY.md, USER.md, memory/*.md) */
@@ -105,7 +107,7 @@ export const RunRequest = z.object({
   /** start a new harness session instead of continuing this conversation's (background checks) */
   fresh: z.boolean().optional(),
   /** run on this model instead of the agent's own (background checks) */
-  model: z.string().max(200).optional(),
+  model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   /** and with this reasoning effort */
   effort: z.string().max(32).optional(),
   workspace: RunWorkspace.optional(),
