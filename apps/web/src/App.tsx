@@ -363,6 +363,9 @@ function ModePicker() {
 
 export async function logout() {
   await api("POST", "/api/auth/logout").catch(() => {});
+  window.warrenDesktop?.setBadge(0);
+  const nav = navigator as Navigator & { clearAppBadge?(): Promise<void>; setAppBadge?(n: number): Promise<void> };
+  await (nav.clearAppBadge ? nav.clearAppBadge() : nav.setAppBadge?.(0))?.catch(() => {});
   setToken(null);
   location.hash = "";
   location.reload();

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 
 /**
  * Hash routes:
@@ -47,7 +47,12 @@ export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 
 export function parseRoute(hash: string): Route {
-  const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  let parts: string[];
+  try {
+    parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  } catch {
+    return { view: "chat", channelId: null, threadId: null };
+  }
   switch (parts[0]) {
     case "buddy":
       return { view: "buddy" };
@@ -131,7 +136,7 @@ export function href(r: Route): string {
   }
 }
 
-/** Views with unsaved work register one of these; `go()` asks before leaving. Returns the question, or null when it's fine to go. */
+/** Views with unsaved work register one of these; navigation asks before leaving. Returns the question, or null when it's fine to go. */
 type LeaveGuard = () => string | null;
 const guards = new Set<LeaveGuard>();
 
@@ -151,30 +156,45 @@ export function mayLeave(): boolean {
 }
 
 export function go(r: Route) {
-  if (!mayLeave()) return;
-  location.hash = href(r);
+  transition(href(r), true);
 }
 
 /** The last place in the app outside Settings, for Settings' "Back to app". */
 let lastAppHash: string | null = null;
+let currentHash = typeof location === "undefined" ? "" : location.hash;
+const listeners = new Set<() => void>();
+const subscribe = (on: () => void) => {
+  listeners.add(on);
+  return () => void listeners.delete(on);
+};
+
+function transition(hash: string, push = false) {
+  if (hash === currentHash) return;
+  if (!mayLeave()) {
+    if (!push) history.replaceState(history.state, "", location.pathname + location.search + currentHash);
+    return;
+  }
+  if (push) location.hash = hash;
+  currentHash = location.hash;
+  noteAppHash();
+  listeners.forEach((on) => on());
+}
+
 function noteAppHash() {
   if (typeof location === "undefined") return;
-  if (parseRoute(location.hash).view !== "settings") lastAppHash = location.hash || "#/";
+  if (parseRoute(currentHash).view !== "settings") lastAppHash = currentHash || "#/";
 }
 if (typeof window !== "undefined") {
   noteAppHash();
-  window.addEventListener("hashchange", noteAppHash);
+  const on = () => transition(location.hash);
+  window.addEventListener("hashchange", on);
+  window.addEventListener("popstate", on);
 }
 export function appHashBeforeSettings(): string {
   return lastAppHash ?? href({ view: "dashboard" });
 }
 
 export function useRoute(): Route {
-  const [route, setRoute] = useState(() => parseRoute(location.hash));
-  useEffect(() => {
-    const on = () => setRoute(parseRoute(location.hash));
-    window.addEventListener("hashchange", on);
-    return () => window.removeEventListener("hashchange", on);
-  }, []);
-  return route;
+  const hash = useSyncExternalStore(subscribe, () => currentHash);
+  return useMemo(() => parseRoute(hash), [hash]);
 }

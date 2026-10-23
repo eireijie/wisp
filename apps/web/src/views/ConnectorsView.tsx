@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BadgeCheck, ExternalLink, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, Server, ShieldQuestion, Trash2 } from "lucide-react";
 import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, everydayAppFor, everydayFirst, harnessSupportsConnectors, isMasked, type EverydayApp, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
 import { api } from "../api.ts";
@@ -141,6 +141,7 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"marketplace" | "catalog">(simple ? "catalog" : "marketplace");
   const [market, setMarket] = useState<{ q: string; entries: MarketplaceEntry[] | null; error: string | null }>({ q: "", entries: null, error: null });
+  const searchGeneration = useRef(0);
   // coming back from a sign-in page: ?signin=ok (or why it didn't work)
   const [retry, setRetry] = useState(0);
   // Zapier, remembered once the registry lists it, so Simple mode can recommend it above the tabs
@@ -153,20 +154,25 @@ export function ConnectorsView({ onBack }: { onBack?: () => void }) {
   // the MCP Registry, searched on the hub (popular ones until someone types)
   useEffect(() => {
     const query = q.trim();
+    const generation = ++searchGeneration.current;
     setMarket((m) => ({ ...m, entries: m.q === query ? m.entries : null, error: null }));
     const t = setTimeout(
       () =>
         api<{ entries: MarketplaceEntry[] }>("GET", `/api/marketplace?q=${encodeURIComponent(query)}`).then(
           (r) => {
+            if (generation !== searchGeneration.current) return;
             setMarket({ q: query, entries: r.entries, error: null });
             const z = r.entries.find((e) => e.id === ZAPIER_ID);
             if (z) setZapier(z);
           },
-          (e) => setMarket({ q: query, entries: [], error: (e as Error).message }),
+          (e) => generation === searchGeneration.current && setMarket({ q: query, entries: [], error: (e as Error).message }),
         ),
       query ? 350 : 0,
     );
-    return () => clearTimeout(t);
+    return () => {
+      searchGeneration.current++;
+      clearTimeout(t);
+    };
   }, [q, retry]);
 
   /** Send the person to a remote server's sign-in page; it brings them back here. */
