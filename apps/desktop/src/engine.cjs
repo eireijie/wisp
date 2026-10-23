@@ -227,22 +227,51 @@ class Child {
     this.detail = "";
     this.wanted = false;
     this.restarts = 0;
+    this.stopping = null;
   }
 
+  /** Start it, or, while a stopped one is still exiting, start it again as soon as that one has. */
   start(node, warrenDir, args, extraEnv = {}) {
-    if (this.proc) return;
     this.wanted = true;
     this.spec = { node, warrenDir, args, extraEnv };
-    fs.mkdirSync(path.dirname(this.log), { recursive: true });
-    const out = fs.openSync(this.log, "a");
-    fs.writeSync(out, `\n--- ${new Date().toISOString()} starting ${args.join(" ")}\n`);
-    const proc = spawn(node, [path.join(warrenDir, "bin", "warren.mjs"), ...args], { cwd: warrenDir, env: env(extraEnv), stdio: ["ignore", out, out], windowsHide: true });
-    fs.closeSync(out);
+    if (this.proc) return;
+    this.launch();
+  }
+
+  launch() {
+    const { node, warrenDir, args, extraEnv } = this.spec;
+    let proc;
+    try {
+      fs.mkdirSync(path.dirname(this.log), { recursive: true });
+      const out = fs.openSync(this.log, "a");
+      fs.writeSync(out, `\n--- ${new Date().toISOString()} starting ${args.join(" ")}\n`);
+      try {
+        proc = spawn(node, [path.join(warrenDir, "bin", "warren.mjs"), ...args], { cwd: warrenDir, env: env(extraEnv), stdio: ["ignore", out, out], windowsHide: true });
+      } finally {
+        fs.closeSync(out);
+      }
+    } catch (err) {
+      this.wanted = false;
+      return this.set("error", `couldn't start (${err.message}); see ${this.log}`);
+    }
     this.proc = proc;
     this.set("starting", "");
     const startedAt = Date.now();
-    proc.on("exit", (code, signal) => {
+    // spawning failed (no such Node, no permission): there's no process, and maybe no 'exit' either
+    proc.on("error", (err) => {
+      fs.appendFile(this.log, `--- ${err.message}\n`, () => {});
+      if (this.proc !== proc || proc.pid !== undefined) return; // a failed kill of a live process: its 'exit' still comes
       this.proc = null;
+      this.stopping = null;
+      this.wanted = false;
+      this.set("error", `couldn't start (${err.message}); see ${this.log}`);
+    });
+    proc.on("exit", (code, signal) => {
+      if (this.proc !== proc) return;
+      this.proc = null;
+      const stopped = this.stopping === proc;
+      this.stopping = null;
+      if (stopped) return this.wanted ? this.launch() : this.set("stopped", "");
       if (!this.wanted) return this.set("stopped", "");
       if (code === REJECTED_CODE) {
         // the hub turned the device's token down: restarting can't help
@@ -254,7 +283,7 @@ class Child {
       if (this.restarts < 3) {
         this.restarts++;
         this.set("starting", `restarting (exited ${signal || code})`);
-        setTimeout(() => this.wanted && this.start(node, warrenDir, args, extraEnv), 1500 * this.restarts);
+        setTimeout(() => this.wanted && !this.proc && this.launch(), 1500 * this.restarts);
       } else this.set("error", `stopped unexpectedly (${signal || `exit ${code}`}); see ${this.log}`);
     });
   }
@@ -274,6 +303,7 @@ class Child {
     this.restarts = 0;
     if (!this.proc) return;
     const p = this.proc;
+    this.stopping = p;
     p.kill(isWin ? undefined : "SIGTERM");
     setTimeout(() => p.exitCode === null && p.kill("SIGKILL"), 8000).unref();
   }

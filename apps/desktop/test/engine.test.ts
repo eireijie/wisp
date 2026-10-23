@@ -1,4 +1,7 @@
+import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const engine = createRequire(import.meta.url)("../src/engine.cjs");
@@ -54,5 +57,44 @@ describe("testing a server before joining", () => {
     const r = await engine.testHub("https://new.example.com", { fetchImpl: async () => json({ needsSetup: true }) });
     expect(r.needsSetup).toBe(true);
     expect(r.checks.at(-1).label).toMatch(/first account/);
+  });
+});
+
+describe("the processes the app runs", () => {
+  /** A pretend Warren whose `warren.mjs` stays up until it's told to stop. */
+  const fakeWarren = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-child-"));
+    fs.mkdirSync(path.join(dir, "bin"));
+    fs.writeFileSync(path.join(dir, "bin", "warren.mjs"), "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 300)); setInterval(() => {}, 1000);\n");
+    return dir;
+  };
+  const until = async (ok: () => boolean, ms = 5000) => {
+    for (const end = Date.now() + ms; !ok(); await new Promise((r) => setTimeout(r, 20))) if (Date.now() > end) throw new Error("timed out");
+  };
+
+  it("says it couldn't start when there's no Node to run, instead of crashing the app", async () => {
+    const dir = fakeWarren();
+    const child = new engine.Child("test", dir, () => {});
+    child.start(path.join(dir, "no-such-node"), dir, ["hub", "start"]);
+    await until(() => child.state === "error");
+    expect(child.running()).toBe(false);
+    expect(child.detail).toMatch(/couldn't start/);
+  });
+
+  it("starts again once a stopped one has exited, when asked before it did", async () => {
+    const dir = fakeWarren();
+    const child = new engine.Child("test", dir, () => {});
+    child.start(process.execPath, dir, ["node", "start"]);
+    await until(() => child.running());
+    const first = child.proc;
+    child.stop();
+    child.start(process.execPath, dir, ["node", "start"]); // the old one takes 300ms to exit
+    expect(child.proc).toBe(first);
+    await until(() => child.running() && child.proc !== first);
+    expect(first.exitCode !== null || first.signalCode !== null).toBe(true);
+    expect(child.state).toBe("starting");
+    child.stop();
+    await until(() => !child.running());
+    expect(child.state).toBe("stopped");
   });
 });

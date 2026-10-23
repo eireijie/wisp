@@ -9,6 +9,7 @@ import { useFeatures } from "../features.ts";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
+import { HarnessesPage } from "./settings/harnesses.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
@@ -16,7 +17,7 @@ import { ModsPage } from "./settings/features.tsx";
 import { UsagePage } from "./settings/usage.tsx";
 import { AskAndChanges } from "./settings/changes.tsx";
 import { AgentDefaultsPage } from "./settings/defaults.tsx";
-import { ConnectorsView } from "./ConnectorsView.tsx";
+import { MarketplaceView } from "./MarketplaceView.tsx";
 import { AccessPanel } from "../components/Access.tsx";
 import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
 
@@ -73,6 +74,7 @@ const NAV: NavSection[] = [
       { id: "memory", label: "Memory" },
       { id: "apps", label: "Connected apps", noGuests: true },
       { id: "runtimes", label: "Agent runtimes", noGuests: true },
+      { id: "harnesses", label: "Harnesses", noGuests: true },
       { id: "connections", label: "Connections", noGuests: true },
       { id: "security", label: "Security" },
       { id: "data", label: "Data" },
@@ -112,6 +114,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,
+  harnesses: () => <HarnessesPage />,
   memory: () => <MemoryPage />,
   computers: () => <ComputersPage />,
   connections: () => <ConnectionsPage />,
@@ -193,7 +196,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
 
   const body = (id: SettingsPage) =>
     id === "apps" ? (
-      <ConnectorsView />
+      <MarketplaceView section="installed" />
     ) : (
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className={cx("max-w-3xl pb-16", fullWindow ? "mx-auto px-7 py-10" : "p-4")}>
@@ -240,7 +243,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
         </header>
       )}
       {current === "apps" ? (
-        <ConnectorsView onBack={() => go({ view: "settings", page: null })} />
+        <MarketplaceView section="installed" onBack={() => go({ view: "settings", page: null })} />
       ) : current ? (
         body(current)
       ) : (

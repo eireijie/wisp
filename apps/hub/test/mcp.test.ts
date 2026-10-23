@@ -77,6 +77,8 @@ describe("warren-mcp", () => {
       "followup_cancel",
       "followup_list",
       "followup_set",
+      "harness_settings",
+      "harness_settings_change",
       "memory_append",
       "memory_context",
       "memory_forget",

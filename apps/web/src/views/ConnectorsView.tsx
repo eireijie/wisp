@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BadgeCheck, ExternalLink, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, Server, ShieldQuestion, Trash2 } from "lucide-react";
-import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, everydayAppFor, everydayFirst, harnessSupportsConnectors, isMasked, type EverydayApp, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
+import { useEffect, useState, type ReactNode } from "react";
+import { BadgeCheck, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, ShieldQuestion, Trash2 } from "lucide-react";
+import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, entryLogos, everydayFirst, harnessSupportsConnectors, isMasked, logoUrl, type EverydayApp, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore } from "../store.ts";
-import { Button, Field, Input, Loader, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
-import { AgentPicker, AgentStack, Group, CatalogIcon, IconTile, SearchBox, ShopHeader } from "../components/ShopParts.tsx";
+import { Button, Field, Input, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
+import { AgentPicker, AgentStack, AppLogo, Group, IconTile } from "../components/ShopParts.tsx";
 import { useDevices, type DeviceInfo } from "../devices.ts";
-import { Advanced, useSimple } from "../experience.tsx";
+import { Advanced } from "../experience.tsx";
 
 const KIND_LABEL: Record<ConnectorKind, string> = { "mcp-stdio": "MCP · runs on the device", "mcp-http": "MCP · remote", secret: "Key" };
 
@@ -120,316 +119,18 @@ export function recommendedFirst(entries: MarketplaceEntry[], zapier: Marketplac
   return [zapier, ...entries.filter((e) => e.id !== zapier.id)];
 }
 
-const ZAPIER_ID = "com.zapier/mcp";
-const CATEGORIES = ["All", ...new Set(CONNECTOR_CATALOG.map((c) => c.category))];
-const SIMPLE_CATEGORIES = ["All", ...new Set(everydayFirst(CONNECTOR_CATALOG).map((c) => c.category))];
-
-/**
- * Connectors: MCP servers agents can call (on their device, or remote) and keys they need for
- * services. A catalog of popular ones, ready to fill in; and your own.
- */
-export function ConnectorsView({ onBack }: { onBack?: () => void }) {
-  const me = useStore((s) => s.me)!;
-  const agents = useStore((s) => s.agents);
-  const canEdit = me.role !== "guest";
-  const simple = useSimple();
-  const [list, setList] = useState<Connector[] | null>(null);
-  const [q, setQ] = useState("");
-  const [category, setCategory] = useState("All");
-  const [form, setForm] = useState<{ entry?: CatalogConnector; existing?: Connector } | null>(null);
-  const [adding, setAdding] = useState<MarketplaceEntry | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"marketplace" | "catalog">(simple ? "catalog" : "marketplace");
-  const [market, setMarket] = useState<{ q: string; entries: MarketplaceEntry[] | null; error: string | null }>({ q: "", entries: null, error: null });
-  const searchGeneration = useRef(0);
-  // coming back from a sign-in page: ?signin=ok (or why it didn't work)
-  const [retry, setRetry] = useState(0);
-  // Zapier, remembered once the registry lists it, so Simple mode can recommend it above the tabs
-  const [zapier, setZapier] = useState<MarketplaceEntry | null>(null);
-  const [signedIn] = useState(() => new URLSearchParams(location.search).get("signin"));
-  useEffect(() => {
-    if (signedIn) history.replaceState(null, "", location.pathname + location.hash);
-  }, [signedIn]);
-
-  // the MCP Registry, searched on the hub (popular ones until someone types)
-  useEffect(() => {
-    const query = q.trim();
-    const generation = ++searchGeneration.current;
-    setMarket((m) => ({ ...m, entries: m.q === query ? m.entries : null, error: null }));
-    const t = setTimeout(
-      () =>
-        api<{ entries: MarketplaceEntry[] }>("GET", `/api/marketplace?q=${encodeURIComponent(query)}`).then(
-          (r) => {
-            if (generation !== searchGeneration.current) return;
-            setMarket({ q: query, entries: r.entries, error: null });
-            const z = r.entries.find((e) => e.id === ZAPIER_ID);
-            if (z) setZapier(z);
-          },
-          (e) => generation === searchGeneration.current && setMarket({ q: query, entries: [], error: (e as Error).message }),
-        ),
-      query ? 350 : 0,
-    );
-    return () => {
-      searchGeneration.current++;
-      clearTimeout(t);
-    };
-  }, [q, retry]);
-
-  /** Send the person to a remote server's sign-in page; it brings them back here. */
-  async function signIn(c: Connector) {
-    setError(null);
-    try {
-      const r = await api<{ url?: string }>("POST", `/api/connectors/${c.id}/signin`, { origin: location.origin });
-      if (r.url) location.href = r.url;
-      else load();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  const afterSave = (c?: Connector) => {
-    setForm(null);
-    setAdding(null);
-    if (c?.auth?.required && !c.auth.signedIn) void signIn(c);
-    else load();
-  };
-
-  const load = () => api<Connector[]>("GET", "/api/connectors").then(setList, (e) => (setList([]), setError(e.message)));
-  useEffect(() => {
-    load();
-  }, []);
-
-  const needle = q.trim().toLowerCase();
-  const match = (...s: (string | null | undefined)[]) => !needle || s.some((x) => x?.toLowerCase().includes(needle));
-  const connected = (list ?? []).filter((c) => match(c.name, c.url, c.command, catalogConnector(c.catalogId ?? "")?.description));
-  const catalog = catalogFor(simple, category).filter((c) => match(c.name, c.description, c.category));
-  const everyday = q.trim() ? everydayAppFor(q) : null;
-  const builtInFor = everyday?.catalogId ? catalogConnector(everyday.catalogId) : undefined;
-  const marketCard = (e: MarketplaceEntry) => <MarketCard key={e.id} e={e} added={(list ?? []).some((c) => c.catalogId === `registry:${e.id}`)} canEdit={canEdit} onAdd={() => setAdding(e)} />;
-  const catalogCard = (c: CatalogConnector, label = "Built in") => <CatalogCard key={c.id} c={c} label={label} added={countFor(c.id) > 0} canEdit={canEdit} onAdd={() => setForm({ entry: c })} />;
-  const registryGrid = (entries: MarketplaceEntry[], lead?: ReactNode) => (
-    <div className="space-y-3">
-      <p className="text-xs text-muted">
-        {q.trim() ? (
-          <>Results from the MCP Registry. Servers whose publisher is verified come first. "Made by" means the app's own company publishes it; "Verified publisher" only means the registry confirmed who published it.</>
-        ) : (
-          <>Popular servers from the MCP Registry. Search to find any of its thousands more. Zapier connects thousands more apps, like Gmail, Google Calendar, Drive and Todoist, with one sign-in.</>
-        )}
-      </p>
-      {market.error && (
-        <p className="text-sm text-bad flex items-center gap-2">
-          {market.error}
-          <Button className="h-7" onClick={() => setRetry((n) => n + 1)}>
-            Try again
-          </Button>
-        </p>
-      )}
-      {market.entries === null ? (
-        <Loader />
-      ) : entries.length === 0 && !lead ? (
-        !market.error && <p className="text-sm text-muted py-6 text-center">Nothing in the registry matches "{q}".{simple ? "" : " You can still add your own."}</p>
-      ) : (
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {lead}
-          {entries.map(marketCard)}
-        </div>
-      )}
-    </div>
-  );
-  const countFor = (id: string) => (list ?? []).filter((c) => c.catalogId === id).length;
-
-  async function act(p: Promise<unknown>) {
-    setError(null);
-    try {
-      await p;
-    } catch (e) {
-      setError((e as Error).message);
-    }
-    load();
-  }
-
-  return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <ShopHeader
-        title="Connected apps"
-        onBack={onBack}
-        action={
-          canEdit && !simple && (
-            <Button variant="primary" onClick={() => setForm({})}>
-              <Plus size={16} /> <span className="hidden sm:inline">Add your own</span>
-              <span className="sm:hidden">Add</span>
-            </Button>
-          )
-        }
-      />
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl px-4 md:px-6 py-5 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <p className="text-sm text-muted flex-1">Apps your helpers can use for you, like Gmail or Slack. Each one asks you to sign in (a few ask for a key instead); your password never goes to a helper.</p>
-            <SearchBox value={q} onChange={setQ} placeholder={simple ? "Search apps" : "Search apps and MCP servers"} />
-          </div>
-          {error && <p className="text-sm text-bad">{error}</p>}
-          {signedIn && <p className={cx("text-sm rounded-lg px-3 py-2", signedIn === "ok" ? "bg-ok/10 text-ok" : "bg-bad/10 text-bad")}>{signedIn === "ok" ? "Signed in. Agents use it from their next run." : `Sign-in didn't finish: ${signedIn}`}</p>}
-          {!canEdit && <p className="text-xs text-muted">Guests can look around; members add and change connectors.</p>}
-
-          <section aria-labelledby="connected-h">
-            <h2 id="connected-h" className="text-[13px] font-semibold text-muted mb-2">
-              Connected {list && <span className="text-faint tabular-nums">{list.length}</span>}
-            </h2>
-            {list === null ? (
-              <Loader />
-            ) : list.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-sm text-muted">Nothing connected yet. Pick one from the catalog below{simple ? "." : ", or add your own."}</div>
-            ) : connected.length === 0 ? (
-              <p className="text-sm text-muted">No connected ones match "{q}".</p>
-            ) : (
-              <div className="rounded-xl border border-line divide-y divide-line bg-panel">
-                {connected.map((c) => (
-                  <ConnectedRow key={c.id} c={c} agents={agents} canEdit={canEdit} onSignIn={() => signIn(c)} onSignOut={() => act(api("POST", `/api/connectors/${c.id}/signout`))} onEdit={() => setForm({ existing: c, entry: catalogConnector(c.catalogId ?? "") })} onToggle={() => act(api("PATCH", `/api/connectors/${c.id}`, { enabled: !c.enabled }))} onRemove={() => confirm(`Remove ${c.name}? Agents lose it on their next run.`) && act(api("DELETE", `/api/connectors/${c.id}`))} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          {simple && everyday && (
-            <>
-              <section aria-labelledby="recommended-h" className="space-y-2">
-                <h2 id="recommended-h" className="text-[13px] font-semibold text-muted">
-                  Recommended way to connect {everyday.name}
-                </h2>
-                <p className="text-sm text-muted">{everyday.does}</p>
-                <p className="text-sm text-muted">Needs: {everyday.account}</p>
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{builtInFor ? catalogCard(builtInFor) : zapier ? marketCard(zapier) : <Loader />}</div>
-              </section>
-              <section aria-labelledby="other-ways-h" className="space-y-2">
-                <h2 id="other-ways-h" className="text-[13px] font-semibold text-muted">
-                  Other ways
-                </h2>
-                <Advanced title="Other servers from the registry">{registryGrid((market.entries ?? []).filter((e) => e.id !== ZAPIER_ID))}</Advanced>
-              </section>
-            </>
-          )}
-          {simple && !everyday && zapier && (
-            <section aria-labelledby="recommended-h" className="space-y-2">
-              <h2 id="recommended-h" className="text-[13px] font-semibold text-muted">
-                Recommended for most people
-              </h2>
-              <p className="text-sm text-muted">One sign-in with Zapier connects Gmail, Google Calendar, Drive, Todoist and thousands more apps.</p>
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{marketCard(zapier)}</div>
-            </section>
-          )}
-
-          {!(simple && everyday) && (
-            <div className="flex items-center gap-1 border-b border-line">
-              {(
-                [
-                  ["marketplace", "Marketplace"],
-                  ["catalog", "Warren's catalog"],
-                ] as const
-              ).map(([id, label]) => (
-                <button key={id} onClick={() => setTab(id)} className={cx("h-9 px-3 -mb-px border-b-2 text-sm", tab === id ? "border-accent text-ink font-medium" : "border-transparent text-muted hover:text-ink")}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!(simple && everyday) && tab === "marketplace" && (
-            <section aria-label="Marketplace" className="space-y-3">
-              {everyday && (
-                <p className="text-sm">
-                  Recommended for {everyday.name}: {builtInFor ? "Warren's built-in connector." : "Zapier, which connects it with one sign-in."}
-                </p>
-              )}
-              {registryGrid(recommendedFirst(market.entries ?? [], zapier, everyday), builtInFor ? catalogCard(builtInFor) : undefined)}
-            </section>
-          )}
-
-          {!(simple && everyday) && tab === "catalog" && (
-          <section aria-labelledby="catalog-h">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-3">
-              <h2 id="catalog-h" className="text-xs text-muted flex-1">
-                Ones Warren knows well, with what each needs.
-              </h2>
-              <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
-                {(simple ? SIMPLE_CATEGORIES : CATEGORIES).map((cat) => (
-                  <button key={cat} onClick={() => setCategory(cat)} className={cx("h-7 px-2.5 rounded-full text-xs whitespace-nowrap border", category === cat ? "bg-accent text-accent-ink border-transparent" : "border-line text-muted hover:text-ink hover:bg-hover")}>
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {catalog.length === 0 ? (
-              <p className="text-sm text-muted py-6 text-center">Nothing in the catalog matches.{simple ? "" : " You can still add your own."}</p>
-            ) : (
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">{catalog.map((c) => catalogCard(c))}</div>
-            )}
-          </section>
-          )}
-
-          {simple && canEdit && (
-            <Advanced title="Add your own server">
-              <p className="text-sm text-muted mb-2">For an app that isn't listed. You'll need to know how its server is started or where it lives.</p>
-              <Button onClick={() => setForm({})}>
-                <Plus size={14} /> Add your own
-              </Button>
-            </Advanced>
-          )}
-        </div>
-      </div>
-      {adding && <MarketAdd entry={adding} agents={agents} taken={(list ?? []).map((c) => c.name.toLowerCase())} onClose={() => setAdding(null)} onSaved={afterSave} />}
-      {form && (
-        <ConnectorForm
-          entry={form.entry}
-          existing={form.existing}
-          agents={agents}
-          taken={(list ?? []).filter((c) => c.id !== form.existing?.id).map((c) => c.name.toLowerCase())}
-          onClose={() => setForm(null)}
-          onSaved={afterSave}
-        />
-      )}
-    </div>
-  );
-}
-
-function CatalogCard({ c, label, added, canEdit, onAdd }: { c: CatalogConnector; label: string; added: boolean; canEdit: boolean; onAdd: () => void }) {
-  return (
-    <div className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
-      <div className="flex items-start gap-3">
-        <IconTile>
-          <CatalogIcon name={c.icon} />
-        </IconTile>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate">{c.name}</div>
-          <div className="text-[11px] text-muted">{label} · {KIND_LABEL[c.kind]}</div>
-        </div>
-        {added && <Pill tone="ok">Added</Pill>}
-      </div>
-      <p className="text-sm text-muted flex-1">{c.description}</p>
-      <div className="flex items-center gap-2">
-        {c.docs && (
-          <a href={c.docs} target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-ink inline-flex items-center gap-1">
-            Docs <ExternalLink size={11} />
-          </a>
-        )}
-        <span className="flex-1" />
-        {canEdit && (
-          <Button className="h-8" onClick={onAdd}>
-            <Plus size={14} /> Add
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ConnectedRow({ c, agents, canEdit, onEdit, onToggle, onRemove, onSignIn, onSignOut }: { c: Connector; agents: Agent[]; canEdit: boolean; onEdit: () => void; onToggle: () => void; onRemove: () => void; onSignIn: () => void; onSignOut: () => void }) {
+export function ConnectedRow({ c, agents, canEdit, onEdit, onToggle, onRemove, onSignIn, onSignOut }: { c: Connector; agents: Agent[]; canEdit: boolean; onEdit: () => void; onToggle: () => void; onRemove: () => void; onSignIn: () => void; onSignOut: () => void }) {
   const entry = catalogConnector(c.catalogId ?? "");
   const where = c.kind === "mcp-stdio" ? [c.command, ...c.args].join(" ") : c.kind === "mcp-http" ? c.url : Object.keys(c.env).join(", ");
   return (
     <div className={cx("flex items-center gap-3 px-3 sm:px-4 py-3", !c.enabled && "opacity-60")}>
-      <IconTile>
-        <CatalogIcon name={entry?.icon} fallback={c.kind === "secret" ? KeyRound : c.kind === "mcp-http" ? Plug : Server} />
-      </IconTile>
+      {c.kind === "secret" ? (
+        <IconTile>
+          <KeyRound size={18} />
+        </IconTile>
+      ) : (
+        <AppLogo srcs={[logoUrl([c.name, entry?.name])]} size={40} />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-medium truncate">{c.name}</span>
@@ -483,7 +184,7 @@ function ConnectedRow({ c, agents, canEdit, onEdit, onToggle, onRemove, onSignIn
 type Row = { key: string; value: string; saved?: string; field?: CatalogField };
 
 /** Add from the catalog, add your own, or edit one. Asks for the values it needs and which agents get it. */
-function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, title: titleOverride, summary: summaryProp }: { entry?: CatalogConnector; existing?: Connector; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void; top?: ReactNode; title?: string; summary?: ConnectSummary }) {
+export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, title: titleOverride, summary: summaryProp, presetEnv, presetAgents }: { entry?: CatalogConnector; existing?: Connector; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void; top?: ReactNode; title?: string; summary?: ConnectSummary; presetEnv?: Record<string, string>; presetAgents?: string[] }) {
   const [kind, setKind] = useState<ConnectorKind>(existing?.kind ?? entry?.kind ?? "mcp-stdio");
   const [name, setName] = useState(existing?.name ?? entry?.name ?? "");
   const [command, setCommand] = useState(existing?.command ?? entry?.command ?? "");
@@ -500,10 +201,12 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
     const extra = Object.keys(saved)
       .filter((k) => !fromFields.some((r) => r.key === k))
       .map((k) => ({ key: k, value: "", saved: saved[k] }));
-    const all = [...fromFields, ...extra];
+    // values brought over as they were (from a harness on a device), editable here
+    const preset = Object.entries(presetEnv ?? {}).filter(([k]) => !fromFields.some((r) => r.key === k)).map(([k, v]) => ({ key: k, value: v }));
+    const all = [...fromFields, ...extra, ...preset];
     return all.length || entry ? all : [{ key: "", value: "" }];
   });
-  const [agentIds, setAgentIds] = useState<string[]>(existing?.agentIds ?? (agents.length === 1 && harnessSupportsConnectors(agents[0].harness, existing?.kind ?? entry?.kind ?? "mcp-stdio") ? [agents[0].id] : []));
+  const [agentIds, setAgentIds] = useState<string[]>(existing?.agentIds ?? presetAgents ?? (agents.length === 1 && harnessSupportsConnectors(agents[0].harness, existing?.kind ?? entry?.kind ?? "mcp-stdio") ? [agents[0].id] : []));
   // a different kind (custom form) can rule out agents that were ticked
   useEffect(() => {
     if (existing) return;
@@ -573,9 +276,7 @@ function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved, top, 
         {top}
         {entry && !top && (
           <div className="flex items-start gap-3 rounded-lg bg-bg p-3">
-            <IconTile>
-              <CatalogIcon name={entry.icon} />
-            </IconTile>
+            <AppLogo srcs={[logoUrl([entry.name])]} size={40} />
             <div className="text-sm text-muted">
               {entry.description}
               {entry.needs && <div className="mt-1 text-xs">Needs: {entry.needs}.</div>}
@@ -719,54 +420,8 @@ function TrustBadge({ t }: { t: TrustLabel }) {
   );
 }
 
-/** A registry server's logo, or its first letter. */
-function MarketIcon({ e }: { e: MarketplaceEntry }) {
-  const [broken, setBroken] = useState(false);
-  return (
-    <IconTile className="overflow-hidden">
-      {e.icon && !broken ? <img src={e.icon} alt="" className="size-6 object-contain" onError={() => setBroken(true)} /> : <span className="text-sm font-semibold">{e.name.charAt(0).toUpperCase()}</span>}
-    </IconTile>
-  );
-}
-
-const installLabel = (i: MarketplaceInstall) => (i.kind === "mcp-http" ? (i.fields.length ? "Remote · needs a key" : "Remote · sign in") : `${i.label} · runs on the device`);
-
-function MarketCard({ e, added, canEdit, onAdd }: { e: MarketplaceEntry; added: boolean; canEdit: boolean; onAdd: () => void }) {
-  const link = e.website ?? e.repository;
-  return (
-    <div className="rounded-xl border border-line bg-panel p-4 flex flex-col gap-3">
-      <div className="flex items-start gap-3">
-        <MarketIcon e={e} />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate flex items-center gap-1">
-            {e.name}
-          </div>
-          <div className="text-[11px] text-muted truncate">Published by {e.publisher}</div>
-          <TrustBadge t={trustLabel(e)} />
-        </div>
-        {added && <Pill tone="ok">Added</Pill>}
-      </div>
-      <p className="text-sm text-muted flex-1 line-clamp-3">{e.description || "No description."}</p>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted truncate">{installLabel(e.installs[0])}</span>
-        {link && (
-          <a href={link} target="_blank" rel="noreferrer" className="text-xs text-muted hover:text-ink inline-flex items-center gap-1 shrink-0">
-            <ExternalLink size={11} />
-          </a>
-        )}
-        <span className="flex-1" />
-        {canEdit && (
-          <Button className="h-8" onClick={onAdd}>
-            <Plus size={14} /> Add
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** Adding a marketplace server: pick how (remote, npm, Docker…) when there's a choice, then the usual form. */
-function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: MarketplaceEntry; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void }) {
+export function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: MarketplaceEntry & { logos?: string[] }; agents: Agent[]; taken: string[]; onClose: () => void; onSaved: (c?: Connector) => void }) {
   const [i, setI] = useState(0);
   const install = entry.installs[i];
   const trust = trustLabel(entry);
@@ -788,14 +443,14 @@ function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: Marketpl
   const top = (
     <div className="space-y-3">
       <div className="flex items-start gap-3 rounded-lg bg-bg p-3">
-        <MarketIcon e={entry} />
+        <AppLogo srcs={entry.logos ?? entryLogos(entry)} size={44} />
         <div className="text-sm text-muted min-w-0">
           <div className="text-ink font-medium flex items-center gap-1">
             {entry.name}
           </div>
           <div className="text-xs">Published by {entry.publisher}</div>
           <TrustBadge t={trust} />
-          {entry.description}
+          <div className="mt-1">{entry.description}</div>
           {install.kind === "mcp-http" && !install.fields.length && <div className="mt-1 text-xs">If it asks you to sign in, Warren takes you to its sign-in page next. Agents never see your password.</div>}
           {install.needs && <div className="mt-1 text-xs">Needs: {install.needs}.</div>}
           {trust.kind === "unverified" && <div className="mt-1 text-xs">{trust.explanation}</div>}

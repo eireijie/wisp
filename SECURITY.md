@@ -17,6 +17,7 @@ Things like:
 - Someone in a workspace reaching data, memory, devices or computers they shouldn't (for example, another member's device screen or private memory folder)
 - An agent getting around its access level, its memory permissions, or approvals
 - A device token, harness token or connection token leaking, or working after it was revoked
+- A device's own screen opening from Warren without its code, or the hub saving or logging the code
 - Anyone without an account reaching the hub's API, live views or files
 - Prompt injection that makes an agent act outside what the person asked, where Warren could reasonably have stopped it
 

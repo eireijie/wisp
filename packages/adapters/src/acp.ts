@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, AgentEvent, ConnectorSpec, HarnessCatalog, ModelOption } from "@warren/core";
+import { shortDescription, type AccessLevel, type AgentEvent, type CommandOption, type ConnectorSpec, type HarnessCatalog, type ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
 import { commandVersion, launched, spawnCommand, stopProcess } from "./process.ts";
 
@@ -357,11 +357,21 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-acp-"));
       const cmd = command();
       const child = spawnCommand(cmd.command, cmd.args, { cwd: dir, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
-      const conn = new AcpConnection(child, () => {}, async () => ({ outcome: { outcome: "cancelled" } }));
+      // agents announce their "/" commands in a session/update right after the session starts
+      let announced: (c: Json) => void = () => {};
+      const commands = new Promise<Json>((r) => (announced = r));
+      const conn = new AcpConnection(
+        child,
+        (method, params) => {
+          if (method === "session/update" && params?.update?.sessionUpdate === "available_commands_update") announced(params.update.availableCommands);
+        },
+        async () => ({ outcome: { outcome: "cancelled" } }),
+      );
       try {
         await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } }, 20_000);
         const session = await conn.request("session/new", { cwd: dir, mcpServers: [] }, 20_000);
-        return { ...base, ...acpModels(session) };
+        const listed = await Promise.race([commands, new Promise((r) => setTimeout(() => r(null), 3000).unref())]);
+        return { ...base, ...acpModels(session), commands: acpCommands(listed) };
       } catch {
         return base;
       } finally {
@@ -370,6 +380,15 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
       }
     },
   };
+}
+
+/** The commands from an available_commands_update; an agent runs them when a prompt starts with "/name". Exported for tests. */
+export function acpCommands(list: Json): CommandOption[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((c: Json) => typeof c?.name === "string" && c.name.trim())
+    .slice(0, 500)
+    .map((c: Json) => ({ name: c.name.trim().replace(/^\//, ""), description: shortDescription(c.description), hint: typeof c.input?.hint === "string" ? c.input.hint.slice(0, 120) : undefined, kind: "command" as const, via: "raw" as const }));
 }
 
 /** Models and effort levels from a session/new response. Exported for tests. */

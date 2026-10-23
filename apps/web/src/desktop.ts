@@ -41,7 +41,7 @@ export function useDesktopAgents() {
 export type DesktopInfo = { version: string; platform: string; device: boolean };
 
 /** undefined: not in the desktop app (or not asked yet); otherwise what the Warren app says about this computer. */
-export function useDesktopInfo(): { inDesktop: boolean; info: DesktopInfo | null; connect: () => Promise<void> } {
+export function useDesktopInfo(): { inDesktop: boolean; info: DesktopInfo | null; connect: (claim?: { token: string; name: string }) => Promise<void> } {
   const desktop = typeof window !== "undefined" ? window.warrenDesktop : undefined;
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   useEffect(() => {
@@ -55,8 +55,9 @@ export function useDesktopInfo(): { inDesktop: boolean; info: DesktopInfo | null
       clearInterval(t);
     };
   }, [desktop]);
-  const connect = async () => {
-    await desktop?.connectDevice();
+  /** with a claim, this computer becomes that waiting device instead of adding another */
+  const connect = async (claim?: { token: string; name: string }) => {
+    await desktop?.connectDevice(claim);
     await desktop?.info().then(setInfo).catch(() => {});
   };
   return { inDesktop: !!desktop, info, connect };

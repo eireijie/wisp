@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.ts";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { VaultView } from "../views/VaultView.tsx";
-import { ConnectorsView } from "../views/ConnectorsView.tsx";
+import { MarketplaceView } from "../views/MarketplaceView.tsx";
 
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
@@ -40,7 +40,7 @@ const cases = [
     return () => element.type(element.props);
   }, result: (name: string) => ({ channels: [], agents: [], messages: [], notes: [{ path: name, title: name, snippet: name }] }) },
   { name: "vault", queryIndex: 1, resultIndex: 2, component: () => () => VaultView({ path: null }), result: (name: string) => [{ path: name, title: name, snippet: name }] },
-  { name: "connectors", queryIndex: 1, resultIndex: 7, component: () => () => ConnectorsView({}), result: (name: string) => ({ entries: [{ id: name, name }] }) },
+  { name: "marketplace", queryIndex: 0, resultIndex: 5, component: () => () => MarketplaceView({ section: "apps" }), result: (name: string) => ({ entries: [{ id: name, name }] }) },
 ];
 
 describe.each(cases)("$name search", ({ queryIndex, resultIndex, component, result, name }) => {
@@ -96,6 +96,6 @@ describe.each(cases)("$name search", ({ queryIndex, resultIndex, component, resu
     h.requests[0].resolve(result("older"));
     await Promise.resolve();
     expect(h.latest()).toEqual(cleared);
-    if (name !== "connectors") expect(h.latest()).toBeNull();
+    if (name !== "marketplace") expect(h.latest()).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plug, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Sun, SunMoon, Trash2, UserPlus, Wand2 } from "lucide-react";
+import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Store, Sun, SunMoon, Trash2, UserPlus } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useInboxCount, useStore, useWaitingOnYou, type ChannelInfo } from "../store.ts";
@@ -49,7 +49,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const inboxCount = useInboxCount();
   const invite = useFeature("invite");
   const tasksOn = useFeature("tasks");
-  const moreViews: Route["view"][] = ["agents", "vault", "tasks", "connectors", "skills", "about", "nodes", "help"];
+  const moreViews: Route["view"][] = ["agents", "vault", "tasks", "marketplace", "connectors", "skills", "about", "nodes", "help"];
   const [editing, setEditing] = useState<Section | "new" | null>(null);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const { done } = useOnboarding();
@@ -284,8 +284,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
               { label: "Agents", icon: <Ghost size={14} />, onSelect: () => go({ view: "agents", agentId: null }) },
               { label: "Memory", icon: <BookOpen size={14} />, onSelect: () => go({ view: "vault", path: null }) },
               ...(tasksOn ? [{ label: "Tasks", icon: <ListChecks size={14} />, onSelect: () => go({ view: "tasks" }) }] : []),
-              { label: "Connected apps", icon: <Plug size={14} />, onSelect: () => go({ view: "connectors" }) },
-              { label: "Skills", icon: <Wand2 size={14} />, onSelect: () => go({ view: "skills" }) },
+              { label: "Marketplace", icon: <Store size={14} />, onSelect: () => go({ view: "marketplace" }) },
               { label: "About you", icon: <CircleUser size={14} />, onSelect: () => go({ view: "about" }) },
               { label: "Devices", icon: <Server size={14} />, onSelect: () => go({ view: "nodes" }) },
               { label: "Help", icon: <LifeBuoy size={14} />, onSelect: () => go({ view: "help" }) },

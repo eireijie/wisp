@@ -9,6 +9,8 @@ import { HARNESSES } from "@warren/core";
 import { deviceAdapters } from "@warren/adapters";
 import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
+import { listening, remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
+import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
 import { discoverAgents } from "./discover.ts";
 import { installService, isService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
@@ -38,7 +40,14 @@ Usage:
       --allow-full-access lets agents set to "Full access" run without a sandbox here (saved).
   warren node screen on|off
       Let the person who connected this device see and use its own screen from Warren, and
-      lend it to agents for a while. Off by default; it can only be turned on here.
+      lend it to agents for a while. Off by default; it can only be turned on here. Turning it
+      on asks for a code (a 6-digit PIN or a password) that's needed to open the screen from
+      Warren, and offers Remote Desktop.
+  warren node screen code [off]
+      Pick a new code for this screen (or remove it). Only here, never from Warren.
+  warren node screen remote [off]
+      Set up Remote Desktop: a VNC server for this screen that only listens on this device, for
+      smooth live view (Linux with X11, and Windows). \`off\` goes back to screenshots.
   warren node pause | warren node resume
       Stop everything Warren does on this device right away (agent runs, computer use, live
       views) until you resume. Works while \`warren node start\` is running.
@@ -98,6 +107,11 @@ if (values.help || !cmd) {
   console.log("\nComputers");
   const shared = saved.shareScreen && !saved.noScreen;
   console.log(`  This screen  ${!caps.screen.ok ? "no" : shared ? "on (only you can use it, and lend it to agents)" : "off (turn on with `warren node screen on`)"}: ${caps.screen.detail}`);
+  if (caps.screen.ok && shared) {
+    console.log(`               ${saved.screenCode ? `opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : "no code: your Warren sign-in alone opens it (`warren node screen code`)"}`);
+    const rd = remoteDesktopSupport();
+    console.log(`               Remote Desktop ${saved.remoteDesktop ? `on (${saved.remoteDesktop.server}${(await listening(saved.remoteDesktop.port)) ? "" : ", not answering right now"})` : rd.ok ? "off (`warren node screen remote`)" : `unavailable: ${rd.detail}`}`);
+  }
   console.log(`  VMs          ${caps.vm.ok ? "yes" : "no"}: ${caps.vm.detail}`);
   const found = discoverAgents();
   console.log("\nExisting agents Warren can import");
@@ -136,26 +150,14 @@ if (values.help || !cmd) {
       stopping = true;
       void daemon.stop().finally(() => process.exit(0));
     });
-} else if (cmd === "node" && (sub === "screen" || sub === "pause" || sub === "resume")) {
+} else if (cmd === "node" && sub === "screen") {
+  await screen(positionals[2], positionals[3]);
+} else if (cmd === "node" && (sub === "pause" || sub === "resume")) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
-  if (sub === "screen") {
-    const want = positionals[2];
-    if (want !== "on" && want !== "off") {
-      console.log(`This screen is ${saved.shareScreen && !saved.noScreen ? "on" : "off"}. Use \`warren node screen on\` or \`warren node screen off\`.`);
-      process.exit(want ? 1 : 0);
-    }
-    saved.shareScreen = want === "on";
-    if (want === "on") delete saved.noScreen;
-  } else saved.paused = sub === "pause";
+  saved.paused = sub === "pause";
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
-  if (sub === "screen")
-    console.log(
-      saved.shareScreen
-        ? "This screen is on. In Warren, only the person who connected this device can see or use it, and agents only while they lend it (Computers)."
-        : "This screen is off. Nobody in Warren can see or use it.",
-    );
-  else console.log(saved.paused ? "Paused. Warren stops agents and computers on this device within a second or two. `warren node resume` to continue." : "Resumed.");
+  console.log(saved.paused ? "Paused. Warren stops agents and computers on this device within a second or two. `warren node resume` to continue." : "Resumed.");
 } else if (cmd === "update") {
   const v = await version();
   console.log(`Warren ${v.commit ?? "(not a git checkout)"}${v.date ? ` from ${v.date.slice(0, 10)}` : ""}`);
@@ -174,6 +176,146 @@ if (values.help || !cmd) {
 } else {
   console.log(HELP);
   process.exit(1);
+}
+
+/** A yes/no question in the terminal; no terminal means no. */
+async function ask(q: string, yes = false): Promise<boolean> {
+  if (yes) return true;
+  if (!process.stdin.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const a = (await rl.question(`${q} [Y/n] `)).trim().toLowerCase();
+  rl.close();
+  return a === "" || a === "y" || a === "yes";
+}
+
+/** Read a line without showing what's typed. */
+async function askHidden(q: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  const out = rl as unknown as { _writeToOutput: (s: string) => void; output: NodeJS.WritableStream };
+  let prompted = false;
+  out._writeToOutput = (str: string) => {
+    if (!prompted) {
+      out.output.write(str);
+      prompted = true;
+    } else if (str.includes("\n") || str.includes("\r")) out.output.write("\n");
+  };
+  const a = await rl.question(q);
+  rl.close();
+  return a;
+}
+
+/** Pick the screen's code at the terminal: a 6-digit PIN or a password, typed twice. */
+async function pickCode(): Promise<NonNullable<NodeConfig["screenCode"]> | null> {
+  if (!process.stdin.isTTY) return null;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const choice = (await rl.question("   A 6-digit PIN or a password (8+ characters)? [pin/password] ")).trim().toLowerCase();
+  rl.close();
+  const kind: CodeKind = choice.startsWith("pass") ? "password" : "pin";
+  const label = kind === "pin" ? "PIN" : "password";
+  for (let i = 0; i < 3; i++) {
+    const code = await askHidden(`   New ${label}: `);
+    const problem = codeProblem(kind, code);
+    if (problem) {
+      console.log(`   ${problem}`);
+      continue;
+    }
+    if ((await askHidden(`   Type it again: `)) !== code) {
+      console.log("   Those didn't match.");
+      continue;
+    }
+    return hashCode(kind, code);
+  }
+  return null;
+}
+
+/** `warren node screen on|off|code|remote`: everything about this device's own screen, decided here. */
+async function screen(what: string | undefined, arg: string | undefined) {
+  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
+  const save = () => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
+  };
+  const on = !!saved.shareScreen && !saved.noScreen;
+  const setUpRemote = async () => {
+    const rd = await setUpRemoteDesktop(dir, { ask: (q) => ask(q), run, say: (l) => console.log(l) });
+    if (!rd) return false;
+    saved.remoteDesktop = rd;
+    return true;
+  };
+
+  if (what === "off") {
+    saved.shareScreen = false;
+    save();
+    return console.log("This screen is off. Nobody in Warren can see or use it.");
+  }
+
+  if (what === "on") {
+    saved.shareScreen = true;
+    delete saved.noScreen;
+    save();
+    console.log("This screen is on. In Warren, only the person who connected this device can see or use it, and agents only while they lend it.");
+    if (!saved.screenCode) {
+      console.log("\nPick a code. Opening this screen from Warren will need it, so someone who gets into your Warren account still can't see this computer.");
+      const code = await pickCode();
+      if (code) {
+        saved.screenCode = code;
+        save();
+        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Warren to watch this screen or lend it to an agent.`);
+      } else console.log("   No code set, so your Warren sign-in alone opens this screen. Pick one any time: warren node screen code");
+    }
+    if (!saved.remoteDesktop && remoteDesktopSupport().ok) {
+      console.log("");
+      if (await ask("Turn on Remote Desktop? Live view is much smoother, and it only listens on this computer.")) {
+        if (await setUpRemote()) {
+          save();
+          console.log("   Remote Desktop is on.");
+        }
+      } else console.log("   Live view uses screenshots. Turn Remote Desktop on any time: warren node screen remote");
+    }
+    return;
+  }
+
+  if (what === "code") {
+    if (arg === "off") {
+      delete saved.screenCode;
+      save();
+      return console.log("This screen has no code now: your Warren sign-in alone opens it.");
+    }
+    const code = await pickCode();
+    if (!code) {
+      console.log(process.stdin.isTTY ? "The code didn't change." : "Run this in a terminal to pick a code.");
+      process.exit(1);
+    }
+    saved.screenCode = code;
+    save();
+    return console.log("New code saved. Anything the old one opened is closed now.");
+  }
+
+  if (what === "remote") {
+    if (arg === "off") {
+      delete saved.remoteDesktop;
+      save();
+      return console.log("Remote Desktop is off for Warren; live view uses screenshots. (The VNC server stays installed; Warren doesn't run or use it.)");
+    }
+    if (!(await setUpRemote())) process.exit(1);
+    save();
+    return console.log(on ? "Remote Desktop is on." : "Remote Desktop is set up. Turn the screen on to use it: warren node screen on");
+  }
+
+  console.log(`This screen is ${on ? "on" : "off"}${saved.screenCode ? `, opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : ", with no code"}${saved.remoteDesktop ? ", with Remote Desktop" : ""}.`);
+  console.log("Use `warren node screen on|off`, `warren node screen code`, or `warren node screen remote`.");
+  process.exit(what ? 1 : 0);
+}
+
+/** Run a command with the terminal attached, showing it first. */
+function run(cmd: string, args: string[]): boolean {
+  console.log(`  $ ${[cmd, ...args].join(" ")}`);
+  try {
+    execFileSync(cmd, args, { stdio: "inherit" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Merges --hub, --token, --name and --allow-full-access into DIR/node.json; exits if hub or token is missing. */
@@ -297,23 +439,7 @@ async function service(action: string | undefined, kind: string | undefined) {
 /** `warren setup`: harnesses, a VM engine, and the VM image, so agents get their own computers here. */
 async function setup(yes: boolean) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
-  const ask = async (q: string) => {
-    if (yes) return true;
-    if (!process.stdin.isTTY) return false;
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const a = (await rl.question(`${q} [Y/n] `)).trim().toLowerCase();
-    rl.close();
-    return a === "" || a === "y" || a === "yes";
-  };
-  const run = (cmd: string, args: string[]) => {
-    console.log(`  $ ${[cmd, ...args].join(" ")}`);
-    try {
-      execFileSync(cmd, args, { stdio: "inherit" });
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const askHere = (q: string) => ask(q, yes);
   const which = (bin: string) => {
     try {
       execFileSync(process.platform === "win32" ? "where" : "which", [bin], { stdio: "ignore" });
@@ -331,10 +457,10 @@ async function setup(yes: boolean) {
   let { engine, detail } = await detectEngine(saved.vmEngine);
   if (!engine && process.platform === "darwin") {
     if (which("container")) {
-      if (await ask("   Apple's container is installed but not running. Start it now?")) run("container", ["system", "start", "--enable-kernel-install"]);
+      if (await askHere("   Apple's container is installed but not running. Start it now?")) run("container", ["system", "start", "--enable-kernel-install"]);
     } else if (process.arch === "arm64" && which("brew")) {
       console.log("   Apple's container runs each VM in its own small virtual machine. It's free and open source, from Apple.");
-      if (await ask("   Install it with Homebrew now?")) {
+      if (await askHere("   Install it with Homebrew now?")) {
         if (run("brew", ["install", "container"])) run("container", ["system", "start", "--enable-kernel-install"]);
       }
     } else if (process.arch === "arm64") {

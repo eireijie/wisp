@@ -1137,6 +1137,15 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     };
   });
 
+  /** What can follow "/" for this agent in chat. */
+  app.get("/api/agents/:id/commands", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const agent = store.agent((req.params as { id: string }).id);
+    if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    return { commands: hub.commands(agent) };
+  });
+
   /**
    * What you're talking to: harness, model, effort, context window and permissions, combining
    * the agent's settings, its device's harness defaults, and what the last reply actually used.
@@ -1982,9 +1991,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const ticket = hub.computers.redeem((req.query as { ticket?: string }).ticket, computerId);
     const comp = ticket ? store.computer(computerId) : undefined;
     if (!ticket || !comp || comp.workspaceId !== ticket.workspaceId || ticket.kind !== transport) return socket.close(4401, "unauthorized");
+    socket.on("close", () => hub.computers.viewerGone(comp, ticket));
     if (transport !== "vnc") hub.computers.addFrameViewer(comp, socket, ticket.userId);
     else if (comp.kind === "orgo") hub.computers.openOrgoRelay(comp, socket);
-    else hub.computers.openTunnel(comp, socket);
+    else hub.computers.openTunnel(comp, socket, ticket.code);
   });
 
   /** Browsers can't set headers on WebSockets, so the session token arrives in the first frame. */

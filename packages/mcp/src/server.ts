@@ -444,6 +444,64 @@ export async function createWarrenMcp(client: WarrenClient) {
     }),
   );
 
+  // --- your harness's own settings ---------------------------------------------------------------
+
+  const settingsLine = (s: Awaited<ReturnType<typeof client.harnessSettings>>) => {
+    const list = (items: { id: string; name: string; enabled: boolean; canToggle: boolean }[]) => items.map((i) => `${i.name}${i.name === i.id ? "" : ` [${i.id}]`} ${i.enabled ? "on" : "off"}${i.canToggle ? "" : " (changed on the device only)"}`).join(", ") || "none";
+    return [
+      `${s.harness} on ${s.device} (${s.configPath})`,
+      s.accounts.length > 1 ? `account in use: ${s.accounts.find((x) => x.id === s.account)?.label ?? s.account} (accounts here: ${s.accounts.map((x) => `${x.label}${x.signedIn === false ? " (not signed in)" : ""}`).join(", ")})` : "",
+      `model: ${s.model ?? "(its default)"}${s.providers ? `; provider: ${s.provider ?? "(its default)"} (can be: ${s.providers.map((p) => p.id + (p.signedIn ? " signed in" : "")).join(", ")})` : ""}`,
+      s.models.length ? `models it offers: ${s.models.join(", ")}` : "",
+      `apps (MCP servers set up in the harness): ${list(s.apps)}`,
+      `plugins: ${list(s.plugins)}`,
+      `skills: ${list(s.skills)}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  server.registerTool(
+    "harness_settings",
+    { description: "See your harness's own settings on your device (its config file): the model and provider it uses by default, its apps (MCP servers), plugins and skills, and which are on. Give harness to see another harness on the same device (hermes, codex, claude-code).", inputSchema: { harness: z.string().optional() } },
+    safe(async ({ harness }) => text(settingsLine(await client.harnessSettings(harness)))),
+  );
+
+  server.registerTool(
+    "harness_settings_change",
+    {
+      description:
+        "Change your harness's own settings on your device when its owner asks (\"switch Hermes to GPT-5\", \"turn off the GitHub plugin\", \"use my work account\"): its default model, provider, which of its accounts you use, and turning apps, plugins and skills on or off. Only works while you're doing something the device's owner asked for. Names come from harness_settings. The change applies from your next reply on.",
+      inputSchema: {
+        harness: z.string().optional().describe("hermes, codex or claude-code; default: your own"),
+        model: z.string().optional(),
+        provider: z.string().optional(),
+        turn_on: z.array(z.object({ kind: z.enum(["app", "plugin", "skill"]), name: z.string() })).optional(),
+        turn_off: z.array(z.object({ kind: z.enum(["app", "plugin", "skill"]), name: z.string() })).optional(),
+        use_account: z.string().optional().describe("the name of another of your harness's accounts on this device to use from now on"),
+      },
+    },
+    safe(async ({ harness, model, provider, turn_on, turn_off, use_account }) => {
+      const now = await client.harnessSettings(harness);
+      const find = (kind: "app" | "plugin" | "skill", name: string) => {
+        const items = kind === "app" ? now.apps : kind === "plugin" ? now.plugins : now.skills;
+        const n = name.toLowerCase();
+        const hit = items.find((i) => i.id === name) ?? items.find((i) => i.id.toLowerCase() === n || i.name.toLowerCase() === n);
+        if (!hit) throw new Error(`${now.harness} has no ${kind} "${name}". It has: ${items.map((i) => i.name).join(", ") || "none"}`);
+        return hit.id;
+      };
+      const changes = [
+        ...(model ? [{ op: "model" as const, model }] : []),
+        ...(provider ? [{ op: "provider" as const, provider }] : []),
+        ...(turn_on ?? []).map((t) => ({ op: "toggle" as const, kind: t.kind, id: find(t.kind, t.name), enabled: true })),
+        ...(turn_off ?? []).map((t) => ({ op: "toggle" as const, kind: t.kind, id: find(t.kind, t.name), enabled: false })),
+      ];
+      if (!changes.length && !use_account) return text("Nothing to change: give model, provider, use_account, turn_on or turn_off.");
+      const r = await client.changeHarnessSettings(changes, harness, use_account);
+      return text(`Changed ${r.changed.join(", ")}.\n${settingsLine({ ...r, models: [] })}`);
+    }),
+  );
+
   // --- files ------------------------------------------------------------------
 
   server.registerTool(

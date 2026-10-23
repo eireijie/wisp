@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
+import { codexCommands } from "./commands.ts";
 import { commandVersion, execCommand, launched, runJsonl } from "./process.ts";
 
 const SANDBOX: Record<AccessLevel, string> = { "read-only": "read-only", edit: "workspace-write", full: "danger-full-access" };
@@ -196,7 +197,7 @@ export const codex: HarnessAdapter = {
       } catch {}
     }
     const defaults = await fs.readFile(path.join(codexHome(), "config.toml"), "utf8").then(codexDefaults, () => ({}));
-    return { harness: this.id, version: await commandVersion(this.binary), efforts: ["low", "medium", "high"], models, ...defaults };
+    return { harness: this.id, version: await commandVersion(this.binary), efforts: ["low", "medium", "high"], models, ...defaults, commands: await codexCommands(codexHome()) };
   },
 
   async run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult> {

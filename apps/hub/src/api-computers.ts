@@ -22,6 +22,8 @@ interface Helpers {
 }
 
 const NAME = z.string().trim().min(1).max(80);
+/** A screen's code, passed straight to its device to check; Warren never keeps it. */
+const SCREEN_CODE = z.string().min(1).max(200);
 const TIMEZONE = z.string().max(64).refine((tz) => {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: tz });
@@ -203,9 +205,13 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
     if (comp.kind !== "device") return reply.code(400).send({ error: "only a device's own screen is lent; agents can always use VMs and cloud computers" });
-    const body = parse(z.union([z.object({ off: z.literal(true) }), z.object({ minutes: z.number().int().min(1).max(7 * 24 * 60).nullable() })]), req.body, reply);
+    const body = parse(z.union([z.object({ off: z.literal(true) }), z.object({ minutes: z.number().int().min(1).max(7 * 24 * 60).nullable(), code: SCREEN_CODE.optional() })]), req.body, reply);
     if (!body) return;
-    computers.lend(comp, c.actor.id, "off" in body ? false : body.minutes);
+    try {
+      await computers.lend(comp, c.actor.id, "off" in body ? false : body.minutes, "code" in body ? body.code : undefined);
+    } catch (err) {
+      return fail(reply, err);
+    }
     return computers.view(store.computer(comp.id)!);
   });
 
@@ -278,10 +284,12 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
+    const body = parse(z.object({ code: SCREEN_CODE.optional() }), req.body ?? {}, reply);
+    if (!body) return;
     try {
       if (!computers.online(comp)) return reply.code(503).send({ error: comp.kind === "orgo" ? "add an Orgo API key in Settings → Computers first" : `${comp.name} is offline: its device isn't connected` });
       const transport = computers.transport(comp);
-      return { transport, url: `/ws/computers/${comp.id}/${transport}?ticket=${computers.ticket(comp, c.actor.id)}`, direct: false };
+      return { transport, url: `/ws/computers/${comp.id}/${transport}?ticket=${await computers.ticket(comp, c.actor.id, body.code)}`, direct: false };
     } catch (err) {
       return fail(reply, err);
     }
@@ -588,7 +596,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
     if (!a || !canSeeApproval(c, a)) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), minutes: z.number().int().min(1).max(LOAN_MAX_MINUTES).nullable().optional() }), req.body, reply);
+    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), minutes: z.number().int().min(1).max(LOAN_MAX_MINUTES).nullable().optional(), code: SCREEN_CODE.optional() }), req.body, reply);
     if (!body) return;
     if (a.status !== "pending") return reply.code(409).send({ error: `already ${a.status}` });
     const agent = store.agent(a.agentId);
@@ -600,7 +608,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       let verdict: string;
       if (body.approve) {
         try {
-          const loan = computers.startLoan(a, c.actor.id, body.minutes === undefined ? 60 : body.minutes);
+          const loan = await computers.startLoan(a, c.actor.id, body.minutes === undefined ? 60 : body.minutes, body.code);
           const mins = Math.round((new Date(loan.until).getTime() - Date.now()) / 60_000);
           verdict = `Approved: you can use "${a.loan.deviceName}" for ${mins >= 60 && mins % 60 === 0 ? `${mins / 60} hour${mins === 60 ? "" : "s"}` : `${mins} minutes`} (until ${new Date(loan.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}). Pass computer: "${a.loan.deviceName}" to the computer_* tools to act on it; without it they still act on your own computer. When you're done, call device_return.`;
         } catch (err) {
