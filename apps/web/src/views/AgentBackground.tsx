@@ -87,7 +87,7 @@ function Pick({ on, onClick, children }: { on: boolean; onClick: () => void; chi
  * reach, and writes to you only when something needs you. A few settings as a plain list;
  * the rest under More, or you just tell the agent.
  */
-export function BackgroundPanel({ agent, active }: { agent: Agent; active: boolean }) {
+export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; active: boolean; onDirty?: (dirty: boolean) => void }) {
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
   const timezone = useStore((s) => s.me?.user.timezone);
@@ -98,6 +98,8 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
   const [catalog, setCatalog] = useState<HarnessCatalog | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dirty = focus !== null && focus !== (state?.background?.focus ?? "");
+  useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
   const load = () => api<NonNullable<typeof state>>("GET", `/api/agents/${agent.id}/background`).then(setState, (e) => setError((e as Error).message));
   useEffect(() => {
     if (active) void load();
@@ -112,8 +114,10 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
     try {
       await api("PUT", `/api/agents/${agent.id}/background`, patch);
       await load();
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     }
   };
   const checkNow = async () => {
@@ -185,8 +189,15 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                       variant="primary"
                       className="w-full"
                       onClick={() => {
-                        if (focus !== null) void save({ focus }).then(() => setFocus(null));
-                        close();
+                        if (focus !== null) {
+                          const submitted = focus;
+                          void save({ focus }).then((ok) => {
+                            if (ok) {
+                              setFocus((current) => current === submitted ? null : current);
+                              close();
+                            }
+                          });
+                        } else close();
                       }}
                     >
                       Save

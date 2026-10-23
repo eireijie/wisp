@@ -51,8 +51,6 @@ export async function resolveComputer(
         kind: "vm",
         nodeId,
         name: `${agentName}'s desk`,
-        cpus: 2,
-        memoryGb: 4,
       })
     ).id;
   if (choice.kind === "screen")

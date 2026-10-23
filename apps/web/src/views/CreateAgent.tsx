@@ -365,6 +365,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
   const usable = usableDevices(nodes);
   const [nodeId, setNodeId] = useState(usable.find((n) => n.online)?.id ?? usable[0]?.id ?? "");
   const [computer, setComputer] = useState<ComputerChoice>(() => defaultComputer(nodes.find((n) => n.id === nodeId), computers));
+  const createdVm = useRef<{ id: string; nodeId: string } | null>(null);
   const [invite, setInvite] = useState(false);
   const touched = useRef(false);
   useEffect(() => {
@@ -469,7 +470,10 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
           a = await api<Agent>("POST", "/api/agents", { ...common, useDefaults: true, settings });
         } else {
           const computerId = external ? null : await resolveComputer(computer, nodeId, cleanName);
-          const vmHere = vmOnDevice(computer, nodeId, computers);
+          // Keep a newly created computer selected if creating the agent needs a retry.
+          if (computerId && (computer.kind === "vm" || computer.kind === "screen")) setComputer({ kind: "existing", id: computerId });
+          if (computerId && computer.kind === "vm") createdVm.current = { id: computerId, nodeId };
+          const vmHere = vmOnDevice(computer, nodeId, computers) || (createdVm.current?.id === computerId && createdVm.current?.nodeId === nodeId);
           a = await api<Agent>("POST", "/api/agents", {
             ...common,
             harness,
@@ -1019,7 +1023,7 @@ export async function importFound(
   });
 }
 
-function ImportAgent({
+export function ImportAgent({
   nodes: initialNodes,
   onClose,
   onInvite,
@@ -1083,6 +1087,8 @@ function ImportAgent({
   } | null>(null);
   const [handle, setHandle] = useState("");
   const [computer, setComputer] = useState<ComputerChoice>({ kind: "later" });
+  const imported = useRef(new Map<string, Agent>());
+  const importComputers = useRef(new Map<string, string>());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const slug = (s: string) =>
@@ -1101,7 +1107,8 @@ function ImportAgent({
         agents.map((a) => a.handle),
       ),
     );
-    setComputer(defaultComputer(x.node, computers));
+    const existing = importComputers.current.get(`${x.node.id}:${x.d.key}`);
+    setComputer(existing ? { kind: "existing", id: existing } : defaultComputer(x.node, computers));
   };
 
   if (!found.length)
@@ -1146,6 +1153,7 @@ function ImportAgent({
 
   const fresh = found.filter(
     (x) =>
+      !imported.current.has(`${x.node.id}:${x.d.key}`) &&
       !agents.some(
         (a) =>
           a.nodeId === x.node.id &&
@@ -1154,19 +1162,26 @@ function ImportAgent({
       ),
   );
   const bringAll = async () => {
+    if (busy) return;
     setBusy(true);
     setError(null);
-    const taken = agents.map((a) => a.handle);
+    const taken = [...agents, ...imported.current.values()].map((a) => a.handle);
     try {
       for (const x of fresh) {
         const handle = freeHandle(x.d.name, taken);
         taken.push(handle);
         const c = defaultComputer(x.node, computers);
-        await importFound(x, {
+        const key = `${x.node.id}:${x.d.key}`;
+        const computerId = importComputers.current.get(key) ?? await resolveComputer(c, x.node.id, x.d.name);
+        if (computerId) importComputers.current.set(key, computerId);
+        const all = c.kind === "vm" ? await api<ComputerInfo[]>("GET", "/api/computers") : computers;
+        const a = await importFound(x, {
           handle,
-          computerId: c.kind === "existing" ? c.id : null,
-          computers,
+          computerId,
+          headless: c.kind === "headless",
+          computers: all,
         });
+        imported.current.set(key, a);
       }
       await Promise.all([
         refreshAgents(),
@@ -1201,7 +1216,7 @@ function ImportAgent({
           {error}
         </p>
       )}
-      {fresh.length > 1 && !pick && (
+      {fresh.length > 0 && (fresh.length > 1 || imported.current.size > 0) && !pick && (
         <div className="flex items-center gap-3 rounded-xl bg-hover px-3 py-2.5 text-sm">
           <span className="flex-1">
             {fresh.length} agents found. Bring them all in with their
@@ -1223,7 +1238,7 @@ function ImportAgent({
       )}
       <div className="rounded-xl border border-line divide-y divide-line">
         {found.map((x) => {
-          const taken = agents.some(
+          const taken = imported.current.has(`${x.node.id}:${x.d.key}`) || agents.some(
             (a) =>
               a.nodeId === x.node.id &&
               a.harness === x.d.harness &&
@@ -1232,6 +1247,7 @@ function ImportAgent({
           return (
             <button
               key={`${x.node.id}:${x.d.key}`}
+              disabled={busy || taken}
               onClick={() => choose(x)}
               className={cx(
                 "w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-hover",
@@ -1271,16 +1287,22 @@ function ImportAgent({
           className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
+            if (busy) return;
             setBusy(true);
             setError(null);
             try {
+              const key = `${pick.node.id}:${pick.d.key}`;
               const computerId = await resolveComputer(
                 computer,
                 pick.node.id,
                 pick.d.name,
               );
+              if (computerId && (computer.kind === "vm" || computer.kind === "screen")) {
+                importComputers.current.set(key, computerId);
+                setComputer({ kind: "existing", id: computerId });
+              }
               const all =
-                computer.kind === "vm"
+                computer.kind === "vm" || (computer.kind === "existing" && !computers.some((c) => c.id === computerId))
                   ? await api<ComputerInfo[]>("GET", "/api/computers")
                   : computers;
               const a = await importFound(pick, {
@@ -1289,6 +1311,7 @@ function ImportAgent({
                 headless: computer.kind === "headless",
                 computers: all,
               });
+              imported.current.set(key, a);
               await Promise.all([
                 refreshAgents(),
                 useStore.getState().refreshComputers(),

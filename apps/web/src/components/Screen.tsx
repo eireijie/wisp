@@ -12,6 +12,8 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
   const [failed, setFailed] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    setUrl(null);
+    setFailed(false);
     if (!computer.online) return;
     let alive = true;
     let current: string | null = null;
@@ -30,7 +32,12 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
         setUrl(next);
         setFailed(false);
       } catch {
-        if (alive) setFailed(true);
+        if (alive) {
+          if (current) URL.revokeObjectURL(current);
+          current = null;
+          setUrl(null);
+          setFailed(true);
+        }
       }
     };
     load();
@@ -205,7 +212,9 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
         };
         sock.onclose = (e) => !disposed && (setState(e.code === 1000 ? "closed" : "error"), e.code !== 1000 && setError(e.reason || "The connection to the screen dropped."));
       }
-    })();
+    })().catch((e) => {
+      if (!disposed) (setState("error"), setError((e as ApiError).message));
+    });
     return () => {
       disposed = true;
       try {
