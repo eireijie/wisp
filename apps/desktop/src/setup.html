@@ -211,6 +211,7 @@
       <p class="error" id="cloud-fail" hidden></p>
       <div class="row" id="cloud-fail-actions" hidden>
         <button class="primary" id="cloud-delete">Delete the server</button>
+        <button id="cloud-wait">Keep waiting</button>
         <button id="cloud-keep">Keep it</button>
       </div>
       <p class="hint" id="cloud-fail-hint" hidden></p>
@@ -395,8 +396,12 @@
     $("cloud-billing").textContent = `Hetzner's price, including the IPv4 address (${money(p.ipv4)}). They bill your account by the hour, up to this much a month, until you delete the server in their console. 4 GB runs Warren and a couple of agent computers; more memory runs more at once.`;
   }
 
-  $("cloud-form").onsubmit = async (e) => {
+  $("cloud-form").onsubmit = (e) => {
     e.preventDefault();
+    cloudCreate(null);
+  };
+  /** Create a server, or (`resume`, a server that didn't finish) keep setting that one up. */
+  async function cloudCreate(resume) {
     const p = chosen();
     if (!p) return err("cloud-error", "Pick a size.");
     err("cloud-error", "");
@@ -405,9 +410,9 @@
     $("cloud-progress-title").textContent = "Creating your server…";
     cloudCard("cloud-progress");
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
-    progress("create");
+    progress(resume == null ? "create" : "boot");
     const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
-    const r = await setup.cloudCreate(cloudToken, { type: p.type, location: p.location, account, device: $("cloud-device").checked });
+    const r = await setup.cloudCreate(cloudToken, { type: p.type, location: p.location, account, device: $("cloud-device").checked, resume });
     if (r.ok) {
       cloudToken = "";
       $("starting-title").textContent = `Opening ${new URL(r.url).host}…`;
@@ -426,7 +431,7 @@
     $("cloud-fail-actions").hidden = false;
     $("cloud-fail-hint").hidden = false;
     $("cloud-fail-hint").textContent = `It's ${r.server.name} (${r.server.ip || "no address yet"}) in your Hetzner console, and Hetzner bills for it until it's deleted.` + (r.server.ip ? ` If it comes up later, join it at https://${r.server.ip}.` : "");
-  };
+  }
 
   let current = "create";
   setup.onCloudStep((step) => progress(step));
@@ -448,6 +453,7 @@
     err("cloud-fail", "");
     $("cloud-checks").replaceChildren(li("ok", "Deleted from your Hetzner account. Nothing more is billed for it."));
   };
+  $("cloud-wait").onclick = () => failed && cloudCreate(failed.id);
   $("cloud-keep").onclick = () => { $("cloud-fail-actions").hidden = true; };
   $("test").onclick = () => test(false);
 </script>
