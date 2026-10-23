@@ -22,6 +22,7 @@ const RELEASES = process.env.WARREN_UPDATE_FEED || `https://api.github.com/repos
 const TAG = /^desktop-v(\d+\.\d+\.\d+)$/;
 const FIRST_CHECK_MS = 30_000;
 const EVERY_MS = 6 * 60 * 60_000;
+const INSTALL_SPAWN_MS = 5_000;
 
 /** -1, 0 or 1, like a sort comparator, for plain x.y.z versions. */
 function compareVersions(a, b) {
@@ -148,6 +149,7 @@ function createUpdater(o) {
   let file = null; // the downloaded build
   let timer = null;
   let installing = false;
+  let installed = false;
 
   const set = (s, d = "") => {
     state = s;
@@ -160,7 +162,7 @@ function createUpdater(o) {
       if (manual) o.notify("Updates", "Updates only work in the built app. From source, use git pull.");
       return;
     }
-    if (state === "checking" || state === "downloading") return;
+    if (state === "checking" || state === "downloading" || installing) return;
     if (state === "ready") {
       if (manual) o.notify(`Warren ${found.version} is ready`, "Restart Warren to finish updating.");
       return;
@@ -210,24 +212,27 @@ function createUpdater(o) {
   }
 
   /** Swap the new build in after this process exits; `relaunch` opens Warren again afterwards. */
-  function install(relaunch) {
-    if (state !== "ready" || !file || installing) return false;
+  async function install(relaunch) {
+    if ((state !== "ready" && state !== "error") || !file || installing) return false;
     installing = true;
     const pid = process.pid;
     try {
       if (process.platform === "darwin") {
-        runDetached("/bin/sh", [writeScript(macScript({ pid, file, unpacked: path.join(dir, "unpacked"), bundle: macBundle(), dir, relaunch }))]);
+        await runDetached("/bin/sh", [writeScript(macScript({ pid, file, unpacked: path.join(dir, "unpacked"), bundle: macBundle(), dir, relaunch }))]);
       } else if (process.platform === "win32") {
         // electron-builder's one-click installer: /S is silent, --force-run opens Warren when done
-        runDetached(file, relaunch ? ["/S", "--force-run"] : ["/S"]);
+        await runDetached(file, relaunch ? ["/S", "--force-run"] : ["/S"]);
       } else {
-        runDetached("/bin/sh", [writeScript(linuxScript({ pid, file, target: process.env.APPIMAGE, relaunch }))]);
+        await runDetached("/bin/sh", [writeScript(linuxScript({ pid, file, target: process.env.APPIMAGE, relaunch }))]);
       }
+      installed = true;
       return true;
     } catch (e) {
       installing = false;
       o.log(`update install failed: ${e.message}`);
-      set("error", e.message);
+      const message = `couldn't install the update (${e.message})`;
+      set("error", message);
+      o.notify("Couldn't install the update", message);
       return false;
     }
   }
@@ -240,17 +245,38 @@ function createUpdater(o) {
 
   /** Start the installer on its own; if it can't start, say so instead of crashing Warren. */
   function runDetached(cmd, args) {
-    const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
-    child.on("error", (e) => {
-      installing = false;
-      o.log(`update install failed: ${e.message}`);
-      set("error", `couldn't install the update (${e.message})`);
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+      const started = () => {
+        clearTimeout(timeout);
+        child.unref();
+        resolve();
+      };
+      const timeout = setTimeout(() => {
+        child.removeListener("spawn", started);
+        reject(new Error("the update installer took too long to start. Try again."));
+        child.kill();
+      }, INSTALL_SPAWN_MS);
+      child.once("spawn", started);
+      child.once("error", (e) => {
+        clearTimeout(timeout);
+        child.removeListener("spawn", started);
+        reject(e);
+      });
     });
-    child.unref();
   }
 
-  function restart() {
-    if (install(true)) app.quit();
+  async function restart() {
+    if (await install(true)) app.quit();
+  }
+
+  /** Defer quitting until the installer starts; leave Warren running if it fails. */
+  let gaveUp = false; // an install-on-quit that failed: the next quit goes ahead without the update
+  function installOnQuit(event) {
+    if (installed || gaveUp || !file || (state !== "ready" && state !== "error")) return false;
+    event.preventDefault();
+    if (!installing) void install(false).then((ok) => { if (!ok) gaveUp = true; if (ok) app.quit(); });
+    return true;
   }
 
   return {
@@ -265,11 +291,11 @@ function createUpdater(o) {
     /** restart into the new version now */
     restart,
     /** called while quitting: a downloaded update goes in quietly, without reopening Warren */
-    installOnQuit: () => install(false),
+    installOnQuit,
     status: () => ({ state, detail, version: found?.version ?? null }),
     /** the tray's update item(s) */
     menu() {
-      if (state === "ready") return [{ label: `Restart to Update to ${found.version}`, click: restart }];
+      if (state === "ready" || (state === "error" && file)) return [{ label: `Restart to Update to ${found.version}`, click: restart }];
       if (state === "downloading") return [{ label: `Downloading Warren ${detail}…`, enabled: false }];
       return [{ label: state === "checking" ? "Checking for Updates…" : "Check for Updates…", enabled: state !== "checking", click: () => check({ manual: true }) }];
     },

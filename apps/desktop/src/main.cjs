@@ -679,11 +679,11 @@ app.whenReady().then(() => {
 
 app.on("activate", () => showWindow());
 app.on("window-all-closed", () => {}); // stays in the menu bar
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (updater.installOnQuit(event)) return;
   quitting = true;
   clearInterval(deviceStatusTimer);
   updater.stop();
-  updater.installOnQuit();
   buddy.destroy();
   hub.stop();
   device.stop();

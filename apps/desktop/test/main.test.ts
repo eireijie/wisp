@@ -16,6 +16,8 @@ function fixture(pending = false) {
   const loadFile = vi.fn();
   const showNotification = vi.fn();
   const showMessageBox = vi.fn();
+  const updater = { start: vi.fn(), stop: vi.fn(), installOnQuit: vi.fn(() => false) };
+  const buddy = { ready: vi.fn(), destroy: vi.fn() };
   class Window extends EventEmitter {
     webContents = Object.assign(new EventEmitter(), {
       getURL: () => "https://hub/", executeJavaScript: async () => "session-token", setWindowOpenHandler: vi.fn(),
@@ -63,13 +65,28 @@ function fixture(pending = false) {
       };
       if (name === "node:fs") return { readFileSync: () => JSON.stringify(config), mkdirSync: vi.fn(), writeFileSync: vi.fn(), existsSync: () => false };
       if (name === "./engine.cjs") return engine;
-      if (name === "./buddy.cjs") return () => ({ ready: vi.fn() });
-      if (name === "./updater.cjs") return { createUpdater: () => ({ start: vi.fn() }) };
+      if (name === "./buddy.cjs") return () => buddy;
+      if (name === "./updater.cjs") return { createUpdater: () => updater };
       return require(name);
     },
   });
-  return { main: module.exports, engine, handlers, fetch, loadFile, showNotification, showMessageBox, ready: () => ready(), server };
+  return { main: module.exports, app, updater, buddy, engine, handlers, fetch, loadFile, showNotification, showMessageBox, ready: () => ready(), server };
 }
+
+describe("desktop update shutdown", () => {
+  it("defers shutdown cleanup while the updater waits for the installer", () => {
+    const f = fixture();
+    const event = { preventDefault: vi.fn() };
+    f.updater.installOnQuit.mockReturnValueOnce(true);
+    f.app.emit("before-quit", event);
+    expect(f.updater.installOnQuit).toHaveBeenCalledWith(event);
+    expect(f.updater.stop).not.toHaveBeenCalled();
+    expect(f.buddy.destroy).not.toHaveBeenCalled();
+    f.app.emit("before-quit", event);
+    expect(f.updater.stop).toHaveBeenCalledOnce();
+    expect(f.buddy.destroy).toHaveBeenCalledOnce();
+  });
+});
 
 describe("desktop device status", () => {
   it("reports a failed service restart and allows a subsequent retry", async () => {

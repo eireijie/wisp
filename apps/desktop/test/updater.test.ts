@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 const updater = createRequire(import.meta.url)("../src/updater.cjs");
@@ -136,6 +139,129 @@ describe("installing an update on a Mac", () => {
   it("puts the old app back if the new one can't be moved in", () => {
     const script = updater.macScript({ pid: 1, file: "/u/W.zip", unpacked: "/u/unpacked", bundle: "/Applications/Warren.app", dir: "/u", relaunch: true });
     expect(script).toContain(`if ! mv "$NEW" '/Applications/Warren.app'; then rm -rf '/Applications/Warren.app'; mv '/Applications/Warren.app.old' '/Applications/Warren.app'; /usr/bin/open '/Applications/Warren.app'; exit 1; fi`);
+  });
+});
+
+describe("starting the update installer", () => {
+  async function fixture(platform = "win32") {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "warren-installer-"));
+    const children: (EventEmitter & { unref: ReturnType<typeof vi.fn>; kill: ReturnType<typeof vi.fn> })[] = [];
+    const spawn = vi.fn((_cmd: string, _args: string[], _options: object) => {
+      const child = Object.assign(new EventEmitter(), { unref: vi.fn(), kill: vi.fn() });
+      children.push(child);
+      return child;
+    });
+    const body = Buffer.from("a new Warren build");
+    const name = updater.assetName(platform, process.arch, { APPIMAGE: "/Warren.AppImage" });
+    const update = release("desktop-v0.0.2", [name]);
+    Object.assign(update.assets[0], { size: body.length, digest: `sha256:${crypto.createHash("sha256").update(body).digest("hex")}` });
+    const fetch = vi.fn(async (url: string) => url.includes("api.github.com") ? new Response(JSON.stringify([update])) : new Response(body));
+    const app = { isPackaged: true, getPath: () => root, getVersion: () => "0.0.1", quit: vi.fn() };
+    const log = vi.fn();
+    const notify = vi.fn();
+    const filename = fileURLToPath(new URL("../src/updater.cjs", import.meta.url));
+    const require = createRequire(filename);
+    const module = { exports: {} as typeof updater };
+    runInNewContext(fs.readFileSync(filename, "utf8"), {
+      module, fetch, AbortSignal,
+      process: { ...process, platform, execPath: path.join(root, "Warren.app", "Contents", "MacOS", "Warren"), env: { APPIMAGE: "/Warren.AppImage" } },
+      setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms), clearTimeout: (timer: NodeJS.Timeout) => clearTimeout(timer),
+      require: (name: string) => name === "node:child_process" ? { spawn } : name === "node:os" ? { tmpdir: () => root } : require(name),
+    });
+    const u = module.exports.createUpdater({ app, refresh: vi.fn(), log, notify });
+    try {
+      await u.check();
+      expect(u.status().state).toBe("ready");
+    } catch (e) {
+      fs.rmSync(root, { recursive: true, force: true });
+      throw e;
+    }
+    const file = path.join(root, "updates", name);
+    return { u, app, log, notify, children, spawn, file, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+  }
+
+  it.each(["win32", "darwin", "linux"])("waits for spawn before quitting on %s", async (platform) => {
+    const f = await fixture(platform);
+    try {
+      const restart = f.u.restart();
+      expect(f.spawn.mock.calls[0][2]).toEqual({ detached: true, stdio: "ignore" });
+      expect(f.app.quit).not.toHaveBeenCalled();
+      expect(f.children[0].unref).not.toHaveBeenCalled();
+      // Repeated restart/quit requests must not launch another installer or quit early.
+      await f.u.restart();
+      const event = { preventDefault: vi.fn() };
+      expect(f.u.installOnQuit(event)).toBe(true);
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(f.spawn).toHaveBeenCalledOnce();
+      f.children[0].emit("spawn");
+      await restart;
+      expect(f.children[0].unref).toHaveBeenCalledOnce();
+      expect(f.app.quit).toHaveBeenCalledOnce();
+      expect(f.u.installOnQuit({ preventDefault: vi.fn() })).toBe(false);
+    } finally { f.cleanup(); }
+  });
+
+  it.each(["ENOENT", "EACCES"])("keeps the download and reports an asynchronous %s failure so restart can be retried", async (code) => {
+    const f = await fixture();
+    try {
+      const restart = f.u.restart();
+      f.children[0].emit("error", new Error(code));
+      await restart;
+      expect(f.app.quit).not.toHaveBeenCalled();
+      expect(f.u.status()).toMatchObject({ state: "error", detail: expect.stringContaining(code), version: "0.0.2" });
+      expect(f.log).toHaveBeenLastCalledWith(expect.stringContaining(code));
+      expect(f.notify).toHaveBeenLastCalledWith("Couldn't install the update", expect.stringContaining(code));
+      expect(fs.existsSync(f.file)).toBe(true);
+      const retry = f.u.menu()[0].click();
+      f.children[1].emit("spawn");
+      await retry;
+      expect(f.app.quit).toHaveBeenCalledOnce();
+    } finally { f.cleanup(); }
+  });
+
+  it("keeps Warren open and the download retryable when the spawn deadline expires", async () => {
+    const f = await fixture();
+    vi.useFakeTimers();
+    try {
+      const restart = f.u.restart();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await restart;
+      expect(f.app.quit).not.toHaveBeenCalled();
+      expect(f.u.status()).toMatchObject({ state: "error", detail: expect.stringContaining("too long to start") });
+      expect(f.notify).toHaveBeenLastCalledWith("Couldn't install the update", expect.stringContaining("Try again"));
+      expect(fs.existsSync(f.file)).toBe(true);
+      expect(f.children[0].kill).toHaveBeenCalledOnce();
+      f.children[0].emit("spawn");
+      f.children[0].emit("error", new Error("late error"));
+      expect(f.app.quit).not.toHaveBeenCalled();
+      const retry = f.u.restart();
+      f.children[1].emit("spawn");
+      await retry;
+      expect(f.app.quit).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); f.cleanup(); }
+  });
+
+  it.each(["spawn", "error"])("defers normal quitting until the installer emits %s", async (eventName) => {
+    const f = await fixture();
+    try {
+      const event = { preventDefault: vi.fn() };
+      expect(f.u.installOnQuit(event)).toBe(true);
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+      expect(f.app.quit).not.toHaveBeenCalled();
+      f.children[0].emit(eventName, new Error("EACCES"));
+      // Let the install and quit continuations finish.
+      await Promise.resolve();
+      await Promise.resolve();
+      if (eventName === "spawn") {
+        expect(f.app.quit).toHaveBeenCalledOnce();
+        expect(f.u.installOnQuit({ preventDefault: vi.fn() })).toBe(false);
+      } else {
+        expect(f.app.quit).not.toHaveBeenCalled();
+        expect(f.u.status()).toMatchObject({ state: "error", detail: expect.stringContaining("EACCES") });
+        // the next quit must go ahead without the update, not trap the person in the app
+        expect(f.u.installOnQuit({ preventDefault: vi.fn() })).toBe(false);
+      }
+    } finally { f.cleanup(); }
   });
 });
 
