@@ -24,9 +24,20 @@ export function isProtected(channel: ChannelInfo) {
 
 /** Your own settings for a channel: how much it tells you, and whether it's starred. */
 export async function setChannelPrefs(channel: ChannelInfo, patch: { notify?: ChannelNotify; starred?: boolean }) {
+  const before = useStore.getState().channels.find((c) => c.id === channel.id) ?? channel;
   // show it straight away; the list refresh confirms it
   useStore.setState((s) => ({ channels: s.channels.map((c) => (c.id === channel.id ? { ...c, ...patch, ...(patch.notify === "mute" ? { unread: 0 } : {}) } : c)) }));
-  await api("PUT", `/api/channels/${channel.id}/prefs`, patch);
+  try {
+    await api("PUT", `/api/channels/${channel.id}/prefs`, patch);
+  } catch (e) {
+    useStore.setState((s) => ({ channels: s.channels.map((c) => c.id === channel.id ? {
+      ...c,
+      ...(patch.starred !== undefined && c.starred === patch.starred ? { starred: before.starred } : {}),
+      ...(patch.notify !== undefined && c.notify === patch.notify ? { notify: before.notify, ...(patch.notify === "mute" && c.unread === 0 ? { unread: before.unread } : {}) } : {}),
+    } : c) }));
+    alert((e as Error).message);
+    return;
+  }
   await useStore.getState().refreshChannels();
 }
 

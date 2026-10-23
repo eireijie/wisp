@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Pin, PinOff, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
@@ -1353,16 +1353,41 @@ function TaskChip({ id }: { id: string }) {
 
 // --- composer -----------------------------------------------------------------------------------
 
-function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void }) {
+interface ComposerDraft {
+  text: string;
+  files: { id: string; name: string }[];
+  uploading: number;
+  sending: boolean;
+  error: string | null;
+}
+const emptyComposerDraft: ComposerDraft = { text: "", files: [], uploading: 0, sending: false, error: null };
+const composerDrafts = new Map<string, ComposerDraft>();
+const draftListeners = new Set<() => void>();
+const subscribeDrafts = (onChange: () => void) => {
+  draftListeners.add(onChange);
+  return () => { draftListeners.delete(onChange); };
+};
+
+function useComposerDraft(channelId: string, threadId?: string) {
+  const key = JSON.stringify([channelId, threadId ?? null]);
+  const get = () => composerDrafts.get(key) ?? emptyComposerDraft;
+  const draft = useSyncExternalStore(subscribeDrafts, get, get);
+  const update = (change: (draft: ComposerDraft) => ComposerDraft) => {
+    composerDrafts.set(key, change(get()));
+    draftListeners.forEach((notify) => notify());
+  };
+  return [draft, update, get] as const;
+}
+
+export function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void }) {
   const { sendWith } = usePrefs();
   const agents = useStore((s) => s.agents);
   const canEdit = useStore((s) => s.me?.role !== "guest");
   const { agent: dmAgent, ctx, catalog } = useAgentContext(agentId, channelId, threadId);
   const live = useStore((s) => s.live);
-  const [text, setText] = useState("");
-  const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [{ text, files, uploading, sending, error }, updateDraft, getDraft] = useComposerDraft(channelId, threadId);
+  const setText = (value: string) => updateDraft((d) => ({ ...d, text: value }));
+  const setFiles = (value: ComposerDraft["files"]) => updateDraft((d) => ({ ...d, files: value }));
   const [pick, setPick] = useState(0);
   const [emoji, setEmoji] = useState(false);
   const [caret, setCaret] = useState(0);
@@ -1467,37 +1492,44 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
   }
 
   async function send() {
-    if (!text.trim() && !files.length) return;
-    const body = text;
-    const attached = files;
+    const current = getDraft();
+    if (current.uploading || current.sending || (!current.text.trim() && !current.files.length)) return;
+    const body = current.text;
+    const attached = current.files;
     const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !answerer && !leads.length && !parseMentions(body).length;
     setNobodyAsked(false);
-    setText("");
-    setFiles([]);
-    setError(null);
+    updateDraft((d) => ({ ...d, text: "", files: [], sending: true, error: null }));
     try {
       await api("POST", `/api/channels/${channelId}/messages`, { body, threadId, fileIds: attached.map((f) => f.id) });
       setNobodyAsked(unasked);
     } catch (e) {
-      // the message comes back as it was, attachments included (plus anything added meanwhile)
-      setText(body);
-      setFiles((cur) => [...attached, ...cur.filter((f) => !attached.some((a) => a.id === f.id))]);
-      setError((e as Error).message);
+      // Restore into this conversation, keeping anything typed while the send was in flight.
+      updateDraft((d) => ({ ...d, text: body && d.text ? `${body}\n${d.text}` : body || d.text, files: attached, error: (e as Error).message }));
+    } finally {
+      updateDraft((d) => ({ ...d, sending: false }));
     }
   }
 
   async function attach(list: FileList | null) {
     if (!list?.length) return;
-    setUploading(true);
+    const current = getDraft();
+    if (current.sending) {
+      updateDraft((d) => ({ ...d, error: "Wait for the message to send before attaching files." }));
+      return;
+    }
+    const selected = Array.from(list).slice(0, Math.max(0, 20 - current.files.length - current.uploading));
+    let remaining = selected.length;
+    updateDraft((d) => ({ ...d, uploading: d.uploading + remaining, error: selected.length < list.length ? "Attach up to 20 files per message." : null }));
     try {
-      for (const f of Array.from(list)) {
+      for (const f of selected) {
         const up = await uploadFile(f, channelId);
-        setFiles((cur) => [...cur, { id: up.id, name: up.name }]);
+        remaining--;
+        updateDraft((d) => ({ ...d, uploading: d.uploading - 1, files: [...d.files, { id: up.id, name: up.name }] }));
       }
     } catch (e) {
-      setError((e as Error).message);
+      updateDraft((d) => ({ ...d, error: (e as Error).message }));
     } finally {
-      setUploading(false);
+      updateDraft((d) => ({ ...d, uploading: d.uploading - remaining }));
     }
   }
 
@@ -1611,7 +1643,7 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
           <button
             onClick={send}
-            disabled={!text.trim() && !files.length}
+            disabled={!!uploading || sending || (!text.trim() && !files.length)}
             className="ml-1 size-9 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
             aria-label="Send"
           >

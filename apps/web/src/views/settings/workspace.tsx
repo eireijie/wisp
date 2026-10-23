@@ -360,7 +360,6 @@ export function AgentsPolicyPage() {
   }, []);
   const save = async (patch: Partial<AgentPolicy>) => {
     if (!p) return;
-    setP({ ...p, ...patch });
     setError(null);
     try {
       setP(await api<AgentPolicy>("PUT", "/api/settings/agents", patch));

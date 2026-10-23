@@ -11,6 +11,8 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
   const [failed, setFailed] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    setUrl(null);
+    setFailed(false);
     if (!computer.online) return;
     let alive = true;
     let current: string | null = null;
@@ -29,7 +31,12 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
         setUrl(next);
         setFailed(false);
       } catch {
-        if (alive) setFailed(true);
+        if (alive) {
+          if (current) URL.revokeObjectURL(current);
+          current = null;
+          setUrl(null);
+          setFailed(true);
+        }
       }
     };
     load();
@@ -136,13 +143,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
     setState("connecting");
     setError(null);
     (async () => {
-      let view: { transport: "vnc" | "frames"; url: string; direct: boolean };
-      try {
-        view = await api("POST", `/api/computers/${computer.id}/view`);
-      } catch (e) {
-        if (!disposed) (setState("error"), setError((e as ApiError).message));
-        return;
-      }
+      const view = await api<{ transport: "vnc" | "frames"; url: string; direct: boolean }>("POST", `/api/computers/${computer.id}/view`);
       if (disposed) return;
       const wsUrl = view.direct ? view.url : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${view.url}`;
       if (view.transport === "vnc") {
@@ -186,7 +187,9 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
         };
         sock.onclose = (e) => !disposed && (setState(e.code === 1000 ? "closed" : "error"), e.code !== 1000 && setError(e.reason || "The connection to the screen dropped."));
       }
-    })();
+    })().catch((e) => {
+      if (!disposed) (setState("error"), setError((e as ApiError).message));
+    });
     return () => {
       disposed = true;
       try {
