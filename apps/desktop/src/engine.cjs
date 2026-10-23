@@ -112,21 +112,55 @@ function runtime(saved) {
 /** Whether `warren service install` already keeps this running (then the app leaves it alone). */
 function serviceRunning(kind) {
   // a service reads ~/.warren; with another WARREN_NODE_DIR, it isn't this app's device
-  if (process.platform !== "darwin" || process.env.WARREN_NODE_DIR) return Promise.resolve(false);
+  if (process.env.WARREN_NODE_DIR) return Promise.resolve(false);
   return new Promise((resolve) => {
-    execFile("launchctl", ["print", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 4000 }, (err, out) => resolve(!err && /state = running/.test(out)));
+    // Same service names and user/system scope as apps/node/src/service.ts.
+    if (process.platform === "darwin")
+      execFile("launchctl", ["print", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 4000 }, (err, out) => resolve(!err && /state = running/.test(out)));
+    else if (process.platform === "linux")
+      execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "is-active", "--quiet", kind === "hub" ? "warren" : "warren-node"], { timeout: 4000 }, (err) => resolve(!err));
+    else if (process.platform === "win32")
+      execFile("powershell.exe", ["-NoProfile", "-Command", `(Get-ScheduledTask -TaskName 'Warren ${kind}').State`], { timeout: 4000 }, (err, out) => resolve(!err && out.trim() === "Running"));
+    else resolve(false);
   });
 }
 
 /** Restart a `warren service`, so it picks up a node.json that now points at another hub. */
 function restartService(kind) {
-  return new Promise((resolve) => execFile("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 8000 }, (err) => resolve(!err)));
+  return new Promise((resolve) => {
+    const done = (err) => resolve(!err);
+    if (process.platform === "darwin") execFile("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 8000 }, done);
+    else if (process.platform === "linux") execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "restart", kind === "hub" ? "warren" : "warren-node"], { timeout: 8000 }, done);
+    else if (process.platform === "win32") execFile("powershell.exe", ["-NoProfile", "-Command", `$ErrorActionPreference = 'Stop'; Stop-ScheduledTask -TaskName 'Warren ${kind}'; Start-ScheduledTask -TaskName 'Warren ${kind}'`], { timeout: 8000 }, done);
+    else resolve(false);
+  });
 }
 
-async function hubUp(url) {
+async function hubUp(url, { fetchImpl = fetch } = {}) {
   try {
-    const res = await fetch(new URL("/api/setup", url), { signal: AbortSignal.timeout(2500) });
-    return res.ok;
+    const res = await fetchImpl(new URL("/api/setup", url), { signal: AbortSignal.timeout(2500) });
+    const body = res.ok ? await res.json() : null;
+    return !!body && typeof body.needsSetup === "boolean";
+  } catch {
+    return false;
+  }
+}
+
+/** Confirm authentication and the hub's live device state; a running process alone proves neither. */
+async function deviceConnected(origin, cfg, session, { fetchImpl = fetch } = {}) {
+  if (!session || !cfg.token) return false;
+  try {
+    const get = async (route, token) => {
+      const res = await fetchImpl(new URL(route, origin), { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error("unauthorized");
+      return res.json();
+    };
+    const [agents, nodes] = await Promise.all([get("/api/node/agents", cfg.token), get("/api/nodes", session)]);
+    if (!Array.isArray(agents) || !Array.isArray(nodes)) return false;
+    const id = agents[0]?.nodeId || cfg.nodeId;
+    // Older node.json files have no id. Only accept an unambiguous device owned by this person.
+    const matches = id ? nodes.filter((n) => n.id === id) : nodes.filter((n) => n.mine && n.name === cfg.name);
+    return matches.length === 1 && matches[0].online === true;
   } catch {
     return false;
   }
@@ -178,6 +212,7 @@ async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
   const list = candidates(input);
   if (!list.length) return { ok: false, error: "That isn't a server address. Try something like warren.example.com or 192.168.1.20:4747.", checks: [] };
   let first = null;
+  let answered = null;
   for (const origin of list) {
     let res;
     try {
@@ -188,21 +223,22 @@ async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
     }
     const body = await res.json().catch(() => null);
     if (!res.ok || !body || typeof body.needsSetup !== "boolean") {
-      // something answered, so this is the address, but it isn't Warren
-      return { ok: false, url: origin, error: `${new URL(origin).host} answered, but it isn't a Warren server${res.ok ? "" : ` (${res.status})`}.`, checks: [{ label: "Reach the server", ok: true }, { label: "It's a Warren server", ok: false }] };
+      answered ??= { ok: false, url: origin, error: `${new URL(origin).host} answered, but it isn't a Warren server${res.ok ? "" : ` (${res.status})`}.`, checks: [{ label: "Reach the server", ok: true }, { label: "It's a Warren server", ok: false }] };
+      continue;
     }
+    const finalOrigin = res.url ? new URL(res.url).origin : origin;
     return {
       ok: true,
-      url: origin,
+      url: finalOrigin,
       needsSetup: body.needsSetup,
       checks: [
-        { label: `Reach ${new URL(origin).host}`, ok: true },
+        { label: `Reach ${new URL(finalOrigin).host}`, ok: true },
         { label: "It's a Warren server", ok: true },
         { label: body.needsSetup ? "Nobody has set it up yet: you'll create the first account" : "Ready for you to sign in", ok: true },
       ],
     };
   }
-  return first;
+  return answered || first;
 }
 
 /** This computer's addresses other computers can join its server at (LAN and Tailscale). */
@@ -318,4 +354,4 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, deviceConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };

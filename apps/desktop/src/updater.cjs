@@ -67,9 +67,10 @@ function fileDigest(file) {
  * GitHub publishes. A build without a digest isn't installed, since nothing else vouches for it.
  * Anything wrong (a write error, a short or long file, another digest) throws and removes the file.
  */
-async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, headers = {} } = {}) {
+async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, headers = {}, timeoutMs = 10 * 60_000 } = {}) {
   if (!/^sha256:[0-9a-f]{64}$/.test(String(digest || ""))) throw new Error("the release has no checksum for this build, so it wasn't downloaded");
-  const res = await fetchImpl(url, { headers });
+  const signal = AbortSignal.timeout(timeoutMs);
+  const res = await fetchImpl(url, { headers, signal });
   if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`);
   let bytes = 0;
   try {
@@ -83,12 +84,13 @@ async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, head
         }
       },
       fs.createWriteStream(dest),
+      { signal },
     );
     if (typeof size === "number" && bytes !== size) throw new Error("the download was cut short");
     if ((await fileDigest(dest)) !== digest) throw new Error("the download didn't match the release, so it was thrown away");
   } catch (e) {
     fs.rmSync(dest, { force: true });
-    throw e;
+    throw signal.aborted ? signal.reason : e;
   }
   return dest;
 }
@@ -139,7 +141,7 @@ const macBundle = (execPath = process.execPath) => path.resolve(execPath, "..", 
 function createUpdater(o) {
   const { app } = o;
   const dir = path.join(app.getPath("userData"), "updates");
-  /** idle | checking | downloading | ready | error */
+  /** idle | checking | downloading | ready | error | timed-out */
   let state = "idle";
   let detail = "";
   let found = null; // the release being downloaded or ready
@@ -176,7 +178,7 @@ function createUpdater(o) {
     }
     set("checking");
     try {
-      const res = await fetch(RELEASES, { headers: { accept: "application/vnd.github+json", "user-agent": `Warren/${app.getVersion()}` } });
+      const res = await fetch(RELEASES, { signal: AbortSignal.timeout(30_000), headers: { accept: "application/vnd.github+json", "user-agent": `Warren/${app.getVersion()}` } });
       if (!res.ok) throw new Error(res.status === 404 ? "the release page isn't public yet" : `GitHub said ${res.status}`);
       const update = pickUpdate(await res.json(), app.getVersion(), name);
       if (!update) {
@@ -188,8 +190,10 @@ function createUpdater(o) {
       await download(update, name);
     } catch (e) {
       o.log(`update check failed: ${e.message}`);
-      set("error", e.message);
-      if (manual) o.notify("Couldn't check for updates", e.message);
+      const timedOut = e.name === "TimeoutError" || e.name === "AbortError";
+      const message = timedOut ? "The update request timed out. Try checking again." : e.message;
+      set(timedOut ? "timed-out" : "error", message);
+      if (manual) o.notify("Couldn't check for updates", message);
     }
   }
 

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const updater = createRequire(import.meta.url)("../src/updater.cjs");
 
@@ -136,5 +136,40 @@ describe("installing an update on a Mac", () => {
   it("puts the old app back if the new one can't be moved in", () => {
     const script = updater.macScript({ pid: 1, file: "/u/W.zip", unpacked: "/u/unpacked", bundle: "/Applications/Warren.app", dir: "/u", relaunch: true });
     expect(script).toContain(`if ! mv "$NEW" '/Applications/Warren.app'; then rm -rf '/Applications/Warren.app'; mv '/Applications/Warren.app.old' '/Applications/Warren.app'; /usr/bin/open '/Applications/Warren.app'; exit 1; fi`);
+  });
+});
+
+
+describe("update request deadlines", () => {
+  it("aborts and removes a download whose body stalls", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "warren-update-timeout-"));
+    const file = path.join(root, "Warren.zip");
+    try {
+      await expect(updater.downloadTo("https://hub/build", file, { digest: `sha256:${"0".repeat(64)}` }, {
+        timeoutMs: 10, fetchImpl: async (_url: string, init: RequestInit) => {
+          expect(init.signal).toBeInstanceOf(AbortSignal);
+          return new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1])); } }));
+        },
+      })).rejects.toMatchObject({ name: "TimeoutError" });
+      expect(fs.existsSync(file)).toBe(false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("leaves update checks retryable after a deadline", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "warren-updater-"));
+    const fetch = vi.fn(async (_url, init) => {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      throw Object.assign(new Error("deadline"), { name: "TimeoutError" });
+    });
+    vi.stubGlobal("fetch", fetch);
+    try {
+      const app = { isPackaged: true, getPath: () => root, getVersion: () => "0.0.1" };
+      const u = updater.createUpdater({ app, refresh: vi.fn(), log: vi.fn(), notify: vi.fn() });
+      await u.check();
+      expect(u.status()).toMatchObject({ state: "timed-out", detail: expect.stringContaining("Try checking again") });
+      expect(u.menu()[0].enabled).toBe(true);
+      await u.check();
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally { vi.unstubAllGlobals(); fs.rmSync(root, { recursive: true, force: true }); }
   });
 });

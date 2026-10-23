@@ -35,6 +35,8 @@ let hubOrigin = null; // the hub the window shows, once it's reachable
 let hubBy = ""; // "app" | "service" | "already running" | "remote"
 let deviceBy = ""; // "app" | "service"
 let deviceError = "";
+let deviceOnline = false;
+let deviceStatusTimer = null;
 let deviceWaiting = false; // added as soon as someone signs in
 const buddy = require("./buddy.cjs")({
   config, save, mainWindow: () => win, refresh,
@@ -57,6 +59,7 @@ const updater = require("./updater.cjs").createUpdater({
 });
 const hub = new engine.Child("hub", logDir, () => refresh());
 const device = new engine.Child("device", logDir, () => {
+  deviceOnline = false;
   if (device.state === "rejected") deviceRejected();
   refresh();
 });
@@ -236,12 +239,12 @@ async function startDevice({ quiet = false, confirmed = false, claim = null } = 
   // a device card in Warren that never connected: this computer becomes that device
   if (claim?.token) {
     if (device.running()) await stopAndWait();
-    engine.writeNodeConfig({ hub: hubOrigin, token: claim.token, name: claim.name || deviceName() });
+    engine.writeNodeConfig({ hub: hubOrigin, token: claim.token, nodeId: undefined, name: claim.name || deviceName() });
     deviceBy = "";
   }
   let cfg = engine.readNodeConfig();
   const sameHub = cfg.hub && cfg.token && sameOrigin(cfg.hub, hubOrigin);
-  if (service && sameHub && !claim) {
+  if (service && sameHub && !claim && quiet) {
     deviceBy = "service";
     config.device = true;
     save();
@@ -269,19 +272,24 @@ async function startDevice({ quiet = false, confirmed = false, claim = null } = 
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: deviceName() }),
+        signal: AbortSignal.timeout(30_000),
       });
-      const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch((err) => { if (err.name === "TimeoutError" || err.name === "AbortError") throw err; return {}; });
       if (!res.ok) return fail(body.error || `The hub said ${res.status}`);
-      cfg = engine.writeNodeConfig({ hub: hubOrigin, token: body.token, name: deviceName() });
+      cfg = engine.writeNodeConfig({ hub: hubOrigin, token: body.token, nodeId: body.node?.id, name: deviceName() });
     } catch (err) {
-      return fail(`Couldn't reach the hub: ${err.message}`);
+      return fail(err.name === "TimeoutError" || err.name === "AbortError" ? "The hub request timed out. Try connecting again." : `Couldn't reach the hub: ${err.message}`);
     }
   }
   config.device = true;
   save();
   if (service) {
     // `warren service install node` runs the device here: point it at this hub instead
-    await engine.restartService("node");
+    if (!(await engine.restartService("node"))) {
+      deviceBy = "";
+      deviceOnline = false;
+      return fail("The device service couldn't restart. Try connecting again.");
+    }
     deviceBy = "service";
     refresh();
     if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Warren → Devices.");
@@ -309,7 +317,20 @@ function deviceRejected() {
   if (config.device && hubOrigin) waitForSignIn();
 }
 
+async function readDeviceStatus() {
+  const origin = hubOrigin;
+  const cfg = engine.readNodeConfig();
+  const active = () => config.device && !deviceError && (deviceBy === "service" || device.running());
+  const online = !!(active() && origin && sameOrigin(cfg.hub, origin) && await engine.deviceConnected(origin, cfg, await sessionToken()));
+  // A server switch or disconnect during the request invalidates its result.
+  if (hubOrigin !== origin || engine.readNodeConfig().token !== cfg.token) return false;
+  deviceOnline = !!(active() && online);
+  refresh();
+  return deviceOnline;
+}
+
 function stopDevice() {
+  deviceOnline = false;
   stopWaiting();
   config.device = false;
   save();
@@ -411,10 +432,11 @@ function hubLine() {
 }
 
 function deviceLine() {
-  if (deviceBy === "service") return "This computer: connected (as a service)";
-  if (device.state === "starting" && device.running()) return "This computer: connected";
-  if (device.state === "error") return "This computer: stopped unexpectedly";
   if (deviceError) return `This computer: ${deviceError}`;
+  if (deviceOnline && deviceBy === "service") return "This computer: connected (as a service)";
+  if (deviceOnline) return "This computer: connected";
+  if (deviceBy === "service" || device.running()) return "This computer: connecting…";
+  if (device.state === "error") return "This computer: stopped unexpectedly";
   if (deviceWaiting) return "This computer: becomes a device when you sign in";
   return "This computer: not a device";
 }
@@ -582,7 +604,7 @@ setup("setup:cloud-create", async (token, { type, location, account, device: asD
     );
     const { id, name, ip } = r.server;
     config.cloudPending = undefined;
-    switchTo({ mode: "remote", hubUrl: r.url, device: !!asDevice, cloud: { provider: "hetzner", id, name, ip, location, type } });
+    switchTo({ mode: "remote", hubUrl: r.url, device: !!asDevice, cloud: { provider: "hetzner", id, name, ip, location: r.server.location, type: r.server.type } });
     signInOnOpen(r.url, r.session);
     connect();
     return { ok: true, url: r.url };
@@ -620,6 +642,7 @@ function signInOnOpen(url, session) {
 
 /** Leave the current server for another: stop what this app runs for it first. */
 function switchTo(next) {
+  deviceOnline = false;
   stopWaiting();
   if (config.mode === "local" && next.mode !== "local") hub.stop();
   if (deviceBy === "app") device.stop();
@@ -637,7 +660,7 @@ ipcMain.on("badge", (_e, n) => {
   app.setBadgeCount?.(count);
   if (process.platform === "darwin") app.dock?.setBadge(count ? String(count) : "");
 });
-ipcMain.handle("desktop:info", () => ({ version: app.getVersion(), platform: process.platform, device: deviceBy === "service" || device.running() }));
+ipcMain.handle("desktop:info", async () => ({ version: app.getVersion(), platform: process.platform, device: await readDeviceStatus() }));
 ipcMain.handle("desktop:connect-device", (e, claim) => (fromHub(e) ? startDevice({ confirmed: !!claim, claim: claim && typeof claim.token === "string" ? { token: claim.token, name: String(claim.name || "") } : null }) : null));
 
 // ---------------------------------------------------------------- lifecycle
@@ -648,14 +671,17 @@ app.whenReady().then(() => {
   makeTray();
   buddy.ready();
   createWindow();
-  connect();
+  if (config.cloudPending) showSetup({ step: "cloud", server: config.cloudPending.server });
+  else connect();
   updater.start();
+  deviceStatusTimer = setInterval(() => void readDeviceStatus(), 15_000);
 });
 
 app.on("activate", () => showWindow());
 app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", () => {
   quitting = true;
+  clearInterval(deviceStatusTimer);
   updater.stop();
   updater.installOnQuit();
   buddy.destroy();

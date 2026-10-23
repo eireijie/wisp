@@ -409,19 +409,20 @@ const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
 
 /** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
-function EasiestWay({ name, token, connected }: { name: string; token: string; connected: boolean }) {
+export function EasiestWay({ name, token, connected }: { name: string; token: string; connected: boolean }) {
   const { inDesktop, info, connect } = useDesktopInfo();
   const [busy, setBusy] = useState(false);
   useAccess();
   const hub = shareOrigin();
   const os = desktopOs();
   const get = downloadsFor(os);
+  const computer = info?.platform === "darwin" ? "Mac" : info?.platform === "win32" ? "PC" : "computer";
   if (inDesktop)
     return (
       <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
-        <p className="text-sm font-medium">This Mac is being connected automatically</p>
+        <p className="text-sm font-medium">{`This ${computer} is being connected automatically`}</p>
         <p className="text-sm text-muted">
-          {connected ? `${name} is connected.` : info?.device ? "Connected to Warren. It can take a few seconds to show up here." : "The Warren app has not connected this Mac yet."}
+          {connected ? `${name} is connected.` : info?.device ? "Connected to Warren. It can take a few seconds to show up here." : `The Warren app has not connected this ${computer} yet.`}
         </p>
         {!connected && !info?.device && (
           <Button
@@ -435,7 +436,7 @@ function EasiestWay({ name, token, connected }: { name: string; token: string; c
               }
             }}
           >
-            Connect this Mac
+            Connect this {computer}
           </Button>
         )}
       </div>

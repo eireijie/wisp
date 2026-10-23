@@ -177,3 +177,36 @@ describe("creating a Warren in the person's Hetzner project", () => {
     expect(cloud.userData("key-two")).not.toBe(a);
   });
 });
+
+
+describe("cloud request deadlines", () => {
+  it("makes an account timeout retryable and preserves the pending server and key", async () => {
+    const server = { id: 42, name: "existing", ip: "203.0.113.7", location: "fsn1", type: "cx23" };
+    const err = await cloud.createWarren({ token: "good-token", account }, {
+      resume: { server, key: "saved-key" }, sleep,
+      fetchImpl: async (url: URL, init: RequestInit) => {
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        if (url.host === "api.hetzner.cloud") return json({ server: { status: "running", public_net: { ipv4: { ip: server.ip } } } });
+        if (!init.method) return json({ needsSetup: true });
+        throw Object.assign(new Error("deadline"), { name: "TimeoutError" });
+      },
+    }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: "timed_out", retryable: true, server: { id: 42 }, key: "saved-key" });
+  });
+
+  it("aborts an unresponsive account request", async () => {
+    const fetchImpl = (_url: URL, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+    });
+    await expect(cloud.claim("https://hub", "key", account, { fetchImpl, timeoutMs: 10 })).rejects.toMatchObject({ code: "timed_out", retryable: true });
+  });
+
+  it("bounds the optional timezone request and still returns the created session", async () => {
+    const fetchImpl = async (_url: URL, init: RequestInit) => {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      if (init.method === "POST") return json({ token: "session" });
+      return new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true }));
+    };
+    expect(await cloud.claim("https://hub", "key", account, { fetchImpl, timeoutMs: 10 })).toBe("session");
+  });
+});
