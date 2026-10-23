@@ -288,6 +288,8 @@ describe("update request deadlines", () => {
       throw Object.assign(new Error("deadline"), { name: "TimeoutError" });
     });
     vi.stubGlobal("fetch", fetch);
+    // on Linux the updater only runs for AppImage builds, so CI needs to look like one
+    vi.stubEnv("APPIMAGE", "/Warren.AppImage");
     try {
       const app = { isPackaged: true, getPath: () => root, getVersion: () => "0.0.1" };
       const u = updater.createUpdater({ app, refresh: vi.fn(), log: vi.fn(), notify: vi.fn() });
@@ -296,6 +298,6 @@ describe("update request deadlines", () => {
       expect(u.menu()[0].enabled).toBe(true);
       await u.check();
       expect(fetch).toHaveBeenCalledTimes(2);
-    } finally { vi.unstubAllGlobals(); fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); }
   });
 });
