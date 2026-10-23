@@ -58,6 +58,8 @@ final class Store {
   /** thread roots as loaded with their thread: a sub-thread's root is a reply in another thread */
   var roots: [String: Message] = [:]
   var replyCounts: [String: Int] = [:]
+  /** discussions shown in the chat, with who has answered this round */
+  var discussions: [String: Discussion] = [:]
   /** what each busy agent is doing right now ("Reading the vault…"), from run events */
   var activity: [String: String] = [:]
   /** the channel each working agent is replying in */
@@ -74,6 +76,8 @@ final class Store {
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
+  /** threads on screen (root → channel), refreshed when the connection comes back */
+  var openThreads: [String: String] = [:]
   /** where a tapped notification wants to go; the screen that shows it clears it */
   var route: Route?
   /** whether this hub has an APNs key (push is optional for self-hosters) */
@@ -83,6 +87,11 @@ final class Store {
   private var socket: URLSessionWebSocketTask?
   private var socketGeneration = 0
   private var retry = 0
+  /**
+   * Bumped on every sign-in, sign-out and organization switch, so loads and socket callbacks that
+   * started under an old session drop what they got instead of mixing it into the new one.
+   */
+  private(set) var session = 0
 
   init(loadSession: Bool = true) {
     #if DEBUG
@@ -108,8 +117,8 @@ final class Store {
 
   /** Signed in by pairing with Warren on a computer (Settings → Mobile). */
   func adopt(hub: URL, token: String) {
-    socket?.cancel(with: .goingAway, reason: nil)
-    socket = nil
+    disconnect()
+    clearData()
     Session.hub = hub
     Session.token = token
     api = API(base: hub, token: token)
@@ -122,8 +131,7 @@ final class Store {
     let old = api
     Task { try? await old?.post("/api/auth/logout", Empty()) }
     Session.token = nil
-    socket?.cancel(with: .goingAway, reason: nil)
-    socket = nil
+    disconnect()
     api = nil
     clearData()
     phase = .signedOut
@@ -138,13 +146,33 @@ final class Store {
     Session.hub = base
     Session.token = token
     api = API(base: base, token: token)
-    socket?.cancel(with: .goingAway, reason: nil)
-    socket = nil
-    connected = false
+    disconnect()
     clearData()
     phase = .loading
     Task { await load() }
   }
+
+  /** Closes the live connection and starts a new session: anything still in flight from the old one is dropped. */
+  private func disconnect() {
+    session += 1
+    socketGeneration += 1
+    socket?.cancel(with: .goingAway, reason: nil)
+    socket = nil
+    connected = false
+    retry = 0
+  }
+
+  /** The current connection, checked again after `work` so a result from before a sign-out or switch is dropped. */
+  func fetch<T>(_ work: (API) async throws -> T) async throws -> T {
+    let api = try connection()
+    let gen = session
+    let value = try await work(api)
+    guard gen == session else { throw Stale() }
+    return value
+  }
+
+  /** What a request from an earlier session ends with: nothing to show, since that session is gone. */
+  struct Stale: LocalizedError { var errorDescription: String? { "You signed out." } }
 
   private func clearData() {
     me = nil
@@ -157,8 +185,8 @@ final class Store {
     taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
     channels = []; agents = []; members = []; computers = []; approvals = []
     messages = [:]; threads = [:]; roots = [:]; replyCounts = [:]; activity = [:]; activityChannel = [:]
-    activityThread = [:]; activityPath = [:]
-    openChannel = nil
+    activityThread = [:]; activityPath = [:]; discussions = [:]
+    openChannel = nil; openThreads = [:]
     route = nil
   }
 
@@ -166,8 +194,10 @@ final class Store {
 
   func load() async {
     guard let api else { return }
+    let gen = session
     do {
       let me: Me = try await api.get("/api/me")
+      guard gen == session else { return }
       self.me = me.user
       self.role = me.role ?? "member"
       self.prefs = me.prefs
@@ -176,9 +206,12 @@ final class Store {
       self.features = me.features ?? .everything
       async let ch: [Channel] = api.get("/api/channels")
       async let ag: [Agent] = api.get("/api/agents")
-      channels = try await ch
-      agents = try await ag
+      let (loadedChannels, loadedAgents) = try await (ch, ag)
+      guard gen == session else { return }
+      channels = loadedChannels
+      agents = loadedAgents
       try await refreshManagement()
+      guard gen == session else { return }
       phase = .ready
       connect()
       await refreshComputers()
@@ -187,8 +220,9 @@ final class Store {
       await setUpPush()
     } catch let e as API.Failure where e.status == 401 {
       // a token revoked by switching organizations isn't a sign-out if a newer one is in use
-      if self.api?.token == api.token { signOut() }
+      if gen == session && self.api?.token == api.token { signOut() }
     } catch {
+      guard gen == session else { return }
       if phase != .ready { phase = .failed(error.localizedDescription) }
       else { syncError = error.localizedDescription }
     }
@@ -196,25 +230,25 @@ final class Store {
 
   func refreshChannels() async {
     do {
-      channels = try await connection().get("/api/channels")
+      channels = try await fetch { try await $0.get("/api/channels") }
+    } catch is Stale {
     } catch {
       if !Task.isCancelled { syncError = error.localizedDescription }
     }
   }
 
   func refreshComputers() async {
-    if let list: [Computer] = try? await api?.get("/api/computers") { computers = list }
+    if let list: [Computer] = try? await fetch({ try await $0.get("/api/computers") }) { computers = list }
   }
 
   func refreshApprovals() async {
-    if let list: [Approval] = try? await api?.get("/api/approvals") { approvals = list }
+    if let list: [Approval] = try? await fetch({ try await $0.get("/api/approvals") }) { approvals = list }
   }
 
   func loadMessages(_ channelId: String, thread: String? = nil) async throws {
-    guard let api else { return }
     var q = ["limit": "80"]
     if let thread { q["thread"] = thread }
-    let page: MessagePage = try await api.get("/api/channels/\(channelId)/messages", q)
+    let page: MessagePage = try await fetch { try await $0.get("/api/channels/\(channelId)/messages", q) }
     let sorted = page.messages.sorted { $0.createdAt < $1.createdAt }
     if let thread {
       threads[thread] = sorted.filter { $0.id != thread }
@@ -226,8 +260,8 @@ final class Store {
   }
 
   func loadEarlier(_ channelId: String) async -> Bool {
-    guard let api, let first = messages[channelId]?.first else { return false }
-    guard let page: MessagePage = try? await api.get("/api/channels/\(channelId)/messages", ["limit": "60", "before": first.createdAt]) else { return false }
+    guard let first = messages[channelId]?.first else { return false }
+    guard let page: MessagePage = try? await fetch({ try await $0.get("/api/channels/\(channelId)/messages", ["limit": "60", "before": first.createdAt]) }) else { return false }
     let older = page.messages.filter { m in !(messages[channelId] ?? []).contains { $0.id == m.id } }.sorted { $0.createdAt < $1.createdAt }
     messages[channelId] = older + (messages[channelId] ?? [])
     replyCounts.merge(page.replyCounts) { $1 }
@@ -272,9 +306,9 @@ final class Store {
 
   // MARK: actions
 
-  func send(_ text: String, in channelId: String, thread: String? = nil) async throws {
-    struct Body: Encodable { var body: String; var threadId: String? }
-    let m: Message = try await api!.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread))
+  func send(_ text: String, in channelId: String, thread: String? = nil, files: [String] = []) async throws {
+    struct Body: Encodable { var body: String; var threadId: String?; var fileIds: [String] }
+    let m: Message = try await fetch { try await $0.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread, fileIds: files)) }
     insert(m)
     askForNotificationsIfDue()
   }
@@ -289,27 +323,27 @@ final class Store {
 
   /** The DM with an agent, made on first use. */
   func dm(with agent: Agent) async throws -> Channel {
-    let ch: Channel = try await api!.post("/api/dm/\(agent.id)", Empty())
+    let ch: Channel = try await connection().post("/api/dm/\(agent.id)", Empty())
     if !channels.contains(where: { $0.id == ch.id }) { await refreshChannels() }
     return channels.first { $0.id == ch.id } ?? ch
   }
 
   func decide(_ approval: Approval, approve: Bool, note: String = "") async throws {
     struct Body: Encodable { var approve: Bool; var note: String }
-    let a: Approval = try await api!.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note))
+    let a: Approval = try await connection().post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note))
     upsert(a)
   }
 
   func control(_ computer: Computer, take: Bool) async throws {
     struct Body: Encodable { var take: Bool }
-    let c: Computer = try await api!.post("/api/computers/\(computer.id)/control", Body(take: take))
+    let c: Computer = try await connection().post("/api/computers/\(computer.id)/control", Body(take: take))
     upsert(c)
   }
 
   /** Click, type or press keys on a computer someone has taken control of. */
   func act(_ computer: Computer, _ action: [String: AnyEncodable]) async throws {
     struct Body: Encodable { var action: [String: AnyEncodable] }
-    try await api!.post("/api/computers/\(computer.id)/act", Body(action: action))
+    try await connection().post("/api/computers/\(computer.id)/act", Body(action: action))
   }
 
   /** The keys that paste on a computer: ⌘V on a Mac's own screen, Ctrl+V everywhere else. */
@@ -320,24 +354,24 @@ final class Store {
       var id: String
       var capabilities: Caps?
     }
-    let nodes: [Node] = (try? await api!.get("/api/nodes")) ?? []
+    let nodes: [Node] = (try? await connection().get("/api/nodes")) ?? []
     return nodes.first { $0.id == nodeId }?.capabilities?.platform == "darwin" ? "cmd+v" : "ctrl+v"
   }
 
   /** The text on a computer's clipboard. */
   func clipboard(_ computer: Computer) async throws -> String {
     struct Clip: Decodable { var text: String }
-    let c: Clip = try await api!.get("/api/computers/\(computer.id)/clipboard")
+    let c: Clip = try await connection().get("/api/computers/\(computer.id)/clipboard")
     return c.text
   }
 
   func setClipboard(_ computer: Computer, _ text: String) async throws {
     struct Body: Encodable { var text: String }
-    let _: Data = try await api!.request("PUT", "/api/computers/\(computer.id)/clipboard", body: Body(text: text)).0
+    let _: Data = try await connection().request("PUT", "/api/computers/\(computer.id)/clipboard", body: Body(text: text)).0
   }
 
   func screen(_ computer: Computer, maxAge: Int = 1500) async throws -> Frame {
-    let (data, resp) = try await api!.request("GET", "/api/computers/\(computer.id)/screen", query: ["maxAge": String(maxAge)], body: Optional<Empty>.none)
+    let (data, resp) = try await connection().request("GET", "/api/computers/\(computer.id)/screen", query: ["maxAge": String(maxAge)], body: Optional<Empty>.none)
     let w = Int(resp.value(forHTTPHeaderField: "x-frame-width") ?? "") ?? 0
     let h = Int(resp.value(forHTTPHeaderField: "x-frame-height") ?? "") ?? 0
     return Frame(image: data, width: w, height: h)
@@ -403,10 +437,19 @@ final class Store {
     guard api != nil else { return }
     retry += 1
     let delay = min(30.0, pow(1.8, Double(retry)))
+    let gen = socketGeneration
     Task {
       try? await Task.sleep(for: .seconds(delay))
-      if api != nil && !connected { connect() }
+      // a sign-out, a switch or a newer connection since then makes this one moot
+      if api != nil && !connected && gen == socketGeneration { connect() }
     }
+  }
+
+  /** The conversation on screen and its open threads, again: events missed while offline aren't replayed. */
+  func refreshOpen() async {
+    if let open = openChannel { try? await loadMessages(open) }
+    for (root, channelId) in openThreads { try? await loadMessages(channelId, thread: root) }
+    for d in discussions.values where d.live { await loadDiscussion(d.id) }
   }
 
   /** Called when the app comes back to the foreground: sockets don't survive the background. */
@@ -427,7 +470,7 @@ final class Store {
         try await refreshManagement()
         syncError = nil
       } catch { syncError = error.localizedDescription }
-      if let open = openChannel { try? await loadMessages(open) }
+      await refreshOpen()
       await refreshComputers()
       await refreshApprovals()
       await refreshOrgs()
@@ -436,6 +479,8 @@ final class Store {
 
   private struct Envelope: Decodable { var type: String }
   private struct MessageEvent: Decodable { var message: Message }
+  private struct MessageRemovedEvent: Decodable { var messageId: String; var channelId: String; var threadId: String? }
+  private struct DiscussionEvent: Decodable { struct D: Decodable { var id: String }; var discussion: D }
   private struct StatusEvent: Decodable { var agentId: String; var status: Agent.Status }
   private struct RunEvent: Decodable {
     struct E: Decodable { var type: String; var text: String?; var name: String? }
@@ -464,6 +509,7 @@ final class Store {
         do { try await refreshAgents(); try await refreshManagement() }
         catch { syncError = error.localizedDescription }
         await refreshChannels()
+        await refreshOpen()
       }
     case "message":
       guard let e = try? d.decode(MessageEvent.self, from: data) else { return }
@@ -480,6 +526,16 @@ final class Store {
       } else if !channels.contains(where: { $0.id == e.message.channelId }) {
         Task { await refreshChannels() }
       }
+    case "message_updated":
+      guard let e = try? d.decode(MessageEvent.self, from: data) else { return }
+      replace(e.message)
+    case "message_removed":
+      guard let e = try? d.decode(MessageRemovedEvent.self, from: data) else { return }
+      remove(e.messageId, channel: e.channelId, thread: e.threadId)
+    case "discussion":
+      // the event has the discussion; who has answered comes with a fetch
+      guard let e = try? d.decode(DiscussionEvent.self, from: data), discussions[e.discussion.id] != nil else { return }
+      Task { await loadDiscussion(e.discussion.id) }
     case "agent_status":
       guard let e = try? d.decode(StatusEvent.self, from: data) else { return }
       guard let i = agents.firstIndex(where: { $0.id == e.agentId }) else {
@@ -579,6 +635,27 @@ final class Store {
     } else if messages[m.channelId] != nil, !(messages[m.channelId]!.contains { $0.id == m.id }) {
       messages[m.channelId]!.append(m)
     }
+  }
+
+  /** An edited message, or a deleted thread root kept (blank) for its replies, wherever it's loaded. */
+  func replace(_ m: Message) {
+    if let i = messages[m.channelId]?.firstIndex(where: { $0.id == m.id }) { messages[m.channelId]![i] = m }
+    if let root = m.threadId, let i = threads[root]?.firstIndex(where: { $0.id == m.id }) { threads[root]![i] = m }
+    if roots[m.id] != nil { roots[m.id] = m }
+  }
+
+  /** A deleted message, gone from its channel or thread. */
+  func remove(_ id: String, channel: String, thread: String?) {
+    messages[channel]?.removeAll { $0.id == id }
+    if let root = thread {
+      if threads[root] != nil {
+        threads[root]!.removeAll { $0.id == id }
+        replyCounts[root] = threads[root]!.count
+      } else if let n = replyCounts[root] {
+        replyCounts[root] = max(0, n - 1)
+      }
+    }
+    roots[id] = nil
   }
 
   private func update(_ id: String, channel: String, thread: String?, _ change: (inout Message) -> Void) {

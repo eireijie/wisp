@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ThreadRef: Hashable {
   var channelId: String
@@ -61,8 +63,8 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder) { text in
-            try await store.send(text, in: channel.id)
+          Composer(placeholder: placeholder, channelId: channel.id) { text, files in
+            try await store.send(text, in: channel.id, files: files)
           }
         }
         .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
@@ -187,7 +189,7 @@ struct ThreadView: View {
       } else {
         VStack(spacing: 6) {
           if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch, thread: ref.rootId) }
-          Composer(placeholder: "Reply") { text in try await store.send(text, in: ref.channelId, thread: ref.rootId) }
+          Composer(placeholder: "Reply", channelId: ref.channelId) { text, files in try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files) }
         }
       }
     }
@@ -195,6 +197,8 @@ struct ThreadView: View {
     .navigationTitle(parent == nil ? "Thread" : "Sub-thread")
     .navigationBarTitleDisplayMode(.inline)
     .task { try? await store.loadMessages(ref.channelId, thread: ref.rootId) }
+    .onAppear { store.openThreads[ref.rootId] = ref.channelId }
+    .onDisappear { store.openThreads[ref.rootId] = nil }
   }
 
   /** Back to the thread this one came from: just back, when that's where it was opened from. */
@@ -250,39 +254,62 @@ struct EmptyChannel: View {
 }
 
 struct Composer: View {
+  @Environment(Store.self) private var store
   var placeholder: String
-  var send: (String) async throws -> Void
+  /** where attachments are shared, so only people who can see the conversation can open them */
+  var channelId: String?
+  var send: (String, [String]) async throws -> Void
   @State private var text = ""
+  @State private var files: [UploadedFile] = []
+  @State private var uploading = 0
   @State private var sending = false
   @State private var error: String?
+  @State private var pickingPhotos = false
+  @State private var pickingFiles = false
+  @State private var photos: [PhotosPickerItem] = []
   @FocusState private var focused: Bool
 
-  private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty }
+  private var blocked: Bool { empty || sending || uploading > 0 }
 
   var body: some View {
     VStack(spacing: 4) {
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
-      HStack(alignment: .bottom, spacing: 6) {
-        TextField(placeholder, text: $text, axis: .vertical)
-          .lineLimit(1...8)
-          .focused($focused)
-          .padding(.leading, 18)
-          .padding(.vertical, 12)
-        Button {
-          submit()
-        } label: {
-          Image(systemName: sending ? "ellipsis" : "arrow.up")
-            .font(.body.weight(.bold))
-            .foregroundStyle(Color(.systemBackground))
-            .frame(width: 36, height: 36)
-            .background(Circle().fill(Color.primary))
+      VStack(alignment: .leading, spacing: 0) {
+        if !files.isEmpty || uploading > 0 { attachments }
+        HStack(alignment: .bottom, spacing: 6) {
+          Menu {
+            Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
+            Button("Files", systemImage: "folder") { pickingFiles = true }
+          } label: {
+            Image(systemName: "plus")
+              .font(.body.weight(.semibold))
+              .foregroundStyle(.secondary)
+              .frame(width: 36, height: 36)
+          }
+          .padding(.leading, 5)
+          .padding(.bottom, 5)
+          .accessibilityLabel("Attach")
+          TextField(placeholder, text: $text, axis: .vertical)
+            .lineLimit(1...8)
+            .focused($focused)
+            .padding(.vertical, 12)
+          Button {
+            submit()
+          } label: {
+            Image(systemName: sending ? "ellipsis" : "arrow.up")
+              .font(.body.weight(.bold))
+              .foregroundStyle(Color(.systemBackground))
+              .frame(width: 36, height: 36)
+              .background(Circle().fill(Color.primary))
+          }
+          .buttonStyle(.plain)
+          .disabled(blocked)
+          .opacity(blocked ? 0.25 : 1)
+          .animation(.snappy, value: blocked)
+          .padding(5)
+          .accessibilityLabel("Send")
         }
-        .buttonStyle(.plain)
-        .disabled(empty || sending)
-        .opacity(empty ? 0.25 : 1)
-        .animation(.snappy, value: empty)
-        .padding(5)
-        .accessibilityLabel("Send")
       }
       // the message bar floats over the conversation on glass, like the tab bar
       .glass(23, interactive: true)
@@ -290,18 +317,91 @@ struct Composer: View {
     .padding(.horizontal, 12)
     .padding(.bottom, 6)
     .padding(.top, 4)
+    .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
+    .onChange(of: photos) { _, items in
+      guard !items.isEmpty else { return }
+      photos = []
+      for item in items { upload { try await photo(item) } }
+    }
+    .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+      switch result {
+      case .success(let urls):
+        for url in urls {
+          upload {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            return (try Data(contentsOf: url), url.lastPathComponent, UTType(filenameExtension: url.pathExtension)?.preferredMIMEType)
+          }
+        }
+      case .failure(let e): error = e.localizedDescription
+      }
+    }
+  }
+
+  /** What's attached so far, each with a way to take it off again. */
+  private var attachments: some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: 6) {
+        ForEach(files) { f in
+          HStack(spacing: 4) {
+            Image(systemName: UploadedFile.isImage(f.name) ? "photo" : "doc")
+            Text(f.name).lineLimit(1).frame(maxWidth: 160)
+            Button { files.removeAll { $0.id == f.id } } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+              .buttonStyle(.plain)
+              .accessibilityLabel("Remove \(f.name)")
+          }
+          .font(.caption)
+          .padding(.horizontal, 8)
+          .padding(.vertical, 5)
+          .background(Capsule().fill(Color(.tertiarySystemFill)))
+        }
+        if uploading > 0 {
+          ProgressView().controlSize(.small).padding(.horizontal, 6).accessibilityLabel("Uploading")
+        }
+      }
+      .padding(.horizontal, 12)
+      .padding(.top, 10)
+    }
+  }
+
+  private func upload(_ read: @escaping () async throws -> (Data, String, String?)) {
+    uploading += 1
+    error = nil
+    Task {
+      do {
+        let (data, name, mime) = try await read()
+        files.append(try await store.uploadFile(data, name: name, mime: mime, channelId: channelId))
+      } catch { self.error = error.localizedDescription }
+      uploading -= 1
+    }
+  }
+
+  /** A photo or video from the library; photos go up as JPEG, so every app (and the web) can show them. */
+  private func photo(_ item: PhotosPickerItem) async throws -> (Data, String, String?) {
+    guard let data = try await item.loadTransferable(type: Data.self) else { throw API.Failure(status: 0, message: "Couldn't read that photo.") }
+    let type = item.supportedContentTypes.first
+    let stamp = Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false)).replacingOccurrences(of: ":", with: "-")
+    if type?.conforms(to: .image) == true, ![UTType.png, .gif, .jpeg].contains(where: { type?.conforms(to: $0) == true }),
+       let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.85) {
+      return (jpeg, "Photo \(stamp).jpg", "image/jpeg")
+    }
+    let ext = type?.preferredFilenameExtension ?? "jpg"
+    return (data, "\(type?.conforms(to: .movie) == true ? "Video" : "Photo") \(stamp).\(ext)", type?.preferredMIMEType)
   }
 
   private func submit() {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !body.isEmpty else { return }
+    guard !blocked else { return }
+    let attached = files
     sending = true
     error = nil
     text = ""
+    files = []
     Task {
-      do { try await send(body) } catch {
+      do { try await send(body, attached.map(\.id)) } catch {
         self.error = error.localizedDescription
         text = body
+        files = attached + files
       }
       sending = false
     }

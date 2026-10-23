@@ -38,6 +38,8 @@
 		524867CD04910D081E5B3FF6 /* Store+Management.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6533BF0580887C2487ABEF8C /* Store+Management.swift */; };
 		527C5AA7FD6894F906E83912 /* NativeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00807A6F494FD286CCBC2284 /* NativeSettingsView.swift */; };
 		5332DAC571003723AEE0BFCC /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 861495D70C68EFBF004B9B8C /* UsageView.swift */; };
+		54472F31BDFA96981A9E988F /* ChatCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C18E703F2E6049CD7A593468 /* ChatCards.swift */; };
+		56CF04A52FEA7A48061281D7 /* Store+Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B11B697D3AC43E22120786 /* Store+Chat.swift */; };
 		57E7E34E29A09572FF2B86A1 /* UpdateModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E5317E0C4B1BDFEECBAAFD /* UpdateModels.swift */; };
 		5D0FA58D2E43E9191383B9FF /* GhostAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C08A9CEEAA242752608B65 /* GhostAnimation.swift */; };
 		64E201E1CF5EF81820B0871D /* WarrenApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFA4D03542D8A8DB87AB33E /* WarrenApp.swift */; };
@@ -86,6 +88,7 @@
 		D392818477FA221310CC05EC /* ChannelTeamEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A322AFA42BD9D87B68E189DF /* ChannelTeamEditor.swift */; };
 		D5BCFCC33C2E7A35B40C3F21 /* ConnectorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FB391D2FC97B26EED016CD /* ConnectorsView.swift */; };
 		D80D6287C031A9CD47B1DE71 /* PairView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F81B13238E1CE5164CB16619 /* PairView.swift */; };
+		D80D7872AE617AD53DF7D811 /* ChatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50886CA64F303DC6BB834E7 /* ChatTests.swift */; };
 		DBE4912FFB52455DF833C5B9 /* ChannelTeamTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20ED1DB44C979094C93B1CC0 /* ChannelTeamTests.swift */; };
 		DE9B3CF32F599E626837A5D2 /* ConnectorEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AEAE97312C989DFBB397603 /* ConnectorEditor.swift */; };
 		E3DCB2E4C618827020B34308 /* FeaturesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 460C548CF2F72FDA08533466 /* FeaturesView.swift */; };
@@ -167,6 +170,7 @@
 		92F38491D07907E8444EF1B8 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModels.swift; sourceTree = "<group>"; };
 		9D2D365DC64E7E62860E1D71 /* GhostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostTests.swift; sourceTree = "<group>"; };
 		A322AFA42BD9D87B68E189DF /* ChannelTeamEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTeamEditor.swift; sourceTree = "<group>"; };
+		A4B11B697D3AC43E22120786 /* Store+Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Store+Chat.swift"; sourceTree = "<group>"; };
 		A5FB391D2FC97B26EED016CD /* ConnectorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectorsView.swift; sourceTree = "<group>"; };
 		A7AB482BE489F86DB9D606AB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A96E4D2A5ACC91C6A78EE1FF /* Schedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Schedule.swift; sourceTree = "<group>"; };
@@ -175,10 +179,12 @@
 		BAD47CAF1D820F54D092BAE0 /* ChannelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelView.swift; sourceTree = "<group>"; };
 		BFE27406A2EB5E3CAC58068A /* API.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = API.swift; sourceTree = "<group>"; };
 		C0A26EAF577181EF0DC06B6C /* GuideText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideText.swift; sourceTree = "<group>"; };
+		C18E703F2E6049CD7A593468 /* ChatCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCards.swift; sourceTree = "<group>"; };
 		C197A60140751EA7EA1F7D96 /* OrgSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgSwitcher.swift; sourceTree = "<group>"; };
 		C1A182CD72984482682099B0 /* GhostRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostRenderer.swift; sourceTree = "<group>"; };
 		C1E5317E0C4B1BDFEECBAAFD /* UpdateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateModels.swift; sourceTree = "<group>"; };
 		C27C3B28D6897C71174A1FAD /* WorkspaceSettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSettingsViews.swift; sourceTree = "<group>"; };
+		C50886CA64F303DC6BB834E7 /* ChatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTests.swift; sourceTree = "<group>"; };
 		C62D707721BD606E2A488FA8 /* PeopleSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeopleSettingsView.swift; sourceTree = "<group>"; };
 		C77C8FB2EDAE7920FBCE16D6 /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
 		C77F213042CEE11B1336585E /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -212,6 +218,7 @@
 			children = (
 				843A08CE0677A119EF12718C /* appearance-fixtures.json */,
 				20ED1DB44C979094C93B1CC0 /* ChannelTeamTests.swift */,
+				C50886CA64F303DC6BB834E7 /* ChatTests.swift */,
 				9D2D365DC64E7E62860E1D71 /* GhostTests.swift */,
 				F7D6FCF5920A43E60D301B80 /* ManagementTests.swift */,
 				61B4DE7A4EE652D4F8CF07DB /* OrgFeatureTests.swift */,
@@ -250,6 +257,7 @@
 				045B8FA3150C4F24FDCE0906 /* ChannelTeam.swift */,
 				A322AFA42BD9D87B68E189DF /* ChannelTeamEditor.swift */,
 				BAD47CAF1D820F54D092BAE0 /* ChannelView.swift */,
+				C18E703F2E6049CD7A593468 /* ChatCards.swift */,
 				DF01C95837B542AA02127F23 /* ChatsView.swift */,
 				438DF6DC6455C1194CEFB566 /* ComputersView.swift */,
 				2AEAE97312C989DFBB397603 /* ConnectorEditor.swift */,
@@ -293,6 +301,7 @@
 				299CA5756D2F3494FC63A55A /* Store.swift */,
 				0EA512910F1BAB94C31DA392 /* Store+Apps.swift */,
 				F4A594A63F8B37F8213A4A88 /* Store+Automation.swift */,
+				A4B11B697D3AC43E22120786 /* Store+Chat.swift */,
 				D500876A8447BCD41A2B41B8 /* Store+Files.swift */,
 				6533BF0580887C2487ABEF8C /* Store+Management.swift */,
 				660ACD4BB878B98F1CAFDE3B /* Store+Memory.swift */,
@@ -498,6 +507,7 @@
 				8E8238BC2AA81212FCFB0CF9 /* ChannelTeam.swift in Sources */,
 				D392818477FA221310CC05EC /* ChannelTeamEditor.swift in Sources */,
 				685E56E9910C9F15C7F12F0D /* ChannelView.swift in Sources */,
+				54472F31BDFA96981A9E988F /* ChatCards.swift in Sources */,
 				516FE25DB2E5EC0669EF8362 /* ChatsView.swift in Sources */,
 				31DF7FCD3ADC1346A6D1EA36 /* ComputersView.swift in Sources */,
 				DE9B3CF32F599E626837A5D2 /* ConnectorEditor.swift in Sources */,
@@ -539,6 +549,7 @@
 				31300D0C9326C9DE16350062 /* SkillsView.swift in Sources */,
 				96A1EAB82A55EF3675CA0681 /* Store+Apps.swift in Sources */,
 				32828597AD84A06153D0CEDE /* Store+Automation.swift in Sources */,
+				56CF04A52FEA7A48061281D7 /* Store+Chat.swift in Sources */,
 				74866F00C5CB62B3534BEB9D /* Store+Files.swift in Sources */,
 				524867CD04910D081E5B3FF6 /* Store+Management.swift in Sources */,
 				B9D1E753322FD8C9DA2216C1 /* Store+Memory.swift in Sources */,
@@ -564,6 +575,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DBE4912FFB52455DF833C5B9 /* ChannelTeamTests.swift in Sources */,
+				D80D7872AE617AD53DF7D811 /* ChatTests.swift in Sources */,
 				F90CDD2D17DE1ABD07269CA3 /* GhostTests.swift in Sources */,
 				49C60F6B898B3DCE38278667 /* ManagementTests.swift in Sources */,
 				7CC7DB6F0C0774BE61D81EC6 /* OrgFeatureTests.swift in Sources */,

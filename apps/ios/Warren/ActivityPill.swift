@@ -9,6 +9,9 @@ struct ActivityPill: View {
   var channel: Channel
   var thread: String? = nil
   @State private var open: Agent?
+  @State private var choosing = false
+  @State private var stopping = false
+  @State private var error: String?
 
   private var working: [Agent] {
     if let thread { return store.working(in: channel.id, thread: thread) }
@@ -20,6 +23,7 @@ struct ActivityPill: View {
   var body: some View {
     let list = working
     if let first = list.first {
+      HStack(spacing: 8) {
       Button { open = first } label: {
         HStack(spacing: 8) {
           HStack(spacing: -8) {
@@ -44,11 +48,47 @@ struct ActivityPill: View {
         .glassCapsule(interactive: true)
       }
       .buttonStyle(.plain)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityLabel("\(first.name) \(ActivityText.phrase(store.activity[first.id]))\(list.count > 1 ? ", and \(list.count - 1) more" : ""). Show what it's doing")
+      Spacer(minLength: 0)
+      stopButton(list)
+      }
       .padding(.horizontal, 14)
       .transition(.move(edge: .bottom).combined(with: .opacity))
-      .accessibilityLabel("\(first.name) \(ActivityText.phrase(store.activity[first.id]))\(list.count > 1 ? ", and \(list.count - 1) more" : ""). Show what it's doing")
       .sheet(item: $open) { AgentWorkSheet(agentId: $0.id, others: list.map(\.id), hereThread: thread) }
+      .confirmationDialog("Stop which agent?", isPresented: $choosing, titleVisibility: .visible) {
+        ForEach(list) { a in Button("Stop \(a.name)", role: .destructive) { stop([a]) } }
+        Button("Stop all \(list.count)", role: .destructive) { stop(list) }
+      } message: { Text("It stops what it's doing now. Anything it already changed stays changed.") }
+      .alert("Couldn't stop it", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        Button("OK") {}
+      } message: { Text(error ?? "") }
+    }
+  }
+
+  /** Stop the reply in progress: right away with one agent working here, after picking with several. */
+  private func stopButton(_ list: [Agent]) -> some View {
+    Button {
+      if list.count == 1 { stop(list) } else { choosing = true }
+    } label: {
+      Image(systemName: "stop.fill")
+        .font(.footnote.weight(.bold))
+        .foregroundStyle(.red)
+        .frame(width: 32, height: 32)
+        .glassCapsule(interactive: true)
+    }
+    .buttonStyle(.plain)
+    .disabled(stopping)
+    .opacity(stopping ? 0.4 : 1)
+    .accessibilityLabel(list.count == 1 ? "Stop \(list[0].name)" : "Stop an agent")
+  }
+
+  private func stop(_ agents: [Agent]) {
+    stopping = true
+    Task {
+      for a in agents {
+        do { try await store.stopAgent(a.id) } catch { self.error = error.localizedDescription }
+      }
+      stopping = false
     }
   }
 }
