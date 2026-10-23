@@ -8,6 +8,8 @@ import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServer
 import { WarrenClient, WarrenError } from "@warren/sdk";
 import { runUpdate, version } from "@warren/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
+import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remote-desktop.ts";
+import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { VM_HOME, type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
@@ -41,6 +43,10 @@ export interface NodeConfig {
   shareScreen?: boolean;
   /** never offer this device's own screen, whatever shareScreen says (older setting) */
   noScreen?: boolean;
+  /** the code (hashed) that opens this screen from Warren; set at the device, never sent to the hub */
+  screenCode?: ScreenCode;
+  /** Remote Desktop: this device's own VNC server for its screen (`warren node screen remote`) */
+  remoteDesktop?: RemoteDesktopConfig;
   /** `warren node pause`: take no work from the hub (no agent runs, no computer use) until resumed */
   paused?: boolean;
   /** where to look for existing agents (default: the home folder); for tests */
@@ -73,8 +79,13 @@ export class NodeDaemon {
   private fixedRegistry: boolean;
   /** which version of Warren's tools each VM has (by container name) */
   private vmTools = new Map<string, string>();
-  /** shareScreen and paused, as last read from node.json (people change them there with the CLI) */
-  private local: { shareScreen: boolean; paused: boolean };
+  /** the switches people flip at the device, as last read from node.json (people change them there with the CLI) */
+  private local: { shareScreen: boolean; paused: boolean; code?: ScreenCode; remote?: RemoteDesktopConfig };
+  /** the screen's code: checked here, with its own count of wrong tries */
+  private lock: ScreenLock;
+  private remoteServer: RemoteDesktopServer;
+  /** tunnels opened with the screen's code */
+  private codeTunnels = new Set<string>();
   /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
   private outbox: NodeToHub[] = [];
   /** when the hub replaced this connection with another one using the same token */
@@ -93,12 +104,14 @@ export class NodeDaemon {
     this.sessions = readJson(this.sessionsFile, {});
     this.agentTokens = readJson(this.tokensFile, {});
     this.local = this.readLocal();
+    this.lock = new ScreenLock(cfg.dir, () => this.local.code);
+    this.remoteServer = new RemoteDesktopServer(cfg.dir, log);
     this.api = new WarrenClient({ url: cfg.hub, token: cfg.token });
     this.registry = registry ?? deviceAdapters(cfg.harnesses);
     this.fixedRegistry = !!registry;
     this.computers =
       computers ??
-      new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log, onVmStatus: (computerId, status, text) => this.send({ type: "computer_status", computerId, status, text }) });
+      new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log, remoteDesktop: () => this.local.remote, onVmStatus: (computerId, status, text) => this.send({ type: "computer_status", computerId, status, text }) });
   }
 
   private get sessionsFile() {
@@ -116,22 +129,58 @@ export class NodeDaemon {
   /** The switches people flip at the device: node.json wins over what this process started with. */
   private readLocal() {
     const file = readJson<Partial<NodeConfig>>(this.configFile, {});
-    return { shareScreen: !!(file.shareScreen ?? this.cfg.shareScreen) && !(file.noScreen ?? this.cfg.noScreen), paused: !!(file.paused ?? this.cfg.paused) };
+    return {
+      shareScreen: !!(file.shareScreen ?? this.cfg.shareScreen) && !(file.noScreen ?? this.cfg.noScreen),
+      paused: !!(file.paused ?? this.cfg.paused),
+      code: file.screenCode ?? this.cfg.screenCode,
+      remote: file.remoteDesktop ?? this.cfg.remoteDesktop,
+    };
+  }
+
+  /** Remote Desktop's server runs while the screen is on and the device isn't paused. */
+  private applyRemoteServer() {
+    this.remoteServer.set(this.local.shareScreen && !this.local.paused ? this.local.remote : null);
+  }
+
+  private closeTunnels() {
+    for (const t of this.tunnels.values()) t.close();
+    this.tunnels.clear();
+    for (const id of this.codeTunnels) this.lock.lock(`tunnel:${id}`);
+    this.codeTunnels.clear();
+  }
+
+  /** A code was entered for this screen: tell its owner when it was wrong. */
+  private codeResult(r: { ok: boolean; lockedOut?: boolean; triesLeft?: number }) {
+    if (r.ok) return;
+    if (r.lockedOut) this.send({ type: "screen_event", alert: true, text: "Too many wrong codes were entered for this screen, so it stopped taking codes for a while. If that wasn't you, change your Warren password." });
+    else if (r.triesLeft !== undefined) this.send({ type: "screen_event", alert: r.triesLeft <= 2, text: `A wrong code was entered for this screen (${r.triesLeft} ${r.triesLeft === 1 ? "try" : "tries"} left before it locks).` });
   }
 
   /** Someone ran `warren node screen …` or `warren node pause/resume`: apply it now. */
   private onLocalChange = () => {
     const before = this.local;
     this.local = this.readLocal();
-    if (before.shareScreen === this.local.shareScreen && before.paused === this.local.paused) return;
+    const codeChanged = before.code?.hash !== this.local.code?.hash;
+    const remoteChanged = JSON.stringify(before.remote) !== JSON.stringify(this.local.remote);
+    if (codeChanged || remoteChanged) {
+      // a new code (or none) or a new server: whatever the old one opened closes
+      this.lock.lockAll();
+      this.closeTunnels();
+      this.computers.stopAll();
+    }
+    this.applyRemoteServer();
+    if (before.shareScreen === this.local.shareScreen && before.paused === this.local.paused) {
+      if (codeChanged || remoteChanged) void this.sendCapabilities();
+      return;
+    }
     if (this.local.paused && !before.paused) {
       this.log("paused: stopping agents and computers until `warren node resume`");
       for (const a of this.aborts.values()) a.abort("paused");
     }
     if (this.local.paused || !this.local.shareScreen) {
       this.computers.stopAll();
-      for (const t of this.tunnels.values()) t.close();
-      this.tunnels.clear();
+      this.closeTunnels();
+      this.lock.lockAll();
     }
     if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Warren (agents only when you lend it)" : "off"}`);
     if (before.paused && !this.local.paused) this.log("resumed");
@@ -141,6 +190,10 @@ export class NodeDaemon {
   private async sendCapabilities() {
     const caps = await this.computers.capabilities();
     if (!this.local.shareScreen && caps.screen.ok) caps.screen = { ok: false, off: true, detail: "Off. Only someone at this device can turn it on: `warren node screen on`" };
+    else if (caps.screen.ok) {
+      if (this.local.remote) caps.screen.remote = true;
+      if (this.local.code) caps.screen.code = this.local.code.kind;
+    }
     caps.paused = this.local.paused;
     caps.commands = this.commandsHere();
     this.send({ type: "capabilities", capabilities: caps });
@@ -151,6 +204,7 @@ export class NodeDaemon {
     this.replaced = [];
     fs.watchFile(this.configFile, { interval: 1000 }, this.onLocalChange);
     if (this.local.paused) this.log("paused: no agent runs or computer use until `warren node resume`");
+    this.applyRemoteServer();
     this.connect();
   }
 
@@ -163,8 +217,8 @@ export class NodeDaemon {
     fs.unwatchFile(this.configFile, this.onLocalChange);
     for (const a of this.aborts.values()) a.abort();
     this.computers.stopAll();
-    for (const t of this.tunnels.values()) t.close();
-    this.tunnels.clear();
+    this.closeTunnels();
+    this.remoteServer.stop();
     const end = Date.now() + wait;
     while (this.aborts.size && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
     this.ws?.close();
@@ -199,8 +253,7 @@ export class NodeDaemon {
     ws.on("close", (code, reason) => {
       // live views and tunnels belong to this connection; the hub asks again after a reconnect
       this.computers.stopAll();
-      for (const t of this.tunnels.values()) t.close();
-      this.tunnels.clear();
+      this.closeTunnels();
       if (this.stopped) return;
       if (code === 4401) {
         this.log("hub rejected the node token. Create a new node in Warren and run `warren node start` again.");
@@ -262,6 +315,7 @@ export class NodeDaemon {
     } else if (msg.type === "computer") {
       if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`warren node resume\`` });
       if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`warren node screen on\`)` });
+      if (msg.computer.kind === "device" && msg.action.action !== "status" && !this.lock.open()) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is locked with its code. Its owner opens it by entering the code in Warren (to watch it, or when lending it).` });
       this.computers.act(msg.computer, msg.action).then(
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
@@ -274,7 +328,7 @@ export class NodeDaemon {
       );
     } else if (msg.type === "screen_watch") {
       if (!msg.on) return this.computers.unwatch(msg.computer.id);
-      if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return;
+      if (this.local.paused || (msg.computer.kind === "device" && (!this.local.shareScreen || !this.lock.open()))) return;
       this.computers.watch(
         msg.computer,
         msg.fps ?? 2,
@@ -284,6 +338,17 @@ export class NodeDaemon {
     } else if (msg.type === "tunnel_open") {
       const { tunnelId } = msg;
       if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return this.send({ type: "tunnel_closed", tunnelId, error: this.local.paused ? "the device is paused" : "the screen is off" });
+      if (msg.computer.kind === "device" && this.lock.enabled) {
+        // the code itself, every time: a screen opened for a lend doesn't let a viewer in without it
+        const r = this.lock.check(msg.code);
+        this.codeResult(r);
+        if (!r.ok) return this.send({ type: "tunnel_closed", tunnelId, error: r.error });
+        this.codeTunnels.add(tunnelId);
+        this.lock.grant(`tunnel:${tunnelId}`, Date.now() + 24 * 60 * 60_000);
+      }
+      const forget = () => {
+        if (this.codeTunnels.delete(tunnelId)) this.lock.lock(`tunnel:${tunnelId}`);
+      };
       this.computers
         .tunnel(
           msg.computer,
@@ -292,6 +357,7 @@ export class NodeDaemon {
           },
           (error) => {
             this.tunnels.delete(tunnelId);
+            forget();
             this.send({ type: "tunnel_closed", tunnelId, error });
           },
         )
@@ -300,11 +366,23 @@ export class NodeDaemon {
             this.tunnels.set(tunnelId, t);
             this.send({ type: "tunnel_ready", tunnelId });
           },
-          (err) => this.send({ type: "tunnel_closed", tunnelId, error: (err as Error).message }),
+          (err) => {
+            forget();
+            this.send({ type: "tunnel_closed", tunnelId, error: (err as Error).message });
+          },
         );
     } else if (msg.type === "tunnel_close") {
       this.tunnels.get(msg.tunnelId)?.close();
       this.tunnels.delete(msg.tunnelId);
+      if (this.codeTunnels.delete(msg.tunnelId)) this.lock.lock(`tunnel:${msg.tunnelId}`);
+    } else if (msg.type === "screen_unlock") {
+      if (!this.lock.enabled) return this.send({ type: "result", requestId: msg.requestId, ok: true, result: { until: msg.until } });
+      if (this.local.paused || !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: this.local.paused ? `${this.cfg.name} is paused` : `${this.cfg.name}'s screen is off` });
+      const r = this.lock.unlock(msg.purpose, msg.code, Date.parse(msg.until) || 0);
+      this.codeResult(r);
+      this.send(r.ok ? { type: "result", requestId: msg.requestId, ok: true, result: { until: new Date(r.until!).toISOString() } } : { type: "result", requestId: msg.requestId, ok: false, error: r.error });
+    } else if (msg.type === "screen_lock") {
+      this.lock.lock(msg.purpose);
     } else if (msg.type === "discover") {
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
     } else if (msg.type === "refresh") {

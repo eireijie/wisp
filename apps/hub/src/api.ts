@@ -2076,9 +2076,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const ticket = hub.computers.redeem((req.query as { ticket?: string }).ticket, computerId);
     const comp = ticket ? store.computer(computerId) : undefined;
     if (!ticket || !comp || comp.workspaceId !== ticket.workspaceId || ticket.kind !== transport) return socket.close(4401, "unauthorized");
+    socket.on("close", () => hub.computers.viewerGone(comp, ticket));
     if (transport !== "vnc") hub.computers.addFrameViewer(comp, socket, ticket.userId);
     else if (comp.kind === "orgo") hub.computers.openOrgoRelay(comp, socket);
-    else hub.computers.openTunnel(comp, socket);
+    else hub.computers.openTunnel(comp, socket, ticket.code);
   });
 
   /** Browsers can't set headers on WebSockets, so the session token arrives in the first frame. */

@@ -11,6 +11,7 @@ import { MacDesktop } from "./macos.ts";
 import { WindowsDesktop } from "./windows.ts";
 import { X11Driver } from "./x11.ts";
 import { localClipboard, localFiles } from "./transfer.ts";
+import { signedInVnc, type RemoteDesktopConfig } from "./remote-desktop.ts";
 
 export { DockerVm, detectEngine } from "./docker.ts";
 export { perform, jpegSize, type Driver } from "./driver.ts";
@@ -26,6 +27,8 @@ export interface HostOptions {
   /** let shell commands from Warren run on this device's own screen computer */
   allowDeviceShell?: boolean;
   log?: (m: string) => void;
+  /** Remote Desktop on this device's own screen, as set at the device (read on every use) */
+  remoteDesktop?: () => RemoteDesktopConfig | undefined;
   /** a VM here is starting (saying what it's doing), came up, or couldn't, whatever started it */
   onVmStatus?: (computerId: string, status: "starting" | "ready" | "error", text: string) => void;
 }
@@ -118,7 +121,15 @@ export class ComputerHost {
     } else {
       d = desktopDriver(this.opts.allowDeviceShell);
       const vncPort = (spec.config as DeviceConfig).vncPort;
-      if (vncPort) d.vnc = () => connect(vncPort);
+      const remote = this.opts.remoteDesktop;
+      // Remote Desktop set up here wins over a VNC port typed in Warren
+      if (remote || vncPort)
+        d.vnc = () => {
+          const rd = remote?.();
+          if (rd) return signedInVnc(rd);
+          if (vncPort) return connect(vncPort);
+          throw new Error("this screen has no VNC server; live view uses screenshots");
+        };
     }
     this.drivers.set(spec.id, d);
     return d;

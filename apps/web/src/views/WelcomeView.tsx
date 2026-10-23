@@ -15,6 +15,7 @@ import { useDesktopInfo } from "../desktop.ts";
 import { Advanced, setExperience, useSimple, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
+import { CodeInput, codeReady } from "../components/ScreenCode.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
 import { Ghost } from "../components/Ghost.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
@@ -1136,6 +1137,8 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
 /** A device's own screen only works for agents while it's lent. */
 function Lend({ computer, agent }: { computer: ComputerInfo; agent: Agent }) {
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
   if (lentNow(computer))
     return (
       <div className="mb-5">
@@ -1145,17 +1148,20 @@ function Lend({ computer, agent }: { computer: ComputerInfo; agent: Agent }) {
   return (
     <div className="mb-5 rounded-xl border border-line p-4 flex flex-wrap items-center gap-3 text-sm">
       <span className="flex-1 min-w-48">{agent.name} works on your screen, and only while you lend it.</span>
+      {computer.code && <CodeInput kind={computer.code} value={code} onChange={setCode} className="w-36" />}
       <Button
-        disabled={busy}
+        disabled={busy || !codeReady(computer.code, code)}
         onClick={async () => {
           setBusy(true);
-          await api("POST", `/api/computers/${computer.id}/lend`, { minutes: 60 }).catch(() => {});
+          setError(null);
+          await api("POST", `/api/computers/${computer.id}/lend`, { minutes: 60, ...(computer.code ? { code } : {}) }).catch((e) => setError((e as Error).message));
           await useStore.getState().refreshComputers();
           setBusy(false);
         }}
       >
         {busy && <Loader2 size={15} className="animate-spin" />} Lend it for an hour
       </Button>
+      {error && <p className="w-full text-xs text-bad">{error}</p>}
     </div>
   );
 }

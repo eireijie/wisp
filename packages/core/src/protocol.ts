@@ -143,6 +143,8 @@ export const NodeToHub = z.discriminatedUnion("type", [
   z.object({ type: z.literal("screen_frame"), computerId: z.string(), image: z.string(), width: z.number().int(), height: z.number().int() }),
   z.object({ type: z.literal("tunnel_ready"), tunnelId: z.string() }),
   z.object({ type: z.literal("tunnel_closed"), tunnelId: z.string(), error: z.string().optional() }),
+  /** something about the screen's code its owner should hear about (wrong codes, a lockout) */
+  z.object({ type: z.literal("screen_event"), text: z.string().max(500), alert: z.boolean().optional() }),
   /** agents that already exist on this device and could be brought into Warren */
   z.object({ type: z.literal("discovered"), agents: z.array(DiscoveredAgent).max(100) }),
 ]);
@@ -160,7 +162,15 @@ export const HubToNode = z.discriminatedUnion("type", [
   /** start or stop streaming a computer's screen to people watching it */
   z.object({ type: z.literal("screen_watch"), computer: ComputerSpec, on: z.boolean(), fps: z.number().min(0.2).max(10).optional() }),
   /** relay a computer's VNC server: binary frames carry the bytes (see tunnelFrame) */
-  z.object({ type: z.literal("tunnel_open"), tunnelId: z.string(), computer: ComputerSpec }),
+  z.object({ type: z.literal("tunnel_open"), tunnelId: z.string(), computer: ComputerSpec, code: z.string().max(200).optional() }),
+  /**
+   * Open the device's own screen for `purpose` (a viewer, a lend, a loan) until `until`, if `code` is
+   * the one picked at the device; answered with a result ({ until }). The device checks the code and
+   * keeps the time limit itself, so the hub never holds the code.
+   */
+  z.object({ type: z.literal("screen_unlock"), requestId: z.string(), purpose: z.string().max(100), code: z.string().max(200), until: z.string() }),
+  /** close the screen again for `purpose` (the viewer left, the lend or loan ended) */
+  z.object({ type: z.literal("screen_lock"), purpose: z.string().max(100) }),
   z.object({ type: z.literal("tunnel_close"), tunnelId: z.string() }),
   /** look again for agents that already exist on this device */
   z.object({ type: z.literal("discover") }),

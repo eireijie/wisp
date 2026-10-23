@@ -300,6 +300,10 @@ export class Hub {
         for (const c of store.computersOnNode(conn.nodeId)) this.computers.changed(c.id);
         return;
       }
+      case "screen_event": {
+        this.computers.onScreenEvent(conn.nodeId, msg);
+        return;
+      }
       case "discovered": {
         store.setNodeDiscovered(conn.nodeId, msg.agents);
         return;
