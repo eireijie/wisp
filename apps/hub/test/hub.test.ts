@@ -1061,6 +1061,15 @@ describe("privacy", () => {
     dm = (await api("POST", `/api/dm/${nova.id}`)).data;
   });
 
+  it("keeps a task in someone's DM off other people's task list", async () => {
+    const task = (await api<any>("POST", "/api/tasks", { to: "nova", title: "My private errand", brief: "the secret plan" })).data;
+    expect(task.channelId).toBe(dm.id);
+    expect((await api<any[]>("GET", "/api/tasks")).data.some((t) => t.id === task.id)).toBe(true);
+    const hers = (await api<any[]>("GET", "/api/tasks", undefined, eve)).data;
+    expect(hers.some((t) => t.id === task.id)).toBe(false);
+    expect(JSON.stringify(hers)).not.toContain("secret plan");
+  });
+
   it("never sends a DM, its run events or its reactions to someone else's socket", async () => {
     const mine = await clientSocket(token);
     const hers = await clientSocket(eve);
@@ -1131,6 +1140,9 @@ describe("runs that go wrong", () => {
     expect(note?.body).toContain("@atlas");
     // which wakes atlas, who handed it out
     await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id && r.run.prompt.includes("Crash test")));
+    // and not nova, whose failure it reports (an @mention of nova would start it again)
+    expect(note?.body).not.toContain("@nova");
+    expect(node.runs.slice(before).filter((r) => r.type === "run" && r.run.agentId === nova.id)).toHaveLength(1);
   });
 
   it("explains a harness that needs signing in, in the channel and on the agent's page", async () => {
@@ -1163,7 +1175,11 @@ describe("runs that go wrong", () => {
     const n = node.held.length;
     await api("POST", `/api/channels/${ch}/messages`, { body: "@nova hold on" });
     const runId = await waitFor(async () => node.held[n]);
+    const client = await clientSocket(token);
     expect((await api("POST", `/api/runs/${runId}/cancel`)).data).toEqual({ ok: true });
+    // the web clears its "writing…" preview on this, since the device's own report comes too late to count
+    await waitFor(async () => client.events.find((e) => e.type === "agent_status" && e.agentId === nova.id && e.status === "online"));
+    client.close();
     node.send({ type: "run_done", runId, finalText: "too late" });
     node.send({ type: "run_failed", runId, error: "also too late" });
     await new Promise((r) => setTimeout(r, 200));

@@ -245,6 +245,14 @@ body {
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass { background: var(--panel); }
 }
+/*
+ * Glass inside glass (the @mention, / and emoji popups over the message bar) can only blur its
+ * parent, not the messages behind it, so it would show them through; it's solid instead.
+ */
+.glass .glass,
+:root[data-mode="dark"] .glass .glass {
+  background: var(--panel);
+}
 
 /* Rendered markdown in messages and the vault preview */
 .prose-w {

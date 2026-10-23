@@ -90,7 +90,8 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
       searchGeneration.current++;
       clearTimeout(t);
     };
-  }, [query]);
+    // the list reloads after a note is made, changed or deleted: search again so no stale hit stays
+  }, [query, notes]);
   // while viewing as an agent, only show hits it could open
   const visibleHits = useMemo(() => (hits && viewAs && notes ? hits.filter((h) => notes.some((n) => n.path === h.path)) : hits), [hits, viewAs, notes]);
 

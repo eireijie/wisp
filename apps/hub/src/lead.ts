@@ -44,7 +44,8 @@ export function failTaskOfRun(hub: Hub, run: { agentId: string; channelId: strin
   const task = run.threadId ? store.taskByThread(run.threadId) : undefined;
   if (!task || task.toAgentId !== run.agentId || (task.status !== "open" && task.status !== "in_progress")) return;
   const agent = store.agent(run.agentId);
-  const result = `@${agent?.handle ?? "agent"}'s run failed: ${reason}`;
+  // the agent by name, not @handle: the note is routed, and an @mention would wake the agent that just failed
+  const result = `${agent?.name ?? "The agent"}'s run failed: ${reason.trim().replace(/\.+$/, "")}`;
   store.updateTask(task.id, "failed", result);
   hub.broadcast(task.workspaceId, { type: "tasks_changed" });
   const from = task.from.kind === "agent" ? store.agent(task.from.id) : undefined;

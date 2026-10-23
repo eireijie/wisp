@@ -729,6 +729,9 @@ export class Hub {
     const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
     if (conn) this.send(conn, { type: "cancel", runId });
     this.store.setRunStatus(runId, "cancelled");
+    this.live.delete(runId);
+    // the device's late report is ignored, so clients hear from here that the agent is free again
+    if (agent) this.broadcast(agent.workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
     // stopping one participant doesn't stop the discussion; it goes on without them
     if (run.discussionId) void this.discussions.onRunFinished(run, "");
     return true;

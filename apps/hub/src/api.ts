@@ -1291,7 +1291,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply);
     if (!c) return;
     const q = req.query as { agent?: string; status?: string; team?: string };
-    const list = store.tasks(c.workspaceId, { agentId: q.agent === "me" && c.actor.kind === "agent" ? c.actor.id : q.agent, status: q.status });
+    const all = store.tasks(c.workspaceId, { agentId: q.agent === "me" && c.actor.kind === "agent" ? c.actor.id : q.agent, status: q.status });
+    // a person sees tasks in channels they can read: one in someone's DM or a private channel stays there
+    const list = c.actor.kind === "user" ? all.filter((t) => !t.channelId || !!channelVisible(c, t.channelId)) : all;
     return q.team ? list.filter((t) => t.teamId === q.team) : list;
   });
 
