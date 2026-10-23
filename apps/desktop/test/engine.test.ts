@@ -100,6 +100,33 @@ describe("the processes the app runs", () => {
     await until(() => !child.running());
     expect(child.state).toBe("stopped");
   });
+
+  it("stops the copy an earlier run left behind (a crash or Force Quit) before starting another", async () => {
+    const dir = fakeWarren();
+    const crashed = new engine.Child("device", dir, () => {}); // the app that was force quit
+    crashed.start(process.execPath, dir, ["node", "start"]);
+    await until(() => crashed.running());
+    const old = crashed.proc;
+    const next = new engine.Child("device", dir, () => {}); // the app opened again
+    next.start(process.execPath, dir, ["node", "start"]);
+    await until(() => old.exitCode !== null || old.signalCode !== null);
+    await until(() => next.running());
+    expect(next.proc.pid).not.toBe(old.pid);
+    expect(fs.readFileSync(path.join(dir, "device.pid"), "utf8")).toBe(String(next.proc.pid));
+    next.stop();
+    await until(() => !next.running());
+    expect(fs.existsSync(path.join(dir, "device.pid"))).toBe(false);
+  });
+
+  it("leaves a process alone when its saved id now belongs to something else", async () => {
+    const dir = fakeWarren();
+    fs.writeFileSync(path.join(dir, "device.pid"), String(process.ppid)); // alive, but not a Warren device
+    const child = new engine.Child("device", dir, () => {});
+    child.start(process.execPath, dir, ["node", "start"]);
+    expect(child.running()).toBe(true); // started at once: nothing to stop first
+    child.stop();
+    await until(() => !child.running());
+  });
 });
 
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Phone } from "lucide-react";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api, connectEvents, getToken } from "../api.ts";
-import { buddyNoticeWithRoot, completedTasks, type BuddyNotice, type BuddyTask } from "../buddy.ts";
+import { buddyNoticeWithRoot, completedTasks, unlessMuted, type BuddyNotice, type BuddyTask } from "../buddy.ts";
 import type { BuddySettings } from "../desktop.ts";
 import { agentMood } from "../ghostMood.ts";
 import { href } from "../router.ts";
@@ -102,7 +102,8 @@ export function BuddyView() {
         disconnect = connectEvents((e) => {
           if (stopped) return;
           const state = useStore.getState();
-          void buddyNoticeWithRoot(e, state, selected.current).then((next) => { if (next) show(next); });
+          const channels = async () => { await useStore.getState().refreshChannels(); return useStore.getState().channels; };
+          void buddyNoticeWithRoot(e, state, selected.current, { ignoreMute: true }).then((next) => unlessMuted(next, e, channels)).then((next) => { if (next) show(next); });
           state.handle(e, false); // the main window owns system notifications and sounds
           // A proactive DM can be the first event for a newly-created channel.
           const channelId = e.type === "message" ? e.message.channelId : e.type === "approval" ? e.approval.channelId : null;

@@ -19,7 +19,8 @@ export const firstLine = (text: string) => {
 const chat = (channelId: string, threadId: string | null) => href({ view: "chat", channelId, threadId });
 
 /** Only new, person-facing events; loading history never raises a bubble. */
-export function buddyNotice(e: ClientEvent, state: State, selectedId?: string): BuddyNotice | null {
+/** `ignoreMute` leaves the channel's mute to `unlessMuted`, which reads it fresh from the hub. */
+export function buddyNotice(e: ClientEvent, state: State, selectedId?: string, { ignoreMute = false } = {}): BuddyNotice | null {
   if (!state.me) return null;
   if (e.type === "approval") {
     const a = e.approval;
@@ -31,7 +32,7 @@ export function buddyNotice(e: ClientEvent, state: State, selectedId?: string): 
     const m = e.message;
     if (m.author.kind !== "agent" || !m.body.trim()) return null;
     const channel = state.channels.find((c) => c.id === m.channelId);
-    if (!channel || channel.notify === "mute") return null;
+    if (!channel || (!ignoreMute && channel.notify === "mute")) return null;
     const root = m.threadId ? state.roots?.[m.threadId] ?? state.messages[m.channelId]?.find((x) => x.id === m.threadId) : null;
     const toMe = channel?.kind === "dm" || (root?.author.kind === "user" && root.author.id === state.me.user.id);
     if (!toMe && !(m.author.id === selectedId && channel?.joined)) return null;
@@ -43,24 +44,38 @@ export function buddyNotice(e: ClientEvent, state: State, selectedId?: string): 
 }
 
 /** Buddy windows don't load channel history. Fetch just the thread when its root is missing. */
-export async function buddyNoticeWithRoot(e: ClientEvent, state: State, selectedId?: string): Promise<BuddyNotice | null> {
-  const immediate = buddyNotice(e, state, selectedId);
+export async function buddyNoticeWithRoot(e: ClientEvent, state: State, selectedId?: string, opts: { ignoreMute?: boolean } = {}): Promise<BuddyNotice | null> {
+  const immediate = buddyNotice(e, state, selectedId, opts);
   if (immediate || e.type !== "message" || e.message.author.kind !== "agent" || !e.message.threadId) return immediate;
   const m = e.message;
   const channel = state.channels.find((c) => c.id === m.channelId);
-  if (!channel || channel.notify === "mute" || state.roots?.[m.threadId!] || state.messages[m.channelId]?.some((x) => x.id === m.threadId)) return null;
+  if (!channel || (!opts.ignoreMute && channel.notify === "mute") || state.roots?.[m.threadId!] || state.messages[m.channelId]?.some((x) => x.id === m.threadId)) return null;
   try {
     let before = "";
     for (;;) {
       const { messages } = await api<{ messages: Message[] }>("GET", `/api/channels/${encodeURIComponent(m.channelId)}/messages?thread=${encodeURIComponent(m.threadId!)}&limit=200${before ? `&before=${encodeURIComponent(before)}` : ""}`);
       const root = messages.find((x) => x.id === m.threadId);
-      if (root) return buddyNotice(e, { ...state, roots: { ...state.roots, [root.id]: root } }, selectedId);
+      if (root) return buddyNotice(e, { ...state, roots: { ...state.roots, [root.id]: root } }, selectedId, opts);
       const oldest = messages[0]?.createdAt;
       if (messages.length < 200 || !oldest || oldest === before) return null;
       before = oldest;
     }
   } catch {
     return null;
+  }
+}
+
+/**
+ * Muting a channel isn't announced to other windows, and the buddy is a window of its own: before
+ * a message bubble, read the person's channels again, so muting or unmuting after the buddy
+ * started counts. Pair it with `ignoreMute`, so a stale mute can't stop the check from happening.
+ */
+export async function unlessMuted(n: BuddyNotice | null, e: ClientEvent, channels: () => Promise<{ id: string; notify?: string }[]>): Promise<BuddyNotice | null> {
+  if (!n || e.type !== "message") return n;
+  try {
+    return (await channels()).find((c) => c.id === e.message.channelId)?.notify === "mute" ? null : n;
+  } catch {
+    return n; // the hub is unreachable for a moment: the bubble still says something new arrived
   }
 }
 
