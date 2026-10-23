@@ -3,11 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type Agent, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
-import { deviceAdapters, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@warren/core";
+import { HarnessAccounts, changeHarnessSettings, deviceAdapters, harnessConfigured, loginCommand, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@warren/adapters";
 import { WarrenClient, WarrenError } from "@warren/sdk";
 import { runUpdate, version } from "@warren/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
+import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remote-desktop.ts";
+import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
+import { HarnessLogins } from "./harness-login.ts";
 import { VM_HOME, type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
@@ -39,12 +42,18 @@ export interface NodeConfig {
   shareScreen?: boolean;
   /** never offer this device's own screen, whatever shareScreen says (older setting) */
   noScreen?: boolean;
+  /** the code (hashed) that opens this screen from Warren; set at the device, never sent to the hub */
+  screenCode?: ScreenCode;
+  /** Remote Desktop: this device's own VNC server for its screen (`warren node screen remote`) */
+  remoteDesktop?: RemoteDesktopConfig;
   /** `warren node pause`: take no work from the hub (no agent runs, no computer use) until resumed */
   paused?: boolean;
   /** where to look for existing agents (default: the home folder); for tests */
   discoverHome?: string;
   /** don't get the VM image ready when connecting (it's fetched when the first VM starts instead) */
   noPrepare?: boolean;
+  /** the home folder whose harness configs Settings → Harnesses reads and changes (default: this user's); for tests */
+  harnessHome?: string;
 }
 
 type Log = (msg: string) => void;
@@ -71,8 +80,17 @@ export class NodeDaemon {
   private fixedRegistry: boolean;
   /** which version of Warren's tools each VM has (by container name) */
   private vmTools = new Map<string, string>();
-  /** shareScreen and paused, as last read from node.json (people change them there with the CLI) */
-  private local: { shareScreen: boolean; paused: boolean };
+  /** the switches people flip at the device, as last read from node.json (people change them there with the CLI) */
+  private local: { shareScreen: boolean; paused: boolean; code?: ScreenCode; remote?: RemoteDesktopConfig };
+  /** the screen's code: checked here, with its own count of wrong tries */
+  private lock: ScreenLock;
+  private remoteServer: RemoteDesktopServer;
+  /** tunnels opened with the screen's code */
+  private codeTunnels = new Set<string>();
+  /** each harness's logins here, and which agent uses which */
+  private accounts: HarnessAccounts;
+  /** sign-ins running for those accounts */
+  private logins = new HarnessLogins();
   /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
   private outbox: NodeToHub[] = [];
   /** when the hub replaced this connection with another one using the same token */
@@ -91,12 +109,15 @@ export class NodeDaemon {
     this.sessions = readJson(this.sessionsFile, {});
     this.agentTokens = readJson(this.tokensFile, {});
     this.local = this.readLocal();
+    this.lock = new ScreenLock(cfg.dir, () => this.local.code);
+    this.remoteServer = new RemoteDesktopServer(cfg.dir, log);
     this.api = new WarrenClient({ url: cfg.hub, token: cfg.token });
+    this.accounts = new HarnessAccounts(cfg.dir, { home: cfg.harnessHome });
     this.registry = registry ?? deviceAdapters(cfg.harnesses);
     this.fixedRegistry = !!registry;
     this.computers =
       computers ??
-      new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log, onVmStatus: (computerId, status, text) => this.send({ type: "computer_status", computerId, status, text }) });
+      new ComputerHost({ dir: cfg.dir, vmEngine: cfg.vmEngine, allowDeviceShell: cfg.allowFullAccess, log, remoteDesktop: () => this.local.remote, onVmStatus: (computerId, status, text) => this.send({ type: "computer_status", computerId, status, text }) });
   }
 
   private get sessionsFile() {
@@ -114,22 +135,58 @@ export class NodeDaemon {
   /** The switches people flip at the device: node.json wins over what this process started with. */
   private readLocal() {
     const file = readJson<Partial<NodeConfig>>(this.configFile, {});
-    return { shareScreen: !!(file.shareScreen ?? this.cfg.shareScreen) && !(file.noScreen ?? this.cfg.noScreen), paused: !!(file.paused ?? this.cfg.paused) };
+    return {
+      shareScreen: !!(file.shareScreen ?? this.cfg.shareScreen) && !(file.noScreen ?? this.cfg.noScreen),
+      paused: !!(file.paused ?? this.cfg.paused),
+      code: file.screenCode ?? this.cfg.screenCode,
+      remote: file.remoteDesktop ?? this.cfg.remoteDesktop,
+    };
+  }
+
+  /** Remote Desktop's server runs while the screen is on and the device isn't paused. */
+  private applyRemoteServer() {
+    this.remoteServer.set(this.local.shareScreen && !this.local.paused ? this.local.remote : null);
+  }
+
+  private closeTunnels() {
+    for (const t of this.tunnels.values()) t.close();
+    this.tunnels.clear();
+    for (const id of this.codeTunnels) this.lock.lock(`tunnel:${id}`);
+    this.codeTunnels.clear();
+  }
+
+  /** A code was entered for this screen: tell its owner when it was wrong. */
+  private codeResult(r: { ok: boolean; lockedOut?: boolean; triesLeft?: number }) {
+    if (r.ok) return;
+    if (r.lockedOut) this.send({ type: "screen_event", alert: true, text: "Too many wrong codes were entered for this screen, so it stopped taking codes for a while. If that wasn't you, change your Warren password." });
+    else if (r.triesLeft !== undefined) this.send({ type: "screen_event", alert: r.triesLeft <= 2, text: `A wrong code was entered for this screen (${r.triesLeft} ${r.triesLeft === 1 ? "try" : "tries"} left before it locks).` });
   }
 
   /** Someone ran `warren node screen …` or `warren node pause/resume`: apply it now. */
   private onLocalChange = () => {
     const before = this.local;
     this.local = this.readLocal();
-    if (before.shareScreen === this.local.shareScreen && before.paused === this.local.paused) return;
+    const codeChanged = before.code?.hash !== this.local.code?.hash;
+    const remoteChanged = JSON.stringify(before.remote) !== JSON.stringify(this.local.remote);
+    if (codeChanged || remoteChanged) {
+      // a new code (or none) or a new server: whatever the old one opened closes
+      this.lock.lockAll();
+      this.closeTunnels();
+      this.computers.stopAll();
+    }
+    this.applyRemoteServer();
+    if (before.shareScreen === this.local.shareScreen && before.paused === this.local.paused) {
+      if (codeChanged || remoteChanged) void this.sendCapabilities();
+      return;
+    }
     if (this.local.paused && !before.paused) {
       this.log("paused: stopping agents and computers until `warren node resume`");
       for (const a of this.aborts.values()) a.abort("paused");
     }
     if (this.local.paused || !this.local.shareScreen) {
       this.computers.stopAll();
-      for (const t of this.tunnels.values()) t.close();
-      this.tunnels.clear();
+      this.closeTunnels();
+      this.lock.lockAll();
     }
     if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Warren (agents only when you lend it)" : "off"}`);
     if (before.paused && !this.local.paused) this.log("resumed");
@@ -139,6 +196,10 @@ export class NodeDaemon {
   private async sendCapabilities() {
     const caps = await this.computers.capabilities();
     if (!this.local.shareScreen && caps.screen.ok) caps.screen = { ok: false, off: true, detail: "Off. Only someone at this device can turn it on: `warren node screen on`" };
+    else if (caps.screen.ok) {
+      if (this.local.remote) caps.screen.remote = true;
+      if (this.local.code) caps.screen.code = this.local.code.kind;
+    }
     caps.paused = this.local.paused;
     caps.commands = this.commandsHere();
     this.send({ type: "capabilities", capabilities: caps });
@@ -149,6 +210,7 @@ export class NodeDaemon {
     this.replaced = [];
     fs.watchFile(this.configFile, { interval: 1000 }, this.onLocalChange);
     if (this.local.paused) this.log("paused: no agent runs or computer use until `warren node resume`");
+    this.applyRemoteServer();
     this.connect();
   }
 
@@ -161,8 +223,9 @@ export class NodeDaemon {
     fs.unwatchFile(this.configFile, this.onLocalChange);
     for (const a of this.aborts.values()) a.abort();
     this.computers.stopAll();
-    for (const t of this.tunnels.values()) t.close();
-    this.tunnels.clear();
+    this.logins.stopAll();
+    this.closeTunnels();
+    this.remoteServer.stop();
     const end = Date.now() + wait;
     while (this.aborts.size && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
     this.ws?.close();
@@ -197,8 +260,7 @@ export class NodeDaemon {
     ws.on("close", (code, reason) => {
       // live views and tunnels belong to this connection; the hub asks again after a reconnect
       this.computers.stopAll();
-      for (const t of this.tunnels.values()) t.close();
-      this.tunnels.clear();
+      this.closeTunnels();
       if (this.stopped) return;
       if (code === 4401) {
         this.log("hub rejected the node token. Create a new node in Warren and run `warren node start` again.");
@@ -257,9 +319,11 @@ export class NodeDaemon {
       if (!this.local.paused && !this.cfg.noPrepare) void this.computers.prepareImage(() => void this.sendCapabilities());
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
       this.send({ type: "catalog", catalog: await this.harnessCatalog() });
+      void this.sendShelf();
     } else if (msg.type === "computer") {
       if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`warren node resume\`` });
       if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`warren node screen on\`)` });
+      if (msg.computer.kind === "device" && msg.action.action !== "status" && !this.lock.open()) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is locked with its code. Its owner opens it by entering the code in Warren (to watch it, or when lending it).` });
       this.computers.act(msg.computer, msg.action).then(
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
@@ -272,7 +336,7 @@ export class NodeDaemon {
       );
     } else if (msg.type === "screen_watch") {
       if (!msg.on) return this.computers.unwatch(msg.computer.id);
-      if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return;
+      if (this.local.paused || (msg.computer.kind === "device" && (!this.local.shareScreen || !this.lock.open()))) return;
       this.computers.watch(
         msg.computer,
         msg.fps ?? 2,
@@ -282,6 +346,17 @@ export class NodeDaemon {
     } else if (msg.type === "tunnel_open") {
       const { tunnelId } = msg;
       if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return this.send({ type: "tunnel_closed", tunnelId, error: this.local.paused ? "the device is paused" : "the screen is off" });
+      if (msg.computer.kind === "device" && this.lock.enabled) {
+        // the code itself, every time: a screen opened for a lend doesn't let a viewer in without it
+        const r = this.lock.check(msg.code);
+        this.codeResult(r);
+        if (!r.ok) return this.send({ type: "tunnel_closed", tunnelId, error: r.error });
+        this.codeTunnels.add(tunnelId);
+        this.lock.grant(`tunnel:${tunnelId}`, Date.now() + 24 * 60 * 60_000);
+      }
+      const forget = () => {
+        if (this.codeTunnels.delete(tunnelId)) this.lock.lock(`tunnel:${tunnelId}`);
+      };
       this.computers
         .tunnel(
           msg.computer,
@@ -290,6 +365,7 @@ export class NodeDaemon {
           },
           (error) => {
             this.tunnels.delete(tunnelId);
+            forget();
             this.send({ type: "tunnel_closed", tunnelId, error });
           },
         )
@@ -298,11 +374,23 @@ export class NodeDaemon {
             this.tunnels.set(tunnelId, t);
             this.send({ type: "tunnel_ready", tunnelId });
           },
-          (err) => this.send({ type: "tunnel_closed", tunnelId, error: (err as Error).message }),
+          (err) => {
+            forget();
+            this.send({ type: "tunnel_closed", tunnelId, error: (err as Error).message });
+          },
         );
     } else if (msg.type === "tunnel_close") {
       this.tunnels.get(msg.tunnelId)?.close();
       this.tunnels.delete(msg.tunnelId);
+      if (this.codeTunnels.delete(msg.tunnelId)) this.lock.lock(`tunnel:${msg.tunnelId}`);
+    } else if (msg.type === "screen_unlock") {
+      if (!this.lock.enabled) return this.send({ type: "result", requestId: msg.requestId, ok: true, result: { until: msg.until } });
+      if (this.local.paused || !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: this.local.paused ? `${this.cfg.name} is paused` : `${this.cfg.name}'s screen is off` });
+      const r = this.lock.unlock(msg.purpose, msg.code, Date.parse(msg.until) || 0);
+      this.codeResult(r);
+      this.send(r.ok ? { type: "result", requestId: msg.requestId, ok: true, result: { until: new Date(r.until!).toISOString() } } : { type: "result", requestId: msg.requestId, ok: false, error: r.error });
+    } else if (msg.type === "screen_lock") {
+      this.lock.lock(msg.purpose);
     } else if (msg.type === "discover") {
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
     } else if (msg.type === "refresh") {
@@ -322,6 +410,11 @@ export class NodeDaemon {
     } else if (msg.type === "update") {
       // finishing writes the update marker, and `warren node start` restarts once agents are done
       runUpdate(undefined, { log: this.log }).then(
+        (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
+        (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
+      );
+    } else if (msg.type === "harness_settings" || msg.type === "harness_settings_change" || msg.type === "harness_skill" || msg.type === "harness_open_config" || msg.type === "harness_account") {
+      this.harnessSettings(msg).then(
         (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
         (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
       );
@@ -438,7 +531,8 @@ export class NodeDaemon {
           browser,
           // MCP connectors go to the harness's own config; secrets go in its environment
           connectors: connectors.filter((c: ConnectorSpec) => c.kind !== "secret"),
-          env: Object.assign({}, ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {})),
+          // the agent's own account of its harness here (its folder), unless it runs inside its VM
+          env: Object.assign(inside ? {} : this.accounts.env(agent.harness, this.accounts.accountOf(agent.id, agent.harness)), ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {})),
           launch: inside ? vm!.launcher(run.runId) : undefined,
           signal: abort.signal,
           options: this.cfg.harnessOptions?.[agent.harness],
@@ -490,6 +584,13 @@ export class NodeDaemon {
     await this.sendCapabilities();
     this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
     this.send({ type: "catalog", catalog: await this.harnessCatalog() });
+    await this.sendShelf();
+  }
+
+  /** Skills and MCP servers the harnesses here already have, for "On your devices" (secret values stay here). */
+  private async sendShelf() {
+    const items = await scanShelf({ home: this.cfg.harnessHome }).catch((err) => (this.log(`couldn't look through the harnesses' skills and apps: ${(err as Error).message}`), []));
+    this.send({ type: "shelf", items });
   }
 
   /**
@@ -521,6 +622,74 @@ export class NodeDaemon {
     this.log(`installed ${harnessLabel(id)}`);
     return out.text.trim().split("\n").slice(-3).join("\n");
   }
+
+  /**
+   * The harnesses' own settings (Settings → Harnesses). The hub lets only this device's owner ask;
+   * the device reads and writes the files itself, so the hub names a harness and a change, never a path.
+   */
+  private async harnessSettings(msg: Extract<HubToNode, { type: "harness_settings" | "harness_settings_change" | "harness_skill" | "harness_open_config" | "harness_account" }>) {
+    const base = { home: this.cfg.harnessHome };
+    const known = (id: string) => {
+      if (!(SETTINGS_HARNESSES as readonly string[]).includes(id)) throw new Error(`Warren can't change ${harnessLabel(id)}'s settings yet`);
+    };
+    // each account is the harness's own folder somewhere else
+    const homes = (harness: string, account = "default") => {
+      if (account !== "default" && !this.accounts.list(harness).some((a) => a.id === account)) throw new Error(`${harnessLabel(harness)} has no account "${account}" on ${this.cfg.name}`);
+      return { ...base, dirs: { [harness]: this.accounts.dir(harness, account) } };
+    };
+    const withAccounts = (s: HarnessSettings, account = "default"): HarnessSettings => ({ ...s, account, accounts: this.accounts.list(s.harness), multiAccount: HarnessAccounts.supports(s.harness), agentAccounts: this.accounts.agentAccounts() });
+    if (msg.type === "harness_settings") {
+      const installed = new Set((await this.harnessCatalog()).map((c) => c.harness));
+      const here = await Promise.all(SETTINGS_HARNESSES.map(async (id) => installed.has(id) || (await harnessConfigured(id, base))));
+      const ids = SETTINGS_HARNESSES.filter((id, i) => (msg.harness ? id === msg.harness : here[i]));
+      return Promise.all(ids.map(async (id) => withAccounts(await readHarnessSettings(id, homes(id, msg.harness === id ? msg.account : undefined)), msg.harness === id ? (msg.account ?? "default") : "default")));
+    }
+    known(msg.harness);
+    // only harnesses this device has (installed, or set up with a config)
+    if (!(await this.harnessCatalog()).some((c) => c.harness === msg.harness) && !(await harnessConfigured(msg.harness, base))) throw new Error(`${harnessLabel(msg.harness)} isn't on ${this.cfg.name}`);
+    if (msg.type === "harness_skill") return readHarnessSkill(msg.harness, msg.id, homes(msg.harness, msg.account));
+    if (msg.type === "harness_open_config") {
+      const file = harnessConfigPath(msg.harness, homes(msg.harness, msg.account))!;
+      if (!fs.existsSync(file)) throw new Error(`${file} doesn't exist on ${this.cfg.name} yet`);
+      const [cmd, args] = process.platform === "darwin" ? ["open", ["-t", file]] : process.platform === "win32" ? ["cmd", ["/c", "start", "", file]] : ["xdg-open", [file]];
+      spawn(cmd, args as string[], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
+      return { path: file };
+    }
+    if (msg.type === "harness_account") return this.harnessAccount(msg.harness, msg.action);
+    if (this.local.paused) throw new Error(`${this.cfg.name} is paused`);
+    this.log(`changing ${harnessLabel(msg.harness)}'s settings${msg.account && msg.account !== "default" ? ` (account ${msg.account})` : ""}`);
+    const settings = withAccounts(await changeHarnessSettings(msg.harness, msg.changes, homes(msg.harness, msg.account)), msg.account);
+    // a new default model shows up in the agent's model picker
+    if (msg.changes.some((c) => c.op !== "toggle")) {
+      this.catalog = null;
+      void this.harnessCatalog().then((catalog) => this.send({ type: "catalog", catalog }));
+    }
+    return settings;
+  }
+
+  /** Accounts of a harness here, and signing them in (the harness's own sign-in, with the account's folder). */
+  private async harnessAccount(harness: string, action: HarnessAccountOp): Promise<unknown> {
+    const a = this.accounts;
+    if (action.op === "login_status") return this.logins.status(action.loginId);
+    if (action.op === "login_input") return this.logins.input(action.loginId, action.text);
+    if (action.op === "login_cancel") return this.logins.cancel(action.loginId), { ok: true };
+    if (this.local.paused) throw new Error(`${this.cfg.name} is paused`);
+    if (action.op === "add") {
+      this.log(`adding a ${harnessLabel(harness)} account (${action.label})`);
+      return a.add(harness, action.label);
+    }
+    if (action.op === "rename") return a.rename(harness, action.account, action.label), { ok: true };
+    if (action.op === "remove") return a.remove(harness, action.account);
+    if (action.op === "assign") return a.assign(action.agentId, harness, action.account), { ok: true };
+    if (action.account !== "default" && !a.list(harness).some((x) => x.id === action.account)) throw new Error(`${harnessLabel(harness)} has no account "${action.account}"`);
+    const cmd = loginCommand(harness, action.provider);
+    const env = a.env(harness, action.account);
+    // a sign-in that only runs in its own screen: the command to type at the device
+    if ("manual" in cmd) return { manual: [...Object.entries(env).map(([k, v]) => `${k}=${JSON.stringify(v)}`), ...cmd.manual].join(" ") };
+    this.log(`signing in ${harnessLabel(harness)} (account ${action.account})`);
+    return this.logins.start(harness, action.account, { command: this.registry[harness]?.binary || cmd.command, args: cmd.args, env });
+  }
+
 
   /** Models each installed harness offers here; computed once per process. */
   private harnessCatalog(): Promise<HarnessCatalog[]> {

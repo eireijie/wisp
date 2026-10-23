@@ -61,6 +61,8 @@ export type ComputerInfo = Computer & {
   ownerId: string | null;
   /** its device was paused there */
   paused: boolean;
+  /** a device's own screen that opens with the code picked at the device */
+  code: "pin" | "password" | null;
   transport: "vnc" | "frames";
   agents: string[];
   activity: { agentId: string; text: string; at: string } | null;

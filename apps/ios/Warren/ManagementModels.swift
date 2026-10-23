@@ -32,6 +32,9 @@ struct AgentNode: Decodable, Identifiable, Hashable {
   var shared: Bool?
   var online: Bool
   var role: String?
+  var paused: Bool?
+  var lastSeen: String?
+  var agents: [String]?
   var harnesses: [Harness]?
   var usable: Bool { mine == true || shared == true }
 }
@@ -73,7 +76,6 @@ struct HarnessState: Decodable {
   var computerId: String?
 }
 
-struct WorkspaceTeam: Decodable { var channelId: String? }
 
 typealias Fields = [String: AnyEncodable]
 

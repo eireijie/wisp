@@ -104,6 +104,42 @@ final class ManagementTests: XCTestCase {
     XCTAssertEqual(Set(prefs.keys), ["notify"])
   }
 
+  func testScreenCodeGoesWithViewLendAndLoanApproval() async throws {
+    let store = try makeStore()
+    let screen = #"{"id":"k1","name":"My Mac","kind":"device","nodeId":"n1","status":"ready","statusText":"","code":"pin","config":{"lend":{"until":null}}}"#
+    let computer = try Wire.decoder.decode(Computer.self, from: Data(screen.utf8))
+    XCTAssertEqual(computer.code, "pin")
+    XCTAssertTrue(computer.lentNow)
+    store.computers = [computer]
+
+    reply("POST", "/api/computers/k1/view", #"{"error":"Wrong PIN. 4 tries left before this screen locks for a while."}"#, status: 403)
+    do { _ = try await store.openView(computer, code: "123456"); XCTFail("Expected 403") }
+    catch let f as API.Failure {
+      XCTAssertEqual(f.status, 403)
+      XCTAssertEqual(f.message, "Wrong PIN. 4 tries left before this screen locks for a while.")
+    }
+    reply("POST", "/api/computers/k1/view", #"{"transport":"frames","url":"/ws/computers/k1/frames?ticket=t1","direct":false}"#)
+    let (view, ws) = try await store.openView(computer, code: "123456")
+    XCTAssertEqual(view.transport, "frames")
+    // URLSession shows a wss task's request as https
+    XCTAssertEqual(ws.originalRequest?.url?.absoluteString.replacingOccurrences(of: "https://", with: "wss://"), "wss://management.test/ws/computers/k1/frames?ticket=t1")
+    ws.cancel()
+
+    reply("POST", "/api/computers/k1/lend", screen)
+    try await store.lend(computer, minutes: nil, code: "123456")
+    reply("POST", "/api/approvals/p1/decide", #"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Borrow My Mac","details":"","status":"approved","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#)
+    let approval = try Wire.decoder.decode(Approval.self, from: Data(#"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Borrow My Mac","details":"","status":"pending","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#.utf8))
+    XCTAssertEqual(store.loanScreen(approval)?.code, "pin")
+    try await store.decide(approval, approve: true, code: "123456")
+
+    let requests = ManagementHTTPStub.requests.withLock { $0 }.filter { $0.httpMethod == "POST" }
+    XCTAssertEqual(try body(of: requests[0])["code"] as? String, "123456")
+    let lend = try body(of: requests[2])
+    XCTAssertTrue(lend["minutes"] is NSNull) // until you stop it
+    XCTAssertEqual(lend["code"] as? String, "123456")
+    XCTAssertEqual(try body(of: requests[3])["code"] as? String, "123456")
+  }
+
   func testChannelMoveAndAgentCreationSendExplicitNulls() async throws {
     let store = try makeStore()
     reply("PATCH", "/api/channels/c1", channelJSON)

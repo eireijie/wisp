@@ -13,6 +13,7 @@ import type { Driver, Shot } from "../../node/src/computers/driver.ts";
 import { localFiles } from "../../node/src/computers/transfer.ts";
 import { mkdirSync } from "node:fs";
 import { NodeDaemon } from "../../node/src/daemon.ts";
+import { hashCode } from "../../node/src/screen-lock.ts";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 
@@ -633,6 +634,63 @@ describe("borrowing a device", () => {
     expect(decided.status).toBe("denied");
     expect(calls.at(-1)!.prompt).toContain('Denied: Me didn\'t lend you "box"');
     expect((await screenOf()).config.loan).toBeUndefined();
+  });
+});
+
+describe("a screen's code", () => {
+  const nodeJson = async (cfg: object) => fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify(cfg));
+  // the device's own screen (made once, then the same one comes back)
+  const screenOf = async () => owner.request("POST", "/api/computers", { kind: "device", nodeId });
+
+  it("opens the screen only with the code picked at the device, which the device checks", async () => {
+    await nodeJson({ shareScreen: true, screenCode: hashCode("pin", "246810") });
+    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.code === "pin");
+    const screen = await screenOf();
+
+    // signed in as its owner isn't enough
+    await expect(owner.request("POST", `/api/computers/${screen.id}/view`)).rejects.toThrow(/Enter box's PIN/);
+    await expect(owner.request("POST", `/api/computers/${screen.id}/view`, { code: "111111" })).rejects.toThrow(/Wrong PIN. 4 tries left/);
+    await expect(owner.request("GET", `/api/computers/${screen.id}/screen?maxAge=1000`)).rejects.toThrow(/locked with its code/);
+    const view = await owner.request("POST", `/api/computers/${screen.id}/view`, { code: "246810" });
+    const ws = new WebSocket(url.replace("http", "ws") + view.url);
+    const msgs: any[] = [];
+    ws.on("message", (d) => msgs.push(JSON.parse(String(d))));
+    await waitFor(() => msgs.find((m) => m.type === "frame"));
+    // while it's open, its thumbnail works too; once the viewer leaves, the device closes it again
+    await owner.request("GET", `/api/computers/${screen.id}/screen?maxAge=1000`);
+    ws.close();
+    await waitFor(() => owner.request("GET", `/api/computers/${screen.id}/screen?maxAge=1000`).then(() => false, (e: Error) => /locked/.test(e.message)));
+  });
+
+  it("needs the code to lend it, or to let an agent borrow it", async () => {
+    const screen = await screenOf();
+    await expect(owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 30 })).rejects.toThrow(/Enter box's PIN/);
+    await owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 30, code: "246810" });
+    expect((await screenOf()).config.lend.until).toBeTruthy();
+    await owner.request("POST", `/api/computers/${screen.id}/lend`, { off: true });
+
+    const { approvalId } = await agentApi.requestDevice("box", "Check the shop's sales");
+    await expect(owner.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 15 })).rejects.toThrow(/Enter box's PIN/);
+    expect((await owner.request("GET", `/api/approvals/${approvalId}`)).status).toBe("pending");
+    const before = calls.length;
+    await owner.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 15, code: "246810" });
+    await waitFor(() => calls.length > before);
+    await agentApi.computer({ action: "screenshot" }, "box");
+    // taking it back closes it at the device too
+    await owner.request("POST", `/api/computers/${screen.id}/loan/end`);
+    await waitFor(() => owner.request("GET", `/api/computers/${screen.id}/screen?maxAge=1000`).then(() => false, (e: Error) => /locked/.test(e.message)));
+  });
+
+  it("stops taking codes after too many wrong ones, and tells its owner", async () => {
+    const screen = await screenOf();
+    for (let i = 0; i < 4; i++) await expect(owner.request("POST", `/api/computers/${screen.id}/view`, { code: "000000" })).rejects.toThrow(/Wrong PIN/);
+    await expect(owner.request("POST", `/api/computers/${screen.id}/view`, { code: "000000" })).rejects.toThrow(/Too many wrong codes/);
+    await expect(owner.request("POST", `/api/computers/${screen.id}/view`, { code: "246810" })).rejects.toThrow(/Too many wrong codes/);
+    await waitFor(async () => (await owner.request<any[]>("GET", `/api/computers/${screen.id}/log`)).find((l) => /stopped taking codes/.test(l.text)));
+    // done: no code again, and the count cleared
+    await fs.rm(path.join(nodeDir, "screen-lock.json"), { force: true });
+    await nodeJson({ shareScreen: true });
+    await waitFor(async () => !(await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.code);
   });
 });
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Archive, Bell, BellOff, BellRing, Pin, PinOff, Star, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, Square, ArrowUp, Users, Wrench, X } from "lucide-react";
-import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
+import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -15,6 +15,7 @@ import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { takeDraft } from "../draft.ts";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
+import { slashQuery, useAgentCommands, useSlashMenu, type SlashItem } from "../components/SlashMenu.tsx";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"];
 
@@ -536,6 +537,45 @@ function ContextRing({ ctx }: { ctx: AgentContext }) {
   );
 }
 
+/** An agent's answer to /context: how full its conversation is, with a way to shrink it when its harness has one. */
+function ContextCard({ usage }: { usage: ContextUsage | null }) {
+  const author = useContext(CardAuthor);
+  const commands = useAgentCommands(author?.agentId);
+  const channelKind = useStore((s) => s.channels.find((c) => c.id === author?.channelId)?.kind);
+  const agent = useStore((s) => s.agents.find((a) => a.id === author?.agentId));
+  const shrink = commands.find((c) => c.via === "raw" && (c.name === "compact" || c.name === "compress"));
+  const used = usage?.contextUsed ?? null;
+  const window = usage?.contextWindow ?? null;
+  const pct = used !== null && window ? Math.min(100, (used / window) * 100) : null;
+  const color = pct === null ? "var(--faint)" : pct > 85 ? "var(--bad)" : pct > 60 ? "var(--warn)" : "var(--ok)";
+  async function run() {
+    if (!author || !shrink || !agent) return;
+    await api("POST", `/api/channels/${author.channelId}/messages`, { body: `${channelKind === "dm" ? "" : `@${agent.handle} `}/${shrink.name}`, threadId: author.threadId ?? undefined });
+  }
+  return (
+    <div className="mt-1.5 max-w-md rounded-2xl border border-line bg-panel p-3.5 space-y-2.5">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="font-semibold tabular-nums">{used !== null ? `${tokens(used)}${window ? ` of ${tokens(window)}` : ""} used` : "Nothing used yet"}</span>
+        {usage?.model && <span className="text-xs text-muted truncate">{prettyModel(usage.model)}</span>}
+      </div>
+      {pct !== null && (
+        <div className="h-2 rounded-full bg-chip overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%`, background: color }} />
+        </div>
+      )}
+      {used === null && <p className="text-xs text-muted">This shows up after its first reply here.</p>}
+      {shrink && used !== null && (
+        <Button className="h-8" onClick={run}>
+          {shrink.name === "compact" ? "Compact" : "Compress"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Which message a card sits in, for cards that act on their conversation. */
+const CardAuthor = createContext<{ agentId: string; channelId: string; threadId: string | null } | null>(null);
+
 // --- message list -------------------------------------------------------------------------------
 
 /** In a DM the agent lives in the pill at the top, so its messages don't repeat its ghost and name. */
@@ -756,7 +796,9 @@ function MessageItem({ m, grouped, replies, onReplies, inThread }: { m: Message;
             </span>
           </a>
         ))}
-        <Parts parts={m.parts} />
+        <CardAuthor.Provider value={m.author.kind === "agent" ? { agentId: m.author.id, channelId: m.channelId, threadId: m.threadId } : null}>
+          <Parts parts={m.parts} />
+        </CardAuthor.Provider>
         <Reactions messageId={m.id} reactions={m.reactions ?? []} />
         {!!replies && onReplies && (
           <button onClick={onReplies} className="mt-1 h-6 px-2 -ml-1 rounded-md text-xs font-medium text-accent-text hover:bg-accent-soft inline-flex items-center gap-1">
@@ -945,6 +987,7 @@ function Parts({ parts }: { parts: MessagePart[] }) {
       {parts.map((p) => p.type === "approval" && <ApprovalCard key={p.approvalId} id={p.approvalId} />)}
       {parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
       {parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
+      {parts.map((p, i) => p.type === "context" && <ContextCard key={`x${i}`} usage={p.usage} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
       {files.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-2">
@@ -1214,6 +1257,20 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
   const word = text.slice(0, caret).match(/(?:^|\s)@([\w-]*)$/)?.[1];
   const suggestions = word !== undefined ? agents.filter((a) => a.handle.startsWith(word.toLowerCase()) || a.name.toLowerCase().startsWith(word.toLowerCase())).slice(0, 6) : [];
 
+  // "/" at the start of the message: what each agent here can do (Esc hides it until the text changes)
+  const [slashHidden, setSlashHidden] = useState<string | null>(null);
+  const slashText = text.slice(0, caret);
+  const slash = useSlashMenu({ query: slashHidden === slashText ? null : slashQuery(slashText), channel, dmAgent, agents });
+  function pickCommand(item: SlashItem) {
+    const next = slash.textFor(item);
+    setText(next + text.slice(caret).replace(/^\S*/, "").trimStart());
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(next.length, next.length);
+      setCaret(next.length);
+    });
+  }
+
   // words handed over from elsewhere (Home's "Try asking…") prefill the box once, ready to edit or send
   useEffect(() => {
     if (threadId) return;
@@ -1294,6 +1351,7 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
     <div className="shrink-0 px-3 md:px-5 pb-2 pt-1 safe-bottom @container">
       {/* the message box floats on glass, like the iPhone app's */}
       <div className="glass relative rounded-[1.75rem]" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
+        {slash.open && !suggestions.length && slash.render(pickCommand)}
         {suggestions.length > 0 && (
           <div className="glass absolute bottom-full mb-2 left-0 w-72 rounded-2xl p-1 z-10" role="listbox">
             {suggestions.map((a, i) => (
@@ -1336,6 +1394,14 @@ function Composer({ channelId, threadId, agentId, placeholder }: { channelId: st
           }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
           onKeyDown={(e) => {
+            if (slash.open && !suggestions.length) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") return (e.preventDefault(), slash.move(e.key === "ArrowDown" ? 1 : -1));
+              if (e.key === "Escape") return (e.preventDefault(), setSlashHidden(slashText));
+              if (slash.current && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing))) {
+                e.preventDefault();
+                return pickCommand(slash.current);
+              }
+            }
             if (suggestions.length && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey))) {
               e.preventDefault();
               return complete(suggestions[pick % suggestions.length].handle);

@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const engine = require("./engine.cjs");
 const cloud = require("./cloud.cjs");
+const screenCode = require("./screen-code.cjs");
 
 const PORT = Number(process.env.PORT || 4747);
 const LOCAL_HUB = `http://localhost:${PORT}`;
@@ -345,7 +346,56 @@ const sameOrigin = (a, b) => {
 function setDeviceFlag(key, on) {
   engine.writeNodeConfig(key === "shareScreen" ? { shareScreen: on, noScreen: on ? undefined : engine.readNodeConfig().noScreen } : { [key]: on });
   refresh();
+  // like `warren node screen on`: turning the screen on asks for a code when there isn't one
+  if (key === "shareScreen" && on && !engine.readNodeConfig().screenCode) showCodeWindow(false);
 }
+
+/** @type {BrowserWindow | null} */
+let codeWin = null;
+let codeSaved = false;
+
+/** Pick (or change) the code that opens this screen from Warren, in a small window of its own. */
+function showCodeWindow(change) {
+  if (codeWin) return codeWin.focus();
+  codeSaved = false;
+  codeWin = new BrowserWindow({
+    width: 420,
+    height: 410,
+    useContentSize: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    title: change ? "Change Screen Code" : "Screen Code",
+    icon: ICON,
+    show: false,
+    backgroundColor: "#f7f7f7",
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: false },
+  });
+  codeWin.setMenuBarVisibility(false);
+  codeWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  codeWin.webContents.on("will-navigate", (e) => e.preventDefault());
+  codeWin.once("ready-to-show", () => codeWin?.show());
+  codeWin.on("closed", () => {
+    codeWin = null;
+    if (!codeSaved && !change && !engine.readNodeConfig().screenCode)
+      notify("No code for this screen", "Your Warren sign-in alone opens it. Pick one from the menu: Pick a Screen Code…");
+  });
+  codeWin.loadFile(path.join(__dirname, "screen-code.html"), { query: { state: JSON.stringify({ change }) } });
+}
+
+// only the code window can save a code; the code itself is hashed here and goes nowhere else
+ipcMain.handle("screen-code:save", (e, input) => {
+  if (!codeWin || e.sender !== codeWin.webContents) return null;
+  const r = screenCode.pick(input);
+  if (r.error) return { error: r.error };
+  engine.writeNodeConfig({ screenCode: r.screenCode });
+  codeSaved = true;
+  notify("Screen code saved", `You'll enter this ${r.screenCode.kind === "pin" ? "PIN" : "password"} in Warren to watch this screen or lend it to an agent.`);
+  codeWin.close();
+  refresh();
+  return { ok: true };
+});
 
 // ---------------------------------------------------------------- menus
 
@@ -403,6 +453,7 @@ function trayMenu() {
       ? { label: deviceWaiting ? "Don't Make This Computer a Device" : "Disconnect This Computer", enabled: deviceBy !== "service", click: () => stopDevice() }
       : { label: "Connect This Computer for Agents…", enabled: !!hubOrigin, click: () => startDevice() },
     { label: "Let Me Use This Screen from Warren", type: "checkbox", visible: isDevice, checked: !!n.shareScreen && !n.noScreen, click: (i) => setDeviceFlag("shareScreen", i.checked) },
+    { label: n.screenCode ? "Change Screen Code…" : "Pick a Screen Code…", visible: isDevice && !!n.shareScreen && !n.noScreen, click: () => showCodeWindow(!!n.screenCode) },
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
     { label: "Create or Join Another Server…", click: () => showSetup() },

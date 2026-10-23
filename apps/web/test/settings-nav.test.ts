@@ -15,7 +15,7 @@ describe("settings navigation", () => {
 
   it("moves agent runtimes and connections under Advanced at the bottom in Simple", () => {
     expect(ids(settingsNav(true, false)).slice(1)).toEqual([
-      ["Workspace", ["general", "people", "agents", "memory", "computers", "data", "updates"]],
+      ["Workspace", ["general", "people", "agents", "harnesses", "memory", "computers", "data", "updates"]],
       ["Advanced", ["runtimes", "connections"]],
     ]);
   });

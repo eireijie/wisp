@@ -12,8 +12,8 @@ import { useEffect, useState } from "react";
  *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
  *   #/nodes                          devices
- *   #/connectors                     MCP servers and other connections agents can use
- *   #/skills                         the skill shop: things agents can learn to do
+ *   #/marketplace[/<section>]        apps and skills to get, and what devices already have (MARKET_SECTIONS)
+ *   #/connectors, #/skills           older addresses of the marketplace (installed apps, skills)
  *   #/settings[/<page>]              your settings and the workspace's (see SETTINGS_PAGES)
  *   #/join/<code>                    accept an invite (signed out)
  *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Warren is" and Simple or Advanced
@@ -33,6 +33,7 @@ export type Route =
   | { view: "tasks" }
   | { view: "computers"; computerId: string | null; teach?: string | null }
   | { view: "nodes" }
+  | { view: "marketplace"; section?: MarketSection | null }
   | { view: "connectors" }
   | { view: "skills" }
   | { view: "settings"; page?: SettingsPage | null }
@@ -43,10 +44,12 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "mobile", "general", "people", "agents", "runtimes", "memory", "computers", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "voice", "appearance", "security", "mobile", "general", "people", "agents", "runtimes", "harnesses", "memory", "computers", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const TEAM_TABS = ["members", "work", "settings"] as const;
 export type TeamTab = (typeof TEAM_TABS)[number];
+export const MARKET_SECTIONS = ["all", "apps", "skills", "devices", "installed"] as const;
+export type MarketSection = (typeof MARKET_SECTIONS)[number];
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
@@ -55,6 +58,8 @@ export function parseRoute(hash: string): Route {
       return { view: "buddy" };
     case "dashboard":
       return { view: "dashboard" };
+    case "marketplace":
+      return { view: "marketplace", section: MARKET_SECTIONS.find((x) => x === parts[1]) ?? null };
     case "connectors":
       return { view: "connectors" };
     case "skills":
@@ -96,6 +101,8 @@ export function href(r: Route): string {
       return "#/buddy";
     case "dashboard":
       return "#/dashboard";
+    case "marketplace":
+      return "#/marketplace" + (r.section && r.section !== "all" ? `/${r.section}` : "");
     case "connectors":
       return "#/connectors";
     case "skills":

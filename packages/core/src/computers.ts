@@ -106,7 +106,15 @@ export const DeviceCapabilities = z.object({
   platform: z.string(),
   arch: z.string(),
   /** can agents see and use this device's own screen? `off`: it could, but it's turned off at the device (the default) */
-  screen: z.object({ ok: z.boolean(), detail: z.string().max(500), off: z.boolean().optional() }),
+  screen: z.object({
+    ok: z.boolean(),
+    detail: z.string().max(500),
+    off: z.boolean().optional(),
+    /** Remote Desktop is set up at the device: live view goes through its own VNC server */
+    remote: z.boolean().optional(),
+    /** opening the screen from Warren needs the code picked at the device (a 6-digit PIN or a password) */
+    code: z.enum(["pin", "password"]).optional(),
+  }),
   /** can this device run VMs for its agents? `engine`: what runs them; `image`: whether the VM image is here yet */
   vm: z.object({
     ok: z.boolean(),

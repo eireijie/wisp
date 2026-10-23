@@ -192,3 +192,21 @@ describe("team templates", () => {
     ]);
   });
 });
+
+describe("/ commands", () => {
+  it("reads a command after an optional @mention of its agent", async () => {
+    const { parseCommand, agentCommands } = await import("../src/commands.ts");
+    expect(parseCommand("/compact")).toEqual({ name: "compact", args: "" });
+    expect(parseCommand("@poopy /review 42", "poopy")).toEqual({ name: "review", args: "42" });
+    expect(parseCommand("@nova /review 42", "poopy")).toBeNull();
+    expect(parseCommand("@poopyx /review", "poopy")).toBeNull();
+    expect(parseCommand("look at /etc")).toBeNull();
+    expect(agentCommands([{ name: "context", kind: "command", via: "raw" }], [{ slug: "pdf", description: "PDFs" }]).map((c) => c.kind)).toEqual(["warren", "warren-skill"]);
+  });
+
+  it("reads front matter, block values included", async () => {
+    const { frontMatter } = await import("../src/commands.ts");
+    expect(frontMatter('---\nname: pdf\ndescription: "Read PDFs"\n---\nbody')).toEqual({ name: "pdf", description: "Read PDFs" });
+    expect(frontMatter("---\nname: h\ndescription: |\n  Makes text\n  sound human.\nlicense: MIT\n---\n").description).toBe("Makes text\nsound human.");
+  });
+});

@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { agentSkillPath, catalogSkill, skillFile, skillSlug, type Skill } from "@warren/core";
+import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@warren/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 import { CALLBACK_PATH } from "./connector-auth.ts";
+import { registerShopApi } from "./api-shop.ts";
+import { ComputerError } from "./computers.ts";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -38,6 +40,7 @@ const SKILL_BODY = z.object({ name: NAME, description: z.string().trim().max(500
 export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   const { store, vault, connectors, skills } = hub;
   const { need, parse, commitAuthor } = h;
+  registerShopApi(app, hub, h);
 
   /** Agents in the caller's workspace, or a 400 naming the ones that aren't. */
   function agentsIn(c: Caller, ids: string[], reply: FastifyReply): string[] | null {
@@ -222,16 +225,56 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     return skills.list(c.workspaceId);
   });
 
-  /** Add a skill: from the catalog (`catalogId`) or your own (name, description, content). Installs it for `agentIds`. */
+  /**
+   * Add a skill: from the catalog (`catalogId`), from a public repo in the store (`storeId`), from a
+   * harness on one of your devices (`nodeId`, `harness`, `skillId`), or your own (name, description,
+   * content). Installs it for `agentIds`.
+   */
   app.post("/api/skills", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
-    const body = parse(z.union([z.object({ catalogId: z.string().min(1).max(60), agentIds: AGENT_IDS.default([]) }).strict(), SKILL_BODY.extend({ agentIds: AGENT_IDS.default([]) }).strict()]), req.body, reply);
+    const body = parse(
+      z.union([
+        z.object({ catalogId: z.string().min(1).max(60), agentIds: AGENT_IDS.default([]) }).strict(),
+        z.object({ storeId: z.string().min(1).max(200), agentIds: AGENT_IDS.default([]) }).strict(),
+        z.object({ nodeId: z.string().min(1).max(100), harness: z.enum(SETTINGS_HARNESSES), skillId: z.string().min(1).max(300), agentIds: AGENT_IDS.default([]) }).strict(),
+        SKILL_BODY.extend({ agentIds: AGENT_IDS.default([]) }).strict(),
+      ]),
+      req.body,
+      reply,
+    );
     if (!body) return;
     const agentIds = agentsIn(c, body.agentIds, reply);
     if (!agentIds) return;
     let skill: Skill;
-    if ("catalogId" in body) {
+    if ("storeId" in body) {
+      let found;
+      try {
+        found = await hub.publicSkills.installable(body.storeId);
+      } catch (e) {
+        return reply.code((e as { status?: number }).status ?? 502).send({ error: (e as Error).message });
+      }
+      if (!found) return reply.code(404).send({ error: "no such skill in the store" });
+      skill =
+        skills.byCatalog(c.workspaceId, body.storeId) ??
+        skills.create(c.workspaceId, c.actor.id, { name: found.name, slug: skills.freeSlug(c.workspaceId, skillSlug(found.skill.id.split(":")[1] ?? found.name)), description: found.description, source: "catalog", catalogId: body.storeId, tags: found.tags, content: found.content });
+    } else if ("skillId" in body) {
+      // a skill a harness on your own device has: the device sends its SKILL.md (sharing a device lends its agents, not its files)
+      const n = store.node(body.nodeId);
+      if (!n || n.workspaceId !== c.workspaceId || n.ownerId !== c.actor.id) return reply.code(404).send({ error: "device not found" });
+      const from = `device:${n.id}:${body.harness}:${body.skillId}`;
+      let file: HarnessSkillFile;
+      try {
+        file = (await hub.computers.nodeRequest(n.id, (requestId) => ({ type: "harness_skill", requestId, harness: body.harness, id: body.skillId }), 20_000)) as HarnessSkillFile;
+      } catch (e) {
+        if (e instanceof ComputerError) return reply.code(e.status).send({ error: e.message });
+        throw e;
+      }
+      const name = skillTitle(file.name || body.skillId).slice(0, 60);
+      skill =
+        skills.byCatalog(c.workspaceId, from) ??
+        skills.create(c.workspaceId, c.actor.id, { name, slug: skills.freeSlug(c.workspaceId, skillSlug(body.skillId)), description: file.description.replace(/\s+/g, " ").trim().slice(0, 500), source: "custom", catalogId: from, tags: [body.harness], content: skillBody(file.content) || file.content });
+    } else if ("catalogId" in body) {
       const entry = catalogSkill(body.catalogId);
       if (!entry) return reply.code(404).send({ error: "no such skill in the catalog" });
       skill =

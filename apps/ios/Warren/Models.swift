@@ -14,6 +14,7 @@ struct User: Codable, Identifiable, Hashable {
   var email: String
   var name: String
   var preferredName: String?
+  var timezone: String?
 }
 
 struct Workspace: Codable, Hashable {
@@ -22,7 +23,7 @@ struct Workspace: Codable, Hashable {
 }
 
 struct Me: Codable {
-  struct Prefs: Codable { var experience: String? }
+  struct Prefs: Codable { var experience: String?; var sendWith: String?; var clock: String?; var toolCalls: String? }
   var prefs: Prefs?
   var kind: String
   var user: User?
@@ -172,6 +173,25 @@ struct Computer: Codable, Identifiable, Hashable {
   var paused: Bool?
   var controller: Controller?
   var help: Help?
+  /** "pin" or "password" when opening this screen needs the code picked at the device */
+  var code: String?
+  var config: Config?
+
+  struct Config: Codable, Hashable {
+    /** a device's own screen lent to agents: until when (nil until you stop it) */
+    struct Lend: Codable, Hashable { var until: String? }
+    var lend: Lend?
+  }
+
+  /** The word for this screen's code. */
+  var codeLabel: String { code == "pin" ? "PIN" : "password" }
+
+  /** Is a device's own screen lent to agents right now? */
+  var lentNow: Bool {
+    guard kind == "device", let lend = config?.lend else { return false }
+    guard let until = lend.until else { return true }
+    return (Wire.date(until) ?? .distantPast) > Date()
+  }
 
   var kindLabel: String {
     switch kind {
@@ -194,6 +214,14 @@ struct Approval: Codable, Identifiable, Hashable {
   var note: String
   var createdAt: String
   var decidedAt: String?
+  /** an agent asking to borrow a device's own screen */
+  var loan: Loan?
+
+  struct Loan: Codable, Hashable {
+    var nodeId: String
+    var deviceName: String
+    var ownerId: String
+  }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }
@@ -207,6 +235,13 @@ enum Wire {
   }()
   nonisolated(unsafe) private static let iso = ISO8601DateFormatter()
 
-  static func date(_ s: String) -> Date? { isoFrac.date(from: s) ?? iso.date(from: s) }
+  private static let day: DateFormatter = {
+    let f = DateFormatter()
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.dateFormat = "yyyy-MM-dd"
+    f.isLenient = false
+    return f
+  }()
+  static func date(_ s: String) -> Date? { isoFrac.date(from: s) ?? iso.date(from: s) ?? (s.count == 10 ? day.date(from: s) : nil) }
   static func now() -> String { isoFrac.string(from: Date()) }
 }

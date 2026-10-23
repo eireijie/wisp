@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
+import { HubToNode, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -8,6 +8,8 @@ import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
 import { Push } from "./push.ts";
 import { Marketplace } from "./marketplace.ts";
+import { Logos } from "./logos.ts";
+import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
@@ -56,6 +58,10 @@ export class Hub {
   readonly background: Background;
   readonly push: Push;
   readonly marketplace: Marketplace;
+  readonly logos: Logos;
+  readonly publicSkills: PublicSkills;
+  /** skills and MCP servers each device's harnesses already have (sent when it connects) */
+  readonly shelves = new Map<string, ShelfItem[]>();
   readonly updates: Updates;
   readonly connectors: ConnectorStore;
   readonly skills: SkillStore;
@@ -80,6 +86,8 @@ export class Hub {
     this.background = new Background(this);
     this.push = new Push(this);
     this.marketplace = new Marketplace(this);
+    this.logos = new Logos(this);
+    this.publicSkills = new PublicSkills(this);
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
@@ -275,8 +283,16 @@ export class Hub {
         for (const c of store.computersOnNode(conn.nodeId)) this.computers.changed(c.id);
         return;
       }
+      case "screen_event": {
+        this.computers.onScreenEvent(conn.nodeId, msg);
+        return;
+      }
       case "discovered": {
         store.setNodeDiscovered(conn.nodeId, msg.agents);
+        return;
+      }
+      case "shelf": {
+        this.shelves.set(conn.nodeId, msg.items);
         return;
       }
       case "result": {
@@ -361,6 +377,10 @@ export class Hub {
       store.setRunStatus(run.id, "done");
       this.routines.runFinished(run);
       body = result.finalText.trim() || live.text.trim();
+      // a harness command (/compact, say) may finish without a word; say it ran
+      const trigger = !body && agent && run.triggerMessageId ? store.message(run.triggerMessageId) : undefined;
+      const ran = trigger && agent ? this.commandFor(agent, trigger.body) : null;
+      if (ran?.via === "raw" && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "notice", text: `Ran /${ran.name}.` }], hop: run.hop + 1, route: false });
       if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
     } else {
       store.setRunStatus(run.id, "failed", result.error);
@@ -470,12 +490,37 @@ export class Hub {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${verdict.reason}.`);
         continue;
       }
+      // commands Warren answers itself don't wake the agent
+      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "warren") {
+        this.answerCommand(agent, msg, threadId);
+        continue;
+      }
       const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop, requestedBy });
       if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a device yet. The request is queued.`);
       else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its device reconnects.`);
       else if (this.isNodePaused(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)}'s device is paused. The request is queued until it's resumed there.`);
       this.dispatchRun(runId);
     }
+  }
+
+  /** What follows "/" for this agent: its harness's commands on its device, its Warren skills, and Warren's own. */
+  commands(agent: Agent): AgentCommand[] {
+    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    return agentCommands(catalog?.commands, this.skills.forAgent(agent.id));
+  }
+
+  /** The command a message runs for this agent ("/name args", or "@handle /name args" in a channel), if it names one it has. */
+  commandFor(agent: Agent, body: string): (AgentCommand & { args: string }) | null {
+    const parsed = parseCommand(body, agent.handle);
+    if (!parsed) return null;
+    const cmd = this.commands(agent).find((c) => c.name === parsed.name);
+    return cmd ? { ...cmd, args: parsed.args } : null;
+  }
+
+  /** /context: how full the agent's conversation here is, from its last reply's usage. */
+  private answerCommand(agent: Agent, msg: Message, threadId: string | null) {
+    const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
+    this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
 
   private postSystem(near: Message, text: string) {
@@ -753,6 +798,9 @@ export class Hub {
     const history = background ? [] : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
     const discussion = run && !background ? this.discussions.promptSection(run) : "";
     const trigger = store.message(triggerId) ?? { body: "", parts: [], author: { kind: "user" as const, id: "system" } };
+    // a harness's own command goes to it exactly as typed, into the same conversation
+    const command = !background && trigger.author.kind === "user" ? this.commandFor(agent, trigger.body) : null;
+    if (command?.via === "raw") return `/${command.name}${command.args ? ` ${command.args}` : ""}`;
     const others = store
       .agents(agent.workspaceId)
       .filter((a) => a.id !== agent.id)
@@ -812,7 +860,7 @@ export class Hub {
       discussion ? `\n${discussion}` : "",
       background,
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
-      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${trigger.body}${taskInstructions(store, agent.id, trigger)}`,
+      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${command?.via === "prompt" ? skillRequest(command.name, command.args) : trigger.body}${taskInstructions(store, agent.id, trigger)}`,
     ]
       .filter(Boolean)
       .join("\n");

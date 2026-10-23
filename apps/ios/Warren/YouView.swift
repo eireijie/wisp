@@ -2,9 +2,8 @@ import SwiftUI
 
 struct YouView: View {
   @Environment(Store.self) private var store
-  @Environment(\.openURL) private var openURL
   @State private var confirmSignOut = false
-
+  @State private var newTask = false
   var body: some View {
     NavigationStack {
       List {
@@ -12,110 +11,64 @@ struct YouView: View {
           Section {
             HStack(spacing: 14) {
               PersonAvatar(name: me.name, size: 60)
-              VStack(alignment: .leading, spacing: 2) {
+              VStack(alignment: .leading, spacing: 3) {
                 Text(me.preferredName ?? me.name).font(.title3.weight(.semibold))
-                Text(me.email).font(.subheadline).foregroundStyle(.secondary)
+                Text("\(me.email) · \(store.role)").font(.subheadline).foregroundStyle(.secondary)
               }
-            }
-            .padding(.vertical, 4)
+            }.padding(.vertical, 4)
           }
         }
         Section {
-          HStack(spacing: 12) {
-            IconTile(symbol: "bell.badge.fill", color: .red, size: 32)
-            Text("Notifications")
-            Spacer()
-            switch store.notificationStatus {
-            case .authorized, .provisional, .ephemeral: Text("On").foregroundStyle(.secondary)
-            case .denied: Button("Turn on") { if let u = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(u) } }
-            default:
-              if store.pushAvailable { Button("Turn on") { Task { await store.enableNotifications() } } } else { Text("Off").foregroundStyle(.secondary) }
-            }
-          }
-          NavigationLink {
-            InboxView()
-          } label: {
-            HStack(spacing: 12) {
-              IconTile(symbol: "checkmark.seal.fill", color: .green, size: 32)
-              Text("Approvals")
-              Spacer()
-              if !store.pendingApprovals.isEmpty { UnreadBadge(count: store.pendingApprovals.count) }
-            }
-          }
-          if let base = store.api?.base {
-            Button {
-              openURL(base)
-            } label: {
-              HStack(spacing: 12) {
-                IconTile(symbol: "safari.fill", color: .blue, size: 32)
-                Text("Open Warren in Safari").foregroundStyle(.primary)
-              }
-            }
-          }
+          NavigationLink { TasksView() } label: { YouRow("Tasks", "Work you handed to a helper", "list.bullet.rectangle", .cyan) }.accessibilityIdentifier("you-tasks")
+          if store.canManage { Button { newTask = true } label: { YouRow("New task", nil, "square.and.pencil", .green) }.accessibilityIdentifier("you-new-task") }
         }
         Section {
-          NavigationLink {
-            WorkspaceDetails()
-          } label: {
-            HStack(spacing: 12) {
-              IconTile(symbol: "building.2.fill", color: .gray, size: 32)
-              VStack(alignment: .leading, spacing: 1) {
-                Text(store.workspace?.name ?? "Warren")
-                Text("Workspace details").font(.caption).foregroundStyle(.secondary)
-              }
-            }
-          }
+          NavigationLink { MemoryView() } label: { YouRow("Memory", "Notes you and your helpers share", "book.fill", .purple) }.accessibilityIdentifier("you-memory")
+          NavigationLink { AboutYouView() } label: { YouRow("About you", "What helpers should know about you", "brain", .pink) }.accessibilityIdentifier("you-about")
+          if !store.simple { NavigationLink { TeamsView() } label: { YouRow("Teams", "Groups of helpers that work together", "person.3.fill", .indigo) }.accessibilityIdentifier("you-teams") }
+          NavigationLink { ConnectorsView() } label: { YouRow("Connected apps", "Gmail, Slack and other apps helpers can use", "powerplug.fill", .orange) }.accessibilityIdentifier("you-connectors")
+          NavigationLink { SkillsView() } label: { YouRow("Skills", "Things helpers know how to do", "wand.and.stars", .yellow) }.accessibilityIdentifier("you-skills")
+          NavigationLink { DevicesView() } label: { YouRow("Devices", "Computers running Warren", "server.rack", .gray) }.accessibilityIdentifier("you-devices")
         }
         Section {
-          Button("Sign out", role: .destructive) { confirmSignOut = true }
+          NavigationLink { NativeSettingsView() } label: { YouRow("Settings", nil, "gearshape.fill", .gray) }.accessibilityIdentifier("you-settings")
         }
-        Section {
-        } footer: {
-          Text("Warren \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") · Free and open source (Apache-2.0)")
-            .frame(maxWidth: .infinity)
-        }
-      }
-      .navigationTitle("You")
-      .confirmationDialog("Sign out of Warren on this iPhone?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-        Button("Sign out", role: .destructive) { store.signOut() }
-      }
+        Section { ExperiencePicker(); ModePicker() }
+        Section { Button("Sign out", role: .destructive) { confirmSignOut = true } }
+      }.navigationTitle("You")
+        .sheet(isPresented: $newTask) { NewTaskView() }
+        .confirmationDialog("Sign out of Warren on this iPhone?", isPresented: $confirmSignOut, titleVisibility: .visible) { Button("Sign out", role: .destructive) { store.signOut() } }
     }
   }
 }
 
-/** The technical side of the Warren this phone is paired with: where it is, who's in it, live updates. */
-struct WorkspaceDetails: View {
-  @Environment(Store.self) private var store
-  @Environment(\.openURL) private var openURL
-
+struct YouRow: View {
+  var title: String
+  var detail: String?
+  var symbol: String
+  var color: Color
+  init(_ title: String, _ detail: String?, _ symbol: String, _ color: Color) { self.title = title; self.detail = detail; self.symbol = symbol; self.color = color }
   var body: some View {
-    List {
-      Section {
-        LabeledContent("Name", value: store.workspace?.name ?? "Warren")
-        LabeledContent("Your role", value: store.role.capitalized)
-        LabeledContent("People", value: "\(store.members.count)")
-        LabeledContent("Agents", value: "\(store.agents.count)")
-      }
-      Section {
-        LabeledContent("Address", value: store.api?.base.host() ?? "")
-        LabeledContent("Live updates") {
-          HStack(spacing: 6) {
-            GlowDot(color: store.connected ? .green : .orange)
-            Text(store.connected ? "Connected" : "Reconnecting")
-          }
-        }
-      } footer: {
-        Text(store.pushAvailable
-          ? "Notifications reach this iPhone while Warren is closed: agent replies, @mentions, approvals and agents that need you on a computer."
-          : "This Warren isn't set up to send notifications. Its owner can add an Apple push key; see Warren's deploy guide.")
-      }
-      if let base = store.api?.base {
-        Section {
-          Button("Settings in Safari") { if let u = URL(string: base.absoluteString + "/#/settings") { openURL(u) } }
-        }
-      }
-    }
-    .navigationTitle("Workspace")
-    .navigationBarTitleDisplayMode(.inline)
+    HStack(spacing: 12) {
+      IconTile(symbol: symbol, color: color, size: 32)
+      VStack(alignment: .leading, spacing: 2) { Text(title).foregroundStyle(.primary); if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) } }
+    }.padding(.vertical, 3)
+  }
+}
+
+struct ModePicker: View {
+  @AppStorage("warren.mode") private var mode = "system"
+  var body: some View {
+    Picker("Mode", selection: $mode) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") }.pickerStyle(.segmented)
+  }
+}
+
+struct ExperiencePicker: View {
+  @Environment(Store.self) private var store
+  @State private var action = FormAction()
+  var body: some View {
+    Picker("Experience", selection: Binding(get: { store.simple ? "simple" : "advanced" }, set: { value in action.run { try await store.savePrefs(["experience": AnyEncodable(value)]) } })) {
+      Text("Simple").tag("simple"); Text("Advanced").tag("advanced")
+    }.disabled(action.busy).managementAlert(action).accessibilityIdentifier("experience-picker")
   }
 }

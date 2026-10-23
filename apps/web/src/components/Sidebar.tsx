@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BellOff, BookOpen, LifeBuoy, LayoutDashboard, Plug, Wand2, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
+import { Bell, BellOff, BookOpen, LifeBuoy, LayoutDashboard, Store, Bot, Brain, ChevronDown, CircleUser, FolderPlus, Hand, Hash, ListTodo, LogOut, SlidersHorizontal, UserPlus, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SquarePen, Sparkles, Sun, SunMoon, Trash2, Users } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -272,11 +272,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
                 <Users size={16} className="shrink-0" /> Teams
               </Item>
             )}
-            <Item href={href({ view: "connectors" })} active={route.view === "connectors"} title="Gmail, Slack and other apps helpers can use">
-              <Plug size={16} className="shrink-0" /> Connected apps
-            </Item>
-            <Item href={href({ view: "skills" })} active={route.view === "skills"} title="Things helpers know how to do">
-              <Wand2 size={16} className="shrink-0" /> Skills
+            <Item href={href({ view: "marketplace" })} active={route.view === "marketplace" || route.view === "connectors" || route.view === "skills"} title="Apps and skills for your helpers">
+              <Store size={16} className="shrink-0" /> Marketplace
             </Item>
             <Item href={href({ view: "about" })} active={route.view === "about"} title="What helpers should know about you">
               <Brain size={16} className="shrink-0" /> About you

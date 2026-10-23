@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users } from "lucide-react";
+import { Bell, Mic, Bot, Building2, ChevronLeft, ChevronRight, Cpu, Database, Link2, Lock, Monitor, Palette, RefreshCw, Shield, SlidersHorizontal, Smartphone, User, Users, Wrench } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -8,6 +8,7 @@ import { useSimple } from "../experience.tsx";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
 import { RuntimesPage } from "./settings/runtimes.tsx";
+import { HarnessesPage } from "./settings/harnesses.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
@@ -35,6 +36,7 @@ const NAV: NavGroup[] = [
       { id: "people", label: "People", icon: <Users size={16} /> },
       { id: "agents", label: "Agents", icon: <Bot size={16} />, noGuests: true },
       { id: "runtimes", label: "Agent runtimes", icon: <Cpu size={16} />, noGuests: true },
+      { id: "harnesses", label: "Harnesses", icon: <Wrench size={16} />, noGuests: true },
       { id: "memory", label: "Memory", icon: <Shield size={16} /> },
       { id: "computers", label: "Computers", icon: <Monitor size={16} />, noGuests: true },
       { id: "connections", label: "Connections", icon: <Link2 size={16} />, noGuests: true },
@@ -68,6 +70,7 @@ const PAGES: Record<SettingsPage, () => ReactNode> = {
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,
+  harnesses: () => <HarnessesPage />,
   memory: () => <MemoryPage />,
   computers: () => <ComputersPage />,
   connections: () => <ConnectionsPage />,

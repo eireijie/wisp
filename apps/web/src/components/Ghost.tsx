@@ -213,9 +213,11 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
                         </g>
                         {speakingLevel !== undefined ? <ellipse cx="60" cy={shape.mouthY + 1} rx={animated ? 3.4 + Math.min(1, Math.max(0, speakingLevel)) * 1.5 : 3.4} ry={animated ? 1 + Math.min(1, Math.max(0, speakingLevel)) * 5 : 2.5} fill={ink} /> : (look.accessory !== "mustache" || look.mouth === "none") && <Mouth style={happy ? "open" : mood === "error" ? "wavy" : asleep || mood === "thinking" || mood === "working" ? "flat" : look.mouth} x={60} y={shape.mouthY} ink={ink} />}
                         {asleep && details && <path d={`M63.5 ${shape.mouthY + 2.2} q1.7 3.2 0 4.8 q-1.7 -1.6 0 -4.8 Z`} fill="#e8f6ff" opacity="0.95" />}
+                        {/* glasses and the mustache ride on the face, so they follow its gaze and mood shifts */}
+                        {FACE_WEAR.has(look.accessory) && <Accessory kind={look.accessory} shape={shape} />}
                       </g>
                     </g>
-                    {look.accessory !== "none" && <Accessory kind={look.accessory} shape={shape} />}
+                    {look.accessory !== "none" && !FACE_WEAR.has(look.accessory) && <Accessory kind={look.accessory} shape={shape} />}
                     {look.hat !== "none" && (
                       <g transform={`translate(60 ${shape.top}) scale(${shape.hatScale})`}>
                         <Hat kind={look.hat} animate={ambientMotion} />
@@ -264,6 +266,9 @@ export function Ghost({ look, size = 40, mood = "awake", animate = true, wave, t
 }
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
+
+/** Accessories worn on the face; neckwear stays with the body. */
+const FACE_WEAR = new Set<GhostAppearance["accessory"]>(["glasses", "sunglasses", "monocle", "mustache"]);
 
 /** where the "done" sparkles twinkle: x, y below the head's top, size, delay */
 const SPARKLES: [number, number, number, number][] = [[24, 4, 5, 0], [97, 2, 6, 0.35], [106, 34, 4, 0.7], [13, 38, 4.5, 0.2], [50, -9, 3.5, 0.55], [80, -8, 4, 0.9], [104, 62, 3, 0.45], [16, 66, 3.2, 1.05]];

@@ -1,4 +1,4 @@
-import type { Agent, Approval, Channel, ComputerAction, Message, Routine, Followup } from "@warren/core";
+import type { Agent, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@warren/core";
 
 export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -143,6 +143,14 @@ export class WarrenClient {
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {
     return this.request<{ ok: boolean; messageId: string }>("POST", "/api/computers/mine/help", { request });
+  }
+  /** This agent's harness settings on its device (or another harness's there): model, provider, apps, plugins, skills. */
+  harnessSettings(harness?: string) {
+    return this.request<HarnessSettings & { device: string; models: string[] }>("GET", `/api/agent/harness-settings${harness ? `?harness=${encodeURIComponent(harness)}` : ""}`);
+  }
+  /** Change them; only works while doing something the device's owner asked for. */
+  changeHarnessSettings(changes: HarnessSettingsChange[], harness?: string, useAccount?: string) {
+    return this.request<HarnessSettings & { device: string; changed: string[] }>("PATCH", "/api/agent/harness-settings", { changes, ...(harness ? { harness } : {}), ...(useAccount ? { useAccount } : {}) });
   }
   /** Ask a person's OK before doing something; the answer arrives as a message that wakes the agent. */
   requestApproval(summary: string, details = "") {

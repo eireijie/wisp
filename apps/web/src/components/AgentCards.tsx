@@ -6,6 +6,7 @@ import { useStore } from "../store.ts";
 import { href } from "../router.ts";
 import { ComputerMini } from "../views/ComputersView.tsx";
 import { AgentAvatar, Button, Pill, Textarea, agentVar, cx, timeAgo } from "./ui.tsx";
+import { CodeInput, codeLabel, codeReady } from "./ScreenCode.tsx";
 
 /** An agent's request on its computer ("Sign in to Zendesk…"), with the screen live. */
 export function ComputerPart({ computerId, request }: { computerId: string; request?: string }) {
@@ -35,6 +36,9 @@ export function ApprovalCard({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [minutes, setMinutes] = useState<number | null>(60);
+  const [code, setCode] = useState("");
+  // a screen with a code: its owner types it to say yes, and the device checks it
+  const codeKind = useStore((s) => (approval?.loan ? (s.computers.find((c) => c.kind === "device" && c.nodeId === approval.loan!.nodeId)?.code ?? null) : null));
   useEffect(() => {
     if (!approval) useStore.getState().loadApproval(id);
   }, [id, approval]);
@@ -43,7 +47,7 @@ export function ApprovalCard({ id }: { id: string }) {
     setBusy(true);
     setError(null);
     try {
-      const a = await api("POST", `/api/approvals/${id}/decide`, { approve, note, ...(approval?.loan && approve ? { minutes } : {}) });
+      const a = await api("POST", `/api/approvals/${id}/decide`, { approve, note, ...(approval?.loan && approve ? { minutes, ...(codeKind ? { code } : {}) } : {}) });
       useStore.setState((s) => ({ approvals: { ...s.approvals, [id]: a } }));
     } catch (e) {
       setError((e as Error).message);
@@ -93,11 +97,12 @@ export function ApprovalCard({ id }: { id: string }) {
                   ))}
                 </div>
                 <p className="text-xs text-muted">It only gets the screen, never a shell, and never for more than 12 hours. You can take it back any time.</p>
+                {codeKind && <CodeInput kind={codeKind} value={code} onChange={setCode} className="max-w-48" />}
               </div>
             )}
             <Textarea rows={1} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)" className="text-sm" />
             <div className="flex gap-2">
-              <Button variant="primary" disabled={busy} onClick={() => decide(true)}>
+              <Button variant="primary" disabled={busy || !codeReady(codeKind, code)} title={codeReady(codeKind, code) ? undefined : `Enter its ${codeLabel(codeKind)} first`} onClick={() => decide(true)}>
                 <Check size={15} /> Approve
               </Button>
               <Button disabled={busy} onClick={() => decide(false)}>

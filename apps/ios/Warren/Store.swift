@@ -17,6 +17,22 @@ final class Store {
   var sections: [ChannelSection] = []
   var nodes: [AgentNode] = []
   var teams: [WorkspaceTeam] = []
+  var tasks: [WorkTask] = []
+  var taskLead: String?
+  var taskLeadOverride: String?
+  var notes: [MemoryNote] = []
+  var profiles: [String: MemoryProfile] = [:]
+  var routines: [Routine] = []
+  var backgrounds: [String: AgentBackground] = [:]
+  var skills: [HelperSkill] = []
+  var connectors: [AppConnector] = []
+  var sessions: [AccountSession] = []
+  var invites: [WorkspaceInvite] = []
+  var prefs: Me.Prefs?
+  var memoryStorage: MemoryStorage?
+  var agentPolicy: AgentPolicy?
+  var routinesVersion = 0
+  var backgroundVersion = 0
   var simple = false
   var syncError: String?
   var channelVersion = 0
@@ -51,6 +67,15 @@ final class Store {
   private var retry = 0
 
   init(loadSession: Bool = true) {
+    #if DEBUG
+    if loadSession, let address = ProcessInfo.processInfo.environment["WARREN_HUB"],
+       let hub = URL(string: address), let token = ProcessInfo.processInfo.environment["WARREN_TOKEN"], !token.isEmpty {
+      api = API(base: hub, token: token)
+      phase = .loading
+      Task { await load() }
+      return
+    }
+    #endif
     if loadSession, let hub = Session.hub, let token = Session.token {
       api = API(base: hub, token: token)
       phase = .loading
@@ -84,7 +109,10 @@ final class Store {
     api = nil
     me = nil
     sections = []; nodes = []; teams = []; syncError = nil
-    channels = []; agents = []; members = []; computers = []; approvals = []
+    tasks = []; notes = []; profiles = [:]; routines = []; backgrounds = [:]
+    skills = []; connectors = []; sessions = []; invites = []; prefs = nil
+    taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
+    channels = []; agents = []; members = []; computers = []; screenCodes = [:]; approvals = []
     messages = [:]; threads = [:]; activity = [:]; activityChannel = [:]
     route = nil
     phase = .signedOut
@@ -100,6 +128,7 @@ final class Store {
       let me: Me = try await api.get("/api/me")
       self.me = me.user
       self.role = me.role ?? "member"
+      self.prefs = me.prefs
       self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
       async let ch: [Channel] = api.get("/api/channels")
@@ -217,10 +246,62 @@ final class Store {
     return channels.first { $0.id == ch.id } ?? ch
   }
 
-  func decide(_ approval: Approval, approve: Bool, note: String = "") async throws {
-    struct Body: Encodable { var approve: Bool; var note: String }
-    let a: Approval = try await api!.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note))
+  /** `code`: the screen's code, when saying yes lends a device's own screen that has one. */
+  func decide(_ approval: Approval, approve: Bool, note: String = "", code: String? = nil) async throws {
+    struct Body: Encodable { var approve: Bool; var note: String; var code: String? }
+    let a: Approval = try await api!.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note, code: approve ? code : nil))
     upsert(a)
+  }
+
+  /** The computer a device-loan approval would lend, for its code. */
+  func loanScreen(_ approval: Approval) -> Computer? {
+    guard let loan = approval.loan else { return nil }
+    return computers.first { $0.kind == "device" && $0.nodeId == loan.nodeId }
+  }
+
+  /**
+   * Codes typed for screens since the app opened, so watching one again doesn't ask again. Only in
+   * memory, never saved: the device checks them and Warren keeps none.
+   */
+  @ObservationIgnored var screenCodes: [String: String] = [:]
+
+  struct LiveView: Decodable { var transport: String; var url: String }
+
+  /**
+   * Open a live view: the hub's one-time link, with the screen's code when it has one. The socket
+   * keeps what the code opened open until it closes.
+   */
+  func openView(_ computer: Computer, code: String?) async throws -> (LiveView, URLSessionWebSocketTask) {
+    struct Body: Encodable { var code: String? }
+    let view: LiveView = try await api!.post("/api/computers/\(computer.id)/view", Body(code: code))
+    var comps = URLComponents(url: api!.base, resolvingAgainstBaseURL: false)!
+    comps.scheme = comps.scheme == "https" ? "wss" : "ws"
+    guard let base = comps.url, let url = URL(string: view.url, relativeTo: base) else { throw API.Failure(status: 0, message: "The hub sent a live view this app doesn't understand.") }
+    let ws = URLSession.shared.webSocketTask(with: url.absoluteURL)
+    ws.maximumMessageSize = 16 << 20 // a frame is a whole screenshot
+    return (view, ws)
+  }
+
+  /** Lend a device's own screen to agents for `minutes` (nil: until you stop it), or stop with `off`. */
+  func lend(_ computer: Computer, minutes: Int?, code: String?) async throws {
+    struct Body: Encodable {
+      var minutes: Int?
+      var code: String?
+      func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(minutes, forKey: .minutes) // null means until you stop it, so it's always sent
+        try c.encodeIfPresent(code, forKey: .code)
+      }
+      enum CodingKeys: String, CodingKey { case minutes, code }
+    }
+    let c: Computer = try await api!.post("/api/computers/\(computer.id)/lend", Body(minutes: minutes, code: code))
+    upsert(c)
+  }
+
+  func stopLending(_ computer: Computer) async throws {
+    struct Body: Encodable { var off = true }
+    let c: Computer = try await api!.post("/api/computers/\(computer.id)/lend", Body())
+    upsert(c)
   }
 
   func control(_ computer: Computer, take: Bool) async throws {
@@ -341,6 +422,8 @@ final class Store {
       do {
         // Simple/Advanced and role can change on the computer while the phone sleeps
         let me: Me = try await connection().get("/api/me")
+        self.me = me.user
+        prefs = me.prefs
         simple = me.prefs?.experience == "simple"
         role = me.role ?? "member"
         try await refreshAgents()
@@ -420,12 +503,25 @@ final class Store {
       Task { await refreshChannels() }
     case "sections_changed":
       Task { do { try await refreshSections() } catch { syncError = error.localizedDescription } }
-    case "agent_created", "agent_updated", "agent_removed", "agents_changed", "tasks_changed":
+    case "agent_created", "agent_updated", "agent_removed", "agents_changed":
       Task { do { try await refreshAgents() } catch { syncError = error.localizedDescription } }
     case "teams_changed":
-      Task { do { try await refreshManagement() } catch { syncError = error.localizedDescription } }
+      Task { do { try await refreshManagement(); try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
+    case "lead_changed":
+      Task { do { try await refreshTaskLead() } catch { syncError = error.localizedDescription } }
+    case "tasks_changed":
+      Task { do { try await refreshTasks() } catch { syncError = error.localizedDescription } }
+    case "routines_changed":
+      routinesVersion += 1
+      Task { do { try await refreshRoutines() } catch { syncError = error.localizedDescription } }
+    case "background_changed":
+      backgroundVersion += 1
+      if let event = try? JSONSerialization.jsonObject(with: data) as? [String: String], let id = event["agentId"], backgrounds[id] != nil {
+        Task { do { try await refreshBackground(id) } catch { syncError = error.localizedDescription } }
+      }
     case "memory_changed":
       memoryVersion += 1
+      Task { do { try await refreshNotes() } catch { syncError = error.localizedDescription } }
     case "computer":
       if let e = try? d.decode(ComputerEvent.self, from: data) { upsert(e.computer) }
     case "computer_removed":

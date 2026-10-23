@@ -1,0 +1,46 @@
+import { describe, expect, it } from "vitest";
+import { HarnessLogins, findLink } from "../../node/src/harness-login.ts";
+
+const waitFor = async <T>(fn: () => T | undefined, ms = 5000): Promise<T> => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error("timed out");
+};
+
+describe("harness sign-ins", () => {
+  it("finds the link and code device sign-ins print", () => {
+    expect(findLink("\u001b[1mFollow these steps\u001b[0m\n1. Open https://auth.openai.com/codex/device\n2. Enter this one-time code: ABCD-1234\n")).toEqual({ url: "https://auth.openai.com/codex/device", code: "ABCD-1234" });
+    expect(findLink("Visit https://example.com/activate?user_code=WDJB-MJHT.")).toEqual({ url: "https://example.com/activate?user_code=WDJB-MJHT", code: "WDJB-MJHT" });
+    expect(findLink("Paste code here if prompted >")).toEqual({ url: undefined, code: undefined });
+  });
+
+  it("runs the sign-in with the account's folder, takes a pasted code, and reports how it ended", async () => {
+    const done: string[] = [];
+    const logins = new HarnessLogins((l) => done.push(l.status));
+    const script = `console.log("Open https://claude.ai/oauth?x=1 then paste the code:"); process.stdin.once("data", (d) => { console.log("got " + d.toString().trim() + " in " + process.env.CLAUDE_CONFIG_DIR); process.exit(d.toString().trim() === "secret-code" ? 0 : 1); });`;
+    const l = logins.start("claude-code", "work", { command: process.execPath, args: ["-e", script], env: { CLAUDE_CONFIG_DIR: "/tmp/acct" } });
+    expect(l.status).toBe("running");
+    await waitFor(() => logins.status(l.id).url);
+    expect(logins.status(l.id).url).toBe("https://claude.ai/oauth?x=1");
+    logins.input(l.id, "secret-code\n");
+    const end = await waitFor(() => (logins.status(l.id).status !== "running" ? logins.status(l.id) : undefined));
+    expect(end.status).toBe("done");
+    expect(end.output).toContain("got secret-code in /tmp/acct");
+    expect(done).toEqual(["done"]);
+  });
+
+  it("can be cancelled, and a failed one says why", async () => {
+    const logins = new HarnessLogins();
+    const slow = logins.start("codex", "a", { command: process.execPath, args: ["-e", "setTimeout(() => {}, 60000)"], env: {} });
+    logins.cancel(slow.id);
+    expect(logins.status(slow.id)).toMatchObject({ status: "failed", error: "Cancelled." });
+    const bad = logins.start("codex", "b", { command: process.execPath, args: ["-e", "console.error('Error: not allowed'); process.exit(2)"], env: {} });
+    const end = await waitFor(() => (logins.status(bad.id).status !== "running" ? logins.status(bad.id) : undefined));
+    expect(end).toMatchObject({ status: "failed", error: "Error: not allowed" });
+    expect(() => logins.status("login_nope")).toThrow(/isn't running/);
+  });
+});

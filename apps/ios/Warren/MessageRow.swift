@@ -192,6 +192,9 @@ struct ApprovalBox: View {
   @State private var busy = false
   @State private var error: String?
   @State private var expanded = false
+  /** lending a screen with a code: its owner types it to say yes, and the device checks it */
+  @State private var code = ""
+  private var codeKind: String? { approval.loan == nil ? nil : store.loanScreen(approval)?.code }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -210,6 +213,7 @@ struct ApprovalBox: View {
           .onTapGesture { expanded.toggle() }
       }
       if approval.status == "pending" {
+        if let kind = codeKind { ScreenCodeField(kind: kind, code: $code) { decide(true) } }
         HStack(spacing: 8) {
           Button {
             decide(false)
@@ -224,6 +228,7 @@ struct ApprovalBox: View {
             Label("Approve", systemImage: "checkmark").fontWeight(.semibold).frame(maxWidth: .infinity)
           }
           .primaryButton()
+          .disabled(!ScreenCodeField.ready(codeKind, code))
         }
         .disabled(busy)
       }
@@ -235,7 +240,10 @@ struct ApprovalBox: View {
   private func decide(_ yes: Bool) {
     busy = true
     Task {
-      do { try await store.decide(approval, approve: yes) } catch { self.error = error.localizedDescription }
+      do {
+        try await store.decide(approval, approve: yes, code: codeKind != nil ? code : nil)
+        code = ""
+      } catch { self.error = error.localizedDescription }
       busy = false
     }
   }

@@ -9,6 +9,7 @@ import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
 import { DEFAULT_TOPIC } from "./apns.ts";
+import { registerHarnessSettingsApi } from "./api-harness-settings.ts";
 
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean; member?: boolean }): Caller | null;
@@ -404,6 +405,8 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       throw err;
     }
   });
+
+  registerHarnessSettingsApi(app, hub, h);
 
   // --- your data ------------------------------------------------------------------------------------
 

@@ -103,6 +103,22 @@ export interface HarnessCatalog {
   /** what the harness uses when the agent doesn't pick (from the device's harness config) */
   defaultModel?: string;
   defaultEffort?: string;
+  /** what can follow a "/" in chat for this harness on this device */
+  commands?: CommandOption[];
+}
+
+/**
+ * Something a person can run with "/" for an agent: one of its harness's own commands, or a skill.
+ * "raw" ones go to the harness exactly as typed ("/compact"); "prompt" ones (a skill the harness
+ * can't run by name) become a request to use that skill.
+ */
+export interface CommandOption {
+  name: string;
+  description?: string;
+  /** what goes after it, e.g. "topic" */
+  hint?: string;
+  kind: "command" | "skill";
+  via: "raw" | "prompt";
 }
 
 /** The latest usage report for an agent in one conversation. */
@@ -250,7 +266,9 @@ export type MessagePart =
   /** a routine was taught, changed or run */
   | { type: "routine"; routineId: string }
   /** this message hands out a task: people see a task card; the assignee gets its id and how to report back */
-  | { type: "task"; taskId: string };
+  | { type: "task"; taskId: string }
+  /** an agent's answer to /context: how full its conversation is */
+  | { type: "context"; usage: ContextUsage | null };
 
 /** An agent asking a person's OK before it acts ("Send these 3 intros?"). */
 export interface Approval {
