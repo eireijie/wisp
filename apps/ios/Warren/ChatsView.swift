@@ -15,13 +15,18 @@ struct ChatsView: View {
       .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
   }
 
+  /** The owner's agents are theirs; a member or guest mostly sees someone else's. */
+  private var ownAgents: Bool {
+    store.role == "owner" || (!store.agents.isEmpty && store.agents.allSatisfy { $0.settings?.createdBy == store.me?.id })
+  }
+
   var body: some View {
     NavigationStack(path: $path) {
       List {
         if search.isEmpty {
           Section { InboxRow() }
         }
-        Section("Your agents") {
+        Section(ownAgents ? "Your agents" : "Agents") {
           ForEach(store.agents.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.handle.localizedCaseInsensitiveContains(search) }) { agent in
             Button {
               action.run { path.append(try await store.dm(with: agent)) }
@@ -86,7 +91,12 @@ struct ChatsView: View {
       .navigationDestination(for: Channel.self) { ChannelView(channel: $0) }
       .navigationDestination(for: ThreadRef.self) { ThreadView(ref: $0) }
       .navigationDestination(for: Agent.self) { AgentPage(agent: $0) }
-      .navigationDestination(for: ChatsScreen.self) { _ in InboxView() }
+      .navigationDestination(for: ChatsScreen.self) { screen in
+        switch screen {
+        case .inbox: InboxView()
+        case .approval(let id): ApprovalDetail(approvalId: id)
+        }
+      }
       .sheet(isPresented: Binding(get: { sheet != nil }, set: { if !$0 { sheet = nil } })) {
         switch sheet {
         case "channel": NewChannel { path.append($0) }
@@ -108,12 +118,12 @@ struct ChatsView: View {
   }
 
   private func open(_ route: Route?) async {
-    if case .approval = route {
+    if case .approval(let id) = route {
       store.route = nil
       var p = NavigationPath()
       p.append(ChatsScreen.inbox)
+      p.append(ChatsScreen.approval(id: id))
       path = p
-      await store.refreshApprovals()
       return
     }
     guard case .chat(let channelId, let threadId) = route else { return }
@@ -198,7 +208,7 @@ struct ChatChannelRow: View {
   }
 }
 
-enum ChatsScreen: Hashable { case inbox }
+enum ChatsScreen: Hashable { case inbox, approval(id: String) }
 
 /** The first row in Chats: what's waiting on you (approvals and computers that need you). */
 struct InboxRow: View {

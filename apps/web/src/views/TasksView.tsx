@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, Hand, Loader2, Paperclip, Plus, Sparkles, WifiOff, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, GitMerge, Hand, Loader2, Paperclip, Plus, Sparkles, WifiOff, X } from "lucide-react";
 import { harnessInfo, type Actor, type Agent } from "@warren/core";
 import { api, uploadFile } from "../api.ts";
-import { useStore } from "../store.ts";
-import { go } from "../router.ts";
+import { useStore, useTeams } from "../store.ts";
+import { go, href } from "../router.ts";
 import { agentReadiness, useDevices } from "../devices.ts";
 import { AgentAvatar, Button, Field, Input, Loader, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
@@ -20,6 +20,9 @@ export interface TaskRow {
   threadId: string | null;
   teamId: string | null;
   reviewOf: string | null;
+  /** coding work for a channel team with a repo happens on its own branch */
+  branch?: string | null;
+  mergedAt?: string | null;
   /** the task this is a piece of; null at the top */
   parentId?: string | null;
   createdAt: string;
@@ -63,7 +66,7 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
         )}
         <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Tasks</h1>
         {lead && (
-          <a href="#/teams" className="hidden sm:flex items-center gap-1.5 text-xs text-muted hover:text-ink mr-1" title="The lead takes every task nobody assigned">
+          <a href={href({ view: "settings", page: "agents" })} className="hidden sm:flex items-center gap-1.5 text-xs text-muted hover:text-ink mr-1" title="The lead takes every task nobody assigned">
             <Crown size={13} /> Lead <AgentAvatar agent={lead} size={18} badge={false} /> <span className="text-ink">{lead.name}</span>
           </a>
         )}
@@ -88,12 +91,11 @@ function NoAgents() {
   return (
     <div className="mx-auto max-w-xl px-4 py-12 md:py-16 text-center space-y-3">
       <h2 className="text-lg font-semibold">Add an agent to hand work to</h2>
-      <p className="text-sm text-muted">Tasks are how you give agents work and follow it from the plan to the pieces to done. Add an agent first, or set up a whole team in one go.</p>
+      <p className="text-sm text-muted">Tasks are how you give agents work and follow it from the plan to the pieces to done. Add an agent first.</p>
       <div className="flex justify-center gap-2">
         <Button variant="primary" onClick={() => to({ view: "agents", agentId: null })}>
           Add an agent
         </Button>
-        <Button onClick={() => to({ view: "teams", teamId: null })}>Set up a team</Button>
       </div>
     </div>
   );
@@ -102,7 +104,7 @@ function NoAgents() {
 function Board({ leadId }: { leadId: string | null }) {
   const me = useStore((s) => s.me)!;
   const agents = useStore((s) => s.agents);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const members = useStore((s) => s.members);
   const approvals = useStore((s) => s.approvals);
   const computers = useStore((s) => s.computers);
@@ -306,6 +308,36 @@ function StateIcon({ state }: { state: State }) {
 }
 
 /** A quiet "Cancel task" button. Sits beside, never inside, the row's open button. */
+/** Merge a finished task's branch into its channel team's base branch. */
+function MergeButton({ task: t, ctx }: { task: TaskRow; ctx: CardCtx }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const merge = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/tasks/${t.id}/merge`);
+      ctx.refetch();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" onClick={merge} disabled={busy} title={t.branch ?? undefined} className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink disabled:opacity-50 shrink-0">
+        <GitMerge size={12} /> {busy ? "Merging…" : "Merge"}
+      </button>
+      {error && (
+        <span role="alert" className="text-xs text-bad whitespace-pre-wrap">
+          {error}
+        </span>
+      )}
+    </>
+  );
+}
+
 function CancelButton({ task: t, ctx, agentName, compact }: { task: TaskRow; ctx: CardCtx; agentName: string; compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -383,6 +415,7 @@ function TaskCard({ task: t, ctx, defaultOpen }: { task: TaskRow; ctx: CardCtx; 
           <span>from {ctx.fromName(t.from)}</span>
           <span>{timeAgo(t.updatedAt)}</span>
           {ctx.canCancel && cancellable(state) && <CancelButton task={t} ctx={ctx} agentName={agent?.name ?? "The agent"} />}
+          {t.branch && !t.reviewOf && (t.mergedAt ? <span className="inline-flex items-center gap-1"><GitMerge size={12} /> merged</span> : t.status === "done" && ctx.canCancel && <MergeButton task={t} ctx={ctx} />)}
           {subs.length > 0 && (
             <button onClick={() => setOpen(!open)} aria-expanded={open} className="ml-auto flex items-center gap-2 hover:text-ink">
               <span className="h-1.5 w-20 rounded-full bg-chip overflow-hidden" aria-hidden>
@@ -441,7 +474,7 @@ function SubtaskRow({ task: t, ctx, depth }: { task: TaskRow; ctx: CardCtx; dept
 /** Start a task. It goes to the lead to plan by default, or straight to an agent or a team's lead. */
 export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo?: string }) {
   const agents = useStore((s) => s.agents);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const status = useStore((s) => s.lead);
   const lead = agents.find((a) => a.id === status?.lead);
   const [title, setTitle] = useState("");
@@ -515,7 +548,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
                 .filter((t) => t.leadId)
                 .map((t) => (
                   <Chip key={t.id} selected={to === `team:${t.name}`} onClick={() => setTo(`team:${t.name}`)}>
-                    {t.emoji || <CircleDot size={14} />} Team {t.name}
+                    <CircleDot size={14} /> Team {t.name}
                   </Chip>
                 ))}
             </div>

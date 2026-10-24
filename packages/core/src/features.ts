@@ -3,7 +3,7 @@
  * that needs setup or adds screens lives here, so a new organization starts small.
  */
 
-export const FEATURE_KEYS = ["background", "routines", "teach", "teams", "tasks", "voice", "buddy", "invite"] as const;
+export const FEATURE_KEYS = ["background", "routines", "teach", "tasks", "voice", "buddy", "invite"] as const;
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type Features = Record<FeatureKey, boolean>;
 
@@ -11,7 +11,6 @@ export const FEATURE_INFO: Record<FeatureKey, { name: string; description: strin
   background: { name: "Background agents", description: "Agents check your apps on their own and message you first.", group: "own" },
   routines: { name: "Routines", description: "Run a task on a schedule, like a morning summary.", group: "own" },
   teach: { name: "Teach a task", description: "Do something once while an agent watches, and it becomes a skill.", group: "own" },
-  teams: { name: "Teams", description: "Group agents under a lead that hands out the work.", group: "many" },
   tasks: { name: "Tasks board", description: "Give out work and track it from start to done.", group: "many" },
   voice: { name: "Voice calls", description: "Call an agent and talk instead of typing.", group: "extras" },
   buddy: { name: "Desk buddy", description: "A small ghost on your desktop that shows what your agents are up to.", group: "extras" },

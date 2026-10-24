@@ -139,7 +139,9 @@ export PATH="$BIN:$PATH"
 if [ "$MODE" = hub ]; then
   P="${PORT:-4747}"
   if [ -n "$SERVICE" ]; then
-    warren service install hub || true
+    svc=1
+    warren service install hub || svc=""
+    [ -n "$svc" ] || fail "Warren couldn't be set up to start by itself (see above). Run the installer again with --no-service, then start it with: warren hub start"
     up=""
     for _ in $(seq 1 30); do
       if curl -fsS "http://127.0.0.1:$P/healthz" >/dev/null 2>&1; then up=1; break; fi

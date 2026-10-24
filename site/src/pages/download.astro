@@ -24,8 +24,11 @@ import { DOWNLOADS, RELEASES, INSTALL_UNIX, INSTALL_WINDOWS, INSTALL_DOCKER } fr
       <ul class="cards">
         <li class="card sheet" data-os="mac">
           <h3>Mac</h3>
-          <p class="meta">macOS on Apple silicon (M1 and newer)</p>
-          <a class="btn btn-primary" href={DOWNLOADS.mac}>Download for Mac <small>.dmg</small></a>
+          <p class="meta">macOS on Apple silicon (M1 and newer) or Intel</p>
+          <div class="pair">
+            <a class="btn btn-primary" href={DOWNLOADS.mac}>Apple silicon <small>.dmg</small></a>
+            <a class="btn btn-quiet" href={DOWNLOADS.macIntel}>Intel <small>.dmg</small></a>
+          </div>
           <p class="hint">
             Open the file and drag Warren to Applications. This early version isn't signed by Apple yet, so the first
             time, right-click Warren and choose <strong>Open</strong>.

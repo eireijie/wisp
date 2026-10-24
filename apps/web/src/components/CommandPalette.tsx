@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Brain, Building2, CornerDownLeft, FileText, Ghost, Hash, Inbox, LifeBuoy, ListTodo, MessageSquare, Monitor, Plug, Plus, Search, Server, Settings, SquarePen, Users, Wand2 } from "lucide-react";
+import { BookOpen, Brain, Building2, CornerDownLeft, FileText, Ghost, Hash, Inbox, LifeBuoy, ListTodo, MessageSquare, Monitor, Plug, Plus, Search, Server, Settings, SquarePen, Wand2 } from "lucide-react";
 import type { Agent, Channel, Message } from "@warren/core";
 import { api } from "../api.ts";
-import { useStore } from "../store.ts";
+import { useStore, useTeams } from "../store.ts";
 import { go } from "../router.ts";
 import { useFeatures } from "../features.ts";
 import { NewOrgDialog } from "./OrgSwitcher.tsx";
@@ -145,18 +145,23 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
   const channels = useStore((s) => s.channels);
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const guest = useStore((s) => s.me?.role) === "guest";
   const features = useFeatures();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Results | null>(null);
   const [sel, setSel] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchGeneration = useRef(0);
 
   useEffect(() => {
+    const generation = ++searchGeneration.current;
     if (!q.trim()) return setResults(null);
-    const t = setTimeout(() => api<Results>("GET", `/api/search?q=${encodeURIComponent(q)}`).then(setResults, () => {}), 120);
-    return () => clearTimeout(t);
+    const t = setTimeout(() => api<Results>("GET", `/api/search?q=${encodeURIComponent(q)}`).then((r) => generation === searchGeneration.current && setResults(r), () => {}), 120);
+    return () => {
+      searchGeneration.current++;
+      clearTimeout(t);
+    };
   }, [q]);
 
   const openDm = async (agentId: string) => {
@@ -172,7 +177,8 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
     const lookup: Lookup = {
       people: Object.fromEntries(members.map((m) => [m.id, m.name])),
       agents: Object.fromEntries(agents.map((a) => [a.id, a.handle])),
-      teams: Object.fromEntries(teams.map((t) => [t.id, t.name])),
+      // a team's memory folder (teams/<name>) shows as its channel
+      teams: Object.fromEntries(teams.filter((t) => t.folder.startsWith("teams/")).map((t) => [t.folder.split("/")[1], `#${t.name}`])),
     };
     const chans = results ? results.channels : channels.filter((c) => c.kind === "channel" && c.joined).slice(0, 6);
     for (const c of chans)
@@ -201,7 +207,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
         icon: <MessageSquare size={15} />,
         label: cleanPreview(m.body, 100) || `Untitled ${kind.toLowerCase()}`,
         sub: messageLocation(m.channelName, lookup.agents),
-        run: () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId }),
+        run: () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId, messageId: m.id }),
       });
     }
     for (const n of results?.notes ?? []) {
@@ -232,7 +238,6 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
       pageRow("computers", <Monitor size={15} />, "Computers", () => go({ view: "computers", computerId: null }), "screens vm"),
       pageRow("vault", <BookOpen size={15} />, "Memory", () => go({ view: "vault", path: null }), "notes vault"),
       ...(features.tasks ? [pageRow("tasks", <ListTodo size={15} />, "Tasks", () => go({ view: "tasks" }), "work board")] : []),
-      ...(features.teams ? [pageRow("teams", <Users size={15} />, "Teams", () => go({ view: "teams", teamId: null }), "groups lead")] : []),
       pageRow("devices", <Server size={15} />, "Devices", () => go({ view: "nodes" }), "nodes machines"),
       pageRow("connectors", <Plug size={15} />, "Connected apps", () => go({ view: "connectors" }), "connectors mcp gmail slack integrations"),
       pageRow("skills", <Wand2 size={15} />, "Skills", () => go({ view: "skills" }), "shop learn"),

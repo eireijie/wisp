@@ -45,7 +45,7 @@ struct ComputersView: View {
     }
     .task(id: store.route) {
       // a tapped "needs you on its computer" notification
-      guard case .computer(let id) = store.route else { return }
+      guard store.canViewComputers, case .computer(let id) = store.route else { return }
       store.route = nil
       if !store.computers.contains(where: { $0.id == id }) { await store.refreshComputers() }
       path = [id]
@@ -79,10 +79,10 @@ struct ScreenThumb: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemBackground))
-      if let image {
+      if let image, computer.status == "ready", computer.code == nil {
         Image(uiImage: image).resizable().scaledToFit()
       } else {
-        Image(systemName: computer.status == "ready" ? "display" : "moon.zzz")
+        Image(systemName: computer.code != nil ? "lock" : computer.status == "ready" ? "display" : "moon.zzz")
           .font(.title)
           .foregroundStyle(.tertiary)
       }
@@ -90,11 +90,20 @@ struct ScreenThumb: View {
     .aspectRatio(16 / 10, contentMode: .fit)
     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(.separator).opacity(0.5)))
-    .task(id: computer.status) {
-      guard computer.status == "ready" else { return }
+    .task(id: "\(computer.id):\(computer.status):\(computer.code ?? ""):\(store.session)") {
+      image = nil
+      // a screen with a code opens only with it, from its own page
+      guard store.canViewComputers, computer.status == "ready", computer.code == nil else { return }
       while !Task.isCancelled {
-        if let f = try? await store.screen(computer, maxAge: 5000), let img = UIImage(data: f.image) { image = img }
-        try? await Task.sleep(for: .seconds(5))
+        do {
+          let f = try await store.screen(computer, maxAge: 5000)
+          try Task.checkCancellation()
+          image = UIImage(data: f.image)
+        } catch {
+          if Task.isCancelled { return }
+          image = nil
+        }
+        do { try await Task.sleep(for: .seconds(5)) } catch { return }
       }
     }
   }
@@ -108,6 +117,8 @@ struct ComputerDetail: View {
   @State private var error: String?
   @State private var busy = false
   @State private var typing = ""
+  @State private var sendingTyping = false
+  @State private var imageCode: String?
   @State private var lastTap: CGPoint?
 
   private var computer: Computer? { store.computers.first { $0.id == computerId } }
@@ -116,9 +127,13 @@ struct ComputerDetail: View {
   @State private var keyboard = false
   @State private var note: String?
   @FocusState private var typingFocused: Bool
+  /** a screen with a code: asking for it, what the device said about the last one, and a retry */
+  @State private var needCode = false
+  @State private var codeError: String?
+  @State private var codeTry = 0
 
   var body: some View {
-    if let c = computer {
+    if store.canViewComputers, let c = computer {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           if let help = c.help {
@@ -150,6 +165,7 @@ struct ComputerDetail: View {
           }
           Text(hint(c)).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
           if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+          if c.kind == "device" { LendPanel(computer: c) }
         }
         .padding(16)
       }
@@ -157,8 +173,8 @@ struct ComputerDetail: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) } }
       .toolbar(.hidden, for: .tabBar)
-      .task(id: c.status) { await stream(c) }
-    } else {
+      .task(id: "\(c.status) \(c.code ?? "") \(codeTry) \(store.session)") { await stream(c) }
+    } else if store.canViewComputers {
       ContentUnavailableView("Computer not found", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
     }
   }
@@ -180,6 +196,7 @@ struct ComputerDetail: View {
             .autocorrectionDisabled()
             .focused($typingFocused)
             .submitLabel(.send)
+            .disabled(sendingTyping)
             .onSubmit { sendTyping(c, enter: true) }
             .padding(.leading, 16)
             .padding(.vertical, 12)
@@ -187,7 +204,7 @@ struct ComputerDetail: View {
             Image(systemName: "arrow.up").font(.body.weight(.bold)).foregroundStyle(Color(.systemBackground)).frame(width: 34, height: 34).background(Circle().fill(Color.primary))
           }
           .buttonStyle(.plain)
-          .disabled(typing.isEmpty)
+          .disabled(typing.isEmpty || sendingTyping)
           .opacity(typing.isEmpty ? 0.25 : 1)
           .padding(5)
         }
@@ -264,7 +281,7 @@ struct ComputerDetail: View {
   @ViewBuilder private func screen(_ c: Computer) -> some View {
     ZStack {
       RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black)
-      if let image {
+      if let image, c.status == "ready", !needCode, imageCode == c.code {
         GeometryReader { geo in
           let fit = fitted(in: geo.size)
           Image(uiImage: image)
@@ -279,13 +296,20 @@ struct ComputerDetail: View {
             .contentShape(Rectangle())
             .onTapGesture(coordinateSpace: .local) { pt in tap(c, at: pt, in: geo.size) }
         }
+      } else if needCode && c.status == "ready" {
+        CodePrompt(computer: c, error: codeError) { code in
+          store.screenCodes[c.id] = code
+          codeError = nil
+          codeTry += 1
+        }
+        .padding(20)
       } else if c.status == "ready" {
         ProgressView().tint(.white)
       } else {
         Text(c.status == "starting" ? "Starting…" : "This computer isn't running").foregroundStyle(.white.opacity(0.7)).font(.callout)
       }
     }
-    .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: .fit)
+    .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: needCode ? .fill : .fit)
     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(inControl ? Color.blue : .clear, lineWidth: 3))
     .shadow(color: inControl ? Color.blue.opacity(0.35) : .clear, radius: 14)
@@ -316,20 +340,103 @@ struct ComputerDetail: View {
 
   /** About two frames a second while it's on screen; faster feels no better on a phone. */
   private func stream(_ c: Computer) async {
+    image = nil; frame = nil; lastTap = nil
+    imageCode = c.code
     guard c.status == "ready" else { return }
+    if c.code != nil { return await streamWithCode(c) }
+    needCode = false
     while !Task.isCancelled {
       do {
         let f = try await store.screen(c, maxAge: 1000)
+        try Task.checkCancellation()
         if let img = UIImage(data: f.image) {
           frame = f.width > 0 ? f : Frame(image: f.image, width: Int(img.size.width), height: Int(img.size.height))
           image = img
           error = nil
         }
       } catch {
+        if Task.isCancelled { return }
+        image = nil; frame = nil
         self.error = error.localizedDescription
         try? await Task.sleep(for: .seconds(2))
       }
       try? await Task.sleep(for: .milliseconds(450))
+    }
+  }
+
+  /**
+   * A screen with a code: open it with the code (asked once while the app is open), and keep the
+   * live view's socket open, which keeps it open. Its frames come over the socket; with Remote
+   * Desktop the socket only holds the screen open and the picture comes from screenshots.
+   */
+  private func streamWithCode(_ c: Computer) async {
+    guard let code = store.screenCodes[c.id] else {
+      image = nil
+      needCode = true
+      return
+    }
+    needCode = false
+    while !Task.isCancelled {
+      let view: Store.LiveView, ws: URLSessionWebSocketTask
+      do {
+        (view, ws) = try await store.openView(c, code: code)
+      } catch let f as API.Failure where f.status == 403 {
+        guard !Task.isCancelled else { return }
+        // a wrong code, or too many: ask again with what the device said
+        store.screenCodes[c.id] = nil
+        image = nil
+        codeError = f.message
+        needCode = true
+        return
+      } catch {
+        if Task.isCancelled { return }
+        image = nil; frame = nil
+        self.error = error.localizedDescription
+        try? await Task.sleep(for: .seconds(2))
+        continue
+      }
+      await withTaskCancellationHandler {
+        guard !Task.isCancelled else { return }
+        ws.resume()
+        error = nil
+        if view.transport == "frames" {
+          struct Msg: Decodable { var type: String; var image: String?; var width: Int?; var height: Int?; var message: String? }
+          while !Task.isCancelled {
+            guard let m = try? await ws.receive(), !Task.isCancelled else { break }
+            guard case .string(let text) = m, let msg = try? JSONDecoder().decode(Msg.self, from: Data(text.utf8)) else { continue }
+            if msg.type == "error" { self.error = msg.message; image = nil; frame = nil; break }
+            guard msg.type == "frame", let b64 = msg.image, let data = Data(base64Encoded: b64), let img = UIImage(data: data) else { continue }
+            frame = Frame(image: data, width: msg.width ?? Int(img.size.width), height: msg.height ?? Int(img.size.height))
+            image = img
+          }
+        } else {
+          let drain = Task { while (try? await ws.receive()) != nil {} }
+          while !Task.isCancelled, ws.state == .running {
+            do {
+              let f = try await store.screen(c, maxAge: 1000)
+              try Task.checkCancellation()
+              if let img = UIImage(data: f.image) {
+                frame = f.width > 0 ? f : Frame(image: f.image, width: Int(img.size.width), height: Int(img.size.height))
+                image = img
+                error = nil
+              }
+            } catch {
+              if Task.isCancelled { break }
+              image = nil; frame = nil
+              self.error = error.localizedDescription
+              try? await Task.sleep(for: .seconds(2))
+            }
+            try? await Task.sleep(for: .milliseconds(450))
+          }
+          drain.cancel()
+        }
+      } onCancel: {
+        ws.cancel(with: .goingAway, reason: nil)
+      }
+      ws.cancel(with: .goingAway, reason: nil)
+      if Task.isCancelled { return }
+      image = nil; frame = nil
+      try? await Task.sleep(for: .seconds(1))
     }
   }
 
@@ -349,11 +456,17 @@ struct ComputerDetail: View {
   }
 
   private func sendTyping(_ c: Computer, enter: Bool) {
+    guard !sendingTyping else { return }
     let text = typing
-    typing = ""
+    sendingTyping = true
     Task {
-      if !text.isEmpty { try? await store.act(c, ["action": AnyEncodable("type"), "text": AnyEncodable(text)]) }
-      if enter { try? await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable("Enter")]) }
+      defer { sendingTyping = false }
+      do {
+        if !text.isEmpty { try await store.act(c, ["action": AnyEncodable("type"), "text": AnyEncodable(text)]) }
+        typing = ""
+        if enter { try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable("Enter")]) }
+        error = nil
+      } catch { self.error = error.localizedDescription }
     }
   }
 
@@ -368,5 +481,136 @@ struct ComputerDetail: View {
     Task {
       do { try await store.act(c, action) } catch { self.error = error.localizedDescription }
     }
+  }
+}
+
+/** The box for a screen's code: six digits, or a password. Typed codes stay in memory only. */
+struct ScreenCodeField: View {
+  var kind: String
+  @Binding var code: String
+  var onSubmit: () -> Void = {}
+
+  static func ready(_ kind: String?, _ code: String) -> Bool { kind == nil || (kind == "pin" ? code.count == 6 : !code.isEmpty) }
+
+  var body: some View {
+    SecureField(kind == "pin" ? "6-digit PIN" : "Password", text: $code)
+      .keyboardType(kind == "pin" ? .numberPad : .default)
+      .textContentType(.oneTimeCode) // keeps iOS from offering to save it as a password
+      .textInputAutocapitalization(.never)
+      .autocorrectionDisabled()
+      .submitLabel(.go)
+      .onSubmit { if Self.ready(kind, code) { onSubmit() } }
+      .onChange(of: code) { _, v in
+        if kind == "pin" {
+          let digits = String(v.filter(\.isNumber).prefix(6))
+          if digits != v { code = digits }
+        } else if v.count > 200 { code = String(v.prefix(200)) }
+      }
+      .padding(.horizontal, 14)
+      .padding(.vertical, 11)
+      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
+      .accessibilityLabel("The screen's \(kind == "pin" ? "PIN" : "password")")
+  }
+}
+
+/** Asking for the code before a screen opens, on the dark screen background. */
+private struct CodePrompt: View {
+  var computer: Computer
+  var error: String?
+  var onSubmit: (String) -> Void
+  @State private var code = ""
+
+  var body: some View {
+    VStack(spacing: 12) {
+      Image(systemName: "lock").font(.title2).foregroundStyle(.white.opacity(0.7))
+      Text("Enter \(computer.name)'s \(computer.codeLabel) to open it.").font(.callout).foregroundStyle(.white).multilineTextAlignment(.center)
+      ScreenCodeField(kind: computer.code ?? "pin", code: $code) { submit() }
+        .frame(maxWidth: 240)
+        .environment(\.colorScheme, .light)
+      // wraps instead of trailing off: the screen box proposes more width than it shows
+      if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.9)).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true) }
+      Button("Open") { submit() }
+        .buttonStyle(.bordered)
+        .tint(.white)
+        .disabled(!ScreenCodeField.ready(computer.code, code))
+    }
+  }
+
+  private func submit() {
+    guard ScreenCodeField.ready(computer.code, code) else { return }
+    onSubmit(code)
+    code = ""
+  }
+}
+
+/** Your own screen: lend it to agents for a while. They use it only for things you ask them. */
+private struct LendPanel: View {
+  @Environment(Store.self) private var store
+  var computer: Computer
+  @State private var code = ""
+  @State private var busy = false
+  @State private var error: String?
+
+  private static let options: [(label: String, minutes: Int?, today: Bool)] = [("1 hour", 60, false), ("4 hours", 240, false), ("Today", nil, true), ("Until I stop it", nil, false)]
+
+  var body: some View {
+    let c = computer
+    VStack(alignment: .leading, spacing: 10) {
+      Label("Your own screen", systemImage: "lock").font(.subheadline.weight(.semibold))
+      Text(c.lentNow ? "Only you can see it. Agents can use it \(Self.label(c.config?.lend?.until)), and only for things you ask them." : "Only you can see it. Agents can't use it right now; they work on their own VMs.")
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      if c.lentNow {
+        Button("Stop lending it") { run { try await store.stopLending(c) } }
+          .secondaryButton()
+          .disabled(busy)
+      } else {
+        if let kind = c.code { ScreenCodeField(kind: kind, code: $code) }
+        Text("Lend it to agents for").font(.footnote.weight(.medium))
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 8)], spacing: 8) {
+          ForEach(Self.options, id: \.label) { o in
+            Button {
+              let minutes = o.today ? Self.untilTonight() : o.minutes
+              let typed = c.code != nil ? code : nil
+              run {
+                try await store.lend(c, minutes: minutes, code: typed)
+                code = ""
+              }
+            } label: {
+              Text(o.label).frame(maxWidth: .infinity)
+            }
+            .secondaryButton()
+            .disabled(busy || !ScreenCodeField.ready(c.code, code))
+          }
+        }
+      }
+      if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .card(Corner.card, padding: 14)
+  }
+
+  private func run(_ work: @escaping () async throws -> Void) {
+    busy = true
+    error = nil
+    Task {
+      do { try await work() } catch { self.error = error.localizedDescription }
+      busy = false
+    }
+  }
+
+  static func untilTonight() -> Int {
+    var end = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+    end.hour = 23
+    end.minute = 59
+    let t = Calendar.current.date(from: end) ?? Date()
+    return max(1, Int((t.timeIntervalSinceNow / 60).rounded()))
+  }
+
+  static func label(_ until: String?) -> String {
+    guard let until, let d = Wire.date(until) else { return "until you stop it" }
+    let f = DateFormatter()
+    f.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(d) ? "jmm" : "EEEjmm")
+    return "until \(f.string(from: d))"
   }
 }

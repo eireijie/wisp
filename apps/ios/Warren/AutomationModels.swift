@@ -52,8 +52,9 @@ struct Allowance: Decodable {
 
   /** The amounts people pick from, smallest first; nil = no limit. */
   static let levels: [(label: String, tokens: Int?)] = [("Low", 300_000), ("Medium", 1_000_000), ("High", 3_000_000), ("No limit", nil)]
-  /** 340k, 1.2M */
+  /** 0, 340k, 1.2M */
   static func text(_ n: Int) -> String {
+    if n == 0 { return "0" }
     if n >= 1_000_000 {
       let m = (Double(n) / 1_000_000 * 10).rounded() / 10
       return m == m.rounded() ? "\(Int(m))M" : "\(m)M"

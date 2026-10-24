@@ -13,6 +13,8 @@ const IMAGE = "ubuntu-24.04";
 const hetznerApi = () => process.env.WARREN_HETZNER_API || "https://api.hetzner.cloud/v1";
 
 class CloudError extends Error {}
+const timedOut = (err) => err?.name === "TimeoutError" || err?.name === "AbortError";
+const timeoutError = () => Object.assign(new CloudError("The request timed out. Try again."), { code: "timed_out", retryable: true });
 
 /** One Hetzner API call, with its errors said the way a person needs to hear them. */
 async function hetzner(token, method, route, body, { fetchImpl = fetch } = {}) {
@@ -25,10 +27,11 @@ async function hetzner(token, method, route, body, { fetchImpl = fetch } = {}) {
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
+    if (timedOut(err)) throw timeoutError();
     throw new CloudError(`Couldn't reach Hetzner (${err.cause?.code || err.message}). Check your internet connection.`);
   }
   if (res.status === 204) return {};
-  const data = await res.json().catch(() => ({}));
+  const data = await res.json().catch((err) => { if (timedOut(err)) throw timeoutError(); return {}; });
   if (res.ok) return data;
   const code = data.error?.code;
   const message = data.error?.message || `Hetzner said ${res.status}`;
@@ -124,24 +127,32 @@ const sleepFor = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * Create a Warren in the person's Hetzner project and make its first account. `onStep(id)` hears
  * "create", "boot", "https" and "account" as each starts. On failure after the server exists, the
- * error carries it (`err.server`), so the person can delete it or keep waiting.
+ * error carries it (`err.server`) and its setup key (`err.key`), so the person can delete it, or keep
+ * waiting: `resume: { server, key }` picks the same server up again instead of creating another,
+ * since only that key can make its first account.
  */
-async function createWarren({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template } = {}) {
+async function createWarren({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template, resume } = {}) {
   const opts = { fetchImpl };
-  const key = crypto.randomBytes(24).toString("base64url");
-  const name = `warren-${crypto.randomBytes(3).toString("hex")}`;
-
-  onStep("create");
-  const created = await hetzner(token, "POST", "/servers", {
-    name,
-    server_type: type,
-    location,
-    image: IMAGE,
-    user_data: userData(key, template),
-    labels: { "managed-by": "warren" },
-    public_net: { enable_ipv4: true, enable_ipv6: true },
-  }, opts);
-  const server = { id: created.server.id, name, ip: created.server.public_net?.ipv4?.ip || "", location, type };
+  let key;
+  let server;
+  if (resume?.server?.id && resume.key) {
+    key = resume.key;
+    server = { ...resume.server };
+  } else {
+    key = crypto.randomBytes(24).toString("base64url");
+    const name = `warren-${crypto.randomBytes(3).toString("hex")}`;
+    onStep("create");
+    const created = await hetzner(token, "POST", "/servers", {
+      name,
+      server_type: type,
+      location,
+      image: IMAGE,
+      user_data: userData(key, template),
+      labels: { "managed-by": "warren" },
+      public_net: { enable_ipv4: true, enable_ipv6: true },
+    }, opts);
+    server = { id: created.server.id, name, ip: created.server.public_net?.ipv4?.ip || "", location, type };
+  }
 
   try {
     onStep("boot");
@@ -163,6 +174,7 @@ async function createWarren({ token, type, location, account }, { fetchImpl = fe
     return { url, session, server };
   } catch (err) {
     err.server = server;
+    err.key = key;
     throw err;
   }
 }
@@ -182,19 +194,25 @@ async function waitForHub(ip, { fetchImpl = fetch, sleep = sleepFor, ms = 15 * 6
 }
 
 /** Make the first account, with the setup key the server only lets this app use. */
-async function claim(url, key, { name, email, password }, { fetchImpl = fetch } = {}) {
-  const res = await fetchImpl(new URL("/api/setup", url), {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-warren-setup-key": key },
-    body: JSON.stringify({ name, email, password, workspaceName: "Warren" }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (res.status === 409) throw new CloudError("Someone already made the first account on this server.");
-  if (!res.ok || !body.token) throw new CloudError(body.error ? `Warren said: ${body.error}` : `Warren said ${res.status}`);
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  if (timezone)
-    await fetchImpl(new URL("/api/me", url), { method: "PATCH", headers: { "content-type": "application/json", authorization: `Bearer ${body.token}` }, body: JSON.stringify({ timezone }) }).catch(() => {});
-  return body.token;
+async function claim(url, key, { name, email, password }, { fetchImpl = fetch, timeoutMs = 30_000 } = {}) {
+  try {
+    const res = await fetchImpl(new URL("/api/setup", url), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-warren-setup-key": key },
+      body: JSON.stringify({ name, email, password, workspaceName: "Warren" }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = await res.json().catch((err) => { if (timedOut(err)) throw err; return {}; });
+    if (res.status === 409) throw new CloudError("Someone already made the first account on this server.");
+    if (!res.ok || !body.token) throw new CloudError(body.error ? `Warren said: ${body.error}` : `Warren said ${res.status}`);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (timezone)
+      await fetchImpl(new URL("/api/me", url), { method: "PATCH", headers: { "content-type": "application/json", authorization: `Bearer ${body.token}` }, body: JSON.stringify({ timezone }), signal: AbortSignal.timeout(timeoutMs) }).catch(() => {});
+    return body.token;
+  } catch (err) {
+    if (timedOut(err)) throw timeoutError();
+    throw err;
+  }
 }
 
 /** Delete a server this flow created (when the person gives up on one that didn't come up). */

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plug, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Sun, SunMoon, Trash2, UserPlus, Users, Wand2 } from "lucide-react";
+import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Store, Sun, SunMoon, Trash2, UserPlus } from "lucide-react";
 import type { Agent, Section } from "@warren/core";
 import { api } from "../api.ts";
 import { useInboxCount, useStore, useWaitingOnYou, type ChannelInfo } from "../store.ts";
@@ -33,7 +33,7 @@ export function startNewAgent() {
 /**
  * The sidebar, top to bottom: the organization (a switcher), search-or-create, the main pages
  * (Inbox, Agents, Computers, Memory), your agents, starred channels, sections and channels, and
- * you at the bottom with Settings. Everything else (Tasks, Teams, Devices, Connected apps,
+ * you at the bottom with Settings. Everything else (Tasks, Devices, Connected apps,
  * Skills, About you, Help) is a click away on the Agents page, in Settings, or in ⌘K. On phones
  * the same lists are the Chats screen (variant "page") with larger touch targets.
  */
@@ -48,9 +48,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const waiting = useWaitingOnYou();
   const inboxCount = useInboxCount();
   const invite = useFeature("invite");
-  const teamsOn = useFeature("teams");
   const tasksOn = useFeature("tasks");
-  const moreViews: Route["view"][] = ["agents", "vault", "teams", "tasks", "connectors", "skills", "about", "nodes", "help"];
+  const moreViews: Route["view"][] = ["agents", "vault", "tasks", "marketplace", "connectors", "skills", "about", "nodes", "help"];
   const [editing, setEditing] = useState<Section | "new" | null>(null);
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const { done } = useOnboarding();
@@ -61,6 +60,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const showGetStarted = route.view === "welcome" || !complete;
   const page = variant === "page";
   const isGuest = me.role === "guest";
+  // the owner's agents are theirs; a member or guest mostly sees someone else's
+  const ownAgents = me.role === "owner" || (agents.length > 0 && agents.every((a) => a.settings.createdBy === me.user.id));
   const browse = (sectionId: string | null) => useStore.setState({ channelBrowser: { sectionId } });
 
   const active = route.view === "chat" ? route.channelId : null;
@@ -138,7 +139,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         {/* phones have no Inbox in this list, so what's waiting shows here */}
         {page && waitingCount > 0 && (
           <Group page title="Waiting on you" collapsed={!!collapsed.waiting} onToggle={() => toggleGroup("waiting")}>
-            {waiting.help.map((c) => {
+            {!isGuest && waiting.help.map((c) => {
               const a = agents.find((x) => x.id === c.help!.agentId);
               return (
                 <Item key={c.id} page href={href({ view: "computers", computerId: c.id })} dot>
@@ -163,7 +164,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           </Group>
         )}
 
-        <Group page={page} title="Your agents" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="New agent" onClick={startNewAgent}><Plus size={14} /></IconButton>}>
+        <Group page={page} title={ownAgents ? "Your agents" : "Agents"} collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="New agent" onClick={startNewAgent}><Plus size={14} /></IconButton>}>
           {agents.length === 0 && <p className="px-4 text-xs text-faint">No agents yet.</p>}
           {agents.map((a) => {
             const dm = dmFor(a.id);
@@ -264,10 +265,12 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       {/* the rest of Warren: a short list, and everything else under More */}
       {!page && (
         <div className="shrink-0 pt-2 space-y-px border-t border-line">
-          <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
-            <Monitor size={16} className="shrink-0" /> Computers
-            {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
-          </Item>
+          {!isGuest && (
+            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
+              <Monitor size={16} className="shrink-0" /> Computers
+              {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
+            </Item>
+          )}
           <Item href={href({ view: "mods" })} active={route.view === "mods"}>
             <Blocks size={16} className="shrink-0" /> Mods
           </Item>
@@ -284,10 +287,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
             items={[
               { label: "Agents", icon: <Ghost size={14} />, onSelect: () => go({ view: "agents", agentId: null }) },
               { label: "Memory", icon: <BookOpen size={14} />, onSelect: () => go({ view: "vault", path: null }) },
-              ...(teamsOn ? [{ label: "Teams", icon: <Users size={14} />, onSelect: () => go({ view: "teams", teamId: null }) }] : []),
               ...(tasksOn ? [{ label: "Tasks", icon: <ListChecks size={14} />, onSelect: () => go({ view: "tasks" }) }] : []),
-              { label: "Connected apps", icon: <Plug size={14} />, onSelect: () => go({ view: "connectors" }) },
-              { label: "Skills", icon: <Wand2 size={14} />, onSelect: () => go({ view: "skills" }) },
+              { label: "Marketplace", icon: <Store size={14} />, onSelect: () => go({ view: "marketplace" }) },
               { label: "About you", icon: <CircleUser size={14} />, onSelect: () => go({ view: "about" }) },
               { label: "Devices", icon: <Server size={14} />, onSelect: () => go({ view: "nodes" }) },
               { label: "Help", icon: <LifeBuoy size={14} />, onSelect: () => go({ view: "help" }) },

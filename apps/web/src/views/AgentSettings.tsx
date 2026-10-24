@@ -4,8 +4,8 @@ import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from
 import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { ApiError, api } from "../api.ts";
-import { useStore } from "../store.ts";
-import { go, type AgentTab } from "../router.ts";
+import { useStore, useTeams } from "../store.ts";
+import { go, guardLeaving, href, mayLeave, type AgentTab } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
@@ -77,6 +77,32 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
   const nav = agentNav(useSimple());
   const active = tab ?? "overview";
   const [dirty, setDirty] = useState<Partial<Record<AgentTab, boolean>>>({});
+  const hasDirty = Object.values(dirty).some(Boolean);
+  useEffect(() => {
+    if (!hasDirty) return;
+    const unguard = guardLeaving(() => `${agent.name} has unsaved changes. Leave without saving them?`);
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = (e.target as Element).closest<HTMLAnchorElement>("a[href]");
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      const url = new URL(link.href, location.href);
+      if (url.origin !== location.origin || url.pathname !== location.pathname || url.search !== location.search) return;
+      // Sections stay mounted, so moving between them keeps all edits.
+      if (url.hash === `#/agents/${agent.id}` || url.hash.startsWith(`#/agents/${agent.id}/`)) return;
+      if (!mayLeave()) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", onClick);
+    return () => {
+      unguard();
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", onClick);
+    };
+  }, [hasDirty, agent.id, agent.name]);
   const markDirty = useCallback((t: AgentTab) => (d: boolean) => setDirty((cur) => (cur[t] === d ? cur : { ...cur, [t]: d })), []);
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -158,7 +184,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
             <ComputerPanel agent={agent} nodes={nodes} />
           </Panel>
           <Panel show={active === "background"} hint="What it does on its own while you're away.">
-            <BackgroundPanel agent={agent} active={active === "background"} />
+            <BackgroundPanel agent={agent} active={active === "background"} onDirty={markDirty("background")} />
           </Panel>
           <Panel show={active === "routines"} hint="Jobs it does on a schedule.">
             <RoutinesPanel agent={agent} active={active === "routines"} />
@@ -349,15 +375,40 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
 
 // --- Instructions -------------------------------------------------------------
 
+/** Follow remote saves only for fields still equal to their previous saved value. */
+export function mergeSavedFields<T extends object>(draft: T, previous: T, saved: T): T {
+  return Object.fromEntries(Object.keys(saved).map((key) => {
+    const k = key as keyof T;
+    return [k, Object.is(draft[k], previous[k]) ? saved[k] : draft[k]];
+  })) as T;
+}
+
+function useSavedDraft<T extends object>(saved: T) {
+  const [draft, setDraft] = useState(saved);
+  const previous = useRef(saved);
+  useEffect(() => {
+    const before = previous.current;
+    if (Object.keys(saved).every((k) => Object.is(saved[k as keyof T], before[k as keyof T]))) return;
+    previous.current = saved;
+    setDraft((current) => {
+      const next = mergeSavedFields(current, before, saved);
+      return Object.keys(next).every((k) => Object.is(next[k as keyof T], current[k as keyof T])) ? current : next;
+    });
+  }, [saved]);
+  return [draft, setDraft] as const;
+}
+
 function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const others = useStore((s) => s.agents).filter((a) => a.id !== agent.id);
   const saved = agent.instructions ?? "";
   const savedRole = agent.settings.role ?? "";
   const savedNotes = agent.settings.roleNotes ?? "";
-  const [draft, setDraft] = useState(saved);
-  const [role, setRole] = useState(savedRole);
-  const [roleNotes, setRoleNotes] = useState(savedNotes);
+  const [form, setForm] = useSavedDraft({ draft: saved, role: savedRole, roleNotes: savedNotes });
+  const { draft, role, roleNotes } = form;
+  const setDraft = (value: string | ((d: string) => string)) => setForm((f) => ({ ...f, draft: typeof value === "function" ? value(f.draft) : value }));
+  const setRole = (value: string) => setForm((f) => ({ ...f, role: value }));
+  const setRoleNotes = (value: string) => setForm((f) => ({ ...f, roleNotes: value }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roleDirty = role.trim() !== savedRole || roleNotes !== savedNotes;
@@ -365,15 +416,6 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
   useEffect(() => {
     onDirty(dirty);
   }, [dirty, onDirty]);
-  // follow edits made elsewhere when there's no local draft
-  useEffect(() => {
-    if (!dirty) {
-      setDraft(saved);
-      setRole(savedRole);
-      setRoleNotes(savedNotes);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, savedRole, savedNotes]);
 
   const helper = others[0] ? `@${others[0].handle}` : "@another-agent";
   const snippets = [
@@ -447,7 +489,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
   const refreshAgents = useStore((s) => s.refreshAgents);
   const [info, setInfo] = useState<{ device: { name: string; online: boolean } | null; catalog: HarnessCatalog | null } | null>(null);
   const saved = { model: agent.model ?? "", effort: agent.settings.effort ?? "", fast: !!agent.settings.fast };
-  const [form, setForm] = useState(saved);
+  const [form, setForm] = useSavedDraft(saved);
   const [custom, setCustom] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -463,7 +505,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
   useEffect(() => {
     if (info && form.model && !models.some((m) => m.id === form.model)) setCustom(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [info]);
+  }, [info, form.model]);
 
   const dirty = form.model !== saved.model || form.effort !== saved.effort || form.fast !== saved.fast;
   useEffect(() => {
@@ -698,7 +740,8 @@ function Seg<T extends string>({ value, onChange, options }: { value: T; onChang
 function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; nodes: NodeInfo[]; onDirty: (d: boolean) => void; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const saved = agent.nodeId ?? "";
-  const [nodeId, setNodeId] = useState(saved);
+  const [{ nodeId }, setDevice] = useSavedDraft({ nodeId: saved });
+  const setNodeId = (value: string) => setDevice({ nodeId: value });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dirty = nodeId !== saved;
@@ -803,7 +846,8 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
   const saved = agent.settings.access ?? "edit";
-  const [access, setAccess] = useState<AccessLevel>(saved);
+  const [{ access }, setPermissions] = useSavedDraft({ access: saved });
+  const setAccess = (value: AccessLevel) => setPermissions({ access: value });
   const [memory, setMemory] = useState<{ rules: AccessRule[]; sharedOut: AccessRule[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -967,7 +1011,7 @@ export function runTitle(trigger: string | null): string {
 function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: NodeInfo[]; active: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const computers = useStore((s) => s.computers);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [soul, setSoul] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -1055,13 +1099,13 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                 {myTeams.length || bossOf.length ? (
                   <>
                     {myTeams.map((t, i) => {
-                      const role = t.leadId === agent.id ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
+                      const role = t.leads.includes(agent.id) ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
                       return (
                         <span key={t.id}>
                           {i > 0 && ", "}
                           {role ? `${role} on ` : "on "}
-                          <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
-                            {t.name}
+                          <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
+                            #{t.name}
                           </a>
                         </span>
                       );
@@ -1072,8 +1116,8 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                         {bossOf.map((t, i) => (
                           <span key={t.id}>
                             {i > 0 && ", "}
-                            <a className="text-accent-text hover:underline" href={`#/teams/${t.id}`}>
-                              {t.name}
+                            <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
+                              #{t.name}
                             </a>
                           </span>
                         ))}
@@ -1081,12 +1125,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
                     )}
                   </>
                 ) : (
-                  <>
-                    Works on its own.{" "}
-                    <a className="text-accent-text hover:underline" href="#/teams">
-                      Put it on a team
-                    </a>
-                  </>
+                  "Works on its own."
                 )}
               </p>
             </>

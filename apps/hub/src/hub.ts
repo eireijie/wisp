@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace } from "@warren/core";
+import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -9,6 +9,8 @@ import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
 import { Push } from "./push.ts";
 import { Marketplace } from "./marketplace.ts";
+import { Logos } from "./logos.ts";
+import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
 import type { Vault } from "@warren/vault";
@@ -18,7 +20,9 @@ import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
 import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
+import { foldTeams } from "./fold-teams.ts";
 import type { Store } from "./store.ts";
+import { guestEvent } from "./guest-computers.ts";
 
 const CONTEXT_MESSAGES = 20;
 
@@ -26,6 +30,7 @@ interface ClientConn {
   socket: WebSocket;
   workspaceId: string;
   userId: string;
+  sessionHash: string;
 }
 
 interface NodeConn {
@@ -48,6 +53,7 @@ export class Hub {
   private clients = new Set<ClientConn>();
   private nodes = new Map<string, NodeConn>();
   private live = new Map<string, LiveRun>();
+  private taskReplies = new Map<string, { messageId: string; result: string }>();
   /** devices whose owner ran `warren node pause` there */
   private pausedNodes = new Set<string>();
   readonly guard = new LoopGuard();
@@ -59,6 +65,10 @@ export class Hub {
   readonly background: Background;
   readonly push: Push;
   readonly marketplace: Marketplace;
+  readonly logos: Logos;
+  readonly publicSkills: PublicSkills;
+  /** skills and MCP servers each device's harnesses already have (sent when it connects) */
+  readonly shelves = new Map<string, ShelfItem[]>();
   readonly updates: Updates;
   readonly connectors: ConnectorStore;
   readonly skills: SkillStore;
@@ -85,6 +95,8 @@ export class Hub {
     this.background = new Background(this);
     this.push = new Push(this);
     this.marketplace = new Marketplace(this);
+    this.logos = new Logos(this);
+    this.publicSkills = new PublicSkills(this);
     this.updates = new Updates(this);
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
@@ -96,22 +108,34 @@ export class Hub {
     return this.vaults.get(workspaceId);
   }
 
-  /** Every team has its own channel and a brief; teams that came from v0.1 groups get them here. */
-  async ensureTeams() {
-    const rows = this.store.db.prepare("SELECT id, workspace_id FROM teams WHERE channel_id IS NULL").all() as { id: string; workspace_id: string }[];
-    for (const r of rows) {
-      const team = this.store.team(r.id)!;
-      const name = `team-${team.name}`;
-      const channel = this.store.channelByName(r.workspace_id, name) ?? this.store.createChannel(r.workspace_id, name, "channel", `Team ${team.name}`);
-      this.store.updateTeam(team.id, { channelId: channel.id });
-      for (const m of team.members) this.store.addChannelMember(channel.id, { kind: "agent", id: m.agentId });
-      for (const p of this.store.members(r.workspace_id).filter((m) => m.role === "owner")) this.store.addChannelMember(channel.id, { kind: "user", id: p.id });
-      const brief = `${team.folder}/README.md`;
-      const vault = this.vault(r.workspace_id);
+  /** Old teams (and v0.1 groups) become their channel's team; each memory folder keeps a brief. */
+  async foldTeams() {
+    for (const t of foldTeams(this.store)) {
+      if (!t.folder) continue;
+      const brief = `${t.folder}/README.md`;
+      const vault = this.vault(t.workspaceId);
       if (!vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
         await vault
-          .write(brief, `# Team ${team.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for team ${team.name}`)
+          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for #${t.name}`)
           .catch(() => undefined);
+      }
+    }
+  }
+
+  /**
+   * Every agent has the built-in skills in its folder. Missing copies are put back (they can't be
+   * removed); `refresh` also rewrites copies that differ, so a new Warren version reaches them.
+   */
+  async ensureBuiltinSkills(agentIds?: string[], refresh = false) {
+    const rows = this.store.db.prepare("SELECT id, workspace_id AS workspaceId FROM agents").all() as { id: string; workspaceId: string }[];
+    for (const { id: agentId, workspaceId } of agentIds ? rows.filter((r) => agentIds.includes(r.id)) : rows) {
+      const vault = this.vault(workspaceId);
+      for (const s of BUILTIN_SKILLS) {
+        const p = agentSkillPath(agentId, s.id);
+        const file = skillFile({ slug: s.id, name: s.name, description: s.description, content: s.content });
+        const have = await vault.read(p).then((n) => n.content, () => null);
+        if (have === file || (have !== null && !refresh)) continue;
+        await vault.write(p, file, { name: "Warren", email: "warren@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
       }
     }
   }
@@ -130,8 +154,8 @@ export class Hub {
 
   // --- browser clients ------------------------------------------------------
 
-  addClient(socket: WebSocket, workspaceId: string, userId: string) {
-    const c = { socket, workspaceId, userId };
+  addClient(socket: WebSocket, workspaceId: string, userId: string, sessionHash: string) {
+    const c = { socket, workspaceId, userId, sessionHash };
     this.clients.add(c);
     socket.on("close", () => this.clients.delete(c));
   }
@@ -139,7 +163,13 @@ export class Hub {
   /** Send an event to everyone in a workspace, or only to the people `only` picks. */
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
     const data = JSON.stringify(event);
-    for (const c of this.clients) if (c.workspaceId === workspaceId && c.socket.readyState === 1 && (!only || only(c.userId))) c.socket.send(data);
+    const guest = guestEvent(event);
+    for (const c of this.clients) {
+      if (c.workspaceId !== workspaceId || c.socket.readyState !== 1 || (only && !only(c.userId))) continue;
+      if (this.store.role(workspaceId, c.userId) === "guest") {
+        if (guest) c.socket.send(JSON.stringify(guest));
+      } else c.socket.send(data);
+    }
     if (!this.closed) this.apns.onEvent(workspaceId, event, only);
   }
 
@@ -160,6 +190,16 @@ export class Hub {
       if (c.userId !== userId) continue;
       this.clients.delete(c);
       c.socket.close(4401, "removed from the workspace");
+    }
+  }
+
+  /** Stop sending events to sign-ins whose tokens were revoked. */
+  disconnectRevokedSessions(userId?: string) {
+    const session = this.store.db.prepare("SELECT 1 FROM tokens WHERE kind = 'session' AND hash = ?");
+    for (const c of this.clients) {
+      if ((userId && c.userId !== userId) || session.get(c.sessionHash)) continue;
+      this.clients.delete(c);
+      c.socket.close(4401, "session revoked");
     }
   }
 
@@ -300,8 +340,16 @@ export class Hub {
         for (const c of store.computersOnNode(conn.nodeId)) this.computers.changed(c.id);
         return;
       }
+      case "screen_event": {
+        this.computers.onScreenEvent(conn.nodeId, msg);
+        return;
+      }
       case "discovered": {
         store.setNodeDiscovered(conn.nodeId, msg.agents);
+        return;
+      }
+      case "shelf": {
+        this.shelves.set(conn.nodeId, msg.items);
         return;
       }
       case "result": {
@@ -372,6 +420,8 @@ export class Hub {
     const { store } = this;
     const live = this.live.get(run.id) ?? { parts: [], text: "" };
     this.live.delete(run.id);
+    const taskReply = this.taskReplies.get(run.id);
+    this.taskReplies.delete(run.id);
     const author: Actor = { kind: "agent", id: run.agentId };
     // in a discussion, replies don't wake anyone: the discussion moves on by itself
     const route = run.discussionId ? false : undefined;
@@ -386,7 +436,20 @@ export class Hub {
       store.setRunStatus(run.id, "done");
       this.routines.runFinished(run);
       body = result.finalText.trim() || live.text.trim();
-      if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
+      // a harness command (/compact, say) may finish without a word; say it ran
+      const trigger = !body && agent && run.triggerMessageId ? store.message(run.triggerMessageId) : undefined;
+      const ran = trigger && agent ? this.commandFor(agent, trigger.body) : null;
+      if (ran?.via === "raw" && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "notice", text: `Ran /${ran.name}.` }], hop: run.hop + 1, route: false });
+      const posted = taskReply ? store.message(taskReply.messageId) : undefined;
+      // the answer task_update already posted, repeated as the final reply (as-is, or wrapped in a line or two)
+      const same = (a: string, b: string) => !!a.trim() && !!b.trim() && a.includes(b.trim());
+      const repeated = taskReply && posted && !posted.deletedAt && (same(taskReply.result, body) || (same(body, taskReply.result) && body.length <= taskReply.result.length + 300));
+      if (repeated && posted && live.parts.length) {
+        const message = { ...posted, parts: [...posted.parts, ...live.parts] };
+        store.db.prepare("UPDATE messages SET parts_json = ? WHERE id = ?").run(JSON.stringify(message.parts), message.id);
+        this.broadcast(workspaceId, { type: "message_updated", message: store.withReactions([message])[0] }, this.audience(message.channelId));
+      }
+      if (body && !gone && !repeated) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
     } else {
       store.setRunStatus(run.id, "failed", result.error);
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
@@ -546,12 +609,37 @@ export class Hub {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${verdict.reason}.`);
         continue;
       }
+      // commands Warren answers itself don't wake the agent
+      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "warren") {
+        this.answerCommand(agent, msg, threadId);
+        continue;
+      }
       const runId = this.store.createRun({ agentId, channelId: msg.channelId, threadId, triggerMessageId: msg.id, hop: msg.hop, requestedBy });
       if (!agent.nodeId) this.postSystem(msg, `${this.handleOf(agentId)} isn't connected to a device yet. The request is queued.`);
       else if (!this.isNodeOnline(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)} is offline. The request is queued until its device reconnects.`);
       else if (this.isNodePaused(agent.nodeId)) this.postSystem(msg, `${this.handleOf(agentId)}'s device is paused. The request is queued until it's resumed there.`);
       this.dispatchRun(runId);
     }
+  }
+
+  /** What follows "/" for this agent: its harness's commands on its device, its Warren skills, and Warren's own. */
+  commands(agent: Agent): AgentCommand[] {
+    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    return agentCommands(catalog?.commands, this.skills.forAgent(agent.id));
+  }
+
+  /** The command a message runs for this agent ("/name args", or "@handle /name args" in a channel), if it names one it has. */
+  commandFor(agent: Agent, body: string): (AgentCommand & { args: string }) | null {
+    const parsed = parseCommand(body, agent.handle);
+    if (!parsed) return null;
+    const cmd = this.commands(agent).find((c) => c.name === parsed.name);
+    return cmd ? { ...cmd, args: parsed.args } : null;
+  }
+
+  /** /context: how full the agent's conversation here is, from its last reply's usage. */
+  private answerCommand(agent: Agent, msg: Message, threadId: string | null) {
+    const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
+    this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
 
   private postSystem(near: Message, text: string) {
@@ -671,6 +759,13 @@ export class Hub {
     return r ? this.store.run(r.id) : undefined;
   }
 
+  /** Remember the answer already posted by task_update, only for runs working on that task. */
+  taskReplyPosted(task: { toAgentId: string | null; channelId: string | null; threadId: string | null }, message: Message, result: string) {
+    if (message.author.kind !== "agent" || message.author.id !== task.toAgentId || !result.trim()) return;
+    const runs = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND channel_id = ? AND thread_id = ? AND status = 'running'").all(task.toAgentId, task.channelId, task.threadId) as { id: string }[];
+    for (const run of runs) this.taskReplies.set(run.id, { messageId: message.id, result: result.trim() });
+  }
+
   cancelRun(runId: string) {
     const run = this.store.run(runId);
     if (!run || (run.status !== "queued" && run.status !== "running")) return false;
@@ -678,6 +773,10 @@ export class Hub {
     const conn = agent?.nodeId ? this.nodes.get(agent.nodeId) : undefined;
     if (conn) this.send(conn, { type: "cancel", runId });
     this.store.setRunStatus(runId, "cancelled");
+    this.live.delete(runId);
+    this.taskReplies.delete(runId);
+    // the device's late report is ignored, so clients hear from here that the agent is free again
+    if (agent) this.broadcast(agent.workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
     // stopping one participant doesn't stop the discussion; it goes on without them
     if (run.discussionId) void this.discussions.onRunFinished(run, "");
     return true;
@@ -821,10 +920,9 @@ export class Hub {
     const me = team?.nodes.find((n) => n.agentId === agentId);
     if (!team || !me) return "";
     const live = team.nodes.filter((n) => this.store.agent(n.agentId));
-    const describe = (id: string) => {
-      const a = this.store.agent(id)!;
-      return `${this.handleOf(id)} (${a.name}${a.settings.role?.trim() ? `, ${a.settings.role.trim()}` : ""})`;
-    };
+    // its role on this team, else the one in its own settings
+    const roleOf = (id: string) => team.nodes.find((n) => n.agentId === id)?.role?.trim() || this.store.agent(id)?.settings.role?.trim() || "";
+    const describe = (id: string) => `${this.handleOf(id)} (${this.store.agent(id)!.name}${roleOf(id) ? `, ${roleOf(id)}` : ""})`;
     const handles = (ids: string[]) => ids.filter((id) => this.store.agent(id)).map(describe).join(", ");
     const leads = live.filter((n) => n.lead).map((n) => n.agentId);
     const fromMe = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
@@ -848,7 +946,8 @@ export class Hub {
           fromMe.length ? `You can hand pieces of your work to ${handles(fromMe)} with task_delegate.` : "",
           "When you finish a task, report the result with task_update so whoever handed it to you hears back.",
         ];
-    return [`## Your team in #${channel.name}`, ...job.filter(Boolean), `The whole team:\n${chart}`].join("\n");
+    const role = me.role?.trim() ? `Your role here: ${me.role.trim()}.${me.roleNotes?.trim() ? ` ${me.roleNotes.trim()}` : ""}` : "";
+    return [`## Your team in #${channel.name}`, role, ...job.filter(Boolean), `The whole team:\n${chart}`].filter(Boolean).join("\n");
   }
 
   /**
@@ -872,6 +971,9 @@ export class Hub {
     const history = background ? [] : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
     const discussion = run && !background ? this.discussions.promptSection(run) : "";
     const trigger = store.message(triggerId) ?? { body: "", parts: [], author: { kind: "user" as const, id: "system" } };
+    // a harness's own command goes to it exactly as typed, into the same conversation
+    const command = !background && trigger.author.kind === "user" ? this.commandFor(agent, trigger.body) : null;
+    if (command?.via === "raw") return `/${command.name}${command.args ? ` ${command.args}` : ""}`;
     const others = store
       .agents(agent.workspaceId)
       .filter((a) => a.id !== agent.id)
@@ -903,6 +1005,7 @@ export class Hub {
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
     const leading = leadSection(store, agent);
     const making = background ? "" : spawnSection(this, agent);
+    await this.ensureBuiltinSkills([agent.id]);
     const skills = this.skills.promptSection(agent.id);
     const connectors = this.connectors.promptSection(agent.id);
     const soulNote = agent.settings.soulLocked
@@ -923,7 +1026,7 @@ export class Hub {
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       channelNotes ? `\n## This channel\n${channelNotes}` : "",
       teamNotes ? `\n${teamNotes}` : "",
-      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available.`,
+      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
@@ -940,7 +1043,7 @@ export class Hub {
       background,
       parentThread.length ? `\nThis is a sub-thread. Earlier, in the thread it branched off from:\n${parentThread.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
-      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${trigger.body}${taskInstructions(store, agent.id, trigger)}`,
+      background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${command?.via === "prompt" ? skillRequest(command.name, command.args) : trigger.body}${taskInstructions(store, agent.id, trigger)}`,
     ]
       .filter(Boolean)
       .join("\n");

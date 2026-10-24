@@ -10,7 +10,7 @@ final class WorkspaceTests: XCTestCase {
   private let background = ##"{"background":{"agentId":"a1","userId":"u1","enabled":true,"everyMinutes":60,"focus":"Inbox","quietStart":"22:00","quietEnd":"08:00","nextAt":null,"nextReason":"","lastAt":null,"lastNote":"","checking":false,"model":null,"effort":null,"dailyCap":24},"followups":[{"id":"f1","agentId":"a1","userId":"u1","dueAt":"2026-10-19T08:00:00Z","note":"Check replies","status":"pending"}],"notAllowed":null,"sources":[{"kind":"app","name":"Gmail","detail":"Connected"}],"usage":{"lastTokens":100,"todayTokens":200,"weekTokens":400,"checksToday":2,"capReached":false},"defaultDailyCap":24}"##
   private let skill = ##"{"id":"s1","name":"Meeting notes","description":"Use when meetings end","content":"# Notes","source":"custom","catalogId":null,"tags":["work"],"agentIds":["a1"]}"##
   private let connector = ##"{"id":"co1","name":"Notion","kind":"mcp-http","url":"https://mcp.notion.com/mcp","headers":{},"env":{"KEY":"••••1234"},"enabled":true,"agentIds":["a1"],"auth":{"required":true,"signedIn":false,"error":null},"warnings":[]}"##
-  private let team = ##"{"id":"te1","name":"research","emoji":"","description":"Sources","leadId":"a1","reportsTo":null,"channelId":"c1","folder":"teams/research","repo":null,"baseBranch":"main","members":[{"agentId":"a1","role":"Lead","roleNotes":"Coordinate","managerId":null}]}"##
+  private let team = ##"{"id":"c1","name":"research","leads":["a1"],"leadId":"a1","reportsTo":null,"channelId":"c1","folder":"teams/research","repo":null,"baseBranch":"main","members":[{"agentId":"a1","role":"Lead","roleNotes":"Coordinate","lead":true,"managerId":null}]}"##
   private let storage = ##"{"path":"/data/vault","source":"setting","setting":"/data/vault","pendingRestart":false,"nextPath":"/data/vault","restartable":true,"previous":null,"moved":{"how":"copied","files":2},"sync":{"allowed":true,"reason":null,"urlPath":"/memory.git","branch":"main"},"tokens":[{"id":"vtk1","label":"Obsidian","createdAt":"2026-10-18","lastUsed":null}]}"##
   private let person = ##"{"id":"u1","name":"Sam","email":"sam@example.test","preferredName":null,"timezone":"UTC","role":"owner"}"##
   private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T { try Wire.decoder.decode(type, from: Data(json.utf8)) }
@@ -148,6 +148,73 @@ final class WorkspaceTests: XCTestCase {
     XCTAssertTrue(try body("PUT", "/api/agents/a1/background")["dailyCap"] is NSNull)
   }
 
+  func testRoutineEditSavesStepsBeforeSchedule() async throws {
+    let store = makeStore()
+    let existing = try decode(Routine.self, routine)
+    reply("PUT", "/api/vault/note", #"{"ok":true}"#)
+    reply("PATCH", "/api/routines/r1", routine)
+    try await store.saveRoutine(existing, fields: ["schedule": AnyEncodable("0 8 * * *")], steps: "New steps")
+    let writes = ManagementHTTPStub.requests.withLock { $0.filter { ["PUT", "PATCH"].contains($0.httpMethod ?? "") } }
+    XCTAssertEqual(writes.map { $0.url!.path }, ["/api/vault/note", "/api/routines/r1"])
+    XCTAssertEqual(try body("PUT", "/api/vault/note")["content"] as? String, "New steps")
+    XCTAssertEqual(store.routines.first?.id, "r1")
+  }
+
+  func testRoutineDoesNotChangeScheduleWhenStepsFail() async throws {
+    let store = makeStore()
+    reply("PUT", "/api/vault/note", #"{"error":"No access"}"#, status: 403)
+    reply("PATCH", "/api/routines/r1", routine)
+    do {
+      try await store.saveRoutine(try decode(Routine.self, routine), fields: [:], steps: "New steps")
+      XCTFail("Expected note failure")
+    } catch { XCTAssertEqual(error.localizedDescription, "No access") }
+    XCTAssertFalse(ManagementHTTPStub.requests.withLock { $0.contains { $0.httpMethod == "PATCH" } })
+  }
+
+  func testRoutineReportsPartialSaveWhenScheduleFails() async throws {
+    let store = makeStore()
+    let existing = try decode(Routine.self, routine)
+    store.routines = [existing]
+    reply("PUT", "/api/vault/note", #"{"ok":true}"#)
+    reply("GET", "/api/vault/notes", #"{"error":"Refresh unavailable"}"#, status: 503)
+    reply("PATCH", "/api/routines/r1", #"{"error":"Schedule rejected"}"#, status: 400)
+    do {
+      try await store.saveRoutine(existing, fields: ["schedule": AnyEncodable("bad")], steps: "New steps")
+      XCTFail("Expected metadata failure")
+    } catch { XCTAssertEqual(error.localizedDescription, "Steps saved, schedule not updated. Schedule rejected") }
+    XCTAssertEqual(store.routines.first?.schedule, existing.schedule)
+    XCTAssertEqual(store.syncError, "Refresh unavailable")
+  }
+
+  func testMemoryMutationsSucceedWhenRefreshFails() async throws {
+    let store = makeStore()
+    reply("PUT", "/api/vault/note", #"{"ok":true}"#)
+    reply("POST", "/api/vault/move", #"{"ok":true}"#)
+    reply("POST", "/api/memory/remember", #"{"saved":true}"#)
+    reply("GET", "/api/vault/notes", #"{"error":"Notes unavailable"}"#, status: 503)
+    reply("GET", "/api/memory/profile", #"{"error":"Profile unavailable"}"#, status: 503)
+    try await store.saveNote(path: "shared/hello.md", content: "Saved", message: "Edit")
+    XCTAssertEqual(store.memoryVersion, 1)
+    XCTAssertEqual(store.syncError, "Notes unavailable")
+    store.notes = [try decode(MemoryNote.self, note)]
+    try await store.moveNote(from: "shared/hello.md", to: "shared/moved.md")
+    XCTAssertTrue(store.notes.isEmpty)
+    XCTAssertEqual(store.memoryVersion, 2)
+    try await store.remember(["text": AnyEncodable("Remember this")])
+    XCTAssertEqual(store.memoryVersion, 3)
+    XCTAssertEqual(store.syncError, "Profile unavailable")
+  }
+
+  func testMemoryMutationFailureDoesNotRefreshOrAdvanceVersion() async throws {
+    let store = makeStore()
+    reply("PUT", "/api/vault/note", #"{"error":"Cannot save"}"#, status: 403)
+    do { try await store.saveNote(path: "shared/hello.md", content: "Saved", message: "Edit"); XCTFail("Expected failure") }
+    catch { XCTAssertEqual(error.localizedDescription, "Cannot save") }
+    XCTAssertEqual(store.memoryVersion, 0)
+    XCTAssertNil(store.syncError)
+    XCTAssertEqual(ManagementHTTPStub.requests.withLock { $0.count }, 1)
+  }
+
   func testSkillsAndConnectorsRoundTrips() async throws {
     let store = makeStore(); reply("POST", "/api/skills", skill)
     try await store.saveSkill(nil, ["name": AnyEncodable("Meeting notes"), "content": AnyEncodable("# Notes"), "agentIds": AnyEncodable(["a1"])])
@@ -164,10 +231,10 @@ final class WorkspaceTests: XCTestCase {
   }
 
   func testTeamsAndDevicesRoundTrips() async throws {
-    let store = makeStore(); reply("POST", "/api/teams", team)
-    try await store.saveTeam(nil, ["name": AnyEncodable("research"), "leadId": AnyEncodable("a1")])
+    let store = makeStore(); reply("GET", "/api/teams", "[\(team)]")
+    try await store.refreshTeams()
     XCTAssertEqual(store.teams.first?.channelId, "c1")
-    XCTAssertEqual(try body("POST", "/api/teams")["leadId"] as? String, "a1")
+    XCTAssertEqual(store.teams.first?.leads, ["a1"])
     reply("PATCH", "/api/nodes/n1", ##"{"ok":true}"##)
     reply("GET", "/api/nodes", ##"[{"id":"n1","name":"Mac","online":true,"mine":true,"shared":true}]"##)
     try await store.updateNode("n1", ["shared": AnyEncodable(true)])

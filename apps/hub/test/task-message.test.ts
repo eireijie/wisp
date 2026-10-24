@@ -37,6 +37,17 @@ afterAll(async () => {
 });
 
 describe("task messages", () => {
+  it("keeps the solo agent's private instructions out of an automatic task brief", async () => {
+    const solo = (await api("POST", "/api/agents", { handle: "solo", name: "Solo", harness: "custom" })).data;
+    const task = (await api("POST", "/api/tasks", { title: "Check the docs", brief: "Only what I typed" })).data;
+    const message = hub.store.message(task.threadId)!;
+    expect(task.brief).toBe("Only what I typed");
+    expect(message.body).toBe("@solo New task **Check the docs**\n\nOnly what I typed");
+    const prompt = await hub.buildPrompt(solo.id, message.channelId, task.threadId, message.id);
+    expect(prompt).toContain("You're the only agent so far");
+    expect(prompt).toContain("task_update");
+  });
+
   it("shows people only the title and brief, and gives the assignee the instructions", async () => {
     const atlas = (await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "custom" })).data;
     const other = (await api("POST", "/api/agents", { handle: "orion", name: "Orion", harness: "custom" })).data;
@@ -57,5 +68,19 @@ describe("task messages", () => {
     // someone the task isn't assigned to does not get the instructions
     const otherPrompt = await hub.buildPrompt(other.id, msg.channelId, task.threadId, msg.id);
     expect(otherPrompt).not.toContain("task_update");
+  });
+
+  it("keeps the lead's plan private when a person starts an automatic task", async () => {
+    const lead = hub.store.agentByHandle((await api("GET", "/api/me")).data.workspace.id, "atlas")!;
+    await api("PUT", "/api/settings/lead", { leadId: lead.id });
+    const task = (await api("POST", "/api/tasks", { title: "Plan the work", brief: "Write the release notes" })).data;
+    const message = hub.store.message(task.threadId)!;
+    expect(task.brief).toBe("Write the release notes");
+    expect(message.body).toBe("@atlas New task **Plan the work**\n\nWrite the release notes");
+    const prompt = await hub.buildPrompt(lead.id, message.channelId, task.threadId, message.id);
+    expect(prompt).toContain("You're the lead");
+    expect(prompt).toContain("task_delegate");
+    expect(prompt).toContain("subtasks");
+    expect(prompt).toContain("task_update");
   });
 });

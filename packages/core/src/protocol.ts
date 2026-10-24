@@ -1,11 +1,15 @@
 import { z } from "zod";
 import { ComputerAction, DeviceCapabilities } from "./computers.ts";
 import { ConnectorSpec } from "./connectors.ts";
+import { HarnessAccountOp, HarnessSettingsChange } from "./harness-settings.ts";
+import { ShelfItem } from "./shop.ts";
 
 /**
  * Hub <-> node wire protocol. Nodes dial out to the hub over WebSocket and
  * authenticate with a node token, so they work behind NAT.
  */
+
+export const MAX_MODEL_ID_LENGTH = 200;
 
 export const AgentEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
@@ -18,7 +22,7 @@ export const AgentEvent = z.discriminatedUnion("type", [
   /** what a run actually used: reported by the harness once the reply is done */
   z.object({
     type: z.literal("usage"),
-    model: z.string().max(200).optional(),
+    model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
     effort: z.string().max(32).nullable().optional(),
     /** tokens in the conversation's context after this reply */
     contextUsed: z.number().int().nonnegative().optional(),
@@ -40,7 +44,7 @@ export const HarnessCatalogSchema = z.object({
   models: z
     .array(
       z.object({
-        id: z.string(),
+        id: z.string().max(MAX_MODEL_ID_LENGTH),
         label: z.string(),
         description: z.string().optional(),
         efforts: z.array(z.string()).optional(),
@@ -51,8 +55,20 @@ export const HarnessCatalogSchema = z.object({
     )
     .max(200),
   efforts: z.array(z.string()),
-  defaultModel: z.string().optional(),
+  defaultModel: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   defaultEffort: z.string().optional(),
+  commands: z
+    .array(
+      z.object({
+        name: z.string().max(120),
+        description: z.string().max(300).optional(),
+        hint: z.string().max(120).optional(),
+        kind: z.enum(["command", "skill"]),
+        via: z.enum(["raw", "prompt"]),
+      }),
+    )
+    .max(500)
+    .optional(),
 });
 
 /** Where a coding run works: its own checkout of a team repo, on the task's branch. */
@@ -82,7 +98,7 @@ export const DiscoveredAgent = z.object({
   harness: z.string().max(60),
   name: z.string().max(120),
   description: z.string().max(2000).optional(),
-  model: z.string().max(200).optional(),
+  model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   soul: z.string().max(50_000).optional(),
   instructions: z.string().max(50_000).optional(),
   /** notes it kept (MEMORY.md, USER.md, memory/*.md) */
@@ -105,7 +121,7 @@ export const RunRequest = z.object({
   /** start a new harness session instead of continuing this conversation's (background checks) */
   fresh: z.boolean().optional(),
   /** run on this model instead of the agent's own (background checks) */
-  model: z.string().max(200).optional(),
+  model: z.string().max(MAX_MODEL_ID_LENGTH).optional(),
   /** and with this reasoning effort */
   effort: z.string().max(32).optional(),
   workspace: RunWorkspace.optional(),
@@ -143,8 +159,12 @@ export const NodeToHub = z.discriminatedUnion("type", [
   z.object({ type: z.literal("screen_frame"), computerId: z.string(), image: z.string(), width: z.number().int(), height: z.number().int() }),
   z.object({ type: z.literal("tunnel_ready"), tunnelId: z.string() }),
   z.object({ type: z.literal("tunnel_closed"), tunnelId: z.string(), error: z.string().optional() }),
+  /** something about the screen's code its owner should hear about (wrong codes, a lockout) */
+  z.object({ type: z.literal("screen_event"), text: z.string().max(500), alert: z.boolean().optional() }),
   /** agents that already exist on this device and could be brought into Warren */
   z.object({ type: z.literal("discovered"), agents: z.array(DiscoveredAgent).max(100) }),
+  /** skills and MCP servers this device's harnesses already have (secret values stay on the device) */
+  z.object({ type: z.literal("shelf"), items: z.array(ShelfItem).max(1000) }),
 ]);
 export type NodeToHub = z.infer<typeof NodeToHub>;
 
@@ -160,7 +180,15 @@ export const HubToNode = z.discriminatedUnion("type", [
   /** start or stop streaming a computer's screen to people watching it */
   z.object({ type: z.literal("screen_watch"), computer: ComputerSpec, on: z.boolean(), fps: z.number().min(0.2).max(10).optional() }),
   /** relay a computer's VNC server: binary frames carry the bytes (see tunnelFrame) */
-  z.object({ type: z.literal("tunnel_open"), tunnelId: z.string(), computer: ComputerSpec }),
+  z.object({ type: z.literal("tunnel_open"), tunnelId: z.string(), computer: ComputerSpec, code: z.string().max(200).optional() }),
+  /**
+   * Open the device's own screen for `purpose` (a viewer, a lend, a loan) until `until`, if `code` is
+   * the one picked at the device; answered with a result ({ until }). The device checks the code and
+   * keeps the time limit itself, so the hub never holds the code.
+   */
+  z.object({ type: z.literal("screen_unlock"), requestId: z.string(), purpose: z.string().max(100), code: z.string().max(200), until: z.string() }),
+  /** close the screen again for `purpose` (the viewer left, the lend or loan ended) */
+  z.object({ type: z.literal("screen_lock"), purpose: z.string().max(100) }),
   z.object({ type: z.literal("tunnel_close"), tunnelId: z.string() }),
   /** look again for agents that already exist on this device */
   z.object({ type: z.literal("discover") }),
@@ -172,6 +200,16 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("read_agent"), requestId: z.string(), key: z.string() }),
   /** update this device's copy of Warren from GitHub and restart; answered with a result (UpdateResult) */
   z.object({ type: z.literal("update"), requestId: z.string() }),
+  /** read the harnesses' own settings (all of them, or one); answered with a result (HarnessSettings[]) */
+  z.object({ type: z.literal("harness_settings"), requestId: z.string(), harness: z.string().max(60).optional(), account: z.string().max(64).optional() }),
+  /** change a harness's own settings; the device edits its config file and answers with a result (HarnessSettings) */
+  z.object({ type: z.literal("harness_settings_change"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional(), changes: z.array(HarnessSettingsChange).min(1).max(20) }),
+  /** add, rename, remove or sign in a harness's accounts, or pick which one an agent uses; answered with a result */
+  z.object({ type: z.literal("harness_account"), requestId: z.string(), harness: z.string().max(60), action: HarnessAccountOp }),
+  /** send one of a harness's skills (its SKILL.md) to share it; answered with a result (HarnessSkillFile) */
+  z.object({ type: z.literal("harness_skill"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional(), id: z.string().max(300) }),
+  /** open a harness's config file in the device's own editor; answered with a result ({ path }) */
+  z.object({ type: z.literal("harness_open_config"), requestId: z.string(), harness: z.string().max(60), account: z.string().max(64).optional() }),
 ]);
 export type HubToNode = z.infer<typeof HubToNode>;
 
@@ -192,7 +230,6 @@ export type ClientEvent =
   | { type: "sections_changed" }
   | { type: "channels_changed" }
   | { type: "agents_changed" }
-  | { type: "teams_changed" }
   | { type: "lead_changed" }
   | { type: "discussion"; discussion: import("./types.ts").Discussion }
   | { type: "computer"; computer: import("./computers.ts").Computer }

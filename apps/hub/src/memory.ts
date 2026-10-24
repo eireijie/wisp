@@ -121,42 +121,46 @@ export class AgentMemory {
   }
 
   private async teamSection(agent: Agent, teams: Team[], shown: Set<string>): Promise<string> {
-    const mine = teams.filter((t) => t.members.some((m) => m.agentId === agent.id));
+    // the chart itself comes with each channel's own section; this adds what a team shares beyond it
+    const mine = teams.filter((t) => t.members.some((m) => m.agentId === agent.id) && (t.folder || t.repo || t.reportsTo || t.members.some((m) => m.role)));
     if (!mine.length) return "";
     const parts = await Promise.all(
       mine.map(async (t) => {
         const me = t.members.find((m) => m.agentId === agent.id)!;
-        const leads = t.leadId === agent.id;
+        const leads = t.leads.includes(agent.id);
         const chain = teamChain(t, teams);
         const onTeam = new Set(t.members.map((m) => m.agentId));
         const mates = t.members
           .filter((m) => m.agentId !== agent.id)
           .map((m) => {
-            const notes = [m.role, t.leadId === m.agentId ? "the lead" : "", m.managerId && onTeam.has(m.managerId) && m.managerId !== agent.id ? `reports to ${this.handle(m.managerId)}` : ""].filter(Boolean);
+            const notes = [m.role, m.lead ? "a lead" : "", m.managerId && onTeam.has(m.managerId) && m.managerId !== agent.id ? `reports to ${this.handle(m.managerId)}` : ""].filter(Boolean);
             return `${this.handle(m.agentId)}${notes.length ? ` (${notes.join(", ")})` : ""}`;
           });
         const boss = me.managerId && onTeam.has(me.managerId) ? me.managerId : null;
         const reports = t.members.filter((m) => m.managerId === agent.id).map((m) => this.handle(m.agentId));
-        const channel = t.channelId ? this.store.channel(t.channelId)?.name : null;
-        const brief = await this.excerpt(t.workspaceId, `${t.folder}/README.md`, BRIEF_CHARS);
-        shown.add(`${t.folder}/readme.md`.toLowerCase());
-        const decisions = this.decisions(t);
+        const folder = t.folder;
+        const brief = folder ? await this.excerpt(t.workspaceId, `${folder}/README.md`, BRIEF_CHARS) : "";
+        if (folder) shown.add(`${folder}/readme.md`.toLowerCase());
+        const decisions = folder ? this.decisions(t) : [];
+        const keep = folder ? `${folder}/` : "shared/";
         return [
           `### Team "${t.name}"${leads ? ", which you lead" : ""}${me.role ? `; your role: ${me.role}` : ""}`,
           me.roleNotes ? `What your role means: ${me.roleNotes}` : "",
-          `Lead: ${this.handle(t.leadId)}${chain.length ? ` · Reports to: ${chain.map((a) => this.handle(a)).join(" → ")}` : ""}${channel ? ` · Channel: #${channel}` : ""} · Team memory: ${t.folder}/`,
+          `Lead: ${t.leads.map((l) => this.handle(l)).join(", ") || "none"}${chain.length ? ` · Reports to: ${chain.map((a) => this.handle(a)).join(" → ")}` : ""} · Channel: #${t.name}${folder ? ` · Team memory: ${folder}/` : ""}`,
           mates.length ? `Teammates: ${mates.join(", ")}` : "No teammates yet.",
           boss || reports.length ? [boss ? `You report to ${this.handle(boss)}.` : "", reports.length ? `${reports.join(", ")} report${reports.length === 1 ? "s" : ""} to you.` : ""].filter(Boolean).join(" ") : "",
-          brief ? `Brief (${t.folder}/README.md):\n${brief}` : "",
+          brief ? `Brief (${folder}/README.md):\n${brief}` : "",
           decisions.length ? `Recent decisions:\n${decisions.join("\n")}` : "",
           t.repo
             ? `Code: the team works in the git repo ${t.repo} (base branch ${t.baseBranch}). Coding tasks handed out in the team channel get their own branch, and runs for them happen in a checkout of it.${leads || /review/i.test(me.role) ? " When a branch is reviewed and good, merge it with branch_merge." : ""}`
             : "",
           leads
-            ? `As the lead: break work into tasks for ${reports.length ? "the agents who report to you" : "your teammates"} with task_delegate, review what comes back, and keep the brief and ${t.folder}/decisions/ current.`
+            ? `As the lead: break work into tasks for ${reports.length ? "the agents who report to you" : "your teammates"} with task_delegate and review what comes back.${folder ? ` Keep the brief and ${folder}/decisions/ current.` : ""}`
             : reports.length
-              ? `Hand work to the agents who report to you with task_delegate and check what comes back; report your own results to ${boss ? this.handle(boss) : "the lead"}. Put what the team should know in ${t.folder}/.`
-              : `Put what the team should know in ${t.folder}/, and what everyone should know in shared/. Notes you add there show your name.`,
+              ? `Hand work to the agents who report to you with task_delegate and check what comes back; report your own results to ${boss ? this.handle(boss) : "the lead"}. Put what the team should know in ${keep}.`
+              : folder
+                ? `Put what the team should know in ${folder}/, and what everyone should know in shared/. Notes you add there show your name.`
+                : "",
         ]
           .filter(Boolean)
           .join("\n");
@@ -172,13 +176,13 @@ export class AgentMemory {
     const parts = await Promise.all(
       below.map(async (t) => {
         const open = tasks.filter((task) => t.members.some((m) => m.agentId === task.toAgentId)).slice(0, 8);
-        const brief = await this.excerpt(t.workspaceId, `${t.folder}/README.md`, 600);
-        shown.add(`${t.folder}/readme.md`.toLowerCase());
-        const decisions = this.decisions(t, 3);
+        const brief = t.folder ? await this.excerpt(t.workspaceId, `${t.folder}/README.md`, 600) : "";
+        if (t.folder) shown.add(`${t.folder}/readme.md`.toLowerCase());
+        const decisions = t.folder ? this.decisions(t, 3) : [];
         const direct = t.reportsTo === agent.id;
         return [
-          `### Team "${t.name}" (lead ${this.handle(t.leadId)}; ${t.members.length} agent${t.members.length === 1 ? "" : "s"}${direct ? "" : `; reports to ${this.handle(t.reportsTo)}`})`,
-          `Members: ${t.members.map((m) => `${this.handle(m.agentId)}${m.role ? ` (${m.role})` : ""}`).join(", ") || "none"} · Team memory: ${t.folder}/`,
+          `### Team "${t.name}" (lead ${t.leads.map((l) => this.handle(l)).join(", ") || "none"}; ${t.members.length} agent${t.members.length === 1 ? "" : "s"}${direct ? "" : `; reports to ${this.handle(t.reportsTo)}`})`,
+          `Members: ${t.members.map((m) => `${this.handle(m.agentId)}${m.role ? ` (${m.role})` : ""}`).join(", ") || "none"}${t.folder ? ` · Team memory: ${t.folder}/` : ""}`,
           brief ? `Brief: ${brief.replace(/\s+/g, " ")}` : "",
           open.length ? `Open tasks:\n${open.map((x) => `- [${x.status}] ${x.title} (${this.handle(x.toAgentId)})`).join("\n")}` : "No open tasks.",
           decisions.length ? `Recent decisions:\n${decisions.join("\n")}` : "",

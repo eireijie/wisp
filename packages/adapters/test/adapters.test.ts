@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseClaudeLine, parseCodexLine } from "../src/index.ts";
+import os from "node:os";
+import path from "node:path";
 
 describe("claude stream-json", () => {
   it("maps init, text, tool use and results", () => {
@@ -201,4 +203,29 @@ describe("cancelling a run", () => {
     expect(res.exitCode).toBeNull(); // ended by a signal, not on its own
     expect(Date.now() - started).toBeLessThan(5000);
   }, 10_000);
+});
+
+describe("harness commands on the device", () => {
+  it("finds Claude Code's commands, skills and enabled plugins' ones", async () => {
+    const { claudeCommands } = await import("../src/commands.ts");
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "warren-cmds-"));
+    const w = async (f: string, t: string) => (await fsp.mkdir(path.dirname(path.join(home, f)), { recursive: true }), fsp.writeFile(path.join(home, f), t));
+    await w(".claude/commands/ship.md", "---\ndescription: Ship it\nargument-hint: version\n---\nDo it");
+    await w(".claude/skills/pdf/SKILL.md", "---\nname: pdf\ndescription: Read PDFs\n---\n");
+    await w(".claude/plugins/installed_plugins.json", JSON.stringify({ version: 2, plugins: { "kit@m": [{ installPath: path.join(home, "kit") }], "off@m": [{ installPath: path.join(home, "off") }] } }));
+    await w(".claude/settings.json", JSON.stringify({ enabledPlugins: { "kit@m": true, "off@m": false } }));
+    await w("kit/skills/plan/SKILL.md", "---\nname: plan\ndescription: Plan\n---\n");
+    await w("off/skills/nope/SKILL.md", "---\nname: nope\n---\n");
+    const names = (await claudeCommands(home)).map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(["compact", "ship", "pdf", "kit:plan"]));
+    expect(names).not.toContain("off:nope");
+    expect((await claudeCommands(home)).find((c) => c.name === "ship")).toMatchObject({ hint: "version", via: "raw" });
+    await fsp.rm(home, { recursive: true, force: true });
+  });
+
+  it("reads an ACP agent's announced commands", async () => {
+    const { acpCommands } = await import("../src/acp.ts");
+    expect(acpCommands([{ name: "model", description: "Switch models", input: { hint: "name" } }, { name: "" }])).toEqual([{ name: "model", description: "Switch models", hint: "name", kind: "command", via: "raw" }]);
+    expect(acpCommands(null)).toEqual([]);
+  });
 });

@@ -298,8 +298,10 @@ export class Background {
     const tz = user ? this.timezone(user.id) : "UTC";
     const quiet = b && inQuietHours(new Date(), tz, b.quietStart, b.quietEnd);
     const fmt = (iso: string) => new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz });
-    const dm = store.messages(run.channelId, { limit: 20 }).filter((m) => m.author.id !== "system");
-    const tasks = store.tasks(agent.workspaceId, { agentId: agent.id }).filter((t) => t.status === "open" || t.status === "in_progress").slice(0, 15);
+    const latestRun = store.db.prepare("SELECT status FROM runs WHERE trigger_message_id = ? OR thread_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1");
+    const stopped = (messageId: string | null) => !!messageId && (latestRun.get(messageId, messageId) as { status: string } | undefined)?.status === "cancelled";
+    const dm = store.messages(run.channelId, { limit: 20 }).filter((m) => m.author.id !== "system" && !stopped(m.id) && !stopped(m.threadId));
+    const tasks = store.tasks(agent.workspaceId, { agentId: agent.id }).filter((t) => (t.status === "open" || t.status === "in_progress") && !stopped(t.threadId)).slice(0, 15);
     const later = store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === user?.id);
     const sources = this.sources(agent.id);
     const notesPath = user ? this.watchNotesPath(agent.id, user.id) : null;
@@ -310,6 +312,7 @@ export class Background {
     return [
       `\n## Working in the background`,
       `Nobody messaged you. You're checking in on your own for ${name}, the way a good assistant keeps an eye on things for someone.`,
+      `A request whose run the person stopped or cancelled is finished, even if it has no answer. Don't retry it, hand it to another agent, or do it yourself unless the person asks again.`,
       followups.length
         ? `You set ${followups.length === 1 ? "a follow-up" : "follow-ups"} for now:\n${followups.map((f) => `- ${f.note} (set for ${fmt(f.dueAt)})`).join("\n")}\nDo what you said you'd do.`
         : `This is a regular check.${b?.lastAt ? ` Your last one started ${fmt(b.lastAt)}.` : ""}`,

@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
+import { issueToken } from "../src/auth.ts";
+import { createOrganization } from "../src/api-orgs.ts";
 
 let dir: string;
 let base: string;
@@ -94,7 +96,7 @@ describe("push notifications", () => {
     const last = got.at(-1)!;
     expect(last.path).toBe(`/3/device/${PHONE}`);
     expect(last.headers).toMatchObject({ "apns-topic": "ai.warren.ios", "apns-push-type": "alert" });
-    expect(last.body).toMatchObject({ aps: { alert: { title: "Warren" }, sound: "default", badge: 0 }, warren: { kind: "test" } });
+    expect(last.body).toMatchObject({ aps: { alert: { title: "Warren" }, sound: "default", badge: 0 }, warren: { kind: "test", category: "other" } });
   });
 
   it("pushes an agent's DM and its reply in your thread, with your unread count as the badge", async () => {
@@ -104,7 +106,7 @@ describe("push notifications", () => {
     const before = got.length;
     expect((await api("POST", `/api/channels/${dm.id}/messages`, { body: "The report is ready." }, agentToken)).status).toBe(200);
     const push = await waitFor(() => got.slice(before).find((g) => g.body.warren.channelId === dm.id));
-    expect(push.body).toMatchObject({ aps: { alert: { title: "Atlas", body: "The report is ready." }, "thread-id": dm.id, badge: 1 }, warren: { kind: "message", channelId: dm.id, threadId: null } });
+    expect(push.body).toMatchObject({ aps: { alert: { title: "Atlas", body: "The report is ready." }, "thread-id": dm.id, badge: 1 }, warren: { kind: "message", category: "dm", channelId: dm.id, threadId: null } });
 
     const general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");
     const root = (await api("POST", `/api/channels/${general.id}/messages`, { body: "can someone look at the logs?" })).data;
@@ -112,6 +114,7 @@ describe("push notifications", () => {
     await api("POST", `/api/channels/${general.id}/messages`, { body: "On it.", threadId: root.id }, agentToken);
     const reply = await waitFor(() => got.slice(n).find((g) => g.body.warren.threadId === root.id));
     expect(reply.body.aps.alert.title).toBe("Atlas in a thread");
+    expect(reply.body.warren.category).toBe("reply");
     // your own messages never push to you
     const m = got.length;
     await api("POST", `/api/channels/${dm.id}/messages`, { body: "thanks" });
@@ -127,15 +130,63 @@ describe("push notifications", () => {
     await api("POST", `/api/channels/${general.id}/messages`, { body: "@yugal the deploy is done" }, agentToken);
     const mention = await waitFor(() => got.slice(n).find((g) => g.body.aps.alert.title.includes("mentioned you")));
     expect(mention.body.aps.alert.title).toBe("Atlas mentioned you in #general");
+    expect(mention.body.warren.category).toBe("mention");
 
     const ws = (await api("GET", "/api/me")).data.workspace.id;
     const approval = { id: "apv_1", agentId: atlas.id, channelId: general.id, threadId: null, summary: "Send the invoice", details: "", status: "pending" } as any;
-    expect(hub.apns.decide(ws, { type: "approval", approval })).toHaveLength(1);
+    expect(hub.apns.decide(ws, { type: "approval", approval })).toMatchObject([[expect.any(String), { warren: { category: "approval" } }]]);
     expect(hub.apns.decide(ws, { type: "approval", approval })).toHaveLength(0);
     const computer = { id: "cmp_1", name: "Lab VM", help: { agentId: atlas.id, request: "Sign in to Stripe", channelId: general.id, threadId: null, at: "" } } as any;
     const [[, help]] = hub.apns.decide(ws, { type: "computer", computer });
-    expect(help).toMatchObject({ aps: { alert: { title: "Atlas needs you on Lab VM", body: "Sign in to Stripe" } }, warren: { kind: "computer", computerId: "cmp_1" } });
+    expect(help).toMatchObject({ aps: { alert: { title: "Atlas needs you on Lab VM", body: "Sign in to Stripe" } }, warren: { kind: "computer", category: "help", computerId: "cmp_1" } });
     expect(hub.apns.decide(ws, { type: "computer", computer })).toHaveLength(0);
+  });
+
+  it("prefers DM, reply, mention, then channel when message categories overlap", async () => {
+    const { user, workspace } = (await api("GET", "/api/me")).data;
+    const atlas = hub.store.agents(workspace.id).find((a) => a.handle === "atlas")!;
+    const dm = hub.store.dmChannel(workspace.id, user.id, atlas.id);
+    const general = hub.store.channelByName(workspace.id, "general")!;
+    const root = (channelId: string) => hub.store.insertMessage({ channelId, author: { kind: "user", id: user.id }, body: "Question" });
+    const message = (channelId: string, threadId: string | null, body = "@yugal here you go") => hub.store.insertMessage({ channelId, threadId, author: { kind: "agent", id: atlas.id }, body });
+    const category = (m: ReturnType<typeof message>) => hub.apns.decide(workspace.id, { type: "message", message: m }).find(([id]) => id === user.id)?.[1].warren.category;
+    hub.store.setChannelPrefs(user.id, general.id, { notify: "all" });
+    try {
+      expect(category(message(dm.id, root(dm.id).id))).toBe("dm");
+      expect(category(message(general.id, root(general.id).id))).toBe("reply");
+      expect(category(message(general.id, null))).toBe("mention");
+      expect(category(message(general.id, null, "An update"))).toBe("channel");
+    } finally {
+      hub.store.setChannelPrefs(user.id, general.id, { notify: "default" });
+    }
+  });
+
+  it("sends events and test pushes only to phones in the caller's organization, using its config and badge", async () => {
+    const { user } = (await api("GET", "/api/me")).data;
+    const workspace = await createOrganization(hub, user, "Side project", "everything");
+    const token = issueToken(hub.store.db, "session", user.id, workspace.id);
+    const phone = "c".repeat(64);
+    await api("POST", "/api/me/push", { token: phone }, token);
+    await api("PUT", "/api/settings/push", { keyId: "KEY7654321", teamId: "TEAM123456", key: p8, topic: "ai.warren.side" }, token);
+    try {
+      const agent = (await api("POST", "/api/agents", { handle: "side", name: "Side", harness: "custom" }, token)).data;
+      const agentToken = (await api("POST", `/api/agents/${agent.id}/token`, {}, token)).data.token;
+      const dm = (await api("POST", `/api/dm/${agent.id}`, {}, token)).data;
+      const before = got.length;
+      await api("POST", `/api/channels/${dm.id}/messages`, { body: "Only for Side project" }, agentToken);
+      await waitFor(() => got.slice(before).find((g) => g.path === `/3/device/${phone}`));
+      expect((await api("POST", "/api/me/push/test", undefined, token)).data).toEqual({ sent: 1, failed: [] });
+      const pushes = got.slice(before);
+      expect(pushes).toHaveLength(2);
+      for (const push of pushes) {
+        expect(push.path).toBe(`/3/device/${phone}`);
+        expect(push.headers["apns-topic"]).toBe("ai.warren.side");
+        expect(JSON.parse(Buffer.from(String(push.headers.authorization).split(" ")[1].split(".")[0], "base64url").toString()).kid).toBe("KEY7654321");
+        expect(push.body.aps.badge).toBe(1);
+      }
+    } finally {
+      await api("DELETE", "/api/me/push", undefined, token);
+    }
   });
 
   it("drops a phone APNs says is gone, and every phone on a sign-in that signs out", async () => {

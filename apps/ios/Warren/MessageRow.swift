@@ -1,3 +1,4 @@
+import QuickLook
 import SwiftUI
 
 struct MessageRow: View {
@@ -11,6 +12,9 @@ struct MessageRow: View {
   /** agents working in that thread, or in a sub-thread under it */
   var working: [Agent] = []
   @State private var toolsOpen = false
+  @State private var editing = false
+  @State private var deleting = false
+  @State private var error: String?
 
   private var tools: [String] {
     message.parts.compactMap { if case .toolCall(let n) = $0 { n } else { nil } }
@@ -60,9 +64,12 @@ struct MessageRow: View {
               .foregroundStyle(.tertiary)
           }
         }
+        if message.deletedAt != nil {
+          Text("This message was deleted.").font(.body).italic().foregroundStyle(.secondary)
+        }
         if !tools.isEmpty { toolLine }
         if !message.body.isEmpty {
-          MarkdownText(message.body)
+          MarkdownText(message.body, edited: message.editedAt != nil)
         }
         ForEach(Array(message.parts.enumerated()), id: \.offset) { _, part in
           PartView(part: part, message: message)
@@ -98,10 +105,25 @@ struct MessageRow: View {
     .padding(.bottom, 2)
     .contentShape(Rectangle())
     .contextMenu {
-      Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.body }
+      if !message.body.isEmpty { Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.body } }
       if let thread { NavigationLink(value: thread) { Label("Reply in thread", systemImage: "arrowshape.turn.up.left") } }
+      if store.canEdit(message) { Button("Edit", systemImage: "pencil") { editing = true } }
+      if store.canDelete(message) { Button("Delete", systemImage: "trash", role: .destructive) { deleting = true } }
     }
+    .sheet(isPresented: $editing) { EditMessageSheet(message: message) }
+    .confirmationDialog(mine ? "Delete this message?" : "Delete this message from someone else?", isPresented: $deleting, titleVisibility: .visible) {
+      Button("Delete", role: .destructive) {
+        Task {
+          do { try await store.deleteMessage(message) } catch { self.error = error.localizedDescription }
+        }
+      }
+    } message: { Text("This can't be undone.") }
+    .alert("Couldn't delete it", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+      Button("OK") {}
+    } message: { Text(error ?? "") }
   }
+
+  private var mine: Bool { message.author == Actor(kind: .user, id: store.me?.id ?? "") }
 
   /** agents' names in their own color, like the web app */
   private var nameColor: Color {
@@ -175,12 +197,16 @@ struct PartView: View {
     switch part {
     case .notice(let t), .status(let t):
       Text(t).font(.caption).foregroundStyle(.secondary).italic()
-    case .file(_, let name):
-      Label(name, systemImage: "doc")
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Capsule().fill(Color(.secondarySystemBackground)))
+    case .file(let id, let name):
+      FileChip(id: id, name: name)
+    case .task(let id):
+      TaskChip(taskId: id)
+    case .routine(let id):
+      RoutineChip(routineId: id)
+    case .discussion(let id):
+      DiscussionCard(discussionId: id)
+    case .context(let usage):
+      ContextCard(usage: usage)
     case .approval(let id):
       ApprovalCard(approvalId: id)
     case .change(let id):
@@ -196,10 +222,18 @@ struct PartView: View {
 /** Message bodies are Markdown; inline styles and links render, block structure stays as written. */
 struct MarkdownText: View {
   var source: String
-  init(_ s: String) { source = s }
+  /** its author changed it: "(edited)" at the end, like the web app */
+  var edited = false
+  init(_ s: String, edited: Bool = false) { source = s; self.edited = edited }
 
   var body: some View {
-    Text(attributed)
+    Group {
+      if edited {
+        Text(attributed) + Text(" (edited)").font(.caption).foregroundStyle(.tertiary)
+      } else {
+        Text(attributed)
+      }
+    }
       .font(.body)
       .textSelection(.enabled)
       .fixedSize(horizontal: false, vertical: true)
@@ -267,15 +301,47 @@ struct ChangeCard: View {
 struct ApprovalCard: View {
   @Environment(Store.self) private var store
   var approvalId: String
+  var refresh = false
+  @State private var loading = true
+  @State private var error: String?
 
   private var approval: Approval? { store.approvals.first { $0.id == approvalId } }
 
   var body: some View {
-    if let a = approval {
-      ApprovalBox(approval: a)
-    } else {
-      ProgressView().task { await store.refreshApprovals() }
+    Group {
+      if let a = approval {
+        ApprovalBox(approval: a)
+      } else if loading {
+        ProgressView()
+      } else {
+        HStack {
+          Text(error ?? "Approval not found.").foregroundStyle(.secondary)
+          Button("Try again") { Task { await load() } }
+        }.font(.footnote)
+      }
     }
+    .task(id: approvalId) { if approval == nil || refresh { await load() } }
+  }
+
+  private func load() async {
+    loading = true
+    error = nil
+    do { _ = try await store.loadApproval(approvalId) }
+    catch { self.error = "Couldn't load this approval." }
+    loading = false
+  }
+}
+
+/** An approval opened from a notification, even after it has been decided. */
+struct ApprovalDetail: View {
+  var approvalId: String
+
+  var body: some View {
+    ScrollView {
+      ApprovalCard(approvalId: approvalId, refresh: true).padding(16)
+    }
+    .navigationTitle("Approval")
+    .navigationBarTitleDisplayMode(.inline)
   }
 }
 
@@ -289,6 +355,9 @@ struct ApprovalBox: View {
   @State private var busy = false
   @State private var error: String?
   @State private var expanded = false
+  /** lending a screen with a code: its owner types it to say yes, and the device checks it */
+  @State private var code = ""
+  private var codeKind: String? { approval.loan == nil ? nil : store.loanScreen(approval)?.code }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -307,6 +376,7 @@ struct ApprovalBox: View {
           .onTapGesture { expanded.toggle() }
       }
       if approval.status == "pending" {
+        if let kind = codeKind { ScreenCodeField(kind: kind, code: $code) { decide(true) } }
         HStack(spacing: 8) {
           Button {
             decide(false)
@@ -321,6 +391,7 @@ struct ApprovalBox: View {
             Label("Approve", systemImage: "checkmark").fontWeight(.semibold).frame(maxWidth: .infinity)
           }
           .primaryButton()
+          .disabled(!ScreenCodeField.ready(codeKind, code))
         }
         .disabled(busy)
       }
@@ -332,7 +403,10 @@ struct ApprovalBox: View {
   private func decide(_ yes: Bool) {
     busy = true
     Task {
-      do { try await store.decide(approval, approve: yes) } catch { self.error = error.localizedDescription }
+      do {
+        try await store.decide(approval, approve: yes, code: codeKind != nil ? code : nil)
+        code = ""
+      } catch { self.error = error.localizedDescription }
       busy = false
     }
   }
@@ -352,7 +426,7 @@ struct ComputerCard: View {
   var request: String?
 
   var body: some View {
-    if let c = store.computers.first(where: { $0.id == computerId }) {
+    if store.canViewComputers, let c = store.computers.first(where: { $0.id == computerId }) {
       NavigationLink {
         ComputerDetail(computerId: c.id)
       } label: {

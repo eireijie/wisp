@@ -47,6 +47,19 @@ const promptFor = async (agentId: string) => {
 };
 
 describe("connectors", () => {
+  it("includes current device warnings when listing connectors", async () => {
+    const { node } = (await api("POST", "/api/nodes", { name: "Laptop" })).data;
+    hub.store.setNodeCapabilities(node.id, { platform: "linux", arch: "x64", screen: { ok: false, detail: "" }, vm: { ok: false, detail: "" }, commands: { uvx: false } });
+    const agent = (await api("POST", "/api/agents", { handle: "local", name: "Local", harness: "custom", nodeId: node.id })).data;
+    const conn = (await api("POST", "/api/connectors", { kind: "mcp-stdio", name: "Local tools", command: "uvx", agentIds: [agent.id] })).data;
+    expect(conn.warnings).toHaveLength(1);
+    const list = (await api<any[]>("GET", "/api/connectors")).data;
+    expect(list.find((c) => c.id === conn.id)?.warnings).toEqual(conn.warnings);
+    await api("DELETE", `/api/connectors/${conn.id}/agents/${agent.id}`);
+    expect((await api<any[]>("GET", "/api/connectors")).data.find((c) => c.id === conn.id)?.warnings).toEqual([]);
+    await api("DELETE", `/api/connectors/${conn.id}`);
+  });
+
   it("keeps secrets masked, fills templates for the agent's runs, and respects enable and detach", async () => {
     const gh = await api("POST", "/api/connectors", {
       kind: "mcp-http",
@@ -117,7 +130,29 @@ describe("skills", () => {
 
     await api("DELETE", `/api/skills/${s.id}/agents/${atlas.id}`);
     await expect(hub.vaults.primary.read(`agents/${atlas.id}/skills/weekly-status-report/SKILL.md`)).rejects.toThrow();
-    expect(await promptFor(atlas.id)).not.toContain("## Your skills");
+    expect(await promptFor(atlas.id)).not.toContain("weekly-status-report");
+  });
+
+  it("gives every agent the built-in memory skill, which can't be removed", async () => {
+    const path = `agents/${atlas.id}/skills/memory/SKILL.md`;
+    expect((await hub.vaults.primary.read(path)).content).toMatch(/^---\nname: memory\n[\s\S]*# Keep memory tidy and linked/);
+    expect(await promptFor(atlas.id)).toContain("Keep memory tidy and linked (me/skills/memory/SKILL.md)");
+    expect(await promptFor(atlas.id)).toContain("follow your memory skill (me/skills/memory/SKILL.md)");
+    // the shop can't add it, and a skill of your own can't take its folder
+    expect((await api("POST", "/api/skills", { catalogId: "memory" })).status).toBe(404);
+    expect((await api("POST", "/api/skills", { name: "Memory", content: "x" })).data.slug).toBe("memory-2");
+
+    // deleted: it's back by the next run; edited: a restart puts the current version back
+    await hub.vaults.primary.remove(path, { name: "Me", email: "me@example.com" });
+    await promptFor(atlas.id);
+    expect((await hub.vaults.primary.read(path)).content).toContain("# Keep memory tidy and linked");
+    await hub.vaults.primary.write(path, "changed", { name: "Me", email: "me@example.com" });
+    await hub.ensureBuiltinSkills(undefined, true);
+    expect((await hub.vaults.primary.read(path)).content).toContain("# Keep memory tidy and linked");
+
+    // the prompt still lists it when the agent has no other skills
+    const fresh = (await api("POST", "/api/agents", { handle: "fresh", name: "Fresh", harness: "codex" })).data;
+    expect((await hub.vaults.primary.read(`agents/${fresh.id}/skills/memory/SKILL.md`)).content).toContain("memory_remember");
   });
 
   it("creates your own skill with a unique slug", async () => {

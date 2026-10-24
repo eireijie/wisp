@@ -3,6 +3,7 @@ import type { Message } from "@warren/core";
 import type { Hub } from "./hub.ts";
 
 const KEY = "push_vapid";
+type PushCategory = "approval" | "dm" | "reply" | "channel" | "other";
 
 /**
  * Web push: notifications that reach a person's phone or computer while Warren is closed, from an
@@ -51,11 +52,19 @@ export class Push {
     const title = asks ? `${agent?.name ?? "An agent"} wants your OK` : (agent?.name ?? "Warren");
     const body = (msg.body || "").replace(/\s+/g, " ").trim().slice(0, 200);
     if (!body) return;
-    void this.notify(channel.workspaceId, to, { title, body, tag: msg.id, url: `/#/c/${msg.channelId}${msg.threadId ? `/t/${msg.threadId}` : ""}` });
+    for (const userId of to) {
+      const category = asks ? "approval" : channel.kind === "dm" ? "dm" : userId === onBehalfOf ? "reply" : "channel";
+      void this.notify(channel.workspaceId, [userId], { title, body, tag: msg.id, url: `/#/c/${msg.channelId}${msg.threadId ? `/t/${msg.threadId}` : ""}` }, category);
+    }
   }
 
-  async notify(workspaceId: string, userIds: string[], n: { title: string; body: string; tag?: string; url?: string }) {
-    const subs = userIds.flatMap((u) => this.hub.store.pushSubscriptions(u));
+  async notify(workspaceId: string, userIds: string[], n: { title: string; body: string; tag?: string; url?: string }, category: PushCategory = "other") {
+    const subs = userIds.flatMap((u) => this.hub.store.pushSubscriptions(u)).filter((s) => {
+      if (category === "dm") return s.prefs.dms !== false;
+      if (category === "reply") return s.prefs.replies !== false;
+      if (category === "approval") return s.prefs.approvals !== false;
+      return true;
+    });
     if (!subs.length) return 0;
     const { publicKey, privateKey } = this.keys(workspaceId);
     const owner = this.hub.store.members(workspaceId).find((m) => m.role === "owner");

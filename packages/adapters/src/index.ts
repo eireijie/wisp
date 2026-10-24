@@ -5,10 +5,14 @@ import { codex } from "./codex.ts";
 import type { HarnessAdapter } from "./types.ts";
 
 export * from "./types.ts";
+export { claudeCommands, codexCommands, commandsIn, skillsIn } from "./commands.ts";
+export { scanShelf, serverItem } from "./shelf.ts";
+export { HarnessAccounts, loginCommand } from "./harness-accounts.ts";
+export { changeHarnessSettings, editClaude, editCodex, editHermes, HARNESS_HOME, harnessConfigPath, harnessConfigured, harnessDir, parseToml, readHarnessSettings, readHarnessSkill, type HarnessHomes } from "./harness-config.ts";
 export { RunFiles, commandVersion, execCommand, runJsonl, spawnCommand, stopProcess } from "./process.ts";
 export { claudeCode, claudeArgs, claudeEnv, claudeMcpConfig, claudeUsage, parseClaudeLine } from "./claude-code.ts";
 export { codex, codexArgs, codexDefaults, codexEnv, codexMcpConfig, codexTokens, codexUsageFromRollout, parseCodexCatalog, parseCodexLine } from "./codex.ts";
-export { AcpConnection, acpAdapter, acpUsage, acpMcpServers, acpModels, parseAcpUpdate, permissionOutcome } from "./acp.ts";
+export { AcpConnection, acpAdapter, acpCommands, acpUsage, acpMcpServers, acpModels, parseAcpUpdate, permissionOutcome } from "./acp.ts";
 
 /**
  * Registered harnesses: Claude Code and Codex have their own adapters; every harness that

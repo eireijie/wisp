@@ -9,6 +9,7 @@ import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
 import { DEFAULT_TOPIC } from "./apns.ts";
+import { registerHarnessSettingsApi } from "./api-harness-settings.ts";
 import { featureOn } from "./features.ts";
 
 interface Helpers {
@@ -86,6 +87,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     store.updateUser(c.actor.id, { passwordHash: hashPassword(body.next) });
     const mine = sha(bearer(req.headers.authorization) ?? "");
     db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND hash != ?").run(c.actor.id, mine);
+    hub.disconnectRevokedSessions(c.actor.id);
     return { ok: true };
   });
 
@@ -100,6 +102,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { user: true });
     if (!c) return;
     if (!store.revokeTokenById("session", (req.params as { id: string }).id, { subjectId: c.actor.id })) return reply.code(404).send({ error: "sign-in not found" });
+    hub.disconnectRevokedSessions(c.actor.id);
     return { ok: true };
   });
 
@@ -108,6 +111,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const mine = sha(bearer(req.headers.authorization) ?? "");
     const n = db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND hash != ?").run(c.actor.id, mine).changes;
+    hub.disconnectRevokedSessions(c.actor.id);
     return { signedOut: n };
   });
 
@@ -148,7 +152,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { user: true });
     if (!c) return;
     if (!hub.apns.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key first" });
-    return hub.apns.sendTo(c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test" } });
+    return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test", category: "other" } });
   });
 
   /** The APNs key, without the key itself. */
@@ -251,6 +255,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!body) return;
     store.updateUser(m.id, { passwordHash: hashPassword(body.password) });
     db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ?").run(m.id);
+    hub.disconnectRevokedSessions(m.id);
     return { ok: true };
   });
 
@@ -409,6 +414,8 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       throw err;
     }
   });
+
+  registerHarnessSettingsApi(app, hub, h);
 
   // --- your data ------------------------------------------------------------------------------------
 

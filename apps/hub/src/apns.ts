@@ -33,7 +33,7 @@ export interface PushDevice {
 
 export interface PushPayload {
   aps: { alert: { title: string; body: string }; sound?: string; badge?: number; "thread-id"?: string };
-  warren: { kind: "message" | "approval" | "computer" | "test"; channelId?: string; threadId?: string | null; approvalId?: string; computerId?: string };
+  warren: { kind: "message" | "approval" | "computer" | "test"; category: "dm" | "reply" | "mention" | "channel" | "approval" | "help" | "other"; channelId?: string; threadId?: string | null; approvalId?: string; computerId?: string };
 }
 
 /** What a send came back with: APNs' status and reason ("BadDeviceToken", "Unregistered"…). */
@@ -128,7 +128,7 @@ export class Apns {
   /** Called with every event the hub broadcasts, and who it went to. Never throws. */
   onEvent(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
     try {
-      for (const [userId, payload] of this.decide(workspaceId, event)) if (!only || only(userId)) void this.sendTo(userId, payload);
+      for (const [userId, payload] of this.decide(workspaceId, event)) if (!only || only(userId)) void this.sendTo(workspaceId, userId, payload);
     } catch {}
   }
 
@@ -149,24 +149,24 @@ export class Apns {
       const members = store.channelMembers(ch.id).filter((a) => a.kind === "user" && !(m.author.kind === "user" && a.id === m.author.id));
       const from = m.author.kind === "agent" ? agentName(m.author.id) : this.personName(m.author.id);
       const where = { kind: "message" as const, channelId: ch.id, threadId: m.threadId };
-      const push = (userId: string, title: string) => out.has(userId) || out.set(userId, { aps: { alert: { title, body: preview(m) }, "thread-id": ch.id }, warren: where });
+      const push = (userId: string, title: string, category: PushPayload["warren"]["category"]) => out.has(userId) || out.set(userId, { aps: { alert: { title, body: preview(m) }, "thread-id": ch.id }, warren: { ...where, category } });
 
       // an agent wrote to you in a DM
-      if (ch.kind === "dm" && m.author.kind === "agent") for (const u of members) push(u.id, from);
+      if (ch.kind === "dm" && m.author.kind === "agent") for (const u of members) push(u.id, from, "dm");
       // an agent answered in a thread you started
       if (m.threadId && m.author.kind === "agent") {
         const root = store.message(m.threadId);
-        if (root?.author.kind === "user") push(root.author.id, `${from} in a thread`);
+        if (root?.author.kind === "user") push(root.author.id, `${from} in a thread`, "reply");
       }
       // someone @mentioned you (people go by their preferred or first name)
       const mentioned = new Set(parseMentions(m.body));
       if (mentioned.size && ch.kind === "channel")
         for (const p of store.members(workspaceId))
           if (!(m.author.kind === "user" && m.author.id === p.id) && handlesOf(p).some((h) => mentioned.has(h)) && store.isMember(ch.id, { kind: "user", id: p.id }))
-            push(p.id, `${from} mentioned you in #${ch.name}`);
+            push(p.id, `${from} mentioned you in #${ch.name}`, "mention");
       if (ch.kind === "channel") {
         // people who asked for every message here, and nobody who muted it
-        for (const u of store.notifyAll(ch.id)) if (!(m.author.kind === "user" && m.author.id === u)) push(u, `${from} in #${ch.name}`);
+        for (const u of store.notifyAll(ch.id)) if (!(m.author.kind === "user" && m.author.id === u)) push(u, `${from} in #${ch.name}`, "channel");
         for (const u of store.mutedBy(ch.id)) out.delete(u);
       }
     }
@@ -174,7 +174,7 @@ export class Apns {
     if (e.type === "approval" && e.approval.status === "pending" && this.once(`approval:${e.approval.id}`)) {
       const a = e.approval;
       for (const u of store.channelMembers(a.channelId))
-        if (u.kind === "user") out.set(u.id, { aps: { alert: { title: `${agentName(a.agentId)} wants your OK`, body: a.summary } }, warren: { kind: "approval", approvalId: a.id, channelId: a.channelId, threadId: a.threadId } });
+        if (u.kind === "user") out.set(u.id, { aps: { alert: { title: `${agentName(a.agentId)} wants your OK`, body: a.summary } }, warren: { kind: "approval", category: "approval", approvalId: a.id, channelId: a.channelId, threadId: a.threadId } });
     }
 
     if (e.type === "computer") {
@@ -182,21 +182,21 @@ export class Apns {
       if (!c.help) this.seen.delete(`help:${c.id}`);
       else if (this.once(`help:${c.id}`))
         for (const p of store.members(workspaceId))
-          out.set(p.id, { aps: { alert: { title: `${agentName(c.help.agentId)} needs you on ${c.name}`, body: c.help.request } }, warren: { kind: "computer", computerId: c.id } });
+          out.set(p.id, { aps: { alert: { title: `${agentName(c.help.agentId)} needs you on ${c.name}`, body: c.help.request } }, warren: { kind: "computer", category: "help", computerId: c.id } });
     }
     return [...out];
   }
 
   // --- sending ------------------------------------------------------------------------------------
 
-  /** Push to every phone this person signed in on, with their unread count as the badge. */
-  async sendTo(userId: string, payload: PushPayload): Promise<{ sent: number; failed: { status: number; reason?: string }[] }> {
-    const devices = this.devices(userId);
+  /** Push to this person's phones in the event's workspace, with that workspace's unread badge. */
+  async sendTo(workspaceId: string, userId: string, payload: PushPayload): Promise<{ sent: number; failed: { status: number; reason?: string }[] }> {
+    const devices = this.devices(userId).filter((d) => d.workspaceId === workspaceId);
     const result = { sent: 0, failed: [] as { status: number; reason?: string }[] };
     if (!devices.length) return result;
-    const cfg = this.config(devices[0].workspaceId);
+    const cfg = this.config(workspaceId);
     if (!cfg) return result;
-    const body = JSON.stringify({ ...payload, aps: { sound: "default", badge: this.unread(userId, devices[0].workspaceId), ...payload.aps } });
+    const body = JSON.stringify({ ...payload, aps: { sound: "default", badge: this.unread(userId, workspaceId), ...payload.aps } });
     for (const d of devices) {
       const env = d.environment ?? cfg.environment;
       let r = await this.post(cfg, env, d, body).catch((err: Error) => ({ status: 0, reason: err.message }) as PushResult);

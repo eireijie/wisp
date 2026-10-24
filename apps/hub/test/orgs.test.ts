@@ -133,6 +133,13 @@ describe("agent defaults", () => {
     // without defaults a harness is still needed
     expect((await api("POST", "/api/agents", { handle: "nohar", name: "No" })).status).toBe(400);
   });
+
+  it("saves model IDs up to the shared catalog limit", async () => {
+    const model = "m".repeat(150);
+    expect((await api("PUT", "/api/settings/agent-defaults", { model })).status).toBe(200);
+    expect((await api("GET", "/api/settings/agent-defaults")).data.model).toBe(model);
+    expect((await api("PUT", "/api/settings/agent-defaults", { model: "m".repeat(201) })).status).toBe(400);
+  });
 });
 
 describe("who an agent answers", () => {
@@ -256,6 +263,9 @@ describe("organizations", () => {
     // the agent's soul went to its own organization's memory
     await expect(hub.vault(second.id).read(`agents/${a.id}/SOUL.md`)).resolves.toBeTruthy();
     await expect(hub.vault(firstOrg).read(`agents/${a.id}/SOUL.md`)).rejects.toThrow();
+    // its built-in memory skill lives in its own organization's memory too
+    await expect(hub.vault(second.id).read(`agents/${a.id}/skills/memory/SKILL.md`)).resolves.toBeTruthy();
+    await expect(hub.vault(firstOrg).read(`agents/${a.id}/skills/memory/SKILL.md`)).rejects.toThrow();
   });
 
   it("lets someone already signed in join another organization with an invite", async () => {

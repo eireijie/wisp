@@ -40,8 +40,8 @@ link plugin so links to it stay on the site).
 ## Downloads
 
 Download buttons use GitHub's `releases/latest/download/<file>` links, so they always point at the newest release as
-long as each release has files with these exact names: `Warren-mac-arm64.dmg`, `Warren-win-x64.exe`,
-`Warren-linux-x86_64.AppImage` and `Warren-linux-amd64.deb`.
+long as each release has files with these exact names: `Warren-mac-arm64.dmg`, `Warren-mac-x64.dmg`, `Warren-win-x64.exe`,
+`Warren-linux-x86_64.AppImage`, `Warren-linux-amd64.deb` and `Warren-android.apk`.
 
 ## Rules for this site
 

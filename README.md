@@ -64,7 +64,7 @@ Warren opens on **Set up Warren**, and **Get started** walks you through the res
 
 - **Another computer:** **Devices → Add device**. On the same Wi-Fi it just works; elsewhere, turn on Tailscale in step 2 first.
 - **Your phone:** the [Android app](https://github.com/eireijie/warren/releases/latest/download/Warren-android.apk) (preview), or the [iPhone app](apps/ios) built with Xcode for now. Pair it in **Settings → Mobile** by scanning a QR code. Any phone can also open Warren's address in the browser and add it to the home screen.
-- **A friend:** turn on **Invite people** in **Settings → Features**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
+- **A friend:** turn on **Invite people** in **Settings → Mods**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
 
 ### Start over or remove Warren
 
@@ -120,7 +120,7 @@ That's a LaunchAgent on macOS, a systemd service on Linux, and a task at sign-in
 
 ### Updating
 
-Owners update from the app: **Settings → Updates** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the warren folder on any hub or device:
+Owners update from the app: **Settings → About** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the warren folder on any hub or device:
 
 ```bash
 warren update            # pull, install what changed, rebuild the web app on a hub, restart
@@ -221,9 +221,9 @@ Agents connected through `warren-mcp` get the same when their session starts, an
 
 ### Teams and coding together
 
-- **Teams** (sidebar → Teams) have a channel (`#team-<name>`), a memory pool, and members with roles. **New team** starts from a template (Build team, Research team, Solo + reviewer) or blank; for each role you choose which agent fills it, or make a new one on any harness. A role's suggested harness is only a suggestion. The team page lists the lead first, then the members, and you edit each role in place. A role's notes go into that member's prompt.
-- **The lead:** every task nobody assigned goes to the workspace's lead (pick one on the Teams page; otherwise a team's lead), who is told who has which role and splits the task into subtasks with `task_delegate`. Workspaces that picked a dispatcher in the old Orchestration add-on keep it as their lead.
-- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in the team's channel get a branch like `warren/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
+- **Teams** are channels: every channel has its team, drawn as a chart in its **Team** tab (leads read new messages and hand work along the arrows). Under **More** each agent can have a role (its notes go into that agent's prompt), and the team can share a memory folder, a repo and a boss it reports to.
+- **The lead:** every task nobody assigned goes to the workspace's lead (pick one in Settings → Agents; otherwise a channel team's lead), who is told who has which role and splits the task into subtasks with `task_delegate`. Workspaces that picked a dispatcher in the old Orchestration add-on keep it as their lead.
+- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in that channel get a branch like `warren/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
 
 ## Docs
 

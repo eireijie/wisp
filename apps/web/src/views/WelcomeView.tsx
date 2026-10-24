@@ -15,6 +15,7 @@ import { useDesktopInfo } from "../desktop.ts";
 import { Advanced, setExperience, useSimple, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
+import { CodeInput, codeReady } from "../components/ScreenCode.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
 import { Ghost } from "../components/Ghost.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
@@ -408,55 +409,71 @@ const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
 
 /** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
-function EasiestWay({ name, connected }: { name: string; connected: boolean }) {
+export function EasiestWay({ name, token, connected }: { name: string; token: string; connected: boolean }) {
   const { inDesktop, info, connect } = useDesktopInfo();
   const [busy, setBusy] = useState(false);
   useAccess();
   const hub = shareOrigin();
   const os = desktopOs();
   const get = downloadsFor(os);
+  const computer = info?.platform === "darwin" ? "Mac" : info?.platform === "win32" ? "PC" : "computer";
+  const command = (
+    <details open={inDesktop && !!info?.device && !connected} className="rounded-xl border border-line p-4">
+      <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
+      <div className="mt-3 space-y-3">
+        <DeviceInstall token={token} name={name} />
+        <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
+      </div>
+    </details>
+  );
   if (inDesktop)
     return (
-      <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
-        <p className="text-sm font-medium">This Mac is being connected automatically</p>
-        <p className="text-sm text-muted">
-          {connected ? `${name} is connected.` : info?.device ? "Connected to Warren. It can take a few seconds to show up here." : "The Warren app has not connected this Mac yet."}
-        </p>
-        {!connected && !info?.device && (
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await connect();
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Connect this Mac
-          </Button>
-        )}
-      </div>
+      <>
+        <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
+          <p className="text-sm font-medium">{`This ${computer} is ${info?.device ? "already connected" : "being connected automatically"}`}</p>
+          {(connected || !info?.device) && (
+            <p className="text-sm text-muted">{connected ? `${name} is connected.` : `The Warren app has not connected this ${computer} yet.`}</p>
+          )}
+          {!connected && !info?.device && (
+            <Button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await connect({ token, name });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Connect this {computer}
+            </Button>
+          )}
+        </div>
+        {command}
+      </>
     );
   return (
-    <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
-      <p className="text-sm font-medium">Easiest: download the Warren app</p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <a className="font-medium underline" href={get.href}>{get.label}</a>
-        {get.more.map((m) => (
-          <a key={m.href} className="text-muted underline" href={m.href}>{m.label}</a>
-        ))}
-        <a className="text-muted underline" href={RELEASES} target="_blank" rel="noreferrer">All downloads</a>
+    <>
+      <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
+        <p className="text-sm font-medium">Easiest: download the Warren app</p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <a className="font-medium underline" href={get.href}>{get.label}</a>
+          {get.more.map((m) => (
+            <a key={m.href} className="text-muted underline" href={m.href}>{m.label}</a>
+          ))}
+          <a className="text-muted underline" href={RELEASES} target="_blank" rel="noreferrer">All downloads</a>
+        </div>
+        <p className="text-sm text-muted">Then open it, choose “Join a server”, and enter this address:</p>
+        <CopyBlock text={hub} />
+        {originReach(hub) !== "anywhere" && (
+          <p className="text-xs text-muted">
+            {originReach(hub) === "this-computer" ? "This address only works on this computer." : "This address only works on this Wi-Fi."} For a computer somewhere else, go back to step 1 and turn on Tailscale.
+          </p>
+        )}
       </div>
-      <p className="text-sm text-muted">Then open it, choose “Join a server”, and enter this address:</p>
-      <CopyBlock text={hub} />
-      {originReach(hub) !== "anywhere" && (
-        <p className="text-xs text-muted">
-          {originReach(hub) === "this-computer" ? "This address only works on this computer." : "This address only works on this Wi-Fi."} For a computer somewhere else, go back to step 1 and turn on Tailscale.
-        </p>
-      )}
-    </div>
+      {command}
+    </>
   );
 }
 
@@ -474,14 +491,7 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
       <>
         <Heading title={`Connect ${created.name}`}>Warren needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
         <div className="space-y-5">
-          <EasiestWay name={created.name} connected={!!live} />
-          <details className="rounded-xl border border-line p-4">
-            <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
-            <div className="mt-3 space-y-3">
-              <DeviceInstall token={created.token} name={created.name} />
-              <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
-            </div>
-          </details>
+          <EasiestWay name={created.name} token={created.token} connected={!!live} />
           <p className="text-xs text-muted">
             The token is shown once and saved on the device.
             {onHub() && " If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from."}
@@ -1136,6 +1146,8 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
 /** A device's own screen only works for agents while it's lent. */
 function Lend({ computer, agent }: { computer: ComputerInfo; agent: Agent }) {
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
   if (lentNow(computer))
     return (
       <div className="mb-5">
@@ -1145,17 +1157,20 @@ function Lend({ computer, agent }: { computer: ComputerInfo; agent: Agent }) {
   return (
     <div className="mb-5 rounded-xl border border-line p-4 flex flex-wrap items-center gap-3 text-sm">
       <span className="flex-1 min-w-48">{agent.name} works on your screen, and only while you lend it.</span>
+      {computer.code && <CodeInput kind={computer.code} value={code} onChange={setCode} className="w-36" />}
       <Button
-        disabled={busy}
+        disabled={busy || !codeReady(computer.code, code)}
         onClick={async () => {
           setBusy(true);
-          await api("POST", `/api/computers/${computer.id}/lend`, { minutes: 60 }).catch(() => {});
+          setError(null);
+          await api("POST", `/api/computers/${computer.id}/lend`, { minutes: 60, ...(computer.code ? { code } : {}) }).catch((e) => setError((e as Error).message));
           await useStore.getState().refreshComputers();
           setBusy(false);
         }}
       >
         {busy && <Loader2 size={15} className="animate-spin" />} Lend it for an hour
       </Button>
+      {error && <p className="w-full text-xs text-bad">{error}</p>}
     </div>
   );
 }

@@ -112,14 +112,10 @@ describe("deleting channels", () => {
     expect((await api("POST", "/api/channels", { name: "scratch" })).status).toBe(200);
   });
 
-  it("keeps #general, DMs and team channels", async () => {
+  it("keeps #general and DMs", async () => {
     expect((await api("DELETE", `/api/channels/${(await channelNamed("general")).id}`)).status).toBe(409);
     const dm = (await api("POST", `/api/dm/${atlas.id}`)).data;
     expect((await api("DELETE", `/api/channels/${dm.id}`)).status).toBe(404);
-    const team = (await api("POST", "/api/teams", { name: "web" })).data;
-    const res = await api("DELETE", `/api/channels/${team.channelId}`);
-    expect(res.status).toBe(409);
-    expect(res.data.error).toMatch(/team web/);
   });
 });
 

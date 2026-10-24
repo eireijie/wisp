@@ -5,6 +5,7 @@ import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
+import { CodeInput, codeLabel, codeReady } from "../components/ScreenCode.tsx";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
 import { ClipboardPanel, FilesPanel, remotePlatform, saveScreenshot, sendFiles, useClipboardSync } from "../components/ComputerSync.tsx";
@@ -49,8 +50,10 @@ export function ComputersView({ computerId, teach, onBack }: { computerId: strin
   const canEdit = me?.role !== "guest";
 
   useEffect(() => {
-    useStore.getState().refreshComputers();
-  }, []);
+    if (me?.role !== "guest") useStore.getState().refreshComputers();
+  }, [me?.role]);
+
+  if (me?.role === "guest") return null;
 
   if (computerId) {
     if (!selected) return <div className="flex-1 grid place-items-center text-sm text-muted">{computers.length ? "That computer is gone." : "Loading…"}</div>;
@@ -375,8 +378,11 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   };
 
   // leaving the desk gives the computer back, so agents aren't stuck waiting on a closed view
+  useEffect(() => () => {
+    const current = useStore.getState().computers.find((computer) => computer.id === c.id);
+    if (current?.controller?.id === me.user.id) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
+  }, [c.id, me.user.id]);
   const leave = () => {
-    if (mine) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
     go({ view: "computers", computerId: null });
   };
 
@@ -683,6 +689,7 @@ const LEND_FOR = [
 /** Your own screen: lend it to agents for a while. They use it only for things you ask them. */
 function LendPanel({ computer: c }: { computer: ComputerInfo }) {
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const lent = lentNow(c);
   const lend = async (body: object) => {
@@ -690,6 +697,7 @@ function LendPanel({ computer: c }: { computer: ComputerInfo }) {
     setError(null);
     try {
       await api("POST", `/api/computers/${c.id}/lend`, body);
+      setCode("");
       await useStore.getState().refreshComputers();
     } catch (e) {
       setError((e as Error).message);
@@ -714,10 +722,11 @@ function LendPanel({ computer: c }: { computer: ComputerInfo }) {
         </Button>
       ) : (
         <div className="space-y-1.5">
+          {c.code && <CodeInput kind={c.code} value={code} onChange={setCode} className="max-w-48" />}
           <div className="text-xs font-medium">Lend it to agents for</div>
           <div className="flex flex-wrap gap-1.5">
             {LEND_FOR.map((o) => (
-              <Button key={o.label} disabled={busy} onClick={() => lend({ minutes: o.today ? untilTonight() : o.minutes })}>
+              <Button key={o.label} disabled={busy || !codeReady(c.code, code)} title={codeReady(c.code, code) ? undefined : `Enter its ${codeLabel(c.code)} first`} onClick={() => lend({ minutes: o.today ? untilTonight() : o.minutes, ...(c.code ? { code } : {}) })}>
                 {o.label}
               </Button>
             ))}
@@ -748,7 +757,14 @@ function ActivityLog({ computer: c }: { computer: ComputerInfo }) {
           <li key={i} className="flex gap-2">
             <span className="text-faint shrink-0 tabular-nums w-14">{timeAgo(l.at)}</span>
             <span className="min-w-0">
-              <span className="font-medium">{who(l.actor)}</span> <span className="text-muted">{l.text.charAt(0).toLowerCase() + l.text.slice(1)}</span>
+              {l.actor.id === "system" ? (
+                // things that happened on their own (a loan running out, wrong codes) read as a sentence
+                <span className="text-muted">{l.text}</span>
+              ) : (
+                <>
+                  <span className="font-medium">{who(l.actor)}</span> <span className="text-muted">{l.text.charAt(0).toLowerCase() + l.text.slice(1)}</span>
+                </>
+              )}
             </span>
           </li>
         ))}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
 import { api, getToken } from "../../api.ts";
-import { useStore } from "../../store.ts";
+import { useStore, useTeams } from "../../store.ts";
 import { href } from "../../router.ts";
 import { originReach, shareOrigin, useAccess } from "../../access.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
@@ -313,6 +313,43 @@ const ASK: [string, string, string][] = [
   ["share", "Sharing files or private information outside Warren", "Uploads, links, forms with personal details"],
 ];
 
+/** Who takes tasks nobody assigned: pick one, or leave it to Warren (a channel team's lead, else the first agent). */
+function WorkspaceLead({ isOwner }: { isOwner: boolean }) {
+  const agents = useStore((s) => s.agents);
+  const lead = useStore((s) => s.lead);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    useStore.getState().refreshLead();
+  }, []);
+  if (!agents.length) return null;
+  const current = agents.find((a) => a.id === lead?.lead);
+  const save = async (leadId: string | null) => {
+    setError(null);
+    try {
+      useStore.setState({ lead: await api("PUT", "/api/settings/lead", { leadId }) });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <Section title="Lead">
+      <Card>
+        <Row label="Lead" hint="Takes every task nobody assigned, splits it up and hands the pieces to agents by role.">
+          <Select label="Lead agent" value={lead?.leadId ?? ""} disabled={!isOwner} onChange={(v) => save(v || null)} className="max-w-60">
+            <option value="">{current ? `Automatic (${current.name})` : "Automatic"}</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                @{a.handle} ({a.name})
+              </option>
+            ))}
+          </Select>
+        </Row>
+      </Card>
+      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+    </Section>
+  );
+}
+
 export function AgentsPolicyPage() {
   const isOwner = useIsOwner();
   const [p, setP] = useState<AgentPolicy | null>(null);
@@ -323,7 +360,6 @@ export function AgentsPolicyPage() {
   }, []);
   const save = async (patch: Partial<AgentPolicy>) => {
     if (!p) return;
-    setP({ ...p, ...patch });
     setError(null);
     try {
       setP(await api<AgentPolicy>("PUT", "/api/settings/agents", patch));
@@ -341,6 +377,7 @@ export function AgentsPolicyPage() {
         <SavedNote shown={saved} />
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
+      <WorkspaceLead isOwner={isOwner} />
       <Section title="Ask before" description="Checked actions need your OK (Approve / Deny in the conversation). If you ask Nova to email Sam, it just does it. If it decides on its own to email someone, it asks first.">
         <Card>
           {ASK.map(([k, label, hint]) => (
@@ -379,7 +416,7 @@ export function AgentsPolicyPage() {
       </Section>
       <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">
         <Card>
-          <Row label="Leads can create agents" hint="A channel's lead (or a team's) can create an agent its team is missing. It joins the team chart under the lead.">
+          <Row label="Leads can create agents" hint="A channel's lead can create an agent its team is missing. It joins the team chart under the lead.">
             <Toggle on={p.leadsCreateAgents} onChange={(v) => save({ leadsCreateAgents: v })} label="Leads can create agents" disabled={!isOwner} />
           </Row>
           <Row label="Those agents can make sub-agents" hint={p.leadsCreateAgents ? "An agent a lead made can make sub-agents for pieces of its own work, up to 3 levels down." : "Needs “Leads can create agents” on first."}>
@@ -489,7 +526,7 @@ export function MemoryRules() {
 function AddRule({ onClose }: { onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
-  const teams = useStore((s) => s.teams);
+  const teams = useTeams();
   const [folders, setFolders] = useState<string[]>([]);
   const [path, setPath] = useState("");
   const [who, setWho] = useState("all_agents");

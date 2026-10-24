@@ -4,7 +4,7 @@ import UserNotifications
 extension Store {
   func refreshTasks() async throws {
     let previous = tasks
-    tasks = try await connection().get("/api/tasks")
+    tasks = try await fetch { try await $0.get("/api/tasks") }
     for task in tasks where task.closed && !task.cancelled && task.from == Actor(kind: .user, id: me?.id ?? "") {
       guard previous.contains(where: { $0.id == task.id && !$0.closed }) else { continue }
       let content = UNMutableNotificationContent()
@@ -15,32 +15,32 @@ extension Store {
     }
   }
   func refreshTaskLead() async throws {
-    let lead: WorkspaceLead = try await connection().get("/api/settings/lead")
+    let lead: WorkspaceLead = try await fetch { try await $0.get("/api/settings/lead") }
     taskLead = lead.lead
     taskLeadOverride = lead.leadId
   }
   func saveTaskLead(_ id: String) async throws {
-    let data = try await connection().put("/api/settings/lead", ["leadId": AnyEncodable.nullable(id)])
+    let data = try await fetch { try await $0.put("/api/settings/lead", ["leadId": AnyEncodable.nullable(id)]) }
     let lead = try Wire.decoder.decode(WorkspaceLead.self, from: data)
     taskLead = lead.lead; taskLeadOverride = lead.leadId
   }
   @discardableResult
   func createTask(_ fields: Fields) async throws -> WorkTask {
-    let task: WorkTask = try await connection().post("/api/tasks", fields)
+    let task: WorkTask = try await fetch { try await $0.post("/api/tasks", fields) }
     upsertTask(task)
     await refreshChannels()
     return task
   }
   func updateTask(_ id: String, status: String, result: String) async throws {
-    let task: WorkTask = try await connection().patch("/api/tasks/\(id)", ["status": status, "result": result])
+    let task: WorkTask = try await fetch { try await $0.patch("/api/tasks/\(id)", ["status": status, "result": result]) }
     upsertTask(task)
   }
   func cancelTask(_ id: String) async throws {
-    let task: WorkTask = try await connection().post("/api/tasks/\(id)/cancel", Empty())
+    let task: WorkTask = try await fetch { try await $0.post("/api/tasks/\(id)/cancel", Empty()) }
     upsertTask(task)
   }
   func mergeTask(_ id: String) async throws -> String {
-    let result: TaskMerge = try await connection().post("/api/tasks/\(id)/merge", Empty())
+    let result: TaskMerge = try await fetch { try await $0.post("/api/tasks/\(id)/merge", Empty()) }
     if let task = result.task { upsertTask(task) }
     return result.output ?? "Merged."
   }

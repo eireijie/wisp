@@ -17,9 +17,18 @@ struct DevicesView: View {
       .toolbar { if store.canManage { Button("Add a device", systemImage: "plus") { adding = true } } }
       .sheet(isPresented: $adding) { AddDeviceView() }
       .task {
+        var backoff = DevicePollingBackoff()
         while !Task.isCancelled {
-          do { try await store.refreshNodes(); try await Task.sleep(for: .seconds(5)) }
-          catch { if !Task.isCancelled { action.error = error.localizedDescription }; return }
+          do {
+            try await store.refreshNodes()
+            action.error = nil
+            backoff.succeeded()
+          } catch {
+            if Task.isCancelled { return }
+            action.error = error.localizedDescription
+            backoff.failed()
+          }
+          do { try await Task.sleep(for: .seconds(backoff.interval)) } catch { return }
         }
       }
       .refreshable { do { try await store.refreshNodes() } catch { action.error = error.localizedDescription } }
@@ -105,4 +114,10 @@ struct AddDeviceView: View {
         .interactiveDismissDisabled(action.busy)
     }
   }
+}
+
+struct DevicePollingBackoff {
+  private(set) var interval = 5
+  mutating func succeeded() { interval = 5 }
+  mutating func failed() { interval = min(interval * 2, 30) }
 }

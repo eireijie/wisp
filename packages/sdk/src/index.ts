@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, Message, Routine, Followup } from "@warren/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@warren/core";
 
 export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -85,10 +85,10 @@ export class WarrenClient {
     return this.request<{ path: string; content: string; backlinks: string[] }>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`);
   }
   writeNote(path: string, content: string, message?: string) {
-    return this.request("PUT", "/api/vault/note", { path, content, message });
+    return this.request<SavedNote>("PUT", "/api/vault/note", { path, content, message });
   }
   appendNote(path: string, text: string) {
-    return this.request("POST", "/api/vault/append", { path, text });
+    return this.request<SavedNote>("POST", "/api/vault/append", { path, text });
   }
   search(q: string, limit = 10) {
     return this.request<{ path: string; title: string; snippet: string }[]>("GET", `/api/vault/search?q=${encodeURIComponent(q)}&limit=${limit}`);
@@ -112,8 +112,9 @@ export class WarrenClient {
   mergeTask(taskId: string) {
     return this.request<{ ok: boolean; output: string }>("POST", `/api/tasks/${taskId}/merge`);
   }
+  /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
   teams() {
-    return this.request<{ id: string; name: string; description: string; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
+    return this.request<{ id: string; channelId: string; name: string; leads: string[]; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
   }
   /** Give an agent ("@nova"), a team, or "all agents" read access to a note or folder you can edit. */
   shareNote(path: string, withWho: string) {
@@ -147,6 +148,14 @@ export class WarrenClient {
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {
     return this.request<{ ok: boolean; messageId: string }>("POST", "/api/computers/mine/help", { request });
+  }
+  /** This agent's harness settings on its device (or another harness's there): model, provider, apps, plugins, skills. */
+  harnessSettings(harness?: string) {
+    return this.request<HarnessSettings & { device: string; models: string[] }>("GET", `/api/agent/harness-settings${harness ? `?harness=${encodeURIComponent(harness)}` : ""}`);
+  }
+  /** Change them; only works while doing something the device's owner asked for. */
+  changeHarnessSettings(changes: HarnessSettingsChange[], harness?: string, useAccount?: string) {
+    return this.request<HarnessSettings & { device: string; changed: string[] }>("PATCH", "/api/agent/harness-settings", { changes, ...(harness ? { harness } : {}), ...(useAccount ? { useAccount } : {}) });
   }
   /** Ask a person's OK before doing something; the answer arrives as a message that wakes the agent. */
   requestApproval(summary: string, details = "") {
@@ -214,4 +223,11 @@ function safeJson(t: string) {
   } catch {
     return { error: t };
   }
+}
+
+/** What the hub says after an agent saves a note: hints only (similar notes to merge into, names it could link). */
+export interface SavedNote {
+  path: string;
+  similar?: { path: string; title: string }[];
+  linkable?: string[];
 }

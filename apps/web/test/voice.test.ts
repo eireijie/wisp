@@ -1,20 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ClientEvent } from "@warren/core";
+import type { ClientEvent, Message } from "@warren/core";
 import { VoiceCall } from "../src/voice/call.ts";
 import { spokenReply, isSpeechEcho, voiceIndex } from "../src/voice/text.ts";
 import type { ListenCallbacks } from "../src/voice/providers.ts";
 import { href, parseRoute } from "../src/router.ts";
 
 afterEach(() => vi.useRealTimers());
-function fixture() {
+function fixture(messages: Message[] = [], refresh?: () => Promise<void>) {
   vi.useFakeTimers();
   let cb!: ListenCallbacks;
   const listener = { start: vi.fn(async () => {}), stop: vi.fn() };
   let finish = () => {};
   const speaker = { speak: vi.fn(() => new Promise<void>((resolve) => { finish = resolve; })), cancel: vi.fn(() => finish()) };
   const send = vi.fn(async (_text: string) => {}), update = vi.fn();
-  const call = new VoiceCall({ agentId: "ghost", channelId: "dm", cloudListening: false, listener: (callbacks) => { cb = callbacks; return listener; }, speaker, send, update });
-  return { call, listener, speaker, send, update, cb };
+  const call = new VoiceCall({ agentId: "ghost", channelId: "dm", cloudListening: false, listener: (callbacks) => { cb = callbacks; return listener; }, speaker, send, update, messages: () => messages, refresh });
+  return { call, listener, speaker, send, update, cb, messages };
 }
 const reply = (id = "reply", body = "Hello there. How can I help?\n\nFull details."): ClientEvent => ({ type: "message", message: { id, channelId: "dm", threadId: null, author: { kind: "agent", id: "ghost" }, body, parts: [], hop: 1, createdAt: new Date().toISOString() } });
 
@@ -148,6 +148,83 @@ describe("call lifecycle", () => {
     expect(vi.getTimerCount()).toBe(0);
     call.stop();
   });
+  it("reconciles replies received while disconnected, speaks only the newest and clears stale pending turns", async () => {
+    const old = reply("old");
+    if (old.type !== "message") throw new Error("Expected message");
+    const { call, cb, speaker, messages } = fixture([old.message]);
+    await call.start();
+    cb.final("First task"); cb.final("Second task");
+    call.disconnect();
+    const person: Message = { ...old.message, id: "person", author: { kind: "user", id: "me" }, body: "Second task" };
+    const first = reply("first", "First answer.");
+    const newest = reply("newest", "Newest answer.");
+    if (first.type !== "message" || newest.type !== "message") throw new Error("Expected messages");
+    messages.push(person, first.message, newest.message);
+    call.event(first); call.event(newest);
+    expect(speaker.speak).not.toHaveBeenCalled();
+    await call.start();
+    expect(speaker.speak).toHaveBeenCalledExactlyOnceWith("Newest answer.", expect.any(Function));
+    expect(call.state.waiting).toBe(false);
+    call.event(newest);
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(call.state.longWork).toBe(false);
+    call.stop();
+  });
+
+  it("settles coalesced turns when the agent answered after the last person, keeping later turns outstanding", async () => {
+    const { call, cb, messages, speaker } = fixture();
+    await call.start();
+    cb.final("First"); cb.final("Second");
+    call.disconnect();
+    const answer = reply("answer", "Both done.");
+    if (answer.type !== "message") throw new Error("Expected message");
+    messages.push({ ...answer.message, id: "person", author: { kind: "user", id: "me" } }, answer.message);
+    await call.start();
+    expect(call.state.waiting).toBe(false);
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    cb.final("Another task");
+    messages.push({ ...answer.message, id: "later-person", author: { kind: "user", id: "me" } });
+    call.disconnect();
+    await call.start();
+    expect(call.state.waiting).toBe(true);
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    call.event(reply("later-answer"));
+    expect(call.state.waiting).toBe(false);
+    call.stop();
+  });
+
+  it("waits for reconnect history before restarting capture and reconciling", async () => {
+    let finish!: () => void;
+    const refresh = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    const { call, cb, messages, speaker, listener } = fixture([], refresh);
+    await call.start(); cb.final("Work"); call.disconnect();
+    const starting = call.start();
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(listener.start).toHaveBeenCalledOnce();
+    const answer = reply("answer", "Finished while away.");
+    if (answer.type !== "message") throw new Error("Expected message");
+    messages.push(answer.message);
+    finish(); await starting;
+    expect(listener.start).toHaveBeenCalledTimes(2);
+    expect(call.state.waiting).toBe(false);
+    expect(speaker.speak).toHaveBeenCalledExactlyOnceWith("Finished while away.", expect.any(Function));
+    call.stop();
+  });
+
+  it("clears coalesced pending turns even when the last agent reply was already seen", async () => {
+    const { call, cb, messages } = fixture();
+    await call.start(); cb.final("First"); cb.final("Second");
+    const answer = reply("answer");
+    if (answer.type !== "message") throw new Error("Expected message");
+    messages.push({ ...answer.message, id: "person", author: { kind: "user", id: "me" } }, answer.message);
+    call.event(answer);
+    expect(call.state.waiting).toBe(true);
+    call.disconnect(); await call.start();
+    expect(call.state.waiting).toBe(false);
+    call.stop();
+  });
+
   it("pauses capture on connection loss", async () => {
     const { call, listener, speaker } = fixture();
     await call.start(); call.disconnect();

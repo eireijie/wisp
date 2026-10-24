@@ -25,6 +25,20 @@ async function api<T = any>(method: string, url: string, body?: unknown, token =
 const login = async (email: string, password: string, ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/150.0 Safari/537.36") =>
   (await api<{ token: string }>("POST", "/api/auth/login", { email, password }, "", { "user-agent": ua })).data.token;
 
+async function browserSocket(token: string) {
+  const ws = new WebSocket(base.replace("http", "ws") + "/ws");
+  const closed = new Promise<number>((resolve) => ws.once("close", resolve));
+  await new Promise<void>((resolve, reject) => {
+    ws.once("open", () => ws.send(JSON.stringify({ token })));
+    ws.once("message", (raw) => {
+      expect(JSON.parse(raw.toString()).type).toBe("ready");
+      resolve();
+    });
+    ws.once("error", reject);
+  });
+  return { ws, closed };
+}
+
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-settings-"));
   const built = await buildHub({ dataDir: dir });
@@ -56,19 +70,52 @@ describe("your settings", () => {
     expect(prompt).toMatch(/It's \w+day, .* for Yug \(America\/New_York\)\./);
   });
 
+  it("closes every socket for a revoked sign-in while keeping other sign-ins connected", async () => {
+    const other = await login("me@example.com", "password123");
+    const session = (await api<any[]>("GET", "/api/me/sessions", undefined, other)).data.find((s) => s.current);
+    const live = await browserSocket(owner);
+    const revoked = await browserSocket(other);
+    const revokedTab = await browserSocket(other);
+    expect((await api("DELETE", `/api/me/sessions/${session.id}`)).status).toBe(200);
+    expect(await revoked.closed).toBe(4401);
+    expect(await revokedTab.closed).toBe(4401);
+    expect((await api("GET", "/api/me", undefined, other)).status).toBe(401);
+    const event = new Promise<string>((resolve) => live.ws.once("message", (raw) => resolve(JSON.parse(raw.toString()).type)));
+    hub.broadcast((await api("GET", "/api/me")).data.workspace.id, { type: "channels_changed" });
+    expect(await event).toBe("channels_changed");
+    live.ws.close();
+  });
+
+  it("closes the socket when its own sign-in logs out", async () => {
+    const other = await login("me@example.com", "password123");
+    const live = await browserSocket(other);
+    expect((await api("POST", "/api/auth/logout", undefined, other)).status).toBe(200);
+    expect(await live.closed).toBe(4401);
+  });
+
   it("changes your password, signs out your other sign-ins, and lists them by device", async () => {
     const phone = await login("me@example.com", "password123", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1");
+    const phoneSocket = await browserSocket(phone);
+    const currentSocket = await browserSocket(owner);
     const sessions = (await api<any[]>("GET", "/api/me/sessions")).data;
     expect(sessions.map((s) => s.label)).toContain("Safari on iPhone");
     expect(sessions.filter((s) => s.current)).toHaveLength(1);
 
     expect((await api("POST", "/api/me/password", { current: "wrong", next: "password456" })).status).toBe(403);
+    expect(phoneSocket.ws.readyState).toBe(WebSocket.OPEN);
     expect((await api("POST", "/api/me/password", { current: "password123", next: "password456" })).status).toBe(200);
+    expect(await phoneSocket.closed).toBe(4401);
+    expect(currentSocket.ws.readyState).toBe(WebSocket.OPEN);
     expect((await api("GET", "/api/me", undefined, phone)).status).toBe(401);
     expect((await api("GET", "/api/me")).status).toBe(200);
-    expect(await login("me@example.com", "password456")).toBeTruthy();
+    const other = await login("me@example.com", "password456");
+    expect(other).toBeTruthy();
+    const otherSocket = await browserSocket(other);
     expect((await api("POST", "/api/me/sessions/sign-out-others")).data.signedOut).toBeGreaterThan(0);
+    expect(await otherSocket.closed).toBe(4401);
+    expect(currentSocket.ws.readyState).toBe(WebSocket.OPEN);
     expect((await api<any[]>("GET", "/api/me/sessions")).data).toHaveLength(1);
+    currentSocket.ws.close();
   });
 });
 
@@ -92,6 +139,7 @@ describe("workspace settings", () => {
     const me = (await api<any[]>("GET", "/api/members")).data.find((m) => m.role === "owner");
     expect((await api("PATCH", `/api/members/${me.id}`, { role: "member" })).status).toBe(409);
     const samToken = await login("sam@example.com", "password123");
+    const browser = await browserSocket(samToken);
     // Sam's laptop is connected, with an agent on it that has a harness token
     const laptop = (await api("POST", "/api/nodes", { name: "sams-laptop" }, samToken)).data;
     const nodeSocket = (token: string) => {
@@ -112,6 +160,7 @@ describe("workspace settings", () => {
 
     expect((await api("PATCH", `/api/members/${sam.id}`, { role: "guest" })).data.role).toBe("guest");
     expect((await api("DELETE", `/api/members/${sam.id}`)).status).toBe(200);
+    expect(await browser.closed).toBe(4401);
     expect((await api("GET", "/api/me", undefined, samToken)).status).toBe(401);
     expect((await api<any[]>("GET", "/api/members")).data.map((m) => m.name)).toEqual(["Yugal Patel"]);
     // the laptop is off the hub, its token and the agent's harness token no longer work, and it belongs to nobody
@@ -119,6 +168,20 @@ describe("workspace settings", () => {
     expect(await nodeSocket(laptop.token).opened).toBe(false);
     expect((await api("GET", "/api/me", undefined, harnessToken)).status).toBe(401);
     expect((await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === laptop.node.id)).toMatchObject({ online: false, ownerId: null });
+  });
+
+  it("closes all sign-ins when an owner resets someone's password", async () => {
+    const inv = (await api("POST", "/api/invites", { role: "member" })).data;
+    const joined = (await api("POST", "/api/invites/accept", { code: inv.code, name: "Reset", email: "reset@example.com", password: "password123" }, "")).data;
+    const member = (await api("GET", "/api/me", undefined, joined.token)).data.user;
+    const browser = await browserSocket(joined.token);
+    const phoneToken = await login("reset@example.com", "password123");
+    const phone = await browserSocket(phoneToken);
+    expect((await api("POST", `/api/members/${member.id}/password`, { password: "password456" })).status).toBe(200);
+    expect(await browser.closed).toBe(4401);
+    expect(await phone.closed).toBe(4401);
+    expect((await api("GET", "/api/me", undefined, joined.token)).status).toBe(401);
+    expect((await api("DELETE", `/api/members/${member.id}`)).status).toBe(200);
   });
 
   it("sets what agents ask about first, how far they can ping each other, and new agents' access", async () => {

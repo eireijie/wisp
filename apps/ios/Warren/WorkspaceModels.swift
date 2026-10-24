@@ -1,10 +1,10 @@
 import Foundation
 
+/** A channel's team as /api/teams lists it: its id and name are the channel's. */
 struct WorkspaceTeam: Decodable, Identifiable {
   var id: String = ""
   var name: String = ""
-  var emoji: String?
-  var description: String?
+  var leads: [String]?
   var leadId: String?
   var reportsTo: String?
   var channelId: String?

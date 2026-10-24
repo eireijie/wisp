@@ -128,6 +128,9 @@ struct ChannelTeam: Codable, Hashable {
     var lead: Bool
     var x: Double
     var y: Double
+    /** its role on this team and what that role means; nil = none */
+    var role: String? = nil
+    var roleNotes: String? = nil
   }
   struct Edge: Codable, Hashable {
     var from: String
@@ -135,6 +138,13 @@ struct ChannelTeam: Codable, Hashable {
   }
   var nodes: [Node]
   var edges: [Edge]
+  /** a memory folder the whole team shares, e.g. teams/web; nil or "" = none */
+  var folder: String? = nil
+  /** the git repository it codes in, and the branch work merges into */
+  var repo: String? = nil
+  var baseBranch: String? = nil
+  /** an agent outside the team it reports to */
+  var reportsTo: String? = nil
 
   static let empty = ChannelTeam(nodes: [], edges: [])
 }
@@ -152,9 +162,14 @@ enum MessagePart: Codable, Hashable {
   case computer(computerId: String, request: String?)
   case approval(approvalId: String)
   case change(changeId: String)
+  case task(taskId: String)
+  case routine(routineId: String)
+  case discussion(discussionId: String)
+  /** an agent's answer to /context: how full its conversation is (nil before its first reply) */
+  case context(ContextUsage?)
   case other(String)
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId }
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
@@ -167,6 +182,10 @@ enum MessagePart: Codable, Hashable {
     case "computer": self = .computer(computerId: (try? c.decode(String.self, forKey: .computerId)) ?? "", request: try? c.decode(String.self, forKey: .request))
     case "approval": self = .approval(approvalId: (try? c.decode(String.self, forKey: .approvalId)) ?? "")
     case "change": self = .change(changeId: (try? c.decode(String.self, forKey: .changeId)) ?? "")
+    case "task": self = .task(taskId: (try? c.decode(String.self, forKey: .taskId)) ?? "")
+    case "routine": self = .routine(routineId: (try? c.decode(String.self, forKey: .routineId)) ?? "")
+    case "discussion": self = .discussion(discussionId: (try? c.decode(String.self, forKey: .discussionId)) ?? "")
+    case "context": self = .context(try? c.decode(ContextUsage.self, forKey: .usage))
     default: self = .other(type)
     }
   }
@@ -183,8 +202,39 @@ struct Message: Codable, Identifiable, Hashable {
   var parts: [MessagePart]
   var reactions: [Reaction]?
   var createdAt: String
+  /** set when its author changed the text */
+  var editedAt: String?
+  /** set when it was deleted but kept so its thread's replies stay reachable; body and parts are empty */
+  var deletedAt: String?
 
   var date: Date { Wire.date(createdAt) ?? .distantPast }
+  var files: [(id: String, name: String)] { parts.compactMap { if case .file(let id, let name) = $0 { (id, name) } else { nil } } }
+}
+
+/** How full an agent's conversation is (ContextUsage in packages/core/src/types.ts). */
+struct ContextUsage: Codable, Hashable {
+  var model: String?
+  var contextUsed: Int?
+  var contextWindow: Int?
+}
+
+/** Agents talking something through in rounds in a thread, then a decision (Discussion + progress). */
+struct Discussion: Codable, Identifiable, Hashable {
+  struct Progress: Codable, Hashable { var agentId: String; var status: String }
+  var id: String
+  var channelId: String
+  var threadId: String
+  var topic: String
+  var participants: [String]
+  var moderatorId: String
+  var rounds: Int
+  /** 0 before it starts; rounds + 1 while the moderator writes the decision */
+  var round: Int
+  var status: String // running | summarizing | done | cancelled
+  var decisionPath: String?
+  var progress: [Progress]?
+
+  var live: Bool { status == "running" || status == "summarizing" }
 }
 
 struct MessagePage: Codable {
@@ -206,6 +256,25 @@ struct Computer: Codable, Identifiable, Hashable {
   var paused: Bool?
   var controller: Controller?
   var help: Help?
+  /** "pin" or "password" when opening this screen needs the code picked at the device */
+  var code: String?
+  var config: Config?
+
+  struct Config: Codable, Hashable {
+    /** a device's own screen lent to agents: until when (nil until you stop it) */
+    struct Lend: Codable, Hashable { var until: String? }
+    var lend: Lend?
+  }
+
+  /** The word for this screen's code. */
+  var codeLabel: String { code == "pin" ? "PIN" : "password" }
+
+  /** Is a device's own screen lent to agents right now? */
+  var lentNow: Bool {
+    guard kind == "device", let lend = config?.lend else { return false }
+    guard let until = lend.until else { return true }
+    return (Wire.date(until) ?? .distantPast) > Date()
+  }
 
   var kindLabel: String {
     switch kind {
@@ -228,6 +297,14 @@ struct Approval: Codable, Identifiable, Hashable {
   var note: String
   var createdAt: String
   var decidedAt: String?
+  /** an agent asking to borrow a device's own screen */
+  var loan: Loan?
+
+  struct Loan: Codable, Hashable {
+    var nodeId: String
+    var deviceName: String
+    var ownerId: String
+  }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }

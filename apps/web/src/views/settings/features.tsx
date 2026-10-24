@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Bell, CircleDot, Clock, Ghost, ListChecks, Phone, UserPlus, Users } from "lucide-react";
+import { Bell, CircleDot, Clock, Ghost, ListChecks, Phone, UserPlus } from "lucide-react";
 import { FEATURE_INFO, FEATURE_KEYS, type FeatureKey, type Features } from "@warren/core";
 import { useStore } from "../../store.ts";
 import { setFeatures, useFeatures } from "../../features.ts";
@@ -10,7 +10,6 @@ const ICONS: Record<FeatureKey, ReactNode> = {
   background: <Bell size={18} />,
   routines: <Clock size={18} />,
   teach: <CircleDot size={18} />,
-  teams: <Users size={18} />,
   tasks: <ListChecks size={18} />,
   voice: <Phone size={18} />,
   buddy: <Ghost size={18} />,

@@ -8,16 +8,13 @@ import { Button, CopyBlock, Menu, Modal, Pill, cx } from "../../components/ui.ts
 import { Card, PageHeader, Section, Select } from "./parts.tsx";
 import { HarnessLogo, hasHarnessLogo } from "../../components/HarnessLogo.tsx";
 
-/** A harness's brand mark on a tile, or its monogram when Warren has no logo for it. */
-function Mark({ id, label }: { id: string; label: string }) {
-  if (hasHarnessLogo(id))
-    return (
-      <span className="size-9 shrink-0 rounded-lg bg-chip border border-line grid place-items-center text-ink">
-        <HarnessLogo harness={id} size={20} />
-      </span>
-    );
-  const letters = label.replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean);
-  return <span className="size-9 shrink-0 rounded-lg bg-chip border border-line grid place-items-center text-[13px] font-semibold text-muted">{(letters.length > 1 ? letters[0][0] + letters[1][0] : (letters[0] ?? "?").slice(0, 2)).toUpperCase()}</span>;
+/** A harness's brand mark on a tile, or a plain line icon when Warren has no logo for it (never a letter tile). */
+function Mark({ id }: { id: string; label?: string }) {
+  return (
+    <span className={cx("size-9 shrink-0 rounded-lg bg-chip border border-line grid place-items-center", hasHarnessLogo(id) ? "text-ink" : "text-muted")}>
+      <HarnessLogo harness={id} size={hasHarnessLogo(id) ? 20 : 18} />
+    </span>
+  );
 }
 
 /**

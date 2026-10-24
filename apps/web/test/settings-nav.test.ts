@@ -16,7 +16,7 @@ describe("settings navigation", () => {
       ["Notifications", ["notifications", "voice"]],
       ["Appearance", ["appearance"]],
       ["Devices", ["computers", "mobile", "access"]],
-      ["Advanced", ["agent-defaults", "memory", "apps", "runtimes", "connections", "security", "data", "updates"]],
+      ["Advanced", ["agent-defaults", "memory", "apps", "runtimes", "harnesses", "connections", "security", "data", "updates"]],
     ]);
   });
 

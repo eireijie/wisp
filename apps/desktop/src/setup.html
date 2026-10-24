@@ -211,6 +211,7 @@
       <p class="error" id="cloud-fail" hidden></p>
       <div class="row" id="cloud-fail-actions" hidden>
         <button class="primary" id="cloud-delete">Delete the server</button>
+        <button id="cloud-wait">Keep waiting</button>
         <button id="cloud-keep">Keep it</button>
       </div>
       <p class="hint" id="cloud-fail-hint" hidden></p>
@@ -322,6 +323,8 @@
   let cloudToken = "";
   let offer = null;
   let failed = null;
+  let resumeId = null;
+  let deleteId = null;
   const cloudCard = (id) => ["cloud-connect", "cloud-choose", "cloud-progress"].forEach((c) => ($(c).hidden = c !== id));
   const money = (n) => new Intl.NumberFormat(undefined, { style: "currency", currency: offer.currency }).format(n);
   const STEPS = [
@@ -348,13 +351,18 @@
     $("cloud-token-go").disabled = false;
     $("cloud-token-go").textContent = "Continue";
     if (!r.ok) return err("cloud-token-error", r.error);
-    if (!r.plans.length) return err("cloud-token-error", "Hetzner has no servers available for this project right now. Try again later.");
+    if (!r.plans.length && resumeId == null && deleteId == null) return err("cloud-token-error", "Hetzner has no servers available for this project right now. Try again later.");
     cloudToken = token;
     $("cloud-token").value = "";
+    if (deleteId != null) {
+      cloudCard("cloud-progress");
+      await deleteFailed();
+      return;
+    }
     offer = r;
     const sel = $("cloud-location");
     sel.replaceChildren(...r.locations.map((l) => new Option(`${l.city}, ${l.country}`, l.name)));
-    sel.value = r.plans[0].location; // where the cheapest is
+    sel.value = r.plans[0]?.location || ""; // where the cheapest is
     renderPlans();
     cloudCard("cloud-choose");
     $("cloud-name").focus();
@@ -385,29 +393,34 @@
 
   function chosen() {
     const type = document.querySelector('input[name="plan"]:checked')?.value;
-    return offer.plans.find((p) => p.type === type && p.location === $("cloud-location").value);
+    return offer?.plans.find((p) => p.type === type && p.location === $("cloud-location").value);
   }
 
   function priceButton() {
     const p = chosen();
+    if (resumeId != null) { $("cloud-go").textContent = "Keep waiting"; return; }
     if (!p) return;
     $("cloud-go").textContent = `Create server for ${money(p.monthly)}/month`;
     $("cloud-billing").textContent = `Hetzner's price, including the IPv4 address (${money(p.ipv4)}). They bill your account by the hour, up to this much a month, until you delete the server in their console. 4 GB runs Warren and a couple of agent computers; more memory runs more at once.`;
   }
 
-  $("cloud-form").onsubmit = async (e) => {
+  $("cloud-form").onsubmit = (e) => {
     e.preventDefault();
+    cloudCreate(resumeId);
+  };
+  /** Create a server, or (`resume`, a server that didn't finish) keep setting that one up. */
+  async function cloudCreate(resume) {
     const p = chosen();
-    if (!p) return err("cloud-error", "Pick a size.");
+    if (!p && resume == null) return err("cloud-error", "Pick a size.");
     err("cloud-error", "");
     failed = null;
     $("cloud-fail").hidden = $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
     $("cloud-progress-title").textContent = "Creating your server…";
     cloudCard("cloud-progress");
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
-    progress("create");
+    progress(resume == null ? "create" : "boot");
     const account = { name: $("cloud-name").value.trim(), email: $("cloud-email").value.trim(), password: $("cloud-password").value };
-    const r = await setup.cloudCreate(cloudToken, { type: p.type, location: p.location, account, device: $("cloud-device").checked });
+    const r = await setup.cloudCreate(cloudToken, { type: p?.type, location: p?.location, account, device: $("cloud-device").checked, resume });
     if (r.ok) {
       cloudToken = "";
       $("starting-title").textContent = `Opening ${new URL(r.url).host}…`;
@@ -422,11 +435,15 @@
       cloudCard("cloud-choose");
       return err("cloud-error", r.error);
     }
-    failed = r.server;
+    showCloudFailure(r.server);
+  }
+
+  function showCloudFailure(server) {
+    failed = server;
     $("cloud-fail-actions").hidden = false;
     $("cloud-fail-hint").hidden = false;
-    $("cloud-fail-hint").textContent = `It's ${r.server.name} (${r.server.ip || "no address yet"}) in your Hetzner console, and Hetzner bills for it until it's deleted.` + (r.server.ip ? ` If it comes up later, join it at https://${r.server.ip}.` : "");
-  };
+    $("cloud-fail-hint").textContent = `It's ${server.name} (${server.ip || "no address yet"}) in your Hetzner console, and Hetzner bills for it until it's deleted.` + (server.ip ? ` If it comes up later, join it at https://${server.ip}.` : "");
+  }
 
   let current = "create";
   setup.onCloudStep((step) => progress(step));
@@ -436,19 +453,34 @@
     $("cloud-checks").replaceChildren(...STEPS.map(([, label], i) => li(i < at ? "ok" : i === at ? (broken ? "bad" : "wait") : "no", label)));
   }
 
-  $("cloud-delete").onclick = async () => {
+  async function deleteFailed() {
     if (!failed) return;
+    if (!cloudToken) { deleteId = failed.id; cloudCard("cloud-connect"); $("cloud-token").focus(); return; }
     $("cloud-delete").disabled = true;
     const r = await setup.cloudDelete(cloudToken, failed.id);
     $("cloud-delete").disabled = false;
     if (!r.ok) return err("cloud-fail", r.error);
     failed = null;
+    resumeId = deleteId = null;
     $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
     $("cloud-progress-title").textContent = "Server deleted";
     err("cloud-fail", "");
     $("cloud-checks").replaceChildren(li("ok", "Deleted from your Hetzner account. Nothing more is billed for it."));
+  }
+  $("cloud-delete").onclick = deleteFailed;
+  $("cloud-wait").onclick = () => {
+    if (!failed) return;
+    resumeId = failed.id;
+    if (!cloudToken) { deleteId = null; cloudCard("cloud-connect"); $("cloud-token").focus(); return; }
+    cloudCreate(resumeId);
   };
-  $("cloud-keep").onclick = () => { $("cloud-fail-actions").hidden = true; };
+  $("cloud-keep").onclick = () => setup.cloudKeep();
+  if (state.step === "cloud" && state.server) {
+    show("cloud");
+    cloudCard("cloud-progress");
+    $("cloud-progress-title").textContent = "Your server isn't ready";
+    showCloudFailure(state.server);
+  }
   $("test").onclick = () => test(false);
 </script>
 </body>

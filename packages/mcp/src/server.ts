@@ -44,7 +44,7 @@ export async function createWarrenMcp(client: WarrenClient) {
   const server = new McpServer(
     { name: "warren", version: "0.0.1" },
     {
-      instructions: `You are @${self.handle} in the Warren workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. When you learn something lasting about a person (a preference, a plan, something they did, a small detail), save it with memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
+      instructions: `You are @${self.handle} in the Warren workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
     },
   );
 
@@ -91,17 +91,20 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "agents_list",
-    { description: "List agents in the workspace with their harness, status and teams." },
-    safe(async () => json((await client.agents()).map((a) => ({ handle: `@${a.handle}`, name: a.name, harness: a.harness, status: a.status, teams: a.groups })))),
+    { description: "List agents in the workspace with their harness, status and the channel teams they're on." },
+    safe(async () => {
+      const [agents, teams] = await Promise.all([client.agents(), client.teams()]);
+      return json(agents.map((a) => ({ handle: `@${a.handle}`, name: a.name, harness: a.harness, status: a.status, teams: teams.filter((t) => t.members.some((m) => m.agentId === a.id)).map((t) => `#${t.name}`) })));
+    }),
   );
 
   server.registerTool(
     "teams_list",
-    { description: "List teams: their lead, members and roles, who they report to, their channel and their memory folder." },
+    { description: "List channel teams (every team is a channel's): their leads, members and roles, who they report to, and their memory folder and repo." },
     safe(async () => {
       const [teams, agents] = await Promise.all([client.teams(), client.agents()]);
       const h = (id: string | null) => (id ? `@${agents.find((a) => a.id === id)?.handle ?? "?"}` : null);
-      return json(teams.map((t) => ({ name: t.name, description: t.description, lead: h(t.leadId), reportsTo: h(t.reportsTo), memory: `${t.folder}/`, repo: t.repo, members: t.members.map((m) => ({ agent: h(m.agentId), role: m.role || null })) })));
+      return json(teams.map((t) => ({ channel: `#${t.name}`, leads: t.leads.map(h), reportsTo: h(t.reportsTo), memory: t.folder ? `${t.folder}/` : null, repo: t.repo, members: t.members.map((m) => ({ agent: h(m.agentId), role: m.role || null })) })));
     }),
   );
 
@@ -113,7 +116,7 @@ export async function createWarrenMcp(client: WarrenClient) {
       description:
         "Hand a piece of work to another agent (possibly on another computer). They get woken up, and you get a message back when they mark it done. Work you hand out while working on a task becomes a subtask of it (or name the parent with parent_task_id); if you're the lead, this is how you assign the pieces of a task to agents by their roles.",
       inputSchema: {
-        to: z.string().describe('agent handle, e.g. @nova, or "team:<name>" for a team\'s lead'),
+        to: z.string().describe('agent handle, e.g. @nova, or "#channel" for the lead of that channel\'s team'),
         title: z.string(),
         brief: z.string().describe("everything they need to do the work"),
         channel: z.string().optional(),
@@ -170,7 +173,7 @@ export async function createWarrenMcp(client: WarrenClient) {
         topic: z.string(),
         goal: z.string().optional().describe("what the discussion should decide"),
         participants: z.array(z.string()).optional().describe("agent handles; default: everyone on the team"),
-        team: z.string().optional().describe("team name; its channel and decisions folder are used"),
+        team: z.string().optional().describe("a channel with a team, e.g. #web; the discussion happens there and its decision goes in the team's memory folder"),
         rounds: z.number().int().min(1).max(5).optional(),
         moderator: z.string().optional(),
       },
@@ -210,22 +213,17 @@ export async function createWarrenMcp(client: WarrenClient) {
   server.registerTool(
     "memory_write",
     {
-      description: "Create or overwrite a markdown note (Obsidian style: use [[wikilinks]] and #tags). Write to 'me/...' for private memory or 'shared/...' for everyone. Every write is versioned.",
+      description:
+        "Create or overwrite a markdown note (Obsidian style: use [[wikilinks]] and #tags). Write to 'me/...' for private memory or 'shared/...' for everyone; follow me/skills/memory/SKILL.md for folders, header and links. Every write is versioned. The reply lists similar notes to merge into and names you could link.",
       inputSchema: { path: z.string(), content: z.string(), message: z.string().optional().describe("short change description") },
     },
-    safe(async ({ path: p, content, message }) => {
-      await client.writeNote(vaultPath(p), content, message);
-      return text(`Saved ${vaultPath(p)}.`);
-    }),
+    safe(async ({ path: p, content, message }) => text(`Saved ${vaultPath(p)}.${saveHints(await client.writeNote(vaultPath(p), content, message))}`)),
   );
 
   server.registerTool(
     "memory_append",
     { description: "Append text to a note, creating it if needed. Good for logs and journals.", inputSchema: { path: z.string(), text: z.string() } },
-    safe(async ({ path: p, text: t }) => {
-      await client.appendNote(vaultPath(p), t);
-      return text(`Appended to ${vaultPath(p)}.`);
-    }),
+    safe(async ({ path: p, text: t }) => text(`Appended to ${vaultPath(p)}.${saveHints(await client.appendNote(vaultPath(p), t))}`)),
   );
 
   server.registerTool(
@@ -441,6 +439,64 @@ export async function createWarrenMcp(client: WarrenClient) {
     }),
   );
 
+  // --- your harness's own settings ---------------------------------------------------------------
+
+  const settingsLine = (s: Awaited<ReturnType<typeof client.harnessSettings>>) => {
+    const list = (items: { id: string; name: string; enabled: boolean; canToggle: boolean }[]) => items.map((i) => `${i.name}${i.name === i.id ? "" : ` [${i.id}]`} ${i.enabled ? "on" : "off"}${i.canToggle ? "" : " (changed on the device only)"}`).join(", ") || "none";
+    return [
+      `${s.harness} on ${s.device} (${s.configPath})`,
+      s.accounts.length > 1 ? `account in use: ${s.accounts.find((x) => x.id === s.account)?.label ?? s.account} (accounts here: ${s.accounts.map((x) => `${x.label}${x.signedIn === false ? " (not signed in)" : ""}`).join(", ")})` : "",
+      `model: ${s.model ?? "(its default)"}${s.providers ? `; provider: ${s.provider ?? "(its default)"} (can be: ${s.providers.map((p) => p.id + (p.signedIn ? " signed in" : "")).join(", ")})` : ""}`,
+      s.models.length ? `models it offers: ${s.models.join(", ")}` : "",
+      `apps (MCP servers set up in the harness): ${list(s.apps)}`,
+      `plugins: ${list(s.plugins)}`,
+      `skills: ${list(s.skills)}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  server.registerTool(
+    "harness_settings",
+    { description: "See your harness's own settings on your device (its config file): the model and provider it uses by default, its apps (MCP servers), plugins and skills, and which are on. Give harness to see another harness on the same device (hermes, codex, claude-code).", inputSchema: { harness: z.string().optional() } },
+    safe(async ({ harness }) => text(settingsLine(await client.harnessSettings(harness)))),
+  );
+
+  server.registerTool(
+    "harness_settings_change",
+    {
+      description:
+        "Change your harness's own settings on your device when its owner asks (\"switch Hermes to GPT-5\", \"turn off the GitHub plugin\", \"use my work account\"): its default model, provider, which of its accounts you use, and turning apps, plugins and skills on or off. Only works while you're doing something the device's owner asked for. Names come from harness_settings. The change applies from your next reply on.",
+      inputSchema: {
+        harness: z.string().optional().describe("hermes, codex or claude-code; default: your own"),
+        model: z.string().optional(),
+        provider: z.string().optional(),
+        turn_on: z.array(z.object({ kind: z.enum(["app", "plugin", "skill"]), name: z.string() })).optional(),
+        turn_off: z.array(z.object({ kind: z.enum(["app", "plugin", "skill"]), name: z.string() })).optional(),
+        use_account: z.string().optional().describe("the name of another of your harness's accounts on this device to use from now on"),
+      },
+    },
+    safe(async ({ harness, model, provider, turn_on, turn_off, use_account }) => {
+      const now = await client.harnessSettings(harness);
+      const find = (kind: "app" | "plugin" | "skill", name: string) => {
+        const items = kind === "app" ? now.apps : kind === "plugin" ? now.plugins : now.skills;
+        const n = name.toLowerCase();
+        const hit = items.find((i) => i.id === name) ?? items.find((i) => i.id.toLowerCase() === n || i.name.toLowerCase() === n);
+        if (!hit) throw new Error(`${now.harness} has no ${kind} "${name}". It has: ${items.map((i) => i.name).join(", ") || "none"}`);
+        return hit.id;
+      };
+      const changes = [
+        ...(model ? [{ op: "model" as const, model }] : []),
+        ...(provider ? [{ op: "provider" as const, provider }] : []),
+        ...(turn_on ?? []).map((t) => ({ op: "toggle" as const, kind: t.kind, id: find(t.kind, t.name), enabled: true })),
+        ...(turn_off ?? []).map((t) => ({ op: "toggle" as const, kind: t.kind, id: find(t.kind, t.name), enabled: false })),
+      ];
+      if (!changes.length && !use_account) return text("Nothing to change: give model, provider, use_account, turn_on or turn_off.");
+      const r = await client.changeHarnessSettings(changes, harness, use_account);
+      return text(`Changed ${r.changed.join(", ")}.\n${settingsLine({ ...r, models: [] })}`);
+    }),
+  );
+
   // --- files ------------------------------------------------------------------
 
   server.registerTool(
@@ -646,4 +702,12 @@ function guessMime(p: string): string {
   const ext = path.extname(p).toLowerCase();
   const map: Record<string, string> = { ".txt": "text/plain", ".md": "text/markdown", ".json": "application/json", ".csv": "text/csv", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf" };
   return map[ext] ?? "application/octet-stream";
+}
+
+/** The hints after a save, in a few short lines ("" when there are none). */
+export function saveHints(r: { similar?: { path: string; title: string }[]; linkable?: string[] } | null | undefined): string {
+  const out: string[] = [];
+  if (r?.similar?.length) out.push(`Similar notes (if it's the same idea, merge into one and delete the other):\n${r.similar.map((s) => `- ${s.path} (${s.title})`).join("\n")}`);
+  if (r?.linkable?.length) out.push(`Mentions you could link: ${r.linkable.join(", ")}`);
+  return out.length ? `\n${out.join("\n")}` : "";
 }

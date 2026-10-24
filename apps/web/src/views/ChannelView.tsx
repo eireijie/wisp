@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Pin, PinOff, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
-import { parseMentions, type AccessLevel, type Agent, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Wrench, Pin, PinOff, Square, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
+import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
-import { useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
+import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
@@ -15,6 +15,7 @@ import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { takeDraft } from "../draft.ts";
 import { AgentPanel, type AgentPanelTab } from "../components/AgentPanel.tsx";
+import { slashQuery, useAgentCommands, useSlashMenu, type SlashItem } from "../components/SlashMenu.tsx";
 import { ActivityPill } from "../components/ActivityPill.tsx";
 import { RightPane } from "../components/RightPane.tsx";
 import { workSummary } from "../components/agentActivity.ts";
@@ -42,7 +43,6 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const role = useStore((s) => s.me?.role);
   const names = useNames();
   const voice = useFeature("voice");
-  const backgroundOn = useFeature("background");
   const [calling, setCalling] = useState(!!route.call);
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
@@ -83,7 +83,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
     if (!channel) return;
     setReadMark({ channelId: channel.id, at: channel.lastReadAt });
     setActive(channel.id);
-    loadChannel(channel.id);
+    void loadChannel(channel.id).catch(() => {});
     return () => {
       setActive(null);
     };
@@ -133,21 +133,6 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
               <ChannelSubtitle channel={channel} onAgents={() => setSettings(channel.settings.team?.nodes.length ? "team" : "agents")} />
             </div>
           )}
-          {dmAgent && (
-            <nav aria-label={dmAgent.name} className="hidden md:flex items-center gap-0.5 rounded-xl bg-chip p-[3px] text-[13px] font-bold">
-              <span aria-current="page" className="h-7 px-3 rounded-[9px] bg-panel shadow-sm grid place-items-center">
-                Chat
-              </span>
-              {backgroundOn && (
-                <a href={href({ view: "agents", agentId: dmAgent.id, tab: "background" })} className="h-7 px-3 rounded-[9px] grid place-items-center text-ink/70 hover:text-ink">
-                  Background
-                </a>
-              )}
-              <a href={href({ view: "agents", agentId: dmAgent.id })} className="h-7 px-3 rounded-[9px] grid place-items-center text-ink/70 hover:text-ink">
-                Settings
-              </a>
-            </nav>
-          )}
           {dmAgent?.computerId && (
             <button onClick={() => (dmPanel === "computer" ? setSide(null) : openAgent(dmAgent.id, "computer"))} className={cx("size-9 rounded-full hover:bg-hover grid place-items-center hover:text-ink", dmPanel === "computer" ? "text-ink bg-hover" : "text-muted")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>
               <Monitor size={18} />
@@ -171,11 +156,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           )}
         </header>
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
-          <MessageList channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "members" })} />
+          <MessageList messageId={!route.threadId ? route.messageId : undefined} channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "members" })} />
         </SoloAgent.Provider>
         {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} onDetails={openAgent} />}
       </div>
-      {route.threadId && <ThreadPanel channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
+      {route.threadId && <ThreadPanel key={route.threadId} messageId={route.messageId} channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
       {sideAgent && side?.kind === "agent" && (
         <AgentPanel
           key={sideAgent.id}
@@ -669,17 +654,106 @@ function ContextRing({ ctx }: { ctx: AgentContext }) {
   );
 }
 
+/** An agent's answer to /context: how full its conversation is, with a way to shrink it when its harness has one. */
+function ContextCard({ usage }: { usage: ContextUsage | null }) {
+  const author = useContext(CardAuthor);
+  const commands = useAgentCommands(author?.agentId);
+  const channelKind = useStore((s) => s.channels.find((c) => c.id === author?.channelId)?.kind);
+  const agent = useStore((s) => s.agents.find((a) => a.id === author?.agentId));
+  const shrink = commands.find((c) => c.via === "raw" && (c.name === "compact" || c.name === "compress"));
+  const used = usage?.contextUsed ?? null;
+  const window = usage?.contextWindow ?? null;
+  const pct = used !== null && window ? Math.min(100, (used / window) * 100) : null;
+  const color = pct === null ? "var(--faint)" : pct > 85 ? "var(--bad)" : pct > 60 ? "var(--warn)" : "var(--ok)";
+  async function run() {
+    if (!author || !shrink || !agent) return;
+    await api("POST", `/api/channels/${author.channelId}/messages`, { body: `${channelKind === "dm" ? "" : `@${agent.handle} `}/${shrink.name}`, threadId: author.threadId ?? undefined });
+  }
+  return (
+    <div className="mt-1.5 max-w-md rounded-2xl border border-line bg-panel p-3.5 space-y-2.5">
+      <div className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="font-semibold tabular-nums">{used !== null ? `${tokens(used)}${window ? ` of ${tokens(window)}` : ""} used` : "Nothing used yet"}</span>
+        {usage?.model && <span className="text-xs text-muted truncate">{prettyModel(usage.model)}</span>}
+      </div>
+      {pct !== null && (
+        <div className="h-2 rounded-full bg-chip overflow-hidden">
+          <div className="h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%`, background: color }} />
+        </div>
+      )}
+      {used === null && <p className="text-xs text-muted">This shows up after its first reply here.</p>}
+      {shrink && used !== null && (
+        <Button className="h-8" onClick={run}>
+          {shrink.name === "compact" ? "Compact" : "Compress"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Which message a card sits in, for cards that act on their conversation. */
+const CardAuthor = createContext<{ agentId: string; channelId: string; threadId: string | null } | null>(null);
+
 // --- message list -------------------------------------------------------------------------------
 
 /** In a DM the agent lives in the pill at the top, so its messages don't repeat its ghost and name. */
 const SoloAgent = createContext<string | null>(null);
 
-function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: ChannelInfo; readMark: string | null; onAddAgent: () => void; onMembers: () => void }) {
+/** Shared paging, retry and search positioning for a channel or thread. */
+function useMessageHistory(channelId: string, threadId: string | undefined, messageId: string | undefined, ref: RefObject<HTMLDivElement | null>, messages: Message[] | undefined) {
+  const key = conversationKey(channelId, threadId);
+  const earlier = useStore((s) => s.hasEarlier[key]);
+  const error = useStore((s) => s.loadErrors[key]);
+  const loading = useStore((s) => s.loadingMessages[key]);
+  const snapshot = useRef<{ height: number; top: number } | null>(null);
+  const prepended = useRef(false);
+  const search = useRef({ key: "", pages: 0, found: false });
+  const highlight = useRef<(() => void) | null>(null);
+  const loadEarlier = async () => {
+    if (ref.current) snapshot.current = { height: ref.current.scrollHeight, top: ref.current.scrollTop };
+    try { await useStore.getState().loadEarlier(channelId, threadId); } catch { snapshot.current = null; }
+  };
+  useLayoutEffect(() => {
+    prepended.current = !!snapshot.current;
+    if (ref.current && snapshot.current) ref.current.scrollTop = snapshot.current.top + ref.current.scrollHeight - snapshot.current.height;
+    snapshot.current = null;
+  }, [messages]);
+  useEffect(() => {
+    const searchKey = `${key}/${messageId ?? ""}`;
+    if (search.current.key !== searchKey) search.current = { key: searchKey, pages: 0, found: false };
+    if (!messageId || !messages || loading || error || search.current.found) return;
+    const row = Array.from(ref.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []).find((el) => el.dataset.messageId === messageId);
+    if (row) {
+      search.current.found = true;
+      row.scrollIntoView({ block: "center" });
+      highlight.current?.();
+      row.classList.add("bg-accent-soft");
+      const timer = setTimeout(() => row.classList.remove("bg-accent-soft"), 2000);
+      highlight.current = () => { clearTimeout(timer); row.classList.remove("bg-accent-soft"); };
+    } else if (earlier && search.current.pages < 10) {
+      search.current.pages++;
+      void loadEarlier();
+    }
+  }, [key, messageId, messages, loading, error, earlier]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => highlight.current?.(), []);
+  const retry = () => {
+    const state = useStore.getState();
+    if (error?.earlier) void loadEarlier();
+    else void (threadId ? state.loadThread(channelId, threadId) : state.loadChannel(channelId)).catch(() => {});
+  };
+  const controls = <>
+    {earlier && <div className="px-5 py-1 text-center"><button className="text-xs text-muted hover:text-ink hover:underline" disabled={loading} onClick={() => void loadEarlier()}>Show earlier messages</button></div>}
+    {error && <p role="alert" className="px-5 py-2 text-xs text-bad">Couldn't load messages: {error.message} <button className="underline" disabled={loading} onClick={retry}>Try again</button></p>}
+  </>;
+  return { controls, error, prepended };
+}
+
+function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { messageId?: string; channel: ChannelInfo; readMark: string | null; onAddAgent: () => void; onMembers: () => void }) {
   const messages = useStore((s) => s.messages[channel.id]);
   const replyCounts = useStore((s) => s.replyCounts);
   const live = useStore((s) => s.live);
   const me = useStore((s) => s.me);
   const ref = useRef<HTMLDivElement>(null);
+  const history = useMessageHistory(channel.id, undefined, messageId, ref, messages);
   const dividerRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [newSince, setNewSince] = useState(0);
@@ -705,6 +779,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
       else el.scrollTop = el.scrollHeight;
       return;
     }
+    if (history.prepended.current) { history.prepended.current = false; lastCount.current = messages.length; return; }
     const added = messages.length - lastCount.current;
     lastCount.current = messages.length;
     if (atBottom) el.scrollTop = el.scrollHeight;
@@ -716,7 +791,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
     setAtBottom(true);
   }, [channel.id]);
 
-  if (!messages) return <div className="flex-1 grid place-items-center text-sm text-muted">Loading…</div>;
+  if (!messages) return <div className="flex-1 grid place-items-center text-sm text-muted">{history.error ? history.controls : "Loading…"}</div>;
 
   return (
     <div className="relative flex-1 min-h-0">
@@ -730,7 +805,8 @@ function MessageList({ channel, readMark, onAddAgent, onMembers }: { channel: Ch
           if (bottom) setNewSince(0);
         }}
       >
-        {messages.length < 100 && <ChannelIntro channel={channel} empty={!messages.some((m) => m.author.id !== "system")} onAddAgent={onAddAgent} onMembers={onMembers} />}
+        {history.controls}
+        {!history.error && messages.length < 100 && <ChannelIntro channel={channel} empty={!messages.some((m) => m.author.id !== "system")} onAddAgent={onAddAgent} onMembers={onMembers} />}
         {messages.map((m, i) => (
           <div key={m.id}>
             {m.id === firstNew && (
@@ -867,6 +943,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
   return (
     <div
       ref={row}
+      data-message-id={m.id}
       className={cx("group relative px-3 md:px-5 flex gap-3 hover:bg-hover/70", grouped ? "py-0.5" : "pt-2.5 pb-0.5", touched && "bg-hover/70")}
       onClick={(e) => {
         // phones have no hover: a tap on the message shows its actions (buttons and links in it still do their own thing)
@@ -924,7 +1001,9 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
             </span>
           </a>
         ))}
-        <Parts parts={m.parts} body={m.body} />
+        <CardAuthor.Provider value={m.author.kind === "agent" ? { agentId: m.author.id, channelId: m.channelId, threadId: m.threadId } : null}>
+          <Parts parts={m.parts} body={m.body} />
+        </CardAuthor.Provider>
         <Reactions messageId={m.id} reactions={m.reactions ?? []} />
         {(!!replies || working.length > 0) && onReplies && (
           <div className="mt-1 -ml-1 flex flex-wrap items-center gap-1.5">
@@ -1119,6 +1198,7 @@ function Parts({ parts, body = "" }: { parts: MessagePart[]; body?: string }) {
       {parts.map((p) => p.type === "approval" && <ApprovalCard key={p.approvalId} id={p.approvalId} />)}
       {parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
       {parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
+      {parts.map((p, i) => p.type === "context" && <ContextCard key={`x${i}`} usage={p.usage} />)}
       {parts.map((p) => p.type === "change" && <ChangeCard key={p.changeId} id={p.changeId} fallback={body} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
       {files.length > 0 && (
@@ -1244,20 +1324,23 @@ function StreamingItem({ run }: { run: LiveRun }) {
 
 // --- thread -------------------------------------------------------------------------------------
 
-function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId: string; agentId?: string }) {
+function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: string; rootId: string; agentId?: string; messageId?: string }) {
   const root = useStore((s) => s.messages[channelId]?.find((m) => m.id === rootId) ?? s.roots[rootId] ?? Object.values(s.threads).flat().find((m) => m.id === rootId));
+  const removed = useStore((s) => s.removedRoots[rootId]);
   const replies = useStore((s) => s.threads[rootId]);
   const replyCounts = useStore((s) => s.replyCounts);
   const live = useStore((s) => s.live);
   const loadThread = useStore((s) => s.loadThread);
   const ref = useRef<HTMLDivElement>(null);
+  const history = useMessageHistory(channelId, rootId, messageId, ref, replies);
   const streaming = Object.values(live).filter((r) => r.channelId === channelId && r.threadId === rootId && (r.text || r.usedComputer));
   const below = Object.values(live).filter((r) => r.channelId === channelId && r.threadPath.includes(rootId));
 
   useEffect(() => {
-    loadThread(channelId, rootId);
+    void loadThread(channelId, rootId).catch(() => {});
   }, [channelId, rootId, loadThread]);
   useLayoutEffect(() => {
+    if (history.prepended.current) { history.prepended.current = false; return; }
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
   }, [replies?.length, streaming.map((r) => r.text.length).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1277,9 +1360,11 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
         </button>
       </header>
       <div ref={ref} className="flex-1 overflow-y-auto py-3">
-        {root && <MessageItem m={root} inThread />}
+        {history.controls}
+        {removed && <p role="status" className="px-5 py-2 text-xs text-muted">This message was deleted.</p>}
+        {!removed && root && <MessageItem m={root} inThread />}
         <div className="flex items-center gap-3 px-5 py-2 text-xs text-muted">
-          {replies ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Loading…"}
+          {history.error ? "" : replies ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Loading…"}
           <span className="h-px flex-1 bg-line" />
         </div>
         {replies?.map((m, i) => (
@@ -1289,7 +1374,7 @@ function ThreadPanel({ channelId, rootId, agentId }: { channelId: string; rootId
           <StreamingItem key={r.runId} run={r} />
         ))}
       </div>
-      <Composer channelId={channelId} threadId={rootId} agentId={agentId} placeholder="Reply…" />
+      {!removed && <Composer channelId={channelId} threadId={rootId} agentId={agentId} placeholder="Reply…" />}
     </RightPane>
   );
 }
@@ -1369,16 +1454,41 @@ function TaskChip({ id }: { id: string }) {
 
 // --- composer -----------------------------------------------------------------------------------
 
-function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void }) {
+interface ComposerDraft {
+  text: string;
+  files: { id: string; name: string }[];
+  uploading: number;
+  sending: boolean;
+  error: string | null;
+}
+const emptyComposerDraft: ComposerDraft = { text: "", files: [], uploading: 0, sending: false, error: null };
+const composerDrafts = new Map<string, ComposerDraft>();
+const draftListeners = new Set<() => void>();
+const subscribeDrafts = (onChange: () => void) => {
+  draftListeners.add(onChange);
+  return () => { draftListeners.delete(onChange); };
+};
+
+function useComposerDraft(channelId: string, threadId?: string) {
+  const key = JSON.stringify([channelId, threadId ?? null]);
+  const get = () => composerDrafts.get(key) ?? emptyComposerDraft;
+  const draft = useSyncExternalStore(subscribeDrafts, get, get);
+  const update = (change: (draft: ComposerDraft) => ComposerDraft) => {
+    composerDrafts.set(key, change(get()));
+    draftListeners.forEach((notify) => notify());
+  };
+  return [draft, update, get] as const;
+}
+
+export function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void }) {
   const { sendWith } = usePrefs();
   const agents = useStore((s) => s.agents);
   const canEdit = useStore((s) => s.me?.role !== "guest");
   const { agent: dmAgent, ctx, catalog } = useAgentContext(agentId, channelId, threadId);
   const live = useStore((s) => s.live);
-  const [text, setText] = useState("");
-  const [files, setFiles] = useState<{ id: string; name: string }[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [{ text, files, uploading, sending, error }, updateDraft, getDraft] = useComposerDraft(channelId, threadId);
+  const setText = (value: string) => updateDraft((d) => ({ ...d, text: value }));
+  const setFiles = (value: ComposerDraft["files"]) => updateDraft((d) => ({ ...d, files: value }));
   const [pick, setPick] = useState(0);
   const [emoji, setEmoji] = useState(false);
   const [caret, setCaret] = useState(0);
@@ -1432,6 +1542,20 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
   const word = text.slice(0, caret).match(/(?:^|\s)@([\w-]*)$/)?.[1];
   const suggestions = word !== undefined ? agents.filter((a) => a.handle.startsWith(word.toLowerCase()) || a.name.toLowerCase().startsWith(word.toLowerCase())).slice(0, 6) : [];
 
+  // "/" at the start of the message: what each agent here can do (Esc hides it until the text changes)
+  const [slashHidden, setSlashHidden] = useState<string | null>(null);
+  const slashText = text.slice(0, caret);
+  const slash = useSlashMenu({ query: slashHidden === slashText ? null : slashQuery(slashText), channel, dmAgent, agents });
+  function pickCommand(item: SlashItem) {
+    const next = slash.textFor(item);
+    setText(next + text.slice(caret).replace(/^\S*/, "").trimStart());
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(next.length, next.length);
+      setCaret(next.length);
+    });
+  }
+
   // words handed over from elsewhere (Home's "Try asking…") prefill the box once, ready to edit or send
   useEffect(() => {
     if (threadId) return;
@@ -1483,37 +1607,44 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
   }
 
   async function send() {
-    if (!text.trim() && !files.length) return;
-    const body = text;
-    const attached = files;
+    const current = getDraft();
+    if (current.uploading || current.sending || (!current.text.trim() && !current.files.length)) return;
+    const body = current.text;
+    const attached = current.files;
     const unasked = !!channel && channel.kind !== "dm" && !threadId && agents.length > 0 && !answerer && !leads.length && !parseMentions(body).length;
     setNobodyAsked(false);
-    setText("");
-    setFiles([]);
-    setError(null);
+    updateDraft((d) => ({ ...d, text: "", files: [], sending: true, error: null }));
     try {
       await api("POST", `/api/channels/${channelId}/messages`, { body, threadId, fileIds: attached.map((f) => f.id) });
       setNobodyAsked(unasked);
     } catch (e) {
-      // the message comes back as it was, attachments included (plus anything added meanwhile)
-      setText(body);
-      setFiles((cur) => [...attached, ...cur.filter((f) => !attached.some((a) => a.id === f.id))]);
-      setError((e as Error).message);
+      // Restore into this conversation, keeping anything typed while the send was in flight.
+      updateDraft((d) => ({ ...d, text: body && d.text ? `${body}\n${d.text}` : body || d.text, files: attached, error: (e as Error).message }));
+    } finally {
+      updateDraft((d) => ({ ...d, sending: false }));
     }
   }
 
   async function attach(list: FileList | null) {
     if (!list?.length) return;
-    setUploading(true);
+    const current = getDraft();
+    if (current.sending) {
+      updateDraft((d) => ({ ...d, error: "Wait for the message to send before attaching files." }));
+      return;
+    }
+    const selected = Array.from(list).slice(0, Math.max(0, 20 - current.files.length - current.uploading));
+    let remaining = selected.length;
+    updateDraft((d) => ({ ...d, uploading: d.uploading + remaining, error: selected.length < list.length ? "Attach up to 20 files per message." : null }));
     try {
-      for (const f of Array.from(list)) {
+      for (const f of selected) {
         const up = await uploadFile(f, channelId);
-        setFiles((cur) => [...cur, { id: up.id, name: up.name }]);
+        remaining--;
+        updateDraft((d) => ({ ...d, uploading: d.uploading - 1, files: [...d.files, { id: up.id, name: up.name }] }));
       }
     } catch (e) {
-      setError((e as Error).message);
+      updateDraft((d) => ({ ...d, error: (e as Error).message }));
     } finally {
-      setUploading(false);
+      updateDraft((d) => ({ ...d, uploading: d.uploading - remaining }));
     }
   }
 
@@ -1528,6 +1659,7 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
       )}
       {/* the message box floats on glass, like the iPhone app's */}
       <div className="glass relative rounded-[1.75rem]" onDragOver={(e) => e.preventDefault()} onDrop={(e) => (e.preventDefault(), attach(e.dataTransfer.files))}>
+        {slash.open && !suggestions.length && slash.render(pickCommand)}
         {suggestions.length > 0 && (
           <div className="glass absolute bottom-full mb-2 left-0 w-72 rounded-2xl p-1 z-10" role="listbox">
             {suggestions.map((a, i) => (
@@ -1570,6 +1702,14 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
           }}
           onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
           onKeyDown={(e) => {
+            if (slash.open && !suggestions.length) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") return (e.preventDefault(), slash.move(e.key === "ArrowDown" ? 1 : -1));
+              if (e.key === "Escape") return (e.preventDefault(), setSlashHidden(slashText));
+              if (slash.current && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing))) {
+                e.preventDefault();
+                return pickCommand(slash.current);
+              }
+            }
             if (suggestions.length && (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey))) {
               e.preventDefault();
               return complete(suggestions[pick % suggestions.length].handle);
@@ -1627,7 +1767,7 @@ function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { ch
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
           <button
             onClick={send}
-            disabled={!text.trim() && !files.length}
+            disabled={!!uploading || sending || (!text.trim() && !files.length)}
             className="ml-1 size-9 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
             aria-label="Send"
           >

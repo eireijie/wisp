@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { AppWindow, BellRing, Check, ChevronRight, FolderOpen, Monitor, RefreshCw, X } from "lucide-react";
+import { AppWindow, BellRing, Check, ChevronDown, ChevronRight, FolderOpen, Monitor, RefreshCw, X } from "lucide-react";
 import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, Followup, HarnessCatalog } from "@warren/core";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { api } from "../api.ts";
@@ -9,7 +9,7 @@ import { pathLabel } from "../components/AccessDialog.tsx";
 import { pushOnHere } from "../push.ts";
 import { tokensText, useAllowance } from "../changes.ts";
 import { Toggle } from "./settings/parts.tsx";
-import { Button, Pill, Popover, Textarea, agentColor, cx, timeAgo } from "../components/ui.tsx";
+import { Button, Popover, Textarea, agentColor, cx, timeAgo } from "../components/ui.tsx";
 
 const PACES = [
   [15, "every 15 minutes"],
@@ -45,22 +45,26 @@ const at = (iso: string) => {
   return d.toLocaleString([], today ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
 };
 
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** "10pm", "7:30am" */
 const clock = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
   return `${h % 12 || 12}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "am" : "pm"}`;
 };
 
-/** A word in the sentence that opens a small picker right under it. */
-function Word({ label, children }: { label: string; children: (close: () => void) => ReactNode }) {
+/** A setting's current value; clicking it opens a small picker right under it. */
+function Choice({ label, children }: { label: string; children: (close: () => void) => ReactNode }) {
   return (
     <Popover
       inline
       up={false}
+      align="right"
       className="w-72 p-1.5"
       trigger={(open, toggle) => (
-        <button type="button" onClick={toggle} aria-expanded={open} className={cx("rounded-lg px-1.5 font-extrabold underline decoration-faint decoration-2 underline-offset-[5px] hover:bg-chip", open ? "bg-chip" : "bg-chip/60")}>
-          {label}
+        <button type="button" onClick={toggle} aria-expanded={open} className={cx("max-w-64 h-8 pl-3 pr-2 rounded-lg inline-flex items-center gap-1 text-muted hover:text-ink hover:bg-hover", open && "bg-hover text-ink")}>
+          <span className="truncate">{label}</span>
+          <ChevronDown size={14} className="shrink-0" />
         </button>
       )}
     >
@@ -80,10 +84,10 @@ function Pick({ on, onClick, children }: { on: boolean; onClick: () => void; chi
 
 /**
  * An agent working in the background for you: it checks in on its own, looks at what it can
- * reach, and writes to you only when something needs you. The settings read as one sentence;
- * each underlined word opens a picker. Anything else is under More, or you just tell the agent.
+ * reach, and writes to you only when something needs you. A few settings as a plain list;
+ * the rest under More, or you just tell the agent.
  */
-export function BackgroundPanel({ agent, active }: { agent: Agent; active: boolean }) {
+export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; active: boolean; onDirty?: (dirty: boolean) => void }) {
   const agents = useStore((s) => s.agents);
   const members = useStore((s) => s.members);
   const timezone = useStore((s) => s.me?.user.timezone);
@@ -94,6 +98,8 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
   const [catalog, setCatalog] = useState<HarnessCatalog | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dirty = focus !== null && focus !== (state?.background?.focus ?? "");
+  useEffect(() => { onDirty?.(dirty); }, [dirty, onDirty]);
   const load = () => api<NonNullable<typeof state>>("GET", `/api/agents/${agent.id}/background`).then(setState, (e) => setError((e as Error).message));
   useEffect(() => {
     if (active) void load();
@@ -108,8 +114,10 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
     try {
       await api("PUT", `/api/agents/${agent.id}/background`, patch);
       await load();
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     }
   };
   const checkNow = async () => {
@@ -130,15 +138,23 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
   const every = b?.everyMinutes ?? 60;
   const quietStart = b?.quietStart ?? "22:00";
   const quietEnd = b?.quietEnd ?? "07:00";
-  const watch = (b?.focus ?? "").trim().replace(/[.\s]+$/, "") || "everything it can reach";
+  const watch = (b?.focus ?? "").trim().replace(/[.\s]+$/, "") || "Everything it can reach";
   const mine = allowance?.agents.find((a) => a.agentId === agent.id);
+  const failed = !!b?.lastNote && /fail|error|isn't signed in|can't/i.test(b.lastNote);
   const share = allowance?.dailyTokens && mine ? Math.round((mine.tokens / allowance.dailyTokens) * 100) : null;
 
   return (
-    <div className="max-w-2xl space-y-7">
-      <div className="flex items-center gap-3">
-        <h2 className="flex-1 text-2xl font-extrabold">Background</h2>
-        {state && !state.notAllowed && <Toggle label="Work in the background for you" on={on} onChange={(v) => void save({ enabled: v })} />}
+    <div className="max-w-2xl space-y-8">
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight">Background</h2>
+          <p className="mt-1 text-sm text-muted">{agent.name} checks in on its own while you're away and messages you when something needs you.</p>
+        </div>
+        {state && !state.notAllowed && (
+          <span className="mt-1.5">
+            <Toggle label="Work in the background for you" on={on} onChange={(v) => void save({ enabled: v })} />
+          </span>
+        )}
       </div>
       {error && <p className="text-sm text-bad">{error}</p>}
       {state === null ? (
@@ -147,121 +163,129 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
         <p className="rounded-xl border border-line p-4 text-sm text-muted">{state.notAllowed}.</p>
       ) : (
         <>
-          <div className={cx("text-[21px] leading-[1.9] font-semibold", !on && "text-muted")}>
-            While you're away, {agent.name} checks{" "}
-            <Word label={watch}>
-              {(close) => (
-                <div className="p-1.5 space-y-2">
-                  <Textarea rows={3} autoFocus placeholder="Everything it can reach. Or: my inbox and calendar, anything from my landlord." value={focus ?? b?.focus ?? ""} onChange={(e) => setFocus(e.target.value)} />
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    onClick={() => {
-                      if (focus !== null) void save({ focus }).then(() => setFocus(null));
-                      close();
-                    }}
-                  >
-                    Save
-                  </Button>
-                </div>
-              )}
-            </Word>{" "}
-            <Word label={PACES.find(([m]) => m === every)?.[1] ?? `every ${every} minutes`}>
-              {(close) =>
-                PACES.map(([m, label]) => (
-                  <Pick
-                    key={m}
-                    on={m === every}
-                    onClick={() => {
-                      void save({ everyMinutes: m });
-                      close();
-                    }}
-                  >
-                    {label}
-                  </Pick>
-                ))
-              }
-            </Word>
-            , stays quiet{" "}
-            <Word label={quietStart === quietEnd ? "never" : `${clock(quietStart)}–${clock(quietEnd)}`}>
-              {(close) => (
-                <div className="p-1.5 space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <input type="time" className="h-9 flex-1 rounded-lg border border-line bg-panel px-2" value={quietStart} onChange={(e) => e.target.value && void save({ quietStart: e.target.value })} aria-label="Quiet hours start" />
-                    <span className="text-muted">to</span>
-                    <input type="time" className="h-9 flex-1 rounded-lg border border-line bg-panel px-2" value={quietEnd} onChange={(e) => e.target.value && void save({ quietEnd: e.target.value })} aria-label="Quiet hours end" />
-                  </div>
-                  <Pick
-                    on={quietStart === quietEnd}
-                    onClick={() => {
-                      void save({ quietEnd: quietStart });
-                      close();
-                    }}
-                  >
-                    No quiet hours
-                  </Pick>
-                  {!timezone && (
-                    <a className="block px-3 text-xs text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
-                      Set your time zone (now UTC)
-                    </a>
-                  )}
-                </div>
-              )}
-            </Word>
-            , and messages you when something needs you.
-          </div>
-
           {b && (on || b.lastAt) && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-              <span className="flex-1 min-w-56 text-muted">
-                {b.checking ? (
-                  <Pill tone={offline ? "warn" : "info"}>{offline ? "waiting for its device" : "checking now"}</Pill>
-                ) : b.lastAt ? (
-                  <>
-                    Checked {timeAgo(b.lastAt)}
-                    {b.lastNote && `: ${b.lastNote}`}
-                  </>
-                ) : (
-                  "Hasn't checked yet"
-                )}
-                {on && !b.checking && b.nextAt && ` · next ${at(b.nextAt)}`}
-              </span>
+            <div className="rounded-xl border border-line px-4 py-3 flex items-center gap-3">
+              <span className={cx("size-2 shrink-0 rounded-full", b.checking ? (offline ? "bg-warn" : "bg-ok animate-pulse") : failed ? "bg-warn" : on ? "bg-ok" : "bg-faint")} aria-hidden />
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="font-medium">
+                  {b.checking ? (offline ? "Waiting for its device" : "Checking now") : b.lastAt ? `Checked ${timeAgo(b.lastAt)}` : "Hasn't checked yet"}
+                  {on && !b.checking && b.nextAt && <span className="font-normal text-muted"> · next {at(b.nextAt)}</span>}
+                </div>
+                {!b.checking && b.lastNote && <div className={cx("mt-0.5 text-xs line-clamp-2", failed ? "text-warn" : "text-muted")}>{b.lastNote}</div>}
+              </div>
               <Button onClick={() => void checkNow()} disabled={b.checking}>
                 <RefreshCw size={14} /> Check now
               </Button>
             </div>
           )}
 
-          {allowance && (
-            <a href={href({ view: "settings", page: "usage" })} className="flex items-center gap-3 rounded-2xl bg-bg px-4 py-3.5 text-sm font-bold hover:bg-hover">
-              <span className="w-24 h-2 rounded-full bg-chip overflow-hidden">
-                <span className="block h-full rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: agentColor(agent) }} />
-              </span>
-              <span className="flex-1">{share !== null ? `${agent.name} used ${share}% of today's allowance` : mine ? `${agent.name} used ${tokensText(mine.tokens)} today` : `${agent.name} hasn't used any of today's allowance`}</span>
-              <ChevronRight size={16} className="text-muted" />
-            </a>
-          )}
+          <div className={cx("rounded-xl border border-line divide-y divide-line", !on && "opacity-60")}>
+            <Setting label="Watches">
+              <Choice label={watch}>
+                {(close) => (
+                  <div className="p-1.5 space-y-2">
+                    <Textarea rows={3} autoFocus placeholder="Everything it can reach. Or: my inbox and calendar, anything from my landlord." value={focus ?? b?.focus ?? ""} onChange={(e) => setFocus(e.target.value)} />
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      onClick={() => {
+                        if (focus !== null) {
+                          const submitted = focus;
+                          void save({ focus }).then((ok) => {
+                            if (ok) {
+                              setFocus((current) => current === submitted ? null : current);
+                              close();
+                            }
+                          });
+                        } else close();
+                      }}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                )}
+              </Choice>
+            </Setting>
+            <Setting label="Checks">
+              <Choice label={cap(PACES.find(([m]) => m === every)?.[1] ?? `every ${every} minutes`)}>
+                {(close) =>
+                  PACES.map(([m, label]) => (
+                    <Pick
+                      key={m}
+                      on={m === every}
+                      onClick={() => {
+                        void save({ everyMinutes: m });
+                        close();
+                      }}
+                    >
+                      {cap(label)}
+                    </Pick>
+                  ))
+                }
+              </Choice>
+            </Setting>
+            <Setting label="Quiet hours">
+              <Choice label={quietStart === quietEnd ? "None" : `${clock(quietStart)} – ${clock(quietEnd)}`}>
+                {(close) => (
+                  <div className="p-1.5 space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <input type="time" className="h-9 flex-1 rounded-lg border border-line bg-panel px-2" value={quietStart} onChange={(e) => e.target.value && void save({ quietStart: e.target.value })} aria-label="Quiet hours start" />
+                      <span className="text-muted">to</span>
+                      <input type="time" className="h-9 flex-1 rounded-lg border border-line bg-panel px-2" value={quietEnd} onChange={(e) => e.target.value && void save({ quietEnd: e.target.value })} aria-label="Quiet hours end" />
+                    </div>
+                    <Pick
+                      on={quietStart === quietEnd}
+                      onClick={() => {
+                        void save({ quietEnd: quietStart });
+                        close();
+                      }}
+                    >
+                      No quiet hours
+                    </Pick>
+                    {!timezone && (
+                      <a className="block px-3 text-xs text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
+                        Set your time zone (now UTC)
+                      </a>
+                    )}
+                  </div>
+                )}
+              </Choice>
+            </Setting>
+            {allowance && (
+              <a href={href({ view: "settings", page: "usage" })} className="flex items-center gap-3 px-4 h-12 text-sm hover:bg-hover rounded-b-xl">
+                <span className="flex-1 font-medium">Today</span>
+                <span className="text-muted">{share !== null ? `${share}% of the allowance` : mine ? tokensText(mine.tokens) : "Nothing used yet"}</span>
+                <span className="w-16 h-1.5 rounded-full bg-chip overflow-hidden">
+                  <span className="block h-full rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: agentColor(agent) }} />
+                </span>
+                <ChevronRight size={15} className="text-faint" />
+              </a>
+            )}
+          </div>
 
           {state.followups.length > 0 && (
-            <section className="space-y-1">
-              <h3 className="text-[15px] font-extrabold text-muted">Coming up</h3>
-              {state.followups.map((f) => (
-                <div key={f.id} className="flex items-center gap-3 h-10 border-b border-line text-sm">
-                  <span className="text-muted w-28 shrink-0 font-bold text-[13px]">{at(f.dueAt)}</span>
-                  <span className="flex-1 truncate">{f.note}</span>
-                  <button type="button" className="p-1 rounded-md text-muted hover:text-ink hover:bg-hover" onClick={() => void cancel(f)} aria-label="Cancel this follow-up">
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">Coming up</h3>
+              <div className="rounded-xl border border-line divide-y divide-line">
+                {state.followups.map((f) => (
+                  <div key={f.id} className="flex items-center gap-3 px-4 h-11 text-sm">
+                    <span className="text-muted w-28 shrink-0">{at(f.dueAt)}</span>
+                    <span className="flex-1 truncate">{f.note}</span>
+                    <button type="button" className="p-1 rounded-md text-muted hover:text-ink hover:bg-hover" onClick={() => void cancel(f)} aria-label="Cancel this follow-up">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </section>
           )}
 
-          <details className="border-t border-line pt-3.5 group">
-            <summary className="cursor-pointer text-sm font-bold text-muted hover:text-ink">More</summary>
-            <div className="pt-3 space-y-4 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-32 font-semibold">Model for checks</span>
+          <details className="group">
+            <summary className="list-none cursor-pointer inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+              <ChevronRight size={14} className="transition-transform group-open:rotate-90" /> More
+            </summary>
+            <div className="mt-3 rounded-xl border border-line divide-y divide-line text-sm">
+              <Setting label="Model for checks">
                 <select aria-label="Model for background checks" className="h-8 rounded-lg border border-line bg-panel px-2 max-w-52" value={b?.model ?? ""} onChange={(e) => void save({ model: e.target.value || null, effort: null })}>
                   <option value="">{agent.model ? `${agent.name}'s own (${prettyModel(models.find((m) => m.id === agent.model)?.label ?? agent.model)})` : `${agent.name}'s own model`}</option>
                   {models.map((m) => (
@@ -279,9 +303,8 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="w-32 font-semibold">Most checks a day</span>
+              </Setting>
+              <Setting label="Most checks a day">
                 <select aria-label="Most checks a day" className="h-8 rounded-lg border border-line bg-panel px-2" value={b ? (b.dailyCap ?? "") : state.defaultDailyCap} onChange={(e) => void save({ dailyCap: e.target.value ? Number(e.target.value) : null })}>
                   {[...new Set<number>([...CAPS, ...(b?.dailyCap ? [b.dailyCap] : [])])]
                     .sort((x, y) => x - y)
@@ -292,9 +315,9 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                     ))}
                   <option value="">No limit</option>
                 </select>
-              </div>
-              <div className="space-y-1.5">
-                <span className="font-semibold">Can see</span>
+              </Setting>
+              <div className="px-4 py-3 space-y-2">
+                <div className="font-medium">Can see</div>
                 <div className="flex flex-wrap gap-1.5">
                   {state.sources.map((x) => (
                     <span key={`${x.kind}:${x.name}`} className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-chip text-[13px]">
@@ -307,18 +330,28 @@ export function BackgroundPanel({ agent, active }: { agent: Agent; active: boole
                   </a>
                 </div>
               </div>
-              <UsageLine usage={state.usage} cap={b?.dailyCap ?? null} simple={false} />
+              <div className="px-4 py-3">
+                <UsageLine usage={state.usage} cap={b?.dailyCap ?? null} simple={false} />
+              </div>
               {on && !pushOnHere() && (
-                <a className="inline-flex items-center gap-1.5 text-accent-text hover:underline" href={href({ view: "settings", page: "notifications" })}>
+                <a className="flex items-center gap-1.5 px-4 py-3 text-accent-text hover:underline" href={href({ view: "settings", page: "notifications" })}>
                   <BellRing size={14} /> Get its messages on your phone
                 </a>
               )}
             </div>
           </details>
-
-          <p className="text-sm text-muted">Or just tell {agent.name}, like "check less on weekends".</p>
         </>
       )}
+    </div>
+  );
+}
+
+/** One setting: its name on the left, the value (or control) on the right. */
+function Setting({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-4 min-h-12 py-2 text-sm">
+      <span className="flex-1 font-medium">{label}</span>
+      <span className="flex items-center gap-2 min-w-0">{children}</span>
     </div>
   );
 }

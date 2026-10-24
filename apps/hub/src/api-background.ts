@@ -79,7 +79,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
       background: store.background(agent.id, c.actor.id) ?? null,
       followups: store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === c.actor.id),
       notAllowed: hub.whyNotAllowed(agent, c.actor.id),
-      sources: hub.background.sources(agent.id),
+      sources: hub.background.sources(agent.id).filter((s) => c.viewer.role !== "guest" || s.kind !== "computer"),
       usage: hub.background.usage(agent.id, c.actor.id),
       defaultDailyCap: DEFAULT_DAILY_CAP,
     };
@@ -318,14 +318,18 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     return { publicKey: hub.push.keys(c.workspaceId).publicKey };
   });
 
-  const SUB = z.object({ endpoint: z.string().url().max(2000), keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }) });
+  const SUB = z.object({
+    endpoint: z.string().url().max(2000),
+    keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
+    prefs: z.object({ dms: z.boolean().optional(), replies: z.boolean().optional(), approvals: z.boolean().optional(), help: z.boolean().optional(), tasks: z.boolean().optional() }).optional(),
+  });
 
   app.post("/api/push/subscribe", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
     const body = parse(SUB, req.body, reply);
     if (!body) return;
-    store.savePushSubscription(c.actor.id, body.endpoint, body.keys);
+    store.savePushSubscription(c.actor.id, body.endpoint, body.keys, body.prefs);
     return { ok: true };
   });
 

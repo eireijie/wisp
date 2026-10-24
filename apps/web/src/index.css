@@ -49,6 +49,14 @@
   --org-4: oklch(0.55 0.15 45);
   --org-5: oklch(0.52 0.16 350);
   --org-6: oklch(0.5 0.11 145);
+  /* memory folders, in the graph and beside note names: one hue each, the same in every theme */
+  --kind-shared: #0f9d76;
+  --kind-people: #2f6fe0;
+  --kind-agents: #d9622b;
+  --kind-teams: #9b51e0;
+  --kind-groups: #c58a06;
+  --kind-other: #6b7a88;
+  --kind-ghost: oklch(0.75 0 0);
   color-scheme: light;
 }
 
@@ -78,6 +86,13 @@
   --org-4: oklch(0.62 0.14 45);
   --org-5: oklch(0.6 0.15 350);
   --org-6: oklch(0.58 0.11 145);
+  --kind-shared: #3ccf9f;
+  --kind-people: #6aa2ff;
+  --kind-agents: #ff8a52;
+  --kind-teams: #c08cff;
+  --kind-groups: #f2c14b;
+  --kind-other: #97a6b4;
+  --kind-ghost: oklch(0.45 0 0);
   color-scheme: dark;
 }
 
@@ -244,6 +259,14 @@ body {
 /* without backdrop blur, glass is just a solid surface */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass { background: var(--panel); }
+}
+/*
+ * Glass inside glass (the @mention, / and emoji popups over the message bar) can only blur its
+ * parent, not the messages behind it, so it would show them through; it's solid instead.
+ */
+.glass .glass,
+:root[data-mode="dark"] .glass .glass {
+  background: var(--panel);
 }
 
 /* Rendered markdown in messages and the vault preview */

@@ -9,6 +9,7 @@ const latest = (name: string) => `${RELEASES}/latest/download/${name}`;
 
 export const DOWNLOADS = {
   mac: latest("Warren-mac-arm64.dmg"),
+  macIntel: latest("Warren-mac-x64.dmg"),
   windows: latest("Warren-win-x64.exe"),
   linuxAppImage: latest("Warren-linux-x86_64.AppImage"),
   linuxDeb: latest("Warren-linux-amd64.deb"),

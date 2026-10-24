@@ -77,6 +77,8 @@ describe("warren-mcp", () => {
       "followup_cancel",
       "followup_list",
       "followup_set",
+      "harness_settings",
+      "harness_settings_change",
       "memory_append",
       "memory_context",
       "memory_forget",
@@ -119,6 +121,22 @@ describe("warren-mcp", () => {
     expect((await call("memory_read", { path: `agents/${helper.id}/SOUL.md` })).isError).toBe(true);
   });
 
+  it("fills in a note's header and hints at similar notes and links", async () => {
+    await call("memory_write", { path: "shared/projects/apollo.md", content: "# Apollo\nThe launch site rebuild." });
+    await call("memory_write", { path: "shared/projects/apollo-launch-plan.md", content: "# Apollo launch plan\nLaunch the rebuilt site on November 3 after the content freeze and QA pass." });
+    const r = await call("memory_write", { path: "shared/projects/apollo-launch.md", content: "# Apollo launch\nWe launch the rebuilt site November 3, after QA and the content freeze." });
+    expect(r.text).toBe(
+      "Saved shared/projects/apollo-launch.md.\nSimilar notes (if it's the same idea, merge into one and delete the other):\n- shared/projects/apollo-launch-plan.md (Apollo launch plan)\nMentions you could link: [[apollo]]",
+    );
+    const saved = (await call("memory_read", { path: "shared/projects/apollo-launch.md" })).text;
+    expect(saved).toMatch(/^---\ntype: project\ncreated: \d{4}-\d\d-\d\d\nupdated: \d{4}-\d\d-\d\d\n---\n\n# Apollo launch/);
+    expect((await call("memory_append", { path: "me/journal/2026-10-17", text: "- Planned the Apollo launch" })).text).toBe(`Appended to agents/${agentId}/journal/2026-10-17.\nMentions you could link: [[apollo-launch]], [[apollo]]`);
+
+    // a person's edit in Warren is saved exactly as typed
+    await owner.writeNote("shared/projects/apollo.md", "# Apollo\nEdited by hand.");
+    expect((await owner.readNote("shared/projects/apollo.md")).content).toBe("# Apollo\nEdited by hand.");
+  });
+
   it("shares a note with another agent", async () => {
     await call("memory_write", { path: "me/handoff.md", content: "# Handoff" });
     expect((await call("memory_share", { path: "me/handoff", with: "@helper" })).text).toBe(`Shared agents/${agentId}/handoff.md with @helper (read-only).`);
@@ -134,8 +152,9 @@ describe("warren-mcp", () => {
     expect((await call("memory_context")).text).toContain("Likes tea, not coffee");
     const p = saved.text.match(/in (\S+)\.$/)![1];
     expect((await call("memory_forget", { path: p })).text).toBe(`Forgot ${p}.`);
-    await owner.request("POST", "/api/teams", { name: "scouts", leadId: agentId });
-    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ name: "scouts", lead: "@scout", memory: "teams/scouts/" });
+    await owner.request("POST", "/api/channels", { name: "scouts", settings: { team: { nodes: [{ agentId, lead: true, x: 0, y: 0, role: "Scout" }], edges: [], folder: "teams/scouts" } } });
+    expect(JSON.parse((await call("teams_list")).text)[0]).toMatchObject({ channel: "#scouts", leads: ["@scout"], memory: "teams/scouts/", members: [{ agent: "@scout", role: "Scout" }] });
+    expect(JSON.parse((await call("agents_list")).text).find((a: any) => a.handle === "@scout").teams).toEqual(["#scouts"]);
   });
 
   it("delegates tasks and moves files", async () => {

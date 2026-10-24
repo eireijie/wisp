@@ -72,6 +72,7 @@ struct NoteView: View {
   @State private var moving = false
   @State private var deleting = false
   @State private var removingNote = false
+  @State private var unavailable = false
   @State private var destination: MemoryNote?
   @State private var action = FormAction()
   private var wikiLinks: [String] {
@@ -108,22 +109,35 @@ struct NoteView: View {
             Button("Delete note", role: .destructive) { deleting = true }
           }
         }
+      } else if unavailable {
+        Text("This note isn't available any more").foregroundStyle(.secondary)
       } else if action.error == nil { ProgressView() }
       InlineError(error: action.error)
       if action.error != nil { Button("Try again") { action.run { note = try await store.readNote(path) } } }
     }
     .sectionScreen(note?.name ?? "Note", id: "note")
     .toolbar { if note?.editable == true { Button("Edit") { editing = true }.accessibilityIdentifier("edit-note") } }
-    .task(id: "\(store.memoryVersion):\(path):\(moving):\(removingNote)") {
-      guard !moving && !removingNote else { return }
-      guard note == nil || store.notes.contains(where: { $0.path == path }) else { return }
+    .task(id: NoteLoadID(version: store.memoryVersion, path: path, moving: moving, removing: removingNote, notes: store.notes)) {
+      guard !removingNote else { return }
+      if (note != nil || unavailable) && !store.notes.contains(where: { $0.path == path }) {
+        markUnavailable()
+        return
+      }
+      guard !moving else { return }
       do {
         let loaded = try await store.readNote(path)
-        if !Task.isCancelled { note = loaded; action.error = nil }
-      } catch { if !Task.isCancelled && (note == nil || store.notes.contains(where: { $0.path == path })) { action.error = error.localizedDescription } }
+        if !Task.isCancelled {
+          note = loaded; unavailable = false; action.error = nil
+          if !loaded.editable { editing = false }
+        }
+      } catch {
+        guard !Task.isCancelled else { return }
+        if let failure = error as? API.Failure, [403, 404].contains(failure.status) { markUnavailable() }
+        else { action.error = error.localizedDescription }
+      }
     }
     .sheet(isPresented: $editing) { NoteEditor(note: note) }
-    .sheet(isPresented: $moving) { MoveNoteView(path: path) { moved in note = nil; action.error = nil; path = moved } }
+    .sheet(isPresented: $moving) { MoveNoteView(path: path) { moved in note = nil; unavailable = false; action.error = nil; path = moved } }
     .navigationDestination(item: $destination) { NoteView(path: $0.path) }
     .confirmationDialog("Delete this note? Git history keeps the old version.", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete note", role: .destructive) { action.run {
@@ -133,6 +147,21 @@ struct NoteView: View {
       } }
     }
   }
+
+  private func markUnavailable() {
+    note = nil
+    unavailable = true
+    editing = false; moving = false; deleting = false
+    action.error = nil
+  }
+}
+
+private struct NoteLoadID: Equatable {
+  var version: Int
+  var path: String
+  var moving: Bool
+  var removing: Bool
+  var notes: [MemoryNote]
 }
 
 struct NoteEditor: View {

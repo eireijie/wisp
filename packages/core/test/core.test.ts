@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TEAM_TEMPLATES, HARNESS_IDS, builtinRules, covers, pickReviewer, teamChain, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, signInProblem, startupRules, subjectKey, type AccessRule, type Viewer } from "../src/index.ts";
+import { TEAM_TEMPLATES, HARNESS_IDS, DEFAULT_CHANNEL_SETTINGS, builtinRules, channelTeams, covers, pickReviewer, teamChain, teamOf, teamProblem, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, signInProblem, startupRules, subjectKey, type AccessRule, type Channel, type ChannelTeam, type Viewer } from "../src/index.ts";
 
 describe("parseMentions", () => {
   it("finds handles, ignores emails and code", () => {
@@ -116,12 +116,55 @@ import { GHOST_ACCESSORIES, GHOST_EYES, GHOST_HATS, GHOST_PALETTES, GHOST_SHAPES
 describe("teamChain", () => {
   it("follows bosses up through the teams they lead, and stops at loops", () => {
     const teams = [
-      { leadId: "lead-web", reportsTo: "cto" },
-      { leadId: "cto", reportsTo: "ceo" },
-      { leadId: "ceo", reportsTo: "lead-web" },
+      { leads: ["lead-web"], reportsTo: "cto" },
+      { leads: ["cto"], reportsTo: "ceo" },
+      { leads: ["ceo"], reportsTo: "lead-web" },
     ];
     expect(teamChain(teams[0], teams)).toEqual(["cto", "ceo", "lead-web"]);
     expect(teamChain({ reportsTo: null }, teams)).toEqual([]);
+  });
+});
+
+describe("teamOf", () => {
+  const channel = (team: ChannelTeam | null, more: Partial<Channel> = {}): Channel => ({ id: "ch_1", workspaceId: "ws", name: "web", kind: "channel", topic: "", sectionId: null, private: false, archivedAt: null, settings: { ...DEFAULT_CHANNEL_SETTINGS, team }, createdAt: "", ...more });
+  const chart: ChannelTeam = {
+    nodes: [
+      { agentId: "a", lead: true, x: 0, y: 0, role: "Lead" },
+      { agentId: "b", lead: false, x: 0, y: 100, role: " Reviewer ", roleNotes: "Checks it" },
+    ],
+    edges: [{ from: "a", to: "b" }],
+    folder: "/teams/web/",
+    repo: " /srv/web ",
+    reportsTo: "boss",
+  };
+  it("reads a channel's chart as its team, named and keyed by the channel", () => {
+    expect(teamOf(channel(chart))).toEqual({
+      id: "ch_1",
+      channelId: "ch_1",
+      workspaceId: "ws",
+      name: "web",
+      leads: ["a"],
+      leadId: "a",
+      reportsTo: "boss",
+      folder: "teams/web",
+      repo: "/srv/web",
+      baseBranch: "main",
+      members: [
+        { agentId: "a", role: "Lead", roleNotes: "", lead: true, managerId: null },
+        { agentId: "b", role: "Reviewer", roleNotes: "Checks it", lead: false, managerId: "a" },
+      ],
+    });
+  });
+  it("has no team without a chart, in a DM, or once archived", () => {
+    expect(teamOf(channel(null))).toBeNull();
+    expect(teamOf(channel({ ...chart, nodes: [] }))).toBeNull();
+    expect(teamOf(channel(chart, { kind: "dm" }))).toBeNull();
+    expect(teamOf(channel(chart, { archivedAt: "2026-01-01" }))).toBeNull();
+    expect(channelTeams([channel(chart), channel(null, { id: "ch_2" })]).map((t) => t.id)).toEqual(["ch_1"]);
+  });
+  it("won't let a team report to one of its own", () => {
+    expect(teamProblem({ ...chart, reportsTo: "b" })).toMatch(/report/);
+    expect(teamProblem(chart)).toBeNull();
   });
 });
 
@@ -190,5 +233,23 @@ describe("team templates", () => {
       ["Frontend & design", "kimi"],
       ["Reviewer", "claude-code"],
     ]);
+  });
+});
+
+describe("/ commands", () => {
+  it("reads a command after an optional @mention of its agent", async () => {
+    const { parseCommand, agentCommands } = await import("../src/commands.ts");
+    expect(parseCommand("/compact")).toEqual({ name: "compact", args: "" });
+    expect(parseCommand("@poopy /review 42", "poopy")).toEqual({ name: "review", args: "42" });
+    expect(parseCommand("@nova /review 42", "poopy")).toBeNull();
+    expect(parseCommand("@poopyx /review", "poopy")).toBeNull();
+    expect(parseCommand("look at /etc")).toBeNull();
+    expect(agentCommands([{ name: "context", kind: "command", via: "raw" }], [{ slug: "pdf", description: "PDFs" }]).map((c) => c.kind)).toEqual(["warren", "warren-skill"]);
+  });
+
+  it("reads front matter, block values included", async () => {
+    const { frontMatter } = await import("../src/commands.ts");
+    expect(frontMatter('---\nname: pdf\ndescription: "Read PDFs"\n---\nbody')).toEqual({ name: "pdf", description: "Read PDFs" });
+    expect(frontMatter("---\nname: h\ndescription: |\n  Makes text\n  sound human.\nlicense: MIT\n---\n").description).toBe("Makes text\nsound human.");
   });
 });

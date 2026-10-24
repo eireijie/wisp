@@ -104,6 +104,42 @@ final class ManagementTests: XCTestCase {
     XCTAssertEqual(Set(prefs.keys), ["notify"])
   }
 
+  func testScreenCodeGoesWithViewLendAndLoanApproval() async throws {
+    let store = try makeStore()
+    let screen = #"{"id":"k1","name":"My Mac","kind":"device","nodeId":"n1","status":"ready","statusText":"","code":"pin","config":{"lend":{"until":null}}}"#
+    let computer = try Wire.decoder.decode(Computer.self, from: Data(screen.utf8))
+    XCTAssertEqual(computer.code, "pin")
+    XCTAssertTrue(computer.lentNow)
+    store.computers = [computer]
+
+    reply("POST", "/api/computers/k1/view", #"{"error":"Wrong PIN. 4 tries left before this screen locks for a while."}"#, status: 403)
+    do { _ = try await store.openView(computer, code: "123456"); XCTFail("Expected 403") }
+    catch let f as API.Failure {
+      XCTAssertEqual(f.status, 403)
+      XCTAssertEqual(f.message, "Wrong PIN. 4 tries left before this screen locks for a while.")
+    }
+    reply("POST", "/api/computers/k1/view", #"{"transport":"frames","url":"/ws/computers/k1/frames?ticket=t1","direct":false}"#)
+    let (view, ws) = try await store.openView(computer, code: "123456")
+    XCTAssertEqual(view.transport, "frames")
+    // URLSession shows a wss task's request as https
+    XCTAssertEqual(ws.originalRequest?.url?.absoluteString.replacingOccurrences(of: "https://", with: "wss://"), "wss://management.test/ws/computers/k1/frames?ticket=t1")
+    ws.cancel()
+
+    reply("POST", "/api/computers/k1/lend", screen)
+    try await store.lend(computer, minutes: nil, code: "123456")
+    reply("POST", "/api/approvals/p1/decide", #"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Borrow My Mac","details":"","status":"approved","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#)
+    let approval = try Wire.decoder.decode(Approval.self, from: Data(#"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Borrow My Mac","details":"","status":"pending","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#.utf8))
+    XCTAssertEqual(store.loanScreen(approval)?.code, "pin")
+    try await store.decide(approval, approve: true, code: "123456")
+
+    let requests = ManagementHTTPStub.requests.withLock { $0 }.filter { $0.httpMethod == "POST" }
+    XCTAssertEqual(try body(of: requests[0])["code"] as? String, "123456")
+    let lend = try body(of: requests[2])
+    XCTAssertTrue(lend["minutes"] is NSNull) // until you stop it
+    XCTAssertEqual(lend["code"] as? String, "123456")
+    XCTAssertEqual(try body(of: requests[3])["code"] as? String, "123456")
+  }
+
   func testChannelMoveAndAgentCreationSendExplicitNulls() async throws {
     let store = try makeStore()
     reply("PATCH", "/api/channels/c1", channelJSON)
@@ -128,9 +164,10 @@ final class ManagementTests: XCTestCase {
     XCTAssertTrue(store.canManage)
     store.channels[0].name = "general"
     XCTAssertTrue(store.isProtected(store.channels[0]))
+    // a channel with a team can be archived and deleted like any other
     store.channels[0].name = "team-channel"
-    store.teams = [WorkspaceTeam(channelId: "c1")]
-    XCTAssertTrue(store.isProtected(store.channels[0]))
+    store.channels[0].settings = Channel.Settings(team: ChannelTeam(nodes: [.init(agentId: "a1", lead: true, x: 0, y: 0)], edges: []))
+    XCTAssertFalse(store.isProtected(store.channels[0]))
     reply("DELETE", "/api/sections/s1", #"{"ok":true}"#)
     try await store.deleteSection("s1")
     XCTAssertTrue(store.sections.isEmpty)
@@ -179,6 +216,96 @@ final class ManagementTests: XCTestCase {
     store.agents[0].computerId = "vm1"
     store.agents[0].settings?.runIn = "computer"
     XCTAssertFalse(store.harnessOnDevice(store.agents[0]))
+  }
+
+  func testPushCategoriesOverrideLegacyThreadGuess() {
+    let expected = ["approval": "approvals", "help": "help", "reply": "replies", "dm": "dms", "mention": "dms", "channel": "dms"]
+    for (category, key) in expected {
+      for hasThread in [false, true] {
+        XCTAssertEqual(PushPreference.key(category: category, kind: "task", hasThread: hasThread), key)
+      }
+    }
+    XCTAssertEqual(PushPreference.key(category: nil, kind: "message", hasThread: true), "replies")
+    XCTAssertEqual(PushPreference.key(category: nil, kind: "message", hasThread: false), "dms")
+    XCTAssertEqual(PushPreference.key(category: nil, kind: "approval", hasThread: false), "approvals")
+    XCTAssertEqual(PushPreference.key(category: nil, kind: "computer", hasThread: false), "help")
+    XCTAssertEqual(PushPreference.key(category: nil, kind: "task", hasThread: false), "tasks")
+  }
+
+  func testDevicePollingBackoffCapsAndResetsAfterRecovery() {
+    var backoff = DevicePollingBackoff()
+    XCTAssertEqual(backoff.interval, 5)
+    backoff.failed(); XCTAssertEqual(backoff.interval, 10)
+    backoff.failed(); XCTAssertEqual(backoff.interval, 20)
+    backoff.failed(); XCTAssertEqual(backoff.interval, 30)
+    backoff.failed(); XCTAssertEqual(backoff.interval, 30)
+    backoff.succeeded(); XCTAssertEqual(backoff.interval, 5)
+    backoff.failed(); XCTAssertEqual(backoff.interval, 10)
+  }
+
+  func testNewVMDraftReusesComputerAfterAgentCreationFails() async throws {
+    let store = try makeStore()
+    let draft = AgentComputerDraft()
+    reply("POST", "/api/computers", #"{"id":"vm1","name":"Nova's desk","kind":"vm","nodeId":"n1","status":"stopped","statusText":""}"#)
+    let computerId = try await draft.resolveVM(node: "n1", name: "Nova", store: store)
+    let fields: Fields = ["name": AnyEncodable("Nova"), "computerId": AnyEncodable(computerId), "settings": AnyEncodable(["runIn": "computer"])]
+    reply("POST", "/api/agents", #"{"error":"Try again"}"#, status: 503)
+    do { _ = try await store.createAgent(fields); XCTFail("Expected failure") } catch {}
+    let retryId = try await draft.resolveVM(node: "n1", name: "Nova", store: store)
+    XCTAssertEqual(retryId, "vm1")
+    reply("POST", "/api/agents", agentJSON)
+    _ = try await store.createAgent(fields)
+    let computers = ManagementHTTPStub.requests.withLock { $0.filter { $0.url?.path == "/api/computers" } }
+    XCTAssertEqual(computers.count, 1)
+    let json = try body(of: XCTUnwrap(computers.first))
+    XCTAssertEqual(json["kind"] as? String, "vm")
+    XCTAssertEqual(json["nodeId"] as? String, "n1")
+    XCTAssertEqual(json["name"] as? String, "Nova's desk")
+  }
+
+  func testModelOverridesAreOmittedWithoutCatalog() throws {
+    let missing = try Wire.decoder.decode(AgentModels.self, from: Data(#"{"catalog":null}"#.utf8))
+    XCTAssertNil(missing.settings(model: "model", effort: "high", fast: true))
+    let models = try Wire.decoder.decode(AgentModels.self, from: Data(#"{"catalog":{"models":[{"id":"model","label":"Model","fast":{}}],"efforts":["high"]}}"#.utf8))
+    let fields = try XCTUnwrap(models.settings(model: "model", effort: "high", fast: true))
+    let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(fields)) as? [String: Any])
+    XCTAssertEqual(json["effort"] as? String, "high")
+    XCTAssertEqual(json["fast"] as? Bool, true)
+  }
+
+  func testSlowHarnessRequestsKeepDefaultTimeoutForOtherCalls() async throws {
+    let store = try makeStore()
+    reply("GET", "/api/agents/a1/harness", #"{"possible":true,"inComputer":true,"signedIn":false,"computerId":"vm1"}"#)
+    reply("POST", "/api/agents/a1/signin", #"{"computerId":"vm1"}"#)
+    reply("GET", "/api/computers", "[]")
+    reply("POST", "/api/nodes/n1/install", #"{"ok":true}"#)
+    _ = try await store.harnessState("a1")
+    _ = try await store.signInAgent("a1")
+    _ = try await store.installHarness("codex", node: "n1")
+    let requests = ManagementHTTPStub.requests.withLock { $0 }
+    XCTAssertEqual(requests.first { $0.url?.path == "/api/agents/a1/harness" }?.timeoutInterval, 130)
+    XCTAssertEqual(requests.first { $0.url?.path == "/api/agents/a1/signin" }?.timeoutInterval, 610)
+    XCTAssertEqual(requests.first { $0.url?.path == "/api/nodes/n1/install" }?.timeoutInterval, 970)
+    XCTAssertEqual(requests.first { $0.url?.path == "/api/computers" }?.timeoutInterval, 30)
+    XCTAssertEqual(store.api?.timeout, 30)
+  }
+
+  func testPushUploadFailureRetriesAndKeepsTokenForNextAttempt() async throws {
+    let store = try makeStore()
+    reply("POST", "/api/me/push", #"{"error":"Temporarily unavailable"}"#, status: 503)
+    store.pushTokenReceived("abc123", retryDelay: .zero)
+    await store.pushUploadTask?.value
+    XCTAssertEqual(store.pushToken, "abc123")
+    XCTAssertEqual(store.pushRegistrationError, "Couldn't register this phone")
+    XCTAssertEqual(ManagementHTTPStub.requests.withLock { $0.filter { $0.url?.path == "/api/me/push" }.count }, 2)
+    reply("POST", "/api/me/push", #"{"ok":true}"#)
+    store.pushTokenReceived(try XCTUnwrap(store.pushToken), retryDelay: .zero)
+    await store.pushUploadTask?.value
+    XCTAssertNil(store.pushRegistrationError)
+    let request = try XCTUnwrap(ManagementHTTPStub.requests.withLock { $0.last })
+    XCTAssertEqual(try body(of: request)["token"] as? String, "abc123")
+    store.pushRegistrationFailed(API.Failure(status: 0, message: "APNs unavailable"))
+    XCTAssertEqual(store.pushRegistrationError, "Couldn't register this phone")
   }
 
   func testManagementScreensRender() async throws {

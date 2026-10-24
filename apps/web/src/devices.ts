@@ -73,9 +73,9 @@ export function lendLabel(until: string | null): string {
 /**
  * Can this agent do work yet? Only from what the hub already reports, and never a claim it can't
  * back up: while devices are loading, or the device or its harness list is unknown, it's ready.
- * Agents that join from outside (mcp) and harnesses that run in a VM need no device install.
+ * Agents that join from outside (mcp) and harnesses placed in a computer need no device install.
  */
-export function agentReadiness(agent: Pick<Agent, "nodeId" | "harness">, devices: DeviceInfo[] | null): { ready: boolean; problem: string | null } {
+export function agentReadiness(agent: Pick<Agent, "nodeId" | "harness" | "settings" | "computerId">, devices: DeviceInfo[] | null): { ready: boolean; problem: string | null } {
   const ok = { ready: true, problem: null };
   const no = (problem: string) => ({ ready: false, problem });
   if (harnessInfo(agent.harness)?.protocol === "mcp") return ok;
@@ -85,7 +85,7 @@ export function agentReadiness(agent: Pick<Agent, "nodeId" | "harness">, devices
   if (!device.online) return no(`${device.name} is offline`);
   if (device.paused) return no(`${device.name} is paused`);
   const reported = device.harnesses ?? [];
-  if (reported.length && !runsInVm(agent.harness) && !reported.some((h) => h.id === agent.harness)) return no(`${harnessLabel(agent.harness)} isn't installed on ${device.name}`);
+  if (reported.length && !(runsInVm(agent.harness) && agent.settings?.runIn === "computer" && agent.computerId) && !reported.some((h) => h.id === agent.harness)) return no(`${harnessLabel(agent.harness)} isn't installed on ${device.name}`);
   return ok;
 }
 

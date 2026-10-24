@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { ClientEvent } from "@warren/core";
 import { api } from "./api.ts";
 import { go } from "./router.ts";
-import { pushOnHere } from "./push.ts";
+import { pushOnHere, reconcilePush, syncPushPrefs } from "./push.ts";
 import type { useStore } from "./store.ts";
 
 /**
@@ -41,13 +41,17 @@ function load(): NotifyPrefs {
 let prefs = load();
 let snap = JSON.stringify(prefs);
 
+export const getNotifyPrefs = () => prefs;
+
 export function setNotifyPrefs(patch: Partial<NotifyPrefs>) {
+  const categoriesChanged = (["dms", "replies", "approvals", "help", "tasks"] as const).some((key) => patch[key] !== undefined && patch[key] !== prefs[key]);
   prefs = { ...prefs, ...patch };
   snap = JSON.stringify(prefs);
   try {
     localStorage.setItem(KEY, snap);
   } catch {}
   listeners.forEach((l) => l());
+  if (categoriesChanged) void syncPushPrefs();
 }
 
 export function useNotifyPrefs(): NotifyPrefs {
@@ -109,6 +113,7 @@ const taskStatus = new Map<string, string>();
 
 /** Remember where your tasks stand now, so a later change can be told apart. */
 export function primeTasks() {
+  void reconcilePush();
   void api<{ id: string; status: string }[]>("GET", "/api/tasks").then((tasks) => tasks.forEach((t) => taskStatus.set(t.id, t.status)), () => {});
 }
 
@@ -118,10 +123,17 @@ export function notifyOn(e: ClientEvent, before: State, after: State) {
   const me = after.me.user.id;
   const agentName = (id: string | null) => after.agents.find((a) => a.id === id)?.name ?? "An agent";
 
-  if (e.type === "message" && e.message.author.kind === "agent" && e.message.body.trim()) {
+  if (e.type === "message" && e.message.body.trim()) {
     const m = e.message;
     const ch = after.channels.find((c) => c.id === m.channelId);
+    if (ch?.notify === "mute") return;
     const open = () => go({ view: "chat", channelId: m.channelId, threadId: m.threadId });
+    if (ch?.notify === "all" && ch.joined) {
+      if (m.author.id === "system" || (m.author.kind === "user" && m.author.id === me) || (m.author.kind === "agent" && pushOnHere())) return;
+      const from = m.author.kind === "agent" ? agentName(m.author.id) : after.members.find((u) => u.id === m.author.id)?.name ?? "Someone";
+      return show(ch.kind === "dm" ? from : `${from} in #${ch.name}`, m.body, open);
+    }
+    if (m.author.kind !== "agent") return;
     // with push on here, the hub's push notification covers DMs
     if (ch?.kind === "dm") return prefs.dms && !pushOnHere() ? show(agentName(m.author.id), m.body, open) : undefined;
     if (m.threadId && prefs.replies) {

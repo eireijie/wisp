@@ -31,7 +31,8 @@ export function taskInstructions(store: Store, agentId: string, trigger: { parts
     task.branch && team?.repo && !task.reviewOf
       ? `\n\nCode: you'll work in your own checkout of \`${team.repo}\` on branch \`${task.branch}\` (from \`${team.baseBranch}\`). Commit your work on that branch${isRemote(team.repo) ? " and push it" : ""}.`
       : "";
-  return `\n\nThis is task \`${task.id}\`.${code}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`;
+  const solo = store.agents(task.workspaceId).length === 1 ? "\n\nYou're the only agent so far, so this one's yours to do." : "";
+  return `\n\nThis is task \`${task.id}\`.${code}${solo}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`;
 }
 
 /**
@@ -44,7 +45,8 @@ export function failTaskOfRun(hub: Hub, run: { agentId: string; channelId: strin
   const task = run.threadId ? store.taskByThread(run.threadId) : undefined;
   if (!task || task.toAgentId !== run.agentId || (task.status !== "open" && task.status !== "in_progress")) return;
   const agent = store.agent(run.agentId);
-  const result = `@${agent?.handle ?? "agent"}'s run failed: ${reason}`;
+  // the agent by name, not @handle: the note is routed, and an @mention would wake the agent that just failed
+  const result = `${agent?.name ?? "The agent"}'s run failed: ${reason.trim().replace(/\.+$/, "")}`;
   store.updateTask(task.id, "failed", result);
   hub.broadcast(task.workspaceId, { type: "tasks_changed" });
   const from = task.from.kind === "agent" ? store.agent(task.from.id) : undefined;
@@ -118,7 +120,7 @@ export function leadSection(store: Store, agent: Agent): string {
   const leads = store
     .teams(agent.workspaceId)
     .filter((t) => t.leadId && t.leadId !== agent.id)
-    .map((t) => `- team ${t.name}: lead @${others.find((a) => a.id === t.leadId)?.handle ?? "?"}${t.description ? ` (${t.description})` : ""}`);
+    .map((t) => `- #${t.name}: lead @${others.find((a) => a.id === t.leadId)?.handle ?? "?"}`);
   return [
     "## You're the lead",
     "Every task nobody assigned comes to you, and you decide who does what. Don't do the work yourself unless nobody else fits.",
@@ -126,7 +128,7 @@ export function leadSection(store: Store, agent: Agent): string {
     "When subtasks come back, check the results, hand out follow-ups if something's missing, and when the whole thing is done mark the parent task done with task_update and a short summary.",
     "Work that's done gets looked at by a different agent than the one who did it, ideally on another harness. If you'd review your own work, hand the review to someone else.",
     `Agents and their roles:\n${people.join("\n")}`,
-    leads.length ? `Teams (hand team work to the lead):\n${leads.join("\n")}` : "",
+    leads.length ? `Channel teams (hand a team's work to its lead, or to "team:<channel>"):\n${leads.join("\n")}` : "",
   ]
     .filter(Boolean)
     .join("\n");

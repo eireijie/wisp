@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AccessLevel, AgentEvent, HarnessCatalog } from "@warren/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
+import { claudeCommands } from "./commands.ts";
 import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";
 
 const PERMISSION_MODE: Record<AccessLevel, string> = { "read-only": "plan", edit: "acceptEdits", full: "bypassPermissions" };
@@ -70,6 +71,7 @@ export const claudeCode: HarnessAdapter = {
       version: await commandVersion(this.binary),
       defaultModel: typeof settings.model === "string" ? settings.model : undefined,
       efforts: EFFORTS,
+      commands: await claudeCommands(),
       models: [
         { id: "fable", label: "Fable", description: "Most capable, for the hardest work." },
         { id: "opus", label: "Opus", description: "Deep reasoning for complex, multi-step tasks.", fast: { description: "Faster output, higher usage" } },

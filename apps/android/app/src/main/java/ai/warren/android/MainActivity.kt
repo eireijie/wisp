@@ -18,6 +18,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -197,12 +198,27 @@ class MainActivity : Activity() {
         val early = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         if (early) WebViewCompat.addDocumentStartJavaScript(view, setToken, setOf(origin))
         var tokenSet = early
+        var errorShown = false
         view.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
                 val url = request.url
                 if (url.toString().startsWith("$origin/") || url.toString() == origin) return false
                 startActivity(Intent(Intent.ACTION_VIEW, url))
                 return true
+            }
+
+            // the saved address stopped answering (the computer is off, or its address changed): offer a way out
+            // instead of leaving the browser's own error page with nothing to tap
+            override fun onReceivedError(v: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (!request.isForMainFrame || web !== v || errorShown) return
+                errorShown = true
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Can't reach Warren")
+                    .setMessage("Is your computer on, and is this phone on the same Wi-Fi as it (or on your private network)? You can also pair with it again.")
+                    .setPositiveButton("Try again") { _, _ -> errorShown = false; v.loadUrl("$origin/") }
+                    .setNegativeButton("Pair again") { _, _ -> errorShown = false; signOut() }
+                    .setOnCancelListener { errorShown = false }
+                    .show()
             }
 
             override fun onPageFinished(v: WebView, url: String) {

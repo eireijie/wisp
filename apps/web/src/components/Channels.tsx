@@ -6,7 +6,7 @@ import { useDevices } from "../devices.ts";
 import { EMPTY_TEAM, TeamChart, TeamRules, addToTeam, liveTeam } from "./TeamChart.tsx";
 import { api } from "../api.ts";
 import { useNames, useStore, type ChannelInfo } from "../store.ts";
-import { go } from "../router.ts";
+import { go, href } from "../router.ts";
 import { AgentAvatar, Button, Field, Input, Menu, Modal, Textarea, UserAvatar, cx } from "./ui.tsx";
 import { Toggle } from "../views/settings/parts.tsx";
 
@@ -17,16 +17,27 @@ export function ChannelIcon({ channel, size = 14, className = "text-faint" }: { 
   return channel.private ? <Lock size={size} className={className} aria-label="Private" /> : <Hash size={size} className={className} />;
 }
 
-/** #general and a team's own channel stay public and can't be archived or deleted. */
+/** #general stays public and can't be archived or deleted. */
 export function isProtected(channel: ChannelInfo) {
-  return channel.name === "general" || useStore.getState().teams.some((t) => t.channelId === channel.id);
+  return channel.name === "general";
 }
 
 /** Your own settings for a channel: how much it tells you, and whether it's starred. */
 export async function setChannelPrefs(channel: ChannelInfo, patch: { notify?: ChannelNotify; starred?: boolean }) {
+  const before = useStore.getState().channels.find((c) => c.id === channel.id) ?? channel;
   // show it straight away; the list refresh confirms it
   useStore.setState((s) => ({ channels: s.channels.map((c) => (c.id === channel.id ? { ...c, ...patch, ...(patch.notify === "mute" ? { unread: 0 } : {}) } : c)) }));
-  await api("PUT", `/api/channels/${channel.id}/prefs`, patch);
+  try {
+    await api("PUT", `/api/channels/${channel.id}/prefs`, patch);
+  } catch (e) {
+    useStore.setState((s) => ({ channels: s.channels.map((c) => c.id === channel.id ? {
+      ...c,
+      ...(patch.starred !== undefined && c.starred === patch.starred ? { starred: before.starred } : {}),
+      ...(patch.notify !== undefined && c.notify === patch.notify ? { notify: before.notify, ...(patch.notify === "mute" && c.unread === 0 ? { unread: before.unread } : {}) } : {}),
+    } : c) }));
+    alert((e as Error).message);
+    return;
+  }
   await useStore.getState().refreshChannels();
 }
 
@@ -682,7 +693,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
     setError(null);
     setSaving(true);
     try {
-      await api("PATCH", `/api/channels/${channel.id}`, { settings: { team: next, ...(next ? { replyInThread: true } : {}) } });
+      await api("PATCH", `/api/channels/${channel.id}`, { settings: { team: next } });
       await refreshChannels();
       onClose();
     } catch (err) {
@@ -703,6 +714,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
         <summary className="text-sm font-medium cursor-pointer">How the team works</summary>
         <TeamRules className="mt-2" />
       </details>
+      {team.nodes.length > 0 && <TeamMore team={team} onChange={onChange} canManage={canManage} />}
       {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This channel is archived." : "Guests can't change channels."}</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       {canManage && (
@@ -720,6 +732,76 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
         </div>
       )}
     </div>
+  );
+}
+
+/** The rest of a team, out of the way until it's wanted: each agent's role, a shared memory folder, a repo, and who it reports to. */
+function TeamMore({ team, onChange, canManage }: { team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean }) {
+  const names = useNames();
+  const agents = useStore((s) => s.agents);
+  const set = (patch: Partial<ChannelTeam>) => onChange({ ...team, ...patch });
+  const setNode = (agentId: string, patch: { role?: string; roleNotes?: string }) => set({ nodes: team.nodes.map((n) => (n.agentId === agentId ? { ...n, ...patch } : n)) });
+  const onTeam = new Set(team.nodes.map((n) => n.agentId));
+  const folder = team.folder ?? "";
+  return (
+    <details className="rounded-xl bg-bg px-3.5 py-2.5">
+      <summary className="text-sm font-medium cursor-pointer">More</summary>
+      <fieldset disabled={!canManage} className="mt-3 space-y-5">
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Roles</div>
+          {team.nodes.map((n) => {
+            const a = names.agent(n.agentId);
+            if (!a) return null;
+            return (
+              <div key={n.agentId} className="grid sm:grid-cols-[10rem_1fr] gap-2 items-start">
+                <span className="flex items-center gap-2 min-w-0 h-9 text-sm">
+                  <AgentAvatar agent={a} size={22} badge={false} interactive={false} /> <span className="truncate">{a.name}</span>
+                </span>
+                <div className="space-y-1.5">
+                  <Input value={n.role ?? ""} onChange={(e) => setNode(n.agentId, { role: e.target.value })} placeholder="Role, e.g. Backend" aria-label={`${a.name}'s role`} maxLength={60} />
+                  {(n.role || n.roleNotes) && <Textarea rows={2} value={n.roleNotes ?? ""} onChange={(e) => setNode(n.agentId, { roleNotes: e.target.value })} placeholder="What it owns and what to send its way. The agent reads this." aria-label={`What ${a.name}'s role owns`} maxLength={4000} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Field
+          label="Memory folder"
+          hint={
+            <>
+              Everyone on the team reads and writes it.{" "}
+              {folder && (
+                <a className="text-accent-text hover:underline" href={href({ view: "vault", path: `${folder}/README.md` })}>
+                  Open
+                </a>
+              )}
+            </>
+          }
+        >
+          <Input value={folder} onChange={(e) => set({ folder: e.target.value })} placeholder="teams/web" maxLength={200} />
+        </Field>
+        <div className="grid sm:grid-cols-[1fr_10rem] gap-4">
+          <Field label="Code repository" hint="A git URL, or a path on the device the agents run on. Tasks for this team get their own branch and checkout.">
+            <Input value={team.repo ?? ""} onChange={(e) => set({ repo: e.target.value || null })} placeholder="git@github.com:you/app.git" maxLength={500} />
+          </Field>
+          <Field label="Base branch">
+            <Input value={team.baseBranch ?? ""} onChange={(e) => set({ baseBranch: e.target.value })} placeholder="main" maxLength={100} />
+          </Field>
+        </div>
+        <Field label="Reports to" hint="An agent outside the team that can see and steer its work.">
+          <select value={team.reportsTo ?? ""} onChange={(e) => set({ reportsTo: e.target.value || null })} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
+            <option value="">Nobody</option>
+            {agents
+              .filter((a) => !onTeam.has(a.id) || a.id === team.reportsTo)
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  @{a.handle} ({a.name})
+                </option>
+              ))}
+          </select>
+        </Field>
+      </fieldset>
+    </details>
   );
 }
 

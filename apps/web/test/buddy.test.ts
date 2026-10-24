@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Approval, Message } from "@warren/core";
-import { buddyNotice, completedTasks, firstLine, type BuddyTask } from "../src/buddy.ts";
+import { buddyNotice, completedTasks, firstLine, unlessMuted, type BuddyTask } from "../src/buddy.ts";
 import { href, parseRoute } from "../src/router.ts";
 import { connectEvents } from "../src/api.ts";
 
@@ -67,5 +67,19 @@ describe("desk buddy events", () => {
     expect(completedTasks([{ ...task, status: "done" }], previous, "person")).toEqual([]);
     completedTasks([task], previous, "person");
     expect(completedTasks([{ ...task, status: "done", from: { kind: "user", id: "someone-else" } }], previous, "person")).toEqual([]);
+  });
+  it("follows muting and unmuting after the buddy loaded its channels", async () => {
+    const e = { type: "message", message: message() } as const;
+    const n = buddyNotice(e, state);
+    expect(n).not.toBeNull();
+    // muted elsewhere after the buddy loaded the channel
+    expect(await unlessMuted(n, e, async () => [{ id: "dm", notify: "mute" }])).toBeNull();
+    // unmuted again: the buddy's own copy still says muted, which must not stop the fresh check
+    const stale = { ...state, channels: [{ id: "dm", kind: "dm", joined: true, notify: "mute" }] } as unknown as typeof state;
+    expect(buddyNotice(e, stale)).toBeNull();
+    const ignoring = buddyNotice(e, stale, undefined, { ignoreMute: true });
+    expect(await unlessMuted(ignoring, e, async () => [{ id: "dm", notify: "all" }])).toEqual(n);
+    // the hub is unreachable for a moment: still say something arrived
+    expect(await unlessMuted(n, e, async () => { throw new Error("offline"); })).toEqual(n);
   });
 });

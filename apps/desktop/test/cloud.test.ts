@@ -26,6 +26,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
   let polls = 0;
   let serverPolls = 0;
   let setupKey = "";
+  let upAfter = hubAfter;
   const fetchImpl = async (url: URL, init: RequestInit = {}) => {
     const method = init.method || "GET";
     const headers = Object.fromEntries(Object.entries((init.headers as Record<string, string>) || {}).map(([k, v]) => [k.toLowerCase(), v]));
@@ -52,7 +53,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
     // the new server: the IP address has no certificate (unless ipCert), the sslip.io name does
     if (url.host === "203.0.113.7" && !ipCert) throw certError();
     if (url.pathname === "/api/setup" && method === "GET") {
-      if (++polls < hubAfter) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
+      if (++polls < upAfter) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
       return json({ needsSetup: true });
     }
     if (url.pathname === "/api/setup" && method === "POST") {
@@ -62,7 +63,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
     if (url.pathname === "/api/me") return json({ ok: true });
     throw new Error(`unexpected ${method} ${url.href}`);
   };
-  return { calls, fetchImpl, key: () => setupKey };
+  return { calls, fetchImpl, key: () => setupKey, comeUp: () => (upAfter = 0) };
 }
 
 const sleep = async () => {};
@@ -154,6 +155,19 @@ describe("creating a Warren in the person's Hetzner project", () => {
     expect(mock.calls.at(-1)).toMatchObject({ method: "DELETE", url: "https://api.hetzner.cloud/v1/servers/42" });
   });
 
+  it("keeps the setup key of a server that didn't finish, so the same server can be picked up again", async () => {
+    const mock = mockCloud({ hubAfter: Infinity });
+    const err = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
+    expect(err.key).toBe(mock.key());
+
+    mock.comeUp();
+    const steps: string[] = [];
+    const r = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s), resume: { server: err.server, key: err.key } });
+    expect(steps).toEqual(["boot", "https", "account"]);
+    expect(r).toMatchObject({ session: "session-token", server: { id: 42 } });
+    expect(mock.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v1/servers"))).toHaveLength(1);
+  });
+
   it("puts a fresh key into the real cloud-init script", () => {
     const a = cloud.userData("key-one");
     expect(a).toContain('content: "key-one"');
@@ -161,5 +175,38 @@ describe("creating a Warren in the person's Hetzner project", () => {
     // the script still knows the placeholder, so the key it got isn't mistaken for "no key"
     expect(a).toContain(`"" | ${cloud.PLACEHOLDER})`);
     expect(cloud.userData("key-two")).not.toBe(a);
+  });
+});
+
+
+describe("cloud request deadlines", () => {
+  it("makes an account timeout retryable and preserves the pending server and key", async () => {
+    const server = { id: 42, name: "existing", ip: "203.0.113.7", location: "fsn1", type: "cx23" };
+    const err = await cloud.createWarren({ token: "good-token", account }, {
+      resume: { server, key: "saved-key" }, sleep,
+      fetchImpl: async (url: URL, init: RequestInit) => {
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        if (url.host === "api.hetzner.cloud") return json({ server: { status: "running", public_net: { ipv4: { ip: server.ip } } } });
+        if (!init.method) return json({ needsSetup: true });
+        throw Object.assign(new Error("deadline"), { name: "TimeoutError" });
+      },
+    }).catch((e: Error) => e);
+    expect(err).toMatchObject({ code: "timed_out", retryable: true, server: { id: 42 }, key: "saved-key" });
+  });
+
+  it("aborts an unresponsive account request", async () => {
+    const fetchImpl = (_url: URL, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+    });
+    await expect(cloud.claim("https://hub", "key", account, { fetchImpl, timeoutMs: 10 })).rejects.toMatchObject({ code: "timed_out", retryable: true });
+  });
+
+  it("bounds the optional timezone request and still returns the created session", async () => {
+    const fetchImpl = async (_url: URL, init: RequestInit) => {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      if (init.method === "POST") return json({ token: "session" });
+      return new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason), { once: true }));
+    };
+    expect(await cloud.claim("https://hub", "key", account, { fetchImpl, timeoutMs: 10 })).toBe("session");
   });
 });

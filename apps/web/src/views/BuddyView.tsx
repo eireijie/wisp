@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Phone } from "lucide-react";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { api, connectEvents, getToken } from "../api.ts";
-import { buddyNotice, completedTasks, type BuddyNotice, type BuddyTask } from "../buddy.ts";
+import { buddyNoticeWithRoot, completedTasks, unlessMuted, type BuddyNotice, type BuddyTask } from "../buddy.ts";
 import type { BuddySettings } from "../desktop.ts";
 import { agentMood } from "../ghostMood.ts";
 import { href } from "../router.ts";
 import { useStore } from "../store.ts";
-import { useMotionReduced } from "../theme.ts";
+import { setMode, setTheme, setTextSize, setReduceMotion, THEMES, useMotionReduced } from "../theme.ts";
 import { Ghost } from "../components/Ghost.tsx";
 import { agentVar } from "../components/ui.tsx";
 import "./buddy.css";
@@ -39,7 +39,23 @@ export function BuddyView() {
     const update = (s: BuddySettings) => { if (active) setSettings(s); };
     const unsubscribe = desktop?.onSettings(update);
     void desktop?.settings().then(update);
-    const storage = (e: StorageEvent) => { if (e.key === "warren.token" || e.key === null) setSession(getToken()); };
+    const storage = (e: StorageEvent) => {
+      if (e.key === "warren.token" || e.key === null) setSession(getToken());
+      // Setters update this renderer's theme state and notify reduced-motion subscribers.
+      if (e.key === "warren.mode" || e.key === null) {
+        const v = localStorage.getItem("warren.mode");
+        setMode(v === "light" || v === "dark" ? v : "system");
+      }
+      if (e.key === "warren.theme" || e.key === null) {
+        const v = localStorage.getItem("warren.theme");
+        setTheme(THEMES.find((t) => t.id === v)?.id ?? "mono");
+      }
+      if (e.key === "warren.textSize" || e.key === null) {
+        const v = localStorage.getItem("warren.textSize");
+        setTextSize(v === "small" || v === "large" ? v : "default");
+      }
+      if (e.key === "warren.motion" || e.key === null) setReduceMotion(localStorage.getItem("warren.motion") === "reduce");
+    };
     window.addEventListener("storage", storage);
     return () => {
       active = false;
@@ -86,14 +102,14 @@ export function BuddyView() {
         disconnect = connectEvents((e) => {
           if (stopped) return;
           const state = useStore.getState();
-          const next = buddyNotice(e, state, selected.current);
+          const channels = async () => { await useStore.getState().refreshChannels(); return useStore.getState().channels; };
+          void buddyNoticeWithRoot(e, state, selected.current, { ignoreMute: true }).then((next) => unlessMuted(next, e, channels)).then((next) => { if (next) show(next); });
           state.handle(e, false); // the main window owns system notifications and sounds
-          if (next) show(next);
           // A proactive DM can be the first event for a newly-created channel.
           const channelId = e.type === "message" ? e.message.channelId : e.type === "approval" ? e.approval.channelId : null;
           if (channelId && !state.channels.some((c) => c.id === channelId)) {
-            void state.refreshChannels().then(() => {
-              const found = buddyNotice(e, { ...state, channels: useStore.getState().channels }, selected.current);
+            void state.refreshChannels().then(async () => {
+              const found = await buddyNoticeWithRoot(e, { ...state, channels: useStore.getState().channels }, selected.current);
               if (found) show(found);
             }, () => {});
           }

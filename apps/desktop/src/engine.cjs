@@ -112,24 +112,81 @@ function runtime(saved) {
 /** Whether `warren service install` already keeps this running (then the app leaves it alone). */
 function serviceRunning(kind) {
   // a service reads ~/.warren; with another WARREN_NODE_DIR, it isn't this app's device
-  if (process.platform !== "darwin" || process.env.WARREN_NODE_DIR) return Promise.resolve(false);
+  if (process.env.WARREN_NODE_DIR) return Promise.resolve(false);
   return new Promise((resolve) => {
-    execFile("launchctl", ["print", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 4000 }, (err, out) => resolve(!err && /state = running/.test(out)));
+    // Same service names and user/system scope as apps/node/src/service.ts.
+    if (process.platform === "darwin")
+      execFile("launchctl", ["print", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 4000 }, (err, out) => resolve(!err && /state = running/.test(out)));
+    else if (process.platform === "linux")
+      execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "is-active", "--quiet", kind === "hub" ? "warren" : "warren-node"], { timeout: 4000 }, (err) => resolve(!err));
+    else if (process.platform === "win32")
+      execFile("powershell.exe", ["-NoProfile", "-Command", `(Get-ScheduledTask -TaskName 'Warren ${kind}').State`], { timeout: 4000 }, (err, out) => resolve(!err && out.trim() === "Running"));
+    else resolve(false);
   });
 }
 
 /** Restart a `warren service`, so it picks up a node.json that now points at another hub. */
 function restartService(kind) {
-  return new Promise((resolve) => execFile("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 8000 }, (err) => resolve(!err)));
+  return new Promise((resolve) => {
+    const done = (err) => resolve(!err);
+    if (process.platform === "darwin") execFile("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 8000 }, done);
+    else if (process.platform === "linux") execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "restart", kind === "hub" ? "warren" : "warren-node"], { timeout: 8000 }, done);
+    else if (process.platform === "win32") execFile("powershell.exe", ["-NoProfile", "-Command", `$ErrorActionPreference = 'Stop'; Stop-ScheduledTask -TaskName 'Warren ${kind}'; Start-ScheduledTask -TaskName 'Warren ${kind}'`], { timeout: 8000 }, done);
+    else resolve(false);
+  });
 }
 
-async function hubUp(url) {
+async function hubUp(url, { fetchImpl = fetch } = {}) {
   try {
-    const res = await fetch(new URL("/api/setup", url), { signal: AbortSignal.timeout(2500) });
-    return res.ok;
+    const res = await fetchImpl(new URL("/api/setup", url), { signal: AbortSignal.timeout(2500) });
+    const body = res.ok ? await res.json() : null;
+    return !!body && typeof body.needsSetup === "boolean";
   } catch {
     return false;
   }
+}
+
+/** Confirm authentication and the hub's live device state; a running process alone proves neither. */
+async function deviceConnected(origin, cfg, session, { fetchImpl = fetch } = {}) {
+  if (!session || !cfg.token) return false;
+  try {
+    const get = async (route, token) => {
+      const res = await fetchImpl(new URL(route, origin), { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
+      if (!res.ok) throw new Error("unauthorized");
+      return res.json();
+    };
+    const [agents, nodes] = await Promise.all([get("/api/node/agents", cfg.token), get("/api/nodes", session)]);
+    if (!Array.isArray(agents) || !Array.isArray(nodes)) return false;
+    const id = agents[0]?.nodeId || cfg.nodeId;
+    // Older node.json files have no id. Only accept an unambiguous device owned by this person.
+    const matches = id ? nodes.filter((n) => n.id === id) : nodes.filter((n) => n.mine && n.name === cfg.name);
+    return matches.length === 1 && matches[0].online === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The latest connection event in the device log, including restarts and rejected tokens. */
+function deviceLogConnected(origin, file = path.join(NODE_DIR, "node.log")) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const size = fs.fstatSync(fd).size;
+    const bytes = Buffer.alloc(Math.min(size, 64 * 1024));
+    fs.readSync(fd, bytes, 0, bytes.length, size - bytes.length);
+    const lines = bytes.toString("utf8").split("\n");
+    if (size > bytes.length) lines.shift();
+    for (const line of lines.reverse()) {
+      const connected = line.match(/^\[warren\] connected to (\S+) as /);
+      if (connected) return new URL(connected[1]).origin === new URL(origin).origin;
+      if (/^--- .* starting node start|^\[warren\] (?:disconnected |connection error:|hub rejected the node token|another `warren node start`)/.test(line)) return false;
+    }
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  return false;
 }
 
 /** What a person typed as a server address, as the addresses to try in order. */
@@ -178,6 +235,7 @@ async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
   const list = candidates(input);
   if (!list.length) return { ok: false, error: "That isn't a server address. Try something like warren.example.com or 192.168.1.20:4747.", checks: [] };
   let first = null;
+  let answered = null;
   for (const origin of list) {
     let res;
     try {
@@ -188,21 +246,22 @@ async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
     }
     const body = await res.json().catch(() => null);
     if (!res.ok || !body || typeof body.needsSetup !== "boolean") {
-      // something answered, so this is the address, but it isn't Warren
-      return { ok: false, url: origin, error: `${new URL(origin).host} answered, but it isn't a Warren server${res.ok ? "" : ` (${res.status})`}.`, checks: [{ label: "Reach the server", ok: true }, { label: "It's a Warren server", ok: false }] };
+      answered ??= { ok: false, url: origin, error: `${new URL(origin).host} answered, but it isn't a Warren server${res.ok ? "" : ` (${res.status})`}.`, checks: [{ label: "Reach the server", ok: true }, { label: "It's a Warren server", ok: false }] };
+      continue;
     }
+    const finalOrigin = res.url ? new URL(res.url).origin : origin;
     return {
       ok: true,
-      url: origin,
+      url: finalOrigin,
       needsSetup: body.needsSetup,
       checks: [
-        { label: `Reach ${new URL(origin).host}`, ok: true },
+        { label: `Reach ${new URL(finalOrigin).host}`, ok: true },
         { label: "It's a Warren server", ok: true },
         { label: body.needsSetup ? "Nobody has set it up yet: you'll create the first account" : "Ready for you to sign in", ok: true },
       ],
     };
   }
-  return first;
+  return answered || first;
 }
 
 /** This computer's addresses other computers can join its server at (LAN and Tailscale). */
@@ -213,9 +272,46 @@ function lanAddresses(port) {
   return out;
 }
 
-/** A Warren process this app started; it stops when the app quits. */
 /** what `warren node start` exits with when the hub turns its token down ($WARREN_EXIT_IF_REJECTED) */
 const REJECTED_CODE = 78;
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+};
+
+/** A process's command line, or "" when it can't be read. */
+function commandOf(pid) {
+  try {
+    if (isWin)
+      return execFileSync("powershell.exe", ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`], { encoding: "utf8", timeout: 5000, windowsHide: true }).trim();
+    return execFileSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8", timeout: 3000 }).trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The process an earlier run of the app started and never stopped (it crashed, or was force
+ * quit), when it's still running: still that Warren command, not some other process that got its id.
+ */
+function leftover(pidFile, args) {
+  let pid;
+  try {
+    pid = Number(fs.readFileSync(pidFile, "utf8").trim());
+  } catch {
+    return null;
+  }
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid || !alive(pid)) return null;
+  const cmd = commandOf(pid);
+  return cmd.includes("warren.mjs") && cmd.includes(args.join(" ")) ? pid : null;
+}
+
+/** A Warren process this app started; it stops when the app quits. */
 
 class Child {
   constructor(name, logDir, onChange) {
@@ -227,22 +323,84 @@ class Child {
     this.detail = "";
     this.wanted = false;
     this.restarts = 0;
+    this.stopping = null;
+    this.pidFile = path.join(logDir, `${name}.pid`);
+    this.reaping = false;
   }
 
+  /**
+   * Start it, or, while a stopped one is still exiting, start it again as soon as that one has.
+   * One an earlier run of the app left running is stopped first: a second device with the same
+   * token would fight it for the hub, and nothing would stop the old one on Quit or Disconnect.
+   */
   start(node, warrenDir, args, extraEnv = {}) {
-    if (this.proc) return;
     this.wanted = true;
     this.spec = { node, warrenDir, args, extraEnv };
-    fs.mkdirSync(path.dirname(this.log), { recursive: true });
-    const out = fs.openSync(this.log, "a");
-    fs.writeSync(out, `\n--- ${new Date().toISOString()} starting ${args.join(" ")}\n`);
-    const proc = spawn(node, [path.join(warrenDir, "bin", "warren.mjs"), ...args], { cwd: warrenDir, env: env(extraEnv), stdio: ["ignore", out, out], windowsHide: true });
-    fs.closeSync(out);
+    if (this.proc || this.reaping) return;
+    const old = leftover(this.pidFile, args);
+    if (!old) return this.launch();
+    this.reaping = true;
+    try {
+      process.kill(old, "SIGTERM");
+    } catch {}
+    const until = Date.now() + 8000;
+    const wait = () => {
+      if (alive(old) && Date.now() < until) return void setTimeout(wait, 200);
+      try {
+        if (alive(old)) process.kill(old, "SIGKILL");
+      } catch {}
+      this.reaping = false;
+      if (this.wanted && !this.proc) this.launch();
+    };
+    wait();
+  }
+
+  /** Forget the process id saved for `proc`, once it has exited. */
+  forget(proc) {
+    try {
+      if (fs.readFileSync(this.pidFile, "utf8").trim() === String(proc.pid)) fs.rmSync(this.pidFile, { force: true });
+    } catch {}
+  }
+
+  launch() {
+    const { node, warrenDir, args, extraEnv } = this.spec;
+    let proc;
+    try {
+      fs.mkdirSync(path.dirname(this.log), { recursive: true });
+      const out = fs.openSync(this.log, "a");
+      fs.writeSync(out, `\n--- ${new Date().toISOString()} starting ${args.join(" ")}\n`);
+      try {
+        proc = spawn(node, [path.join(warrenDir, "bin", "warren.mjs"), ...args], { cwd: warrenDir, env: env(extraEnv), stdio: ["ignore", out, out], windowsHide: true });
+      } finally {
+        fs.closeSync(out);
+      }
+    } catch (err) {
+      this.wanted = false;
+      return this.set("error", `couldn't start (${err.message}); see ${this.log}`);
+    }
     this.proc = proc;
+    if (proc.pid)
+      try {
+        fs.writeFileSync(this.pidFile, String(proc.pid));
+      } catch {}
     this.set("starting", "");
     const startedAt = Date.now();
-    proc.on("exit", (code, signal) => {
+    // spawning failed (no such Node, no permission): there's no process, and maybe no 'exit' either
+    proc.on("error", (err) => {
+      fs.appendFile(this.log, `--- ${err.message}\n`, () => {});
+      if (this.proc !== proc || proc.pid !== undefined) return; // a failed kill of a live process: its 'exit' still comes
       this.proc = null;
+      this.stopping = null;
+      this.wanted = false;
+      this.set("error", `couldn't start (${err.message}); see ${this.log}`);
+    });
+    proc.on("exit", (code, signal) => {
+      this.forget(proc);
+      if (this.proc !== proc) return;
+      this.proc = null;
+      const stopped = this.stopping === proc;
+      this.stopping = null;
+      if (stopped) return this.wanted ? this.launch() : this.set("stopped", "");
       if (!this.wanted) return this.set("stopped", "");
       if (code === REJECTED_CODE) {
         // the hub turned the device's token down: restarting can't help
@@ -254,7 +412,7 @@ class Child {
       if (this.restarts < 3) {
         this.restarts++;
         this.set("starting", `restarting (exited ${signal || code})`);
-        setTimeout(() => this.wanted && this.start(node, warrenDir, args, extraEnv), 1500 * this.restarts);
+        setTimeout(() => this.wanted && !this.proc && this.launch(), 1500 * this.restarts);
       } else this.set("error", `stopped unexpectedly (${signal || `exit ${code}`}); see ${this.log}`);
     });
   }
@@ -274,6 +432,7 @@ class Child {
     this.restarts = 0;
     if (!this.proc) return;
     const p = this.proc;
+    this.stopping = p;
     p.kill(isWin ? undefined : "SIGTERM");
     setTimeout(() => p.exitCode === null && p.kill("SIGKILL"), 8000).unref();
   }
@@ -288,4 +447,4 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };

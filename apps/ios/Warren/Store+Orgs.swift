@@ -4,9 +4,9 @@ import Foundation
 extension Store {
   /** Older hubs have no organizations list: the one you're in is the only one. */
   func refreshOrgs() async {
-    guard let api else { return }
+    guard api != nil else { return }
     do {
-      orgs = try await api.get("/api/orgs")
+      orgs = try await fetch { try await $0.get("/api/orgs") }
     } catch let e as API.Failure where e.status == 404 {
       orgs = []
     } catch {}
@@ -22,14 +22,14 @@ extension Store {
   func isCurrent(_ org: OrgSummary) -> Bool { org.current ?? (org.id == workspace?.id) }
 
   func createOrg(_ name: String) async throws {
-    let created: OrgCreated = try await connection().post("/api/orgs", ["name": name])
-    switchSession(token: created.token)
+    let created: OrgCreated = try await fetch { try await $0.post("/api/orgs", ["name": name]) }
+    try switchSession(token: created.token)
   }
 
   func switchOrg(_ org: OrgSummary) async throws {
     guard !isCurrent(org) else { return }
-    let result: SessionToken = try await connection().post("/api/orgs/\(org.id)/switch", Empty())
-    switchSession(token: result.token)
+    let result: SessionToken = try await fetch { try await $0.post("/api/orgs/\(org.id)/switch", Empty()) }
+    try switchSession(token: result.token)
   }
 
   /** Accepts a whole invite link (…#/join/CODE) or just the code. */
@@ -44,37 +44,38 @@ extension Store {
   func joinOrg(_ link: String) async throws {
     let code = Self.inviteCode(link)
     guard !code.isEmpty else { throw API.Failure(status: 0, message: "Paste an invite link to join.") }
-    let result: SessionToken = try await connection().post("/api/invites/join", ["code": code])
-    switchSession(token: result.token)
+    let result: SessionToken = try await fetch { try await $0.post("/api/invites/join", ["code": code]) }
+    try switchSession(token: result.token)
   }
 
   func refreshFeatures() async {
-    guard let api else { return }
-    if let result: FeaturesResponse = try? await api.get("/api/features") { features = result.features }
+    guard api != nil else { return }
+    if let result: FeaturesResponse = try? await fetch({ try await $0.get("/api/features") }) { features = result.features }
   }
 
   /** Owners turn features on and off; the hub tells every other device with a "features" event. */
   func setFeatures(_ next: Features) async throws {
+    let gen = session
     let previous = features
     features = next
     do {
-      let data = try await connection().put("/api/features", next)
+      let data = try await fetch { try await $0.put("/api/features", next) }
       if let result = try? Wire.decoder.decode(FeaturesResponse.self, from: data) { features = result.features }
     } catch {
-      features = previous
+      if gen == session { features = previous }
       throw error
     }
   }
 
   func refreshAgentDefaults() async {
-    guard let api else { return }
-    do { agentDefaults = try await api.get("/api/settings/agent-defaults") }
+    guard api != nil else { return }
+    do { agentDefaults = try await fetch { try await $0.get("/api/settings/agent-defaults") } }
     catch let e as API.Failure where e.status == 404 { agentDefaults = nil }
     catch {}
   }
 
   func saveAgentDefaults(_ next: AgentDefaults) async throws {
-    let data = try await connection().put("/api/settings/agent-defaults", next)
+    let data = try await fetch { try await $0.put("/api/settings/agent-defaults", next) }
     agentDefaults = (try? Wire.decoder.decode(AgentDefaults.self, from: data)) ?? next
   }
 
@@ -93,7 +94,7 @@ extension Store {
     var runId = activityRun[agentId]
     if runId == nil { runId = try await agentRuns(agentId).first { $0.status == "running" }?.id }
     guard let runId else { throw API.Failure(status: 0, message: "It isn't working on anything right now.") }
-    try await connection().post("/api/runs/\(runId)/cancel", Empty())
+    try await fetch { try await $0.post("/api/runs/\(runId)/cancel", Empty()) }
   }
 
   /** People's names for "Picked people". */

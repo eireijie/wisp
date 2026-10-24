@@ -11,8 +11,8 @@ export type Subject =
   | { kind: "members" } // every owner and member (not guests)
   | { kind: "guests" }
   | { kind: "agent"; id: string }
-  | { kind: "team"; name: string }
-  | { kind: "role"; team: string; role: string } // members of a team with that role, e.g. reviewers on "web"
+  | { kind: "team"; name: string } // everyone on a channel's team, by the channel's name
+  | { kind: "role"; team: string; role: string } // agents with that role on a channel's team, e.g. reviewers in #web
   | { kind: "all_agents" };
 
 /**
@@ -37,7 +37,7 @@ export interface AccessRule {
 export interface Viewer {
   actor: Actor;
   role?: Role; // people
-  teams?: string[]; // agents: names of the teams they're on
+  teams?: string[]; // agents: names of the channels whose teams they're on
   teamRoles?: { team: string; role: string }[]; // agents: their role on each team, when they have one
   soulLocked?: boolean; // agents
 }
@@ -128,6 +128,7 @@ export function builtinRules(ws: WorkspaceShape): AccessRule[] {
   ];
   for (const a of ws.agents) rules.push({ path: `agents/${a.id}`, subject: { kind: "agent", id: a.id }, level: "edit", builtin: true });
   for (const t of ws.teams ?? []) {
+    if (!t.folder) continue;
     rules.push({ path: t.folder, subject: { kind: "team", name: t.name }, level: "edit", builtin: true });
     for (const boss of t.above) rules.push({ path: t.folder, subject: { kind: "agent", id: boss }, level: "edit", builtin: true });
   }
