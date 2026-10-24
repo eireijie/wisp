@@ -628,7 +628,8 @@ setup("setup:poll-join", () => {
       const result = await joinClient.poll();
       if (result.status !== "approved") return { ok: true, status: result.status };
       switchTo({ mode: "remote", hubUrl: result.hubUrl, cloud: sameOrigin(result.hubUrl, config.hubUrl ?? "") ? config.cloud : undefined, device: true });
-      engine.writeNodeConfig({ hub: result.hubUrl, token: result.nodeToken, nodeId: result.nodeId, name: deviceName() });
+      // hubId lets this computer find its Wisp again if the address changes; undefined clears one from an earlier Wisp
+      engine.writeNodeConfig({ hub: result.hubUrl, token: result.nodeToken, nodeId: result.nodeId, name: deviceName(), hubId: typeof result.hubId === "string" ? result.hubId : undefined });
       joinClient.cancel();
       await connect(true);
       return { ok: true, status: "approved" };

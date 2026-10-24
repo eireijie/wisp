@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -29,6 +30,9 @@ export interface JoinDependencies {
   install: (dir: string) => unknown;
   choose?: (wisps: NearbyWisp[]) => Promise<NearbyWisp>;
 }
+
+/** `--dir <folder>` when it isn't the default, so a printed follow-up command finds this computer's settings. */
+const dirFlag = (dir: string) => (path.resolve(dir) === path.join(os.homedir(), ".warren") ? "" : ` --dir ${JSON.stringify(dir)}`);
 
 /** Persist credentials before starting the service; a service failure must not lose a one-use grant. */
 export function saveJoinedComputer(dir: string, grant: Grant, name: string) {
@@ -89,22 +93,37 @@ export async function joinWisp(options: JoinOptions, overrides: Partial<JoinDepe
     if (status.status === "expired") break;
     if (status.status !== "approved") throw new Error("Your Wisp sent an incomplete reply; update Wisp and try again.");
     if (!status.nodeId || !status.nodeToken || !status.hubUrl || !status.workspaceName) throw new Error("Approval was already collected; run wisp join to ask again.");
-    saveJoinedComputer(options.dir, status as Grant, name);
+    // Wisp's suggested address (Tailscale, say) works away from home too, but only keep it if this computer can reach it
+    const suggested = joinTarget(status.hubUrl).url;
+    const reachable = suggested === target.url || await deps.fetch(`${suggested}/healthz`, { signal: AbortSignal.timeout(4000) }).then((r) => r.ok, () => false);
+    saveJoinedComputer(options.dir, { ...(status as Grant), hubUrl: reachable ? suggested : target.url }, name);
     say("✓ Approved");
     if (options.service !== false) {
       try { await deps.install(options.dir); }
-      catch { throw new Error("Approval is saved; start this computer with: wisp service install node"); }
+      catch { throw new Error(`Approval is saved; start this computer with: wisp service install node${dirFlag(options.dir)}`); }
       say(`✓ ${name} joined. Agents can work on this computer now.`);
-    } else say(`✓ ${name} joined; connect with: wisp node start`);
+    } else say(`✓ ${name} joined; connect with: wisp node start${dirFlag(options.dir)}`);
     return status as Grant;
   }
   throw new Error("The code expired; run wisp join to get a new one.");
 }
 
 /** The address a joined computer's Wisp has on this Wi-Fi now, when it moved (a new DHCP lease, say). */
-export async function findMovedWisp(hubId: string, current: string, discover: () => Promise<NearbyWisp[]> = () => discoverWisps()): Promise<string | null> {
+export async function findMovedWisp(
+  me: { hubId: string; nodeId: string; token: string }, current: string,
+  discover: () => Promise<NearbyWisp[]> = () => discoverWisps(), fetcher: typeof fetch = fetch,
+): Promise<string | null> {
   // https addresses (Tailscale, a domain) don't move with the Wi-Fi
   if (!/^http:/.test(current)) return null;
-  const found = (await discover().catch(() => [])).find((w) => w.id === hubId);
-  return found && found.url !== joinTarget(current).url ? found.url : null;
+  const found = (await discover().catch(() => [])).find((w) => w.id === me.hubId);
+  if (!found || found.url === joinTarget(current).url) return null;
+  // anyone can announce this Wisp's id on the Wi-Fi; only the real one can answer this without seeing the credential
+  const nonce = crypto.randomBytes(24).toString("base64url");
+  const expected = crypto.createHmac("sha256", crypto.createHash("sha256").update(me.token).digest("hex")).update(`wisp-relocate:${nonce}`).digest("hex");
+  try {
+    const res = await fetcher(`${found.url}/api/join/prove`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nodeId: me.nodeId, nonce }), signal: AbortSignal.timeout(5000) });
+    const { macs } = (await res.json()) as { macs?: unknown };
+    const ok = Array.isArray(macs) && macs.some((m) => typeof m === "string" && m.length === expected.length && crypto.timingSafeEqual(Buffer.from(m), Buffer.from(expected)));
+    return ok ? found.url : null;
+  } catch { return null; }
 }

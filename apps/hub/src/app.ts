@@ -53,7 +53,17 @@ export async function buildHub(opts: HubOptions) {
     },
   });
 
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
+  // invite links carry their secret in the path; keep it out of the log
+  const redact = (url: string) => url.replace(/^\/join\/[^/?#]+/, "/join/[invite]");
+  const logger = opts.logger ? { serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redact(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
+  const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024 });
+  // the consent and approve screens can't be framed by another site and clicked through
+  app.addHook("onSend", async (_req, reply, payload) => {
+    if (!reply.hasHeader("x-frame-options")) reply.header("x-frame-options", "SAMEORIGIN");
+    const csp = reply.getHeader("content-security-policy");
+    if (!csp) reply.header("content-security-policy", "frame-ancestors 'self'");
+    return payload;
+  });
   await app.register(websocket);
   app.get("/healthz", async () => ({ ok: true }));
   registerInstallers(app);

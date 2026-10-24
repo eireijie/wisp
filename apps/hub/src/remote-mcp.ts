@@ -118,6 +118,8 @@ interface Session {
   transport: StreamableHTTPServerTransport;
   server: McpServer;
   agentId: string;
+  /** the connection that opened it; another connection to the same agent can't use it */
+  grant: string;
   /** the latest access token the client used; the session's own calls into the API use it */
   auth: { token: string };
   lastSeen: number;
@@ -137,6 +139,8 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
   const pending = new Map<string, Pending>();
   const codes = new Map<string, Code>();
   const sessions = new Map<string, Session>();
+  /** The connection (grant) an access token belongs to, from its label. */
+  const grantOf = (token: string) => (db.prepare("SELECT label FROM tokens WHERE hash = ?").get(sha(token)) as { label: string } | undefined)?.label ?? "";
   const registrations = new Map<string, number[]>();
 
   const sweep = () => {
@@ -248,25 +252,19 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
   app.get("/oauth/authorize", async (req, reply) => {
     const q = req.query as Record<string, string | undefined>;
     const c = client(q.client_id);
-    if (!c) return problem(reply, "This app isn't registered with this Warren hub. Remove it and add it again.");
+    if (!c) return problem(reply, "This app isn't connected to this Wisp yet. Remove it in the app and add it again.");
     const registered = JSON.parse(c.redirect_uris_json) as string[];
     const redirectUri = q.redirect_uri ?? (registered.length === 1 ? registered[0] : undefined);
     if (!redirectUri || !redirectMatches(registered, redirectUri)) return problem(reply, "This app asked to return to an address it didn't register.");
-    const back = (error: string, description: string) => {
-      const u = new URL(redirectUri);
-      u.searchParams.set("error", error);
-      u.searchParams.set("error_description", description);
-      if (q.state) u.searchParams.set("state", q.state);
-      return reply.redirect(u.toString());
-    };
-    if (q.response_type !== "code") return back("unsupported_response_type", "only response_type=code");
-    if (!q.code_challenge || q.code_challenge_method !== "S256") return back("invalid_request", "PKCE with S256 is required");
+    // nobody has approved this app yet, so a bad request gets a page here instead of a trip to its address
+    if (q.response_type !== "code") return problem(reply, "This app asked to sign in in a way Wisp doesn't support.");
+    if (!q.code_challenge || q.code_challenge_method !== "S256") return problem(reply, "This app has to use PKCE (S256) to connect.");
     if (q.resource) {
-      let path = "";
+      let target: URL | null = null;
       try {
-        path = new URL(q.resource).pathname.replace(/\/+$/, "");
+        target = new URL(q.resource);
       } catch {}
-      if (path !== "/mcp") return back("invalid_target", "this hub's resource is /mcp");
+      if (!target || target.host !== new URL(publicOrigin(req)).host || target.pathname.replace(/\/+$/, "") !== "/mcp") return problem(reply, "This app asked for a different server than this Wisp.");
     }
     const requestId = random();
     pending.set(requestId, { clientId: c.id, clientName: c.name, redirectUri, state: q.state, challenge: q.code_challenge, scope: q.scope || "agent", expires: Date.now() + REQUEST_TTL_MS });
@@ -308,6 +306,8 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const owner = h.deviceOwnerOf(agent);
     if (owner && owner !== c.actor.id) return reply.code(403).send({ error: `@${agent.handle} runs directly on someone's device; only they can connect to it` });
+    // an app acts as the agent with all its access, which can be more than this member's own
+    if (!owner && c.viewer.role !== "owner") return reply.code(403).send({ error: `Only an owner of this Wisp can connect apps to @${agent.handle}.` });
     pending.delete((req.params as { id: string }).id);
     const code = random();
     codes.set(code, { clientId: p.clientId, redirectUri: p.redirectUri, challenge: p.challenge, agentId: agent.id, userId: c.actor.id, workspaceId: c.workspaceId, scope: p.scope, expires: Date.now() + CODE_TTL_MS });
@@ -345,9 +345,15 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     const basic = req.headers.authorization?.match(/^Basic\s+(\S+)$/i)?.[1];
     if (basic) {
       const [u, s] = Buffer.from(basic, "base64").toString("utf8").split(":");
-      clientId = decodeURIComponent(u ?? "");
-      secret = decodeURIComponent(s ?? "");
+      try {
+        clientId = decodeURIComponent(u ?? "");
+        secret = decodeURIComponent(s ?? "");
+      } catch {
+        return fail(401, "invalid_client", "the client credentials aren't encoded properly");
+      }
     }
+    for (const k of ["grant_type", "code", "code_verifier", "redirect_uri", "refresh_token", "client_id", "client_secret"])
+      if (b[k] !== undefined && typeof b[k] !== "string") return fail(400, "invalid_request", `${k} must be text`);
     const c = client(clientId);
     if (!c) return fail(401, "invalid_client", "unknown client");
     if (c.secret_hash && !(secret && safeEqual(sha(secret), c.secret_hash))) return fail(401, "invalid_client", "wrong client secret");
@@ -435,8 +441,9 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     const c = h.need(req, reply, { member: true });
     if (!c) return;
     const { grantId } = req.params as { grantId: string };
-    const g = db.prepare("SELECT id FROM oauth_grants WHERE id = ? AND workspace_id = ?").get(grantId, c.workspaceId);
+    const g = db.prepare("SELECT id, user_id FROM oauth_grants WHERE id = ? AND workspace_id = ?").get(grantId, c.workspaceId) as { id: string; user_id: string } | undefined;
     if (!g) return reply.code(404).send({ error: "not connected" });
+    if (c.viewer.role !== "owner" && g.user_id !== c.actor.id) return reply.code(403).send({ error: "Only an owner, or whoever connected this app, can disconnect it." });
     revokeGrant(grantId);
     hub.broadcast(c.workspaceId, { type: "agents_changed" });
     return { ok: true };
@@ -481,7 +488,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (typeof sid === "string") {
       const s = sessions.get(sid);
       if (!s) return rpcError(reply, 404, "Session not found");
-      if (s.agentId !== p.subjectId) return rpcError(reply, 403, "This session belongs to another agent");
+      if (s.agentId !== p.subjectId || s.grant !== grantOf(token)) return rpcError(reply, 403, "This session belongs to another connection");
       s.auth.token = token;
       s.lastSeen = Date.now();
       reply.hijack();
@@ -505,7 +512,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (sessionId) => {
-        sessions.set(sessionId, { transport, server, agentId: p.subjectId, auth, lastSeen: Date.now() });
+        sessions.set(sessionId, { transport, server, agentId: p.subjectId, grant: grantOf(token), auth, lastSeen: Date.now() });
       },
       onsessionclosed: (sessionId) => {
         sessions.delete(sessionId);

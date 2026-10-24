@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import os from "node:os";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { JoinRequestView } from "@warren/core";
@@ -24,6 +23,10 @@ interface Helpers {
   parse<S extends z.ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | null;
 }
 const sha = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+/** At most this many computers wait for approval at once. */
+export const MAX_PENDING = 5;
+/** HMAC over a joined computer's challenge, keyed by the stored hash of its credential. */
+export const relocationProof = (tokenHash: string, nonce: string) => crypto.createHmac("sha256", tokenHash).update(`wisp-relocate:${nonce}`).digest("hex");
 const secret = () => crypto.randomBytes(24).toString("base64url");
 const view = (r: JoinRequest): JoinRequestView => ({ id: r.id, name: r.name, kind: r.kind, platform: r.platform, code: r.code, createdAt: r.createdAt });
 const html = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -41,7 +44,13 @@ export function registerJoinApi(app: FastifyInstance, hub: Hub, { need, parse }:
     for (const [id, r] of requests) {
       if (now >= r.expiresAt) {
         if (r.status === "pending") { r.status = "expired"; done(r); }
-        if (r.credentials) { revokeToken(db, r.credentials.nodeToken); delete r.credentials; r.status = "expired"; }
+        // approved but never collected: the computer never got its credential, so its device goes too
+        if (r.credentials) {
+          revokeToken(db, r.credentials.nodeToken);
+          if (store.node(r.credentials.nodeId) && !store.computersOnNode(r.credentials.nodeId).length) store.deleteNode(r.credentials.nodeId);
+          delete r.credentials;
+          r.status = "expired";
+        }
       }
       if (now >= r.expiresAt + JOIN_TTL_MS) requests.delete(id);
     }
@@ -66,13 +75,15 @@ export function registerJoinApi(app: FastifyInstance, hub: Hub, { need, parse }:
     const recent = (attempts.get(ip) ?? []).filter((t) => Date.now() - t < 60_000);
     if (recent.length >= 10) return reply.code(429).header("retry-after", "60").send({ error: "Try again in a minute." });
     attempts.set(ip, [...recent, Date.now()]);
-    const body = parse(z.object({ name: z.string().trim().min(1).max(80).default(os.hostname()), kind: z.literal("computer"), platform: z.string().trim().min(1).max(80), invite: z.string().min(1).max(200).optional() }), req.body, reply);
+    const body = parse(z.object({ name: z.string().trim().min(1).max(80).default("A new computer"), kind: z.literal("computer"), platform: z.string().trim().min(1).max(80), invite: z.string().min(1).max(200).optional() }), req.body, reply);
     if (!body) return;
     const i = body.invite ? invite(body.invite) : undefined;
     const forwarded = ["forwarded", "x-forwarded-for", "x-real-ip", "cf-connecting-ip"].some((h) => req.headers[h] !== undefined);
     if ((body.invite && !i) || ((!isLocalJoinAddress(ip) || forwarded) && !i)) return reply.code(403).send({ error: "Ask for a new invite link from your Wisp." });
     const workspaceId = i?.workspaceId ?? store.firstWorkspace()?.id;
     if (!workspaceId) return reply.code(409).send({ error: "Finish getting Wisp ready on this computer first." });
+    if ([...requests.values()].filter((p) => p.workspaceId === workspaceId && p.status === "pending").length >= MAX_PENDING)
+      return reply.code(429).header("retry-after", "60").send({ error: "Your Wisp already has computers waiting to join. Approve or deny them first." });
     const hubUrl = await origin(req);
     if (!hubUrl) return reply.code(409).send({ error: "Wisp needs a reachable address first." });
     const key = secret(), requestId = crypto.randomBytes(12).toString("base64url");
@@ -125,6 +136,15 @@ export function registerJoinApi(app: FastifyInstance, hub: Hub, { need, parse }:
     db.prepare("INSERT INTO device_invites (hash, workspace_id, expires_at) VALUES (?, ?, ?)").run(sha(key), c.workspaceId, expiresAt);
     return { url: `${base}/join/${key}`, expiresAt: new Date(expiresAt).toISOString() };
   });
+  // A joined computer that lost its Wisp checks a Wisp it found on the Wi-Fi is the real one before it sends its credential:
+  // only the real Wisp holds the credential's hash, so only it can answer the challenge.
+  app.post("/api/join/prove", async (req, reply) => {
+    const body = parse(z.object({ nodeId: z.string().min(1).max(100), nonce: z.string().min(16).max(200) }), req.body, reply);
+    if (!body) return;
+    const rows = db.prepare("SELECT hash FROM tokens WHERE kind = 'node' AND subject_id = ?").all(body.nodeId) as { hash: string }[];
+    return { macs: rows.map((r) => relocationProof(r.hash, body.nonce)) };
+  });
+
   app.get("/join/:secret", async (req, reply) => {
     reply.header("cache-control", "no-store").header("referrer-policy", "no-referrer").header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
     const key = (req.params as { secret: string }).secret;

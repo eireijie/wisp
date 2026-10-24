@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import { createServer } from "node:http";
 import { once } from "node:events";
@@ -73,6 +74,21 @@ describe("join protocol", () => {
     try {
       await joinWisp({ dir: f.dir, name: "Laptop", address: `${origin}/join/hello` }, { ...f.deps, fetch, now: Date.now, sleep: async () => {} });
       expect(f.install).toHaveBeenCalledOnce();
+    } finally { server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve())); }
+  });
+  it("keeps the address that worked when the one Wisp suggests can't be reached, and says which folder to start", async () => {
+    const f = fixture();
+    const server = createServer(async (req, res) => {
+      res.setHeader("content-type", "application/json");
+      if (req.method === "POST") res.writeHead(201).end(JSON.stringify({ requestId: "r1", secret: "s", code: "482913", expiresAt: new Date(Date.now() + 600_000).toISOString() }));
+      else res.end(JSON.stringify({ status: "approved", nodeId: "n1", nodeToken: "k", hubUrl: "http://127.0.0.1:1", workspaceName: "Test Wisp" }));
+    });
+    server.listen(0, "127.0.0.1"); await once(server, "listening");
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    try {
+      await joinWisp({ dir: f.dir, name: "Laptop", address: origin, service: false }, { ...f.deps, fetch, now: Date.now, sleep: async () => {} });
+      expect(JSON.parse(fs.readFileSync(path.join(f.dir, "node.json"), "utf8")).hub).toBe(origin);
+      expect(f.say.mock.calls.flat().join("\n")).toContain(`wisp node start --dir ${JSON.stringify(f.dir)}`);
     } finally { server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
   it("uses an invite without browsing and can save without installing a service", async () => {
@@ -156,15 +172,32 @@ describe("mDNS discovery", () => {
 });
 
 describe("a Wisp that moved", () => {
+  const me = { hubId: "hub-1", nodeId: "node-1", token: "wr_node_secret" };
   const wisp = (id: string, url: string) => ({ id, name: "Yug's Wisp", host: "yug-mac", url });
-  it("finds the same Wisp at its new Wi-Fi address", async () => {
-    expect(await findMovedWisp("hub-1", "http://192.168.1.20:4747", async () => [wisp("other", "http://192.168.1.9:4747"), wisp("hub-1", "http://192.168.1.31:4747")])).toBe("http://192.168.1.31:4747");
+  const hash = crypto.createHash("sha256").update(me.token).digest("hex");
+  const prover = (key: string) => vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+    const { nonce } = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ macs: [crypto.createHmac("sha256", key).update(`wisp-relocate:${nonce}`).digest("hex")] }));
+  }) as unknown as typeof fetch;
+
+  it("moves only to the Wisp that proves it holds this computer's credential", async () => {
+    const found = async () => [wisp("other", "http://192.168.1.9:4747"), wisp("hub-1", "http://192.168.1.31:4747")];
+    const real = prover(hash);
+    expect(await findMovedWisp(me, "http://192.168.1.20:4747", found, real)).toBe("http://192.168.1.31:4747");
+    const body = JSON.parse(String((real as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body));
+    expect(JSON.stringify(body)).not.toContain(me.token);
+    expect(JSON.stringify(body)).not.toContain(hash);
+  });
+  it("refuses a look-alike that announces the same id but can't prove it", async () => {
+    const found = async () => [wisp("hub-1", "http://192.168.1.66:4998")];
+    expect(await findMovedWisp(me, "http://192.168.1.20:4747", found, prover("not-the-hash"))).toBeNull();
+    expect(await findMovedWisp(me, "http://192.168.1.20:4747", found, (async () => { throw new Error("refused"); }) as typeof fetch)).toBeNull();
   });
   it("leaves https addresses, unmoved Wisps and failed lookups alone", async () => {
     const discover = vi.fn(async () => [wisp("hub-1", "http://192.168.1.31:4747")]);
-    expect(await findMovedWisp("hub-1", "https://yug-mac.tail3c1.ts.net", discover)).toBeNull();
+    expect(await findMovedWisp(me, "https://yug-mac.tail3c1.ts.net", discover, prover(hash))).toBeNull();
     expect(discover).not.toHaveBeenCalled();
-    expect(await findMovedWisp("hub-1", "http://192.168.1.31:4747", discover)).toBeNull();
-    expect(await findMovedWisp("hub-1", "http://192.168.1.20:4747", async () => { throw new Error("no multicast"); })).toBeNull();
+    expect(await findMovedWisp(me, "http://192.168.1.31:4747", discover, prover(hash))).toBeNull();
+    expect(await findMovedWisp(me, "http://192.168.1.20:4747", async () => { throw new Error("no multicast"); }, prover(hash))).toBeNull();
   });
 });

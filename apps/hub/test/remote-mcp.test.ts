@@ -190,10 +190,18 @@ describe("remote MCP", () => {
     });
 
     it("requires PKCE", async () => {
+      // bad requests get a page on the hub, never a redirect to the app's (unapproved) address
       const res = await fetch(authorize({ code_challenge_method: "plain" }), { redirect: "manual" });
-      const back = new URL(res.headers.get("location")!);
-      expect(back.searchParams.get("error")).toBe("invalid_request");
-      expect(back.searchParams.get("state")).toBe("xyz");
+      expect(res.status).toBe(400);
+      expect(res.headers.get("location")).toBeNull();
+      expect((await fetch(authorize({ response_type: "token" }), { redirect: "manual" })).status).toBe(400);
+      // a token for some other server's resource isn't handed out here
+      expect((await fetch(authorize({ resource: "https://foreign.example/mcp" }), { redirect: "manual" })).status).toBe(400);
+      // malformed client input is a client error, not a crash
+      const basic = await fetch(url + "/oauth/token", { method: "POST", headers: { authorization: `Basic ${Buffer.from("%E0%A4%A:x").toString("base64")}`, "content-type": "application/x-www-form-urlencoded" }, body: "grant_type=authorization_code" });
+      expect(basic.status).toBe(401);
+      const arr = await fetch(url + "/oauth/token", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ client_id: clientId, grant_type: "authorization_code", code: "x", code_verifier: ["x"] }) });
+      expect(arr.status).toBe(400);
 
       const code = (await consent(authorize())).searchParams.get("code")!;
       const wrong = await token({ grant_type: "authorization_code", code, redirect_uri: REDIRECT, code_verifier: "not-the-verifier-not-the-verifier-not-the" });
@@ -234,6 +242,11 @@ describe("remote MCP", () => {
       const requestId = res.headers.get("location")!.split("/authorize/")[1];
       const anon = await fetch(`${url}/api/oauth/requests/${requestId}/approve`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId }) });
       expect(anon.status).toBe(401);
+      // a member can't hand an app an agent's access, which may be more than their own
+      const { code } = await owner.request<{ code: string }>("POST", "/api/invites", { role: "member" });
+      const member = (await (await fetch(`${url}/api/invites/accept`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, email: "m@example.com", name: "Member", password: "password123" }) })).json()).token;
+      const asMember = await fetch(`${url}/api/oauth/requests/${requestId}/approve`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${member}` }, body: JSON.stringify({ agentId }) });
+      expect(asMember.status).toBe(403);
     });
   });
 

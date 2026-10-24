@@ -103,15 +103,15 @@ if (values.help || !cmd) {
   // the installed service uses the default folder, so a device kept in another folder (--dir) is a different device
   const service = process.env.WARREN_SERVICE || dir !== path.join(os.homedir(), ".warren") ? null : serviceStatus("node", dir);
   if (service?.running && !isService(service)) {
-    console.error(`This device is already connected by its service (${service.name}), so there's nothing to start. To run it in this terminal instead: warren service uninstall node`);
+    console.error(`This computer is already connected to your Wisp in the background, so there's nothing to start. To run it in this terminal instead: wisp service uninstall node`);
     process.exit(1);
   }
   if (cfg.local && !cfg.token) cfg = await waitForLocalHub(cfg);
   const daemon = new NodeDaemon(cfg);
-  const hubId = cfg.hubId;
-  if (hubId)
+  const { hubId, nodeId } = cfg as NodeConfig & { nodeId?: string };
+  if (hubId && nodeId)
     daemon.relocate = async () => {
-      const url = await findMovedWisp(hubId, cfg.hub);
+      const url = await findMovedWisp({ hubId, nodeId, token: cfg.token }, cfg.hub);
       if (url) fs.writeFileSync(configFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(configFile, "utf8")), hub: url }, null, 2), { mode: 0o600 });
       return url;
     };
@@ -119,8 +119,8 @@ if (values.help || !cmd) {
   if (process.env.WARREN_EXIT_IF_REJECTED) daemon.onRejected = () => process.exit(REJECTED_CODE);
   daemon.start();
   watchForUpdates(async () => {
-    if (!kept) return console.log("[warren] Wisp was updated; restart `warren node start` to use the new version");
-    console.log("[warren] Wisp was updated; restarting once no agent is running");
+    if (!kept) return console.log("[wisp] Wisp was updated; restart `wisp node start` to use the new version");
+    console.log("[wisp] Wisp was updated; restarting once no agent is running");
     await daemon.idle();
     await daemon.stop();
     process.exit(RESTART_CODE);

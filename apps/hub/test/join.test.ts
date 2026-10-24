@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -59,13 +60,20 @@ describe("asking to join", () => {
     expect(resolveToken(built.hub.store.db, done.nodeToken)).toMatchObject({ kind: "node", subjectId: done.nodeId, workspaceId });
     expect(built.hub.store.node(done.nodeId)).toMatchObject({ name: device.name, ownerId: resolveToken(built.hub.store.db, owner)!.subjectId });
     expect((await poll(r)).json()).toEqual({ status: "approved" });
+    // the real Wisp can prove it holds this computer's credential, without anyone sending it
+    const nonce = "n".repeat(24);
+    const key = crypto.createHash("sha256").update(done.nodeToken).digest("hex");
+    const proof = (await call("POST", "/api/join/prove", { nodeId: done.nodeId, nonce }, "")).json();
+    expect(proof.macs).toContain(crypto.createHmac("sha256", key).update(`wisp-relocate:${nonce}`).digest("hex"));
+    expect(JSON.stringify(proof)).not.toContain(key);
+    expect((await call("POST", "/api/join/prove", { nodeId: "node_nope", nonce }, "")).json()).toEqual({ macs: [] });
   });
   it("rejects invalid inputs, defaults the device name, and denies without creating a computer", async () => {
     expect((await ask({ ...device, name: " ", kind: "phone" })).statusCode).toBe(400);
     expect((await ask({ ...device, platform: "" })).statusCode).toBe(400);
     const r = (await ask({ kind: "computer", platform: "darwin" })).json();
     const list = (await call("GET", "/api/join/requests", undefined, owner)).json();
-    expect(list.find((v: any) => v.id === r.requestId).name).toBe(os.hostname());
+    expect(list.find((v: any) => v.id === r.requestId).name).toBe("A new computer");
     const before = built.hub.store.nodes(workspaceId).length;
     expect((await call("POST", `/api/join/requests/${r.requestId}/deny`, undefined, owner)).json()).toEqual({ status: "denied" });
     expect((await poll(r)).json()).toEqual({ status: "denied" });
@@ -160,5 +168,31 @@ describe("invite links", () => {
     expect((await approve(r)).statusCode).toBe(404);
     expect((await approve(r, token)).statusCode).toBe(200);
     expect((await poll(r)).json().workspaceName).toBe("Invited Wisp");
+  });
+});
+
+describe("join limits", () => {
+  it("keeps at most a handful of computers waiting, and removes a device whose approval was never collected", async () => {
+    const { MAX_PENDING } = await import("../src/join.ts");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const made = [];
+      for (let i = 0; i < MAX_PENDING; i++) made.push((await ask({ ...device, name: `waiting-${i}` })).json());
+      expect((await ask({ ...device, name: "one-too-many" })).statusCode).toBe(429);
+      const r = made[0];
+      expect((await approve(r)).statusCode).toBe(200);
+      const nodeId = built.hub.store.nodes(workspaceId).find((n) => n.name === "waiting-0")!.id;
+      vi.setSystemTime(Date.now() + JOIN_TTL_MS + 1000);
+      expect((await poll(r)).json()).toEqual({ status: "expired" });
+      expect(built.hub.store.node(nodeId)).toBeFalsy();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("page protection", () => {
+  it("doesn't let other sites frame Wisp's pages", async () => {
+    const res = await built.app.inject({ method: "GET", url: "/api/join/requests" });
+    expect(res.headers["x-frame-options"]).toBe("SAMEORIGIN");
+    expect(String(res.headers["content-security-policy"])).toContain("frame-ancestors");
   });
 });
