@@ -213,7 +213,9 @@ async function connect(restartDevice = false) {
       return showSetup({ step: "create", problem: "The server didn't start.", log: hub.tail() });
     }
   }
-  openHub(LOCAL_HUB, openOnboarding ? "#/welcome/intro" : "");
+  // a new Wisp here: its setup link, so making the first account doesn't ask for the code
+  const setupCode = engine.localSetupCode(config.warrenDir);
+  openHub(LOCAL_HUB, setupCode ? `#/setup/${setupCode}` : openOnboarding ? "#/welcome/intro" : "");
   openOnboarding = false;
   startDeviceIfWanted();
 }

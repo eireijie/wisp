@@ -21,7 +21,7 @@ const makeInvite = async () => (await call("POST", "/api/join/invites", undefine
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-join-"));
-  built = await buildHub({ dataDir: dir });
+  built = await buildHub({ dataDir: dir, setupCode: false });
   const setup = (await call("POST", "/api/setup", { email: "owner@example.com", name: "Yug", password: "password123", workspaceName: "Yug's Wisp" })).json();
   owner = setup.token; workspaceId = setup.workspace.id;
 });
@@ -163,7 +163,7 @@ describe("invite links", () => {
     const link = (await call("POST", "/api/join/invites", undefined, token)).json();
     const invite = new URL(link.url).pathname.split("/")[2];
     await built.app.close();
-    built = await buildHub({ dataDir: dir });
+    built = await buildHub({ dataDir: dir, setupCode: false });
     const r = (await ask({ ...device, invite }, "9.9.9.9")).json();
     expect((await approve(r)).statusCode).toBe(404);
     expect((await approve(r, token)).statusCode).toBe(200);

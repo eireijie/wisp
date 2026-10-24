@@ -34,6 +34,8 @@ const CODE_TTL_MS = 5 * 60_000;
 const REQUEST_TTL_MS = 15 * 60_000;
 const SESSION_IDLE_MS = 60 * 60_000;
 const MAX_SESSIONS = 200;
+/** sign-in requests waiting for someone to allow them; anyone can start one, so they're capped */
+const MAX_PENDING = 500;
 const grantLabel = (grantId: string) => `oauth:${grantId}`;
 
 /** This hub as the caller reached it (behind a tunnel or Tailscale, its public https address). */
@@ -267,6 +269,11 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
       if (!target || target.host !== new URL(publicOrigin(req)).host || target.pathname.replace(/\/+$/, "") !== "/mcp") return problem(reply, "This app asked for a different server than this Wisp.");
     }
     const requestId = random();
+    if (pending.size >= MAX_PENDING) {
+      sweep();
+      // still full: drop the oldest waiting request (the app can just ask again)
+      while (pending.size >= MAX_PENDING) pending.delete(pending.keys().next().value!);
+    }
     pending.set(requestId, { clientId: c.id, clientName: c.name, redirectUri, state: q.state, challenge: q.code_challenge, scope: q.scope || "agent", expires: Date.now() + REQUEST_TTL_MS });
     return reply.redirect(`${publicOrigin(req)}/#/authorize/${requestId}`);
   });

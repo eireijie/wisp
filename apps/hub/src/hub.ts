@@ -145,7 +145,7 @@ export class Hub {
   /** Stop handling events and drop every connection (before the database closes). */
   shutdown() {
     this.closed = true;
-    this.reach.cloudflare.close();
+    void this.reach.cloudflare.close();
     this.computers.shutdown();
     this.routines.stop();
     this.background.stop();

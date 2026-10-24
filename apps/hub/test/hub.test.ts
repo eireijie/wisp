@@ -109,7 +109,7 @@ let node: FakeNode;
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-hub-"));
-  const built = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
   const { app } = built;
   hub = built.hub;
   await app.listen({ port: 0, host: "127.0.0.1" });

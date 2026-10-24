@@ -6,19 +6,26 @@ import { Button, Field, GhostMark, Input } from "../components/ui.tsx";
 
 /** An invite link: #/join/<code>. */
 const inviteCode = () => location.hash.match(/^#\/join\/([\w-]+)/)?.[1] ?? null;
+/** The link the desktop app and installer open on a new Wisp: #/setup/<setup code>. */
+const linkedSetupCode = () => location.hash.match(/^#\/setup\/([\w-]+)/)?.[1] ?? "";
 
 export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) {
   const { resolvedMode, toggleMode } = useAppearance();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
-  const [form, setForm] = useState({ email: "", password: "", name: "", workspaceName: "" });
+  const [needsCode, setNeedsCode] = useState(false);
+  const [linkedCode] = useState(linkedSetupCode);
+  const [form, setForm] = useState({ email: "", password: "", name: "", workspaceName: "", setupCode: linkedCode });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState(inviteCode);
   const [invite, setInvite] = useState<{ workspace: string; role: string } | null>(null);
 
   useEffect(() => {
-    api<{ needsSetup: boolean }>("GET", "/api/setup")
-      .then((r) => setNeedsSetup(r.needsSetup))
+    api<{ needsSetup: boolean; needsCode?: boolean }>("GET", "/api/setup")
+      .then((r) => {
+        setNeedsSetup(r.needsSetup);
+        setNeedsCode(!!r.needsCode);
+      })
       .catch(() => setError("Can't reach your Wisp."));
   }, []);
   useEffect(() => {
@@ -35,7 +42,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
     setError(null);
     try {
       const r = needsSetup
-        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName.trim() || `${form.name.trim()}'s Wisp`, features: "simple" })
+        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName.trim() || `${form.name.trim()}'s Wisp`, features: "simple", setupCode: form.setupCode.trim() || undefined })
         : joining
           ? await api<{ token: string }>("POST", "/api/invites/accept", { code, name: form.name, email: form.email, password: form.password })
           : await api<{ token: string }>("POST", "/api/auth/login", { email: form.email, password: form.password });
@@ -89,6 +96,11 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
                 <Field label="Your Wisp">
                   <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder={form.name.trim() ? `${form.name.trim()}'s Wisp` : "Your Wisp"} />
                 </Field>
+                {needsCode && !linkedCode && (
+                  <Field label="Setup code" hint="On the computer Wisp runs on, run wisp setup-code.">
+                    <Input value={form.setupCode} onChange={set("setupCode")} placeholder="abcd-efgh-jkmn" autoComplete="off" autoCapitalize="none" spellCheck={false} required />
+                  </Field>
+                )}
               </>
             )}
             <Field label="Email">

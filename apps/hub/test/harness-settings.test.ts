@@ -72,7 +72,7 @@ beforeAll(async () => {
   await fs.mkdir(path.join(home, ".hermes", "skills", "notes"), { recursive: true });
   await fs.writeFile(path.join(home, ".hermes", "config.yaml"), "model:\n  default: claude-sonnet-5.5\n  provider: openrouter\n");
   await fs.writeFile(path.join(home, ".hermes", "skills", "notes", "SKILL.md"), "---\nname: notes\ndescription: Keep notes\n---\nWrite them down.\n");
-  const { app } = await buildHub({ dataDir: path.join(dir, "hub") });
+  const { app } = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();

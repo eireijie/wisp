@@ -12,7 +12,8 @@ const token = "a-valid-cloudflare-credential";
 function fake() {
   const children: any[] = [];
   const spawnChild = vi.fn(() => {
-    const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn() });
+    const child: any = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter() });
+    child.kill = vi.fn(() => setImmediate(() => child.emit("exit", null, "SIGTERM")));
     children.push(child); return child;
   });
   return { children, spawnChild, options: { spawn: spawnChild as unknown as typeof spawn } };
@@ -72,7 +73,7 @@ describe("Cloudflare reach", () => {
     cf.start(token); f.children[2].emit("exit", 1); expect(cf.status().state).toBe("error");
   });
   it("exposes the connected Cloudflare origin through the shared reach API, with owner controls", async () => {
-    const dir = temp(), built = await buildHub({ dataDir: dir });
+    const dir = temp(), built = await buildHub({ dataDir: dir, setupCode: false });
     const f = fake();
     built.hub.reach = new Reach(4747, async () => ({ code: 1, stdout: "", stderr: "" }), (p) => p.endsWith("cloudflared"), f.options);
     built.hub.reach.cloudflare.configure(dir);

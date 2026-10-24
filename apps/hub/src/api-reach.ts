@@ -68,7 +68,7 @@ export function registerReachApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (!body) return;
     try {
       if (body.action === "start") hub.reach.cloudflare.start(body.token, body.url);
-      else hub.reach.cloudflare.stop();
+      else await hub.reach.cloudflare.stop();
     } catch (e) { return reply.code(409).send({ error: (e as Error).message }); }
     return view(c, true);
   });

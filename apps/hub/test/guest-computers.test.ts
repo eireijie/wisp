@@ -26,7 +26,7 @@ async function api(method: "GET" | "POST" | "PUT", url: string, token = owner, p
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-guest-computers-"));
-  ({ app, hub } = await buildHub({ dataDir: dir }));
+  ({ app, hub } = await buildHub({ dataDir: dir, setupCode: false }));
   const setup = await api("POST", "/api/setup", "", { email: "owner@example.com", name: "Owner", password: "password123", features: "everything" });
   owner = setup.json().token;
   users.owner = (await api("GET", "/api/me")).json().user.id;
