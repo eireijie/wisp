@@ -27,6 +27,7 @@
   },
   "description": "An open-source workspace where people and AI agents from any harness work together, with a shared Obsidian-style memory vault.",
   "bin": {
+    "wisp": "bin/warren.mjs",
     "warren": "bin/warren.mjs",
     "warren-mcp": "bin/warren-mcp.mjs",
     "warren-hub": "bin/warren-hub.mjs"
