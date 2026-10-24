@@ -13,7 +13,7 @@ const json = (v: unknown) => text(JSON.stringify(v, null, 2));
  * The Warren MCP server: gives any MCP-capable harness (Claude Code, Codex,
  * Kimi, Hermes, OpenClaw, ...) chat, task, memory-vault and file tools.
  */
-export async function createWarrenMcp(client: WarrenClient) {
+export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?: boolean } = {}) {
   const me = await client.me();
   if (me.kind !== "agent" || !me.agent) throw new Error("warren-mcp needs an agent token (or a node token with WARREN_AGENT)");
   const self = me.agent;
@@ -510,29 +510,32 @@ export async function createWarrenMcp(client: WarrenClient) {
     }),
   );
 
-  server.registerTool(
-    "file_upload",
-    { description: "Upload a local file to Warren so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
-    safe(async ({ local_path, channel }) => {
-      const data = await fs.readFile(local_path);
-      const ch = channel ? await resolveChannel(channel) : undefined;
-      const f = await client.uploadFile(path.basename(local_path), data, guessMime(local_path), ch?.id);
-      return text(`Uploaded ${f.name} as ${f.id} (${f.size} bytes).`);
-    }),
-  );
+  // the remote endpoint runs on the hub, whose files aren't the caller's
+  if (opts.localFiles !== false) {
+    server.registerTool(
+      "file_upload",
+      { description: "Upload a local file to Warren so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
+      safe(async ({ local_path, channel }) => {
+        const data = await fs.readFile(local_path);
+        const ch = channel ? await resolveChannel(channel) : undefined;
+        const f = await client.uploadFile(path.basename(local_path), data, guessMime(local_path), ch?.id);
+        return text(`Uploaded ${f.name} as ${f.id} (${f.size} bytes).`);
+      }),
+    );
 
-  server.registerTool(
-    "file_download",
-    { description: "Download a Warren file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
-    safe(async ({ file_id, dest_dir }) => {
-      const f = await client.downloadFile(file_id);
-      const dir = dest_dir ?? process.cwd();
-      await fs.mkdir(dir, { recursive: true });
-      const dest = path.join(dir, path.basename(f.name));
-      await fs.writeFile(dest, f.data);
-      return text(`Saved to ${dest}.`);
-    }),
-  );
+    server.registerTool(
+      "file_download",
+      { description: "Download a Warren file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
+      safe(async ({ file_id, dest_dir }) => {
+        const f = await client.downloadFile(file_id);
+        const dir = dest_dir ?? process.cwd();
+        await fs.mkdir(dir, { recursive: true });
+        const dest = path.join(dir, path.basename(f.name));
+        await fs.writeFile(dest, f.data);
+        return text(`Saved to ${dest}.`);
+      }),
+    );
+  }
 
   return server;
 }

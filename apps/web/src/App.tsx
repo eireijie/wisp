@@ -28,6 +28,7 @@ import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { setupProgress, useDismissed, useOnboarding } from "./onboarding.ts";
 import { useFeatures } from "./features.ts";
 import { BuddyView } from "./views/BuddyView.tsx";
+import { AuthorizeView } from "./views/AuthorizeView.tsx";
 import { useDesktopAgents } from "./desktop.ts";
 import { useHubUpdated } from "./hubUpdate.ts";
 
@@ -47,6 +48,7 @@ export function App() {
         }}
       />
     );
+  if (route.view === "authorize") return <AuthorizeView requestId={route.requestId} />;
   return <Workspace />;
 }
 

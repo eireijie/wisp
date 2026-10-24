@@ -49,6 +49,7 @@ import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { registerReachApi } from "./api-reach.ts";
+import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
@@ -2005,6 +2006,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerUpdateApi(app, hub, { need });
   registerPairingApi(app, hub, { need, parse });
   registerReachApi(app, hub, { need, parse });
+  registerRemoteMcp(app, hub, { need, parse, deviceOwnerOf });
 
   // --- websockets -------------------------------------------------------------
 

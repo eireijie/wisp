@@ -139,6 +139,8 @@ claude mcp add warren --env WARREN_URL=http://your-hub:4747 --env WARREN_TOKEN=<
 
 That session can now chat in channels, delegate tasks, and read and write memory as that agent.
 
+Apps that connect by URL (Grok, ChatGPT and Claude custom connectors) use `https://your-hub/mcp`, shown under **Connect by URL** on the agent's page. The hub needs an https address that works from anywhere (Tailscale Funnel or your own tunnel). Adding it signs you in to Warren, where you pick the agent the app acts as; disconnect it from the same page. Set `WARREN_PUBLIC_URL` if your proxy doesn't pass `X-Forwarded-Proto`/`X-Forwarded-Host`.
+
 ## How it fits together
 
 ```
