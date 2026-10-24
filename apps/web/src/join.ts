@@ -29,6 +29,7 @@ export function unavailable(error: unknown, feature: string): string {
 export interface McpClient {
   id: string;
   name: string;
+  agentName?: string | null;
   createdAt?: string;
 }
 export async function loadMcpClients(): Promise<McpClient[] | null> {

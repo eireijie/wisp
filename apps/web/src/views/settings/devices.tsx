@@ -200,7 +200,10 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
                 <div className="divide-y divide-line">
                   {clients.map((client) => (
                     <div key={client.id} className="flex items-center justify-between gap-3 py-3">
-                      <span className="text-sm">{client.name}</span>
+                      <span className="text-sm min-w-0">
+                        <span className="font-medium">{client.name}</span>
+                        {client.agentName && <span className="text-muted"> acts as {client.agentName}</span>}
+                      </span>
                       <Button disabled={busy} onClick={() => void disconnect(client)}>
                         Disconnect
                       </Button>

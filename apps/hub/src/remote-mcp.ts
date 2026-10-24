@@ -421,6 +421,27 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     return { ok: true };
   });
 
+  /** Every app connected to any agent in this workspace, for Settings → Devices. */
+  app.get("/api/mcp/clients", async (req, reply) => {
+    const c = h.need(req, reply, { user: true });
+    if (!c) return;
+    const rows = db
+      .prepare("SELECT g.id, g.client_name, g.agent_id, g.created_at, MAX(COALESCE(g.last_used, ''), COALESCE((SELECT MAX(last_used) FROM tokens t WHERE t.label = 'oauth:' || g.id), '')) AS last_used FROM oauth_grants g WHERE g.workspace_id = ? ORDER BY g.created_at DESC")
+      .all(c.workspaceId) as { id: string; client_name: string; agent_id: string; created_at: string; last_used: string | null }[];
+    return rows.map((r) => ({ id: r.id, name: r.client_name, agentId: r.agent_id, agentName: store.agent(r.agent_id)?.name ?? null, createdAt: r.created_at, lastUsed: r.last_used || null }));
+  });
+
+  app.delete("/api/mcp/clients/:grantId", async (req, reply) => {
+    const c = h.need(req, reply, { member: true });
+    if (!c) return;
+    const { grantId } = req.params as { grantId: string };
+    const g = db.prepare("SELECT id FROM oauth_grants WHERE id = ? AND workspace_id = ?").get(grantId, c.workspaceId);
+    if (!g) return reply.code(404).send({ error: "not connected" });
+    revokeGrant(grantId);
+    hub.broadcast(c.workspaceId, { type: "agents_changed" });
+    return { ok: true };
+  });
+
   // --- /mcp ----------------------------------------------------------------------------------
 
   /** The session's tools call the hub's own API in-process, as the agent, with the client's latest token. */

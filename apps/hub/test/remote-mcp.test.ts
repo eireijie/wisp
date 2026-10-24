@@ -145,7 +145,11 @@ describe("remote MCP", () => {
     const apps = await owner.request<{ id: string; name: string; approvedBy: string }[]>("GET", `/api/agents/${agentId}/apps`);
     expect(apps).toHaveLength(1);
     expect(apps[0]).toMatchObject({ name: "Inspector", approvedBy: "Me" });
-    await owner.request("DELETE", `/api/agents/${agentId}/apps/${apps[0].id}`);
+    // Settings → Devices lists every connected app in the workspace, with the agent it acts as
+    const all = await owner.request<{ id: string; name: string; agentId: string; agentName: string | null }[]>("GET", "/api/mcp/clients");
+    expect(all).toEqual([expect.objectContaining({ id: apps[0].id, name: "Inspector", agentId })]);
+    expect(all[0].agentName).toBeTruthy();
+    await owner.request("DELETE", `/api/mcp/clients/${apps[0].id}`);
     expect(await owner.request("GET", `/api/agents/${agentId}/apps`)).toEqual([]);
     const after = await fetch(url + "/mcp", { method: "POST", headers: { authorization: `Bearer ${provider.saved!.access_token}`, "content-type": "application/json" }, body: "{}" });
     expect(after.status).toBe(401);
