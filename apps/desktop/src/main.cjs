@@ -8,6 +8,8 @@ const path = require("node:path");
 const engine = require("./engine.cjs");
 const cloud = require("./cloud.cjs");
 const screenCode = require("./screen-code.cjs");
+const { reachableAddresses } = require("./addresses.cjs");
+const { Discovery, JoinClient } = require("./join.cjs");
 const { onOrigin, isPage, mainFrameUrl } = require("./trust.cjs");
 
 const PORT = Number(process.env.PORT || 4747);
@@ -15,6 +17,16 @@ const LOCAL_HUB = `http://localhost:${PORT}`;
 const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
 const SETUP_PAGE = path.join(__dirname, "setup.html");
+const joinClient = new JoinClient({ fetchImpl: (...args) => fetch(...args), name: () => deviceName(), platform: process.platform });
+const discovery = new Discovery(() => {
+  // Built apps carry production dependencies in Resources/warren, outside app.asar.
+  const bundled = engine.runtime(config.warrenDir);
+  return bundled.bundled
+    ? require("node:module").createRequire(path.join(bundled.warrenDir, "package.json"))("bonjour-service")
+    : require("bonjour-service");
+});
+let joining = null;
+let openOnboarding = false;
 
 /** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string, dismissed?: boolean }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyOverFullscreen?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
@@ -83,10 +95,10 @@ function createWindow() {
     y: b?.y,
     minWidth: 880, // narrower and the web app switches to its phone layout (767px)
     minHeight: 520,
-    title: "Warren",
+    title: "Wisp",
     icon: ICON,
     show: false,
-    backgroundColor: "#f7f7f7",
+    backgroundColor: "#ffffff",
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: true },
   });
   win.once("ready-to-show", () => win?.show());
@@ -134,6 +146,8 @@ function showWindow() {
 }
 
 function showSetup(state = {}) {
+  discovery.cancel();
+  joinClient.cancel();
   resumeOnShow = false;
   pendingCloudOpen = false;
   if (!win) createWindow();
@@ -178,12 +192,12 @@ async function waitFor(url, ms) {
 }
 
 /** Find or start the hub for the saved choice, then show it. */
-async function connect() {
+async function connect(restartDevice = false) {
   if (config.mode === "remote" && config.hubUrl) {
     hubBy = "remote";
     if (!(await engine.hubUp(config.hubUrl))) return showSetup({ step: "unreachable", hubUrl: config.hubUrl });
     openHub(config.hubUrl);
-    return startDeviceIfWanted();
+    return restartDevice ? startDevice({ confirmed: true }) : startDeviceIfWanted();
   }
   if (config.mode !== "local") return showSetup();
 
@@ -199,7 +213,8 @@ async function connect() {
       return showSetup({ step: "create", problem: "The server didn't start.", log: hub.tail() });
     }
   }
-  openHub(LOCAL_HUB);
+  openHub(LOCAL_HUB, openOnboarding ? "#/welcome/intro" : "");
+  openOnboarding = false;
   startDeviceIfWanted();
 }
 
@@ -483,12 +498,12 @@ const hostOf = (u) => {
 /** Where other computers join a server running here: copy it from the menu to send to them. */
 function serverAddressItems() {
   if (config.mode !== "local" || !hubOrigin) return [];
-  const addrs = engine.lanAddresses(PORT);
+  const addrs = reachableAddresses(PORT);
   if (!addrs.length) return [];
   return [
     {
-      label: "Copy Server Address",
-      submenu: addrs.map((a) => ({ label: a.replace(/^http:\/\//, ""), click: () => (clipboard.writeText(a), notify("Server address copied", `Others join with ${a} in their Warren app.`)) })),
+      label: "Copy Wisp Address",
+      submenu: addrs.map((a) => ({ label: a.replace(/^http:\/\//, ""), click: () => (clipboard.writeText(a), notify("Wisp address copied", "Share this address with your other computers.")) })),
     },
   ];
 }
@@ -593,20 +608,34 @@ setup("setup:create", async ({ device: asDevice = true } = {}) => {
   const found = needs();
   if (found.problem) return { ok: false, error: found.problem };
   switchTo({ mode: "local", hubUrl: undefined, cloud: undefined, device: !!asDevice });
+  openOnboarding = true;
   connect();
   return { ok: true };
 });
 
-/** Test a server address without joining it. */
-setup("setup:test", (url) => engine.testHub(url));
-
-/** Join: test the address once more, then open it; this computer becomes a device when you sign in. */
-setup("setup:join", async (url, { device: asDevice = true } = {}) => {
-  const test = await engine.testHub(url);
-  if (!test.ok) return test;
-  switchTo({ mode: "remote", hubUrl: test.url, cloud: sameOrigin(test.url, config.hubUrl ?? "") ? config.cloud : undefined, device: !!asDevice });
-  connect();
-  return test;
+setup("setup:discover", () => discovery.browse());
+setup("setup:cancel-join", () => { discovery.cancel(); joinClient.cancel(); return { ok: true }; });
+setup("setup:request-join", async (input) => {
+  discovery.cancel();
+  try { return await joinClient.request(input); }
+  catch (err) { return { ok: false, error: err.message }; }
+});
+setup("setup:poll-join", () => {
+  // Approval contains a one-use credential; finish saving it even if a renderer reloads.
+  if (joining) return joining;
+  joining = (async () => {
+    try {
+      const result = await joinClient.poll();
+      if (result.status !== "approved") return { ok: true, status: result.status };
+      switchTo({ mode: "remote", hubUrl: result.hubUrl, cloud: sameOrigin(result.hubUrl, config.hubUrl ?? "") ? config.cloud : undefined, device: true });
+      engine.writeNodeConfig({ hub: result.hubUrl, token: result.nodeToken, nodeId: result.nodeId, name: deviceName() });
+      joinClient.cancel();
+      await connect(true);
+      return { ok: true, status: "approved" };
+    } catch (err) { return { ok: false, error: "Couldn't check approval; trying again…" }; }
+    finally { joining = null; }
+  })();
+  return joining;
 });
 
 /**
@@ -723,6 +752,8 @@ app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", (event) => {
   if (updater.installOnQuit(event)) return;
   quitting = true;
+  discovery.cancel();
+  joinClient.cancel();
   clearInterval(deviceStatusTimer);
   updater.stop();
   buddy.destroy();
