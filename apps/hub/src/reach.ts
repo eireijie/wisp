@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
+import { reachableAddresses, isTailscaleAddress } from "./reachable-addresses.ts";
 import path from "node:path";
 
 /**
@@ -208,16 +209,5 @@ export class Reach {
 
 /** This computer's home-network addresses for the hub (not loopback, not Tailscale). */
 export function lanAddresses(port: number, interfaces = os.networkInterfaces()): string[] {
-  const out: string[] = [];
-  for (const [name, list] of Object.entries(interfaces)) {
-    // virtual networks for VMs and containers aren't the Wi-Fi other devices are on
-    if (/^(bridge|vmnet|docker|veth|br-|virbr|vEthernet|utun|lo)/i.test(name)) continue;
-    for (const a of list ?? []) {
-      if (a.family !== "IPv4" || a.internal || a.address.startsWith("169.254.")) continue;
-      const [x, y] = a.address.split(".").map(Number);
-      if (x === 100 && y >= 64 && y <= 127) continue;
-      out.push(`http://${a.address}:${port}`);
-    }
-  }
-  return out;
+  return reachableAddresses(null, port, interfaces).filter((url) => !isTailscaleAddress(new URL(url).hostname));
 }
