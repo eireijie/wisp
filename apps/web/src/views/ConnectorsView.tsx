@@ -13,7 +13,7 @@ const KIND_LABEL: Record<ConnectorKind, string> = { "mcp-stdio": "MCP · runs on
 function worksWith(kind: ConnectorKind): string {
   if (kind === "mcp-http") return "Works with Claude Code and Codex. Not wired yet for ACP agents (Gemini, OpenCode, Hermes…).";
   if (kind === "mcp-stdio") return "Works with Claude Code, Codex, and ACP agents (Gemini, OpenCode, Hermes, Cursor…).";
-  return "Set in the environment of every agent Warren runs: Claude Code, Codex and ACP agents.";
+  return "Set in the environment of every agent Wisp runs: Claude Code, Codex and ACP agents.";
 }
 
 export interface ConnectSummary {
@@ -47,10 +47,10 @@ export function connectSummary(src: { builtIn: CatalogConnector } | { entry: Mar
       can: c.kind === "secret" ? `Your helpers get the key you enter, so they can use ${c.name} with it.` : `Your helpers will be able to use ${c.name} through this connection: read and act on what this app allows.`,
       runBy:
         c.kind === "secret"
-          ? "Warren keeps the key and gives it only to the helpers you pick."
+          ? "Wisp keeps the key and gives it only to the helpers you pick."
           : c.kind === "mcp-http"
-            ? `On Warren's list of well-known apps. It connects to ${host ?? "the app's own address"}, not to a server run by Warren.`
-            : "On Warren's list of well-known apps. It runs as a program on the helper's own computer.",
+            ? `On Wisp's list of well-known apps. It connects to ${host ?? "the app's own address"}, not to a server run by Wisp.`
+            : "On Wisp's list of well-known apps. It runs as a program on the helper's own computer.",
       caution: null,
     };
   }
@@ -60,12 +60,12 @@ export function connectSummary(src: { builtIn: CatalogConnector } | { entry: Mar
   const who = entry.domain ? `${entry.publisher} (${entry.domain})` : entry.publisher;
   const can = install.fields.length ? `Your helpers get the key you enter, so they can use ${name} with it.` : `Your helpers will be able to use ${name} through this connection: read and act on what this app allows.`;
   if (trust.kind === "unverified") {
-    return { can, runBy: `Run by ${entry.publisher}, not by the app's maker or Warren.`, caution: "Nobody has confirmed who they are. Only connect if you trust them." };
+    return { can, runBy: `Run by ${entry.publisher}, not by the app's maker or Wisp.`, caution: "Nobody has confirmed who they are. Only connect if you trust them." };
   }
   if (trust.kind === "maker") {
-    return { can, runBy: `Made and run by ${trust.text.replace(/^Made by /, "")} (${entry.domain ?? entry.publisher}), not by Warren.`, caution: null };
+    return { can, runBy: `Made and run by ${trust.text.replace(/^Made by /, "")} (${entry.domain ?? entry.publisher}), not by Wisp.`, caution: null };
   }
-  return { can, runBy: `Run by ${who}, not by Warren. The registry confirmed who they are; that doesn't mean ${name}'s own maker endorses it.`, caution: null };
+  return { can, runBy: `Run by ${who}, not by Wisp. The registry confirmed who they are; that doesn't mean ${name}'s own maker endorses it.`, caution: null };
 }
 
 function BeforeYouConnect({ s }: { s: ConnectSummary }) {
@@ -439,7 +439,7 @@ export function MarketAdd({ entry, agents, taken, onClose, onSaved }: { entry: M
           <div className="text-xs">Published by {entry.publisher}</div>
           <TrustBadge t={trust} />
           <div className="mt-1">{entry.description}</div>
-          {install.kind === "mcp-http" && !install.fields.length && <div className="mt-1 text-xs">If it asks you to sign in, Warren takes you to its sign-in page next. Agents never see your password.</div>}
+          {install.kind === "mcp-http" && !install.fields.length && <div className="mt-1 text-xs">If it asks you to sign in, Wisp takes you to its sign-in page next. Agents never see your password.</div>}
           {install.needs && <div className="mt-1 text-xs">Needs: {install.needs}.</div>}
           {trust.kind === "unverified" && <div className="mt-1 text-xs">{trust.explanation}</div>}
         </div>

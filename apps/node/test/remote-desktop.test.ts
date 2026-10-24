@@ -8,7 +8,7 @@ import { vncAuthResponse } from "@wisp/core/src/vnc.ts";
 import { signedInVnc, tightVncMsiArgs, x11vncArgs, newRemoteDesktop } from "../src/computers/remote-desktop.ts";
 import { MAX_TRIES, ScreenLock, codeProblem, hashCode } from "../src/screen-lock.ts";
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "warren-lock-"));
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "wisp-lock-"));
 
 describe("the screen's code", () => {
   it("takes a 6-digit PIN or a password of 8+ characters", () => {

@@ -2,7 +2,7 @@
 // computer as a device; the app's own setup page gets its setup calls.
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("warrenDesktop", {
+contextBridge.exposeInMainWorld("wispDesktop", {
   setBadge: (n) => ipcRenderer.send("badge", n),
   info: () => ipcRenderer.invoke("desktop:info"),
   connectDevice: (claim) => ipcRenderer.invoke("desktop:connect-device", claim),
@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld("warrenDesktop", {
 });
 
 if (location.protocol === "file:")
-  contextBridge.exposeInMainWorld("warrenSetup", {
+  contextBridge.exposeInMainWorld("wispSetup", {
     check: () => ipcRenderer.invoke("setup:check"),
     create: (opts) => ipcRenderer.invoke("setup:create", opts),
     test: (url) => ipcRenderer.invoke("setup:test", url),
@@ -41,6 +41,6 @@ if (location.protocol === "file:")
   });
 
 if (location.protocol === "file:")
-  contextBridge.exposeInMainWorld("warrenScreenCode", {
+  contextBridge.exposeInMainWorld("wispScreenCode", {
     save: (input) => ipcRenderer.invoke("screen-code:save", input),
   });

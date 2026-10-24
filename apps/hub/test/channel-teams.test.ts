@@ -30,7 +30,7 @@ const runsFor = (messageId: string) => hub.store.db.prepare("SELECT agent_id AS 
 const post = async (channelId: string, body: string, threadId?: string) => (await api("POST", `/api/channels/${channelId}/messages`, { body, ...(threadId ? { threadId } : {}) })).data;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-channel-teams-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-channel-teams-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });

@@ -5,7 +5,7 @@ import { issueToken } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
 /**
- * The hub's own computer as a device, without tokens: `warren service install node --local` (the
+ * The hub's own computer as a device, without tokens: `wisp service install node --local` (the
  * installer runs it) leaves a request next to the hub's data, and once the organization has an
  * owner the hub registers this computer as their device and writes back where and how to connect.
  * The device service, waiting on the same computer, picks that up and connects.

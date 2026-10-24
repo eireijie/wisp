@@ -57,8 +57,8 @@ export class OrgoClient {
     return data as T;
   }
 
-  /** Warren keeps its computers in one Orgo workspace, made on first use. */
-  async workspaceId(name = "Warren"): Promise<string> {
+  /** Wisp keeps its computers in one Orgo workspace, made on first use. */
+  async workspaceId(name = "Wisp"): Promise<string> {
     const list = await this.request<{ workspaces?: { id: string; name: string }[] }>("GET", "/workspaces");
     const found = list.workspaces?.find((w) => w.name === name);
     if (found) return found.id;
@@ -101,7 +101,7 @@ export class OrgoClient {
     return { url: `${this.ws}/desktops/${instanceId}/ws/websockify?token=${encodeURIComponent(password)}`, password };
   }
 
-  /** Do one Warren computer action on an Orgo computer. */
+  /** Do one Wisp computer action on an Orgo computer. */
   async act(cfg: OrgoConfig & { resolution?: string }, a: ComputerAction): Promise<unknown> {
     const id = cfg.computerId;
     const screen = parseResolution(cfg.resolution);
@@ -177,7 +177,7 @@ export class OrgoClient {
       }
       case "file_write": {
         if (a.data.length > Math.ceil(ORGO_MAX_TRANSFER / 3) * 4) throw new OrgoError(`files bigger than ${ORGO_MAX_TRANSFER / 1024 / 1024} MB can't be sent to cloud computers`, 413);
-        const tmp = `/tmp/warren-upload-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+        const tmp = `/tmp/wisp-upload-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
         try {
           for (let i = 0; i < a.data.length; i += ORGO_CHUNK) await this.sh(id, 'printf %s "$2" >> "$1"', [tmp, a.data.slice(i, i + ORGO_CHUNK)]);
           const r = await this.sh(id, `base64 -d "$3" | sh -c '${POSIX_FILES.write.replace(/'/g, `'\''`)}' sh "$1" "$2"`, [a.folder, a.name, tmp]);

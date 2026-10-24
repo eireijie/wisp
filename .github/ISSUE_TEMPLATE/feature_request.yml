@@ -1,5 +1,5 @@
 name: Idea or feature request
-description: Something Warren should do
+description: Something Wisp should do
 labels: [idea]
 body:
   - type: textarea

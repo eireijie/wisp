@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { WarrenClient } from "@wisp/sdk";
+import { WispClient } from "@wisp/sdk";
 import { SETTINGS_HARNESSES, type Screenshot } from "@wisp/core";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -10,12 +10,12 @@ const text = (t: string): { content: Content[] } => ({ content: [{ type: "text" 
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
 
 /**
- * The Warren MCP server: gives any MCP-capable harness (Claude Code, Codex,
+ * The Wisp MCP server: gives any MCP-capable harness (Claude Code, Codex,
  * Kimi, Hermes, OpenClaw, ...) chat, task, memory-vault and file tools.
  */
-export async function createWarrenMcp(client: WarrenClient) {
+export async function createWispMcp(client: WispClient) {
   const me = await client.me();
-  if (me.kind !== "agent" || !me.agent) throw new Error("warren-mcp needs an agent token (or a node token with WARREN_AGENT)");
+  if (me.kind !== "agent" || !me.agent) throw new Error("wisp-mcp needs an agent token (or a node token with WISP_AGENT)");
   const self = me.agent;
   const myDir = `agents/${self.id}`;
 
@@ -42,9 +42,9 @@ export async function createWarrenMcp(client: WarrenClient) {
     .then((r) => r.text, () => "")
     .then((t) => (t.length > 8000 ? t.slice(0, 8000) + "\n…(more with memory_context)" : t));
   const server = new McpServer(
-    { name: "warren", version: "0.0.1" },
+    { name: "wisp", version: "0.0.1" },
     {
-      instructions: `You are @${self.handle} in the Warren workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
+      instructions: `You are @${self.handle} in the Wisp workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
     },
   );
 
@@ -53,7 +53,7 @@ export async function createWarrenMcp(client: WarrenClient) {
   server.registerTool(
     "chat_send",
     {
-      description: "Post a message to a Warren channel (by name, e.g. 'general'). @mention another agent's handle to wake it up.",
+      description: "Post a message to a Wisp channel (by name, e.g. 'general'). @mention another agent's handle to wake it up.",
       inputSchema: { channel: z.string(), message: z.string(), thread_id: z.string().optional(), file_ids: z.array(z.string()).optional() },
     },
     safe(async ({ channel, message, thread_id, file_ids }) => {
@@ -318,7 +318,7 @@ export async function createWarrenMcp(client: WarrenClient) {
     "settings_read",
     {
       description:
-        "See how Warren is set up for the person you work for: your background work for them (on or off, how often, quiet hours, what to keep an eye on), which mods are on, and how much of their daily allowance background work used today. Read it before settings_change.",
+        "See how Wisp is set up for the person you work for: your background work for them (on or off, how often, quiet hours, what to keep an eye on), which mods are on, and how much of their daily allowance background work used today. Read it before settings_change.",
       inputSchema: {},
     },
     safe(async () => {
@@ -341,7 +341,7 @@ export async function createWarrenMcp(client: WarrenClient) {
     "settings_change",
     {
       description:
-        "Change how Warren works for the person you work for, when they ask in plain words (\"check less often\", \"don't message me after 10pm\", \"turn on voice calls\"). Background fields change your own background work for them; mods switch optional parts of Warren on or off (owners only). Only change what they asked for. They see what changed in your DM with an Undo button, so just confirm in a few words.",
+        "Change how Wisp works for the person you work for, when they ask in plain words (\"check less often\", \"don't message me after 10pm\", \"turn on voice calls\"). Background fields change your own background work for them; mods switch optional parts of Wisp on or off (owners only). Only change what they asked for. They see what changed in your DM with an Undo button, so just confirm in a few words.",
       inputSchema: {
         enabled: z.boolean().optional().describe("background work on or off"),
         every_minutes: z.number().int().min(10).max(1440).optional().describe("how often to check, 10–1440 minutes"),
@@ -408,7 +408,7 @@ export async function createWarrenMcp(client: WarrenClient) {
     "approval_request",
     {
       description:
-        "Ask a person's OK before doing something sensitive or hard to undo (sending an email or message outside Warren, buying something, deleting things, posting publicly). Posts an Approve / Deny card where you're working. End your turn after calling it: you'll be woken with the answer.",
+        "Ask a person's OK before doing something sensitive or hard to undo (sending an email or message outside Wisp, buying something, deleting things, posting publicly). Posts an Approve / Deny card where you're working. End your turn after calling it: you'll be woken with the answer.",
       inputSchema: { summary: z.string().describe("what you want to do, in one line"), details: z.string().optional().describe("the draft, the list, or why") },
     },
     safe(async ({ summary, details }) => {
@@ -501,7 +501,7 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "file_view",
-    { description: "Look at a Warren file by id: images are shown to you (e.g. screenshots from a recording), text files are returned as text.", inputSchema: { file_id: z.string() } },
+    { description: "Look at a Wisp file by id: images are shown to you (e.g. screenshots from a recording), text files are returned as text.", inputSchema: { file_id: z.string() } },
     safe(async ({ file_id }) => {
       const f = await client.downloadFile(file_id);
       if (/^image\/(png|jpeg|gif|webp)$/.test(f.mime)) return { content: [{ type: "image" as const, data: Buffer.from(f.data).toString("base64"), mimeType: f.mime }, { type: "text" as const, text: f.name }] };
@@ -512,7 +512,7 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "file_upload",
-    { description: "Upload a local file to Warren so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
+    { description: "Upload a local file to Wisp so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
     safe(async ({ local_path, channel }) => {
       const data = await fs.readFile(local_path);
       const ch = channel ? await resolveChannel(channel) : undefined;
@@ -523,7 +523,7 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "file_download",
-    { description: "Download a Warren file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
+    { description: "Download a Wisp file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
     safe(async ({ file_id, dest_dir }) => {
       const f = await client.downloadFile(file_id);
       const dir = dest_dir ?? process.cwd();
@@ -546,7 +546,7 @@ type Safe = <A>(fn: (a: A) => Promise<{ content: Content[] }>) => (a: A) => Prom
  * Every tool acts on the agent's own computer unless `computer` names a device it is borrowing
  * (see device_request), so borrowing never changes what the tools do by default.
  */
-function registerComputerTools(server: McpServer, client: WarrenClient, own: { name: string; kind: string } | null, safe: Safe) {
+function registerComputerTools(server: McpServer, client: WispClient, own: { name: string; kind: string } | null, safe: Safe) {
   // each screen has its own size, so remember it per target
   const spaces = new Map<string, { width: number; height: number }>();
   const look = async (device: string | undefined, note: string, settleMs = 600): Promise<{ content: Content[] }> => {
@@ -667,7 +667,7 @@ function registerComputerTools(server: McpServer, client: WarrenClient, own: { n
  * Borrowing a person's device mid-task: an agent works on its own computer and asks for a device's
  * screen only when the task needs something that lives there (an app that only exists on the shop PC).
  */
-function registerDeviceTools(server: McpServer, client: WarrenClient, safe: Safe) {
+function registerDeviceTools(server: McpServer, client: WispClient, safe: Safe) {
   server.registerTool(
     "device_list",
     { description: "Devices belonging to people in the workspace whose screen you could ask to borrow with device_request, and whether each can be asked right now (a device whose screen is off has to be turned on by its owner at the device).", inputSchema: {} },

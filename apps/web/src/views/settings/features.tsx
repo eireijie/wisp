@@ -17,7 +17,7 @@ const ICONS: Record<FeatureKey, ReactNode> = {
 };
 
 /**
- * Mods: the optional parts of Warren, switched on or off for the whole organization. Owners
+ * Mods: the optional parts of Wisp, switched on or off for the whole organization. Owners
  * change them (or ask an agent to); everyone else can see them.
  */
 export function ModsPage() {

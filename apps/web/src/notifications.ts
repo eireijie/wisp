@@ -7,7 +7,7 @@ import type { useStore } from "./store.ts";
 
 /**
  * Desktop notifications, set up per device (Settings → Notifications): the browser asks once for
- * permission, and Warren then tells you about the things you choose, by default only while you're
+ * permission, and Wisp then tells you about the things you choose, by default only while you're
  * looking at something else.
  */
 export interface NotifyPrefs {
@@ -23,11 +23,11 @@ export interface NotifyPrefs {
   /** a task you handed off is done or failed */
   tasks: boolean;
   sound: boolean;
-  /** only when Warren isn't the window you're in */
+  /** only when Wisp isn't the window you're in */
   onlyAway: boolean;
 }
 
-const KEY = "warren.notify";
+const KEY = "wisp.notify";
 const DEFAULTS: NotifyPrefs = { enabled: false, dms: true, replies: true, approvals: true, help: true, tasks: true, sound: false, onlyAway: true };
 const listeners = new Set<() => void>();
 

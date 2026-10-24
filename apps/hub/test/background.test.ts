@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { HarnessAdapter, RunInput } from "@wisp/adapters";
 import type { AgentEvent } from "@wisp/core";
-import { WarrenClient } from "@wisp/sdk";
+import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 import { afterQuietHours, inQuietHours, parseWhen, startOfDay } from "../src/background.ts";
@@ -15,7 +15,7 @@ import { Store } from "../src/store.ts";
 let dir: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
-let owner: WarrenClient;
+let owner: WispClient;
 let hub: Hub;
 let agentId: string;
 let me: string;
@@ -23,7 +23,7 @@ const calls: RunInput[] = [];
 const pushed: { endpoint: string; payload: any }[] = [];
 /** what the fake harness does on a background check */
 let reportUsage: Extract<AgentEvent, { type: "usage" }> | null = null;
-let onCheck: (agent: WarrenClient, input: RunInput) => Promise<string> = async () => "nothing new";
+let onCheck: (agent: WispClient, input: RunInput) => Promise<string> = async () => "nothing new";
 
 const fake: HarnessAdapter = {
   id: "custom",
@@ -32,7 +32,7 @@ const fake: HarnessAdapter = {
   async run(input, onEvent) {
     calls.push(input);
     onEvent({ type: "session", id: `sess-${calls.length}` });
-    const agent = new WarrenClient({ url: input.mcp!.env.WARREN_URL, token: input.mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: input.mcp!.env.WISP_URL, token: input.mcp!.env.WISP_TOKEN });
     const finalText = input.prompt.includes("## Working in the background") ? await onCheck(agent, input) : "hi";
     if (reportUsage && input.prompt.includes("## Working in the background")) onEvent(reportUsage);
     return { finalText, sessionId: `sess-${calls.length}` };
@@ -53,7 +53,7 @@ const idle = () => waitFor(() => !hub.store.db.prepare("SELECT 1 FROM runs WHERE
 const dm = () => hub.store.dmChannel(hub.store.agent(agentId)!.workspaceId, me, agentId);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-background-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-background-"));
   const built = await buildHub({ dataDir: path.join(dir, "hub") });
   hub = built.hub;
   hub.push.send = async (sub, payload) => void pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(payload as string) });
@@ -61,7 +61,7 @@ beforeAll(async () => {
   const url = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
-  owner = new WarrenClient({ url, token: setup.token });
+  owner = new WispClient({ url, token: setup.token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   me = (hub.store.db.prepare("SELECT id FROM users").get() as { id: string }).id;
   agentId = (await owner.request("POST", "/api/agents", { handle: "dot", name: "Dot", harness: "custom", nodeId: node.id })).id;
@@ -148,7 +148,7 @@ describe("background work", () => {
 
   it("wakes for a follow-up the agent set, with its note, once", async () => {
     onCheck = async () => "ok";
-    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: calls[0].mcp!.env.WISP_URL, token: calls[0].mcp!.env.WISP_TOKEN });
     const f = await agent.setFollowup({ inMinutes: 90, note: "remind them about the essay" });
     expect(hub.store.pendingFollowups(agentId).map((x) => x.id)).toContain(f.id);
     const n = calls.length;
@@ -213,7 +213,7 @@ describe("web push preferences", () => {
     await expect(owner.request("POST", "/api/push/subscribe", { endpoint, keys, prefs: { dms: "no" } })).rejects.toThrow();
     await owner.request("POST", "/api/push/subscribe", { endpoint, keys, prefs });
     expect(hub.store.pushSubscriptions(me).find((s) => s.endpoint === endpoint)?.prefs).toEqual(prefs);
-    const note = { title: "Warren", body: "Hello" };
+    const note = { title: "Wisp", body: "Hello" };
     const sentTo = () => pushed.splice(0).map((p) => p.endpoint).sort();
     pushed.length = 0;
     try {
@@ -374,7 +374,7 @@ describe("what a check costs", () => {
 
     // a follow-up the agent set is not a regular check, so it runs with the limit reached
     hub.store.setBackground(agentId, me, { dailyCap: hub.store.backgroundRuns(agentId, me, startOfDay(new Date(), "UTC").toISOString()).length });
-    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: calls[0].mcp!.env.WISP_URL, token: calls[0].mcp!.env.WISP_TOKEN });
     await agent.setFollowup({ inMinutes: 20, note: "tell Sam the essay is due" });
     const m = calls.length;
     hub.background.tick(new Date(Date.now() + 21 * 60_000));
@@ -421,7 +421,7 @@ describe("one allowance for all background work", () => {
     const used = (await owner.request("GET", "/api/background/allowance")).todayTokens;
     // used is 90% of this amount
     await owner.request("PUT", "/api/background/allowance", { dailyTokens: Math.max(10_000, Math.round(used / 0.9)) });
-    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: calls[0].mcp!.env.WISP_URL, token: calls[0].mcp!.env.WISP_TOKEN });
     hub.store.setBackground(agentId, me, { enabled: true });
     const r = await agent.nextCheck(30, "calm");
     expect(r.minutes).toBe(60);
@@ -430,10 +430,10 @@ describe("one allowance for all background work", () => {
   });
 });
 
-describe("agents changing Warren for their person", () => {
+describe("agents changing Wisp for their person", () => {
   it("changes its own background work, shows what changed in the DM, and the person can undo it", async () => {
     hub.store.setBackground(agentId, me, { enabled: false, everyMinutes: 30, quietStart: "23:00", quietEnd: "07:00" });
-    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: calls[0].mcp!.env.WISP_URL, token: calls[0].mcp!.env.WISP_TOKEN });
     expect((await agent.mySettings()).background).toMatchObject({ enabled: false, everyMinutes: 30 });
     const r = await agent.changeSettings({ background: { everyMinutes: 120, quietStart: "22:00" } });
     expect(r.changed).toEqual(["Checks: every 30 min → every 2 hours", "Quiet hours: 10pm – 7am"]);
@@ -461,7 +461,7 @@ describe("agents changing Warren for their person", () => {
   it("keeps background work off when changing it for someone who never turned it on", async () => {
     const saved = hub.store.background(agentId, me)!;
     hub.store.db.prepare("DELETE FROM background WHERE agent_id = ? AND user_id = ?").run(agentId, me);
-    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: calls[0].mcp!.env.WISP_URL, token: calls[0].mcp!.env.WISP_TOKEN });
     const r = await agent.changeSettings({ background: { everyMinutes: 120 } });
     expect(hub.store.background(agentId, me)).toMatchObject({ enabled: false, everyMinutes: 120 });
     expect(r.changed).toEqual(["Checks: every 2 hours"]);
@@ -469,7 +469,7 @@ describe("agents changing Warren for their person", () => {
   });
 
   it("turns mods on and off for an owner, and back", async () => {
-    const agent = new WarrenClient({ url: calls[0].mcp!.env.WARREN_URL, token: calls[0].mcp!.env.WARREN_TOKEN });
+    const agent = new WispClient({ url: calls[0].mcp!.env.WISP_URL, token: calls[0].mcp!.env.WISP_TOKEN });
     const s = await agent.mySettings();
     expect(s.canChangeMods).toBe(true);
     expect(s.mods.find((m) => m.key === "voice")?.on).toBe(true);

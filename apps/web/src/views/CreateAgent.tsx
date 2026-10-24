@@ -104,7 +104,7 @@ export function ComputerPicker({
             <Lock size={15} />,
             simple ? "My own screen" : "Your own screen",
             node.capabilities?.screen.off
-              ? `Off. Turn it on at ${node.name}: warren node screen on`
+              ? `Off. Turn it on at ${node.name}: wisp node screen on`
               : node.capabilities?.screen.ok === false
                 ? node.capabilities.screen.detail
                 : simple
@@ -509,7 +509,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
                   <div className="space-y-2.5">
                     <span className="block text-sm font-semibold">Harness it runs on</span>
                     <HarnessGrid list={harnesses} harness={harness} onPick={setHarness} label="Agent harness" />
-                    <p className="text-xs text-muted">The invitation gives its session Warren's chat, tasks, memory and file tools. You can give it a computer on its Computer tab afterward.</p>
+                    <p className="text-xs text-muted">The invitation gives its session Wisp's chat, tasks, memory and file tools. You can give it a computer on its Computer tab afterward.</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
@@ -822,7 +822,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
               <Ghost look={look} size={72} trackPointer />
               <div>
                 <h1 tabIndex={-1} className="text-2xl font-semibold">
-                  Invite {cleanName} to Warren
+                  Invite {cleanName} to Wisp
                 </h1>
                 <p className="text-sm text-muted mt-1">Add this connection to its existing session.</p>
               </div>
@@ -1014,7 +1014,7 @@ export function ImportAgent({
       <div className="rounded-xl border border-line p-5 space-y-4 text-sm">
         <p className="font-medium">No saved setups found yet</p>
         <p className="text-muted">
-          Warren checks known configuration folders on your connected devices.
+          Wisp checks known configuration folders on your connected devices.
           Custom locations and other profiles may not appear; it doesn't search
           for running processes.
         </p>
@@ -1225,7 +1225,7 @@ export function ImportAgent({
         >
           <Field
             label="Handle"
-            hint={`Its soul, instructions and notes are copied into Warren's memory. ${pick.d.path}`}
+            hint={`Its soul, instructions and notes are copied into Wisp's memory. ${pick.d.path}`}
           >
             <Input
               value={handle}

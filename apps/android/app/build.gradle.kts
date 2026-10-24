@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "ai.warren.android"
+    namespace = "ai.wisp.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "ai.warren.android"
+        applicationId = "ai.wisp.android"
         minSdk = 26
         targetSdk = 35
         // release builds get these from the tag (see .github/workflows/desktop-release.yml)
@@ -34,6 +34,6 @@ android {
 
 dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
-    // Google's ready-made QR scanner (through Play services): no camera permission for Warren itself
+    // Google's ready-made QR scanner (through Play services): no camera permission for Wisp itself
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 }

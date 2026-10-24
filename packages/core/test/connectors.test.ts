@@ -21,7 +21,7 @@ describe("harnessSupportsConnectors", () => {
   });
   it("explains why in plain words", () => {
     expect(connectorUnsupportedReason("gemini")).toBe("Gemini CLI can't use connected apps yet");
-    expect(connectorUnsupportedReason("grok")).toBe("Grok connects through warren-mcp, so it can't use connected apps here");
+    expect(connectorUnsupportedReason("grok")).toBe("Grok connects through wisp-mcp, so it can't use connected apps here");
     expect(connectorUnsupportedReason("codex")).toBeNull();
     expect(connectorUnsupportedReason("gemini", "secret")).toBeNull();
     expect(CONNECTOR_HELP).toMatch(/Claude Code or Codex/);

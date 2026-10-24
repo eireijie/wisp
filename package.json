@@ -10,10 +10,10 @@
   ],
   "scripts": {
     "dev": "npm run dev:hub & npm run dev:web",
-    "dev:hub": "WARREN_DATA_DIR=./data tsx watch apps/hub/src/main.ts",
+    "dev:hub": "WISP_DATA_DIR=./data tsx watch apps/hub/src/main.ts",
     "dev:web": "npm run dev -w @wisp/web",
     "build": "npm run build -w @wisp/web",
-    "start": "node bin/warren-hub.mjs",
+    "start": "node bin/wisp-hub.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
     "desktop": "npm start -w @wisp/desktop",
@@ -27,9 +27,9 @@
   },
   "description": "An open-source workspace where people and AI agents from any harness work together, with a shared Obsidian-style memory vault.",
   "bin": {
-    "warren": "bin/warren.mjs",
-    "warren-mcp": "bin/warren-mcp.mjs",
-    "warren-hub": "bin/warren-hub.mjs"
+    "wisp": "bin/wisp.mjs",
+    "wisp-mcp": "bin/wisp-mcp.mjs",
+    "wisp-hub": "bin/wisp-hub.mjs"
   },
   "dependencies": {
     "tsx": "^4.19.0"

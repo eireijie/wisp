@@ -1,22 +1,22 @@
 {
   "name": "@wisp/desktop",
-  "productName": "Warren",
+  "productName": "Wisp",
   "version": "0.0.2",
-  "description": "Warren for Mac, Windows and Linux: the workspace in its own window, a hub on this computer, and this computer as a device for agents.",
+  "description": "Wisp for Mac, Windows and Linux: the workspace in its own window, a hub on this computer, and this computer as a device for agents.",
   "license": "Apache-2.0",
   "private": true,
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
-    "bundle": "node scripts/bundle-warren.mjs",
+    "bundle": "node scripts/bundle-wisp.mjs",
     "dist": "npm run bundle && electron-builder --dir",
     "dist:mac": "npm run bundle && electron-builder --mac",
     "dist:win": "npm run bundle && electron-builder --win",
     "dist:linux": "npm run bundle && electron-builder --linux"
   },
   "build": {
-    "appId": "ai.warren.desktop",
-    "productName": "Warren",
+    "appId": "ai.wisp.desktop",
+    "productName": "Wisp",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -35,36 +35,52 @@
         "zip"
       ],
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Warren uses your microphone when you call an agent."
+        "NSMicrophoneUsageDescription": "Wisp uses your microphone when you call an agent."
       },
-      "artifactName": "Warren-mac-${arch}.${ext}"
+      "artifactName": "Wisp-mac-${arch}.${ext}"
     },
     "win": {
       "icon": "build/icon.png",
       "target": [
         "nsis"
       ],
-      "artifactName": "Warren-win-${arch}.${ext}"
+      "artifactName": "Wisp-win-${arch}.${ext}"
     },
     "linux": {
       "icon": "build/icon.png",
-      "executableName": "warren",
-      "maintainer": "Warren contributors <warren@localhost>",
+      "executableName": "wisp",
+      "maintainer": "Wisp contributors <wisp@localhost>",
       "target": [
         "AppImage",
         "deb"
       ],
       "category": "Office",
-      "artifactName": "Warren-linux-${arch}.${ext}"
+      "artifactName": "Wisp-linux-${arch}.${ext}"
     },
     "afterPack": "scripts/after-pack.cjs",
     "afterSign": "scripts/after-sign.cjs",
-    "publish": null
+    "publish": null,
+    "protocols": [
+      {
+        "name": "Wisp pairing",
+        "schemes": [
+          "wisp",
+          "warren"
+        ]
+      }
+    ],
+    "executableName": "wisp",
+    "appImage": {
+      "artifactName": "Wisp-linux-x86_64.${ext}"
+    },
+    "deb": {
+      "artifactName": "Wisp-linux-amd64.${ext}"
+    }
   },
   "devDependencies": {
     "electron": "44.7.2",
     "electron-builder": "^26.15.3"
   },
-  "author": "Warren contributors",
-  "homepage": "https://github.com/eireijie/warren"
+  "author": "Wisp contributors",
+  "homepage": "https://github.com/eireijie/wisp"
 }

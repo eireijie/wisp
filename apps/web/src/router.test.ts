@@ -13,7 +13,7 @@ let router: typeof import("./router.ts");
 beforeEach(async () => {
   vi.resetModules();
   changed.mockClear();
-  const url = new URL("https://warren.test/?keep=1#/vault/note.md");
+  const url = new URL("https://wisp.test/?keep=1#/vault/note.md");
   vi.stubGlobal("location", url);
   vi.stubGlobal("window", new EventTarget());
   vi.stubGlobal("history", {

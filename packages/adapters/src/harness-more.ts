@@ -5,7 +5,7 @@ import type { HarnessSettingItem, HarnessSettingsChange } from "@wisp/core";
 import { asObject, editJson, editYaml, isPlainJson, manifestDirs, mcpItem, objAt, parseJsonc, parseToml, readJson, sameKey, skillItems, str, strings, toggleInList, tomlSet, type ConfigSummary } from "./harness-formats.ts";
 
 /**
- * How Warren reads and changes each harness's own config. Hermes, Codex and Claude Code live in
+ * How Wisp reads and changes each harness's own config. Hermes, Codex and Claude Code live in
  * harness-config.ts; the rest are here, from each one's documentation:
  * Gemini CLI  ~/.gemini/settings.json        Qwen Code  ~/.qwen/settings.json
  * OpenCode    ~/.config/opencode/opencode.json(c)   Goose  ~/.config/goose/config.yaml
@@ -31,7 +31,7 @@ export interface HarnessSpec {
   accounts: boolean;
   /** what the variable is set to for a folder (Gemini's points at the folder above .gemini) */
   envValue?: (dir: string) => string;
-  /** an account's folder inside the place Warren keeps it */
+  /** an account's folder inside the place Wisp keeps it */
   accountDir?: (root: string) => string;
   /** a missing config file is fine: changing makes it */
   missingOk?: boolean;
@@ -259,7 +259,7 @@ export const MORE_HARNESSES: Record<string, HarnessSpec> = {
     skillRoots: (d) => [path.join(d.dir, "skills"), path.join(d.home, ".agents", "skills")],
   },
 
-  // its logins live in its state database, one per state folder, which Warren doesn't move yet
+  // its logins live in its state database, one per state folder, which Wisp doesn't move yet
   openclaw: {
     env: "OPENCLAW_STATE_DIR",
     dir: (home) => path.join(home, ".openclaw"),

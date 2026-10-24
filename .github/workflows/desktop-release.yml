@@ -1,5 +1,5 @@
 name: App release
-# Push a tag like desktop-v0.2.0 to build Warren for Mac (Apple silicon and Intel), Windows,
+# Push a tag like desktop-v0.2.0 to build Wisp for Mac (Apple silicon and Intel), Windows,
 # Linux and Android and attach the builds to a GitHub release, marked latest. Installed apps find it there and update
 # themselves (apps/desktop/src/updater.cjs). The file names never change between versions, so
 # The repository's releases/latest/download/<name> URL always links the newest one.
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Warren desktop ${GITHUB_REF_NAME#desktop-v}" --generate-notes --verify-tag --latest
+      - run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Wisp desktop ${GITHUB_REF_NAME#desktop-v}" --generate-notes --verify-tag --latest
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -29,7 +29,7 @@ jobs:
           - os: macos-14
             dist: --mac --arm64
           # Intel Macs, built on Apple silicon (GitHub's Intel runners never started): the bundled
-          # native modules are fetched for x64 (WARREN_BUNDLE_ARCH) and electron-builder packs an x64 app
+          # native modules are fetched for x64 (WISP_BUNDLE_ARCH) and electron-builder packs an x64 app
           - os: macos-14
             dist: --mac --x64
             arch: x64
@@ -50,10 +50,10 @@ jobs:
         shell: bash
       - run: npm run bundle -w @wisp/desktop
         env:
-          WARREN_BUNDLE_ARCH: ${{ matrix.arch }}
+          WISP_BUNDLE_ARCH: ${{ matrix.arch }}
       - run: npx electron-builder ${{ matrix.dist }} --publish never
         working-directory: apps/desktop
-      - run: gh release upload "$GITHUB_REF_NAME" apps/desktop/dist/Warren-* --clobber
+      - run: gh release upload "$GITHUB_REF_NAME" apps/desktop/dist/Wisp-* --clobber
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,8 +72,8 @@ jobs:
           V="${GITHUB_REF_NAME#desktop-v}"
           IFS=. read -r MA MI PA <<< "$V"
           ./gradlew assembleRelease -PversionName="$V" -PversionCode=$((MA * 10000 + MI * 100 + PA))
-          cp app/build/outputs/apk/release/app-release.apk Warren-android.apk
+          cp app/build/outputs/apk/release/app-release.apk Wisp-android.apk
         working-directory: apps/android
-      - run: gh release upload "$GITHUB_REF_NAME" apps/android/Warren-android.apk --clobber
+      - run: gh release upload "$GITHUB_REF_NAME" apps/android/Wisp-android.apk --clobber
         env:
           GH_TOKEN: ${{ github.token }}

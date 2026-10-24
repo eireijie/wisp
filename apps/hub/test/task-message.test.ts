@@ -22,7 +22,7 @@ async function api<T = any>(method: string, url: string, body?: unknown, token =
 }
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-taskmsg-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-taskmsg-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });

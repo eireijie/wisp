@@ -17,7 +17,7 @@ describe("which pages the app trusts", () => {
   });
 
   it("trusts only the setup page itself among file: pages", () => {
-    const file = "/Applications/Warren.app/Contents/Resources/app.asar/src/setup.html";
+    const file = "/Applications/Wisp.app/Contents/Resources/app.asar/src/setup.html";
     const page = pathToFileURL(file).href;
     expect(trust.isPage(`${page}?state=%7B%7D`, file)).toBe(true);
     expect(trust.isPage(`${page}#x`, file)).toBe(true);

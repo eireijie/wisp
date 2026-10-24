@@ -13,7 +13,7 @@ function fixture() {
   const html = readFileSync(new URL("../src/setup.html", import.meta.url), "utf8");
   const code = html.match(/<script>([\s\S]*?)<\/script>/)![1];
   runInNewContext(code, {
-    window: { warrenSetup: setup }, location: { search: `?state=${encodeURIComponent(JSON.stringify({ step: "cloud", server }))}` },
+    window: { wispSetup: setup }, location: { search: `?state=${encodeURIComponent(JSON.stringify({ step: "cloud", server }))}` },
     URLSearchParams, URL, Intl, Option: class {},
     document: { getElementById: element, querySelectorAll: () => [], querySelector: () => null, createElement: () => ({ append: vi.fn() }) },
   });

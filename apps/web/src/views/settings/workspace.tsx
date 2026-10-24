@@ -50,7 +50,7 @@ export function GeneralPage() {
         </form>
         {error && <p className="mt-2 text-sm text-bad">{error}</p>}
       </Section>
-      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
+      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through wisp-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
         <CopyBlock text={shareOrigin(access)} />
       </Section>
     </>
@@ -306,15 +306,15 @@ interface AgentPolicy {
 }
 
 const ASK: [string, string, string][] = [
-  ["send", "Sending email or messages outside Warren", "Email, texts, Slack, DMs on other sites"],
+  ["send", "Sending email or messages outside Wisp", "Email, texts, Slack, DMs on other sites"],
   ["spend", "Buying or paying for anything", "Orders, subscriptions, upgrades, ads"],
   ["delete", "Deleting files, data or accounts", "Anything that can't be undone"],
   ["post", "Posting publicly", "Social media, reviews, comments, forums"],
   ["signup", "Signing up for new accounts or services", "New logins, free trials, newsletters"],
-  ["share", "Sharing files or private information outside Warren", "Uploads, links, forms with personal details"],
+  ["share", "Sharing files or private information outside Wisp", "Uploads, links, forms with personal details"],
 ];
 
-/** Who takes tasks nobody assigned: pick one, or leave it to Warren (a channel team's lead, else the first agent). */
+/** Who takes tasks nobody assigned: pick one, or leave it to Wisp (a channel team's lead, else the first agent). */
 function WorkspaceLead({ isOwner }: { isOwner: boolean }) {
   const agents = useStore((s) => s.agents);
   const lead = useStore((s) => s.lead);
@@ -436,7 +436,7 @@ export function AgentsPolicyPage() {
       </Section>
       <Section title="Loop protection" description="Agents can @mention each other. These stop two agents from pinging each other forever.">
         <Card>
-          <Row label="Hand-offs in a row" hint="How many times agents can wake each other from one message before Warren stops it.">
+          <Row label="Hand-offs in a row" hint="How many times agents can wake each other from one message before Wisp stops it.">
             <Select label="Hand-offs in a row" value={String(p.maxHops)} disabled={!isOwner} onChange={(v) => save({ maxHops: Number(v) })}>
               {[2, 3, 4, 6, 8, 10, 15, 20, 30].map((n) => (
                 <option key={n} value={n}>
@@ -736,7 +736,7 @@ export function ComputersPage() {
                 {s?.orgo.configured ? "Replace" : "Connect"}
               </Button>
               {s?.orgo.configured && (
-                <Button type="button" variant="danger" disabled={busy} onClick={() => confirm("Disconnect Orgo? Cloud computers stop working in Warren until you add a key again.") && put({ orgoApiKey: null })}>
+                <Button type="button" variant="danger" disabled={busy} onClick={() => confirm("Disconnect Orgo? Cloud computers stop working in Wisp until you add a key again.") && put({ orgoApiKey: null })}>
                   Disconnect
                 </Button>
               )}
@@ -772,7 +772,7 @@ export function ConnectionsPage() {
   }, []);
   const agent = (id: string) => agents.find((a) => a.id === id);
   const groups: [string, string, Connection[]][] = [
-    ["Connection tokens", "Made on an agent's Connect tab, for a harness that runs elsewhere (warren-mcp). Disconnect any you don't use.", (list ?? []).filter((c) => c.kind === "connection")],
+    ["Connection tokens", "Made on an agent's Connect tab, for a harness that runs elsewhere (wisp-mcp). Disconnect any you don't use.", (list ?? []).filter((c) => c.kind === "connection")],
     ["Harnesses on devices", "Each agent's harness gets a token for that agent only when its device runs it. Disconnecting one makes the device get a fresh one next run.", (list ?? []).filter((c) => c.kind === "harness")],
   ];
   return (
@@ -869,18 +869,18 @@ export function DataPage() {
   return (
     <>
       <PageHeader title="Data">Back up your organization, or take a copy of your notes and conversations.</PageHeader>
-      <Section title="Back up everything" description="One folder on the computer that runs the Warren hub holds everything for this organization. Copy that folder and you have a full backup.">
+      <Section title="Back up everything" description="One folder on the computer that runs the Wisp hub holds everything for this organization. Copy that folder and you have a full backup.">
         {isOwner && info ? (
           <>
             <Card>
-              <Row label="Where the folder is" hint={`It is on ${where}: the computer that runs the Warren hub.`} />
+              <Row label="Where the folder is" hint={`It is on ${where}: the computer that runs the Wisp hub.`} />
               <div className="px-4 pb-3.5">
                 <CopyBlock text={info.dataDir} />
               </div>
               <Row label="What is inside" hint={`${info.notes} notes, ${info.messages} messages, ${info.files} files and ${info.agents} agents.`} />
             </Card>
             <ul className="mt-3 list-disc pl-5 text-sm text-muted space-y-1">
-              <li><code className="text-xs">warren.db</code>: people, channels, messages, agents, tasks, routines and settings.</li>
+              <li><code className="text-xs">wisp.db</code>: people, channels, messages, agents, tasks, routines and settings.</li>
               <li><code className="text-xs">vault/</code>: your memory notes.</li>
               <li><code className="text-xs">files/</code>: files people uploaded.</li>
             </ul>
@@ -905,18 +905,18 @@ export function DataPage() {
       </Section>
       <Section title="How to back up">
         <ol className="list-decimal pl-5 text-sm space-y-1">
-          <li>Quit Warren on {where} (or stop the hub there), so the copy is complete.</li>
+          <li>Quit Wisp on {where} (or stop the hub there), so the copy is complete.</li>
           <li>Copy the whole folder to a USB drive or a cloud folder.</li>
-          <li>Start Warren again.</li>
+          <li>Start Wisp again.</li>
         </ol>
       </Section>
       <Section title="How to restore">
         <ol className="list-decimal pl-5 text-sm space-y-1">
-          <li>Install Warren on the computer, or keep the install you already have.</li>
-          <li>Quit Warren.</li>
+          <li>Install Wisp on the computer, or keep the install you already have.</li>
+          <li>Quit Wisp.</li>
           <li>Put your copied folder back in the same place, replacing the folder there.</li>
           <li>If your memory notes were in a separate folder, put that folder back too.</li>
-          <li>Start Warren again. Your devices reconnect by themselves when they are online.</li>
+          <li>Start Wisp again. Your devices reconnect by themselves when they are online.</li>
         </ol>
       </Section>
       <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.">
@@ -924,13 +924,13 @@ export function DataPage() {
         <Card>
           {isOwner && (
             <Row label="Download my notes (Markdown ZIP)" hint="Every memory note as a text file, in its folders. Opens in any text editor.">
-              <Button disabled={!!busy} onClick={() => download("/api/export/vault.zip", `warren-memory-${day}.zip`)}>
+              <Button disabled={!!busy} onClick={() => download("/api/export/vault.zip", `wisp-memory-${day}.zip`)}>
                 <Download size={14} /> {busy === "/api/export/vault.zip" ? "Preparing…" : "Download"}
               </Button>
             </Row>
           )}
           <Row label="Download conversations (JSON, for developers)" hint="Every channel and DM you can see. JSON is a data format for programs, not for reading.">
-            <Button disabled={!!busy} onClick={() => download("/api/export/conversations.json", `warren-conversations-${day}.json`)}>
+            <Button disabled={!!busy} onClick={() => download("/api/export/conversations.json", `wisp-conversations-${day}.json`)}>
               <Download size={14} /> {busy === "/api/export/conversations.json" ? "Preparing…" : "Download"}
             </Button>
           </Row>

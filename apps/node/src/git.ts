@@ -28,7 +28,7 @@ function localPath(repo: string): string | null {
 }
 
 /**
- * The repo on this device: the path itself for local repos, or Warren's own clone for URLs
+ * The repo on this device: the path itself for local repos, or Wisp's own clone for URLs
  * (shared by every agent here, so branches are visible to each other without pushing).
  */
 async function repoRoot(dir: string, repo: string): Promise<{ root: string; remote: boolean }> {
@@ -156,8 +156,8 @@ export async function mergeBranch(dir: string, w: { repo: string; branch: string
   fs.mkdirSync(path.dirname(tmp), { recursive: true });
   await git(root, ["worktree", "add", "--quiet", "--detach", tmp, onto]);
   try {
-    // commits need an identity; use the device's, or Warren's when it has none
-    const who = (await ok(tmp, ["config", "user.email"])) ? [] : ["-c", "user.name=Warren", "-c", "user.email=warren@localhost"];
+    // commits need an identity; use the device's, or Wisp's when it has none
+    const who = (await ok(tmp, ["config", "user.email"])) ? [] : ["-c", "user.name=Wisp", "-c", "user.email=wisp@localhost"];
     try {
       await git(tmp, [...who, "merge", "--no-ff", "--no-edit", "-m", `Merge ${w.branch} into ${w.base}`, from]);
     } catch (e) {

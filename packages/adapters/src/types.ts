@@ -1,6 +1,6 @@
 import type { AccessLevel, AgentEvent, ConnectorSpec, HarnessCatalog } from "@wisp/core";
 
-/** How a harness reaches the Warren MCP server (memory, chat, tasks tools). */
+/** How a harness reaches the Wisp MCP server (memory, chat, tasks tools). */
 export interface McpServerSpec {
   command: string;
   args: string[];
@@ -59,13 +59,13 @@ export interface RunResult {
 }
 
 /**
- * A harness adapter turns one Warren run into one headless harness invocation.
+ * A harness adapter turns one Wisp run into one headless harness invocation.
  * Adding a harness means implementing this interface.
  */
 export interface HarnessAdapter {
   id: string;
   label: string;
-  /** Binary the adapter shells out to; used for `warren doctor`. */
+  /** Binary the adapter shells out to; used for `wisp doctor`. */
   binary: string;
   run(input: RunInput, onEvent: (e: AdapterEvent) => void): Promise<RunResult>;
   /** Models and effort levels this harness offers on this device (shown in agent settings). */

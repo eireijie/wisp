@@ -5,7 +5,7 @@ import { createOrg, joinOrg, orgInitials, orgSummary, orgTone, switchOrg, type O
 import { Button, Field, GhostMark, Input, Modal, Popover, cx } from "./ui.tsx";
 
 /**
- * An organization's tile: Warren's ghost for your first (personal) one, initials on a tile in a
+ * An organization's tile: Wisp's ghost for your first (personal) one, initials on a tile in a
  * color that comes from its id for the rest.
  */
 export function OrgTile({ org, home, size = 40, round }: { org: Pick<Org, "id" | "name">; home?: boolean; size?: number; round?: boolean }) {

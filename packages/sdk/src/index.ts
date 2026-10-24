@@ -1,12 +1,12 @@
 import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@wisp/core";
 
-export interface WarrenClientOptions {
+export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
   token: string; // agent token, or node token + agentId
   agentId?: string;
 }
 
-export class WarrenError extends Error {
+export class WispError extends Error {
   constructor(
     message: string,
     readonly status: number,
@@ -15,10 +15,10 @@ export class WarrenError extends Error {
   }
 }
 
-/** Minimal typed client for the Warren hub API. Used by warren-mcp, the node daemon, and custom agents. */
-export class WarrenClient {
+/** Minimal typed client for the Wisp hub API. Used by wisp-mcp, the node daemon, and custom agents. */
+export class WispClient {
   readonly url: string;
-  constructor(private opts: WarrenClientOptions) {
+  constructor(private opts: WispClientOptions) {
     this.url = opts.url.replace(/\/+$/, "");
   }
 
@@ -27,7 +27,7 @@ export class WarrenClient {
       method,
       headers: {
         authorization: `Bearer ${this.opts.token}`,
-        ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}),
+        ...(this.opts.agentId ? { "x-wisp-agent": this.opts.agentId } : {}),
         ...(body !== undefined && !(body instanceof Uint8Array) ? { "content-type": "application/json" } : {}),
         ...headers,
       },
@@ -35,7 +35,7 @@ export class WarrenClient {
     });
     const text = await res.text();
     const data = text ? safeJson(text) : null;
-    if (!res.ok) throw new WarrenError((data as { error?: string })?.error ?? `${res.status} ${res.statusText}`, res.status);
+    if (!res.ok) throw new WispError((data as { error?: string })?.error ?? `${res.status} ${res.statusText}`, res.status);
     return data as T;
   }
 
@@ -125,7 +125,7 @@ export class WarrenClient {
     try {
       return await this.request("GET", "/api/computers/mine");
     } catch (err) {
-      if (err instanceof WarrenError && err.status === 404) return null;
+      if (err instanceof WispError && err.status === 404) return null;
       throw err;
     }
   }
@@ -209,8 +209,8 @@ export class WarrenClient {
     });
   }
   async downloadFile(id: string): Promise<{ data: Uint8Array; name: string; mime: string }> {
-    const res = await fetch(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}) } });
-    if (!res.ok) throw new WarrenError(`download failed: ${res.status}`, res.status);
+    const res = await fetch(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-wisp-agent": this.opts.agentId } : {}) } });
+    if (!res.ok) throw new WispError(`download failed: ${res.status}`, res.status);
     const cd = res.headers.get("content-disposition") ?? "";
     const name = decodeURIComponent(cd.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? id);
     return { data: new Uint8Array(await res.arrayBuffer()), name, mime: res.headers.get("content-type") ?? "application/octet-stream" };

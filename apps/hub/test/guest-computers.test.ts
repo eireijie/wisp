@@ -25,7 +25,7 @@ async function api(method: "GET" | "POST" | "PUT", url: string, token = owner, p
 }
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-guest-computers-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-guest-computers-"));
   ({ app, hub } = await buildHub({ dataDir: dir }));
   const setup = await api("POST", "/api/setup", "", { email: "owner@example.com", name: "Owner", password: "password123", features: "everything" });
   owner = setup.json().token;
@@ -70,7 +70,7 @@ describe("guests and computers", () => {
   it("keeps agents and chat while removing computer data from REST payloads", async () => {
     const parts: MessagePart[] = [
       { type: "computer", computerId: computer.id },
-      { type: "tool_call", name: "mcp__warren__computer_screenshot", input: {}, output: { image: "secret-screen" } },
+      { type: "tool_call", name: "mcp__wisp__computer_screenshot", input: {}, output: { image: "secret-screen" } },
       { type: "tool_call", name: "read_file", input: { path: "readme" }, output: "ordinary agent data" },
     ];
     const message = hub.postMessage({ channelId, author: { kind: "agent", id: agentId }, body: "Screen result", parts, route: false });

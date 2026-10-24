@@ -40,7 +40,7 @@ async function browserSocket(token: string) {
 }
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-settings-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-settings-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });

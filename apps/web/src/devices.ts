@@ -17,7 +17,7 @@ export interface DeviceInfo {
   shared?: boolean;
   /** what it does for agents: runs their VMs, lends its own screen, or neither (headless); null until chosen */
   role?: DeviceRole | null;
-  /** paused at the device (`warren node pause`) */
+  /** paused at the device (`wisp node pause`) */
   paused?: boolean;
   online: boolean;
   lastSeen?: string | null;

@@ -163,7 +163,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     let agentId = p.kind === "agent" ? p.subjectId : null;
     // Nodes act on behalf of the agents they host (the harness gets the node token + agent id).
     if (p.kind === "node") {
-      const as = req.headers["x-warren-agent"];
+      const as = req.headers["x-wisp-agent"] ?? req.headers["x-warren-agent"];
       if (typeof as === "string") {
         const a = store.agent(as);
         if (!a || a.nodeId !== p.subjectId) return null;
@@ -271,7 +271,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   function commitAuthor(c: Caller) {
     if (c.actor.kind === "agent") {
       const a = store.agent(c.actor.id)!;
-      return { name: `@${a.handle}`, email: `${a.handle}@agents.warren` };
+      return { name: `@${a.handle}`, email: `${a.handle}@agents.wisp` };
     }
     const u = store.user(c.actor.id)!;
     return { name: u.name, email: u.email };
@@ -331,7 +331,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   app.post("/api/setup", async (req, reply) => {
     if (store.userCount() > 0) return reply.code(409).send({ error: "already set up" });
     const body = parse(
-      z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Warren"), features: FEATURE_PRESET.default("simple") }),
+      z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Wisp"), features: FEATURE_PRESET.default("simple") }),
       req.body,
       reply,
     );
@@ -1124,7 +1124,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { ok: true };
   });
 
-  /** A token for connecting an existing harness session directly (warren-mcp), without a node. */
+  /** A token for connecting an existing harness session directly (wisp-mcp), without a node. */
   app.post("/api/agents/:id/token", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
@@ -1344,7 +1344,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const team = here?.members.some((m) => m.agentId === o.target.id) || o.team ? (here ?? null) : null;
     const task = store.createTask({ workspaceId: o.workspaceId, from: o.from, toAgentId: o.target.id, title: o.title, brief: o.brief, channelId: o.channelId, threadId: null, teamId: team?.id ?? null, reviewOf: o.reviewOf ?? null, parentId: o.parentId ?? null });
     let branch = o.branch ?? null;
-    if (!branch && team?.repo && !o.reviewOf) branch = `warren/${o.target.handle}/${branchSlug(o.title)}-${task.id.slice(-5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
+    if (!branch && team?.repo && !o.reviewOf) branch = `wisp/${o.target.handle}/${branchSlug(o.title)}-${task.id.slice(-5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
     if (branch) store.setTaskBranch(task.id, branch);
     const files = (o.fileIds ?? []).map((f) => store.file(f)).filter((f) => f && f.workspaceId === o.workspaceId);
     const msg = hub.postMessage({
@@ -1718,7 +1718,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { content: await vaultOf(c).readAt(p, q.rev ?? "") };
   });
 
-  /** Pick up edits made outside Warren (Obsidian, git pull). */
+  /** Pick up edits made outside Wisp (Obsidian, git pull). */
   app.post("/api/vault/sync", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
@@ -1814,7 +1814,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { ...result, person: { id: person.id, name: person.name } };
   });
 
-  /** The memory an agent starts with (for MCP sessions that don't get Warren's prompt). */
+  /** The memory an agent starts with (for MCP sessions that don't get Wisp's prompt). */
   app.get("/api/memory/context", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;

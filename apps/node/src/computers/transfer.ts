@@ -81,7 +81,7 @@ export function localFiles(home = os.homedir()): Files {
     }
     const homeReal = await fs.realpath(home);
     const rel = path.relative(homeReal, real);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new ActionError("Only files in your home folder can be reached from Warren");
+    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new ActionError("Only files in your home folder can be reached from Wisp");
     return real;
   };
   return {

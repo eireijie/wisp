@@ -106,7 +106,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   ),
   access: () => (
     <>
-      <PageHeader title="Access">Open Warren from anywhere with Tailscale, privately.</PageHeader>
+      <PageHeader title="Access">Open Wisp from anywhere with Tailscale, privately.</PageHeader>
       <AccessPanel />
     </>
   ),
@@ -321,7 +321,7 @@ function UpdatesPage() {
           <p className="text-sm text-muted">
             {v?.commit ? (
               <>
-                This hub runs Warren <code>{v.commit}</code>
+                This hub runs Wisp <code>{v.commit}</code>
                 {v.date && <> from {new Date(v.date).toLocaleDateString()}</>}. Update devices from{" "}
                 <a className="text-accent-text hover:underline" href="#/nodes">
                   Devices
@@ -329,7 +329,7 @@ function UpdatesPage() {
                 .
               </>
             ) : (
-              "Which version of Warren this hub runs, and what's new."
+              "Which version of Wisp this hub runs, and what's new."
             )}
           </p>
         </div>

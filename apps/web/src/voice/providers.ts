@@ -55,7 +55,7 @@ class Microphone {
   private generation = 0;
   async start(level: (value: number) => void, activity: (active: boolean) => void): Promise<MediaStream | null> {
     const generation = ++this.generation;
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access needs HTTPS or localhost. Open Warren on a secure connection to call.");
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access needs HTTPS or localhost. Open Wisp on a secure connection to call.");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     if (generation !== this.generation) { stream.getTracks().forEach((t) => t.stop()); return null; }
     this.stream = stream;

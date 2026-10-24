@@ -184,14 +184,14 @@ export function WelcomeView({ intro }: { intro?: boolean }) {
   );
 }
 
-/** Step 1: give Warren an address that works from anywhere (Tailscale), before adding devices and phones. */
+/** Step 1: give Wisp an address that works from anywhere (Tailscale), before adding devices and phones. */
 function AnywhereScreen({ onNext }: { onNext: (skip: boolean) => void }) {
   const access = useAccess(3000);
   const ready = !!access?.publicUrl || onPublicAddress();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Use Warren from anywhere</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Use Wisp from anywhere</h1>
         <p className="mt-1.5 text-[15px] text-muted">Your agents work on your devices, and you'll want to reach them from your phone or another computer, not just this Wi-Fi. Tailscale connects them privately; it takes a couple of minutes.</p>
       </div>
       <AccessPanel compact={false} />
@@ -327,7 +327,7 @@ function NoDevice({ onBack }: { onBack: () => void }) {
   );
 }
 
-// --- before step 1: what Warren is -----------------------------------------------------------------
+// --- before step 1: what Wisp is -----------------------------------------------------------------
 
 const EXAMPLES: { icon: ReactNode; text: string }[] = [
   { icon: <UtensilsCrossed size={17} />, text: "Plan a week of dinners and a shopping list" },
@@ -335,7 +335,7 @@ const EXAMPLES: { icon: ReactNode; text: string }[] = [
   { icon: <FileText size={17} />, text: "Summarize a document" },
 ];
 
-/** Plain words about what Warren is, and how much of it to show. Not a numbered step. */
+/** Plain words about what Wisp is, and how much of it to show. Not a numbered step. */
 function IntroScreen({ onContinue }: { onContinue: () => void }) {
   const picked = useStore((s) => s.me?.prefs?.experience);
   const isOwner = useStore((s) => s.me?.role) === "owner";
@@ -362,8 +362,8 @@ function IntroScreen({ onContinue }: { onContinue: () => void }) {
 
   return (
     <>
-      <Heading title="Welcome to Warren">
-        Warren is a place where you and AI helpers work together. You chat with them, they do the work on a computer you choose, and they remember what matters.
+      <Heading title="Welcome to Wisp">
+        Wisp is a place where you and AI helpers work together. You chat with them, they do the work on a computer you choose, and they remember what matters.
       </Heading>
       <ul className="grid sm:grid-cols-3 gap-2.5" aria-label="Things you can ask">
         {EXAMPLES.map((e) => (
@@ -408,7 +408,7 @@ function guessName(): string {
 const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
 
-/** The no-Terminal way to connect: the Warren app does it itself, or can be downloaded and pointed at this server. */
+/** The no-Terminal way to connect: the Wisp app does it itself, or can be downloaded and pointed at this server. */
 export function EasiestWay({ name, token, connected }: { name: string; token: string; connected: boolean }) {
   const { inDesktop, info, connect } = useDesktopInfo();
   const [busy, setBusy] = useState(false);
@@ -422,7 +422,7 @@ export function EasiestWay({ name, token, connected }: { name: string; token: st
       <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
       <div className="mt-3 space-y-3">
         <DeviceInstall token={token} name={name} />
-        <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
+        <p className="text-xs text-muted">“wisp node start” stops when you close its terminal window; “wisp service install node” keeps it running in the background.</p>
       </div>
     </details>
   );
@@ -432,7 +432,7 @@ export function EasiestWay({ name, token, connected }: { name: string; token: st
         <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
           <p className="text-sm font-medium">{`This ${computer} is ${info?.device ? "already connected" : "being connected automatically"}`}</p>
           {(connected || !info?.device) && (
-            <p className="text-sm text-muted">{connected ? `${name} is connected.` : `The Warren app has not connected this ${computer} yet.`}</p>
+            <p className="text-sm text-muted">{connected ? `${name} is connected.` : `The Wisp app has not connected this ${computer} yet.`}</p>
           )}
           {!connected && !info?.device && (
             <Button
@@ -456,7 +456,7 @@ export function EasiestWay({ name, token, connected }: { name: string; token: st
   return (
     <>
       <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
-        <p className="text-sm font-medium">Easiest: download the Warren app</p>
+        <p className="text-sm font-medium">Easiest: download the Wisp app</p>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <a className="font-medium underline" href={get.href}>{get.label}</a>
           {get.more.map((m) => (
@@ -489,12 +489,12 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
     const live = usable.find((d) => d.id === created.id && d.online);
     return (
       <>
-        <Heading title={`Connect ${created.name}`}>Warren needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
+        <Heading title={`Connect ${created.name}`}>Wisp needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
         <div className="space-y-5">
           <EasiestWay name={created.name} token={created.token} connected={!!live} />
           <p className="text-xs text-muted">
             The token is shown once and saved on the device.
-            {onHub() && " If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from."}
+            {onHub() && " If this is the computer running Wisp, pick “Wisp already installed” and run it in the folder you started Wisp from."}
           </p>
           <Status ok={!!live}>{live ? `${created.name} is connected` : `Waiting for ${created.name} to connect…`}</Status>
         </div>
@@ -522,14 +522,14 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
       <>
         {simple ? (
           <>
-            <Heading title="Where will your helpers live?">A computer that can stay on, like this one. Warren runs there so your helpers can work.</Heading>
+            <Heading title="Where will your helpers live?">A computer that can stay on, like this one. Wisp runs there so your helpers can work.</Heading>
             <Advanced title="How it connects" className="-mt-6 mb-6 text-center">
-              <p className="text-sm text-muted">It connects out to Warren, so it works behind routers and firewalls.</p>
-              {onHub() && <p className="mt-2 text-sm text-muted">Running Warren on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
+              <p className="text-sm text-muted">It connects out to Wisp, so it works behind routers and firewalls.</p>
+              {onHub() && <p className="mt-2 text-sm text-muted">Running Wisp on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
             </Advanced>
           </>
         ) : (
-          <Heading title="Where will your agents live?">A computer that can stay on: this one, a home server, a desktop. It connects out to Warren, so it works behind routers and firewalls.</Heading>
+          <Heading title="Where will your agents live?">A computer that can stay on: this one, a home server, a desktop. It connects out to Wisp, so it works behind routers and firewalls.</Heading>
         )}
         <label className="block space-y-2">
           <span className="text-sm font-medium">Name this device</span>
@@ -546,7 +546,7 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
             }}
           />
         </label>
-        {!simple && onHub() && <p className="mt-3 text-sm text-muted">Running Warren on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
+        {!simple && onHub() && <p className="mt-3 text-sm text-muted">Running Wisp on this computer? It can be the device too: agents get their own VMs on it, apart from your screen.</p>}
         {error && <p className="mt-3 text-sm text-bad">{error}</p>}
         <Footer onBack={usable.length ? () => setAdding(false) : undefined} label="Continue" busy={busy} disabled={!name.trim()} onNext={create} />
       </>
@@ -568,7 +568,7 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
                 <span className="text-ok">Connected{d.mine ? "" : ` · shared by ${d.ownerName ?? "its owner"}`}</span>
               ) : (
                 <>
-                  Not running. Start it there with <code>warren node start</code>
+                  Not running. Start it there with <code>wisp node start</code>
                 </>
               )
             }
@@ -656,7 +656,7 @@ function RoleScreen({ device, onBack, onNext }: { device: DeviceInfo; onBack: ()
           ) : (
             <div className="rounded-xl border border-line p-4 space-y-3 text-sm">
               <p>{caps.vm.detail}</p>
-              <Command text="warren setup">Run this on {device.name}. It installs a VM engine if it needs one (asking first) and downloads the agents' desktop. This page updates by itself.</Command>
+              <Command text="wisp setup">Run this on {device.name}. It installs a VM engine if it needs one (asking first) and downloads the agents' desktop. This page updates by itself.</Command>
             </div>
           )
         ) : role === "screen" ? (
@@ -665,7 +665,7 @@ function RoleScreen({ device, onBack, onNext }: { device: DeviceInfo; onBack: ()
           ) : caps.screen.off ? (
             <div className="rounded-xl border border-line p-4 space-y-3 text-sm">
               <p>{device.name}'s screen is off, which is how every device starts. Only you can turn it on, at {device.name} itself:</p>
-              <Command text="warren node screen on">This page updates by itself.</Command>
+              <Command text="wisp node screen on">This page updates by itself.</Command>
             </div>
           ) : (
             <p className="text-sm text-bad">{caps.screen.detail}</p>
@@ -810,7 +810,7 @@ function AgentScreen({
 
 // --- 4. its harness, signed in -----------------------------------------------------------------------------
 
-/** Harnesses Warren starts itself (not ones that join over MCP), and ones the device declared. */
+/** Harnesses Wisp starts itself (not ones that join over MCP), and ones the device declared. */
 function harnessesFor(device: DeviceInfo) {
   const built = HARNESSES.filter((h) => h.protocol !== "mcp").map((h) => h.id);
   const declared = (device.harnesses ?? []).map((h) => h.id).filter((id) => id.startsWith("acp:"));
@@ -1120,7 +1120,7 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
               <div className="text-sm font-medium flex items-center gap-2">
                 {agent.name}
                 {!reply && <Loader2 size={13} className="animate-spin text-muted" />}
-                {!reply && <span className="text-xs text-muted font-normal">{running?.tools.length ? `using ${running.tools.at(-1)!.replace(/^mcp__warren__/, "")}` : agent.status === "offline" ? "waiting for its device" : "thinking"}</span>}
+                {!reply && <span className="text-xs text-muted font-normal">{running?.tools.length ? `using ${running.tools.at(-1)!.replace(/^mcp__(?:wisp|warren)__/, "")}` : agent.status === "offline" ? "waiting for its device" : "thinking"}</span>}
               </div>
               {reply ? reply.body ? <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} /> : <p className="text-sm text-bad">{failureText(reply.parts)}</p> : running?.text && <p className="text-sm text-muted line-clamp-3">{running.text}</p>}
             </div>

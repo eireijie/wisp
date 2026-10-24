@@ -258,7 +258,7 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
   );
 }
 
-/** After a skill is installed: a request to paste into chat (Warren can't prefill the message) and a shortcut to the helper's chat. */
+/** After a skill is installed: a request to paste into chat (Wisp can't prefill the message) and a shortcut to the helper's chat. */
 function TryIt({ skill, agents, onClose }: { skill: Skill; agents: Agent[]; onClose: () => void }) {
   const holders = skill.agentIds.map((id) => agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
   const [pick, setPick] = useState(holders[0]?.id ?? "");

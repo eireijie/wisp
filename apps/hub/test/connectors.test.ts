@@ -25,7 +25,7 @@ let atlas: any;
 let general: any;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-connectors-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-connectors-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });

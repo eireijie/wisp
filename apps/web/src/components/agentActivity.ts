@@ -28,13 +28,13 @@ const WORDS: Record<WorkKind, { now: string; done: string; count?: (n: number) =
   other: { now: "working", done: "used a tool", count: (n) => (n === 1 ? "used a tool" : `used ${n} tools`) },
 };
 
-/** "mcp__warren__memory_search" → "memory_search"; "WebFetch" → "webfetch". */
+/** "mcp__wisp__memory_search" → "memory_search"; "WebFetch" → "webfetch". */
 export function toolKey(name: string): string {
   return name
-    .replace(/^mcp__warren__/, "")
+    .replace(/^mcp__(?:wisp|warren)__/, "")
     .replace(/^mcp__[^_]+__/, "")
     .replace(/^mcp__/, "")
-    .replace(/^warren\./, "")
+    .replace(/^(?:wisp|warren)\./, "")
     .toLowerCase();
 }
 

@@ -15,7 +15,7 @@ function stage(info: AccessInfo): 0 | 1 | 2 | 3 {
 }
 
 /**
- * Reach Warren from anywhere with Tailscale: install it on the computer running Warren, sign in,
+ * Reach Wisp from anywhere with Tailscale: install it on the computer running Wisp, sign in,
  * turn on the https address, and (optionally) let people without Tailscale in. Used by the setup
  * step and Settings → Access.
  */
@@ -29,7 +29,7 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
   const failed = useAccessStore((s) => s.failed);
 
   if (!info && failed)
-    return <p className="text-sm text-muted">Warren couldn't check how it's reached. If it was just updated, restart it on the computer it runs on (or run: warren update), then reload this page.</p>;
+    return <p className="text-sm text-muted">Wisp couldn't check how it's reached. If it was just updated, restart it on the computer it runs on (or run: wisp update), then reload this page.</p>;
   if (!info)
     return (
       <div className="py-8 grid place-items-center text-muted" role="status">
@@ -57,14 +57,14 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
   // a hub that's already on a public https address (a cloud server, a domain) needs none of this
   if (onPublicAddress() && !info.publicUrl)
     return (
-      <Done url={location.origin} body="Warren already has an address that works from anywhere. Share it with the people and devices you add." />
+      <Done url={location.origin} body="Wisp already has an address that works from anywhere. Share it with the people and devices you add." />
     );
 
   if (!owner)
     return info.publicUrl ? (
-      <Done url={info.publicUrl} body={`Open Warren at this address from anywhere. Your devices need Tailscale, signed in to ${t.tailnet ?? "the same Tailscale network"}.`} />
+      <Done url={info.publicUrl} body={`Open Wisp at this address from anywhere. Your devices need Tailscale, signed in to ${t.tailnet ?? "the same Tailscale network"}.`} />
     ) : (
-      <p className="text-sm text-muted">Warren only works on its home network for now. The owner can turn on Tailscale under Settings → Devices → Access.</p>
+      <p className="text-sm text-muted">Wisp only works on its home network for now. The owner can turn on Tailscale under Settings → Devices → Access.</p>
     );
 
   return (
@@ -83,7 +83,7 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
 
       {at === 0 && (
         <Step
-          title="Install Tailscale on the computer running Warren"
+          title="Install Tailscale on the computer running Wisp"
           body="Tailscale is free. It connects your computers and phone privately, as if they were on the same Wi-Fi, from anywhere. Nothing is opened to the internet."
         >
           <a href={info.download} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-ink text-panel text-sm font-medium">
@@ -109,10 +109,10 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
 
       {at === 2 && (
         <Step
-          title={t.state === "running" ? "Turn on Warren's address" : "Connect Tailscale"}
+          title={t.state === "running" ? "Turn on Wisp's address" : "Connect Tailscale"}
           body={
             t.state === "running"
-              ? `Warren gets a private https address on ${t.tailnet ?? "your Tailscale network"}, like https://${t.dnsName ?? "this-computer.your-tailnet.ts.net"}. Only devices signed in to it can open it.`
+              ? `Wisp gets a private https address on ${t.tailnet ?? "your Tailscale network"}, like https://${t.dnsName ?? "this-computer.your-tailnet.ts.net"}. Only devices signed in to it can open it.`
               : "Tailscale is signed in but switched off on this computer."
           }
         >
@@ -130,7 +130,7 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
 
       {at === 3 && info.publicUrl && (
         <>
-          <Done url={info.publicUrl} body={`Open Warren at this address from anywhere. On your phone and other computers, install Tailscale and sign in to ${t.tailnet ?? "the same account"}.`} />
+          <Done url={info.publicUrl} body={`Open Wisp at this address from anywhere. On your phone and other computers, install Tailscale and sign in to ${t.tailnet ?? "the same account"}.`} />
           {t.canFunnel !== false && (
             <label className="flex items-start justify-between gap-3 rounded-xl border border-line p-3.5">
               <span className="text-sm">
@@ -138,7 +138,7 @@ export function AccessPanel({ compact = false }: { compact?: boolean }) {
                   <Globe size={14} /> Let people without Tailscale in
                 </span>
                 <span className="block text-xs text-muted mt-0.5">
-                  Turns on Tailscale Funnel: the same address works for anyone, like a friend you invite. They still need an invite and a password; anyone with the address can see Warren's sign-in page.
+                  Turns on Tailscale Funnel: the same address works for anyone, like a friend you invite. They still need an invite and a password; anyone with the address can see Wisp's sign-in page.
                 </span>
               </span>
               <Toggle on={t.funnel} onChange={(on) => void run(on ? "funnel" : "unfunnel")} label="Let people without Tailscale in" disabled={!!busy} />
@@ -185,13 +185,13 @@ function Done({ url, body }: { url: string; body: string }) {
   return (
     <div className="rounded-xl border border-ok/40 bg-ok/10 p-4 space-y-2.5">
       <p className="text-[15px] font-semibold flex items-center gap-1.5">
-        <Check size={16} className="text-ok" /> Warren works from anywhere
+        <Check size={16} className="text-ok" /> Wisp works from anywhere
       </p>
       <CopyBlock text={url} />
       <p className="text-sm text-muted">{body}</p>
       {location.origin !== url && (
         <a href={url} className="inline-flex items-center gap-1.5 text-sm font-medium underline">
-          Open Warren at this address <ExternalLink size={13} />
+          Open Wisp at this address <ExternalLink size={13} />
         </a>
       )}
     </div>

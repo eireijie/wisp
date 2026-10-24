@@ -1,7 +1,7 @@
-# Generate Warren.xcodeproj with XcodeGen: `brew install xcodegen && xcodegen` in apps/ios
-name: Warren
+# Generate Wisp.xcodeproj with XcodeGen: `brew install xcodegen && xcodegen` in apps/ios
+name: Wisp
 options:
-  bundleIdPrefix: ai.warren
+  bundleIdPrefix: ai.wisp
   deploymentTarget:
     iOS: "18.0"
   createIntermediateGroups: true
@@ -9,70 +9,77 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: minimal
-    # Warren and its tests do not declare App Intents.
+    # Wisp and its tests do not declare App Intents.
     LM_SKIP_METADATA_EXTRACTION: YES
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  Warren:
+  Wisp:
     type: application
     platform: iOS
-    sources: [Warren]
+    sources: [Wisp]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: ai.warren.ios
-        PRODUCT_NAME: Warren
+        PRODUCT_BUNDLE_IDENTIFIER: ai.wisp.ios
+        PRODUCT_NAME: Wisp
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Warren
+        INFOPLIST_KEY_CFBundleDisplayName: Wisp
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Warren connects to Warren on your computer over your own network.
-        INFOPLIST_KEY_NSCameraUsageDescription: Warren uses the camera to scan the pairing code on your computer.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Wisp connects to Wisp on your computer over your own network.
+        INFOPLIST_KEY_NSCameraUsageDescription: Wisp uses the camera to scan the pairing code on your computer.
         CODE_SIGN_STYLE: Automatic
         # push notifications; Xcode switches this to production when you archive for TestFlight / the App Store
-        CODE_SIGN_ENTITLEMENTS: Warren/Warren.entitlements
+        CODE_SIGN_ENTITLEMENTS: Wisp/Wisp.entitlements
     info:
-      path: Warren/Info.plist
+      path: Wisp/Info.plist
       properties:
-        # pairing QR codes are warren://pair links, so the Camera app opens them in Warren
+        CFBundleDisplayName: Wisp
+        # pairing QR codes are wisp://pair links, so the Camera app opens them in Wisp
         CFBundleURLTypes:
-          - CFBundleURLName: ai.warren.pair
-            CFBundleURLSchemes: [warren]
+          - CFBundleURLName: ai.wisp.pair
+            CFBundleURLSchemes: [wisp, warren]
         # self-hosted hubs are often plain http on a home network or a Tailscale address
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
-  WarrenTests:
+  WispTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [WarrenTests]
+    sources: [WispTests]
     dependencies:
-      - target: Warren
+      - target: Wisp
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-  WarrenUITests:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.wisp.WispTests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Wisp.app/Wisp
+        BUNDLE_LOADER: $(TEST_HOST)
+  WispUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [WarrenUITests]
+    sources: [WispUITests]
     dependencies:
-      - target: Warren
+      - target: Wisp
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: Warren
+        PRODUCT_BUNDLE_IDENTIFIER: ai.wisp.WispUITests
+        TEST_TARGET_NAME: Wisp
 schemes:
-  Warren:
+  Wisp:
     build:
       targets:
-        Warren: all
+        Wisp: all
     test:
-      targets: [WarrenTests, WarrenUITests]
+      targets: [WispTests, WispUITests]
       environmentVariables:
+        WISP_HUB: $(WISP_HUB)
+        WISP_TOKEN: $(WISP_TOKEN)
         WARREN_HUB: $(WARREN_HUB)
         WARREN_TOKEN: $(WARREN_TOKEN)

@@ -214,7 +214,7 @@ export function StatusChip({ status }: { status: Agent["status"] }) {
   );
 }
 
-/** Warren's mark: a ghost outline. `draw` animates it drawing itself (the loading state). */
+/** Wisp's mark: a ghost outline. `draw` animates it drawing itself (the loading state). */
 export function GhostMark({ size = 20, draw, className }: { size?: number; draw?: boolean; className?: string }) {
   return (
     <svg viewBox="22 10 76 104" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={draw ? 4.5 : 9} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -423,9 +423,9 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
 }
 
 /**
- * The one-line command that installs Warren on a device and connects it, served by this hub
+ * The one-line command that installs Wisp on a device and connects it, served by this hub
  * (GET /install.sh, /install.ps1), with a tab per OS and the manual command for a device that
- * already has Warren.
+ * already has Wisp.
  */
 export function DeviceInstall({ token, name }: { token: string; name: string }) {
   const windowsGuess = /Windows/.test(navigator.userAgent);
@@ -437,12 +437,12 @@ export function DeviceInstall({ token, name }: { token: string; name: string }) 
   const commands = {
     unix: `curl -fsSL ${hub}/install.sh | bash -s -- --hub ${hub} --token ${token} --name ${sh(name)}`,
     windows: `& ([scriptblock]::Create((irm ${hub}/install.ps1))) -Hub ${hub} -Token ${token} -Name ${pwsh(name)}`,
-    manual: `warren node start --hub ${hub} --token ${token} --name ${sh(name)}`,
+    manual: `wisp node start --hub ${hub} --token ${token} --name ${sh(name)}`,
   };
   const tabs = [
     ["unix", "Mac or Linux"],
     ["windows", "Windows"],
-    ["manual", "Warren already installed"],
+    ["manual", "Wisp already installed"],
   ] as const;
   return (
     <div className="space-y-2">
@@ -460,9 +460,9 @@ export function DeviceInstall({ token, name }: { token: string; name: string }) 
       </div>
       <CopyBlock text={commands[os]} />
       <p className="text-xs text-muted">
-        {os === "unix" && "In Terminal. It installs Warren in ~/warren (it needs git and Node 22+, and offers Node with Homebrew on a Mac), checks for a VM engine, and keeps the device connected from then on."}
-        {os === "windows" && "In PowerShell. It installs Warren in your home folder (offering git and Node with winget) and keeps the device connected whenever you're signed in."}
-        {os === "manual" && "Inside the Warren folder on that device. It stays connected until you close the terminal; `warren service install node` keeps it running."}
+        {os === "unix" && "In Terminal. It installs Wisp in ~/wisp (it needs git and Node 22+, and offers Node with Homebrew on a Mac), checks for a VM engine, and keeps the device connected from then on."}
+        {os === "windows" && "In PowerShell. It installs Wisp in your home folder (offering git and Node with winget) and keeps the device connected whenever you're signed in."}
+        {os === "manual" && "Inside the Wisp folder on that device. It stays connected until you close the terminal; `wisp service install node` keeps it running."}
       </p>
     </div>
   );

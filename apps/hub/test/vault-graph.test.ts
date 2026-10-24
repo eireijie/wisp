@@ -24,7 +24,7 @@ const write = (p: string, content: string, auth = token, headers: Record<string,
 const edges = (g: any) => g.edges.map((e: any) => `${e.source} -> ${e.target}`).sort();
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-graph-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-graph-"));
   const built = await buildHub({ dataDir: dir });
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
@@ -39,8 +39,8 @@ beforeAll(async () => {
   await write("shared/Roadmap.md", "---\ntype: project\n---\n# Roadmap\nShip [[Launch]] with [[Plan]]. See [[Nowhere]] and ![[diagram.png]]. Also [[Roadmap]].");
   await write("shared/Plan.md", "# Shared plan\nBack to [[Roadmap|the roadmap]] and [[roadmap#Goals]]. #planning");
   await write("Projects/Launch.md", "# Launch\nPart of [[Roadmap]].");
-  await write(`agents/${atlas.id}/Plan.md`, "# Atlas's plan", nodeToken, { "x-warren-agent": atlas.id });
-  await write(`agents/${atlas.id}/Notes.md`, "# Notes\nMy [[Plan]], the [[Roadmap]] and [[Launch]].", nodeToken, { "x-warren-agent": atlas.id });
+  await write(`agents/${atlas.id}/Plan.md`, "# Atlas's plan", nodeToken, { "x-wisp-agent": atlas.id });
+  await write(`agents/${atlas.id}/Notes.md`, "# Notes\nMy [[Plan]], the [[Roadmap]] and [[Launch]].", nodeToken, { "x-wisp-agent": atlas.id });
 });
 
 afterAll(async () => {
@@ -76,7 +76,7 @@ describe("memory graph", () => {
   });
 
   it("only shows notes the viewer can read, and a hidden note never leaks in", async () => {
-    const asAtlas = (await api<any>("GET", "/api/vault/graph", undefined, nodeToken, { "x-warren-agent": atlas.id })).data;
+    const asAtlas = (await api<any>("GET", "/api/vault/graph", undefined, nodeToken, { "x-wisp-agent": atlas.id })).data;
     const ids = asAtlas.nodes.map((n: any) => n.id);
     expect(ids).not.toContain("Projects/Launch.md");
     // Atlas can't see Projects/Launch.md, so its [[Launch]] link is a ghost for it
@@ -92,7 +92,7 @@ describe("memory graph", () => {
 
   it("lets owners, and only owners, view the graph as an agent", async () => {
     const viewed = (await api<any>("GET", `/api/vault/graph?as=agent:${atlas.id}`)).data;
-    const own = (await api<any>("GET", "/api/vault/graph", undefined, nodeToken, { "x-warren-agent": atlas.id })).data;
+    const own = (await api<any>("GET", "/api/vault/graph", undefined, nodeToken, { "x-wisp-agent": atlas.id })).data;
     expect(edges(viewed)).toEqual(edges(own));
     expect((await api("GET", `/api/vault/graph?as=agent:${atlas.id}`, undefined, member)).status).toBe(403);
     expect((await api("GET", "/api/vault/graph", undefined, "")).status).toBe(401);

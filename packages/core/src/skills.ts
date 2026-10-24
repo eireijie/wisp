@@ -608,7 +608,7 @@ related: ["[[acme]]", "[[pricing]]"]
 ---
 \`\`\`
 
-Warren fills in \`type\`, \`created\` and \`updated\` if you leave them out, but never changes what you wrote.
+Wisp fills in \`type\`, \`created\` and \`updated\` if you leave them out, but never changes what you wrote.
 
 ## 6. Link it
 - Link to at least one existing note with \`[[note-name]]\` (the file name without .md).

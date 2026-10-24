@@ -15,9 +15,9 @@ import { useMemo, useSyncExternalStore } from "react";
  *   #/connectors, #/skills           older addresses of the marketplace (installed apps, skills)
  *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
  *   #/join/<code>                    accept an invite (signed out)
- *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Warren is" and Simple or Advanced
+ *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Wisp is" and Simple or Advanced
  *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
- *   #/mods                           mods: optional parts of Warren, switched on or off
+ *   #/mods                           mods: optional parts of Wisp, switched on or off
  *   #/                               the dashboard on desktops, the chats list on phones (App.tsx)
  *   #/chats                          channel list (phones; desktops go to the dashboard)
  *   #/you                            account menu (phones)

@@ -42,6 +42,6 @@ describe("notConnectedLine", () => {
   });
   it("knows local-only hosts", () => {
     expect(isLocalOnlyHost("localhost")).toBe(true);
-    expect(isLocalOnlyHost("warren.example.com")).toBe(false);
+    expect(isLocalOnlyHost("wisp.example.com")).toBe(false);
   });
 });

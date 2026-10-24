@@ -2,7 +2,7 @@ import { cronMatches, describeCron, parseCron, zonedParts, type Actor, type Reco
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
-const WARREN = { name: "Warren", email: "warren@localhost" };
+const WISP = { name: "Wisp", email: "wisp@localhost" };
 
 export function routineSlug(name: string): string {
   return (
@@ -134,11 +134,11 @@ export class Routines {
       ...o.steps.map(stepLine),
       "",
     ].join("\n");
-    await this.hub.vault(o.workspaceId).write(`${base}.recording.md`, recording, WARREN, `Recording for routine "${o.name}"`);
+    await this.hub.vault(o.workspaceId).write(`${base}.recording.md`, recording, WISP, `Recording for routine "${o.name}"`);
     await this.hub.vault(o.workspaceId).write(
       `${base}.md`,
       `# ${o.name}\n\n@${agent.handle} is learning this from [[${base.split("/").pop()}.recording]]. The steps will appear here.\n`,
-      WARREN,
+      WISP,
       `New routine "${o.name}"`,
     );
     const routine = this.hub.store.createRoutine({

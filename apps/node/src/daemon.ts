@@ -1,3 +1,5 @@
+import { migrateHome } from "./migrate-home.ts";
+import { migrateServices } from "./migrate-services.ts";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -5,18 +7,18 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
 import { HarnessAccounts, changeHarnessSettings, deviceAdapters, harnessConfigured, loginCommand, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@wisp/adapters";
-import { WarrenClient, WarrenError } from "@wisp/sdk";
+import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
 import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remote-desktop.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
-import { VM_HOME, type DockerVm } from "./computers/docker.ts";
+import { type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
 
-const MCP_BIN = fileURLToPath(new URL("../../../bin/warren-mcp.mjs", import.meta.url));
+const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
 
 export interface NodeConfig {
   hub: string;
@@ -39,16 +41,16 @@ export interface NodeConfig {
   vmEngine?: string;
   /**
    * Offer this device's own screen to its owner, who can lend it to agents. Off by default, and
-   * only someone at the device can turn it on (`warren node screen on`), not the hub.
+   * only someone at the device can turn it on (`wisp node screen on`), not the hub.
    */
   shareScreen?: boolean;
   /** never offer this device's own screen, whatever shareScreen says (older setting) */
   noScreen?: boolean;
-  /** the code (hashed) that opens this screen from Warren; set at the device, never sent to the hub */
+  /** the code (hashed) that opens this screen from Wisp; set at the device, never sent to the hub */
   screenCode?: ScreenCode;
-  /** Remote Desktop: this device's own VNC server for its screen (`warren node screen remote`) */
+  /** Remote Desktop: this device's own VNC server for its screen (`wisp node screen remote`) */
   remoteDesktop?: RemoteDesktopConfig;
-  /** `warren node pause`: take no work from the hub (no agent runs, no computer use) until resumed */
+  /** `wisp node pause`: take no work from the hub (no agent runs, no computer use) until resumed */
   paused?: boolean;
   /** where to look for existing agents (default: the home folder); for tests */
   discoverHome?: string;
@@ -71,7 +73,7 @@ export class NodeDaemon {
   private queues = new Map<string, Promise<void>>();
   private aborts = new Map<string, AbortController>();
   private sessions: Record<string, string>;
-  private api: WarrenClient;
+  private api: WispClient;
   private catalog: Promise<HarnessCatalog[]> | null = null;
   private registry: Record<string, HarnessAdapter>;
   readonly computers: ComputerHost;
@@ -80,7 +82,7 @@ export class NodeDaemon {
   private agentTokens: Record<string, string>;
   /** harnesses given by the caller (tests), not read from node.json */
   private fixedRegistry: boolean;
-  /** which version of Warren's tools each VM has (by container name) */
+  /** which version of Wisp's tools each VM has (by container name) */
   private vmTools = new Map<string, string>();
   /** the switches people flip at the device, as last read from node.json (people change them there with the CLI) */
   private local: { shareScreen: boolean; paused: boolean; code?: ScreenCode; remote?: RemoteDesktopConfig };
@@ -102,10 +104,15 @@ export class NodeDaemon {
 
   constructor(
     private cfg: NodeConfig,
-    private log: Log = (m) => console.log(`[warren] ${m}`),
+    private log: Log = (m) => console.log(`[wisp] ${m}`),
     registry?: Record<string, HarnessAdapter>,
     computers?: ComputerHost,
   ) {
+    if ([".wisp", ".warren"].includes(path.basename(cfg.dir))) {
+      const migrated = migrateHome({ home: path.dirname(cfg.dir), log });
+      cfg = { ...cfg, dir: migrated.dir };
+      migrateServices({ home: path.dirname(cfg.dir), log });
+    }
     this.cfg = cfg = { ...cfg, hub: normalizeHubUrl(cfg.hub) };
     fs.mkdirSync(cfg.dir, { recursive: true });
     this.sessions = readJson(this.sessionsFile, {});
@@ -113,7 +120,7 @@ export class NodeDaemon {
     this.local = this.readLocal();
     this.lock = new ScreenLock(cfg.dir, () => this.local.code);
     this.remoteServer = new RemoteDesktopServer(cfg.dir, log);
-    this.api = new WarrenClient({ url: cfg.hub, token: cfg.token });
+    this.api = new WispClient({ url: cfg.hub, token: cfg.token });
     this.accounts = new HarnessAccounts(cfg.dir, { home: cfg.harnessHome });
     this.registry = registry ?? deviceAdapters(cfg.harnesses);
     this.fixedRegistry = !!registry;
@@ -160,11 +167,11 @@ export class NodeDaemon {
   /** A code was entered for this screen: tell its owner when it was wrong. */
   private codeResult(r: { ok: boolean; lockedOut?: boolean; triesLeft?: number }) {
     if (r.ok) return;
-    if (r.lockedOut) this.send({ type: "screen_event", alert: true, text: "Too many wrong codes were entered for this screen, so it stopped taking codes for a while. If that wasn't you, change your Warren password." });
+    if (r.lockedOut) this.send({ type: "screen_event", alert: true, text: "Too many wrong codes were entered for this screen, so it stopped taking codes for a while. If that wasn't you, change your Wisp password." });
     else if (r.triesLeft !== undefined) this.send({ type: "screen_event", alert: r.triesLeft <= 2, text: `A wrong code was entered for this screen (${r.triesLeft} ${r.triesLeft === 1 ? "try" : "tries"} left before it locks).` });
   }
 
-  /** Someone ran `warren node screen …` or `warren node pause/resume`: apply it now. */
+  /** Someone ran `wisp node screen …` or `wisp node pause/resume`: apply it now. */
   private onLocalChange = () => {
     const before = this.local;
     this.local = this.readLocal();
@@ -182,7 +189,7 @@ export class NodeDaemon {
       return;
     }
     if (this.local.paused && !before.paused) {
-      this.log("paused: stopping agents and computers until `warren node resume`");
+      this.log("paused: stopping agents and computers until `wisp node resume`");
       for (const a of this.aborts.values()) a.abort("paused");
     }
     if (this.local.paused || !this.local.shareScreen) {
@@ -190,14 +197,14 @@ export class NodeDaemon {
       this.closeTunnels();
       this.lock.lockAll();
     }
-    if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Warren (agents only when you lend it)" : "off"}`);
+    if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Wisp (agents only when you lend it)" : "off"}`);
     if (before.paused && !this.local.paused) this.log("resumed");
     void this.sendCapabilities();
   };
 
   private async sendCapabilities() {
     const caps = await this.computers.capabilities();
-    if (!this.local.shareScreen && caps.screen.ok) caps.screen = { ok: false, off: true, detail: "Off. Only someone at this device can turn it on: `warren node screen on`" };
+    if (!this.local.shareScreen && caps.screen.ok) caps.screen = { ok: false, off: true, detail: "Off. Only someone at this device can turn it on: `wisp node screen on`" };
     else if (caps.screen.ok) {
       if (this.local.remote) caps.screen.remote = true;
       if (this.local.code) caps.screen.code = this.local.code.kind;
@@ -211,7 +218,7 @@ export class NodeDaemon {
     this.stopped = false;
     this.replaced = [];
     fs.watchFile(this.configFile, { interval: 1000 }, this.onLocalChange);
-    if (this.local.paused) this.log("paused: no agent runs or computer use until `warren node resume`");
+    if (this.local.paused) this.log("paused: no agent runs or computer use until `wisp node resume`");
     this.applyRemoteServer();
     this.connect();
   }
@@ -265,7 +272,7 @@ export class NodeDaemon {
       this.closeTunnels();
       if (this.stopped) return;
       if (code === 4401) {
-        this.log("hub rejected the node token. Create a new node in Warren and run `warren node start` again.");
+        this.log("hub rejected the node token. Create a new node in Wisp and run `wisp node start` again.");
         this.stopped = true;
         this.onRejected?.();
         return;
@@ -274,7 +281,7 @@ export class NodeDaemon {
       if (code === 4000) {
         this.replaced = [...this.replaced.filter((t) => Date.now() - t < 60_000), Date.now()];
         if (this.replaced.length >= 2) {
-          this.log("another `warren node start` is running with this device's token (the installed service, perhaps: `warren service status`). This one stops, so the two don't keep replacing each other.");
+          this.log("another `wisp node start` is running with this device's token (the installed service, perhaps: `wisp service status`). This one stops, so the two don't keep replacing each other.");
           this.stopped = true;
           return;
         }
@@ -323,9 +330,9 @@ export class NodeDaemon {
       this.send({ type: "catalog", catalog: await this.harnessCatalog() });
       void this.sendShelf();
     } else if (msg.type === "computer") {
-      if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`warren node resume\`` });
-      if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`warren node screen on\`)` });
-      if (msg.computer.kind === "device" && msg.action.action !== "status" && !this.lock.open()) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is locked with its code. Its owner opens it by entering the code in Warren (to watch it, or when lending it).` });
+      if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`wisp node resume\`` });
+      if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`wisp node screen on\`)` });
+      if (msg.computer.kind === "device" && msg.action.action !== "status" && !this.lock.open()) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is locked with its code. Its owner opens it by entering the code in Wisp (to watch it, or when lending it).` });
       this.computers.act(msg.computer, msg.action).then(
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
@@ -410,7 +417,7 @@ export class NodeDaemon {
       const agent = readDiscovered(msg.key, this.cfg.discoverHome);
       this.send(agent ? { type: "result", requestId: msg.requestId, ok: true, result: agent } : { type: "result", requestId: msg.requestId, ok: false, error: "that agent isn't on this device anymore" });
     } else if (msg.type === "update") {
-      // finishing writes the update marker, and `warren node start` restarts once agents are done
+      // finishing writes the update marker, and `wisp node start` restarts once agents are done
       runUpdate(undefined, { log: this.log }).then(
         (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
         (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
@@ -438,14 +445,14 @@ export class NodeDaemon {
   }
 
   private async execute(run: RunRequest) {
-    // `warren node pause` while this run waited its turn behind another: it doesn't start either
+    // `wisp node pause` while this run waited its turn behind another: it doesn't start either
     if (this.local.paused) return this.send({ type: "run_failed", runId: run.runId, error: `${this.cfg.name} is paused; ask again once someone resumes it there` });
     if (this.stopped) return this.send({ type: "run_failed", runId: run.runId, error: `${this.cfg.name} was stopped before this run started` });
     const agents = await this.api.request<Agent[]>("GET", "/api/node/agents").catch(() => [] as Agent[]);
     const agent = agents.find((a) => a.id === run.agentId);
     if (!agent) return this.send({ type: "run_failed", runId: run.runId, error: "agent is not assigned to this node" });
     const adapter = this.registry[agent.harness];
-    if (!adapter) return this.send({ type: "run_failed", runId: run.runId, error: `no headless adapter for ${agent.harness} yet; connect it with warren-mcp instead` });
+    if (!adapter) return this.send({ type: "run_failed", runId: run.runId, error: `no headless adapter for ${agent.harness} yet; connect it with wisp-mcp instead` });
 
     // its VM, when it has one here: it runs inside it, or at least gets its browser
     let vm: DockerVm | null = null;
@@ -496,7 +503,10 @@ export class NodeDaemon {
     try {
       mcp = inside ? await this.vmMcpSpec(agent.id, vm!) : await this.mcpSpec(agent.id);
       // the VM's Chrome as page-element tools, run inside the VM either way
-      if (vm) browser = inside ? { command: "warren-browser-mcp", args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", "warren", vm.name, "warren-browser-mcp"], env: {} };
+      if (vm) {
+        const browserBin = vm.user === "warren" ? "warren-browser-mcp" : "wisp-browser-mcp";
+        browser = inside ? { command: browserBin, args: [], env: {} } : { command: vm.engine.bin, args: ["exec", "-i", "-u", vm.user, vm.name, browserBin], env: {} };
+      }
     } catch (err) {
       this.aborts.delete(run.runId);
       return this.send({ type: "run_failed", runId: run.runId, error: `couldn't set up its tools: ${(err as Error).message}` });
@@ -596,7 +606,7 @@ export class NodeDaemon {
   }
 
   /**
-   * Install a harness with this device's own recipe: only npm packages Warren knows (see
+   * Install a harness with this device's own recipe: only npm packages Wisp knows (see
    * HARNESSES[].install), so the hub can name a harness but never choose what runs here.
    */
   private async installHarness(id: string): Promise<string> {
@@ -632,7 +642,7 @@ export class NodeDaemon {
   private async harnessSettings(msg: Extract<HubToNode, { type: "harness_settings" | "harness_settings_change" | "harness_skill" | "harness_open_config" | "harness_account" }>) {
     const base = { home: this.cfg.harnessHome };
     const known = (id: string) => {
-      if (!(SETTINGS_HARNESSES as readonly string[]).includes(id)) throw new Error(`Warren can't change ${harnessLabel(id)}'s settings yet`);
+      if (!(SETTINGS_HARNESSES as readonly string[]).includes(id)) throw new Error(`Wisp can't change ${harnessLabel(id)}'s settings yet`);
     };
     // each account is the harness's own folder somewhere else
     const homes = (harness: string, account = "default") => {
@@ -708,7 +718,7 @@ export class NodeDaemon {
   }
 
   /**
-   * The harness gets warren-mcp with a token for its agent alone, so whatever the agent runs can't
+   * The harness gets wisp-mcp with a token for its agent alone, so whatever the agent runs can't
    * act as this device or its other agents. Only a hub from before agent tokens (it has no such
    * endpoint) gets the device's token; when the hub merely can't answer, the run fails instead.
    */
@@ -719,28 +729,28 @@ export class NodeDaemon {
     return {
       command: process.execPath,
       args: [MCP_BIN],
-      env: token ? { ...asNode, WARREN_URL: this.cfg.hub, WARREN_TOKEN: token } : { ...asNode, WARREN_URL: this.cfg.hub, WARREN_TOKEN: this.cfg.token, WARREN_AGENT: agentId },
+      env: token ? { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: token } : { ...asNode, WISP_URL: this.cfg.hub, WISP_TOKEN: this.cfg.token, WISP_AGENT: agentId },
     };
   }
 
-  /** warren-mcp for a harness inside a VM: Warren's tools copied into the VM, talking to the hub from in there. */
+  /** wisp-mcp for a harness inside a VM: Wisp's tools copied into the VM, talking to the hub from in there. */
   private async vmMcpSpec(agentId: string, vm: DockerVm): Promise<McpServerSpec> {
     const token = await this.harnessToken(agentId);
     if (!token) throw new Error("the hub didn't give this agent a token of its own; update the hub");
     const bundle = await mcpBundle();
-    const file = `${VM_HOME}/.warren/warren-mcp.mjs`;
+    const file = `${vm.home}/.wisp/wisp-mcp.mjs`;
     if (this.vmTools.get(vm.name) !== bundle.hash) {
       await vm.writeFile(file, bundle.code);
       this.vmTools.set(vm.name, bundle.hash);
     }
-    return { command: "node", args: [file], env: { WARREN_URL: await vm.hubUrl(this.cfg.hub), WARREN_TOKEN: token } };
+    return { command: "node", args: [file], env: { WISP_URL: await vm.hubUrl(this.cfg.hub), WISP_TOKEN: token } };
   }
 
   private async harnessToken(agentId: string): Promise<string | null> {
     const known = this.agentTokens[agentId];
     if (known && (await this.tokenWorks(known))) return known;
     const r = await this.api.request<{ token: string }>("POST", `/api/node/agents/${agentId}/token`).catch((err) => {
-      if (err instanceof WarrenError && err.status === 404) return null; // an older hub
+      if (err instanceof WispError && err.status === 404) return null; // an older hub
       throw new Error(`the hub couldn't give this agent a token (${(err as Error).message}); try again in a moment`);
     });
     if (!r?.token) return null;
@@ -757,7 +767,7 @@ export class NodeDaemon {
 }
 
 /**
- * The hub's address as people type it ("my-server:4747", "https://warren.example.com/",
+ * The hub's address as people type it ("my-server:4747", "https://wisp.example.com/",
  * "ws://..."), as the http(s) URL the daemon needs. Throws, with a hint, for something that isn't an address.
  */
 export function normalizeHubUrl(raw: string): string {

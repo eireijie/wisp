@@ -24,7 +24,7 @@ export interface HostOptions {
   dir: string;
   /** "container" (Apple), "docker" or "podman"; default: whichever is installed and running */
   vmEngine?: string;
-  /** let shell commands from Warren run on this device's own screen computer */
+  /** let shell commands from Wisp run on this device's own screen computer */
   allowDeviceShell?: boolean;
   log?: (m: string) => void;
   /** Remote Desktop on this device's own screen, as set at the device (read on every use) */
@@ -116,13 +116,13 @@ export class ComputerHost {
     let d: Driver;
     if (spec.kind === "vm") {
       const engine = await this.engineFor(spec);
-      if (!engine) throw new Error("this device can't run VMs yet: run `warren setup`, then restart `warren node`");
+      if (!engine) throw new Error("this device can't run VMs yet: run `wisp setup`, then restart `wisp node`");
       d = new DockerVm(spec, this.opts.dir, engine, (status, text) => this.opts.onVmStatus?.(spec.id, status, text));
     } else {
       d = desktopDriver(this.opts.allowDeviceShell);
       const vncPort = (spec.config as DeviceConfig).vncPort;
       const remote = this.opts.remoteDesktop;
-      // Remote Desktop set up here wins over a VNC port typed in Warren
+      // Remote Desktop set up here wins over a VNC port typed in Wisp
       if (remote || vncPort)
         d.vnc = () => {
           const rd = remote?.();
@@ -269,16 +269,16 @@ function desktopDriver(allowShell?: boolean): Driver {
 }
 
 /**
- * macOS grants screen and input access to the app that started `warren node`: the terminal when
+ * macOS grants screen and input access to the app that started `wisp node`: the terminal when
  * it runs in one, or the Node binary itself when launchd starts it. Node's real path changes when
  * Node is upgraded, and the permission has to be given again then.
  */
 function macPermissionTarget(): string {
-  if (process.versions.electron) return "Warren (the desktop app runs this device)";
+  if (process.versions.electron) return "Wisp (the desktop app runs this device)";
   const node = fs.realpathSync(process.execPath);
   const term = process.env.TERM_PROGRAM;
   const app = term === "Apple_Terminal" ? "Terminal" : term === "iTerm.app" ? "iTerm" : term === "vscode" ? "your editor (VS Code, Cursor…)" : term ?? "your terminal app";
-  return `${app} if you run \`warren node\` there, or to ${node} (add it with + and ⌘⇧G) if it runs in the background as a LaunchAgent`;
+  return `${app} if you run \`wisp node\` there, or to ${node} (add it with + and ⌘⇧G) if it runs in the background as a LaunchAgent`;
 }
 
 /** Can agents use this device's own screen, and if not, why. */

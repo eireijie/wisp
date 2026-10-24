@@ -83,7 +83,7 @@ export async function saveScreenshot(c: ComputerInfo) {
 
 // --- copy and paste while you're in control ------------------------------------------------------------
 
-const SYNC_KEY = "warren.clipboardSync";
+const SYNC_KEY = "wisp.clipboardSync";
 
 export function clipboardSyncOn(): boolean {
   try {

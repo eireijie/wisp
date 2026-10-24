@@ -28,7 +28,7 @@ async function api<T = any>(method: string, url: string, body?: unknown, token =
 const channelNamed = async (name: string) => (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === name);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-channels-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-channels-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });

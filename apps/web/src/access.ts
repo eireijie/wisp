@@ -84,7 +84,7 @@ export function originReach(origin: string): "anywhere" | "network" | "this-comp
   }
 }
 
-const SKIP_KEY = "warren.access.skipped";
+const SKIP_KEY = "wisp.access.skipped";
 /** "Only on this Wi-Fi for now": the setup step counts as done on this browser. */
 export function accessSkipped(): boolean {
   try {

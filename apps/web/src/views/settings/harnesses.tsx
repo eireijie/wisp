@@ -170,7 +170,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
 
       {(settings.multiAccount || settings.accounts.length > 1) && <Accounts device={device} settings={settings} users={users} onLoad={onLoad} />}
 
-      {settings.fixed?.includes("file") && <p className="text-[13px] text-muted">{settings.configPath.split("/").pop()} has comments in it, so Warren only shows it. Change it on {device.name}.</p>}
+      {settings.fixed?.includes("file") && <p className="text-[13px] text-muted">{settings.configPath.split("/").pop()} has comments in it, so Wisp only shows it. Change it on {device.name}.</p>}
 
       <Card>
         <ModelRow settings={settings} catalog={catalog} busy={busy === "model"} onPick={(model) => change("model", [{ op: "model", model }])} />
@@ -200,7 +200,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
 
       {error && <p className="text-sm text-bad whitespace-pre-wrap">{error}</p>}
 
-      <WarrenAndDeviceApps settings={settings} users={users} busy={busy} onToggle={(item, on) => toggle("app", item, on)} />
+      <WispAndDeviceApps settings={settings} users={users} busy={busy} onToggle={(item, on) => toggle("app", item, on)} />
 
       <Section title="Plugins and skills" action={<GetMore href={href({ view: "skills" })} />}>
         {settings.plugins.length + settings.skills.length === 0 ? (
@@ -283,15 +283,15 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
   );
 }
 
-/** Apps: the ones logged in once in Warren (every agent here gets them), then the harness's own. */
-function WarrenAndDeviceApps({ settings, users, busy, onToggle }: { settings: HarnessSettings; users: HarnessesResponse["agents"]; busy: string | null; onToggle: (item: HarnessSettingItem, on: boolean) => void }) {
+/** Apps: the ones logged in once in Wisp (every agent here gets them), then the harness's own. */
+function WispAndDeviceApps({ settings, users, busy, onToggle }: { settings: HarnessSettings; users: HarnessesResponse["agents"]; busy: string | null; onToggle: (item: HarnessSettingItem, on: boolean) => void }) {
   const [connectors, setConnectors] = useState<Connector[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api<Connector[]>("GET", "/api/connectors").then(setConnectors, () => setConnectors([]));
   }, []);
   const ids = users.map((a) => a.id);
-  const warren = (connectors ?? []).filter((c) => c.kind !== "secret" && c.enabled);
+  const wisp = (connectors ?? []).filter((c) => c.kind !== "secret" && c.enabled);
   const attach = async (c: Connector, on: boolean) => {
     setError(null);
     const before = connectors;
@@ -303,16 +303,16 @@ function WarrenAndDeviceApps({ settings, users, busy, onToggle }: { settings: Ha
       setError((e as Error).message);
     }
   };
-  const warrenNote = (c: Connector) => (c.auth?.required ? (c.auth.signedIn ? "Logged in through Warren" : "Needs logging in, in Warren") : "Set up in Warren");
+  const wispNote = (c: Connector) => (c.auth?.required ? (c.auth.signedIn ? "Logged in through Wisp" : "Needs logging in, in Wisp") : "Set up in Wisp");
   return (
     <Section title="Apps" action={<GetMore href={href({ view: "connectors" })} />}>
-      {warren.length + settings.apps.length === 0 ? (
+      {wisp.length + settings.apps.length === 0 ? (
         <p className="text-sm text-muted">None yet.</p>
       ) : (
         <Card>
           {ids.length > 0 &&
-            warren.map((c) => (
-              <ItemRow key={`w:${c.id}`} item={{ id: c.id, name: c.name, enabled: ids.every((a) => c.agentIds.includes(a)), canToggle: true }} note={warrenNote(c)} onToggle={(on) => attach(c, on)} />
+            wisp.map((c) => (
+              <ItemRow key={`w:${c.id}`} item={{ id: c.id, name: c.name, enabled: ids.every((a) => c.agentIds.includes(a)), canToggle: true }} note={wispNote(c)} onToggle={(on) => attach(c, on)} />
             ))}
           {settings.apps.map((a) => (
             <ItemRow key={`d:${a.id}`} item={a} note={a.canToggle ? "Set up on this device" : "Set up on this device · changed there"} busy={busy === `app:${a.id}`} onToggle={(on) => onToggle(a, on)} />
@@ -394,7 +394,7 @@ function AskBox({ agent, harness, device }: { agent: HarnessesResponse["agents"]
   );
 }
 
-/** Copy one of a harness's skills into Warren's skills, for the agents you pick. */
+/** Copy one of a harness's skills into Wisp's skills, for the agents you pick. */
 function ShareSkill({ deviceId, harness, account, skill, onClose, onShared }: { deviceId: string; harness: string; account: string; skill: HarnessSettingItem; onClose: () => void; onShared: (note: string) => void }) {
   const agents = useStore((s) => s.agents);
   const [picked, setPicked] = useState<string[]>([]);
@@ -551,7 +551,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
 
 /**
  * Signing an account in without the device's terminal: the device runs the harness's sign-in and
- * Warren shows the link and code it prints (and passes back a code the page gives you).
+ * Wisp shows the link and code it prints (and passes back a code the page gives you).
  */
 function SignIn({ device, settings, account, onClose, onDone }: { device: HarnessesResponse["device"]; settings: HarnessSettings; account: HarnessSettings["accounts"][number]; onClose: () => void; onDone: () => void }) {
   const label = harnessLabel(settings.harness);

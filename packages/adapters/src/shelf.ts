@@ -6,7 +6,7 @@ import { SETTINGS_HARNESSES, redactServer, type ShelfItem } from "@wisp/core";
 import { harnessConfigPath, parseToml, readHarnessSettings, type HarnessHomes } from "./harness-config.ts";
 
 /**
- * What each harness on this device already has that Warren could share with other agents: its
+ * What each harness on this device already has that Wisp could share with other agents: its
  * skills (read with the harness settings, so `harness_skill` finds them by the same id) and its MCP
  * servers, with secret values left out (see redactServer). Shown under "On your devices".
  */
@@ -43,7 +43,7 @@ async function mcpServers(harness: string, h: HarnessHomes): Promise<[string, Se
     const state = JSON.parse(await fs.readFile(claudeStatePath(h), "utf8")) as { mcpServers?: Record<string, Server> };
     return Object.entries(state.mcpServers ?? {});
   }
-  // only these three keep MCP servers in a file whose shape Warren reads here
+  // only these three keep MCP servers in a file whose shape Wisp reads here
   if (harness !== "hermes" && harness !== "codex") return [];
   const text = await fs.readFile(harnessConfigPath(harness, h)!, "utf8");
   if (harness === "hermes") {

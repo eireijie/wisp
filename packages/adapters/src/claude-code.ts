@@ -9,10 +9,10 @@ import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";
 const PERMISSION_MODE: Record<AccessLevel, string> = { "read-only": "plan", edit: "acceptEdits", full: "bypassPermissions" };
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
-/** The MCP servers a run gets (Warren's tools, its computer's browser, its connectors), as Claude Code's config, or null without any. Exported for tests. */
+/** The MCP servers a run gets (Wisp's tools, its computer's browser, its connectors), as Claude Code's config, or null without any. Exported for tests. */
 export function claudeMcpConfig(input: RunInput): { mcpServers: Record<string, unknown> } | null {
   const servers: Record<string, unknown> = {};
-  if (input.mcp) servers.warren = { type: "stdio", ...input.mcp };
+  if (input.mcp) servers.wisp = { type: "stdio", ...input.mcp };
   if (input.browser) servers.browser = { type: "stdio", ...input.browser };
   for (const c of input.connectors ?? []) {
     if (servers[c.name]) continue;
@@ -47,7 +47,7 @@ export function claudeArgs(input: RunInput, opts: { mcpConfigFile?: string } = {
 
 /**
  * Environment for one run. Claude Code's own auto-memory is off: it writes to files on the
- * device that nobody else can see, while Warren's memory is shared and visible.
+ * device that nobody else can see, while Wisp's memory is shared and visible.
  */
 export function claudeEnv(input: RunInput): Record<string, string> {
   return { ...input.env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
@@ -89,7 +89,7 @@ export const claudeCode: HarnessAdapter = {
     let lastAssistant: any = null;
     let result: any = null;
 
-    const files = new RunFiles("warren-claude-");
+    const files = new RunFiles("wisp-claude-");
     let proc;
     try {
       const mcp = claudeMcpConfig(input);
@@ -143,7 +143,7 @@ export function claudeUsage(lastAssistant: any, result: any): Extract<AgentEvent
   };
 }
 
-/** Translate one stream-json line into Warren events. Exported for tests. */
+/** Translate one stream-json line into Wisp events. Exported for tests. */
 export function parseClaudeLine(m: any, toolNames = new Map<string, string>()): AdapterEvent[] {
   const out: AdapterEvent[] = [];
   if (m.type === "system" && m.subtype === "init" && m.session_id) out.push({ type: "session", id: m.session_id });

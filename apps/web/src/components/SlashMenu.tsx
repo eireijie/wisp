@@ -12,7 +12,7 @@ import { AgentAvatar, harnessLabel, agentVar, cx } from "./ui.tsx";
  * between them. Picking one writes "/name " (and "@handle " in a channel, so it goes to that agent).
  */
 
-const KIND_LABEL: Record<AgentCommand["kind"], string> = { warren: "Warren", command: "Command", skill: "Skill", "warren-skill": "Skill" };
+const KIND_LABEL: Record<AgentCommand["kind"], string> = { wisp: "Wisp", command: "Command", skill: "Skill", "wisp-skill": "Skill" };
 
 const cache = new Map<string, { at: number; list: Promise<AgentCommand[]> }>();
 function commandsOf(agentId: string): Promise<AgentCommand[]> {

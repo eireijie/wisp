@@ -43,7 +43,7 @@ async function tryGit(cwd: string, ...args: string[]): Promise<{ ok: boolean; ou
     return { ok: false, out: `${err.stdout ?? ""}${err.stderr ?? ""}` };
   }
 }
-const remote = (token: string) => `http://warren:${token}@${base.replace("http://", "")}/git/vault.git`;
+const remote = (token: string) => `http://wisp:${token}@${base.replace("http://", "")}/git/vault.git`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function waitFor<T>(fn: () => Promise<T | undefined | false>, ms = 8000): Promise<T> {
   const end = Date.now() + ms;
@@ -59,8 +59,8 @@ let ownerToken: string;
 let clone: string;
 
 beforeAll(async () => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "warren-sync-"));
-  delete process.env.WARREN_VAULT_DIR;
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-sync-"));
+  delete process.env.WISP_VAULT_DIR;
   const built = await buildHub({ dataDir: path.join(tmp, "data") });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
@@ -137,14 +137,14 @@ describe("memory over git", () => {
     expect(fs.readFileSync(path.join(again, "shared/big.md"), "utf8")).toHaveLength(fs.readFileSync(path.join(clone, "shared/big.md"), "utf8").length);
   });
 
-  it("pulls what agents and people wrote in Warren", async () => {
-    await api("PUT", "/api/vault/note", { path: "shared/from-warren.md", content: "# From Warren\n" });
+  it("pulls what agents and people wrote in Wisp", async () => {
+    await api("PUT", "/api/vault/note", { path: "shared/from-wisp.md", content: "# From Wisp\n" });
     await git(clone, "pull", "-q", "--ff-only");
-    expect(fs.existsSync(path.join(clone, "shared/from-warren.md"))).toBe(true);
+    expect(fs.existsSync(path.join(clone, "shared/from-wisp.md"))).toBe(true);
   });
 
   it("refuses a push that isn't up to date, and one that touches hidden files, links or other branches", async () => {
-    // not up to date: Warren has a newer commit than this clone
+    // not up to date: Wisp has a newer commit than this clone
     fs.writeFileSync(path.join(clone, "shared/stale.md"), "stale\n");
     await git(clone, "add", "-A");
     await git(clone, "commit", "-q", "-m", "stale");
@@ -251,7 +251,7 @@ describe("memory over git", () => {
 });
 
 describe("edits made in Obsidian on this machine", () => {
-  it("show up in Warren, credited to Obsidian, without looping on Warren's own saves", async () => {
+  it("show up in Wisp, credited to Obsidian, without looping on Wisp's own saves", async () => {
     const root = hub.vaults.primary.root;
     fs.mkdirSync(path.join(root, "Projects"), { recursive: true });
     fs.writeFileSync(path.join(root, "Projects/Idea.md"), "# Idea\nwritten straight to disk zebrafinch\n");
@@ -260,14 +260,14 @@ describe("edits made in Obsidian on this machine", () => {
     expect(changes[0]).toMatchObject({ author: "Edited in Obsidian" });
     expect(changes[0].files[0].path).toBe("Projects/Idea.md");
 
-    // Warren's own save is not mistaken for an outside edit
+    // Wisp's own save is not mistaken for an outside edit
     const before = await git(root, "rev-list", "--count", "HEAD");
-    await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nsaved by Warren\n" });
+    await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nsaved by Wisp\n" });
     await sleep(2500);
     expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(Number(before) + 1);
     expect(await git(root, "log", "-1", "--format=%an")).toBe("Alex");
 
-    // editing and deleting in Warren (the web app's Save and Delete) don't add outside-edit commits either
+    // editing and deleting in Wisp (the web app's Save and Delete) don't add outside-edit commits either
     const n = Number(await git(root, "rev-list", "--count", "HEAD"));
     await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nfixed by a person" });
     await api("DELETE", "/api/vault/note?path=shared/agent-note.md");
@@ -282,7 +282,7 @@ describe("edits made in Obsidian on this machine", () => {
 });
 
 describe("where memory lives", () => {
-  it("shows the folder to the owner only, and refuses folders that would hold Warren's own data", async () => {
+  it("shows the folder to the owner only, and refuses folders that would hold Wisp's own data", async () => {
     const s = (await api("GET", "/api/memory/storage")).data;
     expect(s).toMatchObject({ path: hub.vaults.primary.root, source: "default", pendingRestart: false, sync: { allowed: true, urlPath: "/git/vault.git" } });
     expect((await api("GET", "/api/memory/storage", undefined, sam)).data.path).toBeNull();

@@ -10,7 +10,7 @@ import { HARNESS_SPECS, harnessConfigPath, harnessDir, type HarnessHomes } from 
  * account is the harness's usual folder. Hermes already has this: its profiles.
  *
  * Which accounts exist and which agent uses which is kept on the device (harness-accounts.json in
- * Warren's folder there), like everything else about the harness.
+ * Wisp's folder there), like everything else about the harness.
  */
 
 export interface AccountsFile {
@@ -21,13 +21,13 @@ export interface AccountsFile {
 
 export class HarnessAccounts {
   constructor(
-    /** Warren's folder on the device (~/.warren) */
-    private warrenDir: string,
+    /** Wisp's folder on the device (~/.wisp) */
+    private wispDir: string,
     private h: HarnessHomes = {},
   ) {}
 
   private get file() {
-    return path.join(this.warrenDir, "harness-accounts.json");
+    return path.join(this.wispDir, "harness-accounts.json");
   }
 
   read(): AccountsFile {
@@ -40,19 +40,19 @@ export class HarnessAccounts {
   }
 
   private write(v: AccountsFile) {
-    fs.mkdirSync(this.warrenDir, { recursive: true });
+    fs.mkdirSync(this.wispDir, { recursive: true });
     fs.writeFileSync(this.file, JSON.stringify(v, null, 2), { mode: 0o600 });
   }
 
   /** The folder an account's harness uses. */
   dir(harness: string, account: string): string {
     const base = harnessDir(harness, this.h);
-    if (!base) throw new Error(`Warren can't add accounts to ${harness} yet`);
+    if (!base) throw new Error(`Wisp can't add accounts to ${harness} yet`);
     if (account === "default") return base;
     ACCOUNT_ID.parse(account);
     // Hermes's own profiles, so `hermes -p <name>` sees the same account
     if (harness === "hermes") return path.join(base, "profiles", account);
-    const root = path.join(this.warrenDir, "accounts", harness, account);
+    const root = path.join(this.wispDir, "accounts", harness, account);
     return HARNESS_SPECS[harness].accountDir?.(root) ?? root;
   }
 
@@ -69,7 +69,7 @@ export class HarnessAccounts {
     return !!HARNESS_SPECS[harness]?.accounts;
   }
 
-  /** Every account of a harness, the default first. Hermes profiles made outside Warren count too. */
+  /** Every account of a harness, the default first. Hermes profiles made outside Wisp count too. */
   list(harness: string): HarnessAccount[] {
     if (!harnessDir(harness, this.h)) return [];
     const known = HarnessAccounts.supports(harness) ? (this.read().accounts[harness] ?? []) : [];
@@ -104,7 +104,7 @@ export class HarnessAccounts {
    * plugins, apps), never its logins.
    */
   add(harness: string, label: string): HarnessAccount {
-    if (!HarnessAccounts.supports(harness)) throw new Error(`${harness} keeps its logins outside its folder (in the system keychain or its own data folder), so Warren can't keep a second account apart yet`);
+    if (!HarnessAccounts.supports(harness)) throw new Error(`${harness} keeps its logins outside its folder (in the system keychain or its own data folder), so Wisp can't keep a second account apart yet`);
     const v = this.read();
     const list = (v.accounts[harness] ??= []);
     const taken = new Set([...this.list(harness).map((a) => a.id)]);
@@ -157,7 +157,7 @@ export class HarnessAccounts {
 
 /**
  * The command that signs an account in on the device, run with the account's folder. Ones that
- * print a link and a code (device sign-in) work from anywhere; Warren shows them.
+ * print a link and a code (device sign-in) work from anywhere; Wisp shows them.
  */
 export function loginCommand(harness: string, provider?: string): { command: string; args: string[] } | { manual: string[] } {
   if (harness === "codex") return { command: "codex", args: ["login", "--device-auth"] };
@@ -166,12 +166,12 @@ export function loginCommand(harness: string, provider?: string): { command: str
     if (!provider) throw new Error("pick the provider to sign in to");
     return { command: "hermes", args: ["auth", "add", provider] };
   }
-  // the browser shows a code to paste back, which Warren passes on
+  // the browser shows a code to paste back, which Wisp passes on
   if (harness === "claude-code") return { command: "claude", args: ["auth", "login"] };
   // their sign-in only runs inside their own screen: the command to run at the device
   if (harness === "gemini") return { manual: ["gemini"] };
   if (harness === "qwen") return { manual: ["qwen", "(then /auth)"] };
-  throw new Error(`Warren can't sign ${harness} in yet; sign in on the device`);
+  throw new Error(`Wisp can't sign ${harness} in yet; sign in on the device`);
 }
 
 /** Whether an account's folder holds a login, from the files harnesses keep it in (null: can't tell). */

@@ -36,7 +36,7 @@ async function start() {
 const login = async (email: string) => (await api<{ token: string }>("POST", "/api/auth/login", { email, password: "password123" }, "")).data.token;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-orgs-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-orgs-"));
   await start();
   const setup = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", workspaceName: "Home" }, "")).data;
   owner = setup.token;

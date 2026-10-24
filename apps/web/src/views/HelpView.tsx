@@ -13,7 +13,7 @@ const ISSUES_URL = `${GITHUB_URL}/issues`;
 const SECTIONS = [
   { id: "setup", title: "Finish setup" },
   { id: "helper", title: "My helper isn't answering" },
-  { id: "examples", title: "What can Warren do?" },
+  { id: "examples", title: "What can Wisp do?" },
   { id: "words", title: "Words you'll see" },
   { id: "mode", title: "Simple or Advanced" },
   { id: "report", title: "Report a problem" },
@@ -31,14 +31,14 @@ const EXAMPLES = [
 const GLOSSARY: [string, string, { label: string; to: string }?][] = [
   ["Agent (helper)", "An AI helper you give work to, like a teammate. It has a name, remembers things, and works on a device."],
   ["Harness", "The AI program a helper runs on, like Claude Code or Codex. You pick it once when you make a helper."],
-  ["Device", "A computer of yours with Warren installed. Helpers do their work there."],
+  ["Device", "A computer of yours with Wisp installed. Helpers do their work there."],
   ["Computer", "A desktop a helper can see and use, either a virtual one on your device or your own screen."],
-  ["Memory", "Notes Warren keeps about you and your work, so helpers don't need to be told twice. You can read and fix them."],
+  ["Memory", "Notes Wisp keeps about you and your work, so helpers don't need to be told twice. You can read and fix them."],
   ["Skill", "Something a helper has learned how to do, like a recipe it can follow again."],
   ["Routine", "A job a helper does on its own, on a schedule or when something happens."],
   ["Team", "A group of helpers that work on something together. Each channel has its own, in the channel's Team tab."],
-  ["Connected app", "A service you link to Warren, like Gmail, so helpers can use it for you."],
-  ["Connection code (token)", "A one-time code that links a computer to this Warren. It's shown once when you add a device."],
+  ["Connected app", "A service you link to Wisp, like Gmail, so helpers can use it for you."],
+  ["Connection code (token)", "A one-time code that links a computer to this Wisp. It's shown once when you add a device."],
   ["AI tokens", "How AI services measure and charge for work: more text, more tokens."],
 ];
 
@@ -132,7 +132,7 @@ function SetupSection() {
           </a>
         )}
         <a className={cx("text-sm", linkClass)} href={href({ view: "welcome", intro: true })}>
-          {complete ? "See the welcome again" : "What is Warren? See the welcome again"}
+          {complete ? "See the welcome again" : "What is Wisp? See the welcome again"}
         </a>
       </div>
     </Section>
@@ -190,13 +190,13 @@ function CheckRow({ check }: { check: HelperCheck }) {
 
 function ExamplesSection() {
   return (
-    <Section id="examples" title="What can Warren do?">
+    <Section id="examples" title="What can Wisp do?">
       <ul className="list-disc pl-5 space-y-1.5 text-sm">
         {EXAMPLES.map((e) => (
           <li key={e}>{e}</li>
         ))}
       </ul>
-      <p className="text-sm text-muted">Each of these needs a helper set up first, and some need a connected app, like Gmail. Warren can only do what you connect it to.</p>
+      <p className="text-sm text-muted">Each of these needs a helper set up first, and some need a connected app, like Gmail. Wisp can only do what you connect it to.</p>
     </Section>
   );
 }

@@ -140,7 +140,7 @@ export const NodeToHub = z.discriminatedUnion("type", [
     type: z.literal("hello"),
     nodeName: z.string(),
     agents: z.array(z.string()),
-    /** the Warren version this device runs (missing from devices older than updates) */
+    /** the Wisp version this device runs (missing from devices older than updates) */
     version: z.object({ commit: z.string().nullable(), date: z.string().nullable() }).optional(),
   }),
   /** models each installed harness offers on this device; sent after hello because it can take a few seconds */
@@ -161,7 +161,7 @@ export const NodeToHub = z.discriminatedUnion("type", [
   z.object({ type: z.literal("tunnel_closed"), tunnelId: z.string(), error: z.string().optional() }),
   /** something about the screen's code its owner should hear about (wrong codes, a lockout) */
   z.object({ type: z.literal("screen_event"), text: z.string().max(500), alert: z.boolean().optional() }),
-  /** agents that already exist on this device and could be brought into Warren */
+  /** agents that already exist on this device and could be brought into Wisp */
   z.object({ type: z.literal("discovered"), agents: z.array(DiscoveredAgent).max(100) }),
   /** skills and MCP servers this device's harnesses already have (secret values stay on the device) */
   z.object({ type: z.literal("shelf"), items: z.array(ShelfItem).max(1000) }),
@@ -198,7 +198,7 @@ export const HubToNode = z.discriminatedUnion("type", [
   z.object({ type: z.literal("install_harness"), requestId: z.string(), harness: z.string().max(60) }),
   /** send everything about one discovered agent (its soul, instructions and notes), to import it */
   z.object({ type: z.literal("read_agent"), requestId: z.string(), key: z.string() }),
-  /** update this device's copy of Warren from GitHub and restart; answered with a result (UpdateResult) */
+  /** update this device's copy of Wisp from GitHub and restart; answered with a result (UpdateResult) */
   z.object({ type: z.literal("update"), requestId: z.string() }),
   /** read the harnesses' own settings (all of them, or one); answered with a result (HarnessSettings[]) */
   z.object({ type: z.literal("harness_settings"), requestId: z.string(), harness: z.string().max(60).optional(), account: z.string().max(64).optional() }),
@@ -240,7 +240,7 @@ export type ClientEvent =
   /** an agent changed a setting or mod for someone, or someone undid one */
   | { type: "changes_changed" }
   | { type: "tasks_changed" }
-  /** notes were changed outside Warren (Obsidian, a git pull or push) */
+  /** notes were changed outside Wisp (Obsidian, a git pull or push) */
   | { type: "memory_changed" }
   /** an owner switched optional features on or off (Settings → General → Mods) */
   | { type: "features"; features: import("./features.ts").Features };

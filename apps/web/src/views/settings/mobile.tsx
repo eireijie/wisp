@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
+import { pairingLink } from "../../pairing.ts";
 import { Check, Copy, Smartphone } from "lucide-react";
 import { api } from "../../api.ts";
 import { Button, cx } from "../../components/ui.tsx";
@@ -25,12 +26,12 @@ const TAILNET = /^http:\/\/100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./;
 /** Where the phone has to be for these addresses to work, in a sentence. */
 function reachHint(addresses: string[]): string {
   if (!addresses.length) return "This computer isn't on a network your phone can reach. Connect it to Wi-Fi and start again.";
-  if (addresses.some((a) => !PRIVATE.test(a) && !TAILNET.test(a))) return "Your phone can reach this Warren from anywhere.";
+  if (addresses.some((a) => !PRIVATE.test(a) && !TAILNET.test(a))) return "Your phone can reach this Wisp from anywhere.";
   if (addresses.some((a) => TAILNET.test(a))) return "Your phone needs to be on the same Wi-Fi, or signed in to Tailscale.";
-  return "Your phone needs to be on the same Wi-Fi as this computer. To use Warren away from home, see Deploying in the docs.";
+  return "Your phone needs to be on the same Wi-Fi as this computer. To use Wisp away from home, see Deploying in the docs.";
 }
 
-/** Settings → Mobile: pair the phone app with this Warren by scanning a QR code, then matching a code. */
+/** Settings → Mobile: pair the phone app with this Wisp by scanning a QR code, then matching a code. */
 export function MobilePage() {
   const [started, setStarted] = useState<Started | null>(null);
   const [pairing, setPairing] = useState<Pairing | null>(null);
@@ -44,7 +45,8 @@ export function MobilePage() {
     setError(null);
     setBusy(true);
     try {
-      const s = await api<Started>("POST", "/api/pair", { origin: window.location.origin });
+      const response = await api<Started>("POST", "/api/pair", { origin: window.location.origin });
+      const s = { ...response, link: pairingLink(response.link) };
       live.current = s.id;
       setStarted(s);
       setPairing(s);
@@ -123,13 +125,13 @@ export function MobilePage() {
 
   return (
     <>
-      <PageHeader title="Mobile">Scan the code with the Warren app on your phone.</PageHeader>
+      <PageHeader title="Mobile">Scan the code with the Wisp app on your phone.</PageHeader>
 
       <div className="rounded-xl border border-line p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row gap-6 sm:items-center">
           <div className="mx-auto sm:mx-0 size-56 shrink-0 rounded-xl border border-line bg-hover flex items-center justify-center overflow-hidden">
             {state === "waiting" && qr ? (
-              <img src={qr} alt="QR code to scan with the Warren app on your phone" className="size-full bg-white p-2" />
+              <img src={qr} alt="QR code to scan with the Wisp app on your phone" className="size-full bg-white p-2" />
             ) : state === "claimed" ? (
               <div className="text-center px-3" aria-live="polite">
                 <div className="text-xs text-muted mb-2">Code on {phone}</div>
@@ -153,7 +155,7 @@ export function MobilePage() {
           <div className="flex-1 min-w-0 space-y-3">
             {state === "waiting" && started && (
               <>
-                <p className="text-sm">Scan this with the Warren app, or with your phone's camera.</p>
+                <p className="text-sm">Scan this with the Wisp app, or with your phone's camera.</p>
                 <p className="text-xs text-muted">{reachHint(started.addresses)}</p>
                 <p className="text-xs text-muted">The code works once and expires in 5 minutes.</p>
                 <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink">
@@ -184,7 +186,7 @@ export function MobilePage() {
               </>
             )}
             {(state === "expired" || state === "rejected") && <p className="text-sm text-muted">{state === "expired" ? "The code expired." : "Pairing was cancelled."} Start again to show a new code.</p>}
-            {!state && <p className="text-sm text-muted">Get the Warren app on your phone first, then start pairing here.</p>}
+            {!state && <p className="text-sm text-muted">Get the Wisp app on your phone first, then start pairing here.</p>}
             {error && <p className="text-sm text-bad">{error}</p>}
           </div>
         </div>
@@ -192,7 +194,7 @@ export function MobilePage() {
 
       <ol className="mt-8 space-y-5">
         {[
-          ["Scan the QR code", "Open Warren on your phone and scan the code shown here."],
+          ["Scan the QR code", "Open Wisp on your phone and scan the code shown here."],
           ["Check the code", "Make sure the six digits match on both screens, then confirm here."],
           ["You're in", "Your phone signs in by itself after you confirm."],
         ].map(([title, text], i) => (

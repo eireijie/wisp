@@ -6,20 +6,20 @@ const connectors: ConnectorSpec[] = [
   { name: "github", kind: "mcp-http", url: "https://api.githubcopilot.com/mcp/", headers: { Authorization: "Bearer t0k" } },
   { name: "postgres", kind: "mcp-stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-postgres", "postgres://h/db"], env: { PGSSL: "1" } },
   { name: "legacy", kind: "mcp-http", url: "https://example.com/sse" },
-  // Warren's own servers can't be replaced by a connector
-  { name: "warren", kind: "mcp-stdio", command: "evil" },
+  // Wisp's own servers can't be replaced by a connector
+  { name: "wisp", kind: "mcp-stdio", command: "evil" },
 ];
-const warren = { command: "node", args: ["warren-mcp.mjs"], env: { WARREN_TOKEN: "x" } };
+const wisp = { command: "node", args: ["wisp-mcp.mjs"], env: { WISP_TOKEN: "x" } };
 
 describe("connectors reach the harness", () => {
   it("claude: --mcp-config with stdio, http and sse servers, all pre-allowed", () => {
-    const a = claudeArgs({ prompt: "", cwd: "/", mcp: warren, connectors });
+    const a = claudeArgs({ prompt: "", cwd: "/", mcp: wisp, connectors });
     const config = JSON.parse(a[a.indexOf("--mcp-config") + 1]);
-    expect(config.mcpServers.warren.command).toBe("node");
+    expect(config.mcpServers.wisp.command).toBe("node");
     expect(config.mcpServers.github).toEqual({ type: "http", url: "https://api.githubcopilot.com/mcp/", headers: { Authorization: "Bearer t0k" } });
     expect(config.mcpServers.postgres).toEqual({ type: "stdio", command: "npx", args: ["-y", "@modelcontextprotocol/server-postgres", "postgres://h/db"], env: { PGSSL: "1" } });
     expect(config.mcpServers.legacy.type).toBe("sse");
-    expect(a[a.indexOf("--allowedTools") + 1].split(",")).toEqual(["mcp__warren", "mcp__github", "mcp__postgres", "mcp__legacy"]);
+    expect(a[a.indexOf("--allowedTools") + 1].split(",")).toEqual(["mcp__wisp", "mcp__github", "mcp__postgres", "mcp__legacy"]);
   });
 
   it("claude: connectors alone still produce a config", () => {
@@ -28,22 +28,22 @@ describe("connectors reach the harness", () => {
   });
 
   it("codex: -c mcp_servers overrides, with tokens and headers read from the environment rather than written on the command line", () => {
-    const input = { prompt: "", cwd: "/", mcp: warren, connectors };
+    const input = { prompt: "", cwd: "/", mcp: wisp, connectors };
     const a = codexArgs(input);
     expect(a).toEqual(
       expect.arrayContaining([
         'mcp_servers.github.url="https://api.githubcopilot.com/mcp/"',
-        'mcp_servers.github.env_http_headers={Authorization="WARREN_HEADER_GITHUB_AUTHORIZATION"}',
+        'mcp_servers.github.env_http_headers={Authorization="WISP_HEADER_GITHUB_AUTHORIZATION"}',
         'mcp_servers.postgres.command="npx"',
         'mcp_servers.postgres.args=["-y","@modelcontextprotocol/server-postgres","postgres://h/db"]',
         'mcp_servers.postgres.env_vars=["PGSSL"]',
-        'mcp_servers.warren.env_vars=["WARREN_TOKEN"]',
+        'mcp_servers.wisp.env_vars=["WISP_TOKEN"]',
       ]),
     );
-    expect(a).not.toContain('mcp_servers.warren.command="evil"');
+    expect(a).not.toContain('mcp_servers.wisp.command="evil"');
     // nothing secret in `ps`
-    expect(a.join(" ")).not.toMatch(/t0k|WARREN_TOKEN="x"/);
-    expect(codexEnv(input)).toEqual({ WARREN_TOKEN: "x", PGSSL: "1", WARREN_HEADER_GITHUB_AUTHORIZATION: "Bearer t0k" });
+    expect(a.join(" ")).not.toMatch(/t0k|WISP_TOKEN="x"/);
+    expect(codexEnv(input)).toEqual({ WISP_TOKEN: "x", PGSSL: "1", WISP_HEADER_GITHUB_AUTHORIZATION: "Bearer t0k" });
   });
 
   it("codex: two servers wanting the same variable with different values don't get each other's", () => {
@@ -60,8 +60,8 @@ describe("connectors reach the harness", () => {
   });
 
   it("acp: stdio connectors only", () => {
-    const servers = acpMcpServers(warren, undefined, connectors);
-    expect(servers.map((s: any) => s.name)).toEqual(["warren", "postgres"]);
+    const servers = acpMcpServers(wisp, undefined, connectors);
+    expect(servers.map((s: any) => s.name)).toEqual(["wisp", "postgres"]);
     expect(servers[1]).toEqual({ name: "postgres", command: "npx", args: ["-y", "@modelcontextprotocol/server-postgres", "postgres://h/db"], env: [{ name: "PGSSL", value: "1" }] });
   });
 });

@@ -886,7 +886,7 @@ function NewNote({ initial, initialName = "", folders, onClose, onCreated }: { i
 }
 
 /**
- * Opens the vault, or one note, in Obsidian. On the same computer as Warren that's a direct link;
+ * Opens the vault, or one note, in Obsidian. On the same computer as Wisp that's a direct link;
  * from anywhere else it leads to the steps for syncing the vault into Obsidian.
  */
 function OpenInObsidian({ note, className }: { note?: string; className?: string }) {

@@ -8,11 +8,11 @@ export DISPLAY=:1
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
 mkdir -p "$HOME/files" "$HOME/Downloads"
 
-# the same desktop every time: Warren's dock, wallpaper, window theme and icons, and Chrome for links
+# the same desktop every time: Wisp's dock, wallpaper, window theme and icons, and Chrome for links
 CONF="$HOME/.config/xfce4/xfconf/xfce-perchannel-xml"
 mkdir -p "$CONF"
-cp /usr/local/share/warren/desktop/*.xml "$CONF/"
-printf 'WebBrowser=warren-chrome\nTerminalEmulator=xfce4-terminal\nFileManager=thunar\n' > "$HOME/.config/xfce4/helpers.rc"
+cp /usr/local/share/wisp/desktop/*.xml "$CONF/"
+printf 'WebBrowser=wisp-chrome\nTerminalEmulator=xfce4-terminal\nFileManager=thunar\n' > "$HOME/.config/xfce4/helpers.rc"
 xdg-settings set default-web-browser google-chrome.desktop 2>/dev/null || true
 
 Xvfb :1 -screen 0 "${RES}x24" -nolisten tcp -dpi 96 &

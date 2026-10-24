@@ -24,12 +24,12 @@
         <TextView
             style="@style/Title"
             android:layout_marginTop="16dp"
-            android:text="Connect to Warren" />
+            android:text="Connect to Wisp" />
 
         <TextView
             style="@style/Body"
             android:layout_marginTop="8dp"
-            android:text="Warren runs on your computer. Pair this phone with it to chat with your agents and watch their computers from your phone." />
+            android:text="Wisp runs on your computer. Pair this phone with it to chat with your agents and watch their computers from your phone." />
 
         <LinearLayout
             android:id="@+id/steps"
@@ -38,10 +38,10 @@
             android:layout_marginTop="28dp"
             android:orientation="vertical">
 
-            <TextView style="@style/StepTitle" android:text="1  Open Warren on your computer" />
+            <TextView style="@style/StepTitle" android:text="1  Open Wisp on your computer" />
             <TextView style="@style/StepText" android:text="Go to Settings → Mobile and click Start pairing." />
             <TextView style="@style/StepTitle" android:text="2  Scan the QR code" />
-            <TextView style="@style/StepText" android:text="Your phone needs to be on the same Wi-Fi, unless your Warren is set up to be reached from anywhere." />
+            <TextView style="@style/StepText" android:text="Your phone needs to be on the same Wi-Fi, unless your Wisp is set up to be reached from anywhere." />
             <TextView style="@style/StepTitle" android:text="3  Check the code" />
             <TextView style="@style/StepText" android:text="Confirm on your computer that both show the same six digits." />
         </LinearLayout>

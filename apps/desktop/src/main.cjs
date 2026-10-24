@@ -1,12 +1,18 @@
-// Warren desktop: the workspace in its own window, plus what only an app on this computer can do:
+// Wisp desktop: the workspace in its own window, plus what only an app on this computer can do:
 // run a hub here, connect this computer as a device for agents (one click, no token to copy), and
 // keep both going from the menu bar after the window closes.
 const { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, shell, Notification } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const migration = require("./migration.cjs").createMigration({ appData: app.getPath("appData") });
+app.setName("Wisp");
+const migrated = migration.prepare();
+fs.mkdirSync(migrated.userData, { recursive: true });
+app.setPath("userData", migrated.userData);
 const engine = require("./engine.cjs");
 const { GITHUB_URL } = require("./repo.cjs");
+const { isPairingLink, registerProtocols } = require("./protocol.cjs");
 const cloud = require("./cloud.cjs");
 const screenCode = require("./screen-code.cjs");
 const { onOrigin, isPage, mainFrameUrl } = require("./trust.cjs");
@@ -17,7 +23,7 @@ const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
 const SETUP_PAGE = path.join(__dirname, "setup.html");
 
-/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string, dismissed?: boolean }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyOverFullscreen?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
+/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string, dismissed?: boolean }, wispDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyOverFullscreen?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
@@ -69,9 +75,27 @@ const device = new engine.Child("device", logDir, () => {
 });
 
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on("second-instance", () => showWindow());
+let startupComplete = false;
+let pendingPairing = process.argv?.some(isPairingLink) || false;
+function openPairing(input) {
+  if (!isPairingLink(input)) return false;
+  pendingPairing = true;
+  if (startupComplete) showPairing();
+  return true;
+}
+function showPairing() {
+  pendingPairing = false;
+  showWindow();
+  // Pairing is completed on a phone; bring the desktop's pairing instructions into view.
+  if (hubOrigin) openHub(hubOrigin, "#/settings/mobile");
+}
+app.on("second-instance", (_event, argv = []) => {
+  if (!argv.some(openPairing) && startupComplete) showWindow();
+});
+app.on("open-url", (event, url) => { event.preventDefault(); openPairing(url); });
+registerProtocols(app);
 
-app.setAboutPanelOptions?.({ applicationName: "Warren", copyright: "Apache-2.0", website: GITHUB_URL });
+app.setAboutPanelOptions?.({ applicationName: "Wisp", copyright: "Apache-2.0", website: GITHUB_URL });
 
 // ---------------------------------------------------------------- window
 
@@ -84,7 +108,7 @@ function createWindow() {
     y: b?.y,
     minWidth: 880, // narrower and the web app switches to its phone layout (767px)
     minHeight: 520,
-    title: "Warren",
+    title: "Wisp",
     icon: ICON,
     show: false,
     backgroundColor: "#f7f7f7",
@@ -98,7 +122,7 @@ function createWindow() {
   };
   win.on("resize", remember);
   win.on("move", remember);
-  // closing the window keeps Warren (and its hub and device) running from the menu bar
+  // closing the window keeps Wisp (and its hub and device) running from the menu bar
   win.on("close", (e) => {
     if (quitting) return;
     e.preventDefault();
@@ -163,6 +187,7 @@ function openHub(url, route = "") {
   buddy.connect(hubOrigin);
   if (!win) createWindow();
   win.loadURL(hubOrigin + "/" + route);
+  if (pendingPairing && startupComplete) showPairing();
   refresh();
 }
 
@@ -193,7 +218,7 @@ async function connect() {
     const found = needs();
     if (found.problem) return showSetup({ step: "create", problem: found.problem });
     showSetup({ step: "starting" });
-    hub.start(found.node, found.warrenDir, ["hub", "start"], { ...found.env, PORT: String(PORT) });
+    hub.start(found.node, found.wispDir, ["hub", "start"], { ...found.env, PORT: String(PORT) });
     hubBy = "app";
     if (!(await waitFor(LOCAL_HUB, 90_000))) {
       hub.stop();
@@ -204,11 +229,11 @@ async function connect() {
   startDeviceIfWanted();
 }
 
-/** How to run Warren here: the app's own copy, or from source a Warren folder and Node 22+. */
+/** How to run Wisp here: the app's own copy, or from source a Wisp folder and Node 22+. */
 function needs() {
-  const found = engine.runtime(config.warrenDir);
-  if (!found.problem && !found.bundled && config.warrenDir !== found.warrenDir) {
-    config.warrenDir = found.warrenDir; // so a copy of the app elsewhere (or a moved one) finds it again
+  const found = engine.runtime(config.wispDir);
+  if (!found.problem && !found.bundled && config.wispDir !== found.wispDir) {
+    config.wispDir = found.wispDir; // so a copy of the app elsewhere (or a moved one) finds it again
     save();
   }
   return found;
@@ -220,14 +245,14 @@ function needs() {
 async function sessionToken() {
   if (!win || !onOrigin(win.webContents.getURL(), hubOrigin)) return null;
   try {
-    return await win.webContents.executeJavaScript('localStorage.getItem("warren.token")', true);
+    return await win.webContents.executeJavaScript('localStorage.getItem("wisp.token")', true);
   } catch {
     return null;
   }
 }
 
 /**
- * Make this computer a device of the Warren in the window, if the person chose that. A device
+ * Make this computer a device of the Wisp in the window, if the person chose that. A device
  * already set up for this hub just starts; otherwise it's added for whoever signs in, as soon as
  * they do (a hub's first account is made in the window, after the app has opened it).
  */
@@ -263,7 +288,7 @@ async function startDevice({ quiet = false, confirmed = false, claim = null } = 
   deviceError = "";
   if (!hubOrigin) return;
   const service = await engine.serviceRunning("node");
-  // a device card in Warren that never connected: this computer becomes that device
+  // a device card in Wisp that never connected: this computer becomes that device
   if (claim?.token) {
     if (device.running()) await stopAndWait();
     engine.writeNodeConfig({ hub: hubOrigin, token: claim.token, nodeId: undefined, name: claim.name || deviceName() });
@@ -283,17 +308,17 @@ async function startDevice({ quiet = false, confirmed = false, claim = null } = 
   if (cfg.hub && cfg.token && !sameHub && !confirmed) {
     const { response } = await dialog.showMessageBox(win, {
       type: "question",
-      buttons: ["Connect to this Warren", "Cancel"],
+      buttons: ["Connect to this Wisp", "Cancel"],
       defaultId: 0,
       cancelId: 1,
-      message: "This computer is a device of another Warren",
+      message: "This computer is a device of another Wisp",
       detail: `It's set up for ${cfg.hub}. Connecting it to ${hubOrigin} instead disconnects it from there.`,
     });
     if (response !== 0) return;
   }
   if (!sameHub) {
     const token = await sessionToken();
-    if (!token) return fail("Sign in to Warren first, then connect this computer.");
+    if (!token) return fail("Sign in to Wisp first, then connect this computer.");
     try {
       const res = await fetch(new URL("/api/nodes", hubOrigin), {
         method: "POST",
@@ -311,7 +336,7 @@ async function startDevice({ quiet = false, confirmed = false, claim = null } = 
   config.device = true;
   save();
   if (service) {
-    // `warren service install node` runs the device here: point it at this hub instead
+    // `wisp service install node` runs the device here: point it at this hub instead
     if (!(await engine.restartService("node"))) {
       deviceBy = "";
       deviceOnline = false;
@@ -319,12 +344,12 @@ async function startDevice({ quiet = false, confirmed = false, claim = null } = 
     }
     deviceBy = "service";
     refresh();
-    if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Warren → Devices.");
+    if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Wisp → Devices.");
     return;
   }
   deviceBy = "app";
-  device.start(found.node, found.warrenDir, ["node", "start"], { ...found.env, WARREN_EXIT_IF_REJECTED: "1" });
-  if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Warren → Devices.");
+  device.start(found.node, found.wispDir, ["node", "start"], { ...found.env, WISP_EXIT_IF_REJECTED: "1" });
+  if (!quiet) notify(`${deviceName()} is a device now`, "Agents can run here. Choose what it does for them in Wisp → Devices.");
 
   function fail(msg) {
     deviceError = msg;
@@ -400,7 +425,7 @@ const sameOrigin = (a, b) => {
 function setDeviceFlag(key, on) {
   engine.writeNodeConfig(key === "shareScreen" ? { shareScreen: on, noScreen: on ? undefined : engine.readNodeConfig().noScreen } : { [key]: on });
   refresh();
-  // like `warren node screen on`: turning the screen on asks for a code when there isn't one
+  // like `wisp node screen on`: turning the screen on asks for a code when there isn't one
   if (key === "shareScreen" && on && !engine.readNodeConfig().screenCode) showCodeWindow(false);
 }
 
@@ -408,7 +433,7 @@ function setDeviceFlag(key, on) {
 let codeWin = null;
 let codeSaved = false;
 
-/** Pick (or change) the code that opens this screen from Warren, in a small window of its own. */
+/** Pick (or change) the code that opens this screen from Wisp, in a small window of its own. */
 function showCodeWindow(change) {
   if (codeWin) return codeWin.focus();
   codeSaved = false;
@@ -433,7 +458,7 @@ function showCodeWindow(change) {
   codeWin.on("closed", () => {
     codeWin = null;
     if (!codeSaved && !change && !engine.readNodeConfig().screenCode)
-      notify("No code for this screen", "Your Warren sign-in alone opens it. Pick one from the menu: Pick a Screen Code…");
+      notify("No code for this screen", "Your Wisp sign-in alone opens it. Pick one from the menu: Pick a Screen Code…");
   });
   codeWin.loadFile(path.join(__dirname, "screen-code.html"), { query: { state: JSON.stringify({ change }) } });
 }
@@ -445,7 +470,7 @@ ipcMain.handle("screen-code:save", (e, input) => {
   if (r.error) return { error: r.error };
   engine.writeNodeConfig({ screenCode: r.screenCode });
   codeSaved = true;
-  notify("Screen code saved", `You'll enter this ${r.screenCode.kind === "pin" ? "PIN" : "password"} in Warren to watch this screen or lend it to an agent.`);
+  notify("Screen code saved", `You'll enter this ${r.screenCode.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen or lend it to an agent.`);
   codeWin.close();
   refresh();
   return { ok: true };
@@ -489,7 +514,7 @@ function serverAddressItems() {
   return [
     {
       label: "Copy Server Address",
-      submenu: addrs.map((a) => ({ label: a.replace(/^http:\/\//, ""), click: () => (clipboard.writeText(a), notify("Server address copied", `Others join with ${a} in their Warren app.`)) })),
+      submenu: addrs.map((a) => ({ label: a.replace(/^http:\/\//, ""), click: () => (clipboard.writeText(a), notify("Server address copied", `Others join with ${a} in their Wisp app.`)) })),
     },
   ];
 }
@@ -501,14 +526,14 @@ function trayMenu() {
     { label: hubLine(), enabled: false },
     { label: deviceLine(), enabled: false },
     { type: "separator" },
-    { label: "Open Warren", click: () => showWindow() },
+    { label: "Open Wisp", click: () => showWindow() },
     ...serverAddressItems(),
     buddy.menu(),
     { type: "separator" },
     isDevice || deviceWaiting
       ? { label: deviceWaiting ? "Don't Make This Computer a Device" : "Disconnect This Computer", enabled: deviceBy !== "service", click: () => stopDevice() }
       : { label: "Connect This Computer for Agents…", enabled: !!hubOrigin, click: () => startDevice() },
-    { label: "Let Me Use This Screen from Warren", type: "checkbox", visible: isDevice, checked: !!n.shareScreen && !n.noScreen, click: (i) => setDeviceFlag("shareScreen", i.checked) },
+    { label: "Let Me Use This Screen from Wisp", type: "checkbox", visible: isDevice, checked: !!n.shareScreen && !n.noScreen, click: (i) => setDeviceFlag("shareScreen", i.checked) },
     { label: n.screenCode ? "Change Screen Code…" : "Pick a Screen Code…", visible: isDevice && !!n.shareScreen && !n.noScreen, click: () => showCodeWindow(!!n.screenCode) },
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
@@ -518,7 +543,7 @@ function trayMenu() {
     { label: "Update Automatically", type: "checkbox", checked: config.autoUpdate !== false, click: (i) => ((config.autoUpdate = i.checked), save()) },
     { label: "Show Logs", click: () => shell.openPath(logDir) },
     { type: "separator" },
-    { label: "Quit Warren", accelerator: "CmdOrCtrl+Q", click: () => app.quit() },
+    { label: "Quit Wisp", accelerator: "CmdOrCtrl+Q", click: () => app.quit() },
   ]);
 }
 
@@ -532,7 +557,7 @@ function appMenu() {
   const mac = process.platform === "darwin";
   return Menu.buildFromTemplate([
     ...(mac
-      ? [{ label: "Warren", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => updater.check() }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
+      ? [{ label: "Wisp", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => updater.check() }, { type: "separator" }, { label: "Settings…", accelerator: "Cmd+,", click: go("settings") }, { type: "separator" }, { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, { type: "separator" }, { role: "quit" }] }]
       : []),
     { label: "File", submenu: [{ label: "Create or Join Another Server…", click: () => showSetup() }, { type: "separator" }, mac ? { role: "close" } : { role: "quit" }] },
     { role: "editMenu" },
@@ -552,14 +577,14 @@ function appMenu() {
       ],
     },
     { role: "windowMenu" },
-    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal(GITHUB_URL) }, ...(mac ? [] : [{ label: "Check for Updates…", click: () => updater.check() }]), { label: "Show Logs", click: () => shell.openPath(logDir) }] },
+    { role: "help", submenu: [{ label: "Wisp on GitHub", click: () => shell.openExternal(GITHUB_URL) }, ...(mac ? [] : [{ label: "Check for Updates…", click: () => updater.check() }]), { label: "Show Logs", click: () => shell.openPath(logDir) }] },
   ]);
 }
 
 function refresh() {
   if (!app.isReady()) return;
   tray?.setContextMenu(trayMenu());
-  tray?.setToolTip(`Warren: ${hubLine()}`);
+  tray?.setToolTip(`Wisp: ${hubLine()}`);
 }
 
 function notify(title, body) {
@@ -585,7 +610,7 @@ const fromHub = (e) => onOrigin(mainFrameUrl(e, win) ?? "", hubOrigin);
 const setup = (name, fn) => ipcMain.handle(name, (e, ...args) => (fromSetup(e) ? fn(...args) : null));
 
 setup("setup:check", () => {
-  const found = engine.runtime(config.warrenDir);
+  const found = engine.runtime(config.wispDir);
   return { problem: found.problem ?? null, platform: process.platform, hubUrl: config.hubUrl ?? "", mode: config.mode ?? null, device: config.device ?? true, deviceName: deviceName() };
 });
 
@@ -631,7 +656,7 @@ setup("setup:cloud-plans", async (token) => {
 setup("setup:cloud-create", async (token, { type, location, account, device: asDevice = true, resume = null } = {}) => {
   const pending = resume != null && config.cloudPending?.server?.id === resume ? config.cloudPending : undefined;
   try {
-    const r = await cloud.createWarren(
+    const r = await cloud.createWisp(
       { token: String(token || "").trim(), type, location, account },
       { onStep: (step) => win?.webContents.send("setup:cloud-step", step), resume: pending },
     );
@@ -678,7 +703,7 @@ function signInOnOpen(url, session) {
   const origin = new URL(url).origin;
   win.webContents.once("did-finish-load", () => {
     if (!onOrigin(win.webContents.getURL(), origin)) return;
-    win.webContents.executeJavaScript(`localStorage.setItem("warren.token", ${JSON.stringify(session)}); location.hash = "#/welcome/intro"; location.reload();`);
+    win.webContents.executeJavaScript(`localStorage.setItem("wisp.token", ${JSON.stringify(session)}); location.hash = "#/welcome/intro"; location.reload();`);
   });
 }
 
@@ -707,19 +732,25 @@ ipcMain.handle("desktop:connect-device", (e, claim) => (fromHub(e) ? startDevice
 
 // ---------------------------------------------------------------- lifecycle
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Do not start or connect while old services are still using the migrated data.
+  await migration.migrateServices(() => engine.runtime(config.wispDir));
   if (process.platform === "darwin" && fs.existsSync(ICON)) app.dock?.setIcon(nativeImage.createFromPath(ICON));
   Menu.setApplicationMenu(appMenu());
   makeTray();
   buddy.ready();
   createWindow();
+  startupComplete = true;
   if (config.cloudPending && !config.cloudPending.dismissed) showPendingCloud();
   else connect();
   updater.start();
   deviceStatusTimer = setInterval(() => void readDeviceStatus(), 15_000);
+}).catch((err) => {
+  dialog.showErrorBox("Couldn’t migrate Wisp", err.message);
+  app.quit();
 });
 
-app.on("activate", () => showWindow());
+app.on("activate", () => { if (startupComplete) showWindow(); });
 app.on("window-all-closed", () => {}); // stays in the menu bar
 app.on("before-quit", (event) => {
   if (updater.installOnQuit(event)) return;

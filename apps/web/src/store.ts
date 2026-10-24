@@ -9,7 +9,7 @@ import { listOrgs, type Org } from "./orgs.ts";
 export interface Me {
   kind: "user";
   user: User;
-  /** how Warren behaves for this person, on every device (Settings → Preferences) */
+  /** how Wisp behaves for this person, on every device (Settings → Preferences) */
   prefs: UserPrefs;
   role: "owner" | "member" | "guest";
   workspace: { id: string; name: string };
@@ -106,7 +106,7 @@ interface State {
   changesVersion: number;
   /** bumps when tasks change, so the Tasks page refetches */
   tasksVersion: number;
-  /** bumps when notes change outside Warren, so Memory reloads */
+  /** bumps when notes change outside Wisp, so Memory reloads */
   memoryVersion: number;
   /** the New task dialog is open */
   newTaskOpen: boolean;

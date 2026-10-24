@@ -3,8 +3,8 @@ import crypto from "node:crypto";
 import type { HarnessLogin } from "@wisp/core";
 
 /**
- * Signing a harness account in from Warren: the device runs the harness's own sign-in command
- * (with the account's folder), and Warren shows the link and code it prints, so nobody needs the
+ * Signing a harness account in from Wisp: the device runs the harness's own sign-in command
+ * (with the account's folder), and Wisp shows the link and code it prints, so nobody needs the
  * device's terminal. Device-code sign-ins finish on their own once approved; ones that print a
  * link and then wait for a pasted code get it through `input`.
  */

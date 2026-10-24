@@ -7,9 +7,9 @@ const { featuresForExperience } = await import("../src/onboarding.ts");
 
 describe("organizations", () => {
   it("reads the code from a pasted invite link or a bare code", () => {
-    expect(inviteCode("https://warren.example/#/join/abc123")).toBe("abc123");
+    expect(inviteCode("https://wisp.example/#/join/abc123")).toBe("abc123");
     expect(inviteCode("  http://localhost:7777/join/x-y_z?ref=1 ")).toBe("x-y_z");
-    expect(inviteCode("https://warren.example/?code=q9")).toBe("q9");
+    expect(inviteCode("https://wisp.example/?code=q9")).toBe("q9");
     expect(inviteCode("plaincode")).toBe("plaincode");
   });
 

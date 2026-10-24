@@ -22,7 +22,7 @@ interface NodeInfo {
   online: boolean;
   lastSeen: string | null;
   agents: string[];
-  /** the Warren version it runs; null for devices from before updates */
+  /** the Wisp version it runs; null for devices from before updates */
   version: { commit: string | null; date: string | null } | null;
   update: { state: "idle" | "updating" | "restarting" | "failed"; message: string } | null;
 }
@@ -54,7 +54,7 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
 /**
  * Shown on a device that is not connected: one line, with the how-to folded away until asked for.
  * One that never connected can get a fresh connection code here, so a lost code or a failed setup
- * is never a dead end; inside the Warren app it's one button that makes this computer that device.
+ * is never a dead end; inside the Wisp app it's one button that makes this computer that device.
  */
 function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
   useAccess();
@@ -84,7 +84,7 @@ function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => 
   const claim = async () => {
     setBusy(true);
     try {
-      await window.warrenDesktop?.connectDevice({ token: await newCode(), name: n.name });
+      await window.wispDesktop?.connectDevice({ token: await newCode(), name: n.name });
       onChange();
     } catch (e) {
       setError((e as Error).message);
@@ -96,7 +96,7 @@ function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => 
   return (
     <div className="mt-3 rounded-xl bg-hover/60 px-3 py-2.5 text-sm">
       <div className="flex items-center gap-3">
-        <p className="flex-1 text-muted">{n.lastSeen ? "Open Warren on this computer to bring it back." : canClaim ? "Is this that computer?" : "Start Warren on this computer to connect it."}</p>
+        <p className="flex-1 text-muted">{n.lastSeen ? "Open Wisp on this computer to bring it back." : canClaim ? "Is this that computer?" : "Start Wisp on this computer to connect it."}</p>
         {canClaim && (
           <Button variant="primary" disabled={busy} onClick={claim}>
             {busy ? "Connecting…" : "Connect this computer"}
@@ -111,7 +111,7 @@ function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => 
         <div className="mt-3 space-y-2 text-xs">
           <p>
             <a className="font-medium underline" href={downloadsFor(desktopOs()).href} target="_blank" rel="noopener noreferrer">
-              Get the Warren app
+              Get the Wisp app
             </a>
             , choose to join a server, and enter:
           </p>
@@ -227,7 +227,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
         ) : (
           <div className="max-w-3xl p-4 md:p-8 space-y-3">
             {nodes && (
-              <p className="text-sm text-muted" title="A device is a computer running Warren. Agents run on it.">
+              <p className="text-sm text-muted" title="A device is a computer running Wisp. Agents run on it.">
                 {online} of {nodes.length} online
               </p>
             )}
@@ -236,7 +236,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
               const behind = !!(hubCommit && n.version?.commit && n.version.commit !== hubCommit);
               const canUpdate = isOwner && n.online;
               const menu = [
-                ...(canUpdate && !busy ? [{ label: "Update Warren", icon: <Download size={15} />, onSelect: () => update(n) }] : []),
+                ...(canUpdate && !busy ? [{ label: "Update Wisp", icon: <Download size={15} />, onSelect: () => update(n) }] : []),
                 ...(n.mine || isOwner ? [{ label: "Remove device", icon: <Trash2 size={15} />, danger: true, onSelect: () => remove(n) }] : []),
               ];
               return (
@@ -253,12 +253,12 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                         )}
                         {!n.mine && n.ownerName && <span className="text-xs text-muted">{n.ownerName}'s</span>}
                       </div>
-                      <div className="text-xs text-muted truncate" title={n.version?.commit ? `Warren ${n.version.commit}${behind ? ` (hub runs ${hubCommit})` : ""}` : undefined}>
+                      <div className="text-xs text-muted truncate" title={n.version?.commit ? `Wisp ${n.version.commit}${behind ? ` (hub runs ${hubCommit})` : ""}` : undefined}>
                         {n.online ? "Online" : `Offline · ${connectionLine(n, timeAgo)}`}
                       </div>
                     </div>
                     {canUpdate && (busy || behind) && (
-                      <Button variant="ghost" disabled={busy} title="Get the latest Warren on this device and restart it" onClick={() => update(n)}>
+                      <Button variant="ghost" disabled={busy} title="Get the latest Wisp on this device and restart it" onClick={() => update(n)}>
                         <Download size={15} /> {busy ? "Updating…" : "Update"}
                       </Button>
                     )}
@@ -313,7 +313,7 @@ function screenSummary(n: NodeInfo): { short: string; long: string } {
   const screen = n.capabilities?.screen;
   if (!screen || !n.online) return { short: n.online ? "Screen not checked" : "Screen unknown", long: screenLine(n) };
   if (screen.ok) return { short: "Screen on", long: n.mine ? "Only you can see it, and agents only while you lend it to them (Computers)." : `It's ${n.ownerName ?? "its owner"}'s alone.` };
-  if (screen.off) return { short: "Screen off", long: n.mine ? `Agents use VMs instead. To use it yourself from Warren, run "warren node screen on" on ${n.name}.` : "Its own screen is off." };
+  if (screen.off) return { short: "Screen off", long: n.mine ? `Agents use VMs instead. To use it yourself from Wisp, run "wisp node screen on" on ${n.name}.` : "Its own screen is off." };
   return { short: "No screen", long: `Its own screen can't be used: ${screen.detail}` };
 }
 
@@ -369,7 +369,7 @@ function CreateNode({ onClose }: { onClose: () => void }) {
       {token ? (
         <div className="space-y-4 text-sm">
           <p>
-            On <b>{name}</b>, run this once. It installs Warren if it isn't there yet and keeps the device connected.
+            On <b>{name}</b>, run this once. It installs Wisp if it isn't there yet and keeps the device connected.
           </p>
           <DeviceInstall token={token} name={name} />
           <p className="text-muted">The token is shown only once. Then assign agents to this device from the Agents page.</p>

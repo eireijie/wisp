@@ -1,7 +1,7 @@
 import type { Channel, ChannelTeam } from "./types.ts";
 
 /**
- * A channel's team as the rest of Warren reads it: who's on it and in what role, who leads, its
+ * A channel's team as the rest of Wisp reads it: who's on it and in what role, who leads, its
  * shared memory folder and repo, and who it reports to. A channel is the only kind of team, so a
  * team's id is its channel's id and its name is the channel's name.
  */

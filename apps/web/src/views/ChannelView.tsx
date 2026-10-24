@@ -30,7 +30,7 @@ type Side = { kind: "agent"; agentId: string; tab: AgentPanelTab } | { kind: "me
 /** The DM's own agent panel stays open across DMs once you open it. */
 function storedDmPanel(): AgentPanelTab | null {
   try {
-    return (localStorage.getItem("warren.agentPanel") as AgentPanelTab | null) || null;
+    return (localStorage.getItem("wisp.agentPanel") as AgentPanelTab | null) || null;
   } catch {
     return null;
   }
@@ -60,8 +60,8 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
     // remember the DM's own panel, so it's there in the next DM too
     if (!dmAgentId) return;
     try {
-      if (next?.kind === "agent" && next.agentId === dmAgentId) localStorage.setItem("warren.agentPanel", next.tab);
-      else if (!next) localStorage.removeItem("warren.agentPanel");
+      if (next?.kind === "agent" && next.agentId === dmAgentId) localStorage.setItem("wisp.agentPanel", next.tab);
+      else if (!next) localStorage.removeItem("wisp.agentPanel");
     } catch {}
   };
   /** Open a pane; a thread that's open closes first, since they share the space. */
@@ -892,7 +892,7 @@ function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: Chan
 }
 
 /** "Add files" on a new channel's intro asks the composer to open its file picker. */
-const COMPOSER_ATTACH = "warren:composer-attach";
+const COMPOSER_ATTACH = "wisp:composer-attach";
 
 function isGrouped(prev: Message | undefined, m: Message) {
   return !!prev && prev.author.kind === m.author.kind && prev.author.id === m.author.id && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000 && m.author.id !== "system";
@@ -1238,7 +1238,7 @@ function Parts({ parts, body = "" }: { parts: MessagePart[]; body?: string }) {
   );
 }
 
-const prettyTool = (n: string) => n.replace(/^mcp__warren__/, "").replace(/^mcp__/, "").replace(/^warren\./, "");
+const prettyTool = (n: string) => n.replace(/^mcp__(?:wisp|warren)__/, "").replace(/^mcp__/, "").replace(/^(?:wisp|warren)\./, "");
 
 const KIND_LABEL: Record<string, string> = { preference: "preference", plan: "plan", did: "what you did", detail: "detail" };
 

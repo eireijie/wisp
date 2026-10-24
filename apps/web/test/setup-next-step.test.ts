@@ -13,7 +13,7 @@ describe("setupNextStep", () => {
   it("asks for a device", () =>
     expect(setupNextStep(agent({ nodeId: null }), [dev()])).toEqual({ text: "Choose the computer that runs Ada.", href: "#/agents/a1/device", action: "Choose a device" }));
   it("explains offline", () =>
-    expect(setupNextStep(agent(), [dev({ online: false })])).toEqual({ text: "Open Warren on my-mac so it reconnects. Messages wait until then.", href: "#/nodes", action: "See devices" }));
+    expect(setupNextStep(agent(), [dev({ online: false })])).toEqual({ text: "Open Wisp on my-mac so it reconnects. Messages wait until then.", href: "#/nodes", action: "See devices" }));
   it("explains paused", () =>
     expect(setupNextStep(agent(), [dev({ paused: true })])).toEqual({ text: "my-mac is paused. Resume it on that computer.", href: "#/nodes", action: "See devices" }));
   it("points to install", () => {

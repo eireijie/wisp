@@ -56,7 +56,7 @@ async function deviceOnline() {
 const routine = async (id: string) => (await api<any[]>("GET", "/api/routines")).find((r) => r.id === id);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-routine-done-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-routine-done-"));
   const built = await buildHub({ dataDir: dir });
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;

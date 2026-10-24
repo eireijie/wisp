@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Files
-Comment=The files folder, shared with the device
-Exec=thunar /home/warren/files
-Icon=system-file-manager
-Terminal=false
-Categories=System;FileManager;

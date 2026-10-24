@@ -65,10 +65,10 @@ const write = (rel: string, text: string) => {
 };
 const read = (rel: string) => fs.readFileSync(path.join(home, rel), "utf8");
 const skill = (rel: string, name: string, description = "Does a thing") => write(path.join(rel, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n\nHow to ${name}.\n`);
-const backups = (rel: string) => fs.readdirSync(path.dirname(path.join(home, rel))).filter((n) => n.startsWith(`${path.basename(rel)}.warren-bak.`));
+const backups = (rel: string) => fs.readdirSync(path.dirname(path.join(home, rel))).filter((n) => n.startsWith(`${path.basename(rel)}.wisp-bak.`));
 
 beforeEach(() => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-harness-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-harness-"));
 });
 afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
@@ -207,7 +207,7 @@ describe("Codex settings", () => {
     skill(".agents/skills/deploy", "deploy");
   });
 
-  it("reads the parts Warren shows", async () => {
+  it("reads the parts Wisp shows", async () => {
     const s = await readHarnessSettings("codex", { home });
     expect(s.error).toBeUndefined();
     expect(s.model).toBe("gpt-6-astra");

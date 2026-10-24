@@ -61,8 +61,8 @@ export function connectorSlug(name: string): string {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
-  // "warren" and "browser" are the servers Warren itself gives every agent
-  return !s ? "connector" : s === "warren" || s === "browser" ? `${s}-2` : s;
+  // "wisp" and "browser" are the servers Wisp itself gives every agent
+  return !s ? "connector" : s === "wisp" || s === "browser" ? `${s}-2` : s;
 }
 
 /** Replace `{{KEY}}` with the connector's own values (unknown keys are left as they are). */
@@ -70,7 +70,7 @@ export function fillTemplate(s: string, env: Record<string, string>): string {
   return s.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (m, k: string) => env[k] ?? m);
 }
 
-/** How a harness talks to Warren: from the harness list, "acp" for acp:<name> ones, else "mcp". */
+/** How a harness talks to Wisp: from the harness list, "acp" for acp:<name> ones, else "mcp". */
 function harnessProtocol(harnessId: string): "native" | "acp" | "mcp" {
   return harnessInfo(harnessId)?.protocol ?? (harnessId.startsWith("acp:") ? "acp" : "mcp");
 }
@@ -90,7 +90,7 @@ export function harnessSupportsConnectors(harnessId: string, kind: ConnectorKind
 export function connectorUnsupportedReason(harnessId: string, kind: ConnectorKind = "mcp-http"): string | null {
   if (harnessSupportsConnectors(harnessId, kind)) return null;
   const label = harnessLabel(harnessId);
-  return harnessProtocol(harnessId) === "mcp" ? `${label} connects through warren-mcp, so it can't use connected apps here` : `${label} can't use connected apps yet`;
+  return harnessProtocol(harnessId) === "mcp" ? `${label} connects through wisp-mcp, so it can't use connected apps here` : `${label} can't use connected apps yet`;
 }
 
 export const CONNECTOR_HELP = "Pick a helper that can use connected apps, or make one with Claude Code or Codex.";
@@ -300,7 +300,7 @@ export const CONNECTOR_CATALOG: CatalogConnector[] = [
   {
     id: "memory",
     name: "Knowledge graph",
-    description: "A small graph memory of people, things and how they relate. (Warren's vault is the shared memory; this is extra.)",
+    description: "A small graph memory of people, things and how they relate. (Wisp's vault is the shared memory; this is extra.)",
     icon: "Network",
     category: "Data",
     kind: "mcp-stdio",
@@ -445,7 +445,7 @@ export function catalogConnector(id: string): CatalogConnector | undefined {
 export interface EverydayApp {
   name: string;
   aliases: string[];
-  /** built-in catalog id when Warren's catalog has it, else connected through Zapier */
+  /** built-in catalog id when Wisp's catalog has it, else connected through Zapier */
   catalogId: string | null;
   /** one plain line: what the helper will be able to do */
   does: string;

@@ -23,15 +23,15 @@ export function ConnectionInstructions({
   const shell = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
   const config =
     format === "claude"
-      ? `claude mcp add warren --env WARREN_URL=${shell(hub)} --env WARREN_TOKEN=${shell(token)} -- warren-mcp`
+      ? `claude mcp add wisp --env WISP_URL=${shell(hub)} --env WISP_TOKEN=${shell(token)} -- wisp-mcp`
       : format === "codex"
-        ? `[mcp_servers.warren]\ncommand = "warren-mcp"\nenv = { WARREN_URL = ${JSON.stringify(hub)}, WARREN_TOKEN = ${JSON.stringify(token)} }`
+        ? `[mcp_servers.wisp]\ncommand = "wisp-mcp"\nenv = { WISP_URL = ${JSON.stringify(hub)}, WISP_TOKEN = ${JSON.stringify(token)} }`
         : JSON.stringify(
             {
               mcpServers: {
-                warren: {
-                  command: "warren-mcp",
-                  env: { WARREN_URL: hub, WARREN_TOKEN: token },
+                wisp: {
+                  command: "wisp-mcp",
+                  env: { WISP_URL: hub, WISP_TOKEN: token },
                 },
               },
             },
@@ -41,9 +41,9 @@ export function ConnectionInstructions({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted">
-        On the agent's machine, install Warren from this repository and run{" "}
+        On the agent's machine, install Wisp from this repository and run{" "}
         <code className="text-ink">npm install && npm link</code> to make{" "}
-        <code className="text-ink">warren-mcp</code> available. Then add this
+        <code className="text-ink">wisp-mcp</code> available. Then add this
         configuration to its MCP settings and restart the session.
       </p>
       <div

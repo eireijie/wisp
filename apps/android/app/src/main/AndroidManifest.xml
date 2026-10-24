@@ -10,9 +10,9 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="Warren"
+        android:label="Wisp"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Warren"
+        android:theme="@style/Theme.Wisp"
         android:usesCleartextTraffic="true">
 
         <!-- the QR scanner module downloads with the app instead of on first scan -->
@@ -30,11 +30,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- pairing QR codes are warren://pair links, so the camera app opens them in Warren -->
+            <!-- pairing QR codes are wisp://pair links, so the camera app opens them in Wisp -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="wisp" android:host="pair" />
                 <data android:scheme="warren" android:host="pair" />
             </intent-filter>
         </activity>

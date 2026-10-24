@@ -2,28 +2,28 @@ import type { CommandOption } from "./types.ts";
 
 /**
  * "/" commands in chat. Each agent offers its harness's own commands and skills (reported by its
- * device in the harness catalog), the Warren skills it has, and a few Warren answers itself.
+ * device in the harness catalog), the Wisp skills it has, and a few Wisp answers itself.
  */
 
-/** Commands Warren answers itself, for every agent, without waking it. */
-export const WARREN_COMMANDS: { name: string; description: string }[] = [{ name: "context", description: "See how full this conversation is" }];
+/** Commands Wisp answers itself, for every agent, without waking it. */
+export const WISP_COMMANDS: { name: string; description: string }[] = [{ name: "context", description: "See how full this conversation is" }];
 
 /** One entry in the "/" menu: where it comes from decides how it runs. */
 export interface AgentCommand {
   name: string;
   description?: string;
   hint?: string;
-  /** "warren": answered by Warren; "command"/"skill": the harness's own; "warren-skill": a skill installed through Warren */
-  kind: "warren" | "command" | "skill" | "warren-skill";
-  via: "warren" | "raw" | "prompt";
+  /** "wisp": answered by Wisp; "command"/"skill": the harness's own; "wisp-skill": a skill installed through Wisp */
+  kind: "wisp" | "command" | "skill" | "wisp-skill";
+  via: "wisp" | "raw" | "prompt";
 }
 
-/** Everything an agent offers after "/", Warren's own first; a harness's own entry wins over a same-named Warren skill. */
-export function agentCommands(harness: CommandOption[] | undefined, warrenSkills: { slug: string; description: string }[]): AgentCommand[] {
+/** Everything an agent offers after "/", Wisp's own first; a harness's own entry wins over a same-named Wisp skill. */
+export function agentCommands(harness: CommandOption[] | undefined, wispSkills: { slug: string; description: string }[]): AgentCommand[] {
   const out = new Map<string, AgentCommand>();
-  for (const c of WARREN_COMMANDS) out.set(c.name, { ...c, kind: "warren", via: "warren" });
+  for (const c of WISP_COMMANDS) out.set(c.name, { ...c, kind: "wisp", via: "wisp" });
   for (const c of harness ?? []) if (!out.has(c.name)) out.set(c.name, { ...c });
-  for (const s of warrenSkills) if (!out.has(s.slug)) out.set(s.slug, { name: s.slug, description: s.description, kind: "warren-skill", via: "prompt" });
+  for (const s of wispSkills) if (!out.has(s.slug)) out.set(s.slug, { name: s.slug, description: s.description, kind: "wisp-skill", via: "prompt" });
   return [...out.values()];
 }
 

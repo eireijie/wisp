@@ -41,17 +41,17 @@ export async function findSkills(root: string): Promise<{ id: string; name: stri
  */
 export async function safeWrite(file: string, before: string, after: string) {
   const now = await fs.readFile(file, "utf8").catch(() => "");
-  if (now !== before) throw new Error(`${path.basename(file)} changed while Warren was changing it; try again`);
+  if (now !== before) throw new Error(`${path.basename(file)} changed while Wisp was changing it; try again`);
   const mode = (await fs.stat(file).catch(() => null))?.mode;
   await fs.mkdir(path.dirname(file), { recursive: true });
   if (before !== "") {
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "");
-    await fs.copyFile(file, `${file}.warren-bak.${stamp}`);
+    await fs.copyFile(file, `${file}.wisp-bak.${stamp}`);
     const base = path.basename(file);
-    const old = (await fs.readdir(path.dirname(file))).filter((n) => n.startsWith(`${base}.warren-bak.`)).sort().slice(0, -3);
+    const old = (await fs.readdir(path.dirname(file))).filter((n) => (n.startsWith(`${base}.wisp-bak.`) || n.startsWith(`${base}.warren-bak.`))).sort().slice(0, -3);
     for (const n of old) await fs.rm(path.join(path.dirname(file), n), { force: true });
   }
-  const tmp = `${file}.warren-tmp-${process.pid}`;
+  const tmp = `${file}.wisp-tmp-${process.pid}`;
   await fs.writeFile(tmp, after, { mode: mode ? mode & 0o777 : 0o644 });
   await fs.rename(tmp, file);
 }
@@ -149,7 +149,7 @@ export function yamlScalar(v: string | boolean) {
   return plain ? v : JSON.stringify(v);
 }
 
-// --- TOML: a reader for the parts Warren needs, and edits by line ---------------------------------
+// --- TOML: a reader for the parts Wisp needs, and edits by line ---------------------------------
 
 export interface TomlTable {
   path: string[];
@@ -200,7 +200,7 @@ export function parseToml(text: string): TomlDoc {
     // a key can't start with "[", so this is a [table] or [[array]] header
     if (l.startsWith("[")) {
       const header = /^(\[\[?)\s*(.+?)\s*\]\]?\s*(#.*)?$/.exec(l);
-      if (!header) throw new Error(`line ${i + 1} isn't something Warren can read: ${l.slice(0, 60)}`);
+      if (!header) throw new Error(`line ${i + 1} isn't something Wisp can read: ${l.slice(0, 60)}`);
       const array = header[1] === "[[";
       table = tomlKeyPath(header[2]);
       arrayIndex = array ? ++arrays : 0;
@@ -208,7 +208,7 @@ export function parseToml(text: string): TomlDoc {
       continue;
     }
     const eq = tomlSplitKey(l);
-    if (!eq) throw new Error(`line ${i + 1} isn't something Warren can read: ${l.slice(0, 60)}`);
+    if (!eq) throw new Error(`line ${i + 1} isn't something Wisp can read: ${l.slice(0, 60)}`);
     const keys = tomlKeyPath(eq.key);
     // a value can go on over several lines (arrays, """strings""")
     let raw = eq.value;
@@ -439,7 +439,7 @@ export function isPlainJson(text: string): boolean {
 
 /** Change a JSON config by mutating its parsed value; keeps its indent. Refuses a file with comments. */
 export function editJson(text: string, name: string, mutate: (o: Record<string, unknown>) => void): string {
-  if (!isPlainJson(text)) throw new Error(`${name} has comments in it, so Warren leaves it as it is; change it on the device`);
+  if (!isPlainJson(text)) throw new Error(`${name} has comments in it, so Wisp leaves it as it is; change it on the device`);
   const o = text.trim() ? asObject(JSON.parse(text)) : {};
   mutate(o);
   const indent = /^\{\s*\n(\s+)"/.exec(text)?.[1] ?? "  ";
@@ -495,7 +495,7 @@ export interface ConfigSummary {
   apps: HarnessSettingItem[];
   plugins: HarnessSettingItem[];
   skills: HarnessSettingItem[];
-  /** what Warren shows but can't change for this harness ("model", "provider"), or everything ("file") */
+  /** what Wisp shows but can't change for this harness ("model", "provider"), or everything ("file") */
   fixed?: ("model" | "provider" | "file")[];
   modelChoices?: string[];
 }

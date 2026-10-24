@@ -1,20 +1,21 @@
 #!/usr/bin/env -S npx tsx
+import { envVar } from "@wisp/core";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { WarrenClient } from "@wisp/sdk";
-import { createWarrenMcp } from "./server.ts";
+import { WispClient } from "@wisp/sdk";
+import { createWispMcp } from "./server.ts";
 
 /**
- * warren-mcp: stdio MCP server.
- *   WARREN_URL    hub URL (default http://localhost:4747)
- *   WARREN_TOKEN  agent token, or node token together with WARREN_AGENT
- *   WARREN_AGENT  agent id when using a node token
+ * wisp-mcp: stdio MCP server.
+ *   WISP_URL    hub URL (default http://localhost:4747)
+ *   WISP_TOKEN  agent token, or node token together with WISP_AGENT
+ *   WISP_AGENT  agent id when using a node token
  */
-const url = process.env.WARREN_URL ?? "http://localhost:4747";
-const token = process.env.WARREN_TOKEN;
+const url = envVar("URL") ?? "http://localhost:4747";
+const token = envVar("TOKEN");
 if (!token) {
-  console.error("warren-mcp: set WARREN_TOKEN (create one in Warren under Agent → Connect)");
+  console.error("wisp-mcp: set WISP_TOKEN (create one in Wisp under Agent → Connect)");
   process.exit(1);
 }
 
-const server = await createWarrenMcp(new WarrenClient({ url, token, agentId: process.env.WARREN_AGENT }));
+const server = await createWispMcp(new WispClient({ url, token, agentId: envVar("AGENT") }));
 await server.connect(new StdioServerTransport());

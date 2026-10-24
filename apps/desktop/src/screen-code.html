@@ -47,7 +47,7 @@
 <body>
 <form id="form">
   <h1 id="title">Pick a code for this screen</h1>
-  <p>Opening this screen from Warren, lending it to agents, and approving their requests to borrow it all need this code. It stays on this computer.</p>
+  <p>Opening this screen from Wisp, lending it to agents, and approving their requests to borrow it all need this code. It stays on this computer.</p>
   <div class="kinds" role="group" aria-label="Kind of code">
     <button type="button" data-kind="pin" aria-pressed="true">6-digit PIN</button>
     <button type="button" data-kind="password" aria-pressed="false">Password</button>
@@ -86,7 +86,7 @@
   document.getElementById("cancel").addEventListener("click", () => window.close());
   document.getElementById("form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const r = await window.warrenScreenCode.save({ kind, code: code.value, again: again.value });
+    const r = await window.wispScreenCode.save({ kind, code: code.value, again: again.value });
     if (r?.error) {
       error.textContent = r.error;
       again.value = "";

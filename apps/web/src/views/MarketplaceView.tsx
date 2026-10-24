@@ -58,7 +58,7 @@ import { InstallModal, SkillEditor, SkillPanel, skillOrigin, whatItsFor, type Op
 const HARNESS_NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", hermes: "Hermes" };
 const harnessName = (h: string) => HARNESS_NAMES[h] ?? h;
 
-/** Warren's own catalog sorted onto the store's shelves. */
+/** Wisp's own catalog sorted onto the store's shelves. */
 const BUILT_IN_SHELF: Record<CatalogConnector["category"], AppCategory> = {
   Code: "Developer",
   "Chat & docs": "Docs and notes",
@@ -108,12 +108,12 @@ function skillIcon(text: string): ReactNode {
   return pick.find(([re]) => re.test(t))?.[1] ?? <Wand2 size={22} strokeWidth={1.8} />;
 }
 
-/** How a shelf skill is known to Warren once it's brought in. */
+/** How a shelf skill is known to Wisp once it's brought in. */
 const deviceSkillId = (nodeId: string, i: ShelfItem) => `device:${nodeId}:${i.harness}:${i.key.split(":skill:")[1] ?? i.name}`;
 
 /** A server a harness has, as something the connector form can fill in: its keys asked for, or a sign-in. */
 function shelfConnector(nodeId: string, i: ShelfItem): CatalogConnector {
-  // an Authorization header is a login: Warren signs in itself instead (log in once, every agent gets it)
+  // an Authorization header is a login: Wisp signs in itself instead (log in once, every agent gets it)
   const headers = (i.headers ?? []).filter((h) => h.toLowerCase() !== "authorization");
   const fields = [...(i.secrets ?? []), ...headers].map((k) => ({ key: k.replace(/[^A-Za-z0-9_]/g, "_").toUpperCase(), label: k, secret: true, hint: "Kept on the device; enter it here once." }));
   return {
@@ -135,9 +135,9 @@ function shelfConnector(nodeId: string, i: ShelfItem): CatalogConnector {
 const readyAsIs = (i: ShelfItem) => i.kind === "mcp" && !(i.secrets ?? []).length && !(i.headers ?? []).some((h) => h.toLowerCase() !== "authorization");
 
 /**
- * The marketplace: apps (MCP servers from the MCP Registry and Warren's own list), skills (Warren's
+ * The marketplace: apps (MCP servers from the MCP Registry and Wisp's own list), skills (Wisp's
  * library and public SKILL.md repos), what your devices' harnesses already have, and what's
- * installed. Apps sign in once in Warren and every agent picked gets them.
+ * installed. Apps sign in once in Wisp and every agent picked gets them.
  */
 export function MarketplaceView({ section, onBack }: { section: MarketSection; onBack?: () => void }) {
   const me = useStore((s) => s.me);
@@ -217,7 +217,7 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
       description: c.description,
       category: appCategory(c) ?? BUILT_IN_SHELF[c.category],
       logos: [logoUrl([c.name])!],
-      who: "Warren",
+      who: "Wisp",
       builtIn: c,
     }));
     return [...fromRegistry, ...builtIn];
@@ -230,7 +230,7 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
   // --- skills ---
   const skillItems: SkillItem[] = useMemo(
     () => [
-      ...SKILL_CATALOG.map((e) => ({ key: `w:${e.id}`, name: e.name, description: e.description, who: "Warren", icon: <CatalogIcon name={e.icon} fallback={Wand2} size={22} />, library: e })),
+      ...SKILL_CATALOG.map((e) => ({ key: `w:${e.id}`, name: e.name, description: e.description, who: "Wisp", icon: <CatalogIcon name={e.icon} fallback={Wand2} size={22} />, library: e })),
       ...(store?.skills ?? []).map((s) => ({ key: `s:${s.id}`, name: s.name, description: s.description, who: s.source.label, icon: skillIcon(`${s.id} ${s.name}`), store: s })),
     ],
     [store],
@@ -252,9 +252,9 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
   };
 
   // --- on your devices ---
-  const inWarren = (nodeId: string, i: ShelfItem) =>
+  const inWisp = (nodeId: string, i: ShelfItem) =>
     i.kind === "skill" ? (skills ?? []).some((s) => s.catalogId === deviceSkillId(nodeId, i) || s.slug === skillSlug(i.name)) : (connectors ?? []).some((c) => c.name.toLowerCase() === i.name.toLowerCase());
-  const pending = shelves.flatMap((d) => d.items.filter((i) => !inWarren(d.nodeId, i)).map((i) => ({ device: d, item: i })));
+  const pending = shelves.flatMap((d) => d.items.filter((i) => !inWisp(d.nodeId, i)).map((i) => ({ device: d, item: i })));
   const bringIn = (d: DeviceShelf, i: ShelfItem) => {
     if (i.kind === "skill") setInstalling({ entry: { name: skillTitle(i.name), description: i.description ?? "" }, body: { nodeId: d.nodeId, harness: i.harness, skillId: i.key.split(":skill:")[1] ?? i.name } });
     else
@@ -448,7 +448,7 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
             </>
           )}
 
-          {section === "devices" && <Devices shelves={shelves} canEdit={canEdit} inWarren={inWarren} onBring={bringIn} onBringAll={() => setBringAll(true)} pending={pending.length} onRefresh={(id) => api("POST", `/api/shelf/${id}/refresh`).then(() => setTimeout(loadShelves, 2500), (e) => setError((e as Error).message))} />}
+          {section === "devices" && <Devices shelves={shelves} canEdit={canEdit} inWisp={inWisp} onBring={bringIn} onBringAll={() => setBringAll(true)} pending={pending.length} onRefresh={(id) => api("POST", `/api/shelf/${id}/refresh`).then(() => setTimeout(loadShelves, 2500), (e) => setError((e as Error).message))} />}
 
           {section === "installed" && (
             <>
@@ -629,7 +629,7 @@ function PopularCard({ a, have, canEdit, onGet }: { a: AppItem; have: boolean; c
         <p className="text-sm text-muted mt-1 line-clamp-2">{whatItsFor(a.description, 120) || a.who}</p>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] text-muted truncate">{"registry" in a ? a.registry.publisher : "Warren"}</span>
+        <span className="text-[13px] text-muted truncate">{"registry" in a ? a.registry.publisher : "Wisp"}</span>
         {canEdit &&
           (have ? (
             <button onClick={onGet} className="h-9 px-4 rounded-full border border-line text-sm text-muted">
@@ -668,7 +668,7 @@ function DeviceBanner({ pending, onBring }: { pending: Pending[]; onBring: () =>
   );
 }
 
-function Devices({ shelves, canEdit, inWarren, onBring, onBringAll, pending, onRefresh }: { shelves: DeviceShelf[]; canEdit: boolean; inWarren: (nodeId: string, i: ShelfItem) => boolean; onBring: (d: DeviceShelf, i: ShelfItem) => void; onBringAll: () => void; pending: number; onRefresh: (nodeId: string) => void }) {
+function Devices({ shelves, canEdit, inWisp, onBring, onBringAll, pending, onRefresh }: { shelves: DeviceShelf[]; canEdit: boolean; inWisp: (nodeId: string, i: ShelfItem) => boolean; onBring: (d: DeviceShelf, i: ShelfItem) => void; onBringAll: () => void; pending: number; onRefresh: (nodeId: string) => void }) {
   return (
     <div className="space-y-8">
       {canEdit && pending > 0 && (
@@ -698,7 +698,7 @@ function Devices({ shelves, canEdit, inWarren, onBring, onBringAll, pending, onR
                   .filter((i) => i.harness === h)
                   .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
                   .map((i) => {
-                    const have = inWarren(d.nodeId, i);
+                    const have = inWisp(d.nodeId, i);
                     const needs = i.kind === "mcp" && !readyAsIs(i);
                     return (
                       <Row
@@ -707,7 +707,7 @@ function Devices({ shelves, canEdit, inWarren, onBring, onBringAll, pending, onR
                         title={i.kind === "skill" ? skillTitle(i.name) : i.name}
                         sub={i.kind === "skill" ? (i.description ?? "Skill") : needs ? "App · needs a key" : "App"}
                         onOpen={() => !have && canEdit && onBring(d, i)}
-                        action={canEdit && (have ? <span className="shrink-0 text-sm text-muted px-2">In Warren</span> : <GetButton text="Bring in" label={`Bring in ${i.name}`} onClick={() => onBring(d, i)} />)}
+                        action={canEdit && (have ? <span className="shrink-0 text-sm text-muted px-2">In Wisp</span> : <GetButton text="Bring in" label={`Bring in ${i.name}`} onClick={() => onBring(d, i)} />)}
                       />
                     );
                   })}
@@ -757,7 +757,7 @@ function BringAll({ pending, agents, onClose, onDone, onSetUp }: { pending: Pend
     <Modal title="Bring them in" onClose={errors.length ? onDone : onClose}>
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          {ready.length ? `${shelfSummary(ready.map((p) => p.item))} come${ready.length === 1 ? "s" : ""} into Warren as they are.` : "Each of these needs a key first."} Apps that need a sign-in ask once, here in Warren.
+          {ready.length ? `${shelfSummary(ready.map((p) => p.item))} come${ready.length === 1 ? "s" : ""} into Wisp as they are.` : "Each of these needs a key first."} Apps that need a sign-in ask once, here in Wisp.
         </p>
         {ready.length > 0 && (
           <Group label={`Share with`} hint={`You can give them to more ${who} later.`}>

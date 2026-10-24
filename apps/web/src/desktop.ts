@@ -8,7 +8,7 @@ export interface BuddySettings {
 
 declare global {
   interface Window {
-    warrenDesktop?: {
+    wispDesktop?: {
       setBadge(n: number): void;
       info(): Promise<{ version: string; platform: string; device: boolean }>;
       /** with a claim, this computer becomes that waiting device; without one, a new device */
@@ -33,16 +33,16 @@ export function useDesktopAgents() {
   const leadId = useStore((s) => s.lead?.lead ?? null);
   const buddy = useFeature("buddy");
   useEffect(() => {
-    window.warrenDesktop?.buddy.agents(buddy ? agents.map(({ id, name }) => ({ id, name })) : [], buddy ? leadId : null);
+    window.wispDesktop?.buddy.agents(buddy ? agents.map(({ id, name }) => ({ id, name })) : [], buddy ? leadId : null);
   }, [agents, leadId, buddy]);
-  useEffect(() => () => window.warrenDesktop?.buddy.agents([], null), []);
+  useEffect(() => () => window.wispDesktop?.buddy.agents([], null), []);
 }
 
 export type DesktopInfo = { version: string; platform: string; device: boolean };
 
-/** undefined: not in the desktop app (or not asked yet); otherwise what the Warren app says about this computer. */
+/** undefined: not in the desktop app (or not asked yet); otherwise what the Wisp app says about this computer. */
 export function useDesktopInfo(): { inDesktop: boolean; info: DesktopInfo | null; connect: (claim?: { token: string; name: string }) => Promise<void> } {
-  const desktop = typeof window !== "undefined" ? window.warrenDesktop : undefined;
+  const desktop = typeof window !== "undefined" ? window.wispDesktop : undefined;
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   useEffect(() => {
     if (!desktop) return;

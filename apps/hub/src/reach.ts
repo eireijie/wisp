@@ -1,3 +1,4 @@
+import { envVar } from "@wisp/core";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -5,7 +6,7 @@ import path from "node:path";
 
 /**
  * How people and devices reach this hub from elsewhere: its home-network addresses, and
- * Tailscale, which Warren pushes as one of the first steps of setup. Tailscale gives the hub a
+ * Tailscale, which Wisp pushes as one of the first steps of setup. Tailscale gives the hub a
  * private https://<computer>.<tailnet>.ts.net address that works from anywhere for devices on the
  * same tailnet (Serve), and optionally a public one for people without Tailscale (Funnel).
  *
@@ -44,8 +45,8 @@ const realRun: Run = (bin, args, timeoutMs) =>
   });
 
 /** Where the tailscale command usually is, PATH first. */
-export function tailscaleCandidates(platform = process.platform, envPath = process.env.PATH ?? "", only = process.env.WARREN_TAILSCALE): string[] {
-  // WARREN_TAILSCALE points at one particular tailscale command (and nothing else is used)
+export function tailscaleCandidates(platform = process.platform, envPath = process.env.PATH ?? "", only = envVar("TAILSCALE")): string[] {
+  // WISP_TAILSCALE points at one particular tailscale command (and nothing else is used)
   if (only) return [only];
   const exe = platform === "win32" ? "tailscale.exe" : "tailscale";
   const onPath = envPath
@@ -68,7 +69,7 @@ export function parseJson(out: string): unknown {
   return JSON.parse(out.slice(at));
 }
 
-/** Turn `tailscale status --json` and `tailscale serve status --json` into what Warren shows. */
+/** Turn `tailscale status --json` and `tailscale serve status --json` into what Wisp shows. */
 export function readStatus(status: unknown, serve: unknown, port: number): Omit<TailscaleStatus, "error"> {
   const s = (status ?? {}) as {
     BackendState?: string;
@@ -105,7 +106,7 @@ export function readStatus(status: unknown, serve: unknown, port: number): Omit<
 export function explainTailscaleError(stderr: string, platform = process.platform): string {
   const t = stderr.trim();
   if (/access denied|permission denied|must be root|operator/i.test(t))
-    return platform === "linux" ? "Warren isn't allowed to change Tailscale on this computer. Run this once in a terminal, then try again: sudo tailscale set --operator=$USER" : "Warren isn't allowed to change Tailscale on this computer. Open the Tailscale app and try again.";
+    return platform === "linux" ? "Wisp isn't allowed to change Tailscale on this computer. Run this once in a terminal, then try again: sudo tailscale set --operator=$USER" : "Wisp isn't allowed to change Tailscale on this computer. Open the Tailscale app and try again.";
   if (/HTTPS.*(not enabled|disabled)|enable HTTPS/i.test(t)) return "HTTPS certificates are off for your tailnet. Turn on HTTPS in the Tailscale admin console (DNS → HTTPS Certificates), then try again: https://login.tailscale.com/admin/dns";
   if (/funnel.*(not enabled|not allowed|disabled|attribute)/i.test(t)) return "Funnel isn't allowed on your tailnet yet. Allow it in the Tailscale admin console, then try again: https://login.tailscale.com/admin/acls";
   if (/doesn't appear to be running|failed to connect|not running/i.test(t)) return "Tailscale is installed but not running. Open the Tailscale app (or start the tailscaled service), then try again.";
@@ -130,7 +131,7 @@ export class Reach {
   ) {}
 
   private find(): string | null {
-    // looked for again until it's found, so installing Tailscale while Warren runs is noticed
+    // looked for again until it's found, so installing Tailscale while Wisp runs is noticed
     if (!this.bin) this.bin = tailscaleCandidates().find((p) => this.exists(p)) ?? null;
     return this.bin;
   }
@@ -172,7 +173,7 @@ export class Reach {
    */
   async act(action: "login" | "up" | "serve" | "unserve" | "funnel" | "unfunnel"): Promise<TailscaleStatus> {
     const bin = this.find();
-    if (!bin) throw new Error("Tailscale isn't installed on the computer running Warren.");
+    if (!bin) throw new Error("Tailscale isn't installed on the computer running Wisp.");
     this.lastError = null;
     const target = `http://127.0.0.1:${this.port}`;
     const steps: string[][] =

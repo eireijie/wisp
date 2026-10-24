@@ -47,7 +47,7 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
       ...(overFullscreen() ? { type: "panel" } : {}),
       ...bounds, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
       resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
-      hasShadow: false, show: false, backgroundColor: "#00000000", title: "Warren desk buddy",
+      hasShadow: false, show: false, backgroundColor: "#00000000", title: "Wisp desk buddy",
       webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: false },
     });
     win.setAlwaysOnTop(true, overFullscreen() ? "screen-saver" : "floating");

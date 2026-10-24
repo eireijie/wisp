@@ -31,7 +31,7 @@ export type ComputerView = Computer & {
   online: boolean;
   /** a device's own screen: whose it is (only they see it) */
   ownerId: string | null;
-  /** its device was paused there (`warren node pause`) */
+  /** its device was paused there (`wisp node pause`) */
   paused: boolean;
   /** a device's own screen that opens with the code picked at the device: which kind it is */
   code: "pin" | "password" | null;
@@ -121,7 +121,7 @@ export class Computers {
     const kind = this.codeKind(c);
     if (!kind) return until;
     const label = kind === "pin" ? "PIN" : "password";
-    if (!code) throw new ComputerError(`Enter ${c.name}'s ${label}. It was picked at the device, and Warren doesn't keep it.`, 403);
+    if (!code) throw new ComputerError(`Enter ${c.name}'s ${label}. It was picked at the device, and Wisp doesn't keep it.`, 403);
     if (!c.nodeId || !this.hub.isNodeOnline(c.nodeId)) throw new ComputerError(`${c.name} is offline: its device isn't connected`, 503);
     try {
       const r = (await this.nodeRequest(c.nodeId, (requestId) => ({ type: "screen_unlock", requestId, purpose, code, until: new Date(until).toISOString() }), 20_000)) as { until?: string };
@@ -143,7 +143,7 @@ export class Computers {
     if (!screen) return;
     this.log(screen, { kind: "user", id: "system" }, msg.text);
     const owner = this.ownerOf(screen);
-    if (msg.alert && owner) void this.hub.apns.sendTo(screen.workspaceId, owner, { aps: { alert: { title: screen.name, body: msg.text } }, warren: { kind: "computer", category: "help", computerId: screen.id } }).catch(() => {});
+    if (msg.alert && owner) void this.hub.apns.sendTo(screen.workspaceId, owner, { aps: { alert: { title: screen.name, body: msg.text } }, wisp: { kind: "computer", category: "help", computerId: screen.id } }).catch(() => {});
   }
 
   online(c: Computer): boolean {
@@ -255,7 +255,7 @@ export class Computers {
     // moving files and clipboard text doesn't need control: it doesn't touch the screen
     const input = !transfer && !["screenshot", "status", "start", "stop", "destroy", "harness_status", "signin", "inspect"].includes(action.action);
     if (c.kind === "device") this.checkScreenUse(c, by, opts.requester !== undefined ? opts.requester : by.kind === "agent" ? (this.hub.currentRun(by.id)?.requestedBy ?? null) : null, action);
-    if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`warren node resume\` first.`, 423);
+    if (this.hub.isNodePaused(c.nodeId)) throw new ComputerError(`${c.name} is paused at its device. Someone there has to run \`wisp node resume\` first.`, 423);
     if (by.kind === "agent" && ctl && input) {
       // a person who's stopped using it doesn't keep the agent waiting: it takes the computer back
       if (Date.now() - ctl.touched >= AGENT_RECLAIM_MS) {
@@ -370,8 +370,8 @@ export class Computers {
     const caps = this.hub.store.nodeCapabilities(node.id);
     if (!owner) return `${node.name} has no owner who could say yes.`;
     if (!this.hub.isNodeOnline(node.id)) return `${node.name} is offline: its device isn't connected.`;
-    if (this.hub.isNodePaused(node.id)) return `${node.name} is paused at its device. ${who} has to run \`warren node resume\` there first.`;
-    if (!caps || caps.screen.off) return `${node.name}'s screen is off. ${who} has to turn it on at the device itself with \`warren node screen on\`; Warren can't do that remotely. Ask ${who} in chat if you need it.`;
+    if (this.hub.isNodePaused(node.id)) return `${node.name} is paused at its device. ${who} has to run \`wisp node resume\` there first.`;
+    if (!caps || caps.screen.off) return `${node.name}'s screen is off. ${who} has to turn it on at the device itself with \`wisp node screen on\`; Wisp can't do that remotely. Ask ${who} in chat if you need it.`;
     if (!caps.screen.ok) return `${node.name} can't offer its screen right now: ${caps.screen.detail}`;
     const loan = computer && activeLoan(computer);
     if (loan) {

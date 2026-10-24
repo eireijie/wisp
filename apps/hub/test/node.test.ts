@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
 import type { HarnessAdapter, RunInput } from "@wisp/adapters";
-import { WarrenClient } from "@wisp/sdk";
+import { WispClient } from "@wisp/sdk";
 import { NodeDaemon, normalizeHubUrl } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 
@@ -14,7 +14,7 @@ let nodeDir: string;
 let nodeToken: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
-let owner: WarrenClient;
+let owner: WispClient;
 const calls: RunInput[] = [];
 const logs: string[] = [];
 /** lets a "slow" run finish */
@@ -54,13 +54,13 @@ const waitFor = async <T>(fn: () => Promise<T | undefined>, ms = 4000): Promise<
 };
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-node-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-node-"));
   const { app } = await buildHub({ dataDir: path.join(dir, "hub") });
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
-  owner = new WarrenClient({ url, token: setup.token });
+  owner = new WispClient({ url, token: setup.token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeToken = token;
   nodeDir = path.join(dir, "node");
@@ -87,8 +87,8 @@ describe("node daemon", () => {
     expect(calls[0].sessionId).toBeNull();
     expect(calls[1].sessionId).toBe("sess-1");
     // the harness acts as its agent only, never with the device's own token
-    expect(calls[0].mcp?.env.WARREN_TOKEN).toMatch(/^wr_agent_/);
-    expect(calls[0].mcp?.env.WARREN_AGENT).toBeUndefined();
+    expect(calls[0].mcp?.env.WISP_TOKEN).toMatch(/^wr_agent_/);
+    expect(calls[0].mcp?.env.WISP_AGENT).toBeUndefined();
     expect(calls[0].cwd).toContain(path.join("agents", "bolt"));
   });
 
@@ -137,9 +137,9 @@ describe("node daemon", () => {
 
   it("takes the hub's address the way people type it", () => {
     expect(normalizeHubUrl("my-server:4747")).toBe("http://my-server:4747");
-    expect(normalizeHubUrl("https://warren.example.com/")).toBe("https://warren.example.com");
+    expect(normalizeHubUrl("https://wisp.example.com/")).toBe("https://wisp.example.com");
     expect(normalizeHubUrl("ws://localhost:4747")).toBe("http://localhost:4747");
-    expect(normalizeHubUrl(" http://10.0.0.5:4747/warren/ ")).toBe("http://10.0.0.5:4747/warren");
+    expect(normalizeHubUrl(" http://10.0.0.5:4747/wisp/ ")).toBe("http://10.0.0.5:4747/wisp");
     expect(() => normalizeHubUrl("not a url")).toThrow(/isn't a hub address/);
     expect(() => normalizeHubUrl("")).toThrow(/isn't a hub address/);
   });
@@ -152,11 +152,11 @@ describe("node daemon", () => {
 
   it("says when a connector didn't start because its command isn't on the device", async () => {
     const bolt = (await owner.agents()).find((a) => a.handle === "bolt")!;
-    const conn = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Widgets", command: "warren-no-such-command-xyz", args: [], agentIds: [bolt.id] });
+    const conn = await owner.request("POST", "/api/connectors", { kind: "mcp-stdio", name: "Widgets", command: "wisp-no-such-command-xyz", args: [], agentIds: [bolt.id] });
     const ch = await owner.request("POST", "/api/channels", { name: "widgets" });
     await owner.send(ch.id, "@bolt use widgets");
     const reply = await waitFor(async () => (await owner.messages(ch.id)).messages.find((m) => m.author.id === bolt.id));
-    expect(reply.parts).toContainEqual({ type: "notice", text: `Connector widgets didn't start: "warren-no-such-command-xyz" isn't installed on box.` });
+    expect(reply.parts).toContainEqual({ type: "notice", text: `Connector widgets didn't start: "wisp-no-such-command-xyz" isn't installed on box.` });
     expect(calls.at(-1)!.connectors ?? []).toEqual([]);
     expect(logs.some((l) => l.includes("Connector widgets didn't start"))).toBe(true);
     await owner.request("DELETE", `/api/connectors/${conn.id}`);

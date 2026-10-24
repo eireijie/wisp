@@ -24,7 +24,7 @@ async function api<T = any>(method: string, url: string, body?: unknown, token =
 }
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-commands-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-commands-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
@@ -57,9 +57,9 @@ afterAll(async () => {
 const post = async (body: string) => (await api("POST", `/api/channels/${general.id}/messages`, { body })).data;
 
 describe("/ commands", () => {
-  it("lists Warren's own first, then the harness's", async () => {
+  it("lists Wisp's own first, then the harness's", async () => {
     const { data } = await api<{ commands: any[] }>("GET", `/api/agents/${atlas.id}/commands`);
-    expect(data.commands.map((c) => `${c.name}:${c.kind}`)).toEqual(["context:warren", "compress:command", "humanizer:skill"]);
+    expect(data.commands.map((c) => `${c.name}:${c.kind}`)).toEqual(["context:wisp", "compress:command", "humanizer:skill"]);
   });
 
   it("passes a harness command through as typed, into the same conversation", async () => {

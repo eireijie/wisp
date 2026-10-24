@@ -7,7 +7,7 @@ import { issueToken } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
 /**
- * Pairing a phone with Warren on a computer, without typing an address or a password.
+ * Pairing a phone with Wisp on a computer, without typing an address or a password.
  *
  * 1. Settings → Mobile starts a pairing: the hub makes a one-time secret and the page shows it as
  *    a QR code, along with the addresses a phone could reach this hub at.
@@ -78,11 +78,11 @@ export function pairingAddresses(origin: string | null, port: number, interfaces
   return out;
 }
 
-/** The link a QR code carries; the phone apps open warren://pair links. */
+/** The link a QR code carries; the phone apps open wisp://pair links. */
 export function pairingLink(p: { id: string; secret: string; addresses: string[] }): string {
   const q = new URLSearchParams({ v: "1", id: p.id, s: p.secret });
   for (const a of p.addresses) q.append("u", a);
-  return `warren://pair?${q}`;
+  return `wisp://pair?${q}`;
 }
 
 const sixDigits = () => String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
@@ -150,7 +150,7 @@ export function registerPairingApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (!p || p.userId !== c.actor.id) return reply.code(404).send({ error: "That pairing has ended. Start again." });
     if (p.state !== "claimed") return reply.code(409).send({ error: p.state === "expired" ? "The code expired. Start again." : "No phone has scanned the code yet." });
     p.state = "approved";
-    p.token = issueToken(db, "session", p.userId, p.workspaceId, `Warren on ${p.deviceName || (p.platform === "android" ? "Android" : "iPhone")}`);
+    p.token = issueToken(db, "session", p.userId, p.workspaceId, `Wisp on ${p.deviceName || (p.platform === "android" ? "Android" : "iPhone")}`);
     return view(p);
   });
 
@@ -167,7 +167,7 @@ export function registerPairingApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   const phone = (req: FastifyRequest, reply: FastifyReply, secret: unknown): Pairing | null => {
     const p = get((req.params as { id: string }).id);
     if (!p || typeof secret !== "string" || !same(secret, p.secret)) {
-      reply.code(404).send({ error: "This code isn't valid anymore. Show a new one in Warren → Settings → Mobile." });
+      reply.code(404).send({ error: "This code isn't valid anymore. Show a new one in Wisp → Settings → Mobile." });
       return null;
     }
     return p;

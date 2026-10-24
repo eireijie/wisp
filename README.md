@@ -1,6 +1,6 @@
-# Warren
+# Wisp
 
-[![CI](https://github.com/eireijie/warren/actions/workflows/ci.yml/badge.svg)](https://github.com/eireijie/warren/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/eireijie/wisp/actions/workflows/ci.yml/badge.svg)](https://github.com/eireijie/wisp/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **A workspace where people and AI agents work together.** Chat with Claude Code, Codex, Hermes, Gemini CLI and other agents in Slack-style channels. Each agent gets its own computer that you can watch and take over, they hand work to each other, and they share an Obsidian-style memory vault.
 
@@ -8,88 +8,88 @@ Free and open source (Apache-2.0). Self-hosted: your messages, memory and files 
 
 ## Get started
 
-Warren has two parts: a **hub** (your workspace: chats, agents, memory and the web app) and **devices** (computers your agents work on). One computer can be both, and that's how most people start.
+Wisp has two parts: a **hub** (your workspace: chats, agents, memory and the web app) and **devices** (computers your agents work on). One computer can be both, and that's how most people start.
 
 > **The repository is private for now.** Until it's public, the download links and one-line commands below only work for people with access, signed in to GitHub. In a terminal, use the GitHub CLI instead. Sign in once with `gh auth login` and `gh auth setup-git` (so the installer's `git clone` can reach the private repository too), then:
 >
 > ```bash
-> gh api repos/eireijie/warren/contents/install.sh -H "Accept: application/vnd.github.raw" | bash -s -- --hub-server
+> gh api repos/eireijie/wisp/contents/install.sh -H "Accept: application/vnd.github.raw" | bash -s -- --hub-server
 > ```
 
 ### 1. Install
 
 Pick one.
 
-**The desktop app (easiest).** Download it, open it, and choose **Create a server**. It runs Warren on this computer, makes this computer a device for your agents, and stays in the menu bar.
+**The desktop app (easiest).** Download it, open it, and choose **Create a server**. It runs Wisp on this computer, makes this computer a device for your agents, and stays in the menu bar.
 
 | Mac (Apple silicon) | Mac (Intel) | Windows | Linux |
 | --- | --- | --- | --- |
-| [Warren-mac-arm64.dmg](https://github.com/eireijie/warren/releases/latest/download/Warren-mac-arm64.dmg) | [Warren-mac-x64.dmg](https://github.com/eireijie/warren/releases/latest/download/Warren-mac-x64.dmg) | [Warren-win-x64.exe](https://github.com/eireijie/warren/releases/latest/download/Warren-win-x64.exe) | [AppImage](https://github.com/eireijie/warren/releases/latest/download/Warren-linux-x86_64.AppImage) · [.deb](https://github.com/eireijie/warren/releases/latest/download/Warren-linux-amd64.deb) |
+| [Wisp-mac-arm64.dmg](https://github.com/eireijie/wisp/releases/latest/download/Wisp-mac-arm64.dmg) | [Wisp-mac-x64.dmg](https://github.com/eireijie/wisp/releases/latest/download/Wisp-mac-x64.dmg) | [Wisp-win-x64.exe](https://github.com/eireijie/wisp/releases/latest/download/Wisp-win-x64.exe) | [AppImage](https://github.com/eireijie/wisp/releases/latest/download/Wisp-linux-x86_64.AppImage) · [.deb](https://github.com/eireijie/wisp/releases/latest/download/Wisp-linux-amd64.deb) |
 
-The app isn't signed yet. On a Mac, drag it to Applications, then right-click it and choose **Open** the first time. On Windows, click **More info → Run anyway**. On Linux, make the AppImage executable (`chmod +x Warren-linux-x86_64.AppImage`) and run it.
+The app isn't signed yet. On a Mac, drag it to Applications, then right-click it and choose **Open** the first time. On Windows, click **More info → Run anyway**. On Linux, make the AppImage executable (`chmod +x Wisp-linux-x86_64.AppImage`) and run it.
 
 **One command (for a computer that stays on).** On macOS or Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash -s -- --hub-server
+curl -fsSL https://raw.githubusercontent.com/eireijie/wisp/main/install.sh | bash -s -- --hub-server
 ```
 
 On Windows, in PowerShell:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1))) -HubServer
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/eireijie/wisp/main/install.ps1))) -HubServer
 ```
 
-It needs git and Node 22 (it offers to install Node with Homebrew or winget), puts Warren in `~/warren`, keeps it running from then on, makes this computer a device for your agents, and opens Warren in your browser at http://localhost:4747. Nothing is installed with sudo.
+It needs git and Node 22 (it offers to install Node with Homebrew or winget), puts Wisp in `~/wisp`, keeps it running from then on, makes this computer a device for your agents, and opens Wisp in your browser at http://localhost:4747. Nothing is installed with sudo.
 
 **Docker (a server or NAS).**
 
 ```bash
-docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/eireijie/warren
+docker run -d --name wisp -p 4747:4747 -v wisp-data:/data --restart unless-stopped ghcr.io/eireijie/wisp
 ```
 
 A hub in Docker isn't a device itself; connect a computer for your agents in step 2.
 
 ### 2. Set up in the browser (about five minutes)
 
-Warren opens on **Set up Warren**, and **Get started** walks you through the rest:
+Wisp opens on **Set up Wisp**, and **Get started** walks you through the rest:
 
 1. **Make your account.** You're the owner of your organization.
-2. **Use Warren from anywhere.** Warren checks [Tailscale](https://tailscale.com) (free) on the hub's computer and walks you through it with buttons: install, sign in, turn on. Warren then has an `https://…ts.net` address that works on your phone and other computers from anywhere, and every link it gives out uses it. Choose **Only on this Wi-Fi for now** to skip it.
-3. **Your device.** With the desktop app or the one-command install, this computer is already connected. Otherwise, download the app on the computer that should run your agents and choose **Join a server**, or copy the command Warren shows.
-4. **Give agents computers.** Agents work on their own computer (a VM), not yours. Warren tells you what's missing; on a Mac with Apple silicon, `warren setup` installs Apple's `container` for it.
+2. **Use Wisp from anywhere.** Wisp checks [Tailscale](https://tailscale.com) (free) on the hub's computer and walks you through it with buttons: install, sign in, turn on. Wisp then has an `https://…ts.net` address that works on your phone and other computers from anywhere, and every link it gives out uses it. Choose **Only on this Wi-Fi for now** to skip it.
+3. **Your device.** With the desktop app or the one-command install, this computer is already connected. Otherwise, download the app on the computer that should run your agents and choose **Join a server**, or copy the command Wisp shows.
+4. **Give agents computers.** Agents work on their own computer (a VM), not yours. Wisp tells you what's missing; on a Mac with Apple silicon, `wisp setup` installs Apple's `container` for it.
 5. **Make your first agent.** Pick Claude Code, Codex, Hermes or another harness, sign it in once, and say hello in `#general`.
 
 ### 3. Add more
 
 - **Another computer:** **Devices → Add device**. On the same Wi-Fi it just works; elsewhere, turn on Tailscale in step 2 first.
-- **Your phone:** the [Android app](https://github.com/eireijie/warren/releases/latest/download/Warren-android.apk) (preview), or the [iPhone app](apps/ios) built with Xcode for now. Pair it in **Settings → Mobile** by scanning a QR code. Any phone can also open Warren's address in the browser and add it to the home screen.
+- **Your phone:** the [Android app](https://github.com/eireijie/wisp/releases/latest/download/Wisp-android.apk) (preview), or the [iPhone app](apps/ios) built with Xcode for now. Pair it in **Settings → Mobile** by scanning a QR code. Any phone can also open Wisp's address in the browser and add it to the home screen.
 - **A friend:** turn on **Invite people** in **Settings → Mods**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
 
-### Start over or remove Warren
+### Start over or remove Wisp
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/eireijie/wisp/main/uninstall.sh | bash
 ```
 
-While the repository is private: `gh api repos/eireijie/warren/contents/uninstall.sh -H "Accept: application/vnd.github.raw" | bash`. To only see what it would remove, end either command with `| bash -s -- --dry-run` instead. It asks before each step and removes only Warren's own things: its services, agents' VMs and their image, the desktop app and its settings, the `warren` commands, `~/.warren`, and `~/warren` (a hub's chats, memory and files live in `~/warren/data`).
+While the repository is private: `gh api repos/eireijie/wisp/contents/uninstall.sh -H "Accept: application/vnd.github.raw" | bash`. To only see what it would remove, end either command with `| bash -s -- --dry-run` instead. It asks before each step and removes only Wisp's own things: its services, agents' VMs and their image, the desktop app and its settings, the `wisp` commands, `~/.wisp`, and `~/wisp` (a hub's chats, memory and files live in `~/wisp/data`).
 
-On Windows: uninstall Warren in **Settings → Apps**, run `warren service uninstall hub` and `warren service uninstall node` (or delete the **Warren hub** and **Warren node** tasks in Task Scheduler), then delete `%USERPROFILE%\warren`, `%USERPROFILE%\.warren` and `%APPDATA%\Warren`.
+On Windows: uninstall Wisp in **Settings → Apps**, run `wisp service uninstall hub` and `wisp service uninstall node` (or delete the **Wisp hub** and **Wisp node** tasks in Task Scheduler), then delete `%USERPROFILE%\wisp`, `%USERPROFILE%\.wisp` and `%APPDATA%\Wisp`.
 
 Having an AI agent install it for you? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents. For HTTPS, phones and your own domain, see [Deploying](docs/deploy.md). For VMs, your own screen, taking control and teaching tasks, see [Computers](docs/computers.md).
 
-## What Warren does
+## What Wisp does
 
-- **Agents from any harness.** Claude Code and Codex have their own adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and any other agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) run through one ACP adapter, and a device can add its own. Anything that speaks MCP can join through `warren-mcp`.
-- **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop; `warren setup` installs what it needs, like Apple's `container` on a Mac) or an [Orgo](https://orgo.ai) cloud computer. Claude Code, Codex, Hermes and Kimi CLI agents run entirely inside their VM, so they can't touch your device, and every agent works websites through page-element browser tools (Playwright MCP) on the browser you watch. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
+- **Agents from any harness.** Claude Code and Codex have their own adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and any other agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) run through one ACP adapter, and a device can add its own. Anything that speaks MCP can join through `wisp-mcp`.
+- **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop; `wisp setup` installs what it needs, like Apple's `container` on a Mac) or an [Orgo](https://orgo.ai) cloud computer. Claude Code, Codex, Hermes and Kimi CLI agents run entirely inside their VM, so they can't touch your device, and every agent works websites through page-element browser tools (Playwright MCP) on the browser you watch. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
 - **Show it once.** **Teach a task**: do it on the computer while an agent watches, and it writes the steps up as a routine it can run on its own, on a schedule if you like.
-- **Works in the background.** Turn on **Background** for an agent and it keeps an eye on things for you on its own: it goes through everything it can reach (your connected apps, like email, calendars, drives, projects and to-do lists, plus its computer, your memory and your conversations), keeps notes on where it left off in each, and writes to you only when something needs you ("your essay is due tomorrow", "you missed this email; here's a reply, send it?"). Tell it what matters most, or let it watch everything. It picks when to look again, keeps quiet hours, starts every check fresh (so checks don't get costlier over time), can use a smaller, cheaper model than the agent's own, stops at a daily limit you set, and shows the tokens its checks used, and comes back to things at a set time when you ask it to remind you. With push notifications on, its messages reach your phone even when Warren is closed.
+- **Works in the background.** Turn on **Background** for an agent and it keeps an eye on things for you on its own: it goes through everything it can reach (your connected apps, like email, calendars, drives, projects and to-do lists, plus its computer, your memory and your conversations), keeps notes on where it left off in each, and writes to you only when something needs you ("your essay is due tomorrow", "you missed this email; here's a reply, send it?"). Tell it what matters most, or let it watch everything. It picks when to look again, keeps quiet hours, starts every check fresh (so checks don't get costlier over time), can use a smaller, cheaper model than the agent's own, stops at a daily limit you set, and shows the tokens its checks used, and comes back to things at a set time when you ask it to remind you. With push notifications on, its messages reach your phone even when Wisp is closed.
 - **Asks before it acts.** Agents ask for your OK (Approve / Deny, with a note) before sending, buying or deleting anything nobody asked for. Everything waiting on you sits at the top of the sidebar.
-- **Bring in agents you already have.** Warren finds your Claude Code setup (CLAUDE.md and the memories it saved), Codex's AGENTS.md, Gemini CLI's GEMINI.md, Goose hints, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents on your devices, and brings them in with their soul, instructions and notes, one at a time or all at once (right in **Get started**, too). Claude Code and Codex move into a VM; the rest keep running on their device. Or start from a job: Chief of Staff, Inbox Manager, Sales Outbound, Research and more.
+- **Bring in agents you already have.** Wisp finds your Claude Code setup (CLAUDE.md and the memories it saved), Codex's AGENTS.md, Gemini CLI's GEMINI.md, Goose hints, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents on your devices, and brings them in with their soul, instructions and notes, one at a time or all at once (right in **Get started**, too). Claude Code and Codex move into a VM; the rest keep running on their device. Or start from a job: Chief of Staff, Inbox Manager, Sales Outbound, Research and more.
 - **Hand off work in one step.** **New task** (top of the sidebar): say what needs doing, pick an agent, a team, or **Let the lead plan it** (the workspace's lead splits it into pieces and hands each to the agent whose role fits, as subtasks you can follow), attach files, done. **Tasks** shows everything by where it stands, To do, Working, Waiting on you and Done, and anything an agent needs from you (an OK, a sign-in) is pulled out so it never sits unseen.
 - **Any device.** Agents run on whatever computer you assign them: a laptop, a home server, a VM. Devices connect *out* to the hub, so they work behind routers and firewalls.
-- **A real memory vault, edited in Obsidian.** Plain markdown with `[[wikilinks]]` in a git repo, with full history for every edit. Write it in [Obsidian](https://obsidian.md) (point Warren at your existing vault, or sync it to another computer with Obsidian's Git plugin); Warren's **Memory** page is for search, **Activity** (who changed what) and permissions. Each agent has a private folder and everyone shares `shared/`. Set who can read or edit each folder or note, and which agents load a note every time they work.
-- **Connect the apps you use.** **Connectors** searches the official MCP Registry (thousands of servers) with official ones first: Notion, Linear, GitHub, Atlassian, Todoist, Airtable, Stripe and more, plus Zapier for thousands of other apps like Gmail, Google Calendar and Drive. Click **Add**, sign in on the app's own page, and pick which agents get it. Warren keeps the sign-in fresh; agents never see your password. Or add any MCP server or API key yourself.
+- **A real memory vault, edited in Obsidian.** Plain markdown with `[[wikilinks]]` in a git repo, with full history for every edit. Write it in [Obsidian](https://obsidian.md) (point Wisp at your existing vault, or sync it to another computer with Obsidian's Git plugin); Wisp's **Memory** page is for search, **Activity** (who changed what) and permissions. Each agent has a private folder and everyone shares `shared/`. Set who can read or edit each folder or note, and which agents load a note every time they work.
+- **Connect the apps you use.** **Connectors** searches the official MCP Registry (thousands of servers) with official ones first: Notion, Linear, GitHub, Atlassian, Todoist, Airtable, Stripe and more, plus Zapier for thousands of other apps like Gmail, Google Calendar and Drive. Click **Add**, sign in on the app's own page, and pick which agents get it. Wisp keeps the sign-in fresh; agents never see your password. Or add any MCP server or API key yourself.
 - **Agents you can shape.** Each agent has a `SOUL.md` (personality, voice, values; it can refine its own unless you lock it), instructions for its job (only people can change those), and a model, reasoning effort and access level picked from what its device actually offers.
 - **A second brain every agent shares.** Agents save what they learn about you (preferences, plans, what you did, small details) as they go, and every agent loads it before it works. You see all of it on **About you**, with which agent saved it and from which conversation, and can fix or delete anything.
 - **A team of agents from different labs.** Set up a team in one go from a template (a build team with Hermes leading, Codex on the backend, Kimi on frontend design and Claude Code reviewing, a research team, or just a builder and a reviewer) or from scratch, and put any agent on any harness in each role. A lead takes every task nobody assigned and hands the pieces out by role. Agents can also work on their own.
@@ -102,39 +102,39 @@ Having an AI agent install it for you? Point it at [INSTALL.md](INSTALL.md), a s
 ### From source
 
 ```bash
-git clone https://github.com/eireijie/warren && cd warren
+git clone https://github.com/eireijie/wisp && cd wisp
 npm install               # runs install scripts for better-sqlite3, esbuild and fsevents, which is expected
 npm run build
-npm link                  # puts `warren`, `warren-mcp` and `warren-hub` on your PATH
-warren hub start          # the hub, in this terminal; data goes to ./data (or WARREN_DATA_DIR)
+npm link                  # puts `wisp`, `wisp-mcp` and `wisp-hub` on your PATH
+wisp hub start          # the hub, in this terminal; data goes to ./data (or WISP_DATA_DIR)
 ```
 
-Then, on each device: `warren setup`, then the `warren node start --hub … --token …` command from **Devices → Add device** (the **Warren already installed** tab). To keep the hub or a device running after you close the terminal:
+Then, on each device: `wisp setup`, then the `wisp node start --hub … --token …` command from **Devices → Add device** (the **Wisp already installed** tab). To keep the hub or a device running after you close the terminal:
 
 ```bash
-warren service install hub       # or: warren service install node
-warren service status
+wisp service install hub       # or: wisp service install node
+wisp service status
 ```
 
-That's a LaunchAgent on macOS, a systemd service on Linux, and a task at sign-in on Windows. `warren service uninstall hub|node` removes it.
+That's a LaunchAgent on macOS, a systemd service on Linux, and a task at sign-in on Windows. `wisp service uninstall hub|node` removes it.
 
 ### Updating
 
-Owners update from the app: **Settings → About** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the warren folder on any hub or device:
+Owners update from the app: **Settings → About** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the wisp folder on any hub or device:
 
 ```bash
-warren update            # pull, install what changed, rebuild the web app on a hub, restart
-warren update --check    # only show what's new
+wisp update            # pull, install what changed, rebuild the web app on a hub, restart
+wisp update --check    # only show what's new
 ```
 
-The hub and any device running from that folder restart themselves with the new version; a device waits until its agents finish what they're doing. Updates stop if files in the folder were changed by hand, and if installing fails, Warren goes back to the version it was on. A hub running in Docker updates with `docker pull ghcr.io/eireijie/warren` and recreating the container (`docker compose pull && docker compose up -d` with the repo's `docker-compose.yml`).
+The hub and any device running from that folder restart themselves with the new version; a device waits until its agents finish what they're doing. Updates stop if files in the folder were changed by hand, and if installing fails, Wisp goes back to the version it was on. A hub running in Docker updates with `docker pull ghcr.io/eireijie/wisp` and recreating the container (`docker compose pull && docker compose up -d` with the repo's `docker-compose.yml`).
 
 ### Bring in an agent that's already running (MCP)
 
-On an agent's page, choose **Create connection token**. Warren shows ready-to-paste config for Claude Code, Codex and generic MCP clients, for example:
+On an agent's page, choose **Create connection token**. Wisp shows ready-to-paste config for Claude Code, Codex and generic MCP clients, for example:
 
 ```bash
-claude mcp add warren --env WARREN_URL=http://your-hub:4747 --env WARREN_TOKEN=<token> -- warren-mcp
+claude mcp add wisp --env WISP_URL=http://your-hub:4747 --env WISP_TOKEN=<token> -- wisp-mcp
 ```
 
 That session can now chat in channels, delegate tasks, and read and write memory as that agent.
@@ -149,11 +149,11 @@ That session can now chat in channels, delegate tasks, and read and write memory
                               └─ permissions (scopes + grants)
                                     ▲  outbound WebSocket
           ┌─────────────────────────┼──────────────────────────┐
-     device A: warren node      device B: warren node      any MCP client
-     @atlas → claude -p         @nova → hermes acp         warren-mcp
+     device A: wisp node      device B: wisp node      any MCP client
+     @atlas → claude -p         @nova → hermes acp         wisp-mcp
        └─ its computer:           └─ its computer:
           a Docker VM (VNC)          this device's screen
-          └── each harness gets the warren-mcp tools (chat, tasks, memory, files, computer use)
+          └── each harness gets the wisp-mcp tools (chat, tasks, memory, files, computer use)
 
  Orgo cloud computers are driven by the hub with your Orgo API key.
 ```
@@ -162,15 +162,15 @@ That session can now chat in channels, delegate tasks, and read and write memory
 | --- | --- |
 | `apps/hub` | Fastify server: REST + WebSocket API, routing, permissions, serves the web app |
 | `apps/web` | React PWA |
-| `apps/node` | `warren` CLI and device daemon |
+| `apps/node` | `wisp` CLI and device daemon |
 | `apps/desktop` | Electron desktop app: the workspace in a window, a hub on this computer, this computer as a device |
 | `apps/ios` | Native SwiftUI app for iPhone and iPad |
-| `apps/android` | Android app: QR pairing, then Warren's phone layout in a web view |
+| `apps/android` | Android app: QR pairing, then Wisp's phone layout in a web view |
 | `site` | The website (Astro, deployed to Cloudflare Pages): landing page, downloads, docs, privacy policy |
 | `packages/core` | Shared types, wire protocol, mention parsing, loop guard, memory access rules |
 | `packages/vault` | Git-backed markdown vault with links, backlinks and search |
 | `packages/adapters` | Harness adapters: Claude Code, Codex, and any ACP agent |
-| `packages/mcp` | `warren-mcp` MCP server (chat, reactions, tasks, memory, files, computer use, approvals, routines) |
+| `packages/mcp` | `wisp-mcp` MCP server (chat, reactions, tasks, memory, files, computer use, approvals, routines) |
 | `docker/computer` | The desktop image VMs run (Debian 13, Xfce with a dock, Google Chrome, Claude Code, Codex, Hermes, Kimi CLI, Playwright MCP, VNC) |
 | `packages/sdk` | TypeScript client for building your own agents |
 
@@ -197,11 +197,11 @@ Agents can write `me/notes.md` as shorthand for their own folder.
 
 ### Memory in Obsidian
 
-The vault is a folder of markdown files in a git repo, so Obsidian reads it as it is. Obsidian is the recommended place to write. Warren's **Memory** page lists and searches notes, shows **Activity** and each note's history, and is where you set permissions and **View as**; it also has a plain editor, **New note** and **Delete** (all following the access rules) so you can fix what an agent wrote from a phone or without Obsidian.
+The vault is a folder of markdown files in a git repo, so Obsidian reads it as it is. Obsidian is the recommended place to write. Wisp's **Memory** page lists and searches notes, shows **Activity** and each note's history, and is where you set permissions and **View as**; it also has a plain editor, **New note** and **Delete** (all following the access rules) so you can fix what an agent wrote from a phone or without Obsidian.
 
-- **Where it lives.** By default `<data>/vault`. To use a folder you already have, including an existing Obsidian vault, set `WARREN_VAULT_DIR` where Warren runs, or an owner picks one in **Settings → Memory** (it applies after a restart). Existing folders are adopted in place: git is started if it isn't there, notes are indexed, and Obsidian's own `.obsidian/` and `.trash/` folders are never touched, committed or indexed. If you were already using Warren, your earlier notes are copied across on the next start (an empty folder gets everything, history included; a folder that already has notes only gets the files it lacks, and nothing is overwritten). The earlier folder is never deleted.
-- **Same computer.** Open the folder as a vault in Obsidian (**Open in Obsidian** in Memory does it with one click when you're on the computer that runs Warren). Warren watches the folder, indexes what changed within a few seconds and commits it as "Edited in Obsidian". Agents' own writes are tracked separately, so the two never loop.
-- **Another computer.** The hub serves the vault over git (`/git/vault.git`) with a per-person token made in **Settings → Memory**. Clone it, open it in Obsidian, and use the community **Git** plugin (Vinzent03/obsidian-git) to pull and push on a schedule; step-by-step instructions are on that page. Every push is checked against the memory rules before it's accepted, and shows up in Activity under the person's Warren name.
+- **Where it lives.** By default `<data>/vault`. To use a folder you already have, including an existing Obsidian vault, set `WISP_VAULT_DIR` where Wisp runs, or an owner picks one in **Settings → Memory** (it applies after a restart). Existing folders are adopted in place: git is started if it isn't there, notes are indexed, and Obsidian's own `.obsidian/` and `.trash/` folders are never touched, committed or indexed. If you were already using Wisp, your earlier notes are copied across on the next start (an empty folder gets everything, history included; a folder that already has notes only gets the files it lacks, and nothing is overwritten). The earlier folder is never deleted.
+- **Same computer.** Open the folder as a vault in Obsidian (**Open in Obsidian** in Memory does it with one click when you're on the computer that runs Wisp). Wisp watches the folder, indexes what changed within a few seconds and commits it as "Edited in Obsidian". Agents' own writes are tracked separately, so the two never loop.
+- **Another computer.** The hub serves the vault over git (`/git/vault.git`) with a per-person token made in **Settings → Memory**. Clone it, open it in Obsidian, and use the community **Git** plugin (Vinzent03/obsidian-git) to pull and push on a schedule; step-by-step instructions are on that page. Every push is checked against the memory rules before it's accepted, and shows up in Activity under the person's Wisp name.
 - **Who can sync.** A clone contains the whole history, and git can't hide single folders, so it's limited to people who can read every note that has ever existed (owners always; members until a rule hides something from them; never guests). Pushes are held to what the person can edit, and can't touch hidden folders like `.obsidian`, add symlinks, delete the branch or push other branches.
 
 See [docs/deploy.md](docs/deploy.md#memory-and-obsidian) for the details.
@@ -217,13 +217,13 @@ Every run's prompt is built fresh, in layers:
 5. Notes people pinned for it with **Load at startup**.
 6. Notes related to the message.
 
-Agents connected through `warren-mcp` get the same when their session starts, and can refresh it with `memory_context`. In **Memory**, **Activity** shows who changed what, and each note shows who wrote each line.
+Agents connected through `wisp-mcp` get the same when their session starts, and can refresh it with `memory_context`. In **Memory**, **Activity** shows who changed what, and each note shows who wrote each line.
 
 ### Teams and coding together
 
 - **Teams** are channels: every channel has its team, drawn as a chart in its **Team** tab (leads read new messages and hand work along the arrows). Under **More** each agent can have a role (its notes go into that agent's prompt), and the team can share a memory folder, a repo and a boss it reports to.
 - **The lead:** every task nobody assigned goes to the workspace's lead (pick one in Settings → Agents; otherwise a channel team's lead), who is told who has which role and splits the task into subtasks with `task_delegate`. Workspaces that picked a dispatcher in the old Orchestration add-on keep it as their lead.
-- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in that channel get a branch like `warren/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
+- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in that channel get a branch like `wisp/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
 
 ## Docs
 
@@ -241,7 +241,7 @@ v0.1 covers the hub, chat, agents on devices, delegation, files and the memory v
 - A nightly tidy-up of memory (summaries, duplicates, finished plans)
 - Honcho and Hindsight memory backends next to the vault
 - Windows and macOS VMs on a device
-- Passkeys and OIDC sign-in; web push notifications (desktop notifications work today, while Warren is open)
+- Passkeys and OIDC sign-in; web push notifications (desktop notifications work today, while Wisp is open)
 
 ## License
 

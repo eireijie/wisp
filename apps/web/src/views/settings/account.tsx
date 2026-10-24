@@ -145,7 +145,7 @@ export function PreferencesPage() {
   const now = new Date();
   return (
     <>
-      <PageHeader title="App behavior">How Warren works for you, on every device you sign in on.</PageHeader>
+      <PageHeader title="App behavior">How Wisp works for you, on every device you sign in on.</PageHeader>
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
       </div>
@@ -217,7 +217,7 @@ export type NotifyKey = "on" | "off" | "blocked" | "ask" | "unsupported";
 
 /** What notifications are doing on THIS device, in plain words. */
 export function notifyStatus(perm: NotificationPermission | "unsupported", enabled: boolean): { key: NotifyKey; label: string; hint: string } {
-  if (perm === "unsupported") return { key: "unsupported", label: "Not available in this browser", hint: "This browser can't show notifications. On an iPhone, add Warren to your Home Screen first (Share, then Add to Home Screen)." };
+  if (perm === "unsupported") return { key: "unsupported", label: "Not available in this browser", hint: "This browser can't show notifications. On an iPhone, add Wisp to your Home Screen first (Share, then Add to Home Screen)." };
   if (perm === "denied") return { key: "blocked", label: "Blocked by your browser", hint: "Your browser is blocking them for this site. Allow notifications in the site's settings (the icon left of the address), then reload." };
   if (perm === "default") return { key: "ask", label: "Not asked yet", hint: "Your browser will ask for permission when you turn them on." };
   return enabled ? { key: "on", label: "On", hint: "You'll get notifications on this device." } : { key: "off", label: "Off", hint: "Switched off on this device. Switch it on to get them." };
@@ -272,7 +272,7 @@ export function NotificationsPage() {
     try {
       const p = await enableNotifications();
       setPerm(p);
-      // so they also arrive while Warren is closed; if that can't be done, say why but keep going
+      // so they also arrive while Wisp is closed; if that can't be done, say why but keep going
       if (p === "granted" && pushSupported()) await push.change(true);
     } finally {
       setStarting(false);
@@ -280,7 +280,7 @@ export function NotificationsPage() {
   };
   const toggle = (k: keyof NotifyPrefs) => (v: boolean) => setNotifyPrefs({ [k]: v });
   const sendTest = () => {
-    show("Warren", "Notifications work on this device.", undefined, { test: true });
+    show("Wisp", "Notifications work on this device.", undefined, { test: true });
     setTestNote("Sent. You should see it now. If not, check your computer's notification settings.");
   };
   const events: [keyof NotifyPrefs, string, string][] = [
@@ -324,13 +324,13 @@ export function NotificationsPage() {
           </p>
         )}
       </Section>
-      <Section title="While Warren is open" description="Shows a notification while Warren is open in a tab or window.">
+      <Section title="While Wisp is open" description="Shows a notification while Wisp is open in a tab or window.">
         <Card>
-          <Row label="Notifications while Warren is open" hint="Uses the main switch above.">
+          <Row label="Notifications while Wisp is open" hint="Uses the main switch above.">
             <Pill tone={on ? "ok" : "neutral"}>{on ? "On" : "Off"}</Pill>
           </Row>
           {on && (
-            <Row label="Only when I'm away" hint="Stay quiet while Warren is the window you're using.">
+            <Row label="Only when I'm away" hint="Stay quiet while Wisp is the window you're using.">
               <Toggle label="Only when I'm away" on={prefs.onlyAway} onChange={toggle("onlyAway")} />
             </Row>
           )}
@@ -360,11 +360,11 @@ export function NotificationsPage() {
   );
 }
 
-/** Push: agents reach this device even while Warren is closed, like a text from an assistant. */
+/** Push: agents reach this device even while Wisp is closed, like a text from an assistant. */
 function PushSection({ push }: { push: ReturnType<typeof usePush> }) {
   const { on, busy, note, change, test } = push;
   return (
-    <Section title="Even when Warren is closed (push)" description="This device gets them like a text message, even with Warren closed: when an agent writes to you, or wants your OK before it sends something.">
+    <Section title="Even when Wisp is closed (push)" description="This device gets them like a text message, even with Wisp closed: when an agent writes to you, or wants your OK before it sends something.">
       <Card>
         <Row
           label={
@@ -372,7 +372,7 @@ function PushSection({ push }: { push: ReturnType<typeof usePush> }) {
               <Smartphone size={15} /> Push to this device
             </span>
           }
-          hint={!pushSupported() ? (/iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add Warren to your Home Screen (Share → Add to Home Screen) and open it from there." : "This browser can't receive push notifications.") : on ? "On." : "Off. Your browser will ask for permission."}
+          hint={!pushSupported() ? (/iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add Wisp to your Home Screen (Share → Add to Home Screen) and open it from there." : "This browser can't receive push notifications.") : on ? "On." : "Off. Your browser will ask for permission."}
         >
           {pushSupported() && on !== null && <Toggle label="Push to this device" on={on} disabled={busy} onChange={(v) => void change(v)} />}
         </Row>
@@ -398,7 +398,7 @@ export function AppearancePage() {
   ];
   return (
     <>
-      <PageHeader title="Appearance">How Warren looks on this device.</PageHeader>
+      <PageHeader title="Appearance">How Wisp looks on this device.</PageHeader>
       <Section title="Mode">
         <Segmented label="Mode" value={mode} options={modes} onChange={setMode} />
       </Section>

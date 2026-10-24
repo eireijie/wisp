@@ -118,7 +118,7 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
           </p>
 
           <p className="text-sm text-muted">
-            How Warren itself behaves (like which key sends a message) is in{" "}
+            How Wisp itself behaves (like which key sends a message) is in{" "}
             <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "preferences" })}>
               Settings → App behavior
             </a>

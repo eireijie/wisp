@@ -58,7 +58,7 @@ function fakeServer(): Promise<string> {
           code_challenge_methods_supported: ["S256"],
           token_endpoint_auth_methods_supported: ["none"],
         });
-      if (url.pathname === "/register") return json(201, { ...JSON.parse(body), client_id: "warren-client" });
+      if (url.pathname === "/register") return json(201, { ...JSON.parse(body), client_id: "wisp-client" });
       if (url.pathname === "/token") {
         const p = new URLSearchParams(body);
         tokensSeen.push(p.get("grant_type")!);
@@ -74,7 +74,7 @@ function fakeServer(): Promise<string> {
 
 beforeAll(async () => {
   mcpUrl = `${await fakeServer()}/mcp`;
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-market-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-market-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
@@ -99,7 +99,7 @@ describe("signing in to a remote connector", () => {
     const start = await api("POST", `/api/connectors/${conn.id}/signin`, { origin: base });
     const to = new URL(start.data.url);
     expect(to.pathname).toBe("/authorize");
-    expect(to.searchParams.get("client_id")).toBe("warren-client");
+    expect(to.searchParams.get("client_id")).toBe("wisp-client");
     expect(to.searchParams.get("redirect_uri")).toBe(`${base}/api/connectors/oauth/callback`);
     expect(to.searchParams.get("code_challenge_method")).toBe("S256");
 
@@ -129,7 +129,7 @@ describe("signing in to a remote connector", () => {
 describe("the marketplace", () => {
   const notion: RegistryServer = { name: "com.notion/mcp", description: "Official Notion MCP server", version: "1.0.1", remotes: [{ type: "streamable-http", url: "https://mcp.notion.com/mcp" }, { type: "sse", url: "https://mcp.notion.com/sse" }] };
 
-  it("turns registry servers into connectors Warren can add", () => {
+  it("turns registry servers into connectors Wisp can add", () => {
     const e = marketplaceEntry(notion)!;
     expect(e).toMatchObject({ id: "com.notion/mcp", name: "Notion", publisher: "notion.com", verified: true });
     expect(e.installs).toEqual([{ kind: "mcp-http", label: "Remote", url: "https://mcp.notion.com/mcp", headers: {}, fields: [] }]);

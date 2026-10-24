@@ -67,7 +67,7 @@ export class AgentMemory {
 
     return [
       person
-        ? `## What you know about ${person.name}\nFrom memory; ${person.name} can see and edit all of it in Warren. When you learn something lasting about them (a preference, a plan, something they did, a small detail they mention), save it right away with memory_remember. Never save passwords, keys or other secrets.${about ? `\n\n${about}` : "\n\nNothing saved yet."}`
+        ? `## What you know about ${person.name}\nFrom memory; ${person.name} can see and edit all of it in Wisp. When you learn something lasting about them (a preference, a plan, something they did, a small detail they mention), save it right away with memory_remember. Never save passwords, keys or other secrets.${about ? `\n\n${about}` : "\n\nNothing saved yet."}`
         : "",
       mine,
       below,

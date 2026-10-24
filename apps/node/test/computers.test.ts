@@ -13,12 +13,12 @@ import { discoverAgents, frontmatter, hermesModel, readDiscovered } from "../src
 
 describe("VM containers", () => {
   it("keep their home in a volume, share files with the device, and expose no ports", () => {
-    const args = runArgs({ id: "cmp_x", name: "Nova's Desk!", kind: "vm", config: { resolution: "1440x900", cpus: 2, memoryGb: 4 } }, { name: "warren-cmp_x", volume: "warren-cmp_x-home", files: "/n/files", image: "warren-computer:1" });
-    expect(args.slice(0, 4)).toEqual(["run", "-d", "--name", "warren-cmp_x"]);
+    const args = runArgs({ id: "cmp_x", name: "Nova's Desk!", kind: "vm", config: { resolution: "1440x900", cpus: 2, memoryGb: 4 } }, { name: "wisp-cmp_x", volume: "wisp-cmp_x-home", files: "/n/files", image: "wisp-computer:1" });
+    expect(args.slice(0, 4)).toEqual(["run", "-d", "--name", "wisp-cmp_x"]);
     expect(args).toEqual(expect.arrayContaining(["--hostname", "nova-s-desk", "--restart", "unless-stopped"]));
-    expect(args).toEqual(expect.arrayContaining(["-e", "RESOLUTION=1440x900", "-v", "warren-cmp_x-home:/home/warren", "-v", "/n/files:/home/warren/files", "--cpus", "2", "--memory", "4g"]));
+    expect(args).toEqual(expect.arrayContaining(["-e", "RESOLUTION=1440x900", "-v", "wisp-cmp_x-home:/home/wisp", "-v", "/n/files:/home/wisp/files", "--cpus", "2", "--memory", "4g"]));
     expect(args.join(" ")).not.toMatch(/ -p /);
-    expect(args.at(-1)).toBe("warren-computer:1");
+    expect(args.at(-1)).toBe("wisp-computer:1");
     expect(runArgs({ id: "c", name: "x", kind: "vm", config: { resolution: "bad; rm -rf" } }, { name: "n", volume: "v", files: "f", image: "i" })).toContain("RESOLUTION=1280x800");
     // Apple's container has no hostname, restart policy or host alias options
     const apple = runArgs({ id: "c", name: "x", kind: "vm", config: { cpus: 1.5 } }, { name: "n", volume: "v", files: "f", image: "i", kind: "apple" });
@@ -29,7 +29,7 @@ describe("VM containers", () => {
   });
 
   it("name their image after a hash of its recipe, the same one CI publishes", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-recipe-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-recipe-"));
     fs.writeFileSync(path.join(dir, "start.sh"), "c");
     fs.writeFileSync(path.join(dir, "Dockerfile"), "a");
     fs.mkdirSync(path.join(dir, "desktop"));
@@ -83,7 +83,7 @@ describe("X11 input", () => {
 
 describe("discovering existing agents", () => {
   it("finds Hermes profiles, OpenClaw workspaces and subagents, and reads one in full on demand", () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-discover-"));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-discover-"));
     const w = (p: string, t: string) => (fs.mkdirSync(path.dirname(path.join(home, p)), { recursive: true }), fs.writeFileSync(path.join(home, p), t));
     w(".hermes/SOUL.md", "# Desk Agent\nCalm.");
     w(".hermes/config.yaml", "model:\n  default: x\n");
@@ -109,7 +109,7 @@ describe("discovering existing agents", () => {
   });
 
   it("finds the harness you already use, with its instructions and saved memories", () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-setup-"));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-setup-"));
     const w = (p: string, t: string) => (fs.mkdirSync(path.dirname(path.join(home, p)), { recursive: true }), fs.writeFileSync(path.join(home, p), t));
     w(".claude/CLAUDE.md", "Always answer in British English.");
     w(".claude/settings.json", JSON.stringify({ model: "opus" }));
@@ -138,7 +138,7 @@ describe("discovering existing agents", () => {
 
 describe("moving files to and from a VM", () => {
   // the same scripts run inside VMs; here with this device's sh, HOME pointing at a scratch folder
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-vmfiles-"));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-vmfiles-"));
   const files = shellFiles((script, args, input) => exec("sh", ["-c", script, "sh", ...args], { input, env: { HOME: home } }));
   const gnuFind = spawnSync("find", [home, "-maxdepth", "0", "-printf", "%Y"]).stdout?.toString() === "d";
 
@@ -164,7 +164,7 @@ describe("moving files to and from a VM", () => {
 
 describe("files on a device's own screen", () => {
   it("stay inside the home folder", async () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-home-"));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-home-"));
     const files = localFiles(home);
     await files.write("~/Downloads", "a.txt", Buffer.from("hi"));
     expect((await files.list("~")).entries.map((e) => e.name)).toEqual(["Downloads"]);

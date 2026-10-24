@@ -1,4 +1,5 @@
-// "Create one in your cloud account": a Warren server in the person's own Hetzner Cloud project,
+const { envVar } = require("./env.cjs");
+// "Create one in your cloud account": a Wisp server in the person's own Hetzner Cloud project,
 // billed to them by Hetzner. The app asks Hetzner for a server with docker/cloud-init.yaml as its
 // first-boot script, waits until the hub answers over HTTPS, and makes the first account with the
 // setup key only this app knows. The API token is only ever passed in, used and dropped: nothing
@@ -7,10 +8,10 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const PLACEHOLDER = "__WARREN_SETUP_KEY__";
+const PLACEHOLDER = "__WISP_SETUP_KEY__";
 const IMAGE = "ubuntu-24.04";
 /** Override the API (and the hub's address) to run the whole flow against a mock. */
-const hetznerApi = () => process.env.WARREN_HETZNER_API || "https://api.hetzner.cloud/v1";
+const hetznerApi = () => envVar("HETZNER_API", process.env) ?? "https://api.hetzner.cloud/v1";
 
 class CloudError extends Error {}
 const timedOut = (err) => err?.name === "TimeoutError" || err?.name === "AbortError";
@@ -103,29 +104,29 @@ function userData(key, file = templatePath()) {
   return text.replace(line, `content: "${key}"`);
 }
 
-/** In a built app, the copy of Warren inside it; from source, this repo. */
+/** In a built app, the copy of Wisp inside it; from source, this repo. */
 function templatePath() {
-  const dirs = [process.env.WARREN_RUNTIME, process.resourcesPath && path.join(process.resourcesPath, "warren"), path.resolve(__dirname, "../../..")];
+  const dirs = [envVar("RUNTIME", process.env), process.resourcesPath && path.join(process.resourcesPath, "wisp"), path.resolve(__dirname, "../../..")];
   for (const d of dirs) if (d && fs.existsSync(path.join(d, "docker", "cloud-init.yaml"))) return path.join(d, "docker", "cloud-init.yaml");
-  throw new CloudError("This copy of Warren is missing docker/cloud-init.yaml. Download Warren again.");
+  throw new CloudError("This copy of Wisp is missing docker/cloud-init.yaml. Download Wisp again.");
 }
 
 /** Where a server's hub answers: its IP address (Let's Encrypt IP certificate), then the sslip.io name. */
 function hubUrls(ip) {
-  if (process.env.WARREN_CLOUD_HUB_URL) return [process.env.WARREN_CLOUD_HUB_URL];
+  if (envVar("CLOUD_HUB_URL", process.env)) return [envVar("CLOUD_HUB_URL", process.env)];
   return [`https://${ip}`, `https://${ip.replaceAll(".", "-")}.sslip.io`];
 }
 
 const sleepFor = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Create a Warren in the person's Hetzner project and make its first account. `onStep(id)` hears
+ * Create a Wisp in the person's Hetzner project and make its first account. `onStep(id)` hears
  * "create", "boot", "https" and "account" as each starts. On failure after the server exists, the
  * error carries it (`err.server`) and its setup key (`err.key`), so the person can delete it, or keep
  * waiting: `resume: { server, key }` picks the same server up again instead of creating another,
  * since only that key can make its first account.
  */
-async function createWarren({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template, resume } = {}) {
+async function createWisp({ token, type, location, account }, { fetchImpl = fetch, sleep = sleepFor, onStep = () => {}, bootMs = 5 * 60_000, httpsMs = 15 * 60_000, template, resume } = {}) {
   const opts = { fetchImpl };
   let key;
   let server;
@@ -134,7 +135,7 @@ async function createWarren({ token, type, location, account }, { fetchImpl = fe
     server = { ...resume.server };
   } else {
     key = crypto.randomBytes(24).toString("base64url");
-    const name = `warren-${crypto.randomBytes(3).toString("hex")}`;
+    const name = `wisp-${crypto.randomBytes(3).toString("hex")}`;
     onStep("create");
     const created = await hetzner(token, "POST", "/servers", {
       name,
@@ -142,7 +143,7 @@ async function createWarren({ token, type, location, account }, { fetchImpl = fe
       location,
       image: IMAGE,
       user_data: userData(key, template),
-      labels: { "managed-by": "warren" },
+      labels: { "managed-by": "wisp" },
       public_net: { enable_ipv4: true, enable_ipv6: true },
     }, opts);
     server = { id: created.server.id, name, ip: created.server.public_net?.ipv4?.ip || "", location, type };
@@ -160,7 +161,7 @@ async function createWarren({ token, type, location, account }, { fetchImpl = fe
 
     onStep("https");
     const url = await waitForHub(server.ip, { fetchImpl, sleep, ms: httpsMs });
-    if (!url) throw new CloudError("The server started, but Warren didn't answer over HTTPS in time. It may still be installing.");
+    if (!url) throw new CloudError("The server started, but Wisp didn't answer over HTTPS in time. It may still be installing.");
     server.url = url;
 
     onStep("account");
@@ -173,7 +174,7 @@ async function createWarren({ token, type, location, account }, { fetchImpl = fe
   }
 }
 
-/** Poll the server's addresses until one is a Warren over valid HTTPS. */
+/** Poll the server's addresses until one is a Wisp over valid HTTPS. */
 async function waitForHub(ip, { fetchImpl = fetch, sleep = sleepFor, ms = 15 * 60_000 } = {}) {
   for (const until = Date.now() + ms; Date.now() <= until; await sleep(5000)) {
     for (const url of hubUrls(ip)) {
@@ -192,13 +193,13 @@ async function claim(url, key, { name, email, password }, { fetchImpl = fetch, t
   try {
     const res = await fetchImpl(new URL("/api/setup", url), {
       method: "POST",
-      headers: { "content-type": "application/json", "x-warren-setup-key": key },
-      body: JSON.stringify({ name, email, password, workspaceName: "Warren" }),
+      headers: { "content-type": "application/json", "x-wisp-setup-key": key },
+      body: JSON.stringify({ name, email, password, workspaceName: "Wisp" }),
       signal: AbortSignal.timeout(timeoutMs),
     });
     const body = await res.json().catch((err) => { if (timedOut(err)) throw err; return {}; });
     if (res.status === 409) throw new CloudError("Someone already made the first account on this server.");
-    if (!res.ok || !body.token) throw new CloudError(body.error ? `Warren said: ${body.error}` : `Warren said ${res.status}`);
+    if (!res.ok || !body.token) throw new CloudError(body.error ? `Wisp said: ${body.error}` : `Wisp said ${res.status}`);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (timezone)
       await fetchImpl(new URL("/api/me", url), { method: "PATCH", headers: { "content-type": "application/json", authorization: `Bearer ${body.token}` }, body: JSON.stringify({ timezone }), signal: AbortSignal.timeout(timeoutMs) }).catch(() => {});
@@ -214,4 +215,4 @@ async function deleteServer(token, id, opts) {
   await hetzner(token, "DELETE", `/servers/${id}`, null, opts);
 }
 
-module.exports = { CloudError, plans, userData, templatePath, hubUrls, createWarren, waitForHub, claim, deleteServer, PLACEHOLDER };
+module.exports = { CloudError, plans, userData, templatePath, hubUrls, createWisp, waitForHub, claim, deleteServer, PLACEHOLDER };

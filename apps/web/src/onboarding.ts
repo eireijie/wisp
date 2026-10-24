@@ -26,7 +26,7 @@ export type StepId = (typeof STEPS)[number];
 export function stepsDone(s: OnboardingState | null): Record<StepId, boolean> {
   const agent = !!s?.agents.length;
   return {
-    // Tailscale first, so every device and phone added next can reach Warren from anywhere
+    // Tailscale first, so every device and phone added next can reach Wisp from anywhere
     anywhere: !!s?.reachable || onPublicAddress() || accessSkipped(),
     device: !!s?.devices.some((d) => d.online),
     role: !!s?.devices.some((d) => d.role),
@@ -37,7 +37,7 @@ export function stepsDone(s: OnboardingState | null): Record<StepId, boolean> {
   };
 }
 
-const DISMISS_KEY = "warren.onboarding.dismissed";
+const DISMISS_KEY = "wisp.onboarding.dismissed";
 
 export function isDismissed(): boolean {
   try {
@@ -77,7 +77,7 @@ const useOnboardingStore = create<{ state: OnboardingState | null; error: string
       (state) => set({ state, error: null }),
       (e: { status?: number; message: string }) =>
         // a 404 means the browser has a newer app than the hub is running
-        set({ error: e.status === 404 ? "This hub is running an older version than the app. Restart Warren on the computer it runs on (or run: warren update), then reload this page." : `Couldn't check your progress: ${e.message}` }),
+        set({ error: e.status === 404 ? "This hub is running an older version than the app. Restart Wisp on the computer it runs on (or run: wisp update), then reload this page." : `Couldn't check your progress: ${e.message}` }),
     ),
 }));
 
@@ -106,8 +106,8 @@ export function useOnboarding(pollMs?: number) {
 
 /** Each setup step as a plain next thing to do, for "Continue setup" and Help. */
 export const NEXT_STEP: Record<StepId, string> = {
-  anywhere: "Set up Warren to work from anywhere",
-  device: "Connect a computer to Warren",
+  anywhere: "Set up Wisp to work from anywhere",
+  device: "Connect a computer to Wisp",
   role: "Choose what that computer does for helpers",
   agent: "Make your first helper",
   harness: "Choose the AI your helper uses",
@@ -168,9 +168,9 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
     return out;
   }
   out.push({ id: "helper", status: "ok", label: `You have a helper: ${agent.name}`, fix: null, to: null });
-  // helpers that join from outside Warren don't need a device here
+  // helpers that join from outside Wisp don't need a device here
   if (harnessInfo(agent.harness)?.protocol === "mcp") {
-    out.push({ id: "device", status: "ok", label: `${agent.name} runs outside Warren and needs no device here`, fix: null, to: null });
+    out.push({ id: "device", status: "ok", label: `${agent.name} runs outside Wisp and needs no device here`, fix: null, to: null });
     return out;
   }
   const agentRoute = (tab: "device" | "model"): Route => ({ view: "agents", agentId: agent.id, tab });
@@ -191,7 +191,7 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
       id: "online",
       status: "bad",
       label: `${device.name} is on and connected`,
-      fix: device.paused ? `${device.name} is paused. Resume Warren on it.` : `Turn on ${device.name} and make sure Warren is running there.`,
+      fix: device.paused ? `${device.name} is paused. Resume Wisp on it.` : `Turn on ${device.name} and make sure Wisp is running there.`,
       to: { view: "nodes" },
     });
     out.push(unknown("harness", "Its AI is installed there"));

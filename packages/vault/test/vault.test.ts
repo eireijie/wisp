@@ -11,7 +11,7 @@ let dir: string;
 let vault: Vault;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-vault-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-vault-"));
   vault = new Vault(dir, new Database(":memory:"));
   await vault.init();
 });
@@ -92,10 +92,10 @@ describe("filing notes", () => {
 
 describe("Vault", () => {
   it("writes, reads, links, searches, and versions notes", async () => {
-    await vault.write("shared/projects/warren", "# Warren\nUses [[Obsidian]] style links.", me);
+    await vault.write("shared/projects/wisp", "# Wisp\nUses [[Obsidian]] style links.", me);
     await vault.write("shared/obsidian.md", "# Obsidian\nA markdown knowledge base.", me);
-    expect((await vault.read("shared/projects/warren.md")).title).toBe("Warren");
-    expect(vault.backlinks("shared/obsidian.md")).toEqual(["shared/projects/warren.md"]);
+    expect((await vault.read("shared/projects/wisp.md")).title).toBe("Wisp");
+    expect(vault.backlinks("shared/obsidian.md")).toEqual(["shared/projects/wisp.md"]);
     expect(vault.resolveLink("Obsidian")).toBe("shared/obsidian.md");
     expect(vault.search("knowledge").map((h) => h.path)).toEqual(["shared/obsidian.md"]);
 
@@ -129,8 +129,8 @@ describe("Vault", () => {
   });
 
   it("knows who wrote each line and what changed recently", async () => {
-    await vault.write("shared/team.md", "# Team\nfirst line\n", { name: "@atlas", email: "atlas@agents.warren" });
-    await vault.append("shared/team.md", "added by nova", { name: "@nova", email: "nova@agents.warren" });
+    await vault.write("shared/team.md", "# Team\nfirst line\n", { name: "@atlas", email: "atlas@agents.wisp" });
+    await vault.append("shared/team.md", "added by nova", { name: "@nova", email: "nova@agents.wisp" });
     const blame = await vault.blame("shared/team.md");
     expect(blame.map((b) => [b.author, b.lines])).toEqual([
       ["@atlas", ["# Team", "first line"]],
@@ -184,7 +184,7 @@ async function until(fn: () => boolean, ms = 5000) {
 
 describe("an existing Obsidian vault", () => {
   it("is adopted in place: notes indexed, settings and trash left alone and out of git", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "warren-obsidian-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-obsidian-"));
     try {
       await put(root, ".obsidian/app.json", '{"theme":"mine"}');
       await put(root, ".obsidian/plugins/thing/README.md", "# plugin readme");
@@ -214,7 +214,7 @@ describe("an existing Obsidian vault", () => {
   });
 
   it("keeps the history of a folder that is already a git repository", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "warren-obsidian-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-obsidian-"));
     try {
       gitOut(root, "init", "-q");
       await put(root, "note.md", "# Mine");
@@ -232,8 +232,8 @@ describe("an existing Obsidian vault", () => {
   });
 });
 
-describe("edits made outside Warren", () => {
-  it("are committed as 'Edited in Obsidian', indexed, and never confused with Warren's own saves", async () => {
+describe("edits made outside Wisp", () => {
+  it("are committed as 'Edited in Obsidian', indexed, and never confused with Wisp's own saves", async () => {
     await vault.write("shared/ours.md", "# Ours\n", me);
     const stop = vault.watch({ debounceMs: 30, intervalMs: 600_000 });
     try {
@@ -242,7 +242,7 @@ describe("edits made outside Warren", () => {
       const first = (await vault.changes(1))[0];
       expect(first).toMatchObject({ author: OUTSIDE_AUTHOR.name, files: [{ path: "Notes/outside.md", change: "added" }] });
 
-      // Warren's own save while the watcher is running: exactly one commit, by Warren's author
+      // Wisp's own save while the watcher is running: exactly one commit, by Wisp's author
       const count = () => Number(gitOut(dir, "rev-list", "--count", "HEAD"));
       const before = count();
       await vault.write("shared/ours.md", "# Ours\nedited", me);
@@ -262,7 +262,7 @@ describe("edits made outside Warren", () => {
     }
   });
 
-  it("are left alone while Warren is saving that very note", async () => {
+  it("are left alone while Wisp is saving that very note", async () => {
     const saving = vault.write("shared/race.md", "# Race\n", me);
     // an outside sync that runs while the save is in flight must not commit it as an outside edit
     const sync = vault.syncFromDisk();
@@ -273,12 +273,12 @@ describe("edits made outside Warren", () => {
   it("notices a git pull or checkout made on the machine, and skips Obsidian's hidden folders", async () => {
     await vault.write("shared/a.md", "# A\nbefore", me);
     const first = gitOut(dir, "rev-parse", "HEAD");
-    await vault.write("shared/a.md", "# A\nrabbitwarren", me);
+    await vault.write("shared/a.md", "# A\nrabbitwisp", me);
     gitOut(dir, "-c", "advice.detachedHead=false", "checkout", "-q", first, "--", "shared/a.md");
     await put(dir, ".obsidian/workspace.json", "{}");
     await put(dir, ".trash/gone.md", "# gone");
     await vault.syncFromDisk();
-    expect(vault.search("rabbitwarren")).toHaveLength(0);
+    expect(vault.search("rabbitwisp")).toHaveLength(0);
     expect(vault.list().map((n) => n.path)).not.toContain(".trash/gone.md");
     expect(gitOut(dir, "ls-files")).not.toMatch(/\.obsidian|\.trash/);
   });

@@ -54,7 +54,7 @@ export class Hub {
   private nodes = new Map<string, NodeConn>();
   private live = new Map<string, LiveRun>();
   private taskReplies = new Map<string, { messageId: string; result: string }>();
-  /** devices whose owner ran `warren node pause` there */
+  /** devices whose owner ran `wisp node pause` there */
   private pausedNodes = new Set<string>();
   readonly guard = new LoopGuard();
   readonly access: MemoryAccess;
@@ -116,7 +116,7 @@ export class Hub {
       const vault = this.vault(t.workspaceId);
       if (!vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
         await vault
-          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for #${t.name}`)
+          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Wisp", email: "wisp@localhost" }, `Brief for #${t.name}`)
           .catch(() => undefined);
       }
     }
@@ -124,7 +124,7 @@ export class Hub {
 
   /**
    * Every agent has the built-in skills in its folder. Missing copies are put back (they can't be
-   * removed); `refresh` also rewrites copies that differ, so a new Warren version reaches them.
+   * removed); `refresh` also rewrites copies that differ, so a new Wisp version reaches them.
    */
   async ensureBuiltinSkills(agentIds?: string[], refresh = false) {
     const rows = this.store.db.prepare("SELECT id, workspace_id AS workspaceId FROM agents").all() as { id: string; workspaceId: string }[];
@@ -135,7 +135,7 @@ export class Hub {
         const file = skillFile({ slug: s.id, name: s.name, description: s.description, content: s.content });
         const have = await vault.read(p).then((n) => n.content, () => null);
         if (have === file || (have !== null && !refresh)) continue;
-        await vault.write(p, file, { name: "Warren", email: "warren@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
+        await vault.write(p, file, { name: "Wisp", email: "wisp@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
       }
     }
   }
@@ -220,7 +220,7 @@ export class Hub {
     return !!nodeId && this.nodes.has(nodeId);
   }
 
-  /** Paused at the device itself (`warren node pause`): it takes no work until it's resumed there. */
+  /** Paused at the device itself (`wisp node pause`): it takes no work until it's resumed there. */
   isNodePaused(nodeId: string | null): boolean {
     return !!nodeId && this.pausedNodes.has(nodeId);
   }
@@ -609,8 +609,8 @@ export class Hub {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${verdict.reason}.`);
         continue;
       }
-      // commands Warren answers itself don't wake the agent
-      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "warren") {
+      // commands Wisp answers itself don't wake the agent
+      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "wisp") {
         this.answerCommand(agent, msg, threadId);
         continue;
       }
@@ -622,7 +622,7 @@ export class Hub {
     }
   }
 
-  /** What follows "/" for this agent: its harness's commands on its device, its Warren skills, and Warren's own. */
+  /** What follows "/" for this agent: its harness's commands on its device, its Wisp skills, and Wisp's own. */
   commands(agent: Agent): AgentCommand[] {
     const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
     return agentCommands(catalog?.commands, this.skills.forAgent(agent.id));
@@ -1013,7 +1013,7 @@ export class Hub {
       : "As you learn who you are, you may refine it with memory_write on me/SOUL.md. Keep it short.";
 
     return [
-      `You are @${agent.handle} ("${agent.name}"), an agent in the Warren workspace "${store.workspace(agent.workspaceId)?.name}".`,
+      `You are @${agent.handle} ("${agent.name}"), an agent in the Wisp workspace "${store.workspace(agent.workspaceId)?.name}".`,
       // models often don't know their exact version, so say what this agent actually runs on
       `You run in ${harnessLabel(agent.harness)} with ${agent.model ? `the model "${agent.model}"` : "its default model"}${agent.settings.effort ? ` at ${agent.settings.effort} reasoning effort` : ""}. If asked what model you are, say exactly that.`,
       soul ? `\n## Your soul (me/SOUL.md): who you are\n${soul}\n\n${soulNote}` : "",
@@ -1026,13 +1026,13 @@ export class Hub {
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       channelNotes ? `\n## This channel\n${channelNotes}` : "",
       teamNotes ? `\n${teamNotes}` : "",
-      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
+      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the wisp MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
       background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
-      background ? "" : `When someone asks you to change how Warren works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
+      background ? "" : `When someone asks you to change how Wisp works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
       localTime,
       this.computerSection(agent.id),
       this.borrowSection(agent.id),

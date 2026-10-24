@@ -13,7 +13,7 @@ let hub: Hub;
 let close: () => Promise<void>;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-local-device-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-local-device-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });

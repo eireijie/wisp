@@ -87,7 +87,7 @@ export function registerHarnessSettingsApi(app: FastifyInstance, hub: Hub, h: He
     return ask<unknown>(n.id, reply, (requestId) => ({ type: "harness_account", requestId, harness, action }), 30_000);
   });
 
-  /** One of a harness's skills, to add it to Warren's skills and give it to other agents. */
+  /** One of a harness's skills, to add it to Wisp's skills and give it to other agents. */
   app.get("/api/nodes/:id/harness-settings/:harness/skills/:skill", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
@@ -115,17 +115,17 @@ export function registerHarnessSettingsApi(app: FastifyInstance, hub: Hub, h: He
     return ask<{ path: string }>(n.id, reply, (requestId) => ({ type: "harness_open_config", requestId, harness, account: q.account }));
   });
 
-  // --- for agents (warren-mcp's harness_settings tools) -------------------------------------------
+  // --- for agents (wisp-mcp's harness_settings tools) -------------------------------------------
 
   /** The agent's own device, and the harness it means (its own unless it names another there). */
   const agentDevice = (c: Caller, reply: FastifyReply, harnessParam: string | undefined) => {
     const agent = c.actor.kind === "agent" ? store.agent(c.actor.id) : undefined;
     if (!agent) return void reply.code(403).send({ error: "agents only" });
     const n = agent.nodeId ? store.node(agent.nodeId) : undefined;
-    if (!n) return void reply.code(409).send({ error: "you don't run on a device Warren starts you on, so there are no harness settings to change from here" });
+    if (!n) return void reply.code(409).send({ error: "you don't run on a device Wisp starts you on, so there are no harness settings to change from here" });
     if (!hub.isNodeOnline(n.id)) return void reply.code(503).send({ error: `${n.name} is offline` });
     const harness = HARNESS.safeParse(harnessParam ?? agent.harness);
-    if (!harness.success) return void reply.code(400).send({ error: `Warren can change the settings of ${SETTINGS_HARNESSES.map(harnessLabel).join(", ")}; not ${harnessLabel(harnessParam ?? agent.harness)}` });
+    if (!harness.success) return void reply.code(400).send({ error: `Wisp can change the settings of ${SETTINGS_HARNESSES.map(harnessLabel).join(", ")}; not ${harnessLabel(harnessParam ?? agent.harness)}` });
     return { agent, node: n, harness: harness.data };
   };
 

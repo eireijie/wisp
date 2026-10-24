@@ -7,7 +7,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import type { ComputerSpec, DeviceCapabilities, KeyCombo, Message } from "@wisp/core";
 import { vncAuthResponse } from "../src/vnc-relay.ts";
 import type { HarnessAdapter, RunInput } from "@wisp/adapters";
-import { WarrenClient } from "@wisp/sdk";
+import { WispClient } from "@wisp/sdk";
 import { ComputerHost } from "../../node/src/computers/index.ts";
 import type { Driver, Shot } from "../../node/src/computers/driver.ts";
 import { localFiles } from "../../node/src/computers/transfer.ts";
@@ -83,15 +83,15 @@ let url: string;
 let hub: Hub;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
-let owner: WarrenClient;
-let agentApi: WarrenClient;
+let owner: WispClient;
+let agentApi: WispClient;
 let nodeId: string;
 let agentId: string;
 let rfb: net.Server;
 /** a fake Orgo websockify: wants the password as ?token=, then again as VNC authentication, then echoes */
 let websockify: WebSocketServer;
 let nodeDir: string;
-let member: WarrenClient;
+let member: WispClient;
 const orgoCalls: { method: string; url: string; body: any }[] = [];
 
 const waitFor = async <T>(fn: () => Promise<T | undefined> | T | undefined, ms = 5000): Promise<T> => {
@@ -111,7 +111,7 @@ const allMessages = async (): Promise<Message[]> => {
 };
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-computers-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-computers-"));
   // a fake VNC server: says hello like RFB, then echoes
   rfb = net.createServer((s) => {
     s.write("RFB 003.008\n");
@@ -185,12 +185,12 @@ beforeAll(async () => {
   close = () => built.app.close();
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
-  owner = new WarrenClient({ url, token: setup.token });
+  owner = new WispClient({ url, token: setup.token });
   const created = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeId = created.node.id;
   const agent = await owner.request("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom", nodeId, settings: { respondTo: "anyone" } });
   agentId = agent.id;
-  agentApi = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${agentId}/token`)).token });
+  agentApi = new WispClient({ url, token: (await owner.request("POST", `/api/agents/${agentId}/token`)).token });
   nodeDir = path.join(dir, "node");
   daemon = new NodeDaemon({ hub: url, token: created.token, name: "box", dir: nodeDir, discoverHome: home }, () => {}, { custom: fake }, new FakeHost({ dir: nodeDir }));
   daemon.start();
@@ -219,7 +219,7 @@ describe("computers", () => {
     const vm = await owner.request("POST", "/api/computers", { kind: "vm", nodeId, name: "Nova's desk" });
     await owner.request("POST", "/api/members", { email: "m@example.com", name: "Mem", password: "password123", role: "member" });
     const memberToken = (await (await fetch(url + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "m@example.com", password: "password123" }) })).json()).token;
-    member = new WarrenClient({ url, token: memberToken });
+    member = new WispClient({ url, token: memberToken });
     // someone else's device takes VMs only once its owner shares it, and never a custom image from a member
     await expect(member.request("POST", "/api/computers", { kind: "vm", nodeId, name: "x" })).rejects.toThrow(/Me's device/);
     await owner.request("PATCH", `/api/nodes/${nodeId}`, { shared: true });
@@ -362,8 +362,8 @@ describe("computers", () => {
   });
 
   it("keeps a device's own screen to its owner, and lends it to agents only for the owner's work", async () => {
-    await expect(owner.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/warren node screen on/);
-    // `warren node screen on`, at the device
+    await expect(owner.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/wisp node screen on/);
+    // `wisp node screen on`, at the device
     await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
     await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.ok);
     await expect(member.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/only Me can use its screen/);
@@ -393,7 +393,7 @@ describe("computers", () => {
     await owner.request("PATCH", `/api/agents/${agentId}`, { settings: { anyoneCanAsk: true } });
     let refused = "";
     duringRun = async (input) => {
-      const harness = new WarrenClient({ url, token: input.mcp!.env.WARREN_TOKEN });
+      const harness = new WispClient({ url, token: input.mcp!.env.WISP_TOKEN });
       refused = await harness.computer({ action: "screenshot" }).then(() => "", (e: Error) => e.message);
     };
     const before = calls.length;
@@ -472,7 +472,7 @@ describe("approvals", () => {
     const a = await agentApi.requestApproval("Delete the old drafts", "");
     await owner.request("POST", "/api/members", { email: "pat@example.com", name: "Pat", password: "password123", role: "member" });
     const login = await (await fetch(url + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "pat@example.com", password: "password123" }) })).json();
-    const pat = new WarrenClient({ url, token: login.token });
+    const pat = new WispClient({ url, token: login.token });
     // asked in the agent's DM with the owner: Pat isn't in it
     expect((await owner.request("GET", "/api/approvals?status=pending")).map((x: any) => x.id)).toContain(a.id);
     expect((await pat.request("GET", "/api/approvals?status=pending")).map((x: any) => x.id)).not.toContain(a.id);
@@ -486,7 +486,7 @@ describe("borrowing a device", () => {
   const nodeJson = async (cfg: object) => fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify(cfg));
   const screenOf = async () => (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "device");
   const pushed: any[] = [];
-  let kai: WarrenClient;
+  let kai: WispClient;
 
   /** the agent asks, the owner answers; returns the approval */
   const ask = async (reason: string, minutes: number | null | "deny") => {
@@ -501,12 +501,12 @@ describe("borrowing a device", () => {
   it("can't ask for a device whose screen is off, or that is paused", async () => {
     await nodeJson({});
     await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.off);
-    await expect(agentApi.requestDevice("box", "enter the sales")).rejects.toThrow(/screen is off.*warren node screen on/);
+    await expect(agentApi.requestDevice("box", "enter the sales")).rejects.toThrow(/screen is off.*wisp node screen on/);
     expect(await agentApi.borrowableDevices()).toEqual([expect.objectContaining({ name: "box", owner: "Me", available: false })]);
     await expect(agentApi.requestDevice("nope", "x")).rejects.toThrow(/no device called "nope".*"box"/);
     await nodeJson({ shareScreen: true, paused: true });
     await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].paused);
-    await expect(agentApi.requestDevice("box", "x")).rejects.toThrow(/paused.*warren node resume/);
+    await expect(agentApi.requestDevice("box", "x")).rejects.toThrow(/paused.*wisp node resume/);
     await nodeJson({ shareScreen: true });
     await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.ok && !(await owner.request<any[]>("GET", "/api/nodes"))[0].paused);
     expect((await agentApi.borrowableDevices())[0].available).toBe(true);
@@ -515,7 +515,7 @@ describe("borrowing a device", () => {
   it("asks the owner, who alone decides, and lends the screen to that agent only", async () => {
     hub.push.send = async (sub, payload) => void pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(payload as string) });
     await owner.request("POST", "/api/push/subscribe", { endpoint: "https://push.example.com/owner", keys: { p256dh: "BNcR", auth: "tBHI" } });
-    kai = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${(await owner.request("POST", "/api/agents", { handle: "kai", name: "Kai", harness: "custom", nodeId })).id}/token`)).token });
+    kai = new WispClient({ url, token: (await owner.request("POST", `/api/agents/${(await owner.request("POST", "/api/agents", { handle: "kai", name: "Kai", harness: "custom", nodeId })).id}/token`)).token });
 
     const { approvalId } = await agentApi.requestDevice("Box", "Enter today's sales in the POS app");
     await expect(agentApi.requestDevice("box", "again")).rejects.toThrow(/already asked/);
@@ -767,7 +767,7 @@ describe("Orgo", () => {
     const cloud = await owner.request("POST", "/api/computers", { kind: "orgo", name: "Cloud" });
     expect(cloud).toMatchObject({ kind: "orgo", online: true, transport: "vnc", config: { computerId: "11111111-1111-4111-8111-111111111111", instanceId: "inst-1" } });
     const scout = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "custom", nodeId, computerId: cloud.id });
-    const scoutApi = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${scout.id}/token`)).token });
+    const scoutApi = new WispClient({ url, token: (await owner.request("POST", `/api/agents/${scout.id}/token`)).token });
     await scoutApi.computer({ action: "click", x: 640, y: 400, space: { width: 1280, height: 800 }, double: true });
     expect(orgoCalls.at(-1)).toMatchObject({ method: "POST", url: expect.stringContaining("/computers/11111111-1111-4111-8111-111111111111/click"), body: { x: 640, y: 400, button: "left", double: true } });
     await scoutApi.computer({ action: "key", keys: "Enter" });

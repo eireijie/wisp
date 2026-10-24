@@ -14,7 +14,7 @@ describe("desktop onboarding wording", () => {
     desktop.device = false;
     const html = renderToStaticMarkup(createElement(EasiestWay, { name: "device", token: "token", connected: false }));
     expect(html).toContain(`This ${label} is being connected automatically`);
-    expect(html).toContain(`The Warren app has not connected this ${label} yet.`);
+    expect(html).toContain(`The Wisp app has not connected this ${label} yet.`);
     expect(html).toContain(`Connect this ${label}`);
   });
 

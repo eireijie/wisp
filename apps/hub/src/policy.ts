@@ -12,12 +12,12 @@ export const ASK_BEFORE_DEFAULT: readonly AskBefore[] = ASK_BEFORE;
 
 /** How each rule reads in an agent's prompt. */
 export const ASK_BEFORE_TEXT: Record<AskBefore, string> = {
-  send: "sending email or messages outside Warren",
+  send: "sending email or messages outside Wisp",
   spend: "buying or paying for anything",
   delete: "deleting files, data or accounts",
   post: "posting publicly (social media, reviews, comments)",
   signup: "signing up for new accounts or services",
-  share: "sharing files or private information outside Warren",
+  share: "sharing files or private information outside Wisp",
 };
 
 export function agentPolicy(hub: Hub, workspaceId: string) {

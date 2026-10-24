@@ -22,7 +22,7 @@ interface Helpers {
 }
 
 const NAME = z.string().trim().min(1).max(80);
-/** A screen's code, passed straight to its device to check; Warren never keeps it. */
+/** A screen's code, passed straight to its device to check; Wisp never keeps it. */
 const SCREEN_CODE = z.string().min(1).max(200);
 const TIMEZONE = z.string().max(64).refine((tz) => {
   try {
@@ -59,7 +59,7 @@ const STEP = z.object({
     .optional(),
 });
 
-const WARREN = { name: "Warren", email: "warren@localhost" };
+const WISP = { name: "Wisp", email: "wisp@localhost" };
 
 /**
  * Routes for computers (devices' screens, VMs, Orgo), approvals, routines, harness settings and
@@ -153,7 +153,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       const owner = node.ownerId ? (store.user(node.ownerId)?.name ?? "its owner") : "its owner";
       if (body.kind === "device") {
         if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: `${node.name} is ${owner}'s device; only ${owner} can use its screen` });
-        if (caps?.screen.off) return reply.code(400).send({ error: `${node.name}'s screen is off. Turn it on at the device itself: \`warren node screen on\`` });
+        if (caps?.screen.off) return reply.code(400).send({ error: `${node.name}'s screen is off. Turn it on at the device itself: \`wisp node screen on\`` });
         // one computer per device screen; asking again returns it
         const existing = store.computersOnNode(node.id).find((x) => x.kind === "device");
         if (existing) return computers.view(existing);
@@ -454,7 +454,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const agent = store.agent(c.actor.id);
     const comp = agent?.computerId ? store.computer(agent.computerId) : undefined;
     if (!comp) {
-      reply.code(404).send({ error: "you don't have a computer; a person can give you one on your page in Warren (Agents → Computer)" });
+      reply.code(404).send({ error: "you don't have a computer; a person can give you one on your page in Wisp (Agents → Computer)" });
       return null;
     }
     return comp;
@@ -727,7 +727,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!r && !body.name) return reply.code(400).send({ error: "name a new routine" });
     const notePath = r?.notePath ?? `agents/${agent.id}/routines/${routineSlug(body.name!)}-${Date.now().toString(36)}.md`;
     const name = body.name ?? r!.name;
-    await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${name}\n\n${body.steps}\n`, { name: `@${agent.handle}`, email: `${agent.handle}@agents.warren` }, `Routine "${name}"`);
+    await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${name}\n\n${body.steps}\n`, { name: `@${agent.handle}`, email: `${agent.handle}@agents.wisp` }, `Routine "${name}"`);
     if (r) r = store.updateRoutine(r.id, { name, status: "ready", ...(body.schedule !== undefined ? { schedule: body.schedule } : {}), ...(body.timezone ? { timezone: body.timezone } : {}) })!;
     else r = store.createRoutine({ workspaceId: c.workspaceId, agentId: agent.id, name, notePath, schedule: body.schedule ?? null, timezone: body.timezone ?? "UTC", channelId: null, status: "ready", createdBy: c.actor });
     hub.broadcast(c.workspaceId, { type: "routines_changed" });
@@ -783,7 +783,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return { ok: true };
   });
 
-  /** Make a Warren agent from one that already exists on a device: its soul, instructions and notes come along. */
+  /** Make a Wisp agent from one that already exists on a device: its soul, instructions and notes come along. */
   app.post("/api/agents/import", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;

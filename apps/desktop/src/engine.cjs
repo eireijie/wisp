@@ -1,6 +1,7 @@
-// Runs Warren's own processes for the desktop app: a hub on this computer, and this computer as a
-// device. Both are the same `warren` CLI a terminal would run. A built app carries its own copy of
-// Warren (scripts/bundle-warren.mjs) and runs it with the app itself as Node, so it needs nothing
+const { envVar } = require("./env.cjs");
+// Runs Wisp's own processes for the desktop app: a hub on this computer, and this computer as a
+// device. Both are the same `wisp` CLI a terminal would run. A built app carries its own copy of
+// Wisp (scripts/bundle-wisp.mjs) and runs it with the app itself as Node, so it needs nothing
 // else installed; run from source, it uses this repo and the person's own Node.js 22+.
 const { spawn, execFile, execFileSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -8,7 +9,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const isWin = process.platform === "win32";
-const NODE_DIR = process.env.WARREN_NODE_DIR || path.join(os.homedir(), ".warren");
+const NODE_DIR = envVar("NODE_DIR", process.env) ?? path.join(os.homedir(), ".wisp");
 const NODE_CONFIG = path.join(NODE_DIR, "node.json");
 
 /**
@@ -22,8 +23,8 @@ function loginPath() {
   if (isWin) return shellPath;
   try {
     const shell = process.env.SHELL || "/bin/zsh";
-    const out = execFileSync(shell, ["-ilc", 'printf "__WARREN_PATH__%s" "$PATH"'], { encoding: "utf8", timeout: 8000, stdio: ["ignore", "pipe", "ignore"] });
-    const m = out.match(/__WARREN_PATH__(.*)$/m);
+    const out = execFileSync(shell, ["-ilc", 'printf "__WISP_PATH__%s" "$PATH"'], { encoding: "utf8", timeout: 8000, stdio: ["ignore", "pipe", "ignore"] });
+    const m = out.match(/__WISP_PATH__(.*)$/m);
     if (m && m[1]) shellPath = m[1];
   } catch {}
   const extra = ["/opt/homebrew/bin", "/usr/local/bin", path.join(os.homedir(), ".local/bin"), path.join(os.homedir(), ".volta/bin")];
@@ -37,7 +38,7 @@ function env(extra = {}) {
   return { ...process.env, PATH: loginPath(), ELECTRON_RUN_AS_NODE: undefined, ...extra };
 }
 
-/** The `node` that runs Warren: 22 or newer, as Warren needs. */
+/** The `node` that runs Wisp: 22 or newer, as Wisp needs. */
 function findNode() {
   for (const dir of loginPath().split(path.delimiter)) {
     const bin = path.join(dir, isWin ? "node.exe" : "node");
@@ -50,26 +51,26 @@ function findNode() {
   return null;
 }
 
-const isWarren = (dir) => !!dir && fs.existsSync(path.join(dir, "bin", "warren.mjs")) && fs.existsSync(path.join(dir, "apps", "hub"));
+const isWisp = (dir) => !!dir && fs.existsSync(path.join(dir, "bin", "wisp.mjs")) && fs.existsSync(path.join(dir, "apps", "hub"));
 
-/** The Warren folder a `warren service install` points at (its LaunchAgent runs <dir>/bin/…). */
-function serviceWarren() {
+/** The Wisp folder a `wisp service install` points at (its LaunchAgent runs <dir>/bin/…). */
+function serviceWisp() {
   if (process.platform !== "darwin") return [];
-  return ["hub", "node"].map((kind) => {
+  return ["wisp", "warren"].flatMap((brand) => ["hub", "node"].map((kind) => {
     try {
-      const plist = fs.readFileSync(path.join(os.homedir(), "Library/LaunchAgents", `ai.warren.${kind}.plist`), "utf8");
-      const m = plist.match(/<string>([^<]+)\/bin\/warren(?:-hub)?\.mjs<\/string>/);
+      const plist = fs.readFileSync(path.join(os.homedir(), "Library/LaunchAgents", `ai.${brand}.${kind}.plist`), "utf8");
+      const m = plist.match(/<string>([^<]+)\/bin\/(?:wisp|warren)(?:-hub)?\.mjs<\/string>/);
       return m ? m[1] : null;
     } catch {
       return null;
     }
-  });
+  }));
 }
 
-/** Where Warren is: the saved folder, $WARREN_DIR, install.sh's ~/warren, a service's folder, or the repo this app runs from. */
-function findWarren(saved) {
-  const candidates = [saved, process.env.WARREN_DIR, path.join(os.homedir(), "warren"), ...serviceWarren(), path.resolve(__dirname, "../../..")];
-  return candidates.find(isWarren) || null;
+/** Where Wisp is: the saved folder, $WISP_DIR, install.sh's ~/wisp, a service's folder, or the repo this app runs from. */
+function findWisp(saved) {
+  const candidates = [saved, envVar("DIR", process.env), path.join(os.homedir(), "wisp"), ...serviceWisp(), path.resolve(__dirname, "../../..")];
+  return candidates.find(isWisp) || null;
 }
 
 function readNodeConfig() {
@@ -88,50 +89,50 @@ function writeNodeConfig(patch) {
   return next;
 }
 
-/** The copy of Warren inside a built app ($WARREN_RUNTIME points a source run at a staged one). */
-function bundledWarren() {
-  const dir = process.env.WARREN_RUNTIME || (process.resourcesPath ? path.join(process.resourcesPath, "warren") : null);
-  return isWarren(dir) ? dir : null;
+/** The copy of Wisp inside a built app ($WISP_RUNTIME points a source run at a staged one). */
+function bundledWisp() {
+  const dir = envVar("RUNTIME", process.env) ?? (process.resourcesPath ? path.join(process.resourcesPath, "wisp") : null);
+  return isWisp(dir) ? dir : null;
 }
 
 /**
- * How to run Warren here: the app's own copy with the app as Node (its data in ~/.warren/data), or
- * from source, a Warren folder and the person's Node.js. `problem` says what's missing.
+ * How to run Wisp here: the app's own copy with the app as Node (its data in ~/.wisp/data), or
+ * from source, a Wisp folder and the person's Node.js. `problem` says what's missing.
  */
 function runtime(saved) {
-  const bundled = bundledWarren();
+  const bundled = bundledWisp();
   if (bundled)
-    return { node: process.execPath, version: process.versions.node, warrenDir: bundled, bundled: true, env: { ELECTRON_RUN_AS_NODE: "1", WARREN_DATA_DIR: process.env.WARREN_DATA_DIR || path.join(NODE_DIR, "data") } };
+    return { node: process.execPath, version: process.versions.node, wispDir: bundled, bundled: true, env: { ELECTRON_RUN_AS_NODE: "1", WISP_DATA_DIR: envVar("DATA_DIR", process.env) ?? path.join(NODE_DIR, "data") } };
   const node = findNode();
-  const warrenDir = findWarren(saved);
-  if (!node) return { problem: "Warren needs Node.js 22 or newer. Install it from nodejs.org, then try again." };
-  if (!warrenDir) return { problem: "This copy of Warren is missing its server. Download Warren again, or run it from a Warren folder." };
-  return { node: node.bin, version: node.version, warrenDir, bundled: false, env: {} };
+  const wispDir = findWisp(saved);
+  if (!node) return { problem: "Wisp needs Node.js 22 or newer. Install it from nodejs.org, then try again." };
+  if (!wispDir) return { problem: "This copy of Wisp is missing its server. Download Wisp again, or run it from a Wisp folder." };
+  return { node: node.bin, version: node.version, wispDir, bundled: false, env: {} };
 }
 
-/** Whether `warren service install` already keeps this running (then the app leaves it alone). */
+/** Whether `wisp service install` already keeps this running (then the app leaves it alone). */
 function serviceRunning(kind) {
-  // a service reads ~/.warren; with another WARREN_NODE_DIR, it isn't this app's device
-  if (process.env.WARREN_NODE_DIR) return Promise.resolve(false);
+  // a service reads ~/.wisp; with another WISP_NODE_DIR, it isn't this app's device
+  if (envVar("NODE_DIR", process.env)) return Promise.resolve(false);
   return new Promise((resolve) => {
     // Same service names and user/system scope as apps/node/src/service.ts.
     if (process.platform === "darwin")
-      execFile("launchctl", ["print", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 4000 }, (err, out) => resolve(!err && /state = running/.test(out)));
+      execFile("launchctl", ["print", `gui/${process.getuid()}/ai.wisp.${kind}`], { timeout: 4000 }, (err, out) => resolve(!err && /state = running/.test(out)));
     else if (process.platform === "linux")
-      execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "is-active", "--quiet", kind === "hub" ? "warren" : "warren-node"], { timeout: 4000 }, (err) => resolve(!err));
+      execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "is-active", "--quiet", kind === "hub" ? "wisp" : "wisp-node"], { timeout: 4000 }, (err) => resolve(!err));
     else if (process.platform === "win32")
-      execFile("powershell.exe", ["-NoProfile", "-Command", `(Get-ScheduledTask -TaskName 'Warren ${kind}').State`], { timeout: 4000 }, (err, out) => resolve(!err && out.trim() === "Running"));
+      execFile("powershell.exe", ["-NoProfile", "-Command", `(Get-ScheduledTask -TaskName 'Wisp ${kind}').State`], { timeout: 4000 }, (err, out) => resolve(!err && out.trim() === "Running"));
     else resolve(false);
   });
 }
 
-/** Restart a `warren service`, so it picks up a node.json that now points at another hub. */
+/** Restart a `wisp service`, so it picks up a node.json that now points at another hub. */
 function restartService(kind) {
   return new Promise((resolve) => {
     const done = (err) => resolve(!err);
-    if (process.platform === "darwin") execFile("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/ai.warren.${kind}`], { timeout: 8000 }, done);
-    else if (process.platform === "linux") execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "restart", kind === "hub" ? "warren" : "warren-node"], { timeout: 8000 }, done);
-    else if (process.platform === "win32") execFile("powershell.exe", ["-NoProfile", "-Command", `$ErrorActionPreference = 'Stop'; Stop-ScheduledTask -TaskName 'Warren ${kind}'; Start-ScheduledTask -TaskName 'Warren ${kind}'`], { timeout: 8000 }, done);
+    if (process.platform === "darwin") execFile("launchctl", ["kickstart", "-k", `gui/${process.getuid()}/ai.wisp.${kind}`], { timeout: 8000 }, done);
+    else if (process.platform === "linux") execFile("systemctl", [...(process.getuid?.() === 0 ? [] : ["--user"]), "restart", kind === "hub" ? "wisp" : "wisp-node"], { timeout: 8000 }, done);
+    else if (process.platform === "win32") execFile("powershell.exe", ["-NoProfile", "-Command", `$ErrorActionPreference = 'Stop'; Stop-ScheduledTask -TaskName 'Wisp ${kind}'; Start-ScheduledTask -TaskName 'Wisp ${kind}'`], { timeout: 8000 }, done);
     else resolve(false);
   });
 }
@@ -177,9 +178,9 @@ function deviceLogConnected(origin, file = path.join(NODE_DIR, "node.log")) {
     const lines = bytes.toString("utf8").split("\n");
     if (size > bytes.length) lines.shift();
     for (const line of lines.reverse()) {
-      const connected = line.match(/^\[warren\] connected to (\S+) as /);
+      const connected = line.match(/^\[(?:wisp|warren)\] connected to (\S+) as /);
       if (connected) return new URL(connected[1]).origin === new URL(origin).origin;
-      if (/^--- .* starting node start|^\[warren\] (?:disconnected |connection error:|hub rejected the node token|another `warren node start`)/.test(line)) return false;
+      if (/^--- .* starting node start|^\[(?:wisp|warren)\] (?:disconnected |connection error:|hub rejected the node token|another `(?:wisp|warren) node start`)/.test(line)) return false;
     }
   } catch {
     return false;
@@ -211,7 +212,7 @@ function candidates(input) {
   const https = `https://${u.host}`;
   const http = `http://${u.host}`;
   const list = local ? [http, https] : [https, http];
-  if (!u.port) list.push(`http://${u.hostname}:4747`); // Warren's own port, when it isn't behind a proxy
+  if (!u.port) list.push(`http://${u.hostname}:4747`); // Wisp's own port, when it isn't behind a proxy
   return [...new Set(list)];
 }
 
@@ -227,13 +228,13 @@ function reason(err, origin) {
 }
 
 /**
- * Check a server address before joining it: can this computer reach it, and is it a Warren hub.
+ * Check a server address before joining it: can this computer reach it, and is it a Wisp hub.
  * Resolves with the address that worked (`url`), whether nobody has set it up yet, and the checks
  * to show, or `ok: false` with why not.
  */
 async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
   const list = candidates(input);
-  if (!list.length) return { ok: false, error: "That isn't a server address. Try something like warren.example.com or warren.local:4747.", checks: [] };
+  if (!list.length) return { ok: false, error: "That isn't a server address. Try something like wisp.example.com or wisp.local:4747.", checks: [] };
   let first = null;
   let answered = null;
   for (const origin of list) {
@@ -246,7 +247,7 @@ async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
     }
     const body = await res.json().catch(() => null);
     if (!res.ok || !body || typeof body.needsSetup !== "boolean") {
-      answered ??= { ok: false, url: origin, error: `${new URL(origin).host} answered, but it isn't a Warren server${res.ok ? "" : ` (${res.status})`}.`, checks: [{ label: "Reach the server", ok: true }, { label: "It's a Warren server", ok: false }] };
+      answered ??= { ok: false, url: origin, error: `${new URL(origin).host} answered, but it isn't a Wisp server${res.ok ? "" : ` (${res.status})`}.`, checks: [{ label: "Reach the server", ok: true }, { label: "It's a Wisp server", ok: false }] };
       continue;
     }
     const finalOrigin = res.url ? new URL(res.url).origin : origin;
@@ -256,7 +257,7 @@ async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
       needsSetup: body.needsSetup,
       checks: [
         { label: `Reach ${new URL(finalOrigin).host}`, ok: true },
-        { label: "It's a Warren server", ok: true },
+        { label: "It's a Wisp server", ok: true },
         { label: body.needsSetup ? "Nobody has set it up yet: you'll create the first account" : "Ready for you to sign in", ok: true },
       ],
     };
@@ -272,7 +273,7 @@ function lanAddresses(port) {
   return out;
 }
 
-/** what `warren node start` exits with when the hub turns its token down ($WARREN_EXIT_IF_REJECTED) */
+/** what `wisp node start` exits with when the hub turns its token down ($WISP_EXIT_IF_REJECTED) */
 const REJECTED_CODE = 78;
 
 const alive = (pid) => {
@@ -297,7 +298,7 @@ function commandOf(pid) {
 
 /**
  * The process an earlier run of the app started and never stopped (it crashed, or was force
- * quit), when it's still running: still that Warren command, not some other process that got its id.
+ * quit), when it's still running: still that Wisp command, not some other process that got its id.
  */
 function leftover(pidFile, args) {
   let pid;
@@ -308,10 +309,10 @@ function leftover(pidFile, args) {
   }
   if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid || !alive(pid)) return null;
   const cmd = commandOf(pid);
-  return cmd.includes("warren.mjs") && cmd.includes(args.join(" ")) ? pid : null;
+  return /(?:wisp|warren)\.mjs/.test(cmd) && cmd.includes(args.join(" ")) ? pid : null;
 }
 
-/** A Warren process this app started; it stops when the app quits. */
+/** A Wisp process this app started; it stops when the app quits. */
 
 class Child {
   constructor(name, logDir, onChange) {
@@ -333,9 +334,9 @@ class Child {
    * One an earlier run of the app left running is stopped first: a second device with the same
    * token would fight it for the hub, and nothing would stop the old one on Quit or Disconnect.
    */
-  start(node, warrenDir, args, extraEnv = {}) {
+  start(node, wispDir, args, extraEnv = {}) {
     this.wanted = true;
-    this.spec = { node, warrenDir, args, extraEnv };
+    this.spec = { node, wispDir, args, extraEnv };
     if (this.proc || this.reaping) return;
     const old = leftover(this.pidFile, args);
     if (!old) return this.launch();
@@ -363,14 +364,14 @@ class Child {
   }
 
   launch() {
-    const { node, warrenDir, args, extraEnv } = this.spec;
+    const { node, wispDir, args, extraEnv } = this.spec;
     let proc;
     try {
       fs.mkdirSync(path.dirname(this.log), { recursive: true });
       const out = fs.openSync(this.log, "a");
       fs.writeSync(out, `\n--- ${new Date().toISOString()} starting ${args.join(" ")}\n`);
       try {
-        proc = spawn(node, [path.join(warrenDir, "bin", "warren.mjs"), ...args], { cwd: warrenDir, env: env(extraEnv), stdio: ["ignore", out, out], windowsHide: true });
+        proc = spawn(node, [path.join(wispDir, "bin", "wisp.mjs"), ...args], { cwd: wispDir, env: env(extraEnv), stdio: ["ignore", out, out], windowsHide: true });
       } finally {
         fs.closeSync(out);
       }
@@ -447,4 +448,4 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+module.exports = { Child, findNode, findWisp, isWisp, runtime, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };

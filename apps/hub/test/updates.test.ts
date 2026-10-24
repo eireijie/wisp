@@ -55,7 +55,7 @@ async function device(commit: string, answer: (requestId: string) => NodeToHub) 
 const nodeInfo = async () => (await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === nodeId);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-updates-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-updates-"));
   const built = await buildHub({ dataDir: dir });
   hub = built.hub;
   // not a git checkout, so the hub's own update is explained rather than run

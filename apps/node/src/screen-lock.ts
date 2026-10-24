@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * The code that opens this device's own screen from Warren, picked at the device. Only a hash of
- * it is kept here, and the hub never stores it: someone signed in to Warren as the owner still
+ * The code that opens this device's own screen from Wisp, picked at the device. Only a hash of
+ * it is kept here, and the hub never stores it: someone signed in to Wisp as the owner still
  * can't see or use the screen without it. The device itself counts wrong codes and locks out
  * guessing, so nothing on the hub can get around that.
  */
@@ -128,7 +128,7 @@ export class ScreenLock {
     this.grants.clear();
   }
 
-  /** May Warren use the screen right now (screenshots, input, files)? Always, when no code is set. */
+  /** May Wisp use the screen right now (screenshots, input, files)? Always, when no code is set. */
   open(): boolean {
     if (!this.enabled) return true;
     const t = this.now();

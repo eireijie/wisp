@@ -19,7 +19,7 @@ Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public static class WarrenInput {
+public static class WispInput {
   [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
   [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
   [StructLayout(LayoutKind.Explicit)] public struct UNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
@@ -35,13 +35,13 @@ public static class WarrenInput {
   public static void Unicode(char c, bool up) { var i = new INPUT(); i.type = 1; i.u.ki.wScan = c; i.u.ki.dwFlags = 4u | (up ? 2u : 0u); Send(i); }
 }
 "@
-[WarrenInput]::SetProcessDPIAware() | Out-Null
+[WispInput]::SetProcessDPIAware() | Out-Null
 $jpeg = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
 $BTN = @{ left = @(2, 4); right = @(8, 16); middle = @(32, 64) }
 $MODS = @{ ctrl = 17; alt = 18; shift = 16; meta = 91 }
 
 function Shot($c) {
-  $w = [WarrenInput]::GetSystemMetrics(0); $h = [WarrenInput]::GetSystemMetrics(1)
+  $w = [WispInput]::GetSystemMetrics(0); $h = [WispInput]::GetSystemMetrics(1)
   $bmp = New-Object System.Drawing.Bitmap $w, $h
   $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $g.Dispose()
   $out = New-Object System.Drawing.Bitmap ([int]$c.width), ([int]$c.height)
@@ -55,39 +55,39 @@ function Shot($c) {
 }
 
 function Press($vk, $mods) {
-  foreach ($m in $mods) { [WarrenInput]::Key($MODS[$m], $false) }
-  [WarrenInput]::Key($vk, $false); [WarrenInput]::Key($vk, $true)
-  [array]::Reverse($mods); foreach ($m in $mods) { [WarrenInput]::Key($MODS[$m], $true) }
+  foreach ($m in $mods) { [WispInput]::Key($MODS[$m], $false) }
+  [WispInput]::Key($vk, $false); [WispInput]::Key($vk, $true)
+  [array]::Reverse($mods); foreach ($m in $mods) { [WispInput]::Key($MODS[$m], $true) }
 }
 
 function Handle($c) {
   switch ($c.op) {
-    'size' { return @{ width = [WarrenInput]::GetSystemMetrics(0); height = [WarrenInput]::GetSystemMetrics(1) } }
+    'size' { return @{ width = [WispInput]::GetSystemMetrics(0); height = [WispInput]::GetSystemMetrics(1) } }
     'shot' { return Shot $c }
-    'move' { [WarrenInput]::SetCursorPos($c.x, $c.y) | Out-Null }
+    'move' { [WispInput]::SetCursorPos($c.x, $c.y) | Out-Null }
     'click' {
-      [WarrenInput]::SetCursorPos($c.x, $c.y) | Out-Null
-      for ($i = 0; $i -lt $c.count; $i++) { [WarrenInput]::Mouse($BTN[$c.button][0], 0); [WarrenInput]::Mouse($BTN[$c.button][1], 0); Start-Sleep -Milliseconds 40 }
+      [WispInput]::SetCursorPos($c.x, $c.y) | Out-Null
+      for ($i = 0; $i -lt $c.count; $i++) { [WispInput]::Mouse($BTN[$c.button][0], 0); [WispInput]::Mouse($BTN[$c.button][1], 0); Start-Sleep -Milliseconds 40 }
     }
-    'mouse' { [WarrenInput]::SetCursorPos($c.x, $c.y) | Out-Null; [WarrenInput]::Mouse($BTN[$c.button][$(if ($c.down) { 0 } else { 1 })], 0) }
+    'mouse' { [WispInput]::SetCursorPos($c.x, $c.y) | Out-Null; [WispInput]::Mouse($BTN[$c.button][$(if ($c.down) { 0 } else { 1 })], 0) }
     'drag' {
-      [WarrenInput]::SetCursorPos($c.x, $c.y) | Out-Null; [WarrenInput]::Mouse(2, 0)
-      for ($i = 1; $i -le 12; $i++) { [WarrenInput]::SetCursorPos([int]($c.x + ($c.toX - $c.x) * $i / 12), [int]($c.y + ($c.toY - $c.y) * $i / 12)) | Out-Null; Start-Sleep -Milliseconds 15 }
-      [WarrenInput]::Mouse(4, 0)
+      [WispInput]::SetCursorPos($c.x, $c.y) | Out-Null; [WispInput]::Mouse(2, 0)
+      for ($i = 1; $i -le 12; $i++) { [WispInput]::SetCursorPos([int]($c.x + ($c.toX - $c.x) * $i / 12), [int]($c.y + ($c.toY - $c.y) * $i / 12)) | Out-Null; Start-Sleep -Milliseconds 15 }
+      [WispInput]::Mouse(4, 0)
     }
     'scroll' {
-      [WarrenInput]::SetCursorPos($c.x, $c.y) | Out-Null
+      [WispInput]::SetCursorPos($c.x, $c.y) | Out-Null
       $d = 120 * $c.amount
-      switch ($c.direction) { 'up' { [WarrenInput]::Mouse(0x800, $d) } 'down' { [WarrenInput]::Mouse(0x800, -$d) } 'left' { [WarrenInput]::Mouse(0x1000, -$d) } 'right' { [WarrenInput]::Mouse(0x1000, $d) } }
+      switch ($c.direction) { 'up' { [WispInput]::Mouse(0x800, $d) } 'down' { [WispInput]::Mouse(0x800, -$d) } 'left' { [WispInput]::Mouse(0x1000, -$d) } 'right' { [WispInput]::Mouse(0x1000, $d) } }
     }
     'type' {
       foreach ($ch in $c.text.ToCharArray()) {
-        if ($ch -eq [char]10) { Press 13 @() } elseif ($ch -eq [char]9) { Press 9 @() } elseif ($ch -ne [char]13) { [WarrenInput]::Unicode($ch, $false); [WarrenInput]::Unicode($ch, $true) }
+        if ($ch -eq [char]10) { Press 13 @() } elseif ($ch -eq [char]9) { Press 9 @() } elseif ($ch -ne [char]13) { [WispInput]::Unicode($ch, $false); [WispInput]::Unicode($ch, $true) }
       }
     }
     'key' {
       $vk = $c.vk
-      if ($vk -eq $null) { $vk = [WarrenInput]::VkKeyScan([char]$c.char) -band 0xff }
+      if ($vk -eq $null) { $vk = [WispInput]::VkKeyScan([char]$c.char) -band 0xff }
       Press $vk @($c.mods)
     }
     'open' { Start-Process $c.target }
@@ -125,7 +125,7 @@ export class WindowsDesktop implements Driver {
 
   private helper(): ChildProcessWithoutNullStreams {
     if (this.proc && this.proc.exitCode === null) return this.proc;
-    const file = path.join(os.tmpdir(), `warren-input-${process.pid}.ps1`);
+    const file = path.join(os.tmpdir(), `wisp-input-${process.pid}.ps1`);
     // with a BOM, PowerShell reads the script as UTF-8 whatever the system code page is
     fs.writeFileSync(file, "\ufeff" + HELPER);
     const p = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", file], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });

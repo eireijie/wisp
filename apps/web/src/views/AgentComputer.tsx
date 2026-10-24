@@ -10,7 +10,7 @@ import { Intro } from "./SettingsParts.tsx";
 import { Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
 
-/** Harnesses Warren starts on a device (natively or over ACP), as opposed to ones that join through MCP. */
+/** Harnesses Wisp starts on a device (natively or over ACP), as opposed to ones that join through MCP. */
 export function runsOnDevice(harness: string) {
   return harness.startsWith("acp:") || (harnessInfo(harness)?.protocol ?? "mcp") !== "mcp";
 }
@@ -114,7 +114,7 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
               title="Your own screen"
               body={
                 device.capabilities?.screen.off
-                  ? `Off. Turn it on at ${device.name} with: warren node screen on`
+                  ? `Off. Turn it on at ${device.name} with: wisp node screen on`
                   : device.capabilities?.screen.ok === false
                     ? device.capabilities.screen.detail
                     : "Only while you lend it, and only for things you ask. For apps that only live on your computer."
@@ -207,7 +207,7 @@ function RunsWhere({ agent, device }: { agent: Agent; device: DeviceInfo | undef
       {!info.possible ? (
         <p className="text-sm text-muted">
           Directly on {device.name}, where it can reach that device's files.{" "}
-          {runsInVm(agent.harness) ? `Give it a VM on ${device.name} to run it inside that instead.` : `${label} doesn't come with Warren's VM yet, so it runs on the device.`}
+          {runsInVm(agent.harness) ? `Give it a VM on ${device.name} to run it inside that instead.` : `${label} doesn't come with Wisp's VM yet, so it runs on the device.`}
         </p>
       ) : (
         <>

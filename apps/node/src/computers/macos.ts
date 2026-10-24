@@ -7,7 +7,7 @@ import { ActionError, cached, exec, must, type Button, type Direction, type Driv
 /**
  * The Mac's own screen. Screenshots with `screencapture`, resized with `sips`; the mouse through
  * CoreGraphics events and the keyboard through System Events, both from JavaScript for
- * Automation (osascript), so nothing extra needs installing. The app running `warren node`
+ * Automation (osascript), so nothing extra needs installing. The app running `wisp node`
  * needs Screen Recording and Accessibility permission (System Settings → Privacy & Security).
  */
 
@@ -92,7 +92,7 @@ export function textPieces(text: string): ({ text: string } | { code: number })[
   return out;
 }
 
-const NEEDS_ACCESS = "Warren needs Accessibility permission to use this Mac's mouse and keyboard: System Settings → Privacy & Security → Accessibility → turn on the app that runs `warren node` (e.g. Terminal), then try again.";
+const NEEDS_ACCESS = "Wisp needs Accessibility permission to use this Mac's mouse and keyboard: System Settings → Privacy & Security → Accessibility → turn on the app that runs `wisp node` (e.g. Terminal), then try again.";
 
 export class MacDesktop implements Driver {
   readonly label = "this Mac";
@@ -115,7 +115,7 @@ export class MacDesktop implements Driver {
   }
 
   async screenshot(box: Size = { width: 1280, height: 800 }): Promise<Shot> {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-shot-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-shot-"));
     const raw = path.join(dir, "raw.jpg");
     const out = path.join(dir, "out.jpg");
     try {
@@ -130,7 +130,7 @@ export class MacDesktop implements Driver {
       return { jpeg: await fs.readFile(out), ...fit };
     } catch (err) {
       if (/could not create image|not authorized|screen recording/i.test((err as Error).message))
-        throw new ActionError("Warren needs Screen Recording permission to see this Mac's screen: System Settings → Privacy & Security → Screen Recording → turn on the app that runs `warren node`.");
+        throw new ActionError("Wisp needs Screen Recording permission to see this Mac's screen: System Settings → Privacy & Security → Screen Recording → turn on the app that runs `wisp node`.");
       throw err;
     } finally {
       await fs.rm(dir, { recursive: true, force: true });

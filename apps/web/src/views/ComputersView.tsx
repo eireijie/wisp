@@ -298,7 +298,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
           <p className={cx("text-xs", (kind === "vm" ? device.capabilities.vm.ok : device.capabilities.screen.ok) ? "text-muted" : "text-bad")}>
             {kind === "device" && device.capabilities.screen.off ? (
               <>
-                {device.name}'s screen is off. Only you can turn it on, at that computer: <code>warren node screen on</code>
+                {device.name}'s screen is off. Only you can turn it on, at that computer: <code>wisp node screen on</code>
               </>
             ) : kind === "vm" ? (
               device.capabilities.vm.detail

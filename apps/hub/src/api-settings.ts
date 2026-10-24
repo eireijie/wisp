@@ -115,7 +115,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return { signedOut: n };
   });
 
-  // --- push notifications to Warren's iOS app ---------------------------------------------------------
+  // --- push notifications to Wisp's iOS app ---------------------------------------------------------
 
   /** Whether this hub can send pushes, and the phones you get them on. */
   app.get("/api/me/push", async (req, reply) => {
@@ -152,7 +152,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { user: true });
     if (!c) return;
     if (!hub.apns.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key first" });
-    return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test", category: "other" } });
+    return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Wisp", body: "Notifications work on this phone." } }, wisp: { kind: "test", category: "other" } });
   });
 
   /** The APNs key, without the key itself. */
@@ -299,7 +299,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.get("/api/invites/check", async (req, reply) => {
     const i = usable((req.query as { code?: string }).code);
     if (!i) return reply.code(404).send({ error: "This invite link has expired or was already used. Ask for a new one." });
-    return { workspace: store.workspace(i.workspaceId)?.name ?? "Warren", role: i.role, expiresAt: i.expiresAt };
+    return { workspace: store.workspace(i.workspaceId)?.name ?? "Wisp", role: i.role, expiresAt: i.expiresAt };
   });
 
   app.post("/api/invites/accept", async (req, reply) => {
@@ -406,7 +406,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!n) return;
     const body = parse(z.object({ harness: z.string().max(60) }), req.body, reply);
     if (!body) return;
-    if (!harnessInfo(body.harness)?.install?.npm) return reply.code(400).send({ error: "Warren can't install that one for you; use its installer on the device" });
+    if (!harnessInfo(body.harness)?.install?.npm) return reply.code(400).send({ error: "Wisp can't install that one for you; use its installer on the device" });
     try {
       return await hub.computers.nodeRequest(n.id, (requestId) => ({ type: "install_harness", requestId, harness: body.harness }), 16 * 60_000);
     } catch (err) {
@@ -437,7 +437,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { owner: true });
     if (!c) return;
     const child = spawn("git", ["-C", hub.vault(c.workspaceId).root, "archive", "--format=zip", "--prefix=memory/", "HEAD"], { stdio: ["ignore", "pipe", "ignore"] });
-    reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="warren-memory-${new Date().toISOString().slice(0, 10)}.zip"`);
+    reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="wisp-memory-${new Date().toISOString().slice(0, 10)}.zip"`);
     return reply.send(child.stdout);
   });
 
@@ -453,9 +453,9 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       topic: ch.topic,
       messages: (db.prepare("SELECT id, thread_id, author_kind, author_id, body, created_at FROM messages WHERE channel_id = ? ORDER BY created_at").all(ch.id) as { id: string; thread_id: string | null; author_kind: string; author_id: string; body: string; created_at: string }[])
         .filter((m) => m.body)
-        .map((m) => ({ id: m.id, thread: m.thread_id, at: m.created_at, from: m.author_kind === "agent" ? (agents[m.author_id] ?? "agent") : (members[m.author_id] ?? (m.author_id === "system" ? "Warren" : "someone")), text: m.body })),
+        .map((m) => ({ id: m.id, thread: m.thread_id, at: m.created_at, from: m.author_kind === "agent" ? (agents[m.author_id] ?? "agent") : (members[m.author_id] ?? (m.author_id === "system" ? "Wisp" : "someone")), text: m.body })),
     }));
-    reply.header("content-disposition", `attachment; filename="warren-conversations-${new Date().toISOString().slice(0, 10)}.json"`);
+    reply.header("content-disposition", `attachment; filename="wisp-conversations-${new Date().toISOString().slice(0, 10)}.json"`);
     return { workspace: store.workspace(c.workspaceId)?.name, exportedAt: new Date().toISOString(), channels: out };
   });
 }

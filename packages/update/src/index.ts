@@ -1,25 +1,26 @@
+import { envVar } from "@wisp/core";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Updating a Warren install in place. Hubs and devices both run from a git checkout of the
- * Warren repo, so an update is: fast-forward to what's on GitHub, install dependencies if they
+ * Updating a Wisp install in place. Hubs and devices both run from a git checkout of the
+ * Wisp repo, so an update is: fast-forward to what's on GitHub, install dependencies if they
  * changed, rebuild the web app if this checkout serves one, then write a marker file. Every
- * Warren process running from the checkout watches that marker and restarts itself (through
+ * Wisp process running from the checkout watches that marker and restarts itself (through
  * bin/keeper.mjs), so the CLI, the hub's Update button and a device's Update button all end the
  * same way.
  */
 
-/** Exit code a Warren process uses to ask bin/keeper.mjs to start it again. Keep in sync there. */
+/** Exit code a Wisp process uses to ask bin/keeper.mjs to start it again. Keep in sync there. */
 export const RESTART_CODE = 75;
 
-/** The Warren checkout this code runs from. */
+/** The Wisp checkout this code runs from. */
 export const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 /** Written at the end of every update; running hubs and devices restart when it changes. */
-const MARKER = ".warren-updated";
+const MARKER = ".wisp-updated";
 
 export interface Version {
   /** short commit hash, or null when this isn't a git checkout */
@@ -85,8 +86,8 @@ export async function checkForUpdate(root = REPO_ROOT, opts: { fetch?: boolean; 
   if (!isCheckout(root)) {
     return result({
       reason: fs.existsSync("/.dockerenv")
-        ? "This hub runs in Docker. To update it, run `git pull && docker compose up -d --build` in the folder you cloned Warren into."
-        : "This copy of Warren isn't a git checkout, so it can't update itself. Clone it with git to get updates.",
+        ? "This hub runs in Docker. To update it, run `git pull && docker compose up -d --build` in the folder you cloned Wisp into."
+        : "This copy of Wisp isn't a git checkout, so it can't update itself. Clone it with git to get updates.",
     });
   }
   try {
@@ -142,7 +143,7 @@ export async function runUpdate(root = REPO_ROOT, opts: { runner?: Runner; log?:
     }
   } catch (e) {
     await git(root, ["reset", "--keep", fromFull], runner).catch(() => {});
-    throw new Error(`${(e as Error).message}\nWarren went back to ${from}, so nothing changed.`);
+    throw new Error(`${(e as Error).message}\nWisp went back to ${from}, so nothing changed.`);
   }
   const to = (await version(root, runner)).commit ?? "";
   fs.writeFileSync(path.join(root, MARKER), `${to}\n`);
@@ -155,17 +156,18 @@ export async function runUpdate(root = REPO_ROOT, opts: { runner?: Runner; log?:
  * same on every platform and doesn't keep the process alive.
  */
 export function watchForUpdates(onUpdated: () => void, root = REPO_ROOT, intervalMs = 5000): () => void {
-  const file = path.join(root, MARKER);
-  const since = fs.statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0;
+  const files = [MARKER, ".warren-updated"].map((name) => path.join(root, name));
+  const since = files.map((file) => fs.statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0);
   let fired = false;
-  const listener = (cur: fs.Stats) => {
-    if (fired || cur.mtimeMs <= since) return;
+  const listeners = files.map((file, index) => (cur: fs.Stats) => {
+    if (fired || cur.mtimeMs <= since[index]) return;
     fired = true;
-    fs.unwatchFile(file, listener);
+    stop();
     onUpdated();
-  };
-  fs.watchFile(file, { interval: intervalMs, persistent: false }, listener);
-  return () => fs.unwatchFile(file, listener);
+  });
+  const stop = () => files.forEach((file, index) => fs.unwatchFile(file, listeners[index]));
+  files.forEach((file, index) => fs.watchFile(file, { interval: intervalMs, persistent: false }, listeners[index]));
+  return stop;
 }
 
 /**
@@ -173,7 +175,7 @@ export function watchForUpdates(onUpdated: () => void, root = REPO_ROOT, interva
  * when the keeper goes away, so a killed keeper never leaves a second copy running.
  */
 export function underKeeper(): boolean {
-  if (process.env.WARREN_KEEPER !== "1" || !process.connected) return false;
+  if (envVar("KEEPER") !== "1" || !process.connected) return false;
   if (!process.listenerCount("disconnect")) process.on("disconnect", () => process.exit(0));
   return true;
 }

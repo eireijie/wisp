@@ -21,11 +21,11 @@ jobs:
           node-version: 22
       # a pull request is checked out detached, and the installer clones whatever branch HEAD is on
       - run: git checkout -B ci
-      - run: WARREN_REPO="$GITHUB_WORKSPACE" bash install.sh --hub-server --no-service --dir "$RUNNER_TEMP/warren"
+      - run: WISP_REPO="$GITHUB_WORKSPACE" bash install.sh --hub-server --no-service --dir "$RUNNER_TEMP/wisp"
       - run: |
           export PATH="$HOME/.local/bin:$PATH"
-          cd "$RUNNER_TEMP/warren"
-          WARREN_DATA_DIR="$RUNNER_TEMP/data" warren hub start &
+          cd "$RUNNER_TEMP/wisp"
+          WISP_DATA_DIR="$RUNNER_TEMP/data" wisp hub start &
           for i in $(seq 30); do curl -sf localhost:4747/healthz && break; sleep 1; done
           curl -sf localhost:4747/healthz
           curl -sf localhost:4747/install.sh | head -1
@@ -40,6 +40,6 @@ jobs:
       - run: git checkout -B ci
       - shell: pwsh
         run: |
-          $env:WARREN_REPO = $env:GITHUB_WORKSPACE
-          ./install.ps1 -HubServer -NoService -Dir "$env:RUNNER_TEMP\warren"
-          warren --help
+          $env:WISP_REPO = $env:GITHUB_WORKSPACE
+          ./install.ps1 -HubServer -NoService -Dir "$env:RUNNER_TEMP\wisp"
+          wisp --help
