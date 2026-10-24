@@ -28,7 +28,8 @@ describe("guest computer UI", () => {
     role(viewer);
     const html = renderToStaticMarkup(createElement(Sidebar, { route: { view: "dashboard" } }));
     expect(html.includes('href="#/computers"')).toBe(viewer !== "guest");
-    expect(html).toContain("Your agents");
+    // the owner's agents are "Your agents"; someone else's are just "Agents"
+    expect(html).toContain(viewer === "owner" ? "Your agents" : ">Agents<");
   });
 
   it.each([null, "private-screen"])("hides the computers page from guests, including a cached detail (%s)", (computerId) => {

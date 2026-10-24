@@ -64,7 +64,7 @@ Warren opens on **Set up Warren**, and **Get started** walks you through the res
 
 - **Another computer:** **Devices → Add device**. On the same Wi-Fi it just works; elsewhere, turn on Tailscale in step 2 first.
 - **Your phone:** the [Android app](https://github.com/eireijie/warren/releases/latest/download/Warren-android.apk) (preview), or the [iPhone app](apps/ios) built with Xcode for now. Pair it in **Settings → Mobile** by scanning a QR code. Any phone can also open Warren's address in the browser and add it to the home screen.
-- **A friend:** turn on **Invite people** in **Settings → Features**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
+- **A friend:** turn on **Invite people** in **Settings → Mods**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
 
 ### Start over or remove Warren
 
@@ -120,7 +120,7 @@ That's a LaunchAgent on macOS, a systemd service on Linux, and a task at sign-in
 
 ### Updating
 
-Owners update from the app: **Settings → Updates** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the warren folder on any hub or device:
+Owners update from the app: **Settings → About** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the warren folder on any hub or device:
 
 ```bash
 warren update            # pull, install what changed, rebuild the web app on a hub, restart

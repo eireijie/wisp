@@ -15,13 +15,18 @@ struct ChatsView: View {
       .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
   }
 
+  /** The owner's agents are theirs; a member or guest mostly sees someone else's. */
+  private var ownAgents: Bool {
+    store.role == "owner" || (!store.agents.isEmpty && store.agents.allSatisfy { $0.settings?.createdBy == store.me?.id })
+  }
+
   var body: some View {
     NavigationStack(path: $path) {
       List {
         if search.isEmpty {
           Section { InboxRow() }
         }
-        Section("Your agents") {
+        Section(ownAgents ? "Your agents" : "Agents") {
           ForEach(store.agents.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.handle.localizedCaseInsensitiveContains(search) }) { agent in
             Button {
               action.run { path.append(try await store.dm(with: agent)) }

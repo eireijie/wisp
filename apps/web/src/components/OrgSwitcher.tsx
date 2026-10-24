@@ -141,7 +141,7 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
             {(
               [
                 ["simple", "Simple"],
-                ["everything", "Everything"],
+                ["everything", "Advanced"],
               ] as const
             ).map(([id, label]) => (
               <button key={id} type="button" role="radio" aria-checked={start === id} onClick={() => setStart(id)} className={cx("flex-1 h-8 rounded-[10px] text-[13px] font-semibold", start === id ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>

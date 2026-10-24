@@ -60,6 +60,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const showGetStarted = route.view === "welcome" || !complete;
   const page = variant === "page";
   const isGuest = me.role === "guest";
+  // the owner's agents are theirs; a member or guest mostly sees someone else's
+  const ownAgents = me.role === "owner" || (agents.length > 0 && agents.every((a) => a.settings.createdBy === me.user.id));
   const browse = (sectionId: string | null) => useStore.setState({ channelBrowser: { sectionId } });
 
   const active = route.view === "chat" ? route.channelId : null;
@@ -162,7 +164,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
           </Group>
         )}
 
-        <Group page={page} title="Your agents" collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="New agent" onClick={startNewAgent}><Plus size={14} /></IconButton>}>
+        <Group page={page} title={ownAgents ? "Your agents" : "Agents"} collapsed={!!collapsed.dms} onToggle={() => toggleGroup("dms")} actions={!isGuest && <IconButton label="New agent" onClick={startNewAgent}><Plus size={14} /></IconButton>}>
           {agents.length === 0 && <p className="px-4 text-xs text-faint">No agents yet.</p>}
           {agents.map((a) => {
             const dm = dmFor(a.id);

@@ -15,6 +15,8 @@ The QR code is a `warren://pair` link with the pairing's one-time secret and the
 
 Open `Warren.xcodeproj` in Xcode 26 or newer, pick a simulator or your iPhone, and Run. Running on your iPhone needs your Apple developer team under **Signing & Capabilities**. The app needs iOS 18.
 
+Unsigned simulator builds (`CODE_SIGNING_ALLOWED=NO`) can't pair, because they can't use the Keychain (error -34018); use Xcode's normal signing.
+
 Your phone must be able to reach the hub: the same network, Tailscale, or a public address (see [Deploying](../../docs/deploy.md)). Plain `http://` addresses work too, since many self-hosted hubs live on a home network.
 
 ## Push notifications
