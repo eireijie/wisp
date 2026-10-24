@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { connectorOrigin, enableTailscale } from "./Access.tsx";
+import { awayEnabled, connectorOrigin, enableTailscale } from "./Access.tsx";
 import { useAccessStore, type AccessInfo } from "../access.ts";
 vi.mock("../theme.ts", () => ({ motionReduced: () => false }));
 const base: AccessInfo = {
@@ -23,11 +23,21 @@ describe("public connector address", () => {
   });
   it("uses HTTPS from Funnel, Cloudflare, or an existing public domain", () => {
     expect(connectorOrigin({ ...base, tailscale: { ...base.tailscale, funnel: true } })).toBe(base.publicUrl);
-    expect(connectorOrigin({ ...base, cloudflare: { enabled: true, publicUrl: "https://wisp.example/" } })).toBe("https://wisp.example");
+    expect(connectorOrigin({ ...base, cloudflare: { state: "running", url: "https://wisp.example/", error: null } })).toBe("https://wisp.example");
     expect(connectorOrigin(null, { protocol: "https:", hostname: "wisp.example", origin: "https://wisp.example" })).toBe("https://wisp.example");
     expect(connectorOrigin(null, { protocol: "http:", hostname: "localhost", origin: "http://localhost:4747" })).toBeNull();
     expect(connectorOrigin(null, { protocol: "https:", hostname: "192.168.1.5", origin: "https://192.168.1.5" })).toBeNull();
     expect(connectorOrigin(null, { protocol: "https:", hostname: "my-mac.local", origin: "https://my-mac.local" })).toBeNull();
+  });
+  it.each(["missing", "stopped", "starting", "error"] as const)("doesn't share a Cloudflare address while %s", (state) => {
+    const info: AccessInfo = { ...base, publicUrl: null, cloudflare: { state, url: "https://wisp.example", error: null } };
+    expect(connectorOrigin(info)).toBeNull();
+    expect(awayEnabled(info)).toBe(false);
+  });
+  it("recognizes a running Cloudflare tunnel even before its address is known", () => {
+    const info: AccessInfo = { ...base, publicUrl: null, cloudflare: { state: "running", url: null, error: null } };
+    expect(awayEnabled(info)).toBe(true);
+    expect(connectorOrigin(info)).toBeNull();
   });
 });
 describe("reach setup", () => {

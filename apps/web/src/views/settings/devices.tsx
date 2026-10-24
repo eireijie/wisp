@@ -21,7 +21,7 @@ export function DevicesPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const on = awayEnabled(info);
-  const cloudflare = info?.cloudflare?.enabled;
+  const cloudflare = info?.cloudflare?.state === "running";
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -35,7 +35,7 @@ export function DevicesPage() {
   };
   const turnOff = async () => {
     if (cloudflare) {
-      await api("DELETE", "/api/reach/cloudflare");
+      await api("POST", "/api/reach/cloudflare", { action: "stop" });
       await useAccessStore.getState().refresh(true);
     } else if (info?.tailscale.serving) {
       if (info.tailscale.funnel) await useAccessStore.getState().act("unfunnel");
@@ -122,7 +122,7 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
   const [hint, setHint] = useState<string | null>(null);
   useEffect(() => {
     setClients(null);
-    if (!allowed || !origin) return;
+    if (!allowed) return;
     let alive = true;
     const load = () =>
       loadMcpClients().then(
@@ -142,7 +142,7 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
       alive = false;
       clearInterval(timer);
     };
-  }, [allowed, origin]);
+  }, [allowed]);
   const toggle = async (on: boolean) => {
     setBusy(true);
     setError(null);
@@ -152,8 +152,8 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
         const ready = await enableTailscale(true);
         if (!ready) setHint("Finish setting up Tailscale, then turn this on again.");
       } else if (info?.tailscale.funnel) await useAccessStore.getState().act("unfunnel");
-      else if (info?.cloudflare?.enabled) {
-        await api("DELETE", "/api/reach/cloudflare");
+      else if (info?.cloudflare?.state === "running") {
+        await api("POST", "/api/reach/cloudflare", { action: "stop" });
         await useAccessStore.getState().refresh(true);
       } else throw new Error("This Wisp uses a public address; disconnect apps below to remove their access.");
     } catch (e) {
@@ -187,34 +187,36 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
       >
         <Toggle label="Grok, ChatGPT and Claude" on={!!origin} disabled={!allowed || busy} onChange={(value) => void toggle(value)} />
       </Row>
-      {origin && (
-        <div className="px-4 pt-3 space-y-3">
-          <CopyBlock text={`${origin}/mcp`} />
-          <p className="text-xs text-muted">In Grok: Connectors → Add custom connector → paste.</p>
-          {clients !== null && (
-            <div className="pt-3">
-              <h3 className="text-xs font-medium text-muted mb-2">Connected apps</h3>
-              {clients.length === 0 ? (
-                <p className="text-sm text-muted">No apps connected yet.</p>
-              ) : (
-                <div className="divide-y divide-line">
-                  {clients.map((client) => (
-                    <div key={client.id} className="flex items-center justify-between gap-3 py-3">
-                      <span className="text-sm min-w-0">
-                        <span className="font-medium">{client.name}</span>
-                        {client.agentName && <span className="text-muted"> acts as {client.agentName}</span>}
-                      </span>
-                      <Button disabled={busy} onClick={() => void disconnect(client)}>
-                        Disconnect
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      <div className="px-4 pt-3 space-y-3">
+        {origin && (
+          <>
+            <CopyBlock text={`${origin}/mcp`} />
+            <p className="text-xs text-muted">In Grok: Connectors → Add custom connector → paste.</p>
+          </>
+        )}
+        {clients !== null && (
+          <div className="pt-3">
+            <h3 className="text-xs font-medium text-muted mb-2">Connected apps</h3>
+            {clients.length === 0 ? (
+              <p className="text-sm text-muted">No apps connected yet.</p>
+            ) : (
+              <div className="divide-y divide-line">
+                {clients.map((client) => (
+                  <div key={client.id} className="flex items-center justify-between gap-3 py-3">
+                    <span className="text-sm min-w-0">
+                      <span className="font-medium">{client.name}</span>
+                      {client.agentName && <span className="text-muted"> acts as {client.agentName}</span>}
+                    </span>
+                    <Button disabled={busy} onClick={() => void disconnect(client)}>
+                      Disconnect
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {hint && (
         <p role="status" className="px-4 mt-3 text-sm text-muted">
           {hint}

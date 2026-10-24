@@ -14,7 +14,7 @@ export function handleFor(name: string, taken: string[]): string {
 }
 
 /**
- * An app connecting to Warren by URL (Grok, ChatGPT, Claude…) signs in here: the person picks
+ * An app connecting to Wisp by URL (Grok, ChatGPT, Claude…) signs in here: the person picks
  * which agent it acts as, or makes one for it, and is sent back to the app.
  */
 export function AuthorizeView({ requestId }: { requestId: string }) {
@@ -60,7 +60,7 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
     <div className="min-h-full bg-panel flex items-center px-6 sm:px-8 py-10 safe-top">
       <div className="w-full max-w-sm mx-auto space-y-6">
         <div className="flex items-center gap-1.5 font-semibold">
-          <GhostMark size={18} className="text-accent-text" /> Warren
+          <GhostMark size={18} className="text-accent-text" /> Wisp
         </div>
         {!info ? (
           <p className={cx("text-sm", error ? "text-bad" : "text-muted")}>{error ?? "Loading…"}</p>
