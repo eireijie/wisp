@@ -12,6 +12,7 @@ import { RuntimesPage } from "./settings/runtimes.tsx";
 import { HarnessesPage } from "./settings/harnesses.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
+import { DevicesPage } from "./settings/devices.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
 import { ModsPage } from "./settings/features.tsx";
 import { UsagePage } from "./settings/usage.tsx";
@@ -61,7 +62,8 @@ const NAV: NavSection[] = [
     section: "Devices",
     icon: <Monitor size={16} />,
     pages: [
-      { id: "computers", label: "Computers", noGuests: true },
+      { id: "devices", label: "Devices" },
+      { id: "computers", label: "Agent computers", noGuests: true },
       { id: "mobile", label: "Mobile" },
       { id: "access", label: "Access" },
     ],
@@ -95,6 +97,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   voice: () => <VoicePage />,
   appearance: () => <AppearancePage />,
   security: () => <SecurityPage />,
+  devices: () => <DevicesPage />,
   mobile: () => <MobilePage />,
   usage: () => <UsagePage />,
   general: () => (
@@ -105,7 +108,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   ),
   access: () => (
     <>
-      <PageHeader title="Access">Open Warren from anywhere with Tailscale, privately.</PageHeader>
+      <PageHeader title="Access">Use Wisp on any Wi-Fi or on cell data.</PageHeader>
       <AccessPanel />
     </>
   ),
