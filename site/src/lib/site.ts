@@ -27,6 +27,7 @@ export const DOC_ORDER = [
   { slug: "install", title: "Installing Wisp", blurb: "Step by step, for a person or an AI agent doing it for you." },
   { slug: "deploy", title: "Deploying", blurb: "Docker, keeping devices connected, HTTPS for phones, settings." },
   { slug: "computers", title: "Computers", blurb: "Agents' VMs, your own screen, watching and taking control." },
+  { slug: "memory", title: "Memory", blurb: "Vault permissions, startup context and Obsidian sync." },
   { slug: "adapters", title: "Adding a harness", blurb: "Bring any agent: MCP, the Agent Client Protocol, or an adapter." },
 ] as const;
 

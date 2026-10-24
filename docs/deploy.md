@@ -8,21 +8,15 @@ Wisp was called Warren. Updating automatically moves `~/.warren` to `~/.wisp` on
 
 Existing `WARREN_*` environment variables still work when the matching `WISP_*` variable is unset, and `warren://` pairing links still open. New pairing links use `wisp://`. The iPhone and Android apps have new app IDs, so they install as new apps and need pairing again.
 
+In Docker, switch the image to `ghcr.io/eireijie/wisp` and keep your existing data volume (for example `-v warren-data:/data`); the database inside it is picked up as is. The bundled `docker-compose.yml` keeps its service name `warren`, so `docker compose up -d` replaces the old container instead of starting a second hub.
+
 ## The installer
 
-On a personal computer or a small server, the installer is the quickest way. It clones Wisp to `~/wisp`, installs it, and keeps the hub running with the system's service manager:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/eireijie/wisp/main/install.sh | bash -s -- --hub-server
-```
-
-On Windows: `irm https://raw.githubusercontent.com/eireijie/wisp/main/install.ps1 | iex`. The hub serves the same scripts at `/install.sh` and `/install.ps1`, which is what **Devices → Add device** uses.
+For installer commands and options, see [Get started](../README.md#1-install) or the [installation guide](../INSTALL.md). The hub serves the same scripts at `/install.sh` and `/install.ps1` for **Devices → Add device**.
 
 ## Docker
 
-```bash
-docker run -d --name wisp -p 4747:4747 -v wisp-data:/data --restart unless-stopped ghcr.io/eireijie/wisp
-```
+Use the [Docker command in Get started](../README.md#1-install) for a container with a persistent data volume.
 
 Or, in a checkout, `docker compose up -d` (add `--build` to build the image from source).
 
@@ -83,39 +77,13 @@ Paste [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) into the "user data"
 | API | `POST /v1/servers` with `user_data` (up to 32 KiB) | `POST /v2/droplets` with `user_data` (up to 64 KiB) |
 | Connecting without a token | No OAuth for third-party apps | OAuth: a "Connect DigitalOcean" button would work once the Wisp project registers an OAuth app. Its docs now describe PKCE for desktop apps, but recent reports say the token exchange still wants a client secret. Needs testing before we build on it |
 
-Both give you a whole virtual machine, so Docker runs normally. That's all agent computers need: on a Linux device they're Docker containers from `docker/computer`, with no nested virtualization. To run agents on the cloud server itself, connect it as a device (`curl -fsSL <your Wisp>/install.sh | bash -s -- --hub <URL> --token <TOKEN>` (use the command from **Devices → Add device**) there, then sign in to your agent CLIs).
+Both give you a whole virtual machine, so Docker runs normally. That's all agent computers need: on a Linux device they're Docker containers from `docker/computer`, with no nested virtualization. To run agents on the cloud server itself, [connect it as a device](../INSTALL.md#4-install-a-device) using the hub URL and token from **Devices → Add device**, then sign in to your agent CLIs.
 
 Platforms like Railway or Render run *your container* but not Docker *inside* it, so the hub would run there but agent computers couldn't. They also need a paid volume for the database and vault. A plain VPS is simpler and cheaper.
 
 ## Memory and Obsidian
 
-Memory is a folder of markdown notes in a git repository. Obsidian is where people browse and edit it; Wisp's Memory page is for search, Activity and permissions.
-
-**Choosing the folder.** The default is `<data>/vault`. Set `WISP_VAULT_DIR=/path/to/folder` (or, as an owner, **Settings → Memory → Use a different folder**, which takes effect after a restart) to keep memory somewhere else, such as an existing Obsidian vault.
-
-- A folder that isn't a git repo gets `git init` and its notes are committed ("Start tracking this folder"). A folder that already is one keeps its history. `.obsidian/` and `.trash/` are added to `.gitignore` and are never committed, indexed or modified. Links (symlinks) are not followed.
-- Wisp refuses `/`, your home folder, and any folder that contains its own data directory.
-- When the folder changes, an earlier vault is carried over once on the next start: an empty folder gets a full copy including git history; a folder that already has notes only gets the files it doesn't have (never overwriting, and without the old `.git`). The earlier folder is never touched or deleted. Settings → Memory says where it is.
-- In Docker, point `WISP_VAULT_DIR` at a path inside a volume you mount (for example `-v ~/Obsidian/Wisp:/vault -e WISP_VAULT_DIR=/vault`), and run the container as a user that can write to it.
-
-**Edits on the same machine.** Wisp watches the folder (with a 30 second re-scan as a backup), commits outside edits as "Edited in Obsidian", and re-indexes only what changed. Settings → Memory and **Refresh** in Memory also trigger a scan.
-
-**Syncing from another computer.** The hub serves the vault's git repository over HTTP at `/git/vault.git`, using git's own `git http-backend` (so `git` must be installed on the hub, as it already must be). People create a token in **Settings → Memory** and use it as the password (any user name). Then:
-
-```bash
-git clone "https://wisp:TOKEN@your-hub.example.com/git/vault.git" "Wisp memory"
-```
-
-Open that folder in Obsidian and install the community **Git** plugin to pull and push on a schedule. Use https (or a private network such as Tailscale) when the hub isn't on your own network; the token is sent with every request.
-
-How it's kept safe:
-
-- Every request needs a sync token (stored hashed; revoke it in Settings). A normal sign-in token doesn't work here, and a sync token doesn't work for the API.
-- A clone includes all history and git can't hide single folders. So only people who can read every note that has ever existed may clone or pull: owners always, members unless a rule (or another person's private folder) hides something from them, never guests. This is checked on every request, so a rule that hides a note cuts that person off from syncing.
-- Reads are served from a separate bare repository that borrows the vault's objects; the vault folder itself is never exposed.
-- A push is first received into a throwaway repository (fast-forward only, objects checked with `fsck`, no deletes, only the vault's branch). Every changed file is then checked against the person's edit rights, and hidden paths (like `.obsidian`), symlinks and submodules are refused. Only then is it fast-forwarded into the vault, while nothing else changes the vault. If the check fails, the push is rejected with a reason and nothing is applied.
-- Pushed commits keep the git author the person's computer gave them, but Activity, history and "who wrote what" show their Wisp name.
-- Wisp commits outside edits before judging a push, so if you edited the vault on the hub's machine at the same moment, the plugin asks you to pull first.
+See [Memory](memory.md) for vault storage, access rules, startup context and Obsidian sync on the same computer or over git.
 
 ## Proxmox (LXC)
 
@@ -134,14 +102,16 @@ npm ci && npm run build
 WISP_DATA_DIR=/var/lib/wisp npm start
 ```
 
-To keep it running, create `/etc/systemd/system/wisp.service`:
+For a dedicated Linux hub, follow [Get the code](../INSTALL.md#2-get-the-code) to create the `wisp` user, make `/opt/wisp` writable by it and create `/var/lib/wisp` owned by it before starting. Use this hub unit at `/etc/systemd/system/wisp.service`:
 
 ```ini
 [Unit]
 Description=Wisp hub
 After=network-online.target
+Wants=network-online.target
 
 [Service]
+User=wisp
 WorkingDirectory=/opt/wisp
 Environment=WISP_DATA_DIR=/var/lib/wisp PORT=4747
 ExecStart=/usr/bin/node bin/wisp-hub.mjs
@@ -152,7 +122,7 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-systemctl enable --now wisp
+systemctl daemon-reload && systemctl enable --now wisp
 ```
 
 ## Keeping a device connected

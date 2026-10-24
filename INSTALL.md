@@ -84,26 +84,7 @@ npm ci                 # install scripts for better-sqlite3, esbuild and fsevent
 npm run build
 ```
 
-Run it as a service. On Linux, `/etc/systemd/system/wisp.service`:
-
-```ini
-[Unit]
-Description=Wisp hub
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=wisp
-WorkingDirectory=/opt/wisp
-Environment=WISP_DATA_DIR=/var/lib/wisp PORT=4747
-ExecStart=/usr/bin/node bin/wisp-hub.mjs
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Run `systemctl daemon-reload && systemctl enable --now wisp`, then check `curl -s localhost:4747/healthz` prints `{"ok":true}`.
+Run it as a service. On Linux, use the [hub systemd unit in Deploying](docs/deploy.md#proxmox-lxc), after creating the user, checkout and owned data directory in step 2. Then check that `curl -s localhost:4747/healthz` prints `{"ok":true}`.
 
 **HTTPS (needed to install the app on a phone):** if the person uses Tailscale, install it (`curl -fsSL https://tailscale.com/install.sh | sh`) and run `tailscale up --hostname wisp`. That prints a login link: give it to the person to approve. Then run `tailscale serve --bg 4747`; the hub is at `https://wisp.<tailnet>.ts.net`. The first visit takes up to a minute while the certificate is issued. Other options are in [docs/deploy.md](docs/deploy.md#reaching-it-from-your-phone).
 
@@ -144,4 +125,4 @@ To remove Wisp from a machine:
 
 ## Updating later
 
-`wisp update` in the folder, or **Settings → Advanced → About** and the **Update** button on each device. See [README → Updating](README.md#updating).
+See [Updating in Deploying](docs/deploy.md#updating) for source checkouts, desktop apps and Docker.

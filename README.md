@@ -1,20 +1,18 @@
+<p align="center"><img src="docs/images/banner.png" alt="Wisp: a self-hosted workspace where you and your AI agents work together" width="100%"></p>
+
 # Wisp
 
-[![CI](https://github.com/eireijie/wisp/actions/workflows/ci.yml/badge.svg)](https://github.com/eireijie/wisp/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+A self-hosted workspace where you and your AI agents work together.
 
-**A workspace where people and AI agents work together.** Chat with Claude Code, Codex, Hermes, Gemini CLI and other agents in Slack-style channels. Each agent gets its own computer that you can watch and take over, they hand work to each other, and they share an Obsidian-style memory vault.
+[![CI](https://github.com/eireijie/wisp/actions/workflows/ci.yml/badge.svg)](https://github.com/eireijie/wisp/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE) · [Website](https://wisp-app.pages.dev)
 
-Free and open source (Apache-2.0). Self-hosted: your messages, memory and files stay on your server.
+Run agents from different harnesses in channels, give them computers you can watch and take over, and keep their shared memory in a markdown vault. Each agent has a ghost mascot and its own personality; you host the workspace on your own computer or server.
+
+Coming from Warren? See the [migration notes](docs/deploy.md#coming-from-warren).
 
 ## Get started
 
 Wisp has two parts: a **hub** (your workspace: chats, agents, memory and the web app) and **devices** (computers your agents work on). One computer can be both, and that's how most people start.
-
-> **The repository is private for now.** Until it's public, the download links and one-line commands below only work for people with access, signed in to GitHub. In a terminal, use the GitHub CLI instead. Sign in once with `gh auth login` and `gh auth setup-git` (so the installer's `git clone` can reach the private repository too), then:
->
-> ```bash
-> gh api repos/eireijie/wisp/contents/install.sh -H "Accept: application/vnd.github.raw" | bash -s -- --hub-server
-> ```
 
 ### 1. Install
 
@@ -57,14 +55,14 @@ Wisp opens on **Set up Wisp**, and **Get started** walks you through the rest:
 1. **Make your account.** You're the owner of your organization.
 2. **Use Wisp from anywhere.** Wisp checks [Tailscale](https://tailscale.com) (free) on the hub's computer and walks you through it with buttons: install, sign in, turn on. Wisp then has an `https://…ts.net` address that works on your phone and other computers from anywhere, and every link it gives out uses it. Choose **Only on this Wi-Fi for now** to skip it.
 3. **Your device.** With the desktop app or the one-command install, this computer is already connected. Otherwise, download the app on the computer that should run your agents and choose **Join a server**, or copy the command Wisp shows.
-4. **Give agents computers.** Agents work on their own computer (a VM), not yours. Wisp tells you what's missing; on a Mac with Apple silicon, `wisp setup` installs Apple's `container` for it.
+4. **Give agents computers.** Create a VM for your agents, or choose another computer for them. Wisp tells you what's missing; on a Mac with Apple silicon, `wisp setup` installs Apple's `container` for it.
 5. **Make your first agent.** Pick Claude Code, Codex, Hermes or another harness, sign it in once, and say hello in `#general`.
 
 ### 3. Add more
 
 - **Another computer:** **Devices → Add device**. On the same Wi-Fi it just works; elsewhere, turn on Tailscale in step 2 first.
 - **Your phone:** the [Android app](https://github.com/eireijie/wisp/releases/latest/download/Wisp-android.apk) (preview), or the [iPhone app](apps/ios) built with Xcode for now. Pair it in **Settings → Mobile** by scanning a QR code. Any phone can also open Wisp's address in the browser and add it to the home screen.
-- **A friend:** turn on **Invite people** in **Settings → Mods**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
+- **A friend:** turn on **Invite people** in **Settings → General → Mods**, then **Settings → People → Create invite link**. If they aren't on your Tailscale, turn on **Let people without Tailscale in** in **Settings → Access** first.
 
 ### Start over or remove Wisp
 
@@ -72,72 +70,80 @@ Wisp opens on **Set up Wisp**, and **Get started** walks you through the rest:
 curl -fsSL https://raw.githubusercontent.com/eireijie/wisp/main/uninstall.sh | bash
 ```
 
-While the repository is private: `gh api repos/eireijie/wisp/contents/uninstall.sh -H "Accept: application/vnd.github.raw" | bash`. To only see what it would remove, end either command with `| bash -s -- --dry-run` instead. It asks before each step and removes only Wisp's own things: its services, agents' VMs and their image, the desktop app and its settings, the `wisp` commands, `~/.wisp`, and `~/wisp` (a hub's chats, memory and files live in `~/wisp/data`).
+To see what it would remove, add `-s -- --dry-run` after `bash`. It asks before each step; a hub’s chats, memory and files are in its data folder (`~/wisp/data` for the installer, `~/.wisp/data` for the desktop app), so keep a backup if you want to retain them.
 
 On Windows: uninstall Wisp in **Settings → Apps**, run `wisp service uninstall hub` and `wisp service uninstall node` (or delete the **Wisp hub** and **Wisp node** tasks in Task Scheduler), then delete `%USERPROFILE%\wisp`, `%USERPROFILE%\.wisp` and `%APPDATA%\Wisp`.
 
 Having an AI agent install it for you? Point it at [INSTALL.md](INSTALL.md), a step-by-step guide written for agents. For HTTPS, phones and your own domain, see [Deploying](docs/deploy.md). For VMs, your own screen, taking control and teaching tasks, see [Computers](docs/computers.md).
 
-## What Wisp does
-
-- **Agents from any harness.** Claude Code and Codex have their own adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and any other agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) run through one ACP adapter, and a device can add its own. Anything that speaks MCP can join through `wisp-mcp`.
-- **Agents with computers.** Agents aren't headless unless you choose that: each one works on a computer, opening apps and websites, signing in once and keeping its files. A computer is a VM on one of your devices (a Linux desktop; `wisp setup` installs what it needs, like Apple's `container` on a Mac) or an [Orgo](https://orgo.ai) cloud computer. Claude Code, Codex, Hermes and Kimi CLI agents run entirely inside their VM, so they can't touch your device, and every agent works websites through page-element browser tools (Playwright MCP) on the browser you watch. Your own screen stays yours: it's off unless you turn it on at the device, only you can see it, and you can lend it to agents for a while. Several agents can share one. Watch any of them live, **Take control** whenever you like (agents wait), and **Hand back**. When an agent needs you to sign in somewhere, it asks with the screen right there in chat.
-- **Show it once.** **Teach a task**: do it on the computer while an agent watches, and it writes the steps up as a routine it can run on its own, on a schedule if you like.
-- **Works in the background.** Turn on **Background** for an agent and it keeps an eye on things for you on its own: it goes through everything it can reach (your connected apps, like email, calendars, drives, projects and to-do lists, plus its computer, your memory and your conversations), keeps notes on where it left off in each, and writes to you only when something needs you ("your essay is due tomorrow", "you missed this email; here's a reply, send it?"). Tell it what matters most, or let it watch everything. It picks when to look again, keeps quiet hours, starts every check fresh (so checks don't get costlier over time), can use a smaller, cheaper model than the agent's own, stops at a daily limit you set, and shows the tokens its checks used, and comes back to things at a set time when you ask it to remind you. With push notifications on, its messages reach your phone even when Wisp is closed.
-- **Asks before it acts.** Agents ask for your OK (Approve / Deny, with a note) before sending, buying or deleting anything nobody asked for. Everything waiting on you sits at the top of the sidebar.
-- **Bring in agents you already have.** Wisp finds your Claude Code setup (CLAUDE.md and the memories it saved), Codex's AGENTS.md, Gemini CLI's GEMINI.md, Goose hints, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents on your devices, and brings them in with their soul, instructions and notes, one at a time or all at once (right in **Get started**, too). Claude Code and Codex move into a VM; the rest keep running on their device. Or start from a job: Chief of Staff, Inbox Manager, Sales Outbound, Research and more.
-- **Hand off work in one step.** **New task** (top of the sidebar): say what needs doing, pick an agent, a team, or **Let the lead plan it** (the workspace's lead splits it into pieces and hands each to the agent whose role fits, as subtasks you can follow), attach files, done. **Tasks** shows everything by where it stands, To do, Working, Waiting on you and Done, and anything an agent needs from you (an OK, a sign-in) is pulled out so it never sits unseen.
-- **Any device.** Agents run on whatever computer you assign them: a laptop, a home server, a VM. Devices connect *out* to the hub, so they work behind routers and firewalls.
-- **A real memory vault, edited in Obsidian.** Plain markdown with `[[wikilinks]]` in a git repo, with full history for every edit. Write it in [Obsidian](https://obsidian.md) (point Wisp at your existing vault, or sync it to another computer with Obsidian's Git plugin); Wisp's **Memory** page is for search, **Activity** (who changed what) and permissions. Each agent has a private folder and everyone shares `shared/`. Set who can read or edit each folder or note, and which agents load a note every time they work.
-- **Connect the apps you use.** **Connectors** searches the official MCP Registry (thousands of servers) with official ones first: Notion, Linear, GitHub, Atlassian, Todoist, Airtable, Stripe and more, plus Zapier for thousands of other apps like Gmail, Google Calendar and Drive. Click **Add**, sign in on the app's own page, and pick which agents get it. Wisp keeps the sign-in fresh; agents never see your password. Or add any MCP server or API key yourself.
-- **Agents you can shape.** Each agent has a `SOUL.md` (personality, voice, values; it can refine its own unless you lock it), instructions for its job (only people can change those), and a model, reasoning effort and access level picked from what its device actually offers.
-- **A second brain every agent shares.** Agents save what they learn about you (preferences, plans, what you did, small details) as they go, and every agent loads it before it works. You see all of it on **About you**, with which agent saved it and from which conversation, and can fix or delete anything.
-- **A team of agents from different labs.** Set up a team in one go from a template (a build team with Hermes leading, Codex on the backend, Kimi on frontend design and Claude Code reviewing, a research team, or just a builder and a reviewer) or from scratch, and put any agent on any harness in each role. A lead takes every task nobody assigned and hands the pieces out by role. Agents can also work on their own.
-- **Agents that collaborate.** Agents @mention each other, delegate tasks (`task_delegate`), pass files, and report back, and you see it happen ("Sending to Chief…"). Coding teams get a branch per task, a review by a different agent than the one who built it (ideally on another harness), and a merge. A loop guard keeps them from pinging each other forever.
-- **Feels like a team chat.** Channels grouped into sections, DMs, threads, reactions, unread state that follows you across devices, ⌘K to search everything, and agents that react 👀 when they pick up your message and show what they're doing while they work.
-- **Works everywhere.** A desktop app for Mac, Windows and Linux runs the hub for you, connects that computer as a device with one click, and stays in the menu bar ([apps/desktop](apps/desktop)). It updates itself from GitHub releases. A native iPhone and iPad app ([apps/ios](apps/ios)) and an Android app ([apps/android](apps/android)) cover chats, agents, approvals and watching or taking over computers; you pair a phone by scanning a QR code in **Settings → Mobile**, with no address or password to type. The web app is also an installable PWA for any browser.
-
-## More ways to run it
-
 ### From source
 
 ```bash
 git clone https://github.com/eireijie/wisp && cd wisp
-npm install               # runs install scripts for better-sqlite3, esbuild and fsevents, which is expected
+npm install               # native dependency install scripts are expected
 npm run build
-npm link                  # puts `wisp`, `wisp-mcp` and `wisp-hub` on your PATH
-wisp hub start          # the hub, in this terminal; data goes to ./data (or WISP_DATA_DIR)
+npm link                  # puts wisp, wisp-mcp and wisp-hub on PATH
+wisp hub start            # data goes to ./data, or WISP_DATA_DIR
 ```
 
-Then, on each device: `wisp setup`, then the `wisp node start --hub … --token …` command from **Devices → Add device** (the **Wisp already installed** tab). To keep the hub or a device running after you close the terminal:
-
-```bash
-wisp service install hub       # or: wisp service install node
-wisp service status
-```
-
-That's a LaunchAgent on macOS, a systemd service on Linux, and a task at sign-in on Windows. `wisp service uninstall hub|node` removes it.
+On each device, run `wisp setup`, then use the command from **Devices → Add device → Wisp already installed**. To keep either part running after you close the terminal, use `wisp service install hub` or `wisp service install node`; see [Deploying](docs/deploy.md#keeping-a-device-connected).
 
 ### Updating
 
-Owners update from the app: **Settings → About** shows what's new and has an **Update hub** button, and **Devices** has an **Update** button for each device. Or run this inside the wisp folder on any hub or device:
+For a source checkout:
 
 ```bash
-wisp update            # pull, install what changed, rebuild the web app on a hub, restart
-wisp update --check    # only show what's new
+wisp update
+wisp update --check
 ```
 
-The hub and any device running from that folder restart themselves with the new version; a device waits until its agents finish what they're doing. Updates stop if files in the folder were changed by hand, and if installing fails, Wisp goes back to the version it was on. A hub running in Docker updates with `docker pull ghcr.io/eireijie/wisp` and recreating the container (`docker compose pull && docker compose up -d` with the repo's `docker-compose.yml`).
+For desktop apps, Docker and update behavior, see [Updating](docs/deploy.md#updating).
 
-### Bring in an agent that's already running (MCP)
+### Connect an existing session
 
-On an agent's page, choose **Create connection token**. Wisp shows ready-to-paste config for Claude Code, Codex and generic MCP clients, for example:
+On an agent's page, choose **Create connection token** and copy the MCP configuration for your harness. For example:
 
 ```bash
 claude mcp add wisp --env WISP_URL=http://your-hub:4747 --env WISP_TOKEN=<token> -- wisp-mcp
 ```
 
-That session can now chat in channels, delegate tasks, and read and write memory as that agent.
+That session can chat, delegate tasks, exchange files and use memory as that agent; see [Adding a harness](docs/adapters.md#1-mcp-only-no-code-needed).
+
+## What Wisp does
+
+**Agents from any harness.** Claude Code and Codex have native adapters; Hermes, Gemini CLI, OpenCode, Goose, Kimi CLI, Qwen Code, Cursor, OpenClaw and other ACP agents use the Agent Client Protocol adapter. Devices can declare additional ACP harnesses, and MCP clients can join through `wisp-mcp`. [Adding a harness](docs/adapters.md)
+
+**Agents with computers.** Give an agent a Linux VM on a device, an Orgo cloud computer, or access to your own screen; watch it live, take control, hand back, and answer sign-in requests in chat. Claude Code, Codex, Hermes and Kimi CLI can run inside a VM when **Where it runs** selects it, with shell and browser work there; device runs can access device files, while agents assigned a local VM also get Playwright tools for its visible Chrome browser. [Computers](docs/computers.md)
+
+**Show it once.** Use **Teach a task** to perform a task while an agent watches. It can save the steps as a routine and run it again, including on a schedule. [Teaching a task](docs/computers.md#teaching-a-task)
+
+**Works in the background.** Enable **Background** to let an agent check connected apps, its computer, memory and conversations, keep notes between fresh checks, and message you when something needs attention. Set its focus, quiet hours, model and daily limits, inspect token use, and use follow-ups and push notifications for reminders. [Agent tools](docs/adapters.md#1-mcp-only-no-code-needed) · [Phone access](docs/deploy.md#reaching-it-from-your-phone)
+
+**Asks before it acts.** By default, instructions tell agents to ask before sending, spending, deleting, posting, signing up or sharing outside Wisp on their own initiative. Approval cards let you approve or deny with a note, and pending requests appear in the Inbox. [Approval tools](docs/adapters.md#1-mcp-only-no-code-needed)
+
+**Bring in agents you already have.** Import supported instructions and notes from Claude Code, Codex, Gemini CLI, Goose, Hermes profiles, OpenClaw workspaces, Claude Code subagents and OpenCode agents, individually or together. With a VM on the same device selected, Claude Code, Codex, Hermes and Kimi CLI imports run there; sign the harness in inside the VM, since importing personality and notes does not transfer credentials. [Importing agents](docs/adapters.md#bringing-in-agents-that-already-exist)
+
+**Hand off work.** Use **New task** to assign work to an agent or channel team, attach files, or let the workspace lead plan it and delegate subtasks. The task board shows progress and requests that need your attention. [Teams and coding together](#teams-and-coding-together)
+
+**Use more than one device.** Assign agents to a laptop, home server or other connected computer, with several agents able to share a VM. Devices connect outward to the hub and reconnect when the connection drops. [Keeping a device connected](docs/deploy.md#keeping-a-device-connected)
+
+**An Obsidian-style memory vault.** Notes are plain markdown with wikilinks, git history, search, activity and per-note or folder permissions. Edit them in Obsidian or Wisp, give agents private and shared folders, and choose notes to load at startup. [Memory](docs/memory.md)
+
+**Connect the apps you use.** Search the MCP Registry from **Connectors**, add a server, sign in where supported, and choose which agents can use it. You can also configure MCP servers and API keys yourself, with connector support depending on the harness. [Connectors and skills](docs/adapters.md#connectors-and-skills)
+
+**Agents you can shape.** Each agent has a `SOUL.md` for personality, a ghost appearance, and instructions that people control; an agent can refine its soul unless you lock it. Choose its model, reasoning effort and access level from what its harness and device support. [Startup context](docs/memory.md#what-agents-know-when-they-start) · [Access levels](docs/deploy.md#configuration)
+
+**Shared knowledge about you.** Agents can save preferences, plans, recent activity and details about you, then load relevant context before working. **About you** shows what was saved and its source conversation, and lets you correct or delete it. [Personal memory](docs/memory.md#what-agents-know-when-they-start)
+
+**Teams across harnesses.** Build a channel's team in its **Team** tab by placing agents in a flow chart, choosing leads and connecting who hands work to whom. Assign roles and role notes, with an optional shared memory folder, repository and reporting agent; team channels can be public or private. [Teams and coding together](#teams-and-coding-together)
+
+**Agents that collaborate.** Agents can mention one another, delegate tasks, exchange files and report results in the conversation, with limits on repeated agent-to-agent routing. Coding tasks in a channel with a repository get their own branches and can receive a review from another agent before merging. [Teams and coding together](#teams-and-coding-together)
+
+**Team chat.** Organize channels into sections and use DMs, threads, reactions, unread state across devices and search. Live status shows what an agent is doing while it works. [Chat tools](docs/adapters.md#1-mcp-only-no-code-needed)
+
+**Desktop, phone and browser.** The Mac, Windows and Linux desktop app can run your hub and device, while the native iPhone and iPad app and Android preview pair by QR code. Use chats, agents, approvals and computers on your phone, or install the web app as a PWA. [Desktop](apps/desktop/README.md) · [iPhone and iPad](apps/ios/README.md) · [Android preview](apps/android/README.md)
+
+**Skills, voice and a desk buddy.** Give agents reusable skills from the Skills page, talk with them through voice calls, and keep a small ghost buddy on the desktop to show work and requests. Optional features are controlled in **Settings → General → Mods**; voice uses browser speech services or your configured online providers. [Skills](docs/adapters.md#connectors-and-skills) · [Desk buddy](apps/desktop/README.md#desk-buddy)
 
 ## How it fits together
 
@@ -172,76 +178,35 @@ That session can now chat in channels, delegate tasks, and read and write memory
 | `packages/adapters` | Harness adapters: Claude Code, Codex, and any ACP agent |
 | `packages/mcp` | `wisp-mcp` MCP server (chat, reactions, tasks, memory, files, computer use, approvals, routines) |
 | `docker/computer` | The desktop image VMs run (Debian 13, Xfce with a dock, Google Chrome, Claude Code, Codex, Hermes, Kimi CLI, Playwright MCP, VNC) |
+| `packages/update` | Update checks, source checkout updates and process restart support |
 | `packages/sdk` | TypeScript client for building your own agents |
 
-### Memory permissions
+## Memory
 
-Every folder and note can have its own access rules. Use the share button on a folder or note in **Memory**, or **Settings → Memory**.
+Memory is a markdown vault with git history, shared notes and an agent's own folder.
+Use Obsidian or Wisp to edit it, manage access and choose what agents load when they start.
+See [Memory](docs/memory.md) for permissions, storage, startup context and Obsidian sync.
 
-| Default | Can read and write |
-| --- | --- |
-| Every agent | `shared/`, its own `agents/<id>/`, the pool of each team it's on (`teams/<name>/`), and what's saved about people (`people/<id>/`) |
-| A team's boss (from older setups) | The pools of the teams that report to it, all the way down |
-| Owners | Everything, always (they also manage who has access) |
-| Members | Everything except other people's `people/` folders (folders can be closed to them) |
-| Guests | Read `shared/` |
+## Teams and coding together
 
-- **Rules:** a rule gives an agent, a role on a team (e.g. reviewers on `web`), a team, all agents, a person, all members or guests one of *no access*, *can read*, *can edit* or *can manage* (people only).
-- **Inheritance:** a rule on a folder covers everything inside it. A rule closer to the note wins, so you can open `Projects/` to all agents and still close `Projects/secret/`. At the same folder, a rule for one agent beats one for its role, which beats one for its team, which beats one for all agents.
-- **Your own folders:** new top-level folders like `Projects/` start out visible to people only, until you share them with agents.
-- **Load at startup:** agents get the note, or the notes in that folder, in their prompt every time they work.
-- **Agent sharing:** agents can share notes and folders they can edit with another agent, read-only, using `memory_share`. Shares show up in Settings and can be removed, and an agent's share never overrides a rule a person set.
-- **View as:** owners can see memory exactly as an agent sees it with **View as** in Memory.
-
-Agents can write `me/notes.md` as shorthand for their own folder.
-
-### Memory in Obsidian
-
-The vault is a folder of markdown files in a git repo, so Obsidian reads it as it is. Obsidian is the recommended place to write. Wisp's **Memory** page lists and searches notes, shows **Activity** and each note's history, and is where you set permissions and **View as**; it also has a plain editor, **New note** and **Delete** (all following the access rules) so you can fix what an agent wrote from a phone or without Obsidian.
-
-- **Where it lives.** By default `<data>/vault`. To use a folder you already have, including an existing Obsidian vault, set `WISP_VAULT_DIR` where Wisp runs, or an owner picks one in **Settings → Memory** (it applies after a restart). Existing folders are adopted in place: git is started if it isn't there, notes are indexed, and Obsidian's own `.obsidian/` and `.trash/` folders are never touched, committed or indexed. If you were already using Wisp, your earlier notes are copied across on the next start (an empty folder gets everything, history included; a folder that already has notes only gets the files it lacks, and nothing is overwritten). The earlier folder is never deleted.
-- **Same computer.** Open the folder as a vault in Obsidian (**Open in Obsidian** in Memory does it with one click when you're on the computer that runs Wisp). Wisp watches the folder, indexes what changed within a few seconds and commits it as "Edited in Obsidian". Agents' own writes are tracked separately, so the two never loop.
-- **Another computer.** The hub serves the vault over git (`/git/vault.git`) with a per-person token made in **Settings → Memory**. Clone it, open it in Obsidian, and use the community **Git** plugin (Vinzent03/obsidian-git) to pull and push on a schedule; step-by-step instructions are on that page. Every push is checked against the memory rules before it's accepted, and shows up in Activity under the person's Wisp name.
-- **Who can sync.** A clone contains the whole history, and git can't hide single folders, so it's limited to people who can read every note that has ever existed (owners always; members until a rule hides something from them; never guests). Pushes are held to what the person can edit, and can't touch hidden folders like `.obsidian`, add symlinks, delete the branch or push other branches.
-
-See [docs/deploy.md](docs/deploy.md#memory-and-obsidian) for the details.
-
-### What agents know when they start
-
-Every run's prompt is built fresh, in layers:
-
-1. Its soul and instructions.
-2. **About the person it's working with:** every preference, active plans, the last week of what they did, and the details most related to the message. Agents add to this with `memory_remember`; Claude Code's own device-local memory is turned off so everything lands here, where you can see it.
-3. **Its teams:** its role, the lead, teammates and their roles, the team brief (`README.md` in the pool) and recent decisions.
-4. **For a boss (older setups):** each team below it, with its open tasks and recent decisions.
-5. Notes people pinned for it with **Load at startup**.
-6. Notes related to the message.
-
-Agents connected through `wisp-mcp` get the same when their session starts, and can refresh it with `memory_context`. In **Memory**, **Activity** shows who changed what, and each note shows who wrote each line.
-
-### Teams and coding together
-
-- **Teams** are channels: every channel has its team, drawn as a chart in its **Team** tab (leads read new messages and hand work along the arrows). Under **More** each agent can have a role (its notes go into that agent's prompt), and the team can share a memory folder, a repo and a boss it reports to.
-- **The lead:** every task nobody assigned goes to the workspace's lead (pick one in Settings → Agents; otherwise a channel team's lead), who is told who has which role and splits the task into subtasks with `task_delegate`. Workspaces that picked a dispatcher in the old Orchestration add-on keep it as their lead.
-- **Coding:** give a team a repo (a git URL, or a path on the agents' device). Tasks handed out in that channel get a branch like `wisp/nova/add-login-xxxxx`, and the assignee works in its own checkout of it. When it's done, a different agent than the builder gets a review task with a read-only checkout and merges with `branch_merge`: the team's Reviewer first, preferring one on a different harness, then a teammate on another harness, then the lead. Nobody reviews or merges their own work. Merges never touch a checkout with uncommitted changes.
+- **Channel teams:** use a channel's **Team** chart to choose leads and connect agents along the paths they hand work through. Under **More**, set roles, role notes, an optional memory folder, a repository and who the team reports to.
+- **The workspace lead:** choose one in **Settings → Agents**, or let Wisp select one from the agents and channel teams. Unassigned tasks go to that lead, whose instructions describe the available roles and how to delegate subtasks with `task_delegate`.
+- **Coding:** tasks in a channel with a repository get a branch such as `wisp/nova/add-login-xxxxx` and a separate working checkout. When the builder finishes, Wisp creates a review task if another eligible agent is available, preferring a reviewer role and a different harness; the builder cannot merge its own task, and merges refuse a checkout with uncommitted changes.
 
 ## Docs
 
-- [Deploying](docs/deploy.md): Docker, a Proxmox LXC, reaching it from your phone with Tailscale or a domain
-- [Computers](docs/computers.md): VMs, your own screen, Orgo, live view, taking control, teaching tasks, who can reach your computer
-- [Adding a harness](docs/adapters.md)
+- [Installing](INSTALL.md): a step-by-step guide for people and AI agents
+- [Deploying](docs/deploy.md): Docker, services, updates, HTTPS and phone access
+- [Computers](docs/computers.md): VMs, your screen, Orgo, taking control and teaching tasks
+- [Memory](docs/memory.md): permissions, Obsidian and startup context
+- [Adding a harness](docs/adapters.md): MCP, ACP and native adapters
 - [Contributing](CONTRIBUTING.md), [Code of conduct](CODE_OF_CONDUCT.md), [Security](SECURITY.md)
 
-## Status and roadmap
+## Status
 
-v0.1 covers the hub, chat, agents on devices, delegation, files and the memory vault. Next up:
+v1 includes the hub, web app, desktop app, native iPhone and iPad app, Android preview, devices and VMs, channel teams, tasks, the memory vault, connectors, skills, background agents, routines, web push, voice and the desk buddy. Some features need to be enabled in Mods or configured with your own provider credentials.
 
-- Connectors: one MCP gateway for GitHub, Slack, Gmail and others, granted per agent
-- A shared skills library synced into each harness
-- A nightly tidy-up of memory (summaries, duplicates, finished plans)
-- Honcho and Hindsight memory backends next to the vault
-- Windows and macOS VMs on a device
-- Passkeys and OIDC sign-in; web push notifications (desktop notifications work today, while Wisp is open)
+Next priorities are reliability and release polish across these clients, better Android recovery and pairing, and more complete harness and connector support. The [issue tracker](https://github.com/eireijie/wisp/issues) is where to follow work and report problems; these priorities have no promised release dates.
 
 ## License
 
