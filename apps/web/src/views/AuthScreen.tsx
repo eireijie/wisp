@@ -19,7 +19,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   useEffect(() => {
     api<{ needsSetup: boolean }>("GET", "/api/setup")
       .then((r) => setNeedsSetup(r.needsSetup))
-      .catch(() => setError("Can't reach the Warren hub."));
+      .catch(() => setError("Can't reach your Wisp."));
   }, []);
   useEffect(() => {
     if (!code) return;
@@ -35,7 +35,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
     setError(null);
     try {
       const r = needsSetup
-        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName || "Warren" })
+        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName.trim() || `${form.name.trim()}'s Wisp`, features: "simple" })
         : joining
           ? await api<{ token: string }>("POST", "/api/invites/accept", { code, name: form.name, email: form.email, password: form.password })
           : await api<{ token: string }>("POST", "/api/auth/login", { email: form.email, password: form.password });
@@ -43,6 +43,9 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
         // New account: start it on this device's time zone so agents and routines don't fall back to UTC. Best-effort.
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (timezone) await api("PATCH", "/api/me", { timezone }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
+      }
+      if (needsSetup) {
+        await api("PUT", "/api/me/prefs", { experience: "simple" }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
       }
       if (needsSetup) location.hash = "#/welcome/intro";
       else if (joining) location.hash = "#/";
@@ -61,10 +64,10 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
       </button>
       <form onSubmit={submit} className="w-full max-w-sm space-y-6">
         <div className="flex items-center gap-1.5 font-semibold">
-          <GhostMark size={18} className="text-accent-text" /> Warren
+          <GhostMark size={18} className="text-accent-text" /> Wisp
         </div>
         <div className="space-y-1.5">
-          <h1 className="text-xl font-semibold">{needsSetup ? "Set up Warren" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Warren"}</h1>
+          <h1 className="text-xl font-semibold">{needsSetup ? "Set up Wisp" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Wisp"}</h1>
           <p className="text-sm text-muted">
             {needsSetup ? "You'll be the owner of this organization." : joining ? (invite ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}. Make your account.` : "Checking your invite…") : "Where people and agents work together."}
           </p>
@@ -83,9 +86,8 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
                 <Field label="Your name">
                   <Input value={form.name} onChange={set("name")} autoComplete="name" required />
                 </Field>
-                <Field label="Organization name">
-                  <span className="block text-xs text-muted">An organization is your own Warren: your helpers, notes and settings. Use any name, like 'Home'.</span>
-                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder="Home" />
+                <Field label="Your Wisp">
+                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder={form.name.trim() ? `${form.name.trim()}'s Wisp` : "Your Wisp"} />
                 </Field>
               </>
             )}
@@ -97,7 +99,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
             </Field>
             {error && <p className="text-sm text-bad">{error}</p>}
             <Button variant="primary" className="w-full h-10" disabled={busy || (joining && !invite)}>
-              {needsSetup ? "Create organization" : joining ? "Join" : "Sign in"}
+              {needsSetup ? "Start Wisp" : joining ? "Join" : "Sign in"}
             </Button>
             {joining && (
               <button

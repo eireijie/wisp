@@ -24,14 +24,18 @@ const TAILNET = /^http:\/\/100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./;
 
 /** Where the phone has to be for these addresses to work, in a sentence. */
 function reachHint(addresses: string[]): string {
-  if (!addresses.length) return "This computer isn't on a network your phone can reach. Connect it to Wi-Fi and start again.";
-  if (addresses.some((a) => !PRIVATE.test(a) && !TAILNET.test(a))) return "Your phone can reach this Warren from anywhere.";
+  if (!addresses.length) return "Connect this computer to Wi-Fi and start again.";
+  if (addresses.some((a) => !PRIVATE.test(a) && !TAILNET.test(a))) return "Your phone can reach this Wisp from anywhere.";
   if (addresses.some((a) => TAILNET.test(a))) return "Your phone needs to be on the same Wi-Fi, or signed in to Tailscale.";
-  return "Your phone needs to be on the same Wi-Fi as this computer. To use Warren away from home, see Deploying in the docs.";
+  return "Your phone needs to be on the same Wi-Fi as this computer.";
 }
 
-/** Settings → Mobile: pair the phone app with this Warren by scanning a QR code, then matching a code. */
+/** Settings → Mobile: pair the phone app with this Wisp by scanning a QR code, then matching a code. */
 export function MobilePage() {
+  return <><PageHeader title="Mobile">Point your camera here to join your Wisp.</PageHeader><PhonePairing /></>;
+}
+
+export function PhonePairing({ autoStart = false, compact = false }: { autoStart?: boolean; compact?: boolean }) {
   const [started, setStarted] = useState<Started | null>(null);
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -39,22 +43,37 @@ export function MobilePage() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const live = useRef<string | null>(null);
+  const generation = useRef(0);
 
   const start = async () => {
+    const current = ++generation.current;
+    if (live.current) void api("POST", `/api/pair/${live.current}/cancel`).catch(() => {});
+    live.current = null;
+    setStarted(null);
+    setPairing(null);
+    setQr(null);
     setError(null);
     setBusy(true);
     try {
       const s = await api<Started>("POST", "/api/pair", { origin: window.location.origin });
+      if (current !== generation.current) {
+        void api("POST", `/api/pair/${s.id}/cancel`).catch(() => {});
+        return;
+      }
       live.current = s.id;
       setStarted(s);
       setPairing(s);
-      setQr(await QRCode.toDataURL(s.link, { margin: 1, width: 480, errorCorrectionLevel: "M", color: { dark: "#0b0b10", light: "#ffffff" } }));
+      const image = await QRCode.toDataURL(s.link, { margin: 1, width: 480, errorCorrectionLevel: "M", color: { dark: "#0b0b10", light: "#ffffff" } });
+      if (current === generation.current) setQr(image);
     } catch (e) {
-      setError((e as Error).message);
+      if (current !== generation.current) return;
+      setError((e as { status?: number }).status === 404 ? "Phone pairing isn't available yet; update Wisp on this computer." : (e as Error).message);
     } finally {
-      setBusy(false);
+      if (current === generation.current) setBusy(false);
     }
   };
+
+  useEffect(() => { if (autoStart) void start(); }, [autoStart]);
 
   // follow the pairing while a phone might scan it or the codes are being checked
   const state = pairing?.state;
@@ -74,7 +93,9 @@ export function MobilePage() {
   // leaving the page ends a pairing nobody finished
   useEffect(
     () => () => {
+      generation.current++;
       if (live.current) api("POST", `/api/pair/${live.current}/cancel`).catch(() => {});
+      live.current = null;
     },
     [],
   );
@@ -86,7 +107,7 @@ export function MobilePage() {
       setPairing(await api<Pairing>("POST", `/api/pair/${pairing.id}/confirm`));
       live.current = null;
     } catch (e) {
-      setError((e as Error).message);
+      setError((e as { status?: number }).status === 404 ? "Phone pairing isn't available yet; update Wisp on this computer." : (e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -109,13 +130,11 @@ export function MobilePage() {
 
   return (
     <>
-      <PageHeader title="Mobile">Scan the code with the Warren app on your phone.</PageHeader>
-
-      <div className="rounded-xl border border-line p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row gap-6 sm:items-center">
+      <div className={compact ? "" : "rounded-xl border border-line p-5 sm:p-6"}>
+        <div className={cx("flex flex-col gap-4", !compact && "sm:flex-row sm:items-center")}>
           <div className="mx-auto sm:mx-0 size-56 shrink-0 rounded-xl border border-line bg-hover flex items-center justify-center overflow-hidden">
             {state === "waiting" && qr ? (
-              <img src={qr} alt="QR code to scan with the Warren app on your phone" className="size-full bg-white p-2" />
+              <img src={qr} alt="QR code to scan with the Wisp app on your phone" className="size-full bg-white p-2" />
             ) : state === "claimed" ? (
               <div className="text-center px-3" aria-live="polite">
                 <div className="text-xs text-muted mb-2">Code on {phone}</div>
@@ -139,9 +158,9 @@ export function MobilePage() {
           <div className="flex-1 min-w-0 space-y-3">
             {state === "waiting" && started && (
               <>
-                <p className="text-sm">Scan this with the Warren app, or with your phone's camera.</p>
+                <p className="text-sm">Point your camera here. It gets the app and joins.</p>
                 <p className="text-xs text-muted">{reachHint(started.addresses)}</p>
-                <p className="text-xs text-muted">The code works once and expires in 5 minutes.</p>
+                <p className="text-xs text-muted">The code expires in 5 minutes.</p>
                 <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink">
                   {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy pairing link"}
                 </button>
@@ -158,27 +177,27 @@ export function MobilePage() {
                     No, cancel
                   </Button>
                 </div>
-                <p className="text-xs text-muted">If the digits don't match, someone else scanned your code. Cancel and start again.</p>
+                <p className="text-xs text-muted">If the digits don't match, cancel and start again.</p>
               </>
             )}
             {state === "approved" && (
               <>
-                <p className="text-sm">Your phone is ready. It stays signed in until you sign it out under Security → Sign-ins.</p>
+                <p className="text-sm">Your phone is ready.</p>
                 <Button onClick={start} disabled={busy}>
                   Pair another phone
                 </Button>
               </>
             )}
             {(state === "expired" || state === "rejected") && <p className="text-sm text-muted">{state === "expired" ? "The code expired." : "Pairing was cancelled."} Start again to show a new code.</p>}
-            {!state && <p className="text-sm text-muted">Get the Warren app on your phone first, then start pairing here.</p>}
+            {!state && <p className="text-sm text-muted">Start pairing to show a QR code for your phone.</p>}
             {error && <p className="text-sm text-bad">{error}</p>}
           </div>
         </div>
       </div>
 
-      <ol className="mt-8 space-y-5">
+      {!compact && <ol className="mt-8 space-y-5">
         {[
-          ["Scan the QR code", "Open Warren on your phone and scan the code shown here."],
+          ["Scan the QR code", "Open Wisp on your phone and scan the code shown here."],
           ["Check the code", "Make sure the six digits match on both screens, then confirm here."],
           ["You're in", "Your phone signs in by itself after you confirm."],
         ].map(([title, text], i) => (
@@ -192,7 +211,7 @@ export function MobilePage() {
             </div>
           </li>
         ))}
-      </ol>
+      </ol>}
     </>
   );
 }
