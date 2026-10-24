@@ -7,7 +7,7 @@ import { useStore } from "../store.ts";
 import { Button, Input, cx } from "./ui.tsx";
 
 export function awayEnabled(info: AccessInfo | null): boolean {
-  return !!info?.publicUrl || !!info?.cloudflare?.enabled || onPublicAddress();
+  return !!info?.publicUrl || info?.cloudflare?.state === "running" || onPublicAddress();
 }
 
 /** Tailscale Serve is private; only Funnel makes the address usable by external apps. */
@@ -16,7 +16,7 @@ export function connectorOrigin(
   loc: Pick<Location, "protocol" | "hostname" | "origin"> | undefined = typeof location === "undefined" ? undefined : location,
 ): string | null {
   const cf = info?.cloudflare;
-  const candidate = cf?.enabled ? (cf.publicUrl ?? cf.url) : info?.tailscale.funnel ? info.publicUrl : null;
+  const candidate = cf?.state === "running" ? cf.url : info?.tailscale.funnel ? info.publicUrl : null;
   if (candidate) {
     try {
       const url = new URL(candidate);
@@ -81,7 +81,7 @@ export function AwayFromHome({ onDone }: { onDone?: () => void }) {
     try {
       let ready = false;
       if (choice === "cloudflare") {
-        const next = await api<AccessInfo>("POST", "/api/reach/cloudflare", { token: credential.trim() });
+        const next = await api<AccessInfo>("POST", "/api/reach/cloudflare", { action: "start", token: credential.trim() });
         useAccessStore.setState({ info: next, failed: false });
         setCredential("");
         ready = awayEnabled(next);
@@ -89,7 +89,7 @@ export function AwayFromHome({ onDone }: { onDone?: () => void }) {
       if (ready) {
         setHint("Away from home is on.");
         onDone?.();
-      } else setHint("Finish setting up Tailscale, then choose Turn it on again.");
+      } else setHint(choice === "cloudflare" ? "Cloudflare is connecting…" : "Finish setting up Tailscale, then choose Turn it on again.");
     } catch (e) {
       setError(unavailable(e, "Away from home"));
     } finally {

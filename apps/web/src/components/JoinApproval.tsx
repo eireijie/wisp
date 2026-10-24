@@ -13,6 +13,8 @@ export function JoinApproval() {
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Keep requests pending on the server, but don't reopen dismissed dialogs on refresh.
+  const [dismissed, setDismissed] = useState<string[]>([]);
   useEffect(() => {
     setRequests([]);
     setError(null);
@@ -40,11 +42,12 @@ export function JoinApproval() {
       clearInterval(timer);
     };
   }, [allowed, me?.workspace.id, connected]);
-  const request = requests[0];
+  const request = requests.find((r) => !dismissed.includes(r.id));
   const current = useRef<string | undefined>(undefined);
   current.current = request?.id;
   useEffect(() => setError(null), [request?.id]);
   if (!allowed || !request) return null;
+  const later = () => setDismissed((ids) => [...ids, request.id]);
   const decide = async (action: "approve" | "deny") => {
     setBusy(true);
     setError(null);
@@ -52,13 +55,13 @@ export function JoinApproval() {
       await api("POST", `/api/join/requests/${encodeURIComponent(request.id)}/${action}`);
       setRequests((r) => r.filter((x) => x.id !== request.id));
     } catch (e) {
-      if (current.current === request.id) setError(unavailable(e, "Device approval"));
+      if (current.current === request.id) setError((e as { status?: number }).status === 404 ? "This request has ended." : unavailable(e, "Device approval"));
     } finally {
       setBusy(false);
     }
   };
   return (
-    <Modal title={`${request.name} wants to join`} onClose={() => {}} headerless label={`${request.name} wants to join`} className="z-60" contentClassName="pt-6">
+    <Modal title={`${request.name} wants to join`} onClose={later} headerless label={`${request.name} wants to join`} className="z-60" contentClassName="pt-6">
       <Monitor size={26} className="mb-4 text-muted" />
       <h2 className="text-xl font-semibold">{request.name} wants to join</h2>
       <div className="my-6 rounded-xl border border-line bg-bg p-5 text-center">
@@ -71,6 +74,9 @@ export function JoinApproval() {
         </p>
       )}
       <div className="flex justify-end gap-2">
+        <Button onClick={later}>
+          Later
+        </Button>
         <Button disabled={busy} onClick={() => void decide("deny")}>
           Deny
         </Button>

@@ -24,7 +24,11 @@ export interface AccessInfo {
   download: string;
   hubPlatform: string;
   /** Optional until Cloudflare reach support is installed. */
-  cloudflare?: { enabled?: boolean; publicUrl?: string | null; url?: string | null };
+  cloudflare?: {
+    state: "missing" | "stopped" | "starting" | "running" | "error";
+    url: string | null;
+    error: string | null;
+  };
 }
 
 const isLoopback = (host: string) => /^(localhost|127\.|\[?::1\]?$)/i.test(host);
