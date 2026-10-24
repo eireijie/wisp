@@ -208,6 +208,15 @@ CREATE TABLE IF NOT EXISTS connector_auth (
   required INTEGER NOT NULL DEFAULT 1, redirect_url TEXT, client_json TEXT, tokens_json TEXT, expires_at TEXT,
   verifier TEXT, state TEXT, signed_in_by TEXT, error TEXT, updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id TEXT PRIMARY KEY, secret_hash TEXT, name TEXT NOT NULL DEFAULT '', redirect_uris_json TEXT NOT NULL,
+  auth_method TEXT NOT NULL DEFAULT 'none', created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oauth_grants (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL, client_name TEXT NOT NULL DEFAULT '',
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL, refresh_hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_used TEXT
+);
 CREATE TABLE IF NOT EXISTS vault_tokens (
   id TEXT PRIMARY KEY, hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   workspace_id TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, last_used TEXT
@@ -262,6 +271,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["nodes", "shared", "INTEGER NOT NULL DEFAULT 0"],
   ["runs", "requested_by", "TEXT"],
   ["tokens", "created_by", "TEXT"],
+  ["tokens", "expires_at", "TEXT"],
   ["nodes", "role", "TEXT"],
   ["users", "preferred_name", "TEXT"],
   ["users", "timezone", "TEXT"],
