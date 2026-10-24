@@ -527,7 +527,8 @@ private struct CodePrompt: View {
       ScreenCodeField(kind: computer.code ?? "pin", code: $code) { submit() }
         .frame(maxWidth: 240)
         .environment(\.colorScheme, .light)
-      if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.9)).multilineTextAlignment(.center) }
+      // wraps instead of trailing off: the screen box proposes more width than it shows
+      if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.9)).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true) }
       Button("Open") { submit() }
         .buttonStyle(.bordered)
         .tint(.white)
