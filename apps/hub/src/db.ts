@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS memberships (
   role TEXT NOT NULL CHECK (role IN ('owner','member','guest')),
   PRIMARY KEY (workspace_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS device_invites (
+  hash TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS nodes (
   id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL, last_seen TEXT, catalog_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL

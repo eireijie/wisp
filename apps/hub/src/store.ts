@@ -23,6 +23,7 @@ export class Store {
   createUser(email: string, name: string, passwordHash: string) {
     const u = { id: id("usr"), email: email.toLowerCase(), name, createdAt: now() };
     this.db.prepare("INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)").run(u.id, u.email, u.name, passwordHash, u.createdAt);
+    this.setPrefs(u.id, { experience: "simple" });
     return u;
   }
 

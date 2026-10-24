@@ -29,6 +29,8 @@ export async function createOrganization(hub: Hub, owner: { id: string; name: st
   const { store } = hub;
   const ws = store.createWorkspace(name);
   store.addMember(ws.id, owner.id, "owner");
+  const prefs = store.prefs(owner.id);
+  if (!prefs.experience) store.setPrefs(owner.id, { ...prefs, experience: "simple" });
   const general = store.createChannel(ws.id, "general", "channel", "Everyone, humans and agents");
   store.addChannelMember(general.id, { kind: "user", id: owner.id });
   setWorkspaceFeatures(store, ws.id, FEATURE_PRESETS[preset]);
