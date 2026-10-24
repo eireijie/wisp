@@ -1,10 +1,9 @@
 /** Everything about the project that more than one page needs. The domain lives in astro.config.mjs. */
 
-/** Where people write to us. A placeholder until the domain is chosen. */
-export const CONTACT_EMAIL = "hello@warren.example";
-
 export const GITHUB_REPO = "eireijie/wisp";
 export const REPO = `https://github.com/${GITHUB_REPO}`;
+/** Where people reach us: there's no email, questions go to GitHub Issues. */
+export const CONTACT = `${REPO}/issues`;
 export const RELEASES = `${REPO}/releases`;
 const latest = (name: string) => `${RELEASES}/latest/download/${name}`;
 

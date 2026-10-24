@@ -1,6 +1,6 @@
 ---
 import Legal from "../layouts/Legal.astro";
-import { CONTACT_EMAIL, REPO } from "../lib/site";
+import { CONTACT, REPO } from "../lib/site";
 ---
 
 <Legal
@@ -117,5 +117,5 @@ import { CONTACT_EMAIL, REPO } from "../lib/site";
   </p>
 
   <h2>Contact</h2>
-  <p>Questions about privacy? Email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+  <p>Questions about privacy? Open an issue on <a href={CONTACT}>GitHub</a>.</p>
 </Legal>
