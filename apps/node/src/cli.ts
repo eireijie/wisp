@@ -5,59 +5,42 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { HARNESSES } from "@warren/core";
 import { deviceAdapters } from "@warren/adapters";
-import { ComputerHost, detectEngine } from "./computers/index.ts";
+import { detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
-import { listening, remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
+import { remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
 import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
-import { discoverAgents } from "./discover.ts";
 import { installService, isService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
 import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
-const HELP = `warren — run a Warren hub, or connect this device to one
+import { joinTarget, joinWisp } from "./join.ts";
+import { doctor } from "./doctor.ts";
+
+const HELP = `wisp — start Wisp on this computer, or join your Wisp
 
 Usage:
-  warren hub start
-      Run the hub (the workspace and web app) in this terminal, on PORT (default 4747) with
-      its data in WARREN_DATA_DIR (default ./data in the Warren folder).
-  warren service install hub
-  warren service install node [--hub URL --token TOKEN | --local] [--name NAME]
-      Keep the hub or this device running, started at login (macOS LaunchAgent, systemd on
-      Linux, a task at sign-in on Windows). Uses this terminal's PATH so agents' CLIs are found.
-      --local makes this computer a device of the hub running on it, once its first account
-      exists: no token needed (the installer does this).
-  warren service uninstall hub|node
-  warren service status
-  warren setup [--yes]
-      Get this device ready to give agents their own computers (VMs): checks the harnesses,
-      offers to install a VM engine (Apple's container on a Mac with Apple silicon), and gets
-      the VM image so the first VM starts in seconds. Asks before installing anything.
-  warren node start [--hub URL --token TOKEN] [--name NAME] [--dir DIR] [--allow-full-access]
-      Connect this device as a node. Hub URL and token are saved to DIR/node.json,
-      so later runs only need \`warren node start\`. Create the token in Warren → Devices.
-      --allow-full-access lets agents set to "Full access" run without a sandbox here (saved).
-  warren node screen on|off
-      Let the person who connected this device see and use its own screen from Warren, and
-      lend it to agents for a while. Off by default; it can only be turned on here. Turning it
-      on asks for a code (a 6-digit PIN or a password) that's needed to open the screen from
-      Warren, and offers Remote Desktop.
-  warren node screen code [off]
-      Pick a new code for this screen (or remove it). Only here, never from Warren.
-  warren node screen remote [off]
-      Set up Remote Desktop: a VNC server for this screen that only listens on this device, for
-      smooth live view (Linux with X11, and Windows). \`off\` goes back to screenshots.
-  warren node pause | warren node resume
-      Stop everything Warren does on this device right away (agent runs, computer use, live
-      views) until you resume. Works while \`warren node start\` is running.
-  warren doctor
-      Check which agent harnesses are installed here, whether agents can use this
-      device's screen or run VMs on it, and which existing agents Warren can import.
-  warren update [--check]
-      Get the latest Warren from GitHub: pull, install what changed, rebuild the web app
-      on a hub, then restart the hub and device running from this folder (a device waits
-      for its agents to finish). --check only shows what's new.
+  wisp join [invite-link] [--name NAME] [--dir DIR] [--no-service]
+      Join my Wisp: find it on this Wi-Fi, then approve this computer where Wisp lives.
+  wisp doctor
+      Check Wisp, this computer, agent apps, VM engine and Away from home.
+  wisp hub start
+      Start Wisp on this computer (default http://localhost:4747).
+  wisp service install hub
+  wisp service install node [--hub URL --token TOKEN | --local] [--name NAME]
+      Start Wisp or this computer's connection again when you log in.
+  wisp service uninstall hub|node
+  wisp service status
+  wisp setup [--yes]
+      Get agent computers ready; asks before installing a VM engine.
+  wisp node start [--hub URL --token TOKEN] [--name NAME] [--dir DIR] [--allow-full-access]
+      Connect with saved settings; the older --hub and --token flags still work.
+  wisp node screen on|off|code|remote [off]
+      Control screen sharing and its code on this computer.
+  wisp node pause | wisp node resume
+      Pause or resume agents on this computer.
+  wisp update [--check]
+      Update Wisp and restart after agents finish; --check only shows what is new.
 
 Settings in DIR/node.json (all optional):
   "harnesses": { "qwen": { "args": ["--experimental-acp"] },
@@ -77,6 +60,7 @@ const { values, positionals } = parseArgs({
     dir: { type: "string" },
     "allow-full-access": { type: "boolean" },
     local: { type: "boolean" },
+    "no-service": { type: "boolean" },
     check: { type: "boolean" },
     yes: { type: "boolean", short: "y" },
     help: { type: "boolean", short: "h" },
@@ -88,40 +72,31 @@ const configFile = path.join(dir, "node.json");
 /** `node start` exits with this once the hub turns its token down, when $WARREN_EXIT_IF_REJECTED asks it to (the desktop app does) */
 const REJECTED_CODE = 78;
 const [cmd, sub] = positionals;
+function isInviteAddress(raw: string): boolean {
+  try { return !!joinTarget(raw).invite; } catch { return false; }
+}
 
 if (values.help || !cmd) {
   console.log(HELP);
+} else if (cmd === "join") {
+  try {
+    await joinWisp({ dir, address: sub ?? values.hub, name: values.name, service: !values["no-service"] });
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exitCode = 1;
+  }
 } else if (cmd === "doctor") {
-  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
-  console.log("Harnesses");
-  for (const a of Object.values(deviceAdapters(saved.harnesses))) {
-    let version = "not found";
-    try {
-      // through the shell on Windows, where npm installs harnesses as .cmd shims
-      version = execFileSync(a.binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000, shell: process.platform === "win32" }).trim().split("\n")[0];
-    } catch {}
-    const how = HARNESSES.find((h) => h.id === a.id)?.protocol === "native" ? "" : " (ACP)";
-    console.log(`  ${(a.label + how).padEnd(20)} ${a.binary.padEnd(14)} ${version}`);
-  }
-  const caps = await new ComputerHost({ dir, vmEngine: saved.vmEngine }).capabilities();
-  console.log("\nComputers");
-  const shared = saved.shareScreen && !saved.noScreen;
-  console.log(`  This screen  ${!caps.screen.ok ? "no" : shared ? "on (only you can use it, and lend it to agents)" : "off (turn on with `warren node screen on`)"}: ${caps.screen.detail}`);
-  if (caps.screen.ok && shared) {
-    console.log(`               ${saved.screenCode ? `opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : "no code: your Warren sign-in alone opens it (`warren node screen code`)"}`);
-    const rd = remoteDesktopSupport();
-    console.log(`               Remote Desktop ${saved.remoteDesktop ? `on (${saved.remoteDesktop.server}${(await listening(saved.remoteDesktop.port)) ? "" : ", not answering right now"})` : rd.ok ? "off (`warren node screen remote`)" : `unavailable: ${rd.detail}`}`);
-  }
-  console.log(`  VMs          ${caps.vm.ok ? "yes" : "no"}: ${caps.vm.detail}`);
-  const found = discoverAgents();
-  console.log("\nExisting agents Warren can import");
-  if (!found.length) console.log("  none found");
-  for (const a of found) console.log(`  ${a.name} (${a.harness}) ${a.path}`);
+  if (!(await doctor(dir))) process.exitCode = 1;
 } else if (cmd === "setup") {
   await setup(values.yes ?? false);
 } else if (cmd === "service") {
   await service(sub, positionals[2]);
 } else if (cmd === "node" && sub === "start") {
+  if (values.hub && isInviteAddress(values.hub)) {
+    await joinWisp({ dir, address: values.hub, name: values.name, service: false });
+    values.hub = undefined;
+    values.token = undefined;
+  }
   let cfg = saveNodeConfig();
   const kept = underKeeper();
   // two daemons with one token would take turns replacing each other on the hub
@@ -136,8 +111,8 @@ if (values.help || !cmd) {
   if (process.env.WARREN_EXIT_IF_REJECTED) daemon.onRejected = () => process.exit(REJECTED_CODE);
   daemon.start();
   watchForUpdates(async () => {
-    if (!kept) return console.log("[warren] Warren was updated; restart `warren node start` to use the new version");
-    console.log("[warren] Warren was updated; restarting once no agent is running");
+    if (!kept) return console.log("[warren] Wisp was updated; restart `warren node start` to use the new version");
+    console.log("[warren] Wisp was updated; restarting once no agent is running");
     await daemon.idle();
     await daemon.stop();
     process.exit(RESTART_CODE);
@@ -157,10 +132,10 @@ if (values.help || !cmd) {
   saved.paused = sub === "pause";
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
-  console.log(saved.paused ? "Paused. Warren stops agents and computers on this device within a second or two. `warren node resume` to continue." : "Resumed.");
+  console.log(saved.paused ? "Paused. Wisp stops agents and computers on this device within a second or two. `warren node resume` to continue." : "Resumed.");
 } else if (cmd === "update") {
   const v = await version();
-  console.log(`Warren ${v.commit ?? "(not a git checkout)"}${v.date ? ` from ${v.date.slice(0, 10)}` : ""}`);
+  console.log(`Wisp ${v.commit ?? "(not a git checkout)"}${v.date ? ` from ${v.date.slice(0, 10)}` : ""}`);
   const check = await checkForUpdate();
   for (const c of check.changes.slice(0, 20)) console.log(`  ${c}`);
   if (check.changes.length > 20) console.log(`  …and ${check.changes.length - 20} more`);
@@ -168,7 +143,7 @@ if (values.help || !cmd) {
   if (values.check || !check.canUpdate) process.exit(check.canUpdate || check.behind === 0 ? 0 : 1);
   try {
     const r = await runUpdate(undefined, { log: (line) => console.log(line) });
-    console.log(`Warren ${r.from} → ${r.to}. A hub or device running from this folder restarts in a few seconds (a device waits for running agents).`);
+    console.log(`Wisp ${r.from} → ${r.to}. A hub or device running from this folder restarts in a few seconds (a device waits for running agents).`);
   } catch (e) {
     console.error((e as Error).message);
     process.exit(1);
@@ -246,22 +221,22 @@ async function screen(what: string | undefined, arg: string | undefined) {
   if (what === "off") {
     saved.shareScreen = false;
     save();
-    return console.log("This screen is off. Nobody in Warren can see or use it.");
+    return console.log("This screen is off. Nobody in Wisp can see or use it.");
   }
 
   if (what === "on") {
     saved.shareScreen = true;
     delete saved.noScreen;
     save();
-    console.log("This screen is on. In Warren, only the person who connected this device can see or use it, and agents only while they lend it.");
+    console.log("This screen is on. In Wisp, only the person who connected this device can see or use it, and agents only while they lend it.");
     if (!saved.screenCode) {
-      console.log("\nPick a code. Opening this screen from Warren will need it, so someone who gets into your Warren account still can't see this computer.");
+      console.log("\nPick a code. Opening this screen from Wisp will need it, so someone who gets into your Wisp account still can't see this computer.");
       const code = await pickCode();
       if (code) {
         saved.screenCode = code;
         save();
-        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Warren to watch this screen or lend it to an agent.`);
-      } else console.log("   No code set, so your Warren sign-in alone opens this screen. Pick one any time: warren node screen code");
+        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen or lend it to an agent.`);
+      } else console.log("   No code set, so your Wisp sign-in alone opens this screen. Pick one any time: warren node screen code");
     }
     if (!saved.remoteDesktop && remoteDesktopSupport().ok) {
       console.log("");
@@ -279,7 +254,7 @@ async function screen(what: string | undefined, arg: string | undefined) {
     if (arg === "off") {
       delete saved.screenCode;
       save();
-      return console.log("This screen has no code now: your Warren sign-in alone opens it.");
+      return console.log("This screen has no code now: your Wisp sign-in alone opens it.");
     }
     const code = await pickCode();
     if (!code) {
@@ -295,7 +270,7 @@ async function screen(what: string | undefined, arg: string | undefined) {
     if (arg === "off") {
       delete saved.remoteDesktop;
       save();
-      return console.log("Remote Desktop is off for Warren; live view uses screenshots. (The VNC server stays installed; Warren doesn't run or use it.)");
+      return console.log("Remote Desktop is off for Wisp; live view uses screenshots. (The VNC server stays installed; Wisp doesn't run or use it.)");
     }
     if (!(await setUpRemote())) process.exit(1);
     save();
@@ -338,7 +313,7 @@ function saveNodeConfig(): NodeConfig {
     return { ...cfg, local: true };
   }
   if (!cfg.hub || !cfg.token) {
-    console.error("Missing --hub and --token. Get them in Warren → Devices → Add device.");
+    console.error("Run wisp join to connect this computer to your Wisp.");
     process.exit(1);
   }
   try {
@@ -369,7 +344,7 @@ async function waitForLocalHub(cfg: NodeConfig): Promise<NodeConfig> {
   if (!fs.existsSync(grant)) {
     fs.mkdirSync(data, { recursive: true });
     fs.writeFileSync(request, JSON.stringify({ name: values.name ?? cfg.name }), { mode: 0o600 });
-    console.log("[warren] waiting for the hub on this computer: this computer becomes a device once you've made your account in the browser");
+    console.log("◌ Waiting for you to finish getting ready in Wisp…");
   }
   while (!fs.existsSync(grant)) await new Promise((r) => setTimeout(r, 2000));
   const got = JSON.parse(fs.readFileSync(grant, "utf8")) as { hub: string; token: string; name: string };
@@ -387,7 +362,7 @@ async function service(action: string | undefined, kind: string | undefined) {
   if (action === "status") {
     for (const k of kind ? [kind as ServiceKind] : kinds) {
       const s = serviceStatus(k, dir);
-      console.log(`${k.padEnd(5)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
+      console.log(`${(k === "hub" ? "Wisp" : "This computer").padEnd(13)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
     }
     return;
   }
@@ -398,7 +373,11 @@ async function service(action: string | undefined, kind: string | undefined) {
   const k = kind as ServiceKind;
   if (action === "uninstall") {
     const s = uninstallService(k, dir);
-    console.log(`Removed ${s.name}. Warren's data and settings are untouched.`);
+    console.log(`Removed ${s.name}. Wisp's data and settings are untouched.`);
+    return;
+  }
+  if (k === "node" && values.hub && isInviteAddress(values.hub)) {
+    await joinWisp({ dir, address: values.hub, name: values.name });
     return;
   }
   const cfg = k === "node" ? saveNodeConfig() : undefined;
@@ -417,7 +396,7 @@ async function service(action: string | undefined, kind: string | undefined) {
     console.error((e as Error).message);
     process.exit(1);
   }
-  console.log(`Installed ${s.name}: it starts at login and restarts if it stops. Log: ${s.log}`);
+  console.log(`✓ ${k === "hub" ? "Started Wisp" : "Started this computer's connection"} (starts again when you log in)`);
   // wait for it to come up, so problems show here instead of in a log nobody reads
   const deadline = Date.now() + 30_000;
   const port = process.env.PORT ?? "4747";
@@ -425,7 +404,7 @@ async function service(action: string | undefined, kind: string | undefined) {
     await new Promise((r) => setTimeout(r, 1000));
     if (k === "hub") {
       const ok = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok, () => false);
-      if (ok) return console.log(`The hub is up at http://localhost:${port}`);
+      if (ok) return console.log(`✓ Wisp is running at http://localhost:${port}`);
     } else if (cfg?.local && !cfg.token) {
       return console.log("This computer becomes a device as soon as you've made your account in the browser.");
     } else if (fs.existsSync(s.log)) {
@@ -478,7 +457,7 @@ async function setup(yes: boolean) {
   }
   console.log(`   ${detail}`);
   if (!engine) {
-    console.log("\nAgents can still use an Orgo cloud computer (Settings → Computers in Warren) until this device can run VMs.");
+    console.log("\nAgents can still use an Orgo cloud computer (Settings → Computers in Wisp) until this device can run VMs.");
     process.exit(1);
   }
 
@@ -490,5 +469,5 @@ async function setup(yes: boolean) {
   console.log(`   ready: ${image}`);
 
   console.log("\nThis device is ready to give agents their own computers.");
-  console.log(saved.hub ? "If `warren node start` is running, Warren sees it within a few seconds." : "Next: connect it to your hub with the command from Warren → Devices → Add device.");
+  console.log(saved.hub ? "If `warren node start` is running, Wisp sees it within a few seconds." : "Next: connect it to your hub with the command from Wisp → Devices → Add device.");
 }
