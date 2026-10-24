@@ -1,5 +1,6 @@
 import XCTest
 import Security
+import UIKit
 import Synchronization
 @testable import Warren
 
@@ -304,6 +305,106 @@ final class ChatTests: XCTestCase {
     XCTAssertEqual(store.phase, .ready)
   }
 
+  func testGuestsDoNotLoadOrReceiveComputers() async throws {
+    let store = makeStore()
+    let computer = #"{"id":"desk","name":"Desk","kind":"vm","status":"ready","statusText":"","help":{"agentId":"a1","request":"Help","channelId":"c1"}}"#
+    reply("GET", "/api/computers", "[\(computer)]")
+    await store.refreshComputers()
+    XCTAssertTrue(store.canViewComputers)
+    XCTAssertEqual(store.computers.map(\.id), ["desk"])
+    XCTAssertEqual(store.needsYouCount, 1)
+    store.route = .computer(id: "desk")
+    store.role = "guest"
+    XCTAssertFalse(store.canViewComputers)
+    XCTAssertTrue(store.computers.isEmpty)
+    XCTAssertNil(store.route)
+    XCTAssertEqual(store.needsYouCount, 0)
+    ManagementHTTPStub.requests.withLock { $0 = [] }
+    reply("GET", "/api/computers", #"{"error":"Forbidden"}"#, status: 403)
+    await store.refreshComputers()
+    store.handle(Data(#"{"type":"computer","computer":\#(computer)}"#.utf8))
+    XCTAssertTrue(store.computers.isEmpty)
+    XCTAssertNil(store.syncError)
+    XCTAssertTrue(ManagementHTTPStub.requests.withLock { $0.isEmpty })
+    store.role = "owner"
+    XCTAssertTrue(store.canViewComputers)
+  }
+
+  func testMentionTriggerMatchesWebAtTheCaret() {
+    for text in ["@", "hello @sc", "hello\n@sc", " @agent_1-two"] {
+      XCTAssertNotNil(ComposerMentions.query(text, caret: text.count), text)
+    }
+    for text in ["sam@example", "(@sc", "@@sc", "@sc.", "@sc ", "@sc\n", "@é"] {
+      XCTAssertNil(ComposerMentions.query(text, caret: text.count), text)
+    }
+    XCTAssertEqual(ComposerMentions.query("ask @sc later", caret: 7), "sc")
+    XCTAssertEqual(ComposerMentions.query("@", caret: 1), "")
+  }
+
+  func testMentionFilteringAndInsertion() {
+    let agents = [Agent(id: "a1", handle: "scout", name: "Researcher", harness: "codex", status: .online),
+                  Agent(id: "a2", handle: "builder", name: "Sam helper", harness: "codex", status: .online)]
+    let people = [Member(id: "u1", email: "sam@example.test", name: "Samuel", preferredName: "Sam", role: "member")]
+    let matches = ComposerMentions.suggestions("@SA", caret: 3, agents: agents, people: people)
+    XCTAssertEqual(matches.map(\.actor), [Actor(kind: .agent, id: "a2"), Actor(kind: .user, id: "u1")])
+    XCTAssertEqual(ComposerMentions.suggestions("@res", caret: 4, agents: agents, people: people).map(\.handle), ["scout"])
+    XCTAssertEqual(ComposerMentions.suggestions("@samu", caret: 5, agents: agents, people: people).map(\.handle), ["Sam"])
+    XCTAssertTrue(ComposerMentions.suggestions("@ese", caret: 4, agents: agents, people: people).isEmpty)
+    let spaced = [Member(id: "u2", email: "ann@example.test", name: "Ann Lee", preferredName: nil, role: "member")]
+    XCTAssertEqual(ComposerMentions.suggestions("@an", caret: 3, agents: [], people: spaced).map(\.handle), ["Ann"])
+    XCTAssertEqual(ComposerMentions.suggestions("@", caret: 1, agents: Array(repeating: agents[0], count: 8), people: people).count, 6)
+    let completed = ComposerMentions.inserting("scout", into: "👋 @sc later", caret: 5)
+    XCTAssertEqual(completed.text, "👋 @scout  later")
+    XCTAssertEqual(completed.caret, "👋 @scout ".count)
+    XCTAssertEqual(ComposerMentions.inserting("Sam", into: "@Sa", caret: 3).text, "@Sam ")
+    XCTAssertEqual(ComposerMentions.inserting("scout", into: "email@sc", caret: 8).text, "email@sc")
+  }
+
+  func testImageAttachmentUsesAuthenticatedCacheAndBoundedThumbnail() async throws {
+    let store = makeStore()
+    let id = UUID().uuidString
+    let format = UIGraphicsImageRendererFormat(); format.scale = 1
+    let image = UIGraphicsImageRenderer(size: CGSize(width: 2000, height: 1000), format: format).image { context in
+      UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 2000, height: 1000))
+    }
+    ManagementHTTPStub.responses.withLock { $0["GET /api/files/" + id] = (200, image.pngData()!) }
+    let url = try await store.localFile(id, name: "Photo.PNG")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let cached = try await store.localFile(id, name: "Photo.PNG")
+    XCTAssertEqual(cached, url)
+    let requests = ManagementHTTPStub.requests.withLock { $0.filter { $0.url?.path == "/api/files/" + id } }
+    XCTAssertEqual(requests.count, 1)
+    XCTAssertEqual(requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer test")
+    let thumbnail = try XCTUnwrap(AttachmentThumbnail.image(at: url))
+    XCTAssertEqual(thumbnail.cgImage?.width, AttachmentThumbnail.maxPixelSize)
+    XCTAssertEqual(thumbnail.cgImage?.height, AttachmentThumbnail.maxPixelSize / 2)
+    XCTAssertTrue(AttachmentThumbnail.image(at: url) === thumbnail)
+    XCTAssertNil(AttachmentThumbnail.image(at: url.deletingLastPathComponent().appending(path: "missing.png")))
+    for name in ["image.png", "image.jpeg", "image.JPG", "image.gif", "image.webp"] { XCTAssertTrue(UploadedFile.isImage(name)) }
+    XCTAssertFalse(UploadedFile.isImage("report.pdf"))
+  }
+
+  func testFailedPairingPersistenceRevokesReceivedTokenBeforeReportingFailure() async throws {
+    let session = makeStore().api!.session
+    for status in [200, 503] {
+      ManagementHTTPStub.requests.withLock { $0 = [] }
+      reply("POST", "/api/auth/logout", "{}", status: status)
+      let store = Store(loadSession: false, persistToken: { _ in throw Session.PersistenceFailure(status: -34018) })
+      do {
+        try await store.adopt(hub: URL(string: "https://management.test")!, token: "just-paired", session: session)
+        XCTFail("Keychain failure must prevent adoption")
+      } catch let error as Session.PersistenceFailure {
+        XCTAssertEqual(error.status, -34018)
+        let logout = try XCTUnwrap(ManagementHTTPStub.requests.withLock { $0.first })
+        XCTAssertEqual(logout.httpMethod, "POST")
+        XCTAssertEqual(logout.url?.path, "/api/auth/logout")
+        XCTAssertEqual(logout.value(forHTTPHeaderField: "Authorization"), "Bearer just-paired")
+      }
+      XCTAssertEqual(store.phase, .signedOut)
+      XCTAssertNil(store.api)
+    }
+  }
+
   func testKeychainFailuresPreventSessionAdoption() throws {
     var added = false
     XCTAssertThrowsError(try Session.saveToken("new", delete: { _ in errSecAuthFailed }, add: { _ in added = true; return errSecSuccess }))
@@ -311,9 +412,6 @@ final class ChatTests: XCTestCase {
     XCTAssertThrowsError(try Session.saveToken("new", delete: { _ in errSecItemNotFound }, add: { _ in errSecNotAvailable }))
     XCTAssertNoThrow(try Session.saveToken("new", delete: { _ in errSecItemNotFound }, add: { _ in errSecSuccess }))
     let store = Store(loadSession: false, persistToken: { _ in throw Session.PersistenceFailure(status: errSecNotAvailable) })
-    XCTAssertThrowsError(try store.adopt(hub: URL(string: "https://management.test")!, token: "new"))
-    XCTAssertEqual(store.phase, .signedOut)
-    XCTAssertNil(store.api)
     store.api = makeStore().api
     store.phase = .ready
     XCTAssertThrowsError(try store.switchSession(token: "new"))

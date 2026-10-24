@@ -137,8 +137,7 @@ struct ChannelTeamScreen: View {
 
   private func save(_ next: ChannelTeam?) {
     action.run {
-      var settings: Fields = ["team": next.map { AnyEncodable($0) } ?? .null]
-      if next != nil { settings["replyInThread"] = AnyEncodable(true) }
+      let settings = ChannelTeam.settingsPatch(next)
       try await store.updateChannel(channel.id, ["settings": AnyEncodable(settings)])
       dismiss()
     }

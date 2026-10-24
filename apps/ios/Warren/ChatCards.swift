@@ -42,7 +42,7 @@ struct FileChip: View {
     .quickLookPreview($preview)
     .task(id: id) {
       guard isImage, image == nil, let url = try? await store.localFile(id, name: name) else { return }
-      image = UIImage(contentsOfFile: url.path())
+      image = AttachmentThumbnail.image(at: url)
     }
   }
 

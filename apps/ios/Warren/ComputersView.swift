@@ -45,7 +45,7 @@ struct ComputersView: View {
     }
     .task(id: store.route) {
       // a tapped "needs you on its computer" notification
-      guard case .computer(let id) = store.route else { return }
+      guard store.canViewComputers, case .computer(let id) = store.route else { return }
       store.route = nil
       if !store.computers.contains(where: { $0.id == id }) { await store.refreshComputers() }
       path = [id]
@@ -93,7 +93,7 @@ struct ScreenThumb: View {
     .task(id: "\(computer.id):\(computer.status):\(computer.code ?? ""):\(store.session)") {
       image = nil
       // a screen with a code opens only with it, from its own page
-      guard computer.status == "ready", computer.code == nil else { return }
+      guard store.canViewComputers, computer.status == "ready", computer.code == nil else { return }
       while !Task.isCancelled {
         do {
           let f = try await store.screen(computer, maxAge: 5000)
@@ -133,7 +133,7 @@ struct ComputerDetail: View {
   @State private var codeTry = 0
 
   var body: some View {
-    if let c = computer {
+    if store.canViewComputers, let c = computer {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           if let help = c.help {
@@ -174,7 +174,7 @@ struct ComputerDetail: View {
       .toolbar { ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) } }
       .toolbar(.hidden, for: .tabBar)
       .task(id: "\(c.status) \(c.code ?? "") \(codeTry) \(store.session)") { await stream(c) }
-    } else {
+    } else if store.canViewComputers {
       ContentUnavailableView("Computer not found", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
     }
   }

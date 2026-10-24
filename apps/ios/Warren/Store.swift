@@ -11,7 +11,15 @@ final class Store {
   var phase: Phase = .signedOut
   var api: API?
   var me: User?
-  var role: String = "member"
+  var role: String = "member" {
+    didSet {
+      if !canViewComputers {
+        computers = []; screenCodes = [:]
+        if case .computer = route { route = nil }
+      }
+    }
+  }
+  var canViewComputers: Bool { role != "guest" }
   var workspace: Workspace?
   var channels: [Channel] = []
   var sections: [ChannelSection] = []
@@ -128,8 +136,9 @@ final class Store {
   var pendingPair: PairLink?
 
   /** Signed in by pairing with Warren on a computer (Settings → Mobile). */
-  func adopt(hub: URL, token: String) throws {
+  func adopt(hub: URL, token: String, session: URLSession = .shared) async throws {
     do { try persistToken(token) } catch {
+      _ = try? await API(base: hub, token: token, session: session).post("/api/auth/logout", Empty())
       if api != nil { signOut() }
       throw error
     }
@@ -279,7 +288,8 @@ final class Store {
   }
 
   func refreshComputers() async {
-    if let list: [Computer] = try? await fetch({ try await $0.get("/api/computers") }) { computers = list }
+    guard canViewComputers else { computers = []; return }
+    if let list: [Computer] = try? await fetch({ try await $0.get("/api/computers") }), canViewComputers { computers = list }
   }
 
   func refreshApprovals() async {
@@ -522,7 +532,7 @@ final class Store {
   var pendingApprovals: [Approval] { approvals.filter { $0.status == "pending" } }
   var unreadTotal: Int { channels.reduce(0) { $0 + $1.badge } }
   /** agents waiting on you: asking for an OK, or for help on their computer */
-  var needsYouCount: Int { pendingApprovals.count + computers.filter { $0.help != nil }.count }
+  var needsYouCount: Int { pendingApprovals.count + (canViewComputers ? computers.filter { $0.help != nil }.count : 0) }
 
   // MARK: live events
 
@@ -781,6 +791,7 @@ final class Store {
       memoryVersion += 1
       Task { do { try await refreshNotes() } catch { recordSyncError(error) } }
     case "computer":
+      guard canViewComputers else { return }
       if let e = try? d.decode(ComputerEvent.self, from: data) { upsert(e.computer) }
     case "computer_removed":
       if let e = try? d.decode(RemovedEvent.self, from: data) { computers.removeAll { $0.id == e.computerId } }

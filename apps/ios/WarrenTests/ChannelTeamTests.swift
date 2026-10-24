@@ -6,6 +6,17 @@ final class ChannelTeamTests: XCTestCase {
   private func node(_ id: String, lead: Bool = false) -> ChannelTeam.Node { .init(agentId: id, lead: lead, x: 0, y: 0) }
   private func edge(_ from: String, _ to: String) -> ChannelTeam.Edge { .init(from: from, to: to) }
 
+  func testTeamSettingsPatchLeavesReplyInThreadUnchanged() throws {
+    for team: ChannelTeam? in [ChannelTeam.empty.adding("a"), nil] {
+      let data = try JSONEncoder().encode(ChannelTeam.settingsPatch(team))
+      let settings = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      XCTAssertEqual(Set(settings.keys), ["team"])
+      XCTAssertNil(settings["replyInThread"])
+      if team == nil { XCTAssertTrue(settings["team"] is NSNull) }
+      else { XCTAssertNotNil(settings["team"] as? [String: Any]) }
+    }
+  }
+
   func testProblemsInPlainWords() {
     let t = { (nodes: [ChannelTeam.Node], edges: [ChannelTeam.Edge]) in ChannelTeam(nodes: nodes, edges: edges).problem }
     XCTAssertEqual(t([], []), "Add at least one agent to the team.")

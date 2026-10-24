@@ -1,4 +1,6 @@
 import Foundation
+import ImageIO
+import UIKit
 import UniformTypeIdentifiers
 
 extension Store {
@@ -53,5 +55,29 @@ extension Store {
 extension UploadedFile {
   static func isImage(_ name: String) -> Bool {
     ["png", "jpg", "jpeg", "gif", "webp", "heic"].contains((name as NSString).pathExtension.lowercased())
+  }
+}
+
+@MainActor
+enum AttachmentThumbnail {
+  static let maxPixelSize = 780
+  private static let cache: NSCache<NSURL, UIImage> = {
+    let cache = NSCache<NSURL, UIImage>()
+    cache.countLimit = 64
+    cache.totalCostLimit = 24 * 1024 * 1024
+    return cache
+  }()
+
+  static func image(at url: URL) -> UIImage? {
+    if let image = cache.object(forKey: url as NSURL) { return image }
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+          let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+          ] as CFDictionary) else { return nil }
+    let image = UIImage(cgImage: thumbnail)
+    cache.setObject(image, forKey: url as NSURL, cost: thumbnail.bytesPerRow * thumbnail.height)
+    return image
   }
 }

@@ -314,6 +314,7 @@ struct Composer: View {
   var channelId: String?
   var send: (String, [String]) async throws -> Void
   @State private var text = ""
+  @State private var selection: TextSelection?
   @State private var files: [UploadedFile] = []
   @State private var uploading = 0
   @State private var sending = false
@@ -326,8 +327,46 @@ struct Composer: View {
   private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty }
   private var blocked: Bool { empty || sending || uploading > 0 }
 
+  private var caret: Int {
+    if let selection, case .selection(let range) = selection.indices {
+      return text.distance(from: text.startIndex, to: range.lowerBound)
+    }
+    return text.count
+  }
+  private var suggestions: [ComposerMentions.Suggestion] {
+    focused ? ComposerMentions.suggestions(text, caret: caret, agents: store.agents, people: store.members.filter { $0.id != store.me?.id }) : []
+  }
+
   var body: some View {
     VStack(spacing: 4) {
+      if !suggestions.isEmpty {
+        VStack(spacing: 0) {
+          ForEach(suggestions) { suggestion in
+            Button {
+              let completed = ComposerMentions.inserting(suggestion.handle, into: text, caret: caret)
+              text = completed.text
+              selection = TextSelection(insertionPoint: text.index(text.startIndex, offsetBy: completed.caret))
+              focused = true
+            } label: {
+              HStack(spacing: 10) {
+                if suggestion.actor.kind == .agent {
+                  AgentAvatar(agent: store.agent(suggestion.actor.id), size: 24, showStatus: false)
+                } else {
+                  Image(systemName: "person.crop.circle").frame(width: 24, height: 24)
+                }
+                Text(suggestion.name).fontWeight(.medium)
+                Text("@\(suggestion.handle)").foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 0)
+              }
+              .font(.subheadline)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 8)
+              .contentShape(Rectangle())
+            }.buttonStyle(.plain)
+          }
+        }
+        .glass(18)
+      }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       VStack(alignment: .leading, spacing: 0) {
         if !files.isEmpty || uploading > 0 { attachments }
@@ -344,7 +383,7 @@ struct Composer: View {
           .padding(.leading, 5)
           .padding(.bottom, 5)
           .accessibilityLabel("Attach")
-          TextField(placeholder, text: $text, axis: .vertical)
+          TextField(placeholder, text: $text, selection: $selection, axis: .vertical)
             .lineLimit(1...8)
             .focused($focused)
             .padding(.vertical, 12)
@@ -463,5 +502,46 @@ struct Composer: View {
       }
       sending = false
     }
+  }
+}
+
+enum ComposerMentions {
+  struct Suggestion: Identifiable, Equatable {
+    var actor: Actor
+    var name: String
+    var handle: String
+    var id: String { "\(actor.kind.rawValue):\(actor.id)" }
+  }
+
+  private static func range(_ text: String, caret: Int) -> Range<String.Index>? {
+    guard (0...text.count).contains(caret) else { return nil }
+    let end = text.index(text.startIndex, offsetBy: caret)
+    let before = String(text[..<end])
+    guard before.range(of: #"(?:^|\s)@([A-Za-z0-9_-]*)\z"#, options: .regularExpression) != nil,
+          let at = text[..<end].lastIndex(of: "@") else { return nil }
+    return at..<end
+  }
+
+  static func query(_ text: String, caret: Int) -> String? {
+    range(text, caret: caret).map { String(text[$0].dropFirst()) }
+  }
+
+  static func suggestions(_ text: String, caret: Int, agents: [Agent], people: [Member]) -> [Suggestion] {
+    guard let word = query(text, caret: caret)?.lowercased() else { return [] }
+    let candidates = agents.map { Suggestion(actor: Actor(kind: .agent, id: $0.id), name: $0.name, handle: $0.handle) } +
+      people.compactMap { p in personHandle(p).map { Suggestion(actor: Actor(kind: .user, id: p.id), name: p.name, handle: $0) } }
+    return Array(candidates.filter { $0.handle.lowercased().hasPrefix(word) || $0.name.lowercased().hasPrefix(word) }.prefix(6))
+  }
+
+  /** What the hub notifies a person for: their preferred name, else their first name (one word either way). */
+  static func personHandle(_ p: Member) -> String? {
+    let word = { (s: String?) in s?.split(whereSeparator: \.isWhitespace).first.map(String.init) }
+    return word(p.preferredName) ?? word(p.name)
+  }
+
+  static func inserting(_ handle: String, into text: String, caret: Int) -> (text: String, caret: Int) {
+    guard let range = range(text, caret: caret) else { return (text, caret) }
+    let before = String(text[..<range.lowerBound]) + "@\(handle) "
+    return (before + text[range.upperBound...], before.count)
   }
 }

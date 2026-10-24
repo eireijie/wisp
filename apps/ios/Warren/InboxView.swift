@@ -4,7 +4,7 @@ import SwiftUI
 struct InboxView: View {
   @Environment(Store.self) private var store
 
-  private var helpWanted: [Computer] { store.computers.filter { $0.help != nil } }
+  private var helpWanted: [Computer] { store.canViewComputers ? store.computers.filter { $0.help != nil } : [] }
   private var decided: [Approval] { store.approvals.filter { $0.status != "pending" }.prefix(20).map { $0 } }
 
   var body: some View {

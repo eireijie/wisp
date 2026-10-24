@@ -74,7 +74,9 @@ struct MainTabs: View {
       Tab("Chats", systemImage: "bubble.left.and.bubble.right.fill", value: 0) { ChatsView() }
         .badge(store.unreadTotal + store.needsYouCount)
       Tab("Agents", systemImage: "sparkles", value: 1) { AgentsView() }
-      Tab("Computers", systemImage: "macbook.and.iphone", value: 2) { ComputersView() }
+      if store.canViewComputers {
+        Tab("Computers", systemImage: "macbook.and.iphone", value: 2) { ComputersView() }
+      }
       Tab("You", systemImage: "person.crop.circle.fill", value: 3) { YouView() }
     }
     .minimizingTabBar()
@@ -84,12 +86,15 @@ struct MainTabs: View {
           .frame(maxWidth: .infinity).background(.regularMaterial)
       }
     }
+    .onChange(of: store.canViewComputers) { _, allowed in
+      if !allowed && tab == 2 { tab = 0 }
+    }
     .onChange(of: store.unreadTotal, initial: true) { store.updateBadge() }
     // a tapped notification: go to its tab; the tab's own screen opens the chat, computer or approval
     .onChange(of: store.route, initial: true) { _, route in
       switch route {
       case .chat, .approval: tab = 0
-      case .computer: tab = 2
+      case .computer: if store.canViewComputers { tab = 2 } else { store.route = nil }
       case nil: break
       }
     }

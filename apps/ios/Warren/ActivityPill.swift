@@ -181,7 +181,7 @@ struct AgentWorkSheet: View {
               StepRow(text: step, state: i == steps.count - 1 && agent.status == .busy ? .now : .done)
             }
           }
-          if let computer {
+          if store.canViewComputers, let computer {
             Section("Its computer") {
               NavigationLink { ComputerDetail(computerId: computer.id) } label: {
                 VStack(alignment: .leading, spacing: 8) {

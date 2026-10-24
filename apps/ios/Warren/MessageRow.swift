@@ -426,7 +426,7 @@ struct ComputerCard: View {
   var request: String?
 
   var body: some View {
-    if let c = store.computers.first(where: { $0.id == computerId }) {
+    if store.canViewComputers, let c = store.computers.first(where: { $0.id == computerId }) {
       NavigationLink {
         ComputerDetail(computerId: c.id)
       } label: {

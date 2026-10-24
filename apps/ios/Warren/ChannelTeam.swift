@@ -172,4 +172,8 @@ extension ChannelTeam {
   static func list(_ names: [String]) -> String {
     names.count <= 2 ? names.joined(separator: " and ") : names.dropLast().joined(separator: ", ") + " and " + names.last!
   }
+
+  static func settingsPatch(_ team: ChannelTeam?) -> Fields {
+    ["team": team.map { AnyEncodable($0) } ?? .null]
+  }
 }

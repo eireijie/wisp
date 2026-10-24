@@ -53,7 +53,7 @@ struct AgentPage: View {
           }.disabled(action.busy)
         }
         NavigationLink("Model") { AgentEditor(agent: current, panel: .model) }
-        NavigationLink("Device") { AgentEditor(agent: current, panel: .device) }
+        if store.canViewComputers { NavigationLink("Device") { AgentEditor(agent: current, panel: .device) } }
         if device != nil && store.harnessOnDevice(current) {
           NavigationLink("Who can ask it") { AgentEditor(agent: current, panel: .who) }
         }
@@ -181,7 +181,9 @@ struct AgentEditor: View {
       if fast == (old.settings?.fast ?? false) { fast = updated.settings?.fast ?? false }
       if nodeId == (old.nodeId ?? "") { nodeId = updated.nodeId ?? "" }
     }
-    .navigationDestination(item: $computer) { ComputerDetail(computerId: $0.id) }
+    .navigationDestination(item: $computer) { route in
+      if store.canViewComputers { ComputerDetail(computerId: route.id) }
+    }
   }
 
   private var identityFields: some View {
@@ -262,7 +264,7 @@ struct AgentEditor: View {
         }.disabled(!store.canManage || action.busy)
         if nodeId.isEmpty { Text("It can't answer @mentions until it has one.").font(.footnote).foregroundStyle(.secondary) }
       }
-      if let harness, harness.inComputer, let computerId = harness.computerId {
+      if store.canViewComputers, let harness, harness.inComputer, let computerId = harness.computerId {
         Section {
           LabeledContent("Sign-in", value: harness.signedIn == true ? "Signed in" : harness.signedIn == false ? "Not signed in" : "Unknown")
           NavigationLink("Open computer") { ComputerDetail(computerId: computerId) }

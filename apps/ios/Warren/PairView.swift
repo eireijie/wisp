@@ -157,7 +157,7 @@ struct PairView: View {
         let claimed = try await Pairing.claim(link, at: hub)
         step = .code(claimed.code, workspace: claimed.workspaceName)
         let token = try await Pairing.waitForConfirm(link, at: hub)
-        try store.adopt(hub: hub, token: token)
+        try await store.adopt(hub: hub, token: token)
       } catch is CancellationError {
       } catch {
         step = .failed(error.localizedDescription)
