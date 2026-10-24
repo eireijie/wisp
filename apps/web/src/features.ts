@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { resolveFeatures, type FeatureKey, type Features } from "@warren/core";
+import { resolveFeatures, type FeatureKey, type Features } from "@wisp/core";
 import { api } from "./api.ts";
 import { useStore } from "./store.ts";
 

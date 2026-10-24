@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { KeyRound, Loader2, MonitorOff, RefreshCw, Sparkle } from "lucide-react";
-import type { ComputerAction, RecordedStep } from "@warren/core";
+import type { ComputerAction, RecordedStep } from "@wisp/core";
 import { ApiError, api, getToken } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { cx } from "./ui.tsx";

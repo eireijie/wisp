@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Allowance, Change } from "@warren/core";
+import type { Allowance, Change } from "@wisp/core";
 import { api } from "./api.ts";
 import { useStore } from "./store.ts";
 

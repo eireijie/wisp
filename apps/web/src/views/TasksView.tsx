@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Crown, GitMerge, Hand, Loader2, Paperclip, Plus, Sparkles, WifiOff, X } from "lucide-react";
-import { harnessInfo, type Actor, type Agent } from "@warren/core";
+import { harnessInfo, type Actor, type Agent } from "@wisp/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, useTeams } from "../store.ts";
 import { go, href } from "../router.ts";

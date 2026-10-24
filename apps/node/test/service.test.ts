@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { REPO_ROOT } from "@warren/update";
+import { REPO_ROOT } from "@wisp/update";
 import { isService, spec, systemdUnit } from "../src/service.ts";
 
 describe("warren service", () => {

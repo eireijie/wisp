@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
-import type { HarnessLogin } from "@warren/core";
+import type { HarnessLogin } from "@wisp/core";
 
 /**
  * Signing a harness account in from Warren: the device runs the harness's own sign-in command

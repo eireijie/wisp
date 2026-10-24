@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { RegistryServer } from "@warren/core";
+import type { RegistryServer } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 

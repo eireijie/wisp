@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http2 from "node:http2";
-import { parseMentions, type ClientEvent, type Message } from "@warren/core";
+import { parseMentions, type ClientEvent, type Message } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 /**

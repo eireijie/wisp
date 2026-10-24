@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { HARNESSES, VM_HARNESSES, harnessInfo, runsInVm } from "@warren/core";
+import { HARNESSES, VM_HARNESSES, harnessInfo, runsInVm } from "@wisp/core";
 import { SIGNED_IN, SIGN_IN_COMMAND, recipeTag, runArgs } from "../src/computers/docker.ts";
 import { exec, jpegSize } from "../src/computers/driver.ts";
 import { localFiles, shellFiles } from "../src/computers/transfer.ts";

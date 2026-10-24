@@ -1,4 +1,4 @@
-import { accessChecker, builtinRules, teamChain, type AccessRule, type Agent, type Decision, type Team, type Viewer } from "@warren/core";
+import { accessChecker, builtinRules, teamChain, type AccessRule, type Agent, type Decision, type Team, type Viewer } from "@wisp/core";
 import type { Store } from "./store.ts";
 
 /** Memory permissions: stored rules plus defaults that follow each workspace's agents, teams and people. */

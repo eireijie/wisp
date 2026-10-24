@@ -1,4 +1,4 @@
-import { AGENT_SCREEN, POSIX_FILES, parseKeys, parseListing, toScreen, x11Combo, type ComputerAction, type FileData, type OrgoConfig, type Screenshot } from "@warren/core";
+import { AGENT_SCREEN, POSIX_FILES, parseKeys, parseListing, toScreen, x11Combo, type ComputerAction, type FileData, type OrgoConfig, type Screenshot } from "@wisp/core";
 
 /**
  * Orgo (orgo.ai) cloud computers, driven from the hub with the workspace's API key. The key

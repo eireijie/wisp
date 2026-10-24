@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { REPO_ROOT } from "@warren/update";
+import { REPO_ROOT } from "@wisp/update";
 
 export type ServiceKind = "hub" | "node";
 

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import WebSocket from "ws";
-import { ComputerAction, LOAN_MAX_MINUTES, TRANSFER_ACTIONS, activeLoan, lentNow, tunnelFrame, type Actor, type Approval, type DeviceConfig, type DeviceLoan, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
+import { ComputerAction, LOAN_MAX_MINUTES, TRANSFER_ACTIONS, activeLoan, lentNow, tunnelFrame, type Actor, type Approval, type DeviceConfig, type DeviceLoan, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import { OrgoClient } from "./orgo.ts";
 import { relayVnc } from "./vnc-relay.ts";

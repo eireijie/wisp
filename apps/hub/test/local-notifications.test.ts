@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Actor, ClientEvent } from "@warren/core";
+import type { Actor, ClientEvent } from "@wisp/core";
 
 vi.mock("../../web/src/router.ts", () => ({ go: vi.fn() }));
 const { pushOnHere } = vi.hoisted(() => ({ pushOnHere: vi.fn(() => false) }));

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowUp, Copy, ExternalLink, Loader2, MoreHorizontal, Plus } from "lucide-react";
-import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@warren/core";
+import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@wisp/core";
 import { api } from "../../api.ts";
 import { useDevices } from "../../devices.ts";
 import { href } from "../../router.ts";

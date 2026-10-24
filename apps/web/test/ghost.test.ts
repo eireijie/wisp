@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Approval, Computer } from "@warren/core";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import type { Approval, Computer } from "@wisp/core";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost } from "../src/components/Ghost.tsx";
 import { agentMood } from "../src/ghostMood.ts";
 import { activitySnapshot, subscribeActivity } from "../src/ghostActivity.ts";

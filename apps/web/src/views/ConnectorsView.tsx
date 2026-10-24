@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BadgeCheck, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, ShieldQuestion, Trash2 } from "lucide-react";
-import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, entryLogos, harnessSupportsConnectors, isMasked, logoUrl, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
+import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, entryLogos, harnessSupportsConnectors, isMasked, logoUrl, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@wisp/core";
 import { api } from "../api.ts";
 import { Button, Field, Input, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 import { AgentPicker, AgentStack, AppLogo, Group, IconTile } from "../components/ShopParts.tsx";

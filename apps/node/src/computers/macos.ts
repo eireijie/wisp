@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fitInto, type KeyCombo } from "@warren/core";
+import { fitInto, type KeyCombo } from "@wisp/core";
 import { ActionError, cached, exec, must, type Button, type Direction, type Driver, type Shot, type Size } from "./driver.ts";
 
 /**

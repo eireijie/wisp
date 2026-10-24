@@ -1,5 +1,5 @@
 {
-  "name": "@warren/mcp",
+  "name": "@wisp/mcp",
   "version": "0.0.1",
   "type": "module",
   "license": "Apache-2.0",
@@ -8,10 +8,10 @@
     "warren-mcp": "src/main.ts"
   },
   "dependencies": {
-    "@warren/sdk": "*",
+    "@wisp/sdk": "*",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "zod": "^3.23.0",
     "ws": "^8.18.0",
-    "@warren/core": "*"
+    "@wisp/core": "*"
   }
 }

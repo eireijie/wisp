@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Mic, MicOff, PhoneOff } from "lucide-react";
-import type { Agent } from "@warren/core";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import type { Agent } from "@wisp/core";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api, observeEvents } from "../api.ts";
 import { useStore } from "../store.ts";
 import { useMotionReduced } from "../theme.ts";

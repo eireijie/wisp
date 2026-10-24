@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Crown, Plus, Search, X } from "lucide-react";
-import { teamProblem, type Agent, type ChannelTeam, type ChannelTeamNode } from "@warren/core";
+import { teamProblem, type Agent, type ChannelTeam, type ChannelTeamNode } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { AgentAvatar, Input, agentVar, cx } from "./ui.tsx";
 

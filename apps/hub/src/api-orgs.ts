@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { FEATURE_KEYS, FEATURE_PRESETS, MAX_MODEL_ID_LENGTH, type Features } from "@warren/core";
+import { FEATURE_KEYS, FEATURE_PRESETS, MAX_MODEL_ID_LENGTH, type Features } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { bearer, issueToken, revokeToken } from "./auth.ts";
 import { deviceLabel } from "./api-settings.ts";

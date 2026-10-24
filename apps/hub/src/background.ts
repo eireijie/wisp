@@ -1,4 +1,4 @@
-import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, type BackgroundUsage, type Followup } from "@warren/core";
+import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, type BackgroundUsage, type Followup } from "@wisp/core";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 

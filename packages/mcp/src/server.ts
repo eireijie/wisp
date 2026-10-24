@@ -2,8 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { WarrenClient } from "@warren/sdk";
-import { SETTINGS_HARNESSES, type Screenshot } from "@warren/core";
+import { WarrenClient } from "@wisp/sdk";
+import { SETTINGS_HARNESSES, type Screenshot } from "@wisp/core";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 const text = (t: string): { content: Content[] } => ({ content: [{ type: "text" as const, text: t }] });

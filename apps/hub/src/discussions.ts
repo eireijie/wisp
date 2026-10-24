@@ -1,4 +1,4 @@
-import type { Actor, Discussion } from "@warren/core";
+import type { Actor, Discussion } from "@wisp/core";
 import { id } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 

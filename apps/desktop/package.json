@@ -1,5 +1,5 @@
 {
-  "name": "@warren/desktop",
+  "name": "@wisp/desktop",
   "productName": "Warren",
   "version": "0.0.2",
   "description": "Warren for Mac, Windows and Linux: the workspace in its own window, a hub on this computer, and this computer as a device for agents.",

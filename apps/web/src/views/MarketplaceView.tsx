@@ -43,7 +43,7 @@ import {
   type Skill,
   type StoreApp,
   type StoreSkill,
-} from "@warren/core";
+} from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href, type MarketSection } from "../router.ts";

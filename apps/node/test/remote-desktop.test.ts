@@ -4,7 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { vncAuthResponse } from "@warren/core/src/vnc.ts";
+import { vncAuthResponse } from "@wisp/core/src/vnc.ts";
 import { signedInVnc, tightVncMsiArgs, x11vncArgs, newRemoteDesktop } from "../src/computers/remote-desktop.ts";
 import { MAX_TRIES, ScreenLock, codeProblem, hashCode } from "../src/screen-lock.ts";
 

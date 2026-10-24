@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import { MAX_MODEL_ID_LENGTH, type HubToNode, type Message, type NodeToHub } from "@warren/core";
+import { MAX_MODEL_ID_LENGTH, type HubToNode, type Message, type NodeToHub } from "@wisp/core";
 import Database from "better-sqlite3";
 import { fileName, limitParam } from "../src/api.ts";
 import { buildHub } from "../src/app.ts";
@@ -12,7 +12,7 @@ import type { Hub } from "../src/hub.ts";
 import { Store } from "../src/store.ts";
 import { workspaceLead } from "../src/lead.ts";
 import { foldTeams } from "../src/fold-teams.ts";
-import { teamProblem } from "@warren/core";
+import { teamProblem } from "@wisp/core";
 
 let dir: string;
 let base: string;

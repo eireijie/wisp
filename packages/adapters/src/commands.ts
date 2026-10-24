@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { frontMatter, shortDescription, type CommandOption } from "@warren/core";
+import { frontMatter, shortDescription, type CommandOption } from "@wisp/core";
 
 /**
  * Commands and skills a harness keeps in files on this device, for the "/" menu in chat.

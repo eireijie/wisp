@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { FEATURE_PRESETS, type Agent, type DeviceRole, type Features } from "@warren/core";
-import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
+import { FEATURE_PRESETS, type Agent, type DeviceRole, type Features } from "@wisp/core";
+import { harnessInfo, harnessLabel, runsInVm } from "@wisp/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import { accessSkipped, onPublicAddress } from "./access.ts";
 import { useStore } from "./store.ts";

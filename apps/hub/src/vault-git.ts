@@ -7,8 +7,8 @@ import { PassThrough, type Readable } from "node:stream";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { accessChecker, atLeast, type Decision, type Viewer } from "@warren/core";
-import { VaultError, isHiddenPath } from "@warren/vault";
+import { accessChecker, atLeast, type Decision, type Viewer } from "@wisp/core";
+import { VaultError, isHiddenPath } from "@wisp/vault";
 import type { Hub } from "./hub.ts";
 
 /**

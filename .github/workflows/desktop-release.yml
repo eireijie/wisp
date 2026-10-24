@@ -46,9 +46,9 @@ jobs:
           cache: npm
       - run: npm ci
       # the app's version comes from the tag
-      - run: npm version "${GITHUB_REF_NAME#desktop-v}" --no-git-tag-version --allow-same-version -w @warren/desktop
+      - run: npm version "${GITHUB_REF_NAME#desktop-v}" --no-git-tag-version --allow-same-version -w @wisp/desktop
         shell: bash
-      - run: npm run bundle -w @warren/desktop
+      - run: npm run bundle -w @wisp/desktop
         env:
           WARREN_BUNDLE_ARCH: ${{ matrix.arch }}
       - run: npx electron-builder ${{ matrix.dist }} --publish never

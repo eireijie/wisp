@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, AgentEvent, HarnessCatalog } from "@warren/core";
+import type { AccessLevel, AgentEvent, HarnessCatalog } from "@wisp/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
 import { claudeCommands } from "./commands.ts";
 import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";

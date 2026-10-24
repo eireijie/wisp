@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
-import { SETTINGS_HARNESSES, redactServer, type ShelfItem } from "@warren/core";
+import { SETTINGS_HARNESSES, redactServer, type ShelfItem } from "@wisp/core";
 import { harnessConfigPath, parseToml, readHarnessSettings, type HarnessHomes } from "./harness-config.ts";
 
 /**

@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { WarrenClient } from "@warren/sdk";
-import { createWarrenMcp } from "@warren/mcp/src/server.ts";
+import { WarrenClient } from "@wisp/sdk";
+import { createWarrenMcp } from "@wisp/mcp/src/server.ts";
 import { buildHub } from "../src/app.ts";
 
 let dir: string;

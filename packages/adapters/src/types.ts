@@ -1,4 +1,4 @@
-import type { AccessLevel, AgentEvent, ConnectorSpec, HarnessCatalog } from "@warren/core";
+import type { AccessLevel, AgentEvent, ConnectorSpec, HarnessCatalog } from "@wisp/core";
 
 /** How a harness reaches the Warren MCP server (memory, chat, tasks tools). */
 export interface McpServerSpec {

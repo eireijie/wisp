@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { FEATURE_INFO, FEATURE_KEYS, type BackgroundWork, type FeatureKey } from "@warren/core";
+import { FEATURE_INFO, FEATURE_KEYS, type BackgroundWork, type FeatureKey } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { DEFAULT_DAILY_CAP, parseWhen } from "./background.ts";
 import { setWorkspaceFeatures, workspaceFeatures } from "./features.ts";

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { Duplex } from "node:stream";
-import { ByteReader, rfbLetIn, rfbSignIn } from "@warren/core/src/vnc.ts";
+import { ByteReader, rfbLetIn, rfbSignIn } from "@wisp/core/src/vnc.ts";
 import { exec, has } from "./driver.ts";
 
 /**

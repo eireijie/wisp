@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { RESTART_CODE, underKeeper, watchForUpdates } from "@warren/update";
+import { RESTART_CODE, underKeeper, watchForUpdates } from "@wisp/update";
 import { buildHub } from "./app.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));

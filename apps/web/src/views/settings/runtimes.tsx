@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Copy, Loader2, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
-import { HARNESSES, harnessInfo, harnessLabel, runsInVm, type HarnessInfo } from "@warren/core";
+import { HARNESSES, harnessInfo, harnessLabel, runsInVm, type HarnessInfo } from "@wisp/core";
 import { api } from "../../api.ts";
 import { usableDevices, useDevices, type DeviceInfo } from "../../devices.ts";
 import { href } from "../../router.ts";

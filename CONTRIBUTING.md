@@ -25,7 +25,7 @@ Open http://localhost:5173 during development; it proxies the API to the hub.
 
 - Keep the default experience simple; put advanced options one click deeper.
 - Every vault change must stay a plain markdown file plus a git commit, so users can always leave with their data.
-- New API routes check access through `can()` from `@warren/core`; agents never see another agent's private scope without a grant.
+- New API routes check access through `can()` from `@wisp/core`; agents never see another agent's private scope without a grant.
 - Add a test with each fix or feature. Integration tests in `apps/hub/test` start a real hub on a random port.
 
 ## Installing and releasing

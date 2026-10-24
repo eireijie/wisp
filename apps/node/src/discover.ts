@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { DiscoveredAgent } from "@warren/core";
+import type { DiscoveredAgent } from "@wisp/core";
 
 /**
  * Agents that already live on this device: Hermes profiles, OpenClaw workspaces, Claude Code

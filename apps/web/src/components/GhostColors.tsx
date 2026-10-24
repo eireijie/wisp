@@ -1,4 +1,4 @@
-import { GHOST_COLORS, GHOST_PALETTES, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import { GHOST_COLORS, GHOST_PALETTES, type GhostAppearance } from "@wisp/core/src/appearance.ts";
 import { cx } from "./ui.tsx";
 
 type Colors = Pick<GhostAppearance, "color" | "color2">;

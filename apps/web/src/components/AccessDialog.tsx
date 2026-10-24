@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Bot, Eye, Pencil, Pin, RotateCcw, Users } from "lucide-react";
-import { atLeast, type AccessRule, type Agent, type MemoryLevel, type Subject } from "@warren/core";
+import { atLeast, type AccessRule, type Agent, type MemoryLevel, type Subject } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type Member } from "../store.ts";
 import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";

@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { RESTART_CODE, underKeeper } from "@warren/update";
+import { RESTART_CODE, underKeeper } from "@wisp/update";
 import type { Caller } from "./api.ts";
 import { id } from "./auth.ts";
 import type { Hub } from "./hub.ts";

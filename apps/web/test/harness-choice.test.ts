@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HARNESSES } from "@warren/core";
+import { HARNESSES } from "@wisp/core";
 
 describe("harness choice", () => {
   it("explains every harness", () => {

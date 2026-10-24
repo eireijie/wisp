@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import type { HubToNode } from "@warren/core";
+import type { HubToNode } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 
 let dir: string;

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { REPO_ROOT, checkForUpdate, run, runUpdate, version, type Runner, type UpdateCheck, type UpdateResult, type Version } from "@warren/update";
+import { REPO_ROOT, checkForUpdate, run, runUpdate, version, type Runner, type UpdateCheck, type UpdateResult, type Version } from "@wisp/update";
 import type { Hub } from "./hub.ts";
 
 /** How long a check for updates is reused before asking GitHub again. */
@@ -17,7 +17,7 @@ export interface UpdateState {
 const idle = (): UpdateState => ({ state: "idle", message: "", log: [] });
 
 /**
- * Updating the hub and devices from the web app. The work itself is in @warren/update; this keeps
+ * Updating the hub and devices from the web app. The work itself is in @wisp/update; this keeps
  * track of what's in progress so the Settings and Devices pages can show it. Finishing an update
  * writes the update marker, and the process restarts itself (see main.ts and the device CLI).
  */

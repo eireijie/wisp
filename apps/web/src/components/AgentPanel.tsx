@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Activity, BookOpen, Check, MessageSquare, ChevronRight, Square, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, Radar, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
-import { harnessLabel, type Agent } from "@warren/core";
-import { soulPath } from "@warren/core/src/soul.ts";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { harnessLabel, type Agent } from "@wisp/core";
+import { soulPath } from "@wisp/core/src/soul.ts";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, useTeams, type ComputerInfo, type LiveRun } from "../store.ts";
 import { useFeature } from "../features.ts";

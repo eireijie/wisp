@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { shortDescription, type AccessLevel, type AgentEvent, type CommandOption, type ConnectorSpec, type HarnessCatalog, type ModelOption } from "@warren/core";
+import { shortDescription, type AccessLevel, type AgentEvent, type CommandOption, type ConnectorSpec, type HarnessCatalog, type ModelOption } from "@wisp/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
 import { commandVersion, launched, spawnCommand, stopProcess } from "./process.ts";
 

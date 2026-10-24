@@ -1,7 +1,7 @@
-import { GITHUB_URL } from "@warren/core";
+import { GITHUB_URL } from "@wisp/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { Bell, ChevronLeft, ChevronRight, Gauge, Monitor, Palette, Settings, SlidersHorizontal, Users } from "lucide-react";
-import { resolveFeatures, type Features } from "@warren/core";
+import { resolveFeatures, type Features } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { appHashBeforeSettings, go, href, type SettingsPage } from "../router.ts";

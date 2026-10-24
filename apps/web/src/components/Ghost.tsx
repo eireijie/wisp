@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { GhostAppearance, GhostShape } from "@warren/core";
-import { GHOST_ASLEEP } from "@warren/core/src/appearance.ts";
+import type { GhostAppearance, GhostShape } from "@wisp/core";
+import { GHOST_ASLEEP } from "@wisp/core/src/appearance.ts";
 import { useMotionReduced } from "../theme.ts";
 import { useGhostActivity } from "../ghostActivity.ts";
 import { ghostArms } from "./GhostArms.tsx";

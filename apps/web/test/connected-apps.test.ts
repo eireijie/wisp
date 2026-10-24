@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONNECTOR_CATALOG, type MarketplaceEntry, type MarketplaceInstall } from "@warren/core";
+import { CONNECTOR_CATALOG, type MarketplaceEntry, type MarketplaceInstall } from "@wisp/core";
 import { connectBlocked, connectSummary } from "../src/views/ConnectorsView.tsx";
 
 vi.mock("../src/api.ts", () => ({ api: vi.fn() }));

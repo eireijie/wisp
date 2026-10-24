@@ -1,7 +1,7 @@
 import { toolKey } from "./agentActivity.ts";
 import { useEffect, useState } from "react";
 import { CalendarClock, Check, ListChecks, RotateCcw, ShieldQuestion, X } from "lucide-react";
-import { describeCron, type Agent, type Routine } from "@warren/core";
+import { describeCron, type Agent, type Routine } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { undoChange, useChanges } from "../changes.ts";

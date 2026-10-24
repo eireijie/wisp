@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 import { isLocalOnlyHost, setupProgress, stepsDone, type OnboardingState } from "../src/onboarding.ts";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));

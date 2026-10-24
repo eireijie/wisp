@@ -1,5 +1,5 @@
-import { accessChecker, atLeast, covers, personDir, soulPath, startupRules, teamChain, teamsBelow, type Agent, type Team } from "@warren/core";
-import type { Vault } from "@warren/vault";
+import { accessChecker, atLeast, covers, personDir, soulPath, startupRules, teamChain, teamsBelow, type Agent, type Team } from "@wisp/core";
+import type { Vault } from "@wisp/vault";
 import type { MemoryAccess } from "./access.ts";
 import { Profiles } from "./profile.ts";
 import type { Store } from "./store.ts";

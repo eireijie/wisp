@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import type { Message } from "@warren/core";
+import type { Message } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 const KEY = "push_vapid";

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { LayoutList } from "lucide-react";
-import type { Agent, AgentCommand } from "@warren/core";
+import type { Agent, AgentCommand } from "@wisp/core";
 import { api } from "../api.ts";
 import type { ChannelInfo } from "../store.ts";
 import type { ChannelMember } from "./Channels.tsx";

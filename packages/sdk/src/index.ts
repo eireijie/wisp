@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@warren/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@wisp/core";
 
 export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747

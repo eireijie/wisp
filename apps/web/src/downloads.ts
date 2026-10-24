@@ -1,4 +1,4 @@
-import { GITHUB_URL } from "@warren/core";
+import { GITHUB_URL } from "@wisp/core";
 /**
  * Where to download the Warren app. Release file names never change between versions
  * (.github/workflows/desktop-release.yml), so "latest/download/<name>" is always the newest build.

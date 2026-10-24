@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { WarrenClient } from "@warren/sdk";
+import { WarrenClient } from "@wisp/sdk";
 import { createWarrenMcp } from "./server.ts";
 
 /**

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bot, Check, ChevronRight, Cloud, Download, Laptop, Loader2, Lock, Monitor, Plus, Search, Shuffle, UserPlus, X } from "lucide-react";
-import { GHOST_WHITE, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import { GHOST_WHITE, randomAppearance, type GhostAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost } from "../components/Ghost.tsx";
 import { GhostColors } from "../components/GhostColors.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { prettyModel } from "../components/EffortSlider.tsx";
-import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@warren/core";
+import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go } from "../router.ts";

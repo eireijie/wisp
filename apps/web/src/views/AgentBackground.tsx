@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AppWindow, BellRing, Check, ChevronDown, ChevronRight, FolderOpen, Monitor, RefreshCw, X } from "lucide-react";
-import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, Followup, HarnessCatalog } from "@warren/core";
+import type { Agent, BackgroundSource, BackgroundUsage, BackgroundWork, Followup, HarnessCatalog } from "@wisp/core";
 import { effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";

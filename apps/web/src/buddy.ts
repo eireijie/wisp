@@ -1,4 +1,4 @@
-import type { ClientEvent, Message } from "@warren/core";
+import type { ClientEvent, Message } from "@wisp/core";
 import type { useStore } from "./store.ts";
 import { api } from "./api.ts";
 import { href } from "./router.ts";

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FEATURE_PRESETS } from "@warren/core";
+import { FEATURE_PRESETS } from "@wisp/core";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 const { inviteCode, orgInitials, orgSummary, orgTone, ORG_TONES } = await import("../src/orgs.ts");

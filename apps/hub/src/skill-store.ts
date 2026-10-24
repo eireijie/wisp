@@ -1,4 +1,4 @@
-import { frontMatter, linkedSkillContent, skillBody, skillLicense, skillTitle, type StoreSkill } from "@warren/core";
+import { frontMatter, linkedSkillContent, skillBody, skillLicense, skillTitle, type StoreSkill } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 /** Public SKILL.md repos the store reads live. Each skill links back to its folder there. */

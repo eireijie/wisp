@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FEATURE_PRESETS } from "@warren/core";
+import { FEATURE_PRESETS } from "@wisp/core";
 
 // the settings pages read browser state when their modules load; the list itself doesn't need it
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, THEMES: [], useAppearance: () => ({}) }));

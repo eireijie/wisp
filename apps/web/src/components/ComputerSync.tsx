@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, ClipboardCopy, Download, ExternalLink, File, Folder, FolderPlus, Home, Loader2, RefreshCw, Send, Upload, X } from "lucide-react";
-import { MAX_TRANSFER_BYTES, type FolderListing } from "@warren/core";
+import { MAX_TRANSFER_BYTES, type FolderListing } from "@wisp/core";
 import { api, getToken, ApiError } from "../api.ts";
 import type { ComputerInfo } from "../store.ts";
 import type { DeviceInfo } from "../devices.ts";

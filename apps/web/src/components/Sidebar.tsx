@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Store, Sun, SunMoon, Trash2, UserPlus } from "lucide-react";
-import type { Agent, Section } from "@warren/core";
+import type { Agent, Section } from "@wisp/core";
 import { api } from "../api.ts";
 import { useInboxCount, useStore, useWaitingOnYou, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";

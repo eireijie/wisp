@@ -5,7 +5,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import type { WebSocket } from "ws";
 import type { FastifyInstance } from "fastify";
-import type { ClientEvent, Computer, MessagePart } from "@warren/core";
+import type { ClientEvent, Computer, MessagePart } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 

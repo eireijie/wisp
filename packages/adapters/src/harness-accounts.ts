@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ACCOUNT_ID, type HarnessAccount } from "@warren/core";
+import { ACCOUNT_ID, type HarnessAccount } from "@wisp/core";
 import { HARNESS_SPECS, harnessConfigPath, harnessDir, type HarnessHomes } from "./harness-config.ts";
 
 /**

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { ClientEvent } from "@warren/core";
+import type { ClientEvent } from "@wisp/core";
 import { api } from "./api.ts";
 import { go } from "./router.ts";
 import { pushOnHere, reconcilePush, syncPushPrefs } from "./push.ts";

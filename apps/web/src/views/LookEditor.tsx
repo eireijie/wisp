@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, Loader2, RotateCcw, Shuffle } from "lucide-react";
-import type { Agent } from "@warren/core";
-import { GHOST_ACCESSORIES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import type { Agent } from "@wisp/core";
+import { GHOST_ACCESSORIES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@wisp/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { GhostColors } from "../components/GhostColors.tsx";

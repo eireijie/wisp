@@ -1,4 +1,4 @@
-import type { AgentSettings } from "@warren/core";
+import type { AgentSettings } from "@wisp/core";
 import { getToken } from "../api.ts";
 import { voiceIndex } from "./text.ts";
 

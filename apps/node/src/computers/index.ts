@@ -4,7 +4,7 @@ import net from "node:net";
 import type { Duplex } from "node:stream";
 import os from "node:os";
 import path from "node:path";
-import type { ComputerAction, ComputerSpec, DeviceCapabilities, DeviceConfig } from "@warren/core";
+import type { ComputerAction, ComputerSpec, DeviceCapabilities, DeviceConfig } from "@wisp/core";
 import { ActionError, exec, has, perform, type Driver } from "./driver.ts";
 import { DockerVm, ENGINE_LABEL, detectEngine, ensureImage, imageExists, recipeTag, LOCAL_IMAGE, type Engine } from "./docker.ts";
 import { MacDesktop } from "./macos.ts";

@@ -42,7 +42,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 import { AgentAvatar, harnessLabel, cx } from "./ui.tsx";
 
 /** Icons the connector and skill catalogs name. */

@@ -2,7 +2,7 @@ import { originReach, shareOrigin, useAccess } from "../access.ts";
 import { desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useState } from "react";
 import { ChevronLeft, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
-import type { DeviceCapabilities, DeviceRole } from "@warren/core";
+import type { DeviceCapabilities, DeviceRole } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { useDesktopInfo } from "../desktop.ts";

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { harnessInfo, type UserPrefs } from "@warren/core";
+import { harnessInfo, type UserPrefs } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { bearer, hashPassword, issueToken, revokeSubjectTokens, verifyPassword } from "./auth.ts";
 import { ComputerError } from "./computers.ts";

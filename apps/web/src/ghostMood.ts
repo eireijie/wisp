@@ -1,4 +1,4 @@
-import type { Agent, Approval, Computer } from "@warren/core";
+import type { Agent, Approval, Computer } from "@wisp/core";
 import type { GhostMood } from "./components/Ghost.tsx";
 
 export type MoodAgent = { id?: string; status?: Agent["status"]; computerId?: string | null };

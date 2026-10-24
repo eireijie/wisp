@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { RunWorkspace } from "@warren/core";
+import type { RunWorkspace } from "@wisp/core";
 
 const exec = promisify(execFile);
 

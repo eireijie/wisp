@@ -3,8 +3,8 @@ import { onPublicAddress, originReach, shareOrigin, skipAccess, useAccess } from
 import { RELEASES, desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, FileText, KeyRound, Laptop, Loader2, MessageSquareText, Monitor, Plus, Server, Smartphone, Sparkles, TerminalSquare, UtensilsCrossed, Users } from "lucide-react";
-import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@warren/core";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@wisp/core";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";

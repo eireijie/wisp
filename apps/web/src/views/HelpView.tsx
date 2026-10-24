@@ -1,4 +1,4 @@
-import { GITHUB_URL } from "@warren/core";
+import { GITHUB_URL } from "@wisp/core";
 import { useState, type ReactNode } from "react";
 import { AlertTriangle, Check, ChevronLeft, CircleHelp, ExternalLink, LifeBuoy } from "lucide-react";
 import { setExperience, useExperience, type Experience } from "../experience.tsx";

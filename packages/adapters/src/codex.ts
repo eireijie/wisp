@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@warren/core";
+import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@wisp/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
 import { codexCommands } from "./commands.ts";
 import { commandVersion, execCommand, launched, runJsonl } from "./process.ts";

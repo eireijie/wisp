@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConnectorSpec } from "@warren/core";
+import type { ConnectorSpec } from "@wisp/core";
 import { acpMcpServers, claudeArgs, codexArgs, codexEnv } from "../src/index.ts";
 
 const connectors: ConnectorSpec[] = [

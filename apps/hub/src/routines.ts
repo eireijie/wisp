@@ -1,4 +1,4 @@
-import { cronMatches, describeCron, parseCron, zonedParts, type Actor, type RecordedStep, type Routine } from "@warren/core";
+import { cronMatches, describeCron, parseCron, zonedParts, type Actor, type RecordedStep, type Routine } from "@wisp/core";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 

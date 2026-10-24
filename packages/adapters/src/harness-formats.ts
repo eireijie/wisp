@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { frontMatter, shortDescription, type HarnessSettingItem } from "@warren/core";
+import { frontMatter, shortDescription, type HarnessSettingItem } from "@wisp/core";
 
 /**
  * File formats harness configs come in, read and changed the way harness-config.ts needs: YAML and

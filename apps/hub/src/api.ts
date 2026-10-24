@@ -31,8 +31,8 @@ import {
   type MemoryLevel,
   type Subject,
   type Viewer,
-} from "@warren/core";
-import { VaultError, notePath } from "@warren/vault";
+} from "@wisp/core";
+import { VaultError, notePath } from "@wisp/vault";
 import { MEMORY_KINDS } from "./profile.ts";
 import { MAX_ROUNDS } from "./discussions.ts";
 import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, revokeToken, verifyPassword, type Principal } from "./auth.ts";

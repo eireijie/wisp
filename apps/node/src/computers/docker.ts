@@ -5,7 +5,7 @@ import net from "node:net";
 import { Duplex } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ComputerSpec, PageElement, RunOutput, VmConfig } from "@warren/core";
+import type { ComputerSpec, PageElement, RunOutput, VmConfig } from "@wisp/core";
 import { ActionError, exec, has, must, type Driver } from "./driver.ts";
 import { X11Driver } from "./x11.ts";
 import { shellFiles, x11Clipboard, type Clipboard, type Files, type ShRunner } from "./transfer.ts";

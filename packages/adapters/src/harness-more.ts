@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
-import type { HarnessSettingItem, HarnessSettingsChange } from "@warren/core";
+import type { HarnessSettingItem, HarnessSettingsChange } from "@wisp/core";
 import { asObject, editJson, editYaml, isPlainJson, manifestDirs, mcpItem, objAt, parseJsonc, parseToml, readJson, sameKey, skillItems, str, strings, toggleInList, tomlSet, type ConfigSummary } from "./harness-formats.ts";
 
 /**

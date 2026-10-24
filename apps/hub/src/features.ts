@@ -1,4 +1,4 @@
-import { FEATURE_KEYS, resolveFeatures, type FeatureKey, type Features } from "@warren/core";
+import { FEATURE_KEYS, resolveFeatures, type FeatureKey, type Features } from "@wisp/core";
 import type { Store } from "./store.ts";
 
 const KEY = "features";

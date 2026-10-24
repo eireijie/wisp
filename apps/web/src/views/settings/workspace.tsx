@@ -1,7 +1,7 @@
 import { isLocalOnlyHost } from "../../loopback.ts";
 import { useEffect, useState } from "react";
 import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
-import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
+import type { AccessRule, Agent, MemoryLevel, Subject } from "@wisp/core";
 import { api, getToken } from "../../api.ts";
 import { useStore, useTeams } from "../../store.ts";
 import { href } from "../../router.ts";

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, BookOpen, Radar, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
-import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@warren/core";
-import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
+import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@wisp/core";
+import { soulPath, soulTemplate } from "@wisp/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { ApiError, api } from "../api.ts";
 import { useStore, useTeams } from "../store.ts";

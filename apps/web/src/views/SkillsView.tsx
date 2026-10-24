@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
-import { catalogSkill, type Agent, type CatalogSkill, type Skill } from "@warren/core";
+import { catalogSkill, type Agent, type CatalogSkill, type Skill } from "@wisp/core";
 import { api } from "../api.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { Advanced, useSimple } from "../experience.tsx";

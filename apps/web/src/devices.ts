@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { Agent, DeviceCapabilities, DeviceRole, DiscoveredAgent } from "@warren/core";
-import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
+import type { Agent, DeviceCapabilities, DeviceRole, DiscoveredAgent } from "@wisp/core";
+import { harnessInfo, harnessLabel, runsInVm } from "@wisp/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import type { ComputerInfo } from "./store.ts";
 

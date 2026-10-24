@@ -4,7 +4,7 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { type ConfigSummary, type TomlDoc, type TomlEntry, asObject, boolish, deepEqual, findSkills, mcpItem, parseToml, readJson, safeWrite, sameKey, setPath, str, strings, tomlSet, tomlString, yamlSetList, yamlSetScalar } from "./harness-formats.ts";
 import { MORE_HARNESSES, configFileFor, type HarnessSpec, type SpecDirs } from "./harness-more.ts";
-import { SETTING_NAME, frontMatter, shortDescription, type HarnessSettingItem, type HarnessSettings, type HarnessSettingsChange, type HarnessSkillFile } from "@warren/core";
+import { SETTING_NAME, frontMatter, shortDescription, type HarnessSettingItem, type HarnessSettings, type HarnessSettingsChange, type HarnessSkillFile } from "@wisp/core";
 
 /**
  * A harness's own settings, straight from its config file: Hermes's ~/.hermes/config.yaml, Codex's

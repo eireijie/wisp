@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Phone } from "lucide-react";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api, connectEvents, getToken } from "../api.ts";
 import { buddyNoticeWithRoot, completedTasks, unlessMuted, type BuddyNotice, type BuddyTask } from "../buddy.ts";
 import type { BuddySettings } from "../desktop.ts";

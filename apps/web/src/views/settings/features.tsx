@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Bell, CircleDot, Clock, Ghost, ListChecks, Phone, UserPlus } from "lucide-react";
-import { FEATURE_INFO, FEATURE_KEYS, type FeatureKey, type Features } from "@warren/core";
+import { FEATURE_INFO, FEATURE_KEYS, type FeatureKey, type Features } from "@wisp/core";
 import { useStore } from "../../store.ts";
 import { setFeatures, useFeatures } from "../../features.ts";
 import { AskAgent } from "../../components/AskAgent.tsx";

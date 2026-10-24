@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { HarnessAdapter } from "@warren/adapters";
-import { WarrenClient } from "@warren/sdk";
+import type { HarnessAdapter } from "@wisp/adapters";
+import { WarrenClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 

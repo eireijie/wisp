@@ -1,4 +1,4 @@
-import { HARNESSES } from "@warren/core";
+import { HARNESSES } from "@wisp/core";
 import { acpAdapter } from "./acp.ts";
 import { claudeCode } from "./claude-code.ts";
 import { codex } from "./codex.ts";

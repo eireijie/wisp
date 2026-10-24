@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import type { HarnessAdapter, RunInput } from "@warren/adapters";
-import { WarrenClient } from "@warren/sdk";
+import type { HarnessAdapter, RunInput } from "@wisp/adapters";
+import { WarrenClient } from "@wisp/sdk";
 import { NodeDaemon, normalizeHubUrl } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 

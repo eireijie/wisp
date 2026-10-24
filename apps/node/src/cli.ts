@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { HARNESSES } from "@warren/core";
-import { deviceAdapters } from "@warren/adapters";
+import { HARNESSES } from "@wisp/core";
+import { deviceAdapters } from "@wisp/adapters";
 import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { listening, remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
@@ -14,7 +14,7 @@ import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
 import { discoverAgents } from "./discover.ts";
 import { installService, isService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
-import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
+import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@wisp/update";
 
 const HELP = `warren — run a Warren hub, or connect this device to one
 

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@warren/core";
+import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 import { CALLBACK_PATH } from "./connector-auth.ts";

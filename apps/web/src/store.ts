@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@warren/core";
+import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@wisp/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";

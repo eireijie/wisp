@@ -1,4 +1,4 @@
-import type { ClientEvent, Message } from "@warren/core";
+import type { ClientEvent, Message } from "@wisp/core";
 import type { ListenCallbacks, VoiceListener, VoiceSpeaker } from "./providers.ts";
 import { isSpeechEcho, spokenReply } from "./text.ts";
 

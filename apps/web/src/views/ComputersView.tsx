@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ChevronLeft, ChevronRight, ClipboardList, Cloud, Eye, FolderOpen, Hand, Info, Laptop, Loader2, Lock, Minimize2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Upload, Video, X } from "lucide-react";
-import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
+import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@wisp/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";

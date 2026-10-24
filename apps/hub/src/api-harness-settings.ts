@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { ACCOUNT_ID, HarnessAccountOp, HarnessSettingsChange, SETTINGS_HARNESSES, describeChange, harnessLabel, type HarnessSettings, type HarnessSkillFile } from "@warren/core";
+import { ACCOUNT_ID, HarnessAccountOp, HarnessSettingsChange, SETTINGS_HARNESSES, describeChange, harnessLabel, type HarnessSettings, type HarnessSkillFile } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";

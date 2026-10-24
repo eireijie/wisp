@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import type { Duplex } from "node:stream";
-import { AGENT_SCREEN, MAX_TRANSFER_BYTES, parseKeys, toScreen, type ComputerAction, type FileData, type KeyCombo, type PageElement, type RunOutput, type Screenshot } from "@warren/core";
+import { AGENT_SCREEN, MAX_TRANSFER_BYTES, parseKeys, toScreen, type ComputerAction, type FileData, type KeyCombo, type PageElement, type RunOutput, type Screenshot } from "@wisp/core";
 import type { Clipboard, Files } from "./transfer.ts";
 
 export interface Size {

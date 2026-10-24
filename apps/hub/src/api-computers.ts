@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { ComputerAction, DEVICE_HARNESS, FileName, LOAN_MAX_MINUTES, MAX_TRANSFER_BYTES, activeLoan, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type FileData, type FolderListing, type RecordedStep } from "@warren/core";
+import { ComputerAction, DEVICE_HARNESS, FileName, LOAN_MAX_MINUTES, MAX_TRANSFER_BYTES, activeLoan, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type FileData, type FolderListing, type RecordedStep } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";

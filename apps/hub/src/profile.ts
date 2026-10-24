@@ -1,5 +1,5 @@
-import { personDir } from "@warren/core";
-import { parseNote, type CommitAuthor, type Vault } from "@warren/vault";
+import { personDir } from "@wisp/core";
+import { parseNote, type CommitAuthor, type Vault } from "@wisp/vault";
 
 /** What agents remember about a person. "did" is a dated journal of what they did. */
 export const MEMORY_KINDS = ["preference", "plan", "did", "detail"] as const;
