@@ -1,190 +1,143 @@
-#!/usr/bin/env bash
-# Install Warren on macOS or Linux.
-#
-#   curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash
-#
-# With no options it asks what this computer is for. Options:
-#   --hub-server                 run the hub here (the workspace and web app), started at boot/login
-#   --hub URL --token T [--name N]
-#                                connect this computer to a hub as a device (from Warren → Devices → Add device)
-#   --dir DIR                    where to put Warren (default ~/warren, or $WARREN_DIR)
-#   --yes                        don't ask before installing a VM engine during `warren setup`
-#   --no-service                 install only; don't start anything
-#   --no-device                  with --hub-server: don't also make this computer a device for agents
-#   --no-open                    don't open the browser at the end
-#
-# It checks for git and Node 22+, clones (or updates) Warren, installs its dependencies, puts the
-# `warren` command on your PATH, and sets it up to keep running. Nothing is installed with sudo.
-set -euo pipefail
+#!/bin/sh
+# Install Wisp without questions: curl -fsSL https://wisp.pages.dev/install | sh
+# Join instead: ... | sh -s join [invite-link]
+# Legacy: --hub-server, --hub URL --token VALUE, --name NAME, --dir DIR,
+# --yes, --no-service, --no-device and --no-open are still accepted.
+set -eu
 
 WARREN_REPO="${WARREN_REPO:-https://github.com/eireijie/warren.git}"
 DIR="${WARREN_DIR:-$HOME/warren}"
-MODE="" HUB="" TOKEN="" NAME="" YES="" SERVICE=1 DEVICE=1 OPEN=1
-
-# an option that takes a value, given without one ("--hub" at the end), is a mistake worth a message, not "unbound variable"
-value() { [ -n "$2" ] || { printf '\033[31m%s\033[0m\n' "$1 needs a value, for example: $1 $3" >&2; exit 1; }; }
+MODE=hub HUB= TOKEN= NAME= INVITE= SERVICE=1 DEVICE=1 OPEN=1
+fail() { printf '%s\n' "✗ $*" >&2; exit 1; }
+value() { [ -n "$2" ] || fail "$1 needs a value."; }
 while [ $# -gt 0 ]; do
   case "$1" in
+    join) MODE=join; if [ $# -gt 1 ]; then case "$2" in -*) ;; *) INVITE="$2"; shift ;; esac; fi ;;
     --hub-server) MODE=hub ;;
-    --hub) value "$1" "${2:-}" "http://my-server:4747"; HUB="$2"; MODE=device; shift ;;
-    --token) value "$1" "${2:-}" "wr_node_…"; TOKEN="$2"; shift ;;
-    --name) value "$1" "${2:-}" "my-laptop"; NAME="$2"; shift ;;
-    --dir) value "$1" "${2:-}" "~/warren"; DIR="$2"; shift ;;
-    --yes|-y) YES=1 ;;
-    --no-service) SERVICE="" ;;
-    --no-device) DEVICE="" ;;
-    --no-open) OPEN="" ;;
-    -h|--help) sed -n '2,17p' "$0" 2>/dev/null || true; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    --hub) value "$1" "${2:-}"; HUB="$2"; MODE=device; shift ;;
+    --token) value "$1" "${2:-}"; TOKEN="$2"; shift ;;
+    --name) value "$1" "${2:-}"; NAME="$2"; shift ;;
+    --dir) value "$1" "${2:-}"; DIR="$2"; shift ;;
+    --yes|-y) : ;;
+    --no-service) SERVICE= ;;
+    --no-device) DEVICE= ;;
+    --no-open) OPEN= ;;
+    -h|--help) printf '%s\n' 'Wisp' 'Usage: install.sh [join [invite-link]] [--dir DIR] [--no-service] [--no-open]' 'Legacy: --hub-server | --hub URL --token VALUE [--name NAME]'; exit 0 ;;
+    *) fail "Unknown option: $1" ;;
   esac
   shift
 done
-
-bold() { printf '\033[1m%s\033[0m\n' "$*"; }
-fail() { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
-# piped into bash, stdin is the script, so questions read from the terminal
-ask() {
-  local q="$1" a=""
-  if [ -r /dev/tty ]; then read -r -p "$q" a </dev/tty || true; fi
-  printf '%s' "$a"
-}
-
-# this computer's address on its home network, for other devices on the same Wi-Fi
-lan_ip() {
-  if [ "$(uname)" = Darwin ]; then ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true
-  else hostname -I 2>/dev/null | tr ' ' '\n' | grep -Ev '^(100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|172\.1[7-9]\.|127\.)' | head -1 || true; fi
-}
-# the browser, when someone is sitting at this computer (not over SSH, and there's a screen)
-open_browser() {
-  [ -n "$OPEN" ] && [ -z "${SSH_CONNECTION:-}" ] || return 0
-  if [ "$(uname)" = Darwin ]; then open "$1" >/dev/null 2>&1 || true
-  elif { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; } && command -v xdg-open >/dev/null; then (xdg-open "$1" >/dev/null 2>&1 &) || true
-  fi
-}
-
-bold "Warren installer"
-
-# 1. git and Node 22+
-command -v git >/dev/null || fail "git is missing. Install it (macOS: xcode-select --install; Debian/Ubuntu: sudo apt-get install -y git) and run this again."
-node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
-if ! command -v node >/dev/null || [ "$(node_major)" -lt 22 ]; then
-  if [ "$(uname)" = Darwin ] && command -v brew >/dev/null; then
-    a=$(ask "Warren needs Node 22 or newer. Install it with Homebrew now? [Y/n] ")
-    case "$a" in n|N|no) fail "Install Node 22 or newer and run this again." ;; esac
-    brew install node@22
-    export PATH="$(brew --prefix node@22)/bin:$PATH"
-    echo "Add Node to your PATH for new terminals: echo 'export PATH=\"$(brew --prefix node@22)/bin:\$PATH\"' >> ~/.zprofile"
-  else
-    echo "Warren needs Node 22 or newer. One way to get it without sudo:"
-    echo "  curl -fsSL https://fnm.vercel.app/install | bash && fnm install 22"
-    echo "On Debian/Ubuntu with sudo:"
-    echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash - && sudo apt-get install -y nodejs"
-    fail "Then run this installer again."
-  fi
-fi
-echo "node $(node -v), $(git --version)"
-
-# 2. the code
-if [ -d "$DIR/.git" ]; then
-  echo "Updating $DIR"
-  # npm rewrites the lockfile on some installs; that change is never the user's work
-  git -C "$DIR" checkout -- package-lock.json 2>/dev/null || true
-  git -C "$DIR" pull --ff-only
+# Invite links work in the older address option too.
+case "$HUB" in */join/*) MODE=join; INVITE="$HUB" ;; esac
+if [ "$MODE" = device ]; then [ -n "$HUB" ] && [ -n "$TOKEN" ] || fail 'Use join [invite-link], or provide both --hub and --token.'; fi
+printf '%s\n' 'Wisp'
+command -v git >/dev/null 2>&1 || fail 'Install Git, then run this installer again.'
+command -v curl >/dev/null 2>&1 || fail 'Install curl, then run this installer again.'
+mkdir -p "$HOME/.warren/runtime"
+LOG="$HOME/.warren/install.log"
+TEMP=$(mktemp -d "${TMPDIR:-/tmp}/wisp-install.XXXXXX")
+trap 'rm -rf "$TEMP"' EXIT HUP INT TERM
+quiet() { "$@" >>"$LOG" 2>&1 || fail "Couldn't finish getting ready; check $LOG and run wisp doctor."; }
+node_major() { "$1" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+RUNTIME="$HOME/.warren/runtime/node"
+if command -v node >/dev/null 2>&1 && [ "$(node_major "$(command -v node)")" -ge 22 ]; then
+  NODE=$(command -v node)
+elif [ -x "$RUNTIME/bin/node" ] && [ "$(node_major "$RUNTIME/bin/node")" -ge 22 ]; then
+  NODE="$RUNTIME/bin/node"
 else
-  [ -e "$DIR" ] && fail "$DIR exists and isn't a Warren checkout. Pick another folder with --dir."
-  git clone "$WARREN_REPO" "$DIR"
+  case "$(uname -s)" in Darwin) system=darwin ;; Linux) system=linux ;; *) fail 'Use install.ps1 on Windows.' ;; esac
+  case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=x64 ;; armv7l) arch=armv7l ;; *) fail 'This computer needs a supported Node 22 installation.' ;; esac
+  printf '%s\n' '◌ Getting Node 22 ready…'
+  quiet curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt -o "$TEMP/SHASUMS256.txt"
+  archive=$(awk -v suffix="-$system-$arch.tar.gz" '$2 ~ (suffix "$") {print $2; exit}' "$TEMP/SHASUMS256.txt")
+  [ -n "$archive" ] || fail 'Node 22 is unavailable for this computer.'
+  quiet curl -fsSL "https://nodejs.org/dist/latest-v22.x/$archive" -o "$TEMP/$archive"
+  expected=$(awk -v file="$archive" '$2 == file {print $1}' "$TEMP/SHASUMS256.txt")
+  if command -v sha256sum >/dev/null 2>&1; then actual=$(sha256sum "$TEMP/$archive" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then actual=$(shasum -a 256 "$TEMP/$archive" | awk '{print $1}')
+  else fail 'Install a SHA-256 checker, then run this installer again.'; fi
+  [ "$actual" = "$expected" ] || fail 'The Node 22 download was incomplete; run this installer again.'
+  mkdir -p "$TEMP/runtime"
+  quiet tar -xzf "$TEMP/$archive" -C "$TEMP/runtime" --strip-components=1
+  rm -rf "$RUNTIME"
+  mv "$TEMP/runtime" "$RUNTIME"
+  NODE="$RUNTIME/bin/node"
+  printf '%s\n' '✓ Downloaded Node 22'
+fi
+export PATH="$(dirname "$NODE"):$PATH"
+# Update only a clean checkout; never discard someone's local changes.
+if [ -d "$DIR/.git" ]; then
+  quiet git -C "$DIR" pull --ff-only
+else
+  [ ! -e "$DIR" ] || fail "$DIR exists; choose another folder with --dir."
+  quiet git clone "$WARREN_REPO" "$DIR"
 fi
 cd "$DIR"
-
-# 3. what this computer is for
-if [ -z "$MODE" ]; then
-  echo
-  echo "What should this computer do?"
-  echo "  1) Run the hub: the workspace and web app (one per workspace)"
-  echo "  2) Connect to a hub as a device that runs agents and their VMs"
-  echo "  3) Just install it"
-  case "$(ask "Choose 1, 2 or 3 [1]: ")" in
-    2) MODE=device ;;
-    3) MODE=none ;;
-    *) MODE=hub ;;
-  esac
-fi
-if [ "$MODE" = device ]; then
-  [ -n "$HUB" ] || HUB=$(ask "Hub URL (for example http://my-server:4747): ")
-  [ -n "$TOKEN" ] || TOKEN=$(ask "Device token (Warren → Devices → Add device): ")
-  [ -n "$HUB" ] && [ -n "$TOKEN" ] || fail "A device needs the hub URL and a token from Warren → Devices → Add device."
-fi
-
-# 4. dependencies (install scripts for better-sqlite3, esbuild and fsevents are expected)
-bold "Installing dependencies"
-npm ci --no-audit --no-fund --loglevel=error
-if [ "$MODE" = hub ] || [ "$MODE" = none ]; then
-  bold "Building the web app"
-  npm run build --silent
-fi
-
-# 5. the `warren` command
+DIR=$(pwd -P)
+printf '%s\n' '◌ Getting Wisp ready…'
+quiet npm ci --no-audit --no-fund --loglevel=error
+quiet npm ci --prefix bin --no-audit --no-fund --loglevel=error
+if [ "$MODE" = hub ]; then quiet npm run build --silent; fi
+printf '%s\n' '✓ Downloaded Wisp'
 BIN="$HOME/.local/bin"
 mkdir -p "$BIN"
-for cmd in warren warren-mcp warren-hub; do
-  ln -sf "$DIR/bin/$cmd.mjs" "$BIN/$cmd"
-done
-case ":$PATH:" in
-  *":$BIN:"*) ;;
-  *) echo "Add $BIN to your PATH for new terminals: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.$(basename "${SHELL:-bash}")rc" ;;
-esac
+# Wrappers keep using the selected runtime in new terminals without a system Node.
+"$NODE" --input-type=commonjs - "$BIN" "$DIR" "$NODE" <<'JS'
+const fs = require('node:fs');
+const path = require('node:path');
+const [bin, dir, node] = process.argv.slice(2);
+const quote = s => "'" + s.replace(/'/g, "'\\''") + "'";
+for (const name of ['wisp', 'warren', 'warren-mcp', 'warren-hub']) {
+  const file = path.join(bin, name);
+  try { fs.unlinkSync(file); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  fs.writeFileSync(file, '#!/bin/sh\nexec ' + quote(node) + ' ' + quote(path.join(dir, 'bin', (name === 'wisp' ? 'warren' : name) + '.mjs')) + ' "$@"\n', { mode: 0o755 });
+}
+JS
 export PATH="$BIN:$PATH"
-
-# 6. start it
-if [ "$MODE" = hub ]; then
-  P="${PORT:-4747}"
-  if [ -n "$SERVICE" ]; then
-    svc=1
-    warren service install hub || svc=""
-    [ -n "$svc" ] || fail "Warren couldn't be set up to start by itself (see above). Run the installer again with --no-service, then start it with: warren hub start"
-    up=""
-    for _ in $(seq 1 30); do
-      if curl -fsS "http://127.0.0.1:$P/healthz" >/dev/null 2>&1; then up=1; break; fi
-      sleep 1
-    done
-    if [ -z "$up" ]; then
-      echo
-      fail "Warren didn't start. Its log is in ~/.warren/hub.log; \`warren service status\` shows what's running. Run the installer again once it's fixed."
-    fi
-    # the hub's own computer runs agents too, so one computer is enough to start
-    if [ -n "$DEVICE" ]; then
-      bold "Making this computer a device for your agents"
-      dev_args=(--local)
-      [ -n "$NAME" ] && dev_args+=(--name "$NAME")
-      warren service install node "${dev_args[@]}" || echo "Couldn't set up this computer as a device; add it later in Warren → Devices."
-      echo "To give agents their own computers (VMs) here, run: warren setup"
-    fi
-    echo
-    bold "Warren is running: http://localhost:$P"
-    lan="$(lan_ip)"
-    [ -n "$lan" ] && echo "On other devices on this Wi-Fi: http://$lan:$P"
-    echo "Open it to make your account. Setup then helps you use Warren from anywhere with Tailscale (free)."
-    open_browser "http://localhost:$P"
-  else
-    echo
-    bold "Start the hub with: warren hub start"
-    echo "Then open http://localhost:$P in a browser to make your account."
-  fi
+case "${SHELL:-}" in */zsh) profile="$HOME/.zshrc" ;; */bash) profile="$HOME/.bashrc" ;; *) profile="$HOME/.profile" ;; esac
+if ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$profile" 2>/dev/null; then printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$profile"; fi
+if [ "$MODE" = join ]; then
+  set --
+  [ -z "$INVITE" ] || set -- "$INVITE"
+  [ -z "$NAME" ] || set -- "$@" --name "$NAME"
+  [ -n "$SERVICE" ] || set -- "$@" --no-service
+  wisp join "$@"
 elif [ "$MODE" = device ]; then
-  bold "Getting this device ready for agents' VMs"
-  setup_args=()
-  [ -n "$YES" ] && setup_args+=(--yes)
-  if [ -r /dev/tty ]; then warren setup ${setup_args[@]+"${setup_args[@]}"} </dev/tty || true; else warren setup ${setup_args[@]+"${setup_args[@]}"} || true; fi
-  args=(--hub "$HUB" --token "$TOKEN")
-  [ -n "$NAME" ] && args+=(--name "$NAME")
-  if [ -n "$SERVICE" ]; then
-    warren service install node "${args[@]}"
-  else
-    echo "Connect with: warren node start ${args[*]}"
+  set -- --hub "$HUB" --token "$TOKEN"
+  [ -z "$NAME" ] || set -- "$@" --name "$NAME"
+  if [ -n "$SERVICE" ]; then quiet wisp service install node "$@"; printf '%s\n' '✓ This computer joined'
+  else printf '%s\n' '✓ Installed Wisp; use the existing connection flags with wisp node start'; fi
+elif [ -n "$SERVICE" ]; then
+  quiet wisp service install hub
+  P="${PORT:-4747}"
+  up=
+  for _ in $(seq 1 30); do
+    if curl -fsS --max-time 2 "http://127.0.0.1:$P/healthz" >/dev/null 2>&1; then up=1; break; fi
+    sleep 1
+  done
+  [ -n "$up" ] || fail 'Wisp did not start; run wisp doctor.'
+  printf '%s\n' '✓ Started Wisp (starts again when you log in)'
+  if [ -n "$DEVICE" ]; then
+    set -- --local
+    [ -z "$NAME" ] || set -- "$@" --name "$NAME"
+    if wisp service install node "$@" >>"$LOG" 2>&1; then printf '%s\n' '✓ This computer is ready to join when you finish getting ready'
+    else printf '%s\n' '✗ This computer needs a check; run wisp doctor'; fi
+    # A connected computer also prepares its VM image in the background.
+    printf '%s\n' '◌ Getting computers ready for agents…'
+  fi
+  apps=
+  for app in claude codex gemini hermes kimi qwen; do
+    if command -v "$app" >/dev/null 2>&1; then apps="${apps:+$apps, }$app"; fi
+  done
+  if [ -n "$apps" ]; then printf '%s\n' "✓ Found agent apps: $apps"; else printf '%s\n' '◌ Agent apps can be added in Wisp'; fi
+  if command -v tailscale >/dev/null 2>&1 || [ -e /Applications/Tailscale.app ]; then printf '%s\n' '✓ Found Tailscale'; fi
+  URL="http://localhost:$P"
+  printf '%s\n' "Opening Wisp in your browser… $URL"
+  if [ -n "$OPEN" ] && [ -z "${SSH_CONNECTION:-}" ]; then
+    if [ "$(uname -s)" = Darwin ]; then open "$URL" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1 && { [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; }; then (xdg-open "$URL" >/dev/null 2>&1 &) || true; fi
   fi
 else
-  echo
-  bold "Installed in $DIR"
-  echo "  warren hub start      run the hub in this terminal"
-  echo "  warren service --help keep the hub or a device running"
+  printf '%s\n' '✓ Installed Wisp; start it with: wisp service install hub'
 fi
+printf '%s\n' 'Other computers → Install Wisp there, then run wisp join' 'Phones → Open Add a device in Wisp and scan the code' 'Stuck? → wisp doctor'
