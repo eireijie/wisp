@@ -59,10 +59,7 @@ export function AddDeviceContent() {
         <div className="border-t border-line pt-4 space-y-3">
           <p className="text-sm">Somewhere else? Send it this invite link.</p>
           {invite && !expired && (
-            <>
-              <CopyBlock text={invite.url} />
-              <p className="text-xs text-muted">Expires {new Date(invite.expiresAt).toLocaleString()}.</p>
-            </>
+<CopyBlock text={invite.url} />
           )}
           {!allowed && <p className="text-sm text-muted">Ask your Wisp's owner for an invite link.</p>}
           {busy && (

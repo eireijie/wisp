@@ -49,6 +49,8 @@ interface LiveRun {
  * and turns messages into agent runs.
  */
 export class Hub {
+  /** Stable across restarts and address changes; joined computers use it to find this Wisp again. */
+  id = "";
   private closed = false;
   private clients = new Set<ClientConn>();
   private nodes = new Map<string, NodeConn>();

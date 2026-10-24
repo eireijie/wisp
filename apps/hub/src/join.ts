@@ -17,7 +17,7 @@ interface JoinRequest extends JoinRequestView {
   expiresAt: number;
   status: Status;
   hubUrl: string;
-  credentials?: { nodeId: string; nodeToken: string; hubUrl: string; workspaceName: string };
+  credentials?: { nodeId: string; nodeToken: string; hubUrl: string; workspaceName: string; hubId: string };
 }
 interface Helpers {
   need(req: FastifyRequest, reply: FastifyReply, opts?: { owner?: boolean; user?: boolean }): Caller | null;
@@ -107,7 +107,7 @@ export function registerJoinApi(app: FastifyInstance, hub: Hub, { need, parse }:
       // Synchronous transaction: repeated approvals cannot create extra devices or credentials.
       db.transaction(() => {
         const node = store.createNode(c.workspaceId, r.name, c.actor.id);
-        r.credentials = { nodeId: node.id, nodeToken: issueToken(db, "node", node.id, c.workspaceId, r.name), hubUrl: r.hubUrl, workspaceName: store.workspace(c.workspaceId)!.name };
+        r.credentials = { nodeId: node.id, nodeToken: issueToken(db, "node", node.id, c.workspaceId, r.name), hubUrl: r.hubUrl, workspaceName: store.workspace(c.workspaceId)!.name, hubId: hub.id };
       })();
       r.status = "approved";
     } else r.status = "denied";

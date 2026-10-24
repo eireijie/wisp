@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
-import { joinTarget, joinWisp, type JoinDependencies } from "./join.ts";
+import { findMovedWisp, joinTarget, joinWisp, type JoinDependencies } from "./join.ts";
 import { discoverWisps, nearbyWisp, type Advertisement, type DiscoveryClient } from "./join-discovery.ts";
 
 const temporary: string[] = [];
@@ -152,5 +152,19 @@ describe("mDNS discovery", () => {
     abort.abort(new Error("cancelled"));
     await expect(promise).rejects.toThrow("cancelled");
     expect(destroy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a Wisp that moved", () => {
+  const wisp = (id: string, url: string) => ({ id, name: "Yug's Wisp", host: "yug-mac", url });
+  it("finds the same Wisp at its new Wi-Fi address", async () => {
+    expect(await findMovedWisp("hub-1", "http://192.168.1.20:4747", async () => [wisp("other", "http://192.168.1.9:4747"), wisp("hub-1", "http://192.168.1.31:4747")])).toBe("http://192.168.1.31:4747");
+  });
+  it("leaves https addresses, unmoved Wisps and failed lookups alone", async () => {
+    const discover = vi.fn(async () => [wisp("hub-1", "http://192.168.1.31:4747")]);
+    expect(await findMovedWisp("hub-1", "https://yug-mac.tail3c1.ts.net", discover)).toBeNull();
+    expect(discover).not.toHaveBeenCalled();
+    expect(await findMovedWisp("hub-1", "http://192.168.1.31:4747", discover)).toBeNull();
+    expect(await findMovedWisp("hub-1", "http://192.168.1.20:4747", async () => { throw new Error("no multicast"); })).toBeNull();
   });
 });

@@ -14,7 +14,7 @@ import { installService, isService, serviceStatus, uninstallService, type Servic
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
 import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
 
-import { joinTarget, joinWisp } from "./join.ts";
+import { findMovedWisp, joinTarget, joinWisp } from "./join.ts";
 import { doctor } from "./doctor.ts";
 
 const HELP = `wisp — start Wisp on this computer, or join your Wisp
@@ -100,13 +100,21 @@ if (values.help || !cmd) {
   let cfg = saveNodeConfig();
   const kept = underKeeper();
   // two daemons with one token would take turns replacing each other on the hub
-  const service = process.env.WARREN_SERVICE ? null : serviceStatus("node", dir);
+  // the installed service uses the default folder, so a device kept in another folder (--dir) is a different device
+  const service = process.env.WARREN_SERVICE || dir !== path.join(os.homedir(), ".warren") ? null : serviceStatus("node", dir);
   if (service?.running && !isService(service)) {
     console.error(`This device is already connected by its service (${service.name}), so there's nothing to start. To run it in this terminal instead: warren service uninstall node`);
     process.exit(1);
   }
   if (cfg.local && !cfg.token) cfg = await waitForLocalHub(cfg);
   const daemon = new NodeDaemon(cfg);
+  const hubId = cfg.hubId;
+  if (hubId)
+    daemon.relocate = async () => {
+      const url = await findMovedWisp(hubId, cfg.hub);
+      if (url) fs.writeFileSync(configFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(configFile, "utf8")), hub: url }, null, 2), { mode: 0o600 });
+      return url;
+    };
   // the desktop app asks for this, so it can add this computer again instead of leaving a dead device running
   if (process.env.WARREN_EXIT_IF_REJECTED) daemon.onRejected = () => process.exit(REJECTED_CODE);
   daemon.start();

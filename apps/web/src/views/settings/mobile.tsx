@@ -159,8 +159,8 @@ export function PhonePairing({ autoStart = false, compact = false }: { autoStart
             {state === "waiting" && started && (
               <>
                 <p className="text-sm">Point your camera here. It gets the app and joins.</p>
-                <p className="text-xs text-muted">{reachHint(started.addresses)}</p>
-                <p className="text-xs text-muted">The code expires in 5 minutes.</p>
+                {!compact && <p className="text-xs text-muted">{reachHint(started.addresses)}</p>}
+                {!compact && <p className="text-xs text-muted">The code expires in 5 minutes.</p>}
                 <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink">
                   {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy pairing link"}
                 </button>

@@ -17,7 +17,7 @@ export function joinTarget(raw: string): JoinTarget {
   if (url.pathname !== "/" && !match) throw new Error("Copy the invite link from Add a device in Wisp.");
   return { url: url.origin, host: url.hostname, ...(match ? { invite: decodeURIComponent(match[1]) } : {}) };
 }
-interface Grant { nodeId: string; nodeToken: string; hubUrl: string; workspaceName: string }
+interface Grant { nodeId: string; nodeToken: string; hubUrl: string; workspaceName: string; hubId?: string }
 interface Request { requestId: string; secret: string; code: string; expiresAt: string }
 export interface JoinOptions { dir: string; address?: string; name?: string; service?: boolean; signal?: AbortSignal }
 export interface JoinDependencies {
@@ -35,7 +35,7 @@ export function saveJoinedComputer(dir: string, grant: Grant, name: string) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = path.join(dir, "node.json");
   const saved = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
-  const next = { ...saved, hub: joinTarget(grant.hubUrl).url, token: grant.nodeToken, nodeId: grant.nodeId, name, local: false };
+  const next = { ...saved, hub: joinTarget(grant.hubUrl).url, token: grant.nodeToken, nodeId: grant.nodeId, name, local: false, ...(grant.hubId ? { hubId: grant.hubId } : {}) };
   const temporary = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temporary, JSON.stringify(next, null, 2), { mode: 0o600 });
   fs.renameSync(temporary, file);
@@ -99,4 +99,12 @@ export async function joinWisp(options: JoinOptions, overrides: Partial<JoinDepe
     return status as Grant;
   }
   throw new Error("The code expired; run wisp join to get a new one.");
+}
+
+/** The address a joined computer's Wisp has on this Wi-Fi now, when it moved (a new DHCP lease, say). */
+export async function findMovedWisp(hubId: string, current: string, discover: () => Promise<NearbyWisp[]> = () => discoverWisps()): Promise<string | null> {
+  // https addresses (Tailscale, a domain) don't move with the Wi-Fi
+  if (!/^http:/.test(current)) return null;
+  const found = (await discover().catch(() => [])).find((w) => w.id === hubId);
+  return found && found.url !== joinTarget(current).url ? found.url : null;
 }

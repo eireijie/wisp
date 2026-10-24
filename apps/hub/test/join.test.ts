@@ -55,7 +55,7 @@ describe("asking to join", () => {
     expect(results.map((v) => v.statusCode).sort()).toEqual([200, 409]);
     expect(built.hub.store.nodes(workspaceId)).toHaveLength(before + 1);
     const done = (await poll(r)).json();
-    expect(done).toMatchObject({ status: "approved", nodeId: expect.any(String), nodeToken: expect.stringMatching(/^wr_node_/), hubUrl: "http://wisp.example:4747", workspaceName: "Yug's Wisp" });
+    expect(done).toMatchObject({ status: "approved", nodeId: expect.any(String), nodeToken: expect.stringMatching(/^wr_node_/), hubUrl: "http://wisp.example:4747", workspaceName: "Yug's Wisp", hubId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     expect(resolveToken(built.hub.store.db, done.nodeToken)).toMatchObject({ kind: "node", subjectId: done.nodeId, workspaceId });
     expect(built.hub.store.node(done.nodeId)).toMatchObject({ name: device.name, ownerId: resolveToken(built.hub.store.db, owner)!.subjectId });
     expect((await poll(r)).json()).toEqual({ status: "approved" });

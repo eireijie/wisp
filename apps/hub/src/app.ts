@@ -1,3 +1,4 @@
+import { stableHubId } from "./discovery.ts";
 import { watchLocalDevice } from "./local-device.ts";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -38,6 +39,7 @@ export async function buildHub(opts: HubOptions) {
   await vaults.openAll();
   const hub = new Hub(store, vaults);
   hubRef = hub;
+  hub.id = stableHubId(path.resolve(opts.dataDir));
   hub.reach.cloudflare.configure(path.resolve(opts.dataDir));
   await hub.foldTeams();
   await hub.ensureBuiltinSkills(undefined, true);
