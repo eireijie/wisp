@@ -81,3 +81,19 @@ describe("hash routing", () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("guest routes", () => {
+  it.each(["#/computers", "#/computers/desk", "#/computers/desk/teach/atlas"])("falls back from %s for guests", (hash) => {
+    expect(router.routeForRole(router.parseRoute(hash), "guest")).toEqual({ view: "dashboard" });
+  });
+
+  it.each(["member", "owner"] as const)("keeps computer routes for a %s", (role) => {
+    const route = router.parseRoute("#/computers/desk/teach/atlas");
+    expect(router.routeForRole(route, role)).toEqual(route);
+  });
+
+  it("keeps guests' other pages available", () => {
+    const route = router.parseRoute("#/agents/atlas");
+    expect(router.routeForRole(route, "guest")).toEqual(route);
+  });
+});

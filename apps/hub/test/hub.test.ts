@@ -925,7 +925,9 @@ describe("agents inside their computers", () => {
     const t = (await api<any>("POST", "/api/tasks", { to: "auto", title: "Plan the offsite", brief: "Three venues under $5k." })).data;
     expect([atlas.id, nova.id]).toContain(t.toAgentId);
     const thread = await waitFor(async () => (await channelMessagesIn(t.channelId)).find((m) => m.id === t.threadId));
-    expect(thread.body).toContain("You're the lead: plan this");
+    // only what the person typed; the lead's instructions go in its prompt
+    expect(thread.body).toContain("Three venues under $5k.");
+    expect(thread.body).not.toContain("You're the lead");
     // the agent picking it up moves it to in progress
     const working = await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((x) => x.id === t.id && x.status === "in_progress"));
     expect(working).toBeTruthy();
@@ -954,7 +956,7 @@ describe("the lead", () => {
     const parent = (await api<any>("POST", "/api/tasks", { title: "Ship the release", brief: "Get 2.0 out." })).data;
     expect(parent.toAgentId).toBe(atlas.id);
     expect(parent.parentId).toBeNull();
-    expect(parent.brief).toContain("You're the lead");
+    expect(parent.brief).toBe("Get 2.0 out.");
     const run = await waitFor(async () => node.runs.slice(before).find((r) => r.type === "run" && r.run.agentId === atlas.id));
     const prompt = run.type === "run" ? run.run.prompt : "";
     expect(prompt).toContain("## You're the lead");

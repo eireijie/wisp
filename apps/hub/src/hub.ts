@@ -22,6 +22,7 @@ import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
 import { foldTeams } from "./fold-teams.ts";
 import type { Store } from "./store.ts";
+import { guestEvent } from "./guest-computers.ts";
 
 const CONTEXT_MESSAGES = 20;
 
@@ -52,6 +53,7 @@ export class Hub {
   private clients = new Set<ClientConn>();
   private nodes = new Map<string, NodeConn>();
   private live = new Map<string, LiveRun>();
+  private taskReplies = new Map<string, { messageId: string; result: string }>();
   /** devices whose owner ran `warren node pause` there */
   private pausedNodes = new Set<string>();
   readonly guard = new LoopGuard();
@@ -143,7 +145,13 @@ export class Hub {
   /** Send an event to everyone in a workspace, or only to the people `only` picks. */
   broadcast(workspaceId: string, event: ClientEvent, only?: (userId: string) => boolean) {
     const data = JSON.stringify(event);
-    for (const c of this.clients) if (c.workspaceId === workspaceId && c.socket.readyState === 1 && (!only || only(c.userId))) c.socket.send(data);
+    const guest = guestEvent(event);
+    for (const c of this.clients) {
+      if (c.workspaceId !== workspaceId || c.socket.readyState !== 1 || (only && !only(c.userId))) continue;
+      if (this.store.role(workspaceId, c.userId) === "guest") {
+        if (guest) c.socket.send(JSON.stringify(guest));
+      } else c.socket.send(data);
+    }
     if (!this.closed) this.apns.onEvent(workspaceId, event, only);
   }
 
@@ -394,6 +402,8 @@ export class Hub {
     const { store } = this;
     const live = this.live.get(run.id) ?? { parts: [], text: "" };
     this.live.delete(run.id);
+    const taskReply = this.taskReplies.get(run.id);
+    this.taskReplies.delete(run.id);
     const author: Actor = { kind: "agent", id: run.agentId };
     // in a discussion, replies don't wake anyone: the discussion moves on by itself
     const route = run.discussionId ? false : undefined;
@@ -412,7 +422,16 @@ export class Hub {
       const trigger = !body && agent && run.triggerMessageId ? store.message(run.triggerMessageId) : undefined;
       const ran = trigger && agent ? this.commandFor(agent, trigger.body) : null;
       if (ran?.via === "raw" && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body: "", parts: [...live.parts, { type: "notice", text: `Ran /${ran.name}.` }], hop: run.hop + 1, route: false });
-      if (body && !gone) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
+      const posted = taskReply ? store.message(taskReply.messageId) : undefined;
+      // the answer task_update already posted, repeated as the final reply (as-is, or wrapped in a line or two)
+      const same = (a: string, b: string) => !!a.trim() && !!b.trim() && a.includes(b.trim());
+      const repeated = taskReply && posted && !posted.deletedAt && (same(taskReply.result, body) || (same(body, taskReply.result) && body.length <= taskReply.result.length + 300));
+      if (repeated && posted && live.parts.length) {
+        const message = { ...posted, parts: [...posted.parts, ...live.parts] };
+        store.db.prepare("UPDATE messages SET parts_json = ? WHERE id = ?").run(JSON.stringify(message.parts), message.id);
+        this.broadcast(workspaceId, { type: "message_updated", message: store.withReactions([message])[0] }, this.audience(message.channelId));
+      }
+      if (body && !gone && !repeated) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
     } else {
       store.setRunStatus(run.id, "failed", result.error);
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
@@ -722,6 +741,13 @@ export class Hub {
     return r ? this.store.run(r.id) : undefined;
   }
 
+  /** Remember the answer already posted by task_update, only for runs working on that task. */
+  taskReplyPosted(task: { toAgentId: string | null; channelId: string | null; threadId: string | null }, message: Message, result: string) {
+    if (message.author.kind !== "agent" || message.author.id !== task.toAgentId || !result.trim()) return;
+    const runs = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND channel_id = ? AND thread_id = ? AND status = 'running'").all(task.toAgentId, task.channelId, task.threadId) as { id: string }[];
+    for (const run of runs) this.taskReplies.set(run.id, { messageId: message.id, result: result.trim() });
+  }
+
   cancelRun(runId: string) {
     const run = this.store.run(runId);
     if (!run || (run.status !== "queued" && run.status !== "running")) return false;
@@ -730,6 +756,7 @@ export class Hub {
     if (conn) this.send(conn, { type: "cancel", runId });
     this.store.setRunStatus(runId, "cancelled");
     this.live.delete(runId);
+    this.taskReplies.delete(runId);
     // the device's late report is ignored, so clients hear from here that the agent is free again
     if (agent) this.broadcast(agent.workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
     // stopping one participant doesn't stop the discussion; it goes on without them

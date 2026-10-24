@@ -38,6 +38,7 @@ import { MAX_ROUNDS } from "./discussions.ts";
 import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, revokeToken, verifyPassword, type Principal } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 import { HARNESS, registerComputerApi } from "./api-computers.ts";
+import { guestMessage } from "./guest-computers.ts";
 import { registerUpdateApi } from "./updates.ts";
 import { deviceLabel, registerSettingsApi } from "./api-settings.ts";
 import { registerVoiceApi } from "./api-voice.ts";
@@ -285,6 +286,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   }
 
   const agentView = (a: NonNullable<ReturnType<typeof store.agent>>) => ({ ...a, status: hub.agentStatus(a) });
+  const messageView = <T extends Parameters<typeof guestMessage>[0]>(c: Caller, m: T): T => c.viewer.role === "guest" ? guestMessage(m) : m;
 
   /** Can this person put agents and VMs on the device? Its owner can; others once the owner shares it. */
   const canUseDevice = (c: Caller, nodeId: string) => {
@@ -392,9 +394,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       // computers agents can share: VMs and cloud computers (never someone's own screen)
       computers: store
         .computers(c.workspaceId)
-        .filter((x) => x.kind !== "device")
+        .filter((x) => c.viewer.role !== "guest" && x.kind !== "device")
         .map((x) => ({ id: x.id, name: x.name, kind: x.kind, nodeId: x.nodeId, status: x.status })),
-      agents: agents.map(agentView),
+      agents: agents.map((a) => ({ ...agentView(a), computerId: c.viewer.role === "guest" ? null : a.computerId })),
       firstReply: firstReply ?? null,
       memoryNotes: [...agentNotes, ...sharedNotes].slice(0, 5).map((n) => ({ path: n.path, title: n.title })),
       reachable: !!(await hub.reach.publicUrl().catch(() => null)),
@@ -670,7 +672,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
-    return store.pins(ch.id).map((p) => ({ ...p, message: store.withReactions([p.message])[0] }));
+    return store.pins(ch.id).map((p) => ({ ...p, message: messageView(c, store.withReactions([p.message])[0]) }));
   });
 
   for (const method of ["PUT", "DELETE"] as const) {
@@ -803,9 +805,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       .filter((a) => a.handle.includes(lower) || a.name.toLowerCase().includes(lower))
       .slice(0, 8)
       .map(agentView);
-    const messages = store.searchMessages(visible.map((ch) => ch.id), q, 15).map((m) => ({ ...m, channelName: visible.find((ch) => ch.id === m.channelId)?.name ?? "" }));
+    const messages = store.searchMessages(visible.map((ch) => ch.id), q, 15).map((m) => ({ ...messageView(c, m), channelName: visible.find((ch) => ch.id === m.channelId)?.name ?? "" }));
     const notes = vaultOf(c).search(q, readable(c), 8);
-    return { channels, agents, messages, notes };
+    return { channels, agents: agents.map((a) => ({ ...a, computerId: c.viewer.role === "guest" ? null : a.computerId })), messages, notes };
   });
 
   app.get("/api/agents/:id/runs", async (req, reply) => {
@@ -877,7 +879,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const q = req.query as { thread?: string; before?: string; limit?: string };
     const messages = store.withReactions(store.messages(ch.id, { threadId: q.thread, before: q.before, limit: limitParam(q.limit, 50, 200) }));
     // replies in a thread can have sub-threads of their own
-    return { messages, replyCounts: store.replyCounts(messages.filter((m) => m.id !== q.thread).map((m) => m.id)) };
+    return { messages: messages.map((m) => messageView(c, m)), replyCounts: store.replyCounts(messages.filter((m) => m.id !== q.thread).map((m) => m.id)) };
   });
 
   app.post("/api/channels/:id/messages", async (req, reply) => {
@@ -919,7 +921,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   app.get("/api/agents", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
-    return store.agents(c.workspaceId).map(agentView);
+    return store.agents(c.workspaceId).map((a) => ({ ...agentView(a), computerId: c.viewer.role === "guest" ? null : a.computerId }));
   });
 
   /**
@@ -1379,11 +1381,6 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (toTeam !== null && !teamTo?.leadId) return reply.code(404).send({ error: teamTo ? `#${teamTo.name} has no lead yet` : "no channel with a team called that" });
     const target = body.to === "auto" ? workspaceLead(store, c.workspaceId) : teamTo ? store.agent(teamTo.leadId!) : (store.agentByHandle(c.workspaceId, body.to.replace(/^@/, "")) ?? store.agent(body.to));
     if (!target || target.workspaceId !== c.workspaceId) return reply.code(404).send({ error: body.to === "auto" ? "add an agent first" : "agent not found" });
-    if (body.to === "auto")
-      body.brief =
-        store.agents(c.workspaceId).length > 1
-          ? `${body.brief}\n\n(You're the lead: plan this, break it into pieces and hand each to the agent whose role fits with task_delegate; they become subtasks of this task. Mark this task done when the pieces are in.)`
-          : `${body.brief}\n\n(You're the only agent so far, so this one's yours to do.)`;
     const forTeam = teamTo;
     // an agent handing work to its own team (as lead, teammate or boss) does it in the team's channel
     const teams = store.teams(c.workspaceId);
@@ -1471,7 +1468,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       // a hand-off in a sub-thread reports back in the thread it came from, where the lead and the person are
       const above = task.threadId ? (store.message(task.threadId)?.threadId ?? null) : null;
       // Mentioning the requesting agent hands the result back to it.
-      hub.postMessage({
+      const message = hub.postMessage({
         channelId: task.channelId,
         threadId: above ?? task.threadId,
         author: c.actor,
@@ -1481,6 +1478,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
         route: task.from.kind === "agent",
         onBehalfOf: requesterOf(c),
       });
+      if (body.result) hub.taskReplyPosted(task, message, body.result);
     }
     if (body.status === "done") requestReview(updated, requesterOf(c));
     return updated;
@@ -1992,7 +1990,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   // --- websockets -------------------------------------------------------------
 
   /** Live view of a computer: a one-time ticket from POST /api/computers/:id/view travels in the URL. */
-  app.get("/ws/computers/:id/:transport", { websocket: true }, (socket, req) => {
+  app.get("/ws/computers/:id/:transport", { websocket: true, preValidation: async (req, reply) => {
+    if (caller(req)?.viewer.role === "guest") need(req, reply, { member: true });
+  } }, (socket, req) => {
     const { id: computerId, transport } = req.params as { id: string; transport: string };
     const ticket = hub.computers.redeem((req.query as { ticket?: string }).ticket, computerId);
     const comp = ticket ? store.computer(computerId) : undefined;

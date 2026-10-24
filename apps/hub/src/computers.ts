@@ -155,9 +155,10 @@ export class Computers {
     return c.kind === "device" && c.nodeId ? (this.hub.store.node(c.nodeId)?.ownerId ?? null) : null;
   }
 
-  /** Can this person see and use it? Everyone in the workspace, except for someone else's own screen. */
+  /** Can this person see and use it? Members, except for someone else's own screen. */
   canSee(c: Computer, userId: string): boolean {
-    return c.kind !== "device" || this.ownerOf(c) === userId;
+    const role = this.hub.store.role(c.workspaceId, userId);
+    return (role === "owner" || role === "member") && (c.kind !== "device" || this.ownerOf(c) === userId);
   }
 
   view(c: Computer): ComputerView {
@@ -657,7 +658,8 @@ export class Computers {
     const t = ticket ? this.tickets.get(ticket) : undefined;
     if (!t) return null;
     this.tickets.delete(ticket!);
-    if (t.expires < Date.now() || t.computerId !== computerId) return null;
+    const c = this.hub.store.computer(computerId);
+    if (t.expires < Date.now() || t.computerId !== computerId || !c || !this.canSee(c, t.userId)) return null;
     return t;
   }
 
@@ -668,6 +670,7 @@ export class Computers {
 
   /** A browser watching a screen through frames; it can send input once it has control. */
   addFrameViewer(c: Computer, socket: WebSocket, userId: string) {
+    if (!this.canSee(c, userId)) return socket.close(4403, "forbidden");
     const viewer = { socket, userId };
     let set = this.viewers.get(c.id);
     if (!set) this.viewers.set(c.id, (set = new Set()));
@@ -706,7 +709,10 @@ export class Computers {
     if (!c || c.nodeId !== nodeId) return;
     const frame = { image: msg.image, width: msg.width, height: msg.height, at: Date.now() };
     this.frames.set(c.id, frame);
-    for (const v of this.viewers.get(c.id) ?? []) send(v.socket, { type: "frame", ...frame });
+    for (const v of this.viewers.get(c.id) ?? []) {
+      if (this.canSee(c, v.userId)) send(v.socket, { type: "frame", ...frame });
+      else v.socket.close(4403, "forbidden");
+    }
   }
 
   /** Relay a browser's VNC connection to a computer on a device. */

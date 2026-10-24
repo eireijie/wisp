@@ -137,7 +137,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         {/* phones have no Inbox in this list, so what's waiting shows here */}
         {page && waitingCount > 0 && (
           <Group page title="Waiting on you" collapsed={!!collapsed.waiting} onToggle={() => toggleGroup("waiting")}>
-            {waiting.help.map((c) => {
+            {!isGuest && waiting.help.map((c) => {
               const a = agents.find((x) => x.id === c.help!.agentId);
               return (
                 <Item key={c.id} page href={href({ view: "computers", computerId: c.id })} dot>
@@ -263,10 +263,12 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
       {/* the rest of Warren: a short list, and everything else under More */}
       {!page && (
         <div className="shrink-0 pt-2 space-y-px border-t border-line">
-          <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
-            <Monitor size={16} className="shrink-0" /> Computers
-            {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
-          </Item>
+          {!isGuest && (
+            <Item href={href({ view: "computers", computerId: null })} active={route.view === "computers"}>
+              <Monitor size={16} className="shrink-0" /> Computers
+              {computerWorking && <span className="ml-auto size-1.5 rounded-full bg-info animate-pulse" title="An agent is working" />}
+            </Item>
+          )}
           <Item href={href({ view: "mods" })} active={route.view === "mods"}>
             <Blocks size={16} className="shrink-0" /> Mods
           </Item>

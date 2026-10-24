@@ -95,7 +95,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   // --- computers ------------------------------------------------------------------------------
 
   app.get("/api/computers", async (req, reply) => {
-    const c = need(req, reply, { user: true });
+    const c = need(req, reply, { member: true });
     if (!c) return;
     return store
       .computers(c.workspaceId)
@@ -104,7 +104,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   });
 
   app.get("/api/computers/:id", async (req, reply) => {
-    const c = need(req, reply, { user: true });
+    const c = need(req, reply, { member: true });
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
@@ -217,7 +217,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
 
   /** What people and agents did on a computer, newest first. */
   app.get("/api/computers/:id/log", async (req, reply) => {
-    const c = need(req, reply, { user: true });
+    const c = need(req, reply, { member: true });
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
@@ -264,7 +264,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
 
   /** The screen right now, as a JPEG (thumbnails, the card in chat). */
   app.get("/api/computers/:id/screen", async (req, reply) => {
-    const c = need(req, reply, { user: true });
+    const c = need(req, reply, { member: true });
     if (!c) return;
     const comp = own(c, (req.params as { id: string }).id);
     if (!comp) return reply.code(404).send({ error: "computer not found" });
@@ -417,6 +417,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const agent = store.agent((req.params as { id: string }).id);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
+    if (c.viewer.role === "guest") return { possible: false, inComputer: false, signedIn: null, computerId: null };
     const comp = agent.computerId ? store.computer(agent.computerId) : undefined;
     const possible = !!comp && comp.kind === "vm" && comp.nodeId === agent.nodeId && runsInVm(agent.harness);
     const inComputer = hub.runsInComputer(agent);
@@ -736,7 +737,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   // --- settings -------------------------------------------------------------------------------
 
   app.get("/api/settings/computers", async (req, reply) => {
-    const c = need(req, reply, { user: true });
+    const c = need(req, reply, { member: true });
     if (!c) return;
     const key = store.setting(c.workspaceId, "orgo.apiKey");
     return { orgo: { configured: !!key, hint: key ? `…${key.slice(-4)}` : null }, defaults: computerDefaults(hub, c.workspaceId) };

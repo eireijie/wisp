@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { BookOpen, Bot, LifeBuoy, ListTodo, SquarePen, Brain, CircleUser, Inbox, LogOut, MessageSquare, Store, Monitor, Moon, Server, Settings, Sparkles, ChevronRight, Sun, SunMoon, RefreshCw, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useInboxCount, useStore } from "./store.ts";
-import { go, href, useRoute, type Route } from "./router.ts";
+import { go, href, routeForRole, useRoute, type Route } from "./router.ts";
 import { useAppearance, type ModeChoice } from "./theme.ts";
 import { Sidebar } from "./components/Sidebar.tsx";
 import { OrgRail } from "./components/OrgRail.tsx";
@@ -81,7 +81,7 @@ function Workspace() {
   const setConnected = useStore((s) => s.setConnected);
   const newTaskOpen = useStore((s) => s.newTaskOpen);
   const channelBrowser = useStore((s) => s.channelBrowser);
-  const route = useRoute();
+  const route = routeForRole(useRoute(), me?.role);
   const phone = useIsPhone();
   const [error, setError] = useState<string | null>(null);
 
@@ -233,6 +233,7 @@ function UpdatedBanner() {
 /** Phones: the same four tabs as the iPhone app, on a floating glass bar. */
 function TabBar({ route }: { route: Route }) {
   const channels = useStore((s) => s.channels);
+  const isGuest = useStore((s) => s.me?.role === "guest");
   const unread = channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread : 0), 0);
   const tab = (active: boolean, label: string, icon: ReactNode, target: string, badge?: number) => (
     <a href={target} aria-current={active ? "page" : undefined} className={cx("flex-1 flex flex-col items-center justify-center gap-0.5 h-14 rounded-full text-[11px] transition-colors", active ? "bg-ink/[0.07] text-ink font-semibold" : "text-muted")}>
@@ -250,7 +251,7 @@ function TabBar({ route }: { route: Route }) {
       <nav className="glass pointer-events-auto mx-auto max-w-md flex gap-1 p-1 rounded-full" aria-label="Main">
         {tab(route.view === "chats" || route.view === "chat", "Chats", <MessageSquare size={22} strokeWidth={2.2} />, href({ view: "chats" }), unread)}
         {tab(route.view === "agents", "Agents", <Bot size={22} strokeWidth={2.2} />, href({ view: "agents", agentId: null }))}
-        {tab(route.view === "computers", "Computers", <Monitor size={22} strokeWidth={2.2} />, href({ view: "computers", computerId: null }))}
+        {!isGuest && tab(route.view === "computers", "Computers", <Monitor size={22} strokeWidth={2.2} />, href({ view: "computers", computerId: null }))}
         {tab(youViews.includes(route.view), "You", <CircleUser size={22} strokeWidth={2.2} />, href({ view: "you" }), route.view === "you" ? undefined : inbox - unread)}
       </nav>
     </div>

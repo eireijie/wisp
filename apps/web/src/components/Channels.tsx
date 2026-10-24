@@ -693,7 +693,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
     setError(null);
     setSaving(true);
     try {
-      await api("PATCH", `/api/channels/${channel.id}`, { settings: { team: next, ...(next ? { replyInThread: true } : {}) } });
+      await api("PATCH", `/api/channels/${channel.id}`, { settings: { team: next } });
       await refreshChannels();
       onClose();
     } catch (err) {

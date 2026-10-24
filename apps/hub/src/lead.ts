@@ -31,7 +31,8 @@ export function taskInstructions(store: Store, agentId: string, trigger: { parts
     task.branch && team?.repo && !task.reviewOf
       ? `\n\nCode: you'll work in your own checkout of \`${team.repo}\` on branch \`${task.branch}\` (from \`${team.baseBranch}\`). Commit your work on that branch${isRemote(team.repo) ? " and push it" : ""}.`
       : "";
-  return `\n\nThis is task \`${task.id}\`.${code}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`;
+  const solo = store.agents(task.workspaceId).length === 1 ? "\n\nYou're the only agent so far, so this one's yours to do." : "";
+  return `\n\nThis is task \`${task.id}\`.${code}${solo}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`;
 }
 
 /**

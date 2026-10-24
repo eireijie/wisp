@@ -79,7 +79,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
       background: store.background(agent.id, c.actor.id) ?? null,
       followups: store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === c.actor.id),
       notAllowed: hub.whyNotAllowed(agent, c.actor.id),
-      sources: hub.background.sources(agent.id),
+      sources: hub.background.sources(agent.id).filter((s) => c.viewer.role !== "guest" || s.kind !== "computer"),
       usage: hub.background.usage(agent.id, c.actor.id),
       defaultDailyCap: DEFAULT_DAILY_CAP,
     };

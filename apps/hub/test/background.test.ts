@@ -481,6 +481,33 @@ describe("agents changing Warren for their person", () => {
   });
 });
 
+describe("stopped requests in background checks", () => {
+  it.each(["queued", "running"] as const)("does not reconsider a request or task whose %s run was stopped", async (status) => {
+    const agent = await owner.request("POST", "/api/agents", { handle: `stopped-${status}`, name: "Stopped", harness: "custom" });
+    const channel = hub.store.dmChannel(agent.workspaceId, me, agent.id);
+    const message = await owner.send(channel.id, "Write the cancelled announcement");
+    const task = await owner.request("POST", "/api/tasks", { to: agent.handle, title: "Cancelled task title", brief: "Cancelled task brief" });
+    const runs = hub.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'queued'").all(agent.id) as { id: string }[];
+    expect(runs).toHaveLength(2);
+    for (const r of runs) {
+      if (status === "running") hub.store.setRunStatus(r.id, "running");
+      await owner.request("POST", `/api/runs/${r.id}/cancel`);
+      expect(hub.store.run(r.id)?.status).toBe("cancelled");
+    }
+    expect(hub.store.message(message.id)?.body).toBe("Write the cancelled announcement");
+    expect(hub.store.task(task.id)?.status).toBe("open");
+    const prompt = await hub.background.promptSection({ id: "check", agentId: agent.id, channelId: channel.id, requestedBy: me });
+    expect(prompt).not.toContain("Write the cancelled announcement");
+    expect(prompt).not.toContain("Cancelled task title");
+    expect(prompt).not.toContain("Cancelled task brief");
+    expect(prompt).toContain("Don't retry it, hand it to another agent, or do it yourself");
+    await owner.send(channel.id, "A new request I still want answered");
+    const next = await hub.background.promptSection({ id: "check", agentId: agent.id, channelId: channel.id, requestedBy: me });
+    expect(next).toContain("A new request I still want answered");
+    expect(next).not.toContain("Write the cancelled announcement");
+  });
+});
+
 describe("times", () => {
   it("finds the start of the day on the person's clock", () => {
     expect(startOfDay(new Date("2026-10-15T03:00:00Z"), "America/New_York").toISOString()).toBe("2026-10-14T04:00:00.000Z");

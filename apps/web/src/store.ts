@@ -213,7 +213,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async refreshComputers() {
-    // a hub older than this page has no computers
+    // guests don't see computers; a hub older than this page has none
+    if (get().me?.role === "guest") return set({ computers: [] });
     set({ computers: await api<ComputerInfo[]>("GET", "/api/computers").catch(() => get().computers) });
   },
 

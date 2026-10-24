@@ -50,8 +50,10 @@ export function ComputersView({ computerId, teach, onBack }: { computerId: strin
   const canEdit = me?.role !== "guest";
 
   useEffect(() => {
-    useStore.getState().refreshComputers();
-  }, []);
+    if (me?.role !== "guest") useStore.getState().refreshComputers();
+  }, [me?.role]);
+
+  if (me?.role === "guest") return null;
 
   if (computerId) {
     if (!selected) return <div className="flex-1 grid place-items-center text-sm text-muted">{computers.length ? "That computer is gone." : "Loading…"}</div>;

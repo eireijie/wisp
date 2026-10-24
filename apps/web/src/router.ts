@@ -49,6 +49,10 @@ export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const MARKET_SECTIONS = ["all", "apps", "skills", "devices", "installed"] as const;
 export type MarketSection = (typeof MARKET_SECTIONS)[number];
 
+export function routeForRole(route: Route, role?: "owner" | "member" | "guest"): Route {
+  return role === "guest" && route.view === "computers" ? { view: "dashboard" } : route;
+}
+
 export function parseRoute(hash: string): Route {
   let parts: string[];
   try {
