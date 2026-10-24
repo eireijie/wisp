@@ -14,7 +14,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     join) MODE=join; if [ $# -gt 1 ]; then case "$2" in -*) ;; *) INVITE="$2"; shift ;; esac; fi ;;
     --hub-server) MODE=hub ;;
-    --hub) value "$1" "${2:-}"; HUB="$2"; MODE=device; shift ;;
+    --hub) [ -n "${2:-}" ] || fail "--hub needs a value, for example: --hub http://my-server:4747"; HUB="$2"; MODE=device; shift ;;
     --token) value "$1" "${2:-}"; TOKEN="$2"; shift ;;
     --name) value "$1" "${2:-}"; NAME="$2"; shift ;;
     --dir) value "$1" "${2:-}"; DIR="$2"; shift ;;
