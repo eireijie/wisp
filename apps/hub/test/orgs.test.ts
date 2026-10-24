@@ -263,6 +263,9 @@ describe("organizations", () => {
     // the agent's soul went to its own organization's memory
     await expect(hub.vault(second.id).read(`agents/${a.id}/SOUL.md`)).resolves.toBeTruthy();
     await expect(hub.vault(firstOrg).read(`agents/${a.id}/SOUL.md`)).rejects.toThrow();
+    // its built-in memory skill lives in its own organization's memory too
+    await expect(hub.vault(second.id).read(`agents/${a.id}/skills/memory/SKILL.md`)).resolves.toBeTruthy();
+    await expect(hub.vault(firstOrg).read(`agents/${a.id}/skills/memory/SKILL.md`)).rejects.toThrow();
   });
 
   it("lets someone already signed in join another organization with an invite", async () => {

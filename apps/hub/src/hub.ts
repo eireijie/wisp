@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { HubToNode, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
+import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -118,6 +118,24 @@ export class Hub {
         await vault
           .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for #${t.name}`)
           .catch(() => undefined);
+      }
+    }
+  }
+
+  /**
+   * Every agent has the built-in skills in its folder. Missing copies are put back (they can't be
+   * removed); `refresh` also rewrites copies that differ, so a new Warren version reaches them.
+   */
+  async ensureBuiltinSkills(agentIds?: string[], refresh = false) {
+    const rows = this.store.db.prepare("SELECT id, workspace_id AS workspaceId FROM agents").all() as { id: string; workspaceId: string }[];
+    for (const { id: agentId, workspaceId } of agentIds ? rows.filter((r) => agentIds.includes(r.id)) : rows) {
+      const vault = this.vault(workspaceId);
+      for (const s of BUILTIN_SKILLS) {
+        const p = agentSkillPath(agentId, s.id);
+        const file = skillFile({ slug: s.id, name: s.name, description: s.description, content: s.content });
+        const have = await vault.read(p).then((n) => n.content, () => null);
+        if (have === file || (have !== null && !refresh)) continue;
+        await vault.write(p, file, { name: "Warren", email: "warren@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
       }
     }
   }
@@ -987,6 +1005,7 @@ export class Hub {
     const [soul, memory, routines] = await Promise.all([this.soul(agent.id), this.memory.sections(agent, { person, query: trigger.body }), this.routines.promptSection(agent.id, trigger)]);
     const leading = leadSection(store, agent);
     const making = background ? "" : spawnSection(this, agent);
+    await this.ensureBuiltinSkills([agent.id]);
     const skills = this.skills.promptSection(agent.id);
     const connectors = this.connectors.promptSection(agent.id);
     const soulNote = agent.settings.soulLocked
@@ -1007,7 +1026,7 @@ export class Hub {
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       channelNotes ? `\n## This channel\n${channelNotes}` : "",
       teamNotes ? `\n${teamNotes}` : "",
-      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available.`,
+      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`

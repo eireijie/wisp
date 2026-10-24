@@ -1,4 +1,4 @@
-import { catalogConnector, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type Skill, type SkillSource } from "@warren/core";
+import { BUILTIN_SKILLS, BUILTIN_SKILL_SLUGS, catalogConnector, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type Skill, type SkillSource } from "@warren/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 import { ConnectorAuth } from "./connector-auth.ts";
@@ -270,7 +270,7 @@ export class SkillStore {
 
   /** A slug not yet used in the workspace. */
   freeSlug(workspaceId: string, base: string): string {
-    const taken = new Set((this.db.prepare("SELECT slug FROM skills WHERE workspace_id = ?").all(workspaceId) as { slug: string }[]).map((r) => r.slug));
+    const taken = new Set([...BUILTIN_SKILL_SLUGS, ...(this.db.prepare("SELECT slug FROM skills WHERE workspace_id = ?").all(workspaceId) as { slug: string }[]).map((r) => r.slug)]);
     let s = base;
     for (let i = 2; taken.has(s); i++) s = `${base}-${i}`;
     return s;
@@ -307,10 +307,9 @@ export class SkillStore {
     return (this.db.prepare("SELECT s.* FROM skills s JOIN agent_skills a ON a.skill_id = s.id WHERE a.agent_id = ? ORDER BY s.name COLLATE NOCASE").all(agentId) as SkillRow[]).map((r) => this.view(r));
   }
 
-  /** The agent's installed skills, for its prompt: what each is for and where to read it. */
+  /** The agent's skills, built-in ones first, for its prompt: what each is for and where to read it. */
   promptSection(agentId: string): string {
-    const skills = this.forAgent(agentId);
-    if (!skills.length) return "";
+    const skills = [...BUILTIN_SKILLS.map((s) => ({ name: s.name, slug: s.id, description: s.description })), ...this.forAgent(agentId)];
     return [
       `## Your skills`,
       `You have these skills: step-by-step instructions for kinds of work. When a request matches one, read its SKILL.md first (memory_read) and follow it.`,

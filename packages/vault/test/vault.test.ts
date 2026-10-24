@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { OUTSIDE_AUTHOR, Vault, parseNote } from "../src/index.ts";
+import { OUTSIDE_AUTHOR, Vault, fillFrontmatter, guessType, parseNote } from "../src/index.ts";
 
 const me = { name: "Tester", email: "t@example.com" };
 let dir: string;
@@ -23,6 +23,70 @@ describe("parseNote", () => {
     expect(n.title).toBe("Alpha");
     expect(n.links.sort()).toEqual(["beta", "img.png"]);
     expect(n.tags.sort()).toEqual(["todo", "x", "y"]);
+  });
+
+  it("reads a [[link]] property as one value that links, and ignores links shown as code", () => {
+    const n = parseNote("shared/a.md", "---\nowner: [[Maya Chen]]\npeople: [\"[[A]]\", \"[[B]]\"]\n---\nSee [[Real]], not `[[Example]]` or\n```\n[[Fenced]]\n```\n");
+    expect(n.frontmatter.owner).toBe("[[Maya Chen]]");
+    expect(n.frontmatter.people).toEqual(["[[A]]", "[[B]]"]);
+    // front matter links count; code doesn't
+    expect(n.links.sort()).toEqual(["a", "b", "maya chen", "real"]);
+    expect(parseNote("a.md", "---\nby: [[[Maya Chen]], [[Sam]]]\n---\n").links.sort()).toEqual(["maya chen", "sam"]);
+  });
+});
+
+describe("links", () => {
+  it("skips examples in code and counts links in front matter", () => {
+    const n = parseNote("shared/a.md", '---\nrelated: ["[[Acme]]", "[[pricing]]"]\n---\nWrite `[[note-name]]` like this:\n```\n[[example]]\n```\nSee [[Beta]].\n');
+    expect(n.links.sort()).toEqual(["acme", "beta", "pricing"]);
+  });
+});
+
+describe("filing notes", () => {
+  it("guesses a note's type from its folder", () => {
+    expect(guessType("shared/people/dana.md")).toBe("person");
+    expect(guessType("agents/a/projects/acme.md")).toBe("project");
+    expect(guessType("shared/projects/acme-pricing-decision.md")).toBe("decision");
+    expect(guessType("teams/web/topics/caching.md")).toBe("topic");
+    expect(guessType("shared/journal/2026-10-17.md")).toBe("journal");
+    expect(guessType("shared/research/llms.md")).toBe("reference");
+  });
+
+  it("adds missing front matter without touching what's there", () => {
+    expect(fillFrontmatter("# A\n", { type: "topic", created: "2026-10-17" })).toBe("---\ntype: topic\ncreated: 2026-10-17\n---\n\n# A\n");
+    expect(fillFrontmatter("---\ntype: decision\nrelated:\n  - x\n---\n# A\n", { type: "topic", updated: "2026-10-17" })).toBe("---\ntype: decision\nrelated:\n  - x\nupdated: 2026-10-17\n---\n# A\n");
+    const full = "---\ntype: person\n---\nx";
+    expect(fillFrontmatter(full, { type: "topic" })).toBe(full);
+  });
+
+  it("saves an agent's note with a header and hints, and keeps the first created date", async () => {
+    await vault.write("shared/projects/acme.md", "# Acme\nOur biggest customer.", me);
+    await vault.write("shared/topics/pricing.md", "# Pricing\nHow we charge.", me);
+    await vault.write("shared/projects/acme-pricing.md", "# Acme pricing\nAcme pays per seat, billed yearly, with a discount for nonprofits.", me);
+
+    const r = await vault.save("shared/projects/acme-seats.md", "# Acme seats\nAcme pays per seat, billed yearly; nonprofits get a discount. See [[acme]].\nPricing review next month.", me, { today: "2026-10-01" });
+    expect(r.similar).toEqual([{ path: "shared/projects/acme-pricing.md", title: "Acme pricing" }]);
+    expect(r.linkable).toEqual(["[[pricing]]"]); // acme is already linked
+    // the note's own links are still there, next to the suggestions
+    expect(r.links).toEqual(["acme"]);
+    expect((await vault.read("shared/projects/acme-seats.md")).content).toMatch(/^---\ntype: project\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n\n# Acme seats/);
+
+    // rewritten without a header: it keeps its type and first date, and gets a new updated date
+    await vault.save("shared/projects/acme-seats.md", "---\ntype: decision\n---\n# Acme seats\nPer seat.", me, { today: "2026-10-17" });
+    expect((await vault.read("shared/projects/acme-seats.md")).content).toBe("---\ntype: decision\ncreated: 2026-10-01\nupdated: 2026-10-17\n---\n# Acme seats\nPer seat.");
+
+    // hints only cover notes the writer can read, and fill can be turned off
+    const hidden = await vault.save("shared/x.md", "Pricing for Acme", me, { fill: false, allow: (p) => !p.includes("pricing") });
+    expect(hidden.linkable).toEqual(["[[acme]]"]);
+    expect((await vault.read("shared/x.md")).content).toBe("Pricing for Acme");
+  });
+
+  it("appends with a header for new notes and hints about the new text only", async () => {
+    await vault.write("shared/topics/caching.md", "# Caching\nWhat we cache.", me);
+    const r = await vault.save("shared/journal/2026-10-17.md", "- Looked at caching for the API", me, { append: true, today: "2026-10-17" });
+    expect(r.linkable).toEqual(["[[caching]]"]);
+    await vault.save("shared/journal/2026-10-17.md", "- Shipped it", me, { append: true, today: "2026-10-17" });
+    expect((await vault.read("shared/journal/2026-10-17.md")).content).toBe("---\ntype: journal\ncreated: 2026-10-17\nupdated: 2026-10-17\n---\n\n- Looked at caching for the API\n- Shipped it\n");
   });
 });
 

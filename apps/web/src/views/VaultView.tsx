@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, FilePlus, Folder, Pencil, Trash2, GitCommitHorizontal, History, RefreshCw, ScanEye, Search, UserPen, Users, X, PanelLeft } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, ExternalLink, FilePlus, Folder, Pencil, Trash2, GitCommitHorizontal, History, House, RefreshCw, ScanEye, Search, Share2, UserPen, Users, X, PanelLeft } from "lucide-react";
 import { personDir, type AccessRule, type MemoryLevel } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
@@ -9,6 +9,9 @@ import { Button, Empty, Field, Input, Menu, Modal, cx, timeAgo } from "../compon
 import { AccessDialog, pathLabel } from "../components/AccessDialog.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
 import { obsidianLink, onHubMachine, useMemoryStorage } from "../obsidian.ts";
+import { MemoryGraph, kindColor, kindLabel, neighbourhood, type GraphData, type GraphKind } from "../components/MemoryGraph.tsx";
+import { MemoryGraphView } from "./MemoryGraphView.tsx";
+import { MemoryHome } from "./MemoryHome.tsx";
 
 interface NoteMeta {
   path: string;
@@ -19,6 +22,7 @@ interface NoteMeta {
 }
 interface Note extends NoteMeta {
   content: string;
+  frontmatter: Record<string, string | string[]>;
   backlinks: string[];
   access: MemoryLevel;
   editedBy: string | null;
@@ -50,6 +54,8 @@ interface Commit {
 }
 
 const base = (p: string) => p.split("/").pop()!.replace(/\.md$/i, "");
+/** Phone-width screens, where the file list and a note take turns. */
+const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 const norm = (s: string) => s.trim().replace(/\.md$/i, "").toLowerCase();
 
 export function VaultView({ path, onBack }: { path: string | null; onBack?: () => void }) {
@@ -58,9 +64,12 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
   const searchGeneration = useRef(0);
-  const [showTree, setShowTree] = useState(true);
-  const [activity, setActivity] = useState(false);
-  const [creating, setCreating] = useState<string | null>(null);
+  // phones start on the Memory home; the file list is a tap away
+  const [showTree, setShowTree] = useState(() => !isPhone());
+  // what fills the page instead of a note: the graph, or who changed what
+  const [panel, setPanel] = useState<{ view: "graph"; kind?: GraphKind } | { view: "activity" } | null>(null);
+  const [graph, setGraph] = useState<GraphData | null>(null);
+  const [creating, setCreating] = useState<{ dir: string; name?: string } | null>(null);
   const [sharing, setSharing] = useState<{ path: string; folder: boolean } | null>(null);
   // owners can look at memory the way one agent sees it
   const [viewAs, setViewAs] = useState<string | null>(null);
@@ -74,8 +83,10 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   const memoryVersion = useStore((s) => s.memoryVersion);
 
   const refresh = useCallback(async () => {
-    const [list, rules] = await Promise.all([api<NoteMeta[]>("GET", `/api/vault/notes${viewAs ? `?as=${encodeURIComponent(viewAs)}` : ""}`), api<AccessRule[]>("GET", "/api/access/rules").catch(() => [])]);
+    const as = viewAs ? `?as=${encodeURIComponent(viewAs)}` : "";
+    const [list, rules, links] = await Promise.all([api<NoteMeta[]>("GET", `/api/vault/notes${as}`), api<AccessRule[]>("GET", "/api/access/rules").catch(() => []), api<GraphData>("GET", `/api/vault/graph${as}`).catch(() => null)]);
     setNotes(list);
+    setGraph(links);
     setRuled(new Set(rules.map((r) => r.path.toLowerCase())));
   }, [viewAs]);
   useEffect(() => {
@@ -95,10 +106,12 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   // while viewing as an agent, only show hits it could open
   const visibleHits = useMemo(() => (hits && viewAs && notes ? hits.filter((h) => notes.some((n) => n.path === h.path)) : hits), [hits, viewAs, notes]);
 
-  // on phones, picking a note hides the tree
+  // on phones, picking a note hides the tree; opening a note from the graph or Activity leaves them
   useEffect(() => {
-    if (path && window.matchMedia("(max-width: 767px)").matches) setShowTree(false);
+    if (path && isPhone()) setShowTree(false);
+    setPanel(null);
   }, [path]);
+  const visible = useMemo(() => (notes ? new Set(notes.map((n) => n.path)) : null), [notes]);
 
   /** Obsidian-style resolution: exact path, then basename (preferring the same top folder). */
   const resolve = useCallback(
@@ -129,7 +142,29 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
     [agents, members],
   );
 
-  const openPath = (p: string) => go({ view: "vault", path: p });
+  const openPath = (p: string) => {
+    if (p === path) setPanel(null);
+    go({ view: "vault", path: p });
+  };
+  const where = (p: string) => {
+    const dir = p.split("/").slice(0, -1);
+    // short names: "My notes", "Atlas's notes"; Shared stays "Shared" here
+    return (simple && dir.join("/") !== "shared" && friendlyDir(dir.join("/"), meId, agents)) || dir.map((seg, i) => folderLabel(seg, dir[i - 1] ?? "")).join(" / ") || "Top folder";
+  };
+  const show = (next: typeof panel) => mayLeave() && (setPanel(next), next && isPhone() && setShowTree(false));
+  const goHome = () => {
+    if (!mayLeave()) return;
+    setPanel(null);
+    if (path) go({ view: "vault", path: null });
+    if (isPhone()) setShowTree(false);
+  };
+  const newNoteDir = path ? path.split("/").slice(0, -1).join("/") : meId ? personDir(meId) : "shared";
+  /** A note that's linked to but not written yet: write it next to the first note that links to it. */
+  const writeMissing = (title: string) => {
+    const from = graph?.edges.find((e) => e.target === `ghost:${title}`)?.source;
+    setCreating({ dir: from ? from.split("/").slice(0, -1).join("/") : newNoteDir, name: title });
+  };
+  const tab = panel?.view ?? (path ? null : "home");
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -142,11 +177,11 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         <button className="p-1.5 rounded-md hover:bg-hover text-muted" onClick={() => setShowTree(!showTree)} aria-label="Toggle file list" title="Toggle file list">
           <PanelLeft size={18} />
         </button>
-        <h1 className="text-lg font-bold tracking-tight flex-1 min-w-0 truncate">Memory</h1>
+        <h1 className="text-lg font-bold tracking-tight shrink-0 mr-auto">Memory</h1>
         {isOwner && agents.length > 0 && (
-          <label className="hidden sm:flex items-center gap-1.5 text-sm text-muted" title="See memory the way an agent does">
+          <label className="hidden sm:flex items-center gap-1.5 text-sm text-muted min-w-0" title="See memory the way an agent does">
             <ScanEye size={16} />
-            <select value={viewAs ?? ""} onChange={(e) => setViewAs(e.target.value || null)} className="h-8 rounded-lg border border-line bg-panel px-2 text-sm text-ink" aria-label="View memory as">
+            <select value={viewAs ?? ""} onChange={(e) => setViewAs(e.target.value || null)} className="h-8 min-w-0 max-w-40 rounded-lg border border-line bg-panel px-2 text-sm text-ink" aria-label="View memory as">
               <option value="">View as you</option>
               {agents.map((a) => (
                 <option key={a.id} value={`agent:${a.id}`}>
@@ -156,15 +191,26 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
             </select>
           </label>
         )}
-        <Button variant={activity ? "primary" : "ghost"} onClick={() => mayLeave() && setActivity(!activity)} title="Who changed what, newest first">
-          <History size={16} /> <span className="hidden lg:inline">Activity</span>
-        </Button>
+        <nav className="flex items-center rounded-full bg-chip p-0.5" aria-label="Memory views">
+          {(
+            [
+              { key: "home", label: "Home", icon: <House size={15} />, onClick: goHome, title: "Search, recent changes and the most linked notes" },
+              { key: "graph", label: "Graph", icon: <Share2 size={15} />, onClick: () => show(tab === "graph" ? null : { view: "graph" }), title: "See how notes link together" },
+              { key: "activity", label: "Activity", icon: <History size={15} />, onClick: () => show(tab === "activity" ? null : { view: "activity" }), title: "Who changed what, newest first" },
+            ] as const
+          ).map((t) => (
+            <button key={t.key} onClick={t.onClick} title={t.title} aria-label={t.label} aria-current={tab === t.key ? "page" : undefined} className={cx("h-7 rounded-full px-2.5 inline-flex items-center gap-1.5 text-sm font-medium transition-colors", tab === t.key ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
+              {t.icon}
+              <span className="hidden sm:inline">{t.label}</span>
+            </button>
+          ))}
+        </nav>
         <Button variant="ghost" onClick={() => api("POST", "/api/vault/sync").then(refresh)} title="Look for changes made in Obsidian or on disk">
-          <RefreshCw size={16} /> <span className="hidden sm:inline">Refresh</span>
+          <RefreshCw size={16} /> <span className="hidden xl:inline">Refresh</span>
         </Button>
         {!viewAs && (
-          <Button variant="default" onClick={() => setCreating(path ? path.split("/").slice(0, -1).join("/") : meId ? personDir(meId) : "shared")} title="Write a new note here">
-            <FilePlus size={16} /> <span>New note</span>
+          <Button variant="default" onClick={() => setCreating({ dir: newNoteDir })} title="Write a new note here">
+            <FilePlus size={16} /> <span className="hidden sm:inline">New note</span>
           </Button>
         )}
       </header>
@@ -217,39 +263,53 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
         )}
 
         <div className={cx("flex-1 min-w-0", showTree && "hidden md:block")}>
-          {activity ? (
-            <ActivityFeed onOpen={(p) => (setActivity(false), openPath(p))} />
+          {panel?.view === "activity" ? (
+            <ActivityFeed onOpen={openPath} />
+          ) : panel?.view === "graph" ? (
+            <MemoryGraphView key={`${viewAs}:${panel.kind ?? ""}`} graph={graph} initialKind={panel.kind} where={where} onOpen={openPath} onWrite={viewAs ? undefined : writeMissing} />
           ) : path ? (
-            <NoteReader key={path} path={path} pendingEdit={pendingEdit} resolve={resolve} folderLabel={folderLabel} onChanged={refresh} onShare={() => setSharing({ path, folder: false })} />
+            <NoteReader key={path} path={path} pendingEdit={pendingEdit} resolve={resolve} folderLabel={folderLabel} graph={graph} where={where} onChanged={refresh} onShare={() => setSharing({ path, folder: false })} />
           ) : (
-            <Empty icon={<BookOpen />} title="Your shared memory">
-              {simple ? (
-                <>
-                  <p>Write, read and fix notes right here. This page is also where you see who changed what, and choose who can read or change each folder and note.</p>
-                  <p>Every helper has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose who can use it.</p>
-                  <p className="text-xs text-muted">
-                    Prefer another notes app? You can use <a href={href({ view: "settings", page: "memory" })} className="underline hover:text-ink">Obsidian</a> too.
-                  </p>
-                </>
-              ) : (
-                <>
-                <p>
-                  Obsidian is the best place to write and organize notes. You can also fix, add or delete notes here. This page is for finding them, seeing who changed what, and choosing who can read or edit each folder and note.
-                </p>
-                <p>Every agent has a private folder and everyone shares <b>Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.</p>
-                <p>
-                  <OpenInObsidian className="mt-1" />
-                </p>
-                </>
-              )}
-            </Empty>
+            <MemoryHome
+              graph={graph}
+              visible={viewAs ? visible : null}
+              where={where}
+              snippetHtml={snippetHtml}
+              onOpen={openPath}
+              onGraph={(kind) => show({ view: "graph", kind })}
+              onActivity={() => show({ view: "activity" })}
+              onNew={viewAs ? undefined : () => setCreating({ dir: newNoteDir })}
+              footer={
+                simple ? (
+                  <>
+                    <p>Every helper has a private folder and everyone shares <b className="text-ink">Shared</b>. Use the share button on a folder or note to choose who can read or change it.</p>
+                    <Advanced title="Use another notes app">
+                      <p className="text-xs">
+                        You can open this memory in <a href={href({ view: "settings", page: "memory" })} className="underline hover:text-ink">Obsidian</a> too.
+                      </p>
+                    </Advanced>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Every agent has a private folder and everyone shares <b className="text-ink">Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.
+                    </p>
+                    <p className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span className="flex-1 min-w-48">It's plain markdown in git, so you can also write in Obsidian.</span>
+                      <OpenInObsidian className="h-8" />
+                    </p>
+                  </>
+                )
+              }
+            />
           )}
         </div>
       </div>
 
       {creating !== null && (
         <NewNote
-          initial={creating}
+          initial={creating.dir}
+          initialName={creating.name}
           folders={notes ? [...new Set(notes.map((n) => n.path.split("/").slice(0, -1).join("/")).filter(Boolean))].sort() : []}
           onClose={() => setCreating(null)}
           onCreated={async (p) => {
@@ -359,7 +419,25 @@ function friendlyDir(dir: string, meId: string | undefined, agents: { id: string
   return a ? `${a.name}'s notes` : null;
 }
 
-function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShare }: { path: string; pendingEdit: React.MutableRefObject<string | null>; resolve: (t: string, from?: string | null) => string | null; folderLabel: (s: string, p: string) => string; onChanged: () => void; onShare: () => void }) {
+function NoteReader({
+  path,
+  pendingEdit,
+  resolve,
+  folderLabel,
+  graph,
+  where,
+  onChanged,
+  onShare,
+}: {
+  path: string;
+  pendingEdit: React.MutableRefObject<string | null>;
+  resolve: (t: string, from?: string | null) => string | null;
+  folderLabel: (s: string, p: string) => string;
+  graph: GraphData | null;
+  where: (p: string) => string;
+  onChanged: () => void;
+  onShare: () => void;
+}) {
   const [note, setNote] = useState<Note | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"history" | "authors" | null>(null);
@@ -505,7 +583,7 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
             </>
           ) : (
             <>
-              <OpenInObsidian note={path} className="h-8 hidden md:inline-flex" />
+              {!simple && <OpenInObsidian note={path} className="h-8 hidden md:inline-flex border-0 px-2 text-muted hover:text-ink" />}
               {canEdit && !viewing && (
                 <Button variant="ghost" className="h-8" onClick={() => setDraft(note.content)} title="Edit this note here">
                   <Pencil size={15} /> <span>Edit</span>
@@ -561,7 +639,13 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
           {draft !== null ? (
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck ref={focusAtEnd} aria-label="Note text" className="w-full h-full resize-none bg-transparent px-4 md:px-8 py-6 font-mono text-[14px] leading-relaxed outline-none" />
           ) : (
-            <div onClick={onClick} className="prose-w max-w-3xl px-4 md:px-8 py-6 text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
+            <div className={cx("px-4 md:px-8 py-6 grid gap-8", !side && "xl:grid-cols-[minmax(0,48rem)_17rem] 2xl:gap-12")}>
+              <article className="min-w-0 max-w-3xl">
+                {!viewing && <Properties frontmatter={note.frontmatter ?? {}} kind={graph?.nodes.find((n) => n.id === path)?.kind ?? null} resolve={(t) => resolve(t, path)} />}
+                <div onClick={onClick} className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
+              </article>
+              <Connected path={path} graph={graph} backlinks={note.backlinks} where={where} />
+            </div>
           )}
         </div>
       </div>
@@ -613,11 +697,120 @@ function NoteReader({ path, pendingEdit, resolve, folderLabel, onChanged, onShar
   );
 }
 
-function NewNote({ initial, folders, onClose, onCreated }: { initial: string; folders: string[]; onClose: () => void; onCreated: (p: string) => void }) {
+/** The note's front matter, laid out as properties: tags as chips, [[links]] you can follow. */
+function Properties({ frontmatter, kind, resolve }: { frontmatter: Record<string, string | string[]>; kind: GraphKind | null; resolve: (t: string) => string | null }) {
+  const simple = useSimple();
+  const entries = Object.entries(frontmatter).filter(([k, v]) => k !== "title" && (Array.isArray(v) ? v.length : v !== ""));
+  if (!entries.length) return null;
+  const value = (v: string) => {
+    const link = v.match(/^\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]$/);
+    if (!link) return <span className="break-words">{v}</span>;
+    const to = resolve(link[1]!);
+    return to ? (
+      <button onClick={() => go({ view: "vault", path: to })} className="text-accent-text hover:underline underline-offset-2">
+        {link[2] ?? link[1]}
+      </button>
+    ) : (
+      <span className="text-muted">{link[2] ?? link[1]}</span>
+    );
+  };
+  const nice = (k: string) => k.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+  return (
+    <dl className="mb-6 rounded-2xl border border-line bg-bg/60 px-4 py-3 grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-6 gap-y-2 text-sm" aria-label="Properties">
+      {entries.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-muted">{nice(k)}</dt>
+          <dd className="min-w-0 flex flex-wrap items-center gap-1.5">
+            {k === "type" && typeof v === "string" ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-chip px-2 h-6 text-xs font-medium">
+                {kind && <span className="size-2 rounded-full" style={{ background: kindColor(kind) }} title={kindLabel(kind, simple)} />}
+                {v}
+              </span>
+            ) : k === "tags" ? (
+              (Array.isArray(v) ? v : [v]).map((t) => (
+                <span key={t} className="rounded-full bg-chip px-2 h-6 inline-flex items-center text-xs text-muted">
+                  #{t}
+                </span>
+              ))
+            ) : Array.isArray(v) ? (
+              v.map((x, i) => (
+                <span key={i} className="after:content-[','] after:text-faint last:after:content-none">
+                  {value(x)}
+                </span>
+              ))
+            ) : (
+              value(v)
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Beside the note: a small map of the notes it's linked with, and the lists of what links here and where it points. */
+function Connected({ path, graph, backlinks, where }: { path: string; graph: GraphData | null; backlinks: string[]; where: (p: string) => string }) {
+  const simple = useSimple();
+  const local = useMemo(() => {
+    if (!graph) return null;
+    // a sparsely linked note also shows its neighbours' neighbours, while that stays small enough to read
+    const one = neighbourhood(graph, path, 1);
+    const two = one.nodes.length < 4 ? neighbourhood(graph, path, 2) : one;
+    return two.nodes.length <= 12 ? two : one;
+  }, [graph, path]);
+  const byId = useMemo(() => new Map(graph?.nodes.map((n) => [n.id, n]) ?? []), [graph]);
+  const outgoing = (graph?.edges ?? []).filter((e) => e.source === path && !backlinks.includes(e.target)).map((e) => byId.get(e.target)!).filter(Boolean);
+  // the graph follows "View as", so a note the viewed agent can't read drops out of these lists too
+  const linkedHere = graph ? backlinks.filter((p) => byId.has(p)).map((p) => byId.get(p)!) : [];
+  const open = (p: string | null) => p && go({ view: "vault", path: p });
+  const Row = ({ n }: { n: { id: string; path: string | null; title: string; kind: GraphKind } }) => (
+    <li>
+      <button disabled={!n.path} onClick={() => open(n.path)} className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-hover disabled:hover:bg-transparent flex items-center gap-2 min-w-0">
+        <span className={cx("size-2 rounded-full shrink-0", n.kind === "ghost" && "border border-dashed")} style={n.kind === "ghost" ? { borderColor: "var(--faint)" } : { background: kindColor(n.kind) }} />
+        <span className={cx("truncate text-sm", !n.path && "text-muted")}>{n.title}</span>
+        <span className="ml-auto text-xs text-faint truncate max-w-[45%] shrink-0">{n.path ? where(n.path) : kindLabel("ghost", simple).toLowerCase()}</span>
+      </button>
+    </li>
+  );
+  return (
+    <aside className="min-w-0 space-y-5 xl:sticky xl:top-6 xl:self-start border-t border-line pt-6 xl:border-0 xl:pt-0" aria-label="Connected notes">
+      <section>
+        <h3 className="text-xs font-semibold text-muted mb-2">Connected notes</h3>
+        <div className="relative h-60 rounded-2xl border border-line bg-[radial-gradient(circle_at_1px_1px,var(--line)_1px,transparent_0)] bg-size-[16px_16px] overflow-hidden">
+          {local && local.nodes.length > 1 ? (
+            <MemoryGraph graph={local} variant="local" active={path} onOpen={(n) => open(n.path)} className="absolute inset-0" label={`${local.nodes.length - 1} notes linked with this one`} />
+          ) : (
+            <p className="absolute inset-0 grid place-items-center p-5 text-center text-xs text-muted">
+              {local ? "Not linked to other notes yet. Write [[Note name]] to link one." : "Loading…"}
+            </p>
+          )}
+        </div>
+      </section>
+      {linkedHere.length > 0 && (
+        <section>
+          <h3 className="text-xs font-semibold text-muted mb-1">
+            Linked from <span className="text-faint tabular-nums">{linkedHere.length}</span>
+          </h3>
+          <ul className="-mx-2">{linkedHere.map((n) => <Row key={n.id} n={n} />)}</ul>
+        </section>
+      )}
+      {outgoing.length > 0 && (
+        <section>
+          <h3 className="text-xs font-semibold text-muted mb-1">
+            Links to <span className="text-faint tabular-nums">{outgoing.length}</span>
+          </h3>
+          <ul className="-mx-2">{outgoing.map((n) => <Row key={n.id} n={n} />)}</ul>
+        </section>
+      )}
+    </aside>
+  );
+}
+
+function NewNote({ initial, initialName = "", folders, onClose, onCreated }: { initial: string; initialName?: string; folders: string[]; onClose: () => void; onCreated: (p: string) => void }) {
   const agents = useStore((s) => s.agents);
   const meId = useStore((s) => s.me?.user.id);
   const [dir, setDir] = useState(initial);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | null>(null);
   const simple = useSimple();
   const choices = [
@@ -701,7 +894,7 @@ function OpenInObsidian({ note, className }: { note?: string; className?: string
   const direct = storage?.path && onHubMachine();
   const label = (
     <>
-      <ExternalLink size={15} /> <span className={note ? "hidden xl:inline" : undefined}>Open in Obsidian</span>
+      <ExternalLink size={15} /> <span className={note ? "sr-only" : undefined}>Open in Obsidian</span>
     </>
   );
   const style = cx("inline-flex items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-medium hover:bg-hover whitespace-nowrap", className);

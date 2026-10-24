@@ -825,6 +825,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       const name = m.name.replace(/[^\w.-]+/g, "-").replace(/\.md$/i, "");
       await hub.vault(c.workspaceId).write(`agents/${agent.id}/imported/${name}.md`, m.content, author, `Import ${m.name} for @${agent.handle}`);
     }
+    await hub.ensureBuiltinSkills([agent.id]);
     return h.agentView(store.agent(agent.id)!);
   });
 }
