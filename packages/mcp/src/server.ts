@@ -42,7 +42,7 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
     .then((r) => r.text, () => "")
     .then((t) => (t.length > 8000 ? t.slice(0, 8000) + "\n…(more with memory_context)" : t));
   const server = new McpServer(
-    { name: "warren", version: "0.0.1" },
+    { name: "wisp", version: "0.0.1" },
     {
       instructions: `You are @${self.handle} in the Warren workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
     },

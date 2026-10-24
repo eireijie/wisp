@@ -176,7 +176,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
 
   const resourceMetadata = (req: FastifyRequest) => {
     const o = publicOrigin(req);
-    return { resource: `${o}/mcp`, authorization_servers: [o], bearer_methods_supported: ["header"], scopes_supported: ["agent"], resource_name: "Warren" };
+    return { resource: `${o}/mcp`, authorization_servers: [o], bearer_methods_supported: ["header"], scopes_supported: ["agent"], resource_name: "Wisp" };
   };
   const serverMetadata = (req: FastifyRequest) => {
     const o = publicOrigin(req);
