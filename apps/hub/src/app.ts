@@ -38,6 +38,7 @@ export async function buildHub(opts: HubOptions) {
   await vaults.openAll();
   const hub = new Hub(store, vaults);
   hubRef = hub;
+  hub.reach.cloudflare.configure(path.resolve(opts.dataDir));
   await hub.foldTeams();
   await hub.ensureBuiltinSkills(undefined, true);
   hub.routines.start();

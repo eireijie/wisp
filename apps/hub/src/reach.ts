@@ -1,7 +1,7 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
-import { reachableAddresses, isTailscaleAddress } from "./reachable-addresses.ts";
+import { httpOrigin, reachableAddresses, isTailscaleAddress } from "./reachable-addresses.ts";
 import path from "node:path";
 
 /**
@@ -117,6 +117,7 @@ export class Reach {
   private bin: string | null = null;
   private cache: { at: number; value: TailscaleStatus } | null = null;
   private lastError: string | null = null;
+  readonly cloudflare: Cloudflare;
 
   constructor(
     private port: number,
@@ -128,7 +129,8 @@ export class Reach {
         return false;
       }
     },
-  ) {}
+    cloudflareOptions: CloudflareOptions = {},
+  ) { this.cloudflare = new Cloudflare(port, exists, cloudflareOptions); }
 
   private find(): string | null {
     // looked for again until it's found, so installing Tailscale while Warren runs is noticed
@@ -164,7 +166,7 @@ export class Reach {
   /** The address to give out, best first: Tailscale's https address when it's serving this hub. */
   async publicUrl(): Promise<string | null> {
     const t = await this.tailscale();
-    return t.state === "running" && t.serving && t.dnsName ? `https://${t.dnsName}` : null;
+    return t.state === "running" && t.serving && t.dnsName ? `https://${t.dnsName}` : this.cloudflare.status().url;
   }
 
   /**
@@ -210,4 +212,116 @@ export class Reach {
 /** This computer's home-network addresses for the hub (not loopback, not Tailscale). */
 export function lanAddresses(port: number, interfaces = os.networkInterfaces()): string[] {
   return reachableAddresses(null, port, interfaces).filter((url) => !isTailscaleAddress(new URL(url).hostname));
+}
+
+export interface CloudflareStatus {
+  state: "missing" | "stopped" | "starting" | "running" | "error";
+  url: string | null;
+  error: string | null;
+}
+export interface CloudflareOptions {
+  spawn?: typeof spawn;
+}
+
+export function cloudflaredCandidates(platform = process.platform, envPath = process.env.PATH ?? "", only = process.env.WARREN_CLOUDFLARED): string[] {
+  if (only) return [only];
+  const exe = platform === "win32" ? "cloudflared.exe" : "cloudflared";
+  return [...new Set([...envPath.split(platform === "win32" ? ";" : ":").filter(Boolean).map((d) => path.join(d, exe)),
+    ...(platform === "darwin" ? ["/opt/homebrew/bin/cloudflared", "/usr/local/bin/cloudflared"] : platform === "win32" ? ["C:\\Program Files (x86)\\cloudflared\\cloudflared.exe"] : ["/usr/bin/cloudflared", "/usr/local/bin/cloudflared"])])];
+}
+
+/** A remotely configured tunnel; its ingress must point at this computer's Wisp. */
+export class Cloudflare {
+  private child: ChildProcess | null = null;
+  private configFile: string | null = null;
+  private value: CloudflareStatus = { state: "stopped", url: null, error: null };
+  private configuredUrl: string | null = null;
+  constructor(private port: number, private exists: (p: string) => boolean, private options: CloudflareOptions = {}) {}
+
+  configure(dataDir: string) {
+    this.configFile = path.join(dataDir, "cloudflare.json");
+    try {
+      const config = JSON.parse(fs.readFileSync(this.configFile, "utf8"));
+      if (typeof config.token === "string") this.start(config.token, config.url, false);
+    } catch { /* no saved tunnel, or unavailable on this computer */ }
+  }
+  private find() { return cloudflaredCandidates().find((p) => this.exists(p)); }
+  status(): CloudflareStatus {
+    if (!this.child && this.value.state === "stopped" && !this.find()) return { state: "missing", url: null, error: null };
+    return { ...this.value };
+  }
+  start(token: string, url?: string | null, persist = true): CloudflareStatus {
+    if (!/^[a-zA-Z0-9_+/=-]{20,16384}$/.test(token)) throw new Error("Paste the code from Cloudflare again.");
+    const bin = this.find();
+    if (!bin) throw new Error("Install cloudflared on this computer, then try again.");
+    const origin = httpOrigin(url);
+    if (url && (!origin || !origin.startsWith("https://") || new URL(url).pathname !== "/" || new URL(url).search || new URL(url).hash)) throw new Error("Use your Cloudflare HTTPS address.");
+    // Save before switching processes, so a failed write leaves the current tunnel running.
+    if (persist && this.configFile) {
+      const temporary = `${this.configFile}.tmp`;
+      try {
+        fs.writeFileSync(temporary, JSON.stringify({ token, url: origin }), { mode: 0o600 });
+        fs.chmodSync(temporary, 0o600);
+        fs.renameSync(temporary, this.configFile);
+      } finally { fs.rmSync(temporary, { force: true }); }
+    }
+    this.close();
+    this.configuredUrl = origin;
+    this.value = { state: "starting", url: null, error: null };
+    // Environment keeps the credential out of command lines and process listings.
+    const child = (this.options.spawn ?? spawn)(bin, ["tunnel", "--no-autoupdate", "--logformat", "json", "run"], { env: { ...process.env, TUNNEL_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    this.child = child;
+    const read = () => {
+      let buffer = "";
+      return (chunk: Buffer) => {
+        if (this.child !== child) return;
+        buffer += chunk.toString();
+        let newline: number;
+        while ((newline = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, newline); buffer = buffer.slice(newline + 1);
+          this.readLine(line);
+        }
+        if (buffer.length > 128_000) buffer = "";
+      };
+    };
+    child.stdout?.on("data", read());
+    child.stderr?.on("data", read());
+    child.on("error", () => {
+      if (this.child !== child) return;
+      this.child = null;
+      this.value = { state: "error", url: null, error: "Cloudflare could not start; check that cloudflared is installed." };
+    });
+    child.on("exit", () => {
+      if (this.child !== child) return;
+      this.child = null;
+      this.value = { state: "error", url: null, error: "Cloudflare stopped; check its setup and try again." };
+    });
+    return this.status();
+  }
+  private readLine(line: string) {
+    try {
+      const event = JSON.parse(line);
+      if (event.config) {
+        const config = typeof event.config === "string" ? JSON.parse(event.config) : event.config;
+        const ingress = config.ingress as { hostname?: string; service?: string }[] | undefined;
+        const route = ingress?.find((r) => r.hostname && r.service && new RegExp(`^http://(localhost|127\\.0\\.0\\.1|\\[::1\\]):${this.port}/?$`).test(r.service));
+        this.configuredUrl = route?.hostname && !route.hostname.includes("*") ? httpOrigin(`https://${route.hostname}`) : null;
+      }
+      if (/Registered tunnel connection/i.test(event.message ?? "")) this.value.state = "running";
+      if (this.value.state === "running") this.value.url = this.configuredUrl;
+    } catch { /* only structured connection and ingress messages affect state */ }
+  }
+  stop() {
+    if (this.configFile) fs.rmSync(this.configFile, { force: true });
+    this.close();
+    return this.status();
+  }
+  /** Shutdown keeps the saved setting, so the tunnel returns with Wisp. */
+  close() {
+    const child = this.child;
+    this.child = null;
+    child?.kill();
+    this.value = { state: "stopped", url: null, error: null };
+    this.configuredUrl = null;
+  }
 }
