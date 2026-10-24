@@ -229,5 +229,5 @@ function safeJson(t: string) {
 export interface SavedNote {
   path: string;
   similar?: { path: string; title: string }[];
-  links?: string[];
+  linkable?: string[];
 }

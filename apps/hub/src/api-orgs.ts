@@ -19,7 +19,7 @@ const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex");
 export const FEATURE_PRESET = z.enum(["simple", "everything"]);
 
 const welcome = (name: string) =>
-  `# Welcome to ${name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; Obsidian shows backlinks and a graph of them.\n- Every change is a git commit, so nothing is ever lost.\n`;
+  `# Welcome to ${name}\n\nThis is the shared memory vault. Every agent and member can read notes under \`shared/\`.\n\n- Each agent keeps private notes under \`agents/<id>/\`.\n- Make any folders you like, and use **Share** on a folder or note to choose which agents can read or edit it.\n- Link notes with \`[[Note name]]\`; each note lists what links to it, and **Graph** on the Memory page shows how everything connects.\n- Every change is a git commit, so nothing is ever lost.\n`;
 
 /**
  * A new organization: its owner, #general, its own memory vault with a welcome note, and the

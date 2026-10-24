@@ -1628,6 +1628,17 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return vaultOf(c).list((p) => atLeast(check(p).level, "read"));
   });
 
+  /** How notes link to each other, for the Memory graph: only notes this caller (or `?as=`) can read. */
+  app.get("/api/vault/graph", async (req, reply) => {
+    const c = need(req, reply);
+    if (!c) return;
+    const as = (req.query as { as?: string }).as;
+    const viewer = as ? viewAs(c, as, reply) : c.viewer;
+    if (!viewer) return;
+    const check = hub.access.checker(c.workspaceId, viewer);
+    return vaultOf(c).graph((p) => atLeast(check(p).level, "read"));
+  });
+
   app.get("/api/vault/note", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;

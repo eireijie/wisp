@@ -24,6 +24,15 @@ describe("parseNote", () => {
     expect(n.links.sort()).toEqual(["beta", "img.png"]);
     expect(n.tags.sort()).toEqual(["todo", "x", "y"]);
   });
+
+  it("reads a [[link]] property as one value that links, and ignores links shown as code", () => {
+    const n = parseNote("shared/a.md", "---\nowner: [[Maya Chen]]\npeople: [\"[[A]]\", \"[[B]]\"]\n---\nSee [[Real]], not `[[Example]]` or\n```\n[[Fenced]]\n```\n");
+    expect(n.frontmatter.owner).toBe("[[Maya Chen]]");
+    expect(n.frontmatter.people).toEqual(["[[A]]", "[[B]]"]);
+    // front matter links count; code doesn't
+    expect(n.links.sort()).toEqual(["a", "b", "maya chen", "real"]);
+    expect(parseNote("a.md", "---\nby: [[[Maya Chen]], [[Sam]]]\n---\n").links.sort()).toEqual(["maya chen", "sam"]);
+  });
 });
 
 describe("links", () => {
@@ -57,7 +66,9 @@ describe("filing notes", () => {
 
     const r = await vault.save("shared/projects/acme-seats.md", "# Acme seats\nAcme pays per seat, billed yearly; nonprofits get a discount. See [[acme]].\nPricing review next month.", me, { today: "2026-10-01" });
     expect(r.similar).toEqual([{ path: "shared/projects/acme-pricing.md", title: "Acme pricing" }]);
-    expect(r.links).toEqual(["[[pricing]]"]); // acme is already linked
+    expect(r.linkable).toEqual(["[[pricing]]"]); // acme is already linked
+    // the note's own links are still there, next to the suggestions
+    expect(r.links).toEqual(["acme"]);
     expect((await vault.read("shared/projects/acme-seats.md")).content).toMatch(/^---\ntype: project\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n\n# Acme seats/);
 
     // rewritten without a header: it keeps its type and first date, and gets a new updated date
@@ -66,14 +77,14 @@ describe("filing notes", () => {
 
     // hints only cover notes the writer can read, and fill can be turned off
     const hidden = await vault.save("shared/x.md", "Pricing for Acme", me, { fill: false, allow: (p) => !p.includes("pricing") });
-    expect(hidden.links).toEqual(["[[acme]]"]);
+    expect(hidden.linkable).toEqual(["[[acme]]"]);
     expect((await vault.read("shared/x.md")).content).toBe("Pricing for Acme");
   });
 
   it("appends with a header for new notes and hints about the new text only", async () => {
     await vault.write("shared/topics/caching.md", "# Caching\nWhat we cache.", me);
     const r = await vault.save("shared/journal/2026-10-17.md", "- Looked at caching for the API", me, { append: true, today: "2026-10-17" });
-    expect(r.links).toEqual(["[[caching]]"]);
+    expect(r.linkable).toEqual(["[[caching]]"]);
     await vault.save("shared/journal/2026-10-17.md", "- Shipped it", me, { append: true, today: "2026-10-17" });
     expect((await vault.read("shared/journal/2026-10-17.md")).content).toBe("---\ntype: journal\ncreated: 2026-10-17\nupdated: 2026-10-17\n---\n\n- Looked at caching for the API\n- Shipped it\n");
   });
