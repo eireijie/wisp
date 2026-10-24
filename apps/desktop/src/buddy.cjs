@@ -13,6 +13,7 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
   let pointerTimer = null;
   const choice = () => config.buddyAgents?.[origin] ?? null;
   const agentId = () => agents.find((a) => a.id === choice())?.id ?? agents.find((a) => a.id === leadId)?.id ?? agents[0]?.id ?? null;
+  const overFullscreen = () => process.platform === "darwin" && config.buddyOverFullscreen === true;
   const settings = () => ({ agentId: agentId() });
   const trusted = (e, window) => {
     if (!window || e.sender !== window.webContents || e.senderFrame !== e.sender.mainFrame) return false;
@@ -45,13 +46,14 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
     const p = config.buddyPosition;
     const bounds = clamp({ x: Number.isFinite(p?.x) ? p.x : area.x + area.width - 160, y: Number.isFinite(p?.y) ? p.y : area.y + area.height - 180, width: 140, height: 160 });
     win = new BrowserWindow({
+      ...(overFullscreen() ? { type: "panel" } : {}),
       ...bounds, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
       resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
       hasShadow: false, show: false, backgroundColor: "#00000000", title: "Warren desk buddy",
       webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: false },
     });
-    win.setAlwaysOnTop(true, "floating");
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    win.setAlwaysOnTop(true, overFullscreen() ? "screen-saver" : "floating");
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: overFullscreen(), skipTransformProcessType: !overFullscreen() });
     win.setIgnoreMouseEvents(true, { forward: true });
     // Linux has no forwarded mousemove while ignoring clicks. Sample only the cursor,
     // sending hit tests when it moves within this tiny window; no renderer idle loop.
@@ -131,6 +133,13 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
       { label: "Off", type: "radio", checked: config.buddyEnabled === false, click: () => choose(choice(), false) },
       { label: "Lead / first agent", type: "radio", checked: config.buddyEnabled !== false && !choice(), click: () => choose(null) },
       ...agents.map((a) => ({ label: a.name, type: "radio", checked: config.buddyEnabled !== false && choice() === a.id, click: () => choose(a.id) })),
+      ...(process.platform === "darwin" ? [
+        { type: "separator" },
+        { label: "Show over fullscreen apps", type: "checkbox", checked: overFullscreen(), click: (i) => {
+          config.buddyOverFullscreen = i.checked;
+          remember(); destroy(); save(); sync(); refresh();
+        } },
+      ] : []),
     ] }),
   };
 };

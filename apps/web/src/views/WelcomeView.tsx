@@ -417,48 +417,63 @@ export function EasiestWay({ name, token, connected }: { name: string; token: st
   const os = desktopOs();
   const get = downloadsFor(os);
   const computer = info?.platform === "darwin" ? "Mac" : info?.platform === "win32" ? "PC" : "computer";
+  const command = (
+    <details open={inDesktop && !!info?.device && !connected} className="rounded-xl border border-line p-4">
+      <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
+      <div className="mt-3 space-y-3">
+        <DeviceInstall token={token} name={name} />
+        <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
+      </div>
+    </details>
+  );
   if (inDesktop)
     return (
-      <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
-        <p className="text-sm font-medium">{`This ${computer} is being connected automatically`}</p>
-        <p className="text-sm text-muted">
-          {connected ? `${name} is connected.` : info?.device ? "Connected to Warren. It can take a few seconds to show up here." : `The Warren app has not connected this ${computer} yet.`}
-        </p>
-        {!connected && !info?.device && (
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await connect({ token, name });
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Connect this {computer}
-          </Button>
-        )}
-      </div>
+      <>
+        <div className="rounded-xl border border-line bg-panel p-4 space-y-2">
+          <p className="text-sm font-medium">{`This ${computer} is ${info?.device ? "already connected" : "being connected automatically"}`}</p>
+          {(connected || !info?.device) && (
+            <p className="text-sm text-muted">{connected ? `${name} is connected.` : `The Warren app has not connected this ${computer} yet.`}</p>
+          )}
+          {!connected && !info?.device && (
+            <Button
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await connect({ token, name });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Connect this {computer}
+            </Button>
+          )}
+        </div>
+        {command}
+      </>
     );
   return (
-    <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
-      <p className="text-sm font-medium">Easiest: download the Warren app</p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        <a className="font-medium underline" href={get.href}>{get.label}</a>
-        {get.more.map((m) => (
-          <a key={m.href} className="text-muted underline" href={m.href}>{m.label}</a>
-        ))}
-        <a className="text-muted underline" href={RELEASES} target="_blank" rel="noreferrer">All downloads</a>
+    <>
+      <div className="rounded-xl border border-line bg-panel p-4 space-y-3">
+        <p className="text-sm font-medium">Easiest: download the Warren app</p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <a className="font-medium underline" href={get.href}>{get.label}</a>
+          {get.more.map((m) => (
+            <a key={m.href} className="text-muted underline" href={m.href}>{m.label}</a>
+          ))}
+          <a className="text-muted underline" href={RELEASES} target="_blank" rel="noreferrer">All downloads</a>
+        </div>
+        <p className="text-sm text-muted">Then open it, choose “Join a server”, and enter this address:</p>
+        <CopyBlock text={hub} />
+        {originReach(hub) !== "anywhere" && (
+          <p className="text-xs text-muted">
+            {originReach(hub) === "this-computer" ? "This address only works on this computer." : "This address only works on this Wi-Fi."} For a computer somewhere else, go back to step 1 and turn on Tailscale.
+          </p>
+        )}
       </div>
-      <p className="text-sm text-muted">Then open it, choose “Join a server”, and enter this address:</p>
-      <CopyBlock text={hub} />
-      {originReach(hub) !== "anywhere" && (
-        <p className="text-xs text-muted">
-          {originReach(hub) === "this-computer" ? "This address only works on this computer." : "This address only works on this Wi-Fi."} For a computer somewhere else, go back to step 1 and turn on Tailscale.
-        </p>
-      )}
-    </div>
+      {command}
+    </>
   );
 }
 
@@ -477,13 +492,6 @@ function DeviceScreen({ usable, device, onPick, onNext }: { usable: DeviceInfo[]
         <Heading title={`Connect ${created.name}`}>Warren needs to be running on {created.name} so your agents can work there. The Mac app does this for you; a command works for any computer.</Heading>
         <div className="space-y-5">
           <EasiestWay name={created.name} token={created.token} connected={!!live} />
-          <details className="rounded-xl border border-line p-4">
-            <summary className="cursor-pointer text-sm font-medium">Connect another computer with a command</summary>
-            <div className="mt-3 space-y-3">
-              <DeviceInstall token={created.token} name={created.name} />
-              <p className="text-xs text-muted">“warren node start” stops when you close its terminal window; “warren service install node” keeps it running in the background.</p>
-            </div>
-          </details>
           <p className="text-xs text-muted">
             The token is shown once and saved on the device.
             {onHub() && " If this is the computer running Warren, pick “Warren already installed” and run it in the folder you started Warren from."}

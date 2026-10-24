@@ -9,7 +9,7 @@ function fixture() {
     return elements.get(id)!;
   };
   const server = { id: 42, name: "saved-server", ip: "203.0.113.7", type: "cx23", location: "fsn1" };
-  const setup = { check: async () => ({}), onCloudStep: vi.fn(), cloudPlans: vi.fn(async () => ({ ok: true, plans: [], locations: [], currency: "EUR" })), cloudCreate: vi.fn(async () => ({ ok: true, url: "https://hub" })) };
+  const setup = { cloudKeep: vi.fn(), check: async () => ({}), onCloudStep: vi.fn(), cloudPlans: vi.fn(async () => ({ ok: true, plans: [], locations: [], currency: "EUR" })), cloudCreate: vi.fn(async () => ({ ok: true, url: "https://hub" })) };
   const html = readFileSync(new URL("../src/setup.html", import.meta.url), "utf8");
   const code = html.match(/<script>([\s\S]*?)<\/script>/)![1];
   runInNewContext(code, {
@@ -21,6 +21,12 @@ function fixture() {
 }
 
 describe("resuming cloud setup after relaunch", () => {
+  it("hands Keep it to the desktop so the pending server can be dismissed persistently", () => {
+    const f = fixture();
+    f.element("cloud-keep").onclick();
+    expect(f.setup.cloudKeep).toHaveBeenCalledOnce();
+  });
+
   it("shows Keep waiting and resumes the saved server after re-entering credentials, even without available plans", async () => {
     const f = fixture();
     await Promise.resolve();

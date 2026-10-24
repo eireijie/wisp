@@ -474,7 +474,7 @@
     if (!cloudToken) { deleteId = null; cloudCard("cloud-connect"); $("cloud-token").focus(); return; }
     cloudCreate(resumeId);
   };
-  $("cloud-keep").onclick = () => { $("cloud-fail-actions").hidden = true; };
+  $("cloud-keep").onclick = () => setup.cloudKeep();
   if (state.step === "cloud" && state.server) {
     show("cloud");
     cloudCard("cloud-progress");

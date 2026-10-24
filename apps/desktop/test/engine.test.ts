@@ -229,3 +229,36 @@ describe("device connection state", () => {
     expect(await engine.deviceConnected("http://hub", { ...cfg, nodeId: undefined }, "session", { fetchImpl: ambiguous })).toBe(false);
   });
 });
+
+
+describe("device status without a session", () => {
+  it("uses the latest connection event for the current hub and invalidates it on disconnect, rejection, or restart", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-device-status-"));
+    const log = path.join(dir, "device.log");
+    const connected = '[warren] connected to https://hub as "My Mac" hosting no agents yet\n';
+    try {
+      expect(engine.deviceLogConnected("https://hub", log)).toBe(false);
+      fs.writeFileSync(log, connected + "[warren] @agent: working\n");
+      expect(engine.deviceLogConnected("https://hub", log)).toBe(true);
+      expect(engine.deviceLogConnected("https://other", log)).toBe(false);
+      for (const event of [
+        "[warren] disconnected (1006); retrying in 1s",
+        "[warren] connection error: socket closed",
+        "[warren] hub rejected the node token. Create a new node in Warren",
+        "[warren] another `warren node start` is running with this device's token",
+        "--- 2026-10-23T12:00:00Z starting node start",
+      ]) {
+        fs.writeFileSync(log, connected + event + "\n");
+        expect(engine.deviceLogConnected("https://hub", log)).toBe(false);
+        fs.appendFileSync(log, connected);
+        expect(engine.deviceLogConnected("https://hub", log)).toBe(true);
+      }
+      fs.writeFileSync(log, "x".repeat(70_000) + "\n" + connected);
+      expect(engine.deviceLogConnected("https://hub", log)).toBe(true);
+      fs.writeFileSync(log, "[warren] connected to invalid-url as device\n");
+      expect(engine.deviceLogConnected("https://hub", log)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

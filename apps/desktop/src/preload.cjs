@@ -35,6 +35,7 @@ if (location.protocol === "file:")
     retry: () => ipcRenderer.invoke("setup:retry"),
     cloudPlans: (token) => ipcRenderer.invoke("setup:cloud-plans", token),
     cloudCreate: (token, choice) => ipcRenderer.invoke("setup:cloud-create", token, choice),
+    cloudKeep: () => ipcRenderer.invoke("setup:cloud-keep"),
     cloudDelete: (token, id) => ipcRenderer.invoke("setup:cloud-delete", token, id),
     onCloudStep: (fn) => ipcRenderer.on("setup:cloud-step", (_event, step) => fn(step)),
   });

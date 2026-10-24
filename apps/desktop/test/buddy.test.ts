@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-function fixture(config: Record<string, any> = {}) {
+function fixture(config: Record<string, any> = {}, platform = "darwin") {
   const ipc = new EventEmitter() as EventEmitter & { handle: ReturnType<typeof vi.fn> };
   ipc.handle = vi.fn();
   const windows: Window[] = [];
@@ -32,7 +32,7 @@ function fixture(config: Record<string, any> = {}) {
   const filename = fileURLToPath(new URL("../src/buddy.cjs", import.meta.url));
   const require = createRequire(import.meta.url);
   const module = { exports: null as any };
-  runInNewContext(readFileSync(filename, "utf8"), { module, URL, process, __dirname: filename.slice(0, filename.lastIndexOf("/")), setTimeout, clearTimeout, setInterval, clearInterval, require: (name: string) => name === "electron" ? { BrowserWindow: Window, ipcMain: ipc, screen } : require(name) });
+  runInNewContext(readFileSync(filename, "utf8"), { module, URL, process: { ...process, platform }, __dirname: filename.slice(0, filename.lastIndexOf("/")), setTimeout, clearTimeout, setInterval, clearInterval, require: (name: string) => name === "electron" ? { BrowserWindow: Window, ipcMain: ipc, screen } : require(name) });
   const main = new Window({});
   main.webContents.mainFrame.url = "http://hub/";
   const open = vi.fn();
@@ -51,7 +51,9 @@ describe("native desk buddy", () => {
     expect(f.win.options).toMatchObject({ frame: false, transparent: true, skipTaskbar: true, alwaysOnTop: true, width: 140, height: 160 });
     expect(f.win.getBounds()).toEqual({ x: 1060, y: 640, width: 140, height: 160 });
     expect(f.win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
-    expect(f.win.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+    expect(f.win.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: false, skipTransformProcessType: true });
+    expect(f.win.setAlwaysOnTop).toHaveBeenCalledWith(true, "floating");
+    expect(f.win.options.type).toBeUndefined();
     f.buddy.destroy();
   });
 
@@ -72,6 +74,47 @@ describe("native desk buddy", () => {
     f.buddy.menu().submenu[0].click();
     expect(f.config.buddyEnabled).toBe(false);
     expect(f.win.destroy).toHaveBeenCalled();
+  });
+
+  it("persists fullscreen visibility and recreates the macOS window with the chosen level and type", () => {
+    const f = fixture();
+    const toggle = () => f.buddy.menu().submenu.find((i: any) => i.label === "Show over fullscreen apps");
+    expect(toggle()).toMatchObject({ type: "checkbox", checked: false });
+    toggle().click({ checked: true });
+    const panel = f.windows.at(-1)!;
+    expect(f.config.buddyOverFullscreen).toBe(true);
+    expect(f.save).toHaveBeenCalled();
+    expect(f.win.destroy).toHaveBeenCalled();
+    expect(panel.options.type).toBe("panel");
+    expect(panel.setAlwaysOnTop).toHaveBeenCalledWith(true, "screen-saver");
+    expect(panel.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: true, skipTransformProcessType: false });
+    expect(toggle().checked).toBe(true);
+    toggle().click({ checked: false });
+    const normal = f.windows.at(-1)!;
+    expect(f.config.buddyOverFullscreen).toBe(false);
+    expect(panel.destroy).toHaveBeenCalled();
+    expect(normal.options.type).toBeUndefined();
+    expect(normal.setAlwaysOnTop).toHaveBeenCalledWith(true, "floating");
+    expect(normal.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: false, skipTransformProcessType: true });
+    f.buddy.destroy();
+  });
+
+  it("restores the fullscreen preference on macOS and ignores it on other platforms", () => {
+    for (const platform of ["darwin", "win32", "linux"]) {
+      const f = fixture({ buddyOverFullscreen: true }, platform);
+      expect(f.win.options.type).toBe(platform === "darwin" ? "panel" : undefined);
+      expect(f.buddy.menu().submenu.some((i: any) => i.label === "Show over fullscreen apps")).toBe(platform === "darwin");
+      f.buddy.destroy();
+    }
+  });
+
+  it("keeps an explicitly disabled buddy off when changing the fullscreen preference", () => {
+    const f = fixture({ buddyEnabled: false });
+    const toggle = f.buddy.menu().submenu.find((i: any) => i.label === "Show over fullscreen apps");
+    toggle.click({ checked: true });
+    expect(f.windows).toHaveLength(1);
+    expect(f.config.buddyEnabled).toBe(false);
+    f.buddy.destroy();
   });
 
   it("only accepts buddy controls from its own main frame and validates navigation", () => {

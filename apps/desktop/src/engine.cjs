@@ -166,6 +166,29 @@ async function deviceConnected(origin, cfg, session, { fetchImpl = fetch } = {})
   }
 }
 
+/** The latest connection event in the device log, including restarts and rejected tokens. */
+function deviceLogConnected(origin, file = path.join(NODE_DIR, "node.log")) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const size = fs.fstatSync(fd).size;
+    const bytes = Buffer.alloc(Math.min(size, 64 * 1024));
+    fs.readSync(fd, bytes, 0, bytes.length, size - bytes.length);
+    const lines = bytes.toString("utf8").split("\n");
+    if (size > bytes.length) lines.shift();
+    for (const line of lines.reverse()) {
+      const connected = line.match(/^\[warren\] connected to (\S+) as /);
+      if (connected) return new URL(connected[1]).origin === new URL(origin).origin;
+      if (/^--- .* starting node start|^\[warren\] (?:disconnected |connection error:|hub rejected the node token|another `warren node start`)/.test(line)) return false;
+    }
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  return false;
+}
+
 /** What a person typed as a server address, as the addresses to try in order. */
 function candidates(input) {
   const text = String(input || "").trim().replace(/\/+$/, "");
@@ -424,4 +447,4 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, deviceConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+module.exports = { Child, findNode, findWarren, isWarren, runtime, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };

@@ -16,7 +16,7 @@ const CONFIG = path.join(app.getPath("userData"), "desktop.json");
 const ICON = path.join(__dirname, "..", "build", "icon.png");
 const SETUP_PAGE = path.join(__dirname, "setup.html");
 
-/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
+/** @type {{ autoUpdate?: boolean, mode?: "local" | "remote", hubUrl?: string, cloud?: { provider: "hetzner", id: number, name: string, ip: string, location: string, type: string }, cloudPending?: { server: { id: number, name: string, ip: string, location: string, type: string }, key: string, dismissed?: boolean }, warrenDir?: string, device?: boolean, bounds?: Electron.Rectangle, buddyEnabled?: boolean, buddyOverFullscreen?: boolean, buddyAgents?: Record<string, string | null>, buddyPosition?: { x: number, y: number } }} */
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
@@ -31,11 +31,14 @@ let win = null;
 /** @type {Tray | null} */
 let tray = null;
 let quitting = false;
+let pendingCloudOpen = false;
+let resumeOnShow = false;
 let hubOrigin = null; // the hub the window shows, once it's reachable
 let hubBy = ""; // "app" | "service" | "already running" | "remote"
 let deviceBy = ""; // "app" | "service"
 let deviceError = "";
 let deviceOnline = false;
+let deviceSignedOut = false;
 let deviceStatusTimer = null;
 let deviceWaiting = false; // added as soon as someone signs in
 const buddy = require("./buddy.cjs")({
@@ -98,6 +101,10 @@ function createWindow() {
   win.on("close", (e) => {
     if (quitting) return;
     e.preventDefault();
+    if (pendingCloudOpen) {
+      keepPendingCloud();
+      resumeOnShow = true;
+    }
     win?.hide();
     if (process.platform === "darwin") app.dock?.hide();
   });
@@ -119,6 +126,7 @@ function createWindow() {
 
 function showWindow() {
   if (!win) createWindow();
+  if (resumeOnShow) { resumeOnShow = false; connect(); }
   if (process.platform === "darwin") app.dock?.show();
   if (win.isMinimized()) win.restore();
   win.show();
@@ -126,12 +134,30 @@ function showWindow() {
 }
 
 function showSetup(state = {}) {
+  resumeOnShow = false;
+  pendingCloudOpen = false;
   if (!win) createWindow();
   win.loadFile(SETUP_PAGE, { query: { state: JSON.stringify(state) } });
   showWindow();
 }
 
+function showPendingCloud() {
+  if (!config.cloudPending) return;
+  showSetup({ step: "cloud", server: config.cloudPending.server });
+  pendingCloudOpen = true;
+}
+
+function keepPendingCloud() {
+  if (config.cloudPending) {
+    config.cloudPending.dismissed = true;
+    save();
+  }
+  pendingCloudOpen = false;
+  refresh();
+}
+
 function openHub(url, route = "") {
+  pendingCloudOpen = false;
   hubOrigin = new URL(url).origin;
   buddy.connect(hubOrigin);
   if (!win) createWindow();
@@ -321,10 +347,14 @@ async function readDeviceStatus() {
   const origin = hubOrigin;
   const cfg = engine.readNodeConfig();
   const active = () => config.device && !deviceError && (deviceBy === "service" || device.running());
-  const online = !!(active() && origin && sameOrigin(cfg.hub, origin) && await engine.deviceConnected(origin, cfg, await sessionToken()));
+  const session = await sessionToken();
+  const online = !!(active() && cfg.token && origin && sameOrigin(cfg.hub, origin) && (session
+    ? await engine.deviceConnected(origin, cfg, session)
+    : (deviceBy !== "service" || await engine.serviceRunning("node")) && engine.deviceLogConnected(origin, deviceBy === "service" ? undefined : device.log)));
   // A server switch or disconnect during the request invalidates its result.
   if (hubOrigin !== origin || engine.readNodeConfig().token !== cfg.token) return false;
   deviceOnline = !!(active() && online);
+  deviceSignedOut = !session;
   refresh();
   return deviceOnline;
 }
@@ -433,6 +463,7 @@ function hubLine() {
 
 function deviceLine() {
   if (deviceError) return `This computer: ${deviceError}`;
+  if (deviceOnline && deviceSignedOut) return "This computer: connected, sign in to manage";
   if (deviceOnline && deviceBy === "service") return "This computer: connected (as a service)";
   if (deviceOnline) return "This computer: connected";
   if (deviceBy === "service" || device.running()) return "This computer: connecting…";
@@ -480,6 +511,7 @@ function trayMenu() {
     { label: n.screenCode ? "Change Screen Code…" : "Pick a Screen Code…", visible: isDevice && !!n.shareScreen && !n.noScreen, click: () => showCodeWindow(!!n.screenCode) },
     { label: "Pause Agents on This Computer", type: "checkbox", visible: isDevice, checked: !!n.paused, click: (i) => setDeviceFlag("paused", i.checked) },
     { type: "separator" },
+    ...(config.cloudPending ? [{ label: "Unfinished Cloud Server…", click: () => showPendingCloud() }] : []),
     { label: "Create or Join Another Server…", click: () => showSetup() },
     ...updater.menu(),
     { label: "Update Automatically", type: "checkbox", checked: config.autoUpdate !== false, click: (i) => ((config.autoUpdate = i.checked), save()) },
@@ -510,7 +542,7 @@ function appMenu() {
     {
       label: "Go",
       submenu: [
-        { label: "Dashboard", accelerator: "CmdOrCtrl+1", click: go("dashboard") },
+        { label: "Inbox", accelerator: "CmdOrCtrl+1", click: go("dashboard") },
         { label: "Computers", accelerator: "CmdOrCtrl+2", click: go("computers") },
         { label: "Memory", accelerator: "CmdOrCtrl+3", click: go("vault") },
         { label: "Devices", accelerator: "CmdOrCtrl+4", click: go("nodes") },
@@ -611,10 +643,17 @@ setup("setup:cloud-create", async (token, { type, location, account, device: asD
   } catch (err) {
     if (err.server && err.key) {
       config.cloudPending = { server: { id: err.server.id, name: err.server.name, ip: err.server.ip, location: err.server.location, type: err.server.type }, key: err.key };
+      pendingCloudOpen = true;
       save();
+      refresh();
     }
     return { ok: false, error: err.message, server: err.server ? { id: err.server.id, name: err.server.name, ip: err.server.ip } : null };
   }
+});
+
+setup("setup:cloud-keep", () => {
+  keepPendingCloud();
+  return connect();
 });
 
 setup("setup:cloud-delete", async (token, id) => {
@@ -622,7 +661,9 @@ setup("setup:cloud-delete", async (token, id) => {
     await cloud.deleteServer(String(token || "").trim(), id);
     if (config.cloudPending?.server?.id === id) {
       config.cloudPending = undefined;
+      pendingCloudOpen = false;
       save();
+      refresh();
     }
     return { ok: true };
   } catch (err) {
@@ -671,7 +712,7 @@ app.whenReady().then(() => {
   makeTray();
   buddy.ready();
   createWindow();
-  if (config.cloudPending) showSetup({ step: "cloud", server: config.cloudPending.server });
+  if (config.cloudPending && !config.cloudPending.dismissed) showPendingCloud();
   else connect();
   updater.start();
   deviceStatusTimer = setInterval(() => void readDeviceStatus(), 15_000);
