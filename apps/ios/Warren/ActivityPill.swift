@@ -74,6 +74,8 @@ struct ActivityPill: View {
         .font(.footnote.weight(.bold))
         .foregroundStyle(.red)
         .frame(width: 32, height: 32)
+        // the whole capsule is the target, not just the small glyph (a plain button only hits its drawn content)
+        .contentShape(Capsule())
         .glassCapsule(interactive: true)
     }
     .buttonStyle(.plain)

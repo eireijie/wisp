@@ -59,6 +59,12 @@ struct ChannelView: View {
     }
     .defaultScrollAnchor(.bottom)
     .onChange(of: list.last?.id) { Bottom.follow(proxy) }
+    // a lazy stack measures tall rows (a long reply) only as they're laid out, so the first scroll
+    // to the end can land past it and show nothing; settle on the real end once layout is done
+    .task(id: list.last?.id) {
+      try? await Task.sleep(for: .milliseconds(300))
+      Bottom.follow(proxy)
+    }
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
