@@ -27,7 +27,7 @@ describe("setupProgress", () => {
 
 describe("isLocalOnlyHost", () => {
   it("flags addresses that only work on this computer", () => {
-    for (const h of ["localhost", "127.0.0.1", "::1", "[::1]"]) expect(isLocalOnlyHost(h)).toBe(true);
-    for (const h of ["warren.example.com", "192.168.1.20", ""]) expect(isLocalOnlyHost(h)).toBe(false);
+    for (const h of ["localhost", "127.0.0.1", "127.0.0.2", "127.255.255.255", "::1", "[::1]", " LOCALHOST "]) expect(isLocalOnlyHost(h)).toBe(true);
+    for (const h of ["warren.example.com", "192.168.1.20", "", "localhost.example.com", "127.0.0.1.example.com", "127.0.0.999", "127.", "::1.example.com", "[::1", "::1]"]) expect(isLocalOnlyHost(h)).toBe(false);
   });
 });

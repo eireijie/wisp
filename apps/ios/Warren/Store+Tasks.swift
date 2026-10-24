@@ -19,11 +19,6 @@ extension Store {
     taskLead = lead.lead
     taskLeadOverride = lead.leadId
   }
-  func saveTaskLead(_ id: String) async throws {
-    let data = try await fetch { try await $0.put("/api/settings/lead", ["leadId": AnyEncodable.nullable(id)]) }
-    let lead = try Wire.decoder.decode(WorkspaceLead.self, from: data)
-    taskLead = lead.lead; taskLeadOverride = lead.leadId
-  }
   @discardableResult
   func createTask(_ fields: Fields) async throws -> WorkTask {
     let task: WorkTask = try await fetch { try await $0.post("/api/tasks", fields) }

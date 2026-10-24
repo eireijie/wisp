@@ -233,7 +233,7 @@ function reason(err, origin) {
  */
 async function testHub(input, { timeoutMs = 5000, fetchImpl = fetch } = {}) {
   const list = candidates(input);
-  if (!list.length) return { ok: false, error: "That isn't a server address. Try something like warren.example.com or 192.168.1.20:4747.", checks: [] };
+  if (!list.length) return { ok: false, error: "That isn't a server address. Try something like warren.example.com or warren.local:4747.", checks: [] };
   let first = null;
   let answered = null;
   for (const origin of list) {

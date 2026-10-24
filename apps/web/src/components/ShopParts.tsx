@@ -4,7 +4,6 @@ import {
   Bug,
   Calculator,
   CalendarCheck,
-  ChevronLeft,
   ClipboardList,
   Clock,
   Cloud,
@@ -44,7 +43,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Agent } from "@warren/core";
-import { AgentAvatar, HARNESS_LABELS, cx } from "./ui.tsx";
+import { AgentAvatar, harnessLabel, cx } from "./ui.tsx";
 
 /** Icons the connector and skill catalogs name. */
 const ICONS: Record<string, LucideIcon> = {
@@ -96,56 +95,6 @@ export function IconTile({ children, className }: { children: ReactNode; classNa
   return <span className={cx("size-9 shrink-0 rounded-lg bg-accent-soft text-accent-text grid place-items-center", className)}>{children}</span>;
 }
 
-/** Title, one line on what the page is for, and an action. */
-export function ShopHeader({ title, onBack, action }: { title: string; onBack?: () => void; action?: ReactNode }) {
-  return (
-    <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-      {onBack && (
-        <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
-          <ChevronLeft size={22} />
-        </button>
-      )}
-      <h1 className="text-lg font-bold tracking-tight flex-1 truncate">{title}</h1>
-      {action}
-    </header>
-  );
-}
-
-export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <label className="relative block w-full sm:w-72">
-      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder}
-        className="h-9 w-full rounded-lg border border-input bg-transparent pl-9 pr-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30"
-      />
-    </label>
-  );
-}
-
-export function Tabs<T extends string>({ value, onChange, tabs }: { value: T; onChange: (v: T) => void; tabs: { id: T; label: string; count?: number }[] }) {
-  return (
-    <div className="flex items-center gap-1" role="tablist">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          role="tab"
-          aria-selected={value === t.id}
-          onClick={() => onChange(t.id)}
-          className={cx("relative h-9 px-2 text-sm font-medium", value === t.id ? "text-ink after:absolute after:inset-x-1 after:-bottom-px after:h-0.5 after:rounded-full after:bg-accent" : "text-muted hover:text-ink")}
-        >
-          {t.label}
-          {t.count !== undefined && <span className="ml-1.5 text-xs text-faint tabular-nums">{t.count}</span>}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** Pick which agents get something. `note` explains, per agent, a caveat (e.g. its harness isn't wired yet). */
 export function AgentPicker({ agents, value, onChange, note, disabled, unavailable }: { agents: Agent[]; value: string[]; onChange: (ids: string[]) => void; note?: (a: Agent) => string | null; disabled?: boolean; unavailable?: (a: Agent) => boolean }) {
   if (!agents.length) return <p className="text-sm text-muted">No agents yet. Add one from the Agents page first.</p>;
@@ -172,7 +121,7 @@ export function AgentPicker({ agents, value, onChange, note, disabled, unavailab
               <span className="min-w-0 flex-1">
                 <span className="block text-sm truncate">{a.name}</span>
                 <span className="block text-xs text-muted truncate">
-                  @{a.handle} · {HARNESS_LABELS[a.harness]}
+                  @{a.handle} · {harnessLabel(a.harness)}
                   {n && <span className="text-warn"> · {n}</span>}
                 </span>
               </span>

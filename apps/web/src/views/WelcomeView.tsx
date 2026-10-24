@@ -397,14 +397,14 @@ function IntroScreen({ onContinue }: { onContinue: () => void }) {
 // --- 1. the device ----------------------------------------------------------------------------------
 
 /** Opened on the computer running the hub, so that computer is probably the device. */
-const onHub = () => ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || location.hostname.endsWith(".localhost");
+const onHub = () => isLocalOnlyHost(location.hostname);
 
 function guessName(): string {
   const ua = navigator.userAgent;
   return /Mac/.test(ua) && !/iPhone|iPad/.test(ua) ? "my-mac" : /Windows/.test(ua) ? "my-pc" : /Linux/.test(ua) && !/Android/.test(ua) ? "my-linux" : "my-computer";
 }
 
-/** Device names like "yug-mac" read as one word, so they don't break at the hyphen. */
+/** Device names like "alex-mac" read as one word, so they don't break at the hyphen. */
 const nb = (name: string) => <span className="whitespace-nowrap">{name}</span>;
 
 

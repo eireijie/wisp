@@ -5,14 +5,14 @@ import { CONTACT_EMAIL, REPO } from "../lib/site";
 
 <Legal
   title="Privacy policy"
-  description="Warren is self-hosted. The apps talk only to your own Warren, and the project collects no analytics or personal data."
+  description="Warren is self-hosted. The apps connect to your own Warren. Desktop update checks contact GitHub, and optional cloud setup contacts Hetzner. The project collects no analytics."
   current="privacy"
 >
   <div class="note">
     <p><strong>The short version.</strong></p>
     <ul>
       <li>Warren runs on your own computer or server, which we call your <em>hub</em>. We don't run a Warren cloud.</li>
-      <li>The Warren apps (desktop, iPhone, Android) talk only to the hub you connect them to.</li>
+      <li>The Warren apps connect to your hub. Desktop update checks also contact GitHub, and cloud setup contacts Hetzner if you use it.</li>
       <li>The Warren project collects no analytics, no tracking data and no personal information. None of it reaches us.</li>
       <li>Your AI agents send what they work on to the AI services you choose to set up, such as Anthropic or OpenAI.</li>
     </ul>
@@ -39,8 +39,9 @@ import { CONTACT_EMAIL, REPO } from "../lib/site";
   <h2>What the apps do</h2>
   <ul>
     <li>
-      <strong>They only talk to your hub.</strong> The desktop, iPhone and Android apps connect to the hub address you
-      give them, and nothing else, except for the push notification services described below.
+      <strong>They connect to your hub.</strong> The desktop, iPhone and Android apps connect to the hub address you
+      give them. Desktop update checks and downloads contact GitHub. If you use the desktop app's cloud setup,
+      it contacts Hetzner to create and manage your server. Push notifications use the services described below.
     </li>
     <li>
       <strong>No analytics, ads or trackers.</strong> The apps contain no analytics tools, advertising tools or crash
@@ -48,7 +49,7 @@ import { CONTACT_EMAIL, REPO } from "../lib/site";
     </li>
     <li>
       <strong>Sign-in stays on your device.</strong> The phone apps keep the sign-in for your hub in your phone's secure
-      storage (the Keychain on iPhone, the app's private storage on Android). Removing the app removes it.
+      storage (the Keychain on iPhone, the app's private storage on Android). Sign out in the app and revoke its session on your hub to remove access.
     </li>
     <li>
       <strong>The camera is only for pairing.</strong> To pair your phone, you scan a QR code shown in Warren on your
@@ -98,9 +99,10 @@ import { CONTACT_EMAIL, REPO } from "../lib/site";
   <h2>Your choices</h2>
   <p>
     Because your information lives on your hub, you control it there. The person who runs a hub can see, change, export
-    and delete what's stored on it, including your account. To remove everything from a phone or computer, remove the
-    Warren app. Since we don't hold any of your data, there's nothing for us to hand over or delete, but we're happy to
-    answer questions.
+    and delete what's stored on it, including your account. Removing the app alone does not delete a computer's hub
+    data or services. For complete deletion on a computer, run <a href={`${REPO}/blob/main/uninstall.sh`}>uninstall.sh</a>
+    and confirm the relevant removal steps. Remove the phone app and revoke its sign-in on your hub to disconnect it.
+    Since we don't hold your data, there's nothing for us to hand over or delete, but we're happy to answer questions.
   </p>
 
   <h2>Open source</h2>

@@ -1,5 +1,5 @@
 /**
- * Optional features an organization can switch on or off (Settings → Features). Everything
+ * Optional features an organization can switch on or off (Settings → General → Mods). Everything
  * that needs setup or adds screens lives here, so a new organization starts small.
  */
 

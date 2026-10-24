@@ -113,7 +113,7 @@ export function VoicePage() {
     <PageHeader title="Voice">Talk with your helpers out loud, and choose how voices sound.</PageHeader>
     <Section title="How voices work" description="Your microphone is only used when you start a call or a test.">
       <Card>
-        <Row label="On this device" hint="Nothing leaves your computer. It's free and needs no key. Some browsers, like Chrome, may still send what you say to their own online speech service when listening." />
+        <Row label="On this device" hint="Uses your device's voices. It's free and needs no key. Browser speech recognition may use an online service, sending what you say to the browser provider." />
         <Row label="Online voices" hint="Audio goes to OpenAI or ElevenLabs, and they bill you separately for it. You need your own key from them." />
       </Card>
     </Section>

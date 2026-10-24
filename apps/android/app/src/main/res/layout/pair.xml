@@ -125,8 +125,8 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/pairHelp"
             style="@style/StepText"
-            android:layout_marginTop="32dp"
-            android:text="Don't have Warren on a computer yet? Get it free at github.com/eireijie/warren." />
+            android:layout_marginTop="32dp" />
     </LinearLayout>
 </ScrollView>

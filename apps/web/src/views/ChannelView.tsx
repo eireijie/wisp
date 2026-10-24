@@ -10,7 +10,7 @@ import { ChannelIcon, ChannelMembers, ChannelSettings, NOTIFY, isProtected, setA
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ChangeCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
-import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, harnessLabel, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { takeDraft } from "../draft.ts";
@@ -462,7 +462,7 @@ function ModelControl({ agent, ctx, catalog, canEdit }: { agent: Agent; ctx: Age
         <button
           type="button"
           onClick={canEdit ? toggle : undefined}
-          title={`${HARNESS_LABELS[ctx.harness] ?? ctx.harness} · ${ctx.model ?? "default model"}${ctx.effort ? ` · ${ctx.effort} effort` : ""}${ctx.fast ? " · fast" : ""}`}
+          title={`${harnessLabel(ctx.harness) ?? ctx.harness} · ${ctx.model ?? "default model"}${ctx.effort ? ` · ${ctx.effort} effort` : ""}${ctx.fast ? " · fast" : ""}`}
           className={cx("h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] min-w-0", canEdit && "hover:bg-hover", open && "bg-hover")}
         >
           {ctx.fast && ctx.fastAvailable && <Zap size={13} className="text-accent-text fill-accent shrink-0" />}
@@ -971,7 +971,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
               {name}
             </span>
             {agent && (
-              <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-semibold" title={`Agent · ${HARNESS_LABELS[agent.harness]}`}>
+              <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-semibold" title={`Agent · ${harnessLabel(agent.harness)}`}>
                 agent
               </span>
             )}

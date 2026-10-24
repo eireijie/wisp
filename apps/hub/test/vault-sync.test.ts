@@ -66,7 +66,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   ownerId = (await api("GET", "/api/me")).data.user.id;
   const invite = (await api("POST", "/api/invites", { role: "member" })).data;
   sam = (await api("POST", "/api/invites/accept", { code: invite.code, name: "Sam", email: "sam@example.com", password: "password123" }, "")).data.token;
@@ -101,7 +101,7 @@ describe("memory over git", () => {
     await git(tmp, "clone", "-q", remote(ownerToken), clone);
     expect(fs.readFileSync(path.join(clone, "shared/hello.md"), "utf8")).toContain("first note");
     expect(fs.readFileSync(path.join(clone, ".gitignore"), "utf8")).toContain(".obsidian/");
-    expect((await git(clone, "log", "--format=%an")).split("\n")).toContain("Yugal");
+    expect((await git(clone, "log", "--format=%an")).split("\n")).toContain("Alex");
   });
 
   it("takes a push from Obsidian, credits the person in Activity, and indexes the note", async () => {
@@ -115,11 +115,11 @@ describe("memory over git", () => {
     expect((await api("GET", "/api/vault/note?path=shared/hello.md")).data.content).toContain("edited on the laptop");
     expect((await api<any[]>("GET", "/api/vault/search?q=fromlaptop")).data.map((h) => h.path)).toEqual(["shared/new.md"]);
     const changes = (await api<any[]>("GET", "/api/vault/changes")).data;
-    expect(changes[0]).toMatchObject({ author: "Yugal", message: "Laptop edits" });
+    expect(changes[0]).toMatchObject({ author: "Alex", message: "Laptop edits" });
     expect(changes[0].files.map((f: any) => f.path).sort()).toEqual(["shared/hello.md", "shared/new.md"]);
-    expect((await api<any[]>("GET", "/api/vault/history?path=shared/new.md")).data[0].author).toBe("Yugal");
+    expect((await api<any[]>("GET", "/api/vault/history?path=shared/new.md")).data[0].author).toBe("Alex");
     // the line-by-line view says the same
-    expect((await api<any[]>("GET", "/api/vault/blame?path=shared/new.md")).data[0].author).toBe("Yugal");
+    expect((await api<any[]>("GET", "/api/vault/blame?path=shared/new.md")).data[0].author).toBe("Alex");
     // and the vault on disk is at the pushed commit, with a clean working folder
     expect(await git(hub.vaults.primary.root, "rev-parse", "HEAD")).toBe(await git(clone, "rev-parse", "HEAD"));
     expect(await git(hub.vaults.primary.root, "status", "--porcelain")).toBe("");
@@ -265,7 +265,7 @@ describe("edits made in Obsidian on this machine", () => {
     await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nsaved by Warren\n" });
     await sleep(2500);
     expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(Number(before) + 1);
-    expect(await git(root, "log", "-1", "--format=%an")).toBe("Yugal");
+    expect(await git(root, "log", "-1", "--format=%an")).toBe("Alex");
 
     // editing and deleting in Warren (the web app's Save and Delete) don't add outside-edit commits either
     const n = Number(await git(root, "rev-list", "--count", "HEAD"));
@@ -273,7 +273,7 @@ describe("edits made in Obsidian on this machine", () => {
     await api("DELETE", "/api/vault/note?path=shared/agent-note.md");
     await sleep(2500);
     expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(n + 2);
-    expect(await git(root, "log", "-2", "--format=%an")).toBe("Yugal\nYugal");
+    expect(await git(root, "log", "-2", "--format=%an")).toBe("Alex\nAlex");
 
     // deleting in Obsidian removes it from search too
     fs.rmSync(path.join(root, "Projects/Idea.md"));

@@ -9,7 +9,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  /** what agents call them ("Yug"); null = their name */
+  /** what agents call them ("Alex"); null = their name */
   preferredName: string | null;
   /** IANA time zone, e.g. "America/New_York"; agents see their local time, routines run in it */
   timezone: string | null;

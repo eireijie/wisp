@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, Loader2, RotateCcw, Shuffle } from "lucide-react";
 import type { Agent } from "@warren/core";
-import { GHOST_ACCESSORIES, GHOST_PALETTES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import { GHOST_ACCESSORIES, GHOST_EYES, GHOST_HATS, GHOST_MOTIONS, GHOST_MOUTHS, GHOST_SHAPES, defaultAppearance, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { GhostColors } from "../components/GhostColors.tsx";
@@ -60,11 +60,6 @@ const MOODS: [PreviewMood, string][] = [
   ["asleep", "Asleep"],
 ];
 
-/** True when the look uses one of the built-in palettes. */
-export function paletteOf(look: Pick<GhostAppearance, "color" | "color2">) {
-  return GHOST_PALETTES.find((p) => p.color === look.color.toLowerCase() && p.color2 === look.color2?.toLowerCase());
-}
-
 /**
  * The full look editor: a big preview that watches your pointer, a mood preview, and every option
  * as chips (colors, shape, eyes, mouth, hat, accessory, motion) plus rosy cheeks.
@@ -73,7 +68,6 @@ export function paletteOf(look: Pick<GhostAppearance, "color" | "color2">) {
 export function LookEditor({ value: look, onChange, name, below, extra, speakingLevel }: { value: GhostAppearance; onChange: (look: GhostAppearance) => void; name: string; below?: ReactNode; extra?: ReactNode; speakingLevel?: number }) {
   const [mood, setMood] = useState<PreviewMood>("awake");
   const set = <K extends keyof GhostAppearance>(k: K, v: GhostAppearance[K]) => onChange({ ...look, [k]: v });
-  const custom = !paletteOf(look);
   return (
     <div className="grid lg:grid-cols-[minmax(280px,400px)_1fr] gap-6 lg:gap-8 items-start">
       {/* preview */}
@@ -169,6 +163,7 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }

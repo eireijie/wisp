@@ -3,7 +3,8 @@
 /** Where people write to us. A placeholder until the domain is chosen. */
 export const CONTACT_EMAIL = "hello@warren.example";
 
-export const REPO = "https://github.com/eireijie/warren";
+export const GITHUB_REPO = "eireijie/warren";
+export const REPO = `https://github.com/${GITHUB_REPO}`;
 export const RELEASES = `${REPO}/releases`;
 const latest = (name: string) => `${RELEASES}/latest/download/${name}`;
 
@@ -17,10 +18,10 @@ export const DOWNLOADS = {
   android: latest("Warren-android.apk"),
 };
 
-export const INSTALL_UNIX = "curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash";
-export const INSTALL_WINDOWS = "irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1 | iex";
+export const INSTALL_UNIX = `curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.sh | bash`;
+export const INSTALL_WINDOWS = `irm https://raw.githubusercontent.com/${GITHUB_REPO}/main/install.ps1 | iex`;
 export const INSTALL_DOCKER =
-  "docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/eireijie/warren";
+  `docker run -d --name warren -p 4747:4747 -v warren-data:/data --restart unless-stopped ghcr.io/${GITHUB_REPO}`;
 
 /** The docs, in reading order. Slugs match the markdown files' names. */
 export const DOC_ORDER = [

@@ -59,8 +59,6 @@ const BUILTIN: Record<string, HarnessSpec> = {
 
 /** Every harness Warren reads and changes the settings of, by id. */
 export const HARNESS_SPECS: Record<string, HarnessSpec> = { ...BUILTIN, ...MORE_HARNESSES };
-/** Where each harness keeps its things, and the variable that moves all of it (older name for HARNESS_SPECS). */
-export const HARNESS_HOME = HARNESS_SPECS;
 
 /** Gemini's variable names the folder above .gemini, Goose's the folder above config/. */
 const FROM_ENV: Record<string, (v: string) => string> = { gemini: (v) => path.join(v, ".gemini"), goose: (v) => path.join(v, "config") };

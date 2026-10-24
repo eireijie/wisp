@@ -10,10 +10,11 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 const updater = createRequire(import.meta.url)("../src/updater.cjs");
+const { GITHUB_URL } = createRequire(import.meta.url)("../src/repo.cjs");
 
 const release = (tag: string, assets: string[], extra: Record<string, unknown> = {}) => ({
   tag_name: tag,
-  html_url: `https://github.com/eireijie/warren/releases/tag/${tag}`,
+  html_url: `${GITHUB_URL}/releases/tag/${tag}`,
   body: `notes for ${tag}`,
   assets: assets.map((name) => ({ name, browser_download_url: `https://example.com/${tag}/${name}`, size: 100, digest: `sha256:${tag}` })),
   ...extra,

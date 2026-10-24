@@ -43,10 +43,7 @@ export function screenLine(n: { online: boolean; capabilities: DeviceCapabilitie
   return `${base} (Last time: ${last.ok ? "on" : "off"}.)`;
 }
 
-/** Opened on the computer running the hub itself, so the address only works there. */
-export function isLocalOnlyHost(hostname: string): boolean {
-  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname) || hostname.endsWith(".localhost");
-}
+export { isLocalOnlyHost } from "../loopback.ts";
 
 /** What to tell someone about a device that is not connected; null while it is connected. */
 export function notConnectedLine(n: { online: boolean; lastSeen: string | null }): string | null {

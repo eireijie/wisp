@@ -4,7 +4,7 @@ import type { Agent, AgentCommand } from "@warren/core";
 import { api } from "../api.ts";
 import type { ChannelInfo } from "../store.ts";
 import type { ChannelMember } from "./Channels.tsx";
-import { AgentAvatar, HARNESS_LABELS, agentVar, cx } from "./ui.tsx";
+import { AgentAvatar, harnessLabel, agentVar, cx } from "./ui.tsx";
 
 /**
  * The "/" menu, like Discord's: type "/" at the start of a message and every agent here shows
@@ -116,7 +116,7 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
             <div key={g.agent.id}>
               <div className="px-2.5 pt-2 pb-1 text-xs text-muted flex items-center gap-1.5" style={agentVar(g.agent)}>
                 <span className="font-semibold agent-ink">{g.agent.name}</span>
-                <span>{HARNESS_LABELS[g.agent.harness]}</span>
+                <span>{harnessLabel(g.agent.harness)}</span>
               </div>
               {g.items.map((c) => {
                 const selected = current?.agent.id === g.agent.id && current.command.name === c.name;

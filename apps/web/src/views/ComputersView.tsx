@@ -935,8 +935,3 @@ export function ComputerMini({ computer, request, showOpen = true, quiet }: { co
     </a>
   );
 }
-
-export function useComputer(id: string | null | undefined) {
-  const computers = useStore((s) => s.computers);
-  return useMemo(() => computers.find((c) => c.id === id), [computers, id]);
-}

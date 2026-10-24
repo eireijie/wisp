@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { BadgeCheck, KeyRound, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Plus, ShieldQuestion, Trash2 } from "lucide-react";
-import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, entryLogos, everydayFirst, harnessSupportsConnectors, isMasked, logoUrl, type EverydayApp, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
+import { CONNECTOR_CATALOG, CONNECTOR_HELP, catalogConnector, connectorUnsupportedReason, entryLogos, harnessSupportsConnectors, isMasked, logoUrl, type Agent, type CatalogConnector, type CatalogField, type Connector, type ConnectorKind, trustLabel, type MarketplaceEntry, type MarketplaceInstall, type TrustLabel } from "@warren/core";
 import { api } from "../api.ts";
 import { Button, Field, Input, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 import { AgentPicker, AgentStack, AppLogo, Group, IconTile } from "../components/ShopParts.tsx";
@@ -105,18 +105,6 @@ export function connectBlocked(agents: Pick<Agent, "id" | "harness">[], agentIds
   if (!agents.length) return false;
   const chosen = agentIds.length ? agents.filter((a) => agentIds.includes(a.id)) : agents;
   return !chosen.some((a) => harnessSupportsConnectors(a.harness, kind));
-}
-
-/** The catalog as listed: Simple shows everyday apps first. */
-export function catalogFor(simple: boolean, category: string, list: CatalogConnector[] = CONNECTOR_CATALOG): CatalogConnector[] {
-  const inCat = list.filter((c) => category === "All" || c.category === category);
-  return simple ? everydayFirst(inCat) : inCat;
-}
-
-/** The registry results with the recommended option first (Zapier, for apps that go through it). */
-export function recommendedFirst(entries: MarketplaceEntry[], zapier: MarketplaceEntry | null, app: EverydayApp | null): MarketplaceEntry[] {
-  if (!app || app.catalogId || !zapier) return entries;
-  return [zapier, ...entries.filter((e) => e.id !== zapier.id)];
 }
 
 export function ConnectedRow({ c, agents, canEdit, onEdit, onToggle, onRemove, onSignIn, onSignOut }: { c: Connector; agents: Agent[]; canEdit: boolean; onEdit: () => void; onToggle: () => void; onRemove: () => void; onSignIn: () => void; onSignOut: () => void }) {

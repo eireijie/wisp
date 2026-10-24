@@ -32,7 +32,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
 });
 
 afterAll(async () => {
@@ -62,17 +62,17 @@ describe("pairing a phone", () => {
     // a wrong secret gets nothing
     expect((await api("POST", `/api/pair/${qr.id}/claim`, { secret: "guess", deviceName: "Mallory" }, "")).status).toBe(404);
 
-    const claimed = await api("POST", `/api/pair/${qr.id}/claim`, { secret: qr.secret, deviceName: "Yug's iPhone", platform: "ios" }, "");
+    const claimed = await api("POST", `/api/pair/${qr.id}/claim`, { secret: qr.secret, deviceName: "Alex's iPhone", platform: "ios" }, "");
     expect(claimed.status).toBe(200);
     expect(claimed.data.code).toMatch(/^\d{6}$/);
-    expect(claimed.data).toMatchObject({ userName: "Yug", workspaceName: "Lab" });
+    expect(claimed.data).toMatchObject({ userName: "Alex", workspaceName: "Lab" });
 
     // a second phone with the same QR code is turned away
     expect((await api("POST", `/api/pair/${qr.id}/claim`, { secret: qr.secret, deviceName: "Other" }, "")).status).toBe(409);
 
     // the computer sees the same code
     const seen = (await api("GET", `/api/pair/${qr.id}`)).data;
-    expect(seen).toMatchObject({ state: "claimed", code: claimed.data.code, deviceName: "Yug's iPhone" });
+    expect(seen).toMatchObject({ state: "claimed", code: claimed.data.code, deviceName: "Alex's iPhone" });
 
     // nothing for the phone until you confirm
     expect((await api("POST", `/api/pair/${qr.id}/status`, { secret: qr.secret }, "")).data).toEqual({ state: "claimed" });
@@ -81,12 +81,12 @@ describe("pairing a phone", () => {
     const done = (await api("POST", `/api/pair/${qr.id}/status`, { secret: qr.secret }, "")).data;
     expect(done.state).toBe("approved");
     const me = (await api("GET", "/api/me", undefined, done.token)).data;
-    expect(me.user.name).toBe("Yug");
+    expect(me.user.name).toBe("Alex");
     // handed over once
     expect((await api("POST", `/api/pair/${qr.id}/status`, { secret: qr.secret }, "")).status).toBe(404);
     // and it's a sign-in you can see and sign out
     const sessions = (await api<any[]>("GET", "/api/me/sessions")).data;
-    expect(sessions.map((s) => s.label)).toContain("Warren on Yug's iPhone");
+    expect(sessions.map((s) => s.label)).toContain("Warren on Alex's iPhone");
   });
 
   it("can be cancelled, needs a signed-in person to start, and is only visible to them", async () => {

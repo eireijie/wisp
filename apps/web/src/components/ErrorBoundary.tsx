@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
                 location.reload();
               }}
             >
-              Go to #general
+              Go to Chats
             </button>
           </div>
         </div>

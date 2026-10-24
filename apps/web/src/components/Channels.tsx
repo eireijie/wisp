@@ -707,7 +707,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
       <p className="text-sm text-muted">
         {saved.nodes.length
           ? `The leads read every new message in #${channel.name} and hand out the work along the arrows.`
-          : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Rules) answer here. Build one: drag agents onto the chart and make one of them a lead.`}
+          : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Build one: drag agents onto the chart and make one of them a lead.`}
       </p>
       <TeamChart team={team} onChange={canManage ? onChange : undefined} readOnly={!canManage} working={working} onCreateAgent={canManage ? onCreateAgent : undefined} />
       <details className="rounded-xl bg-bg px-3.5 py-2.5">

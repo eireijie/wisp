@@ -57,7 +57,7 @@ export class Routines {
   async tick(at = new Date()) {
     const minute = new Date(Math.floor(at.getTime() / 60_000) * 60_000);
     for (const r of this.hub.store.scheduledRoutines()) {
-      // schedules rest while the organization has Routines switched off (Settings → Features)
+      // schedules rest while the organization has Routines switched off (Settings → General → Mods)
       if (!featureOn(this.hub.store, r.workspaceId, "routines")) continue;
       try {
         if (!cronMatches(parseCron(r.schedule!), zonedParts(minute, r.timezone))) continue;

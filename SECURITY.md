@@ -8,7 +8,7 @@ Please **don't open a public issue**. Report it privately through [GitHub's secu
 
 ## Supported versions
 
-Warren updates from `main` (`warren update`, or **Settings → Updates**). Fixes land there, so please check the latest `main` before reporting.
+Warren updates from `main` (`warren update`, or **Settings → Advanced → About**). Fixes land there, so please check the latest `main` before reporting.
 
 ## What's in scope
 

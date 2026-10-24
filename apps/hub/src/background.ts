@@ -92,7 +92,7 @@ export class Background {
     }
     for (const b of store.activeBackground()) {
       if (b.checking || (b.nextAt && new Date(b.nextAt) > at)) continue;
-      // no checks while the organization has Background agents switched off (Settings → Features)
+      // no checks while the organization has Background agents switched off (Settings → General → Mods)
       const ws = store.agent(b.agentId)?.workspaceId;
       if (!ws || !featureOn(store, ws, "background")) continue;
       const tz = this.timezone(b.userId);

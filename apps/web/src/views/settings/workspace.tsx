@@ -1,3 +1,4 @@
+import { isLocalOnlyHost } from "../../loopback.ts";
 import { useEffect, useState } from "react";
 import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@warren/core";
@@ -862,7 +863,7 @@ export function DataPage() {
   };
   const day = new Date().toISOString().slice(0, 10);
   const host = location.hostname;
-  const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  const isLocal = isLocalOnlyHost(host);
   const where = isLocal ? "this computer" : `the computer at ${host}`;
   const memoryElsewhere = !!(info && memoryPath && !isInside(memoryPath, info.dataDir));
   return (

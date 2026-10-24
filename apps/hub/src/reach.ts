@@ -17,7 +17,7 @@ export type TailscaleState = "missing" | "needs-login" | "stopped" | "starting" 
 
 export interface TailscaleStatus {
   state: TailscaleState;
-  /** e.g. yugs-mac.tail1234.ts.net (no trailing dot) */
+  /** e.g. alexs-mac.example-tailnet.ts.net (no trailing dot) */
   dnsName: string | null;
   ip: string | null;
   tailnet: string | null;

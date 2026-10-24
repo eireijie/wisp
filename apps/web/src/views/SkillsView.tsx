@@ -73,8 +73,6 @@ export function skillFromGuide(g: { name: string; what: string; when: string; re
   return { description: description.slice(0, 500), content: [`# ${name || "New skill"}`, ...body].join("\n\n") + "\n" };
 }
 
-export const skillMarkdownFromGuide = (g: Parameters<typeof skillFromGuide>[0]) => skillFromGuide(g).content;
-
 /**
  * The plain-words version of a skill for Simple mode. A library entry (skill null) or an installed,
  * unedited catalog skill uses the catalog's `plain` text; an edited or custom skill only gets a

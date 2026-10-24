@@ -36,7 +36,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   ada = (await api("POST", "/api/agents", { handle: "ada", name: "Ada", harness: "custom" })).data;
   bo = (await api("POST", "/api/agents", { handle: "bo", name: "Bo", harness: "custom" })).data;
   cy = (await api("POST", "/api/agents", { handle: "cy", name: "Cy", harness: "custom" })).data;

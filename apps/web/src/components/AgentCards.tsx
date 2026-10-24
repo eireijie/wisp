@@ -1,3 +1,4 @@
+import { toolKey } from "./agentActivity.ts";
 import { useEffect, useState } from "react";
 import { CalendarClock, Check, ListChecks, RotateCcw, ShieldQuestion, X } from "lucide-react";
 import { describeCron, type Agent, type Routine } from "@warren/core";
@@ -152,14 +153,12 @@ export function RoutineChip({ id }: { id: string }) {
   );
 }
 
-const pretty = (n: string) => n.replace(/^mcp__warren__/, "").replace(/^mcp__/, "").replace(/^warren\./, "");
-
 /**
  * What an agent is doing, the way a teammate would say it: "Sending to Chief…", "Asking
  * Research…", "Using the computer…", with whoever it's talking to.
  */
 export function describeTool(name: string, input: unknown, agents: Agent[]): { text: string; with: Agent[] } {
-  const tool = pretty(name);
+  const tool = toolKey(name);
   const inp = (input ?? {}) as Record<string, unknown>;
   const byHandle = (h: unknown) => agents.find((a) => a.handle === String(h ?? "").replace(/^@/, "").toLowerCase());
   const mentioned = (t: unknown) => [...new Set(String(t ?? "").match(/@([a-z][a-z0-9-]*)/g) ?? [])].map(byHandle).filter((a): a is Agent => !!a);
@@ -184,29 +183,6 @@ export function describeTool(name: string, input: unknown, agents: Agent[]): { t
   if (tool === "routine_save") return { text: "Saving the routine…", with: [] };
   if (tool === "file_view") return { text: "Looking at a file…", with: [] };
   return { text: `using ${tool}`, with: [] };
-}
-
-/** Agent avatars and a status, like "◉◉ ••• Sending to Chief… ◉". */
-export function HandoffPill({ agent, text, with: targets }: { agent?: Agent; text: string; with: Agent[] }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {agent && <AgentAvatar agent={agent} size={18} badge={false} live />}
-      {/* "Sending to Chief…" wears Chief's color, like Grok Bot's handoffs */}
-      <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2 h-6 text-xs", targets.length ? "agent-tint agent-ink font-medium" : "text-muted")} style={targets.length ? agentVar(targets[0]) : undefined}>
-        {targets.length > 0 && (
-          <span className="inline-flex gap-0.5" aria-hidden>
-            <span className="size-1 rounded-full bg-current animate-pulse" />
-            <span className="size-1 rounded-full bg-current animate-pulse [animation-delay:150ms]" />
-            <span className="size-1 rounded-full bg-current animate-pulse [animation-delay:300ms]" />
-          </span>
-        )}
-        {text}
-      </span>
-      {targets.map((t) => (
-        <AgentAvatar key={t.id} agent={t} size={18} badge={false} />
-      ))}
-    </span>
-  );
 }
 
 /** What an agent changed for you (a setting, a mod), one line each, with Undo. */

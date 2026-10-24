@@ -3,7 +3,7 @@ import UIKit
 
 /**
  * What a pairing QR code from Warren → Settings → Mobile carries:
- * `warren://pair?v=1&id=…&s=…&u=http://192.168.1.20:4747&u=…`, the pairing, its one-time secret,
+ * `warren://pair?v=1&id=…&s=…&u=http://warren.local:4747&u=…`, the pairing, its one-time secret,
  * and the addresses this phone might reach the computer at, best first.
  */
 struct PairLink: Equatable {

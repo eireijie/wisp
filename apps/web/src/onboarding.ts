@@ -207,11 +207,7 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
   return out;
 }
 
-/** True when the page is served from this computer only, so its address won't work from another computer. */
-export function isLocalOnlyHost(hostname: string): boolean {
-  const h = hostname.trim().toLowerCase();
-  return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
-}
+export { isLocalOnlyHost } from "./loopback.ts";
 
 /** The features an owner's Simple or Advanced choice sets for the organization: Simple keeps the extras off, Advanced turns them all on. */
 export function featuresForExperience(choice: "simple" | "advanced"): Features {

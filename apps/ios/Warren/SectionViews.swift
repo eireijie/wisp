@@ -40,18 +40,6 @@ struct AgentSelection: View {
   }
 }
 
-struct HelperPicker: View {
-  @Environment(Store.self) private var store
-  var title: String
-  @Binding var selection: String
-  var none = "None"
-  var body: some View {
-    Picker(title, selection: $selection) {
-      Text(none).tag("")
-      ForEach(store.agents) { Text($0.name).tag($0.id) }
-    }
-  }
-}
 
 extension String {
   var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TEAM_TEMPLATES, HARNESS_IDS, DEFAULT_CHANNEL_SETTINGS, builtinRules, channelTeams, covers, pickReviewer, teamChain, teamOf, teamProblem, LoopGuard, parseMentions, parseSubjectKey, resolveAccess, signInProblem, startupRules, subjectKey, type AccessRule, type Channel, type ChannelTeam, type Viewer } from "../src/index.ts";
+import { DEFAULT_CHANNEL_SETTINGS, builtinRules, channelTeams, covers, pickReviewer, teamChain, teamOf, teamProblem, LoopGuard, parseMentions, parseSubjectKey, accessChecker, signInProblem, startupRules, subjectKey, type AccessRule, type Channel, type ChannelTeam, type Viewer } from "../src/index.ts";
 
 describe("parseMentions", () => {
   it("finds handles, ignores emails and code", () => {
@@ -22,7 +22,7 @@ describe("LoopGuard", () => {
 describe("memory access", () => {
   const base = builtinRules({ agents: [{ id: "a" }, { id: "b" }], teams: [{ name: "research", folder: "teams/research", above: ["boss"] }], people: [{ id: "u" }] });
   const atlas: Viewer = { actor: { kind: "agent", id: "a" }, teams: ["research"], teamRoles: [{ team: "research", role: "reviewer" }] };
-  const level = (v: Viewer, p: string, extra: AccessRule[] = []) => resolveAccess(v, p, [...base, ...extra]).level;
+  const level = (v: Viewer, p: string, extra: AccessRule[] = []) => accessChecker(v, [...base, ...extra])(p).level;
   const member: Viewer = { actor: { kind: "user", id: "u" }, role: "member" };
   const guest: Viewer = { actor: { kind: "user", id: "g" }, role: "guest" };
 
@@ -90,7 +90,7 @@ describe("memory access", () => {
   });
 
   it("explains which rule decided", () => {
-    const d = resolveAccess(atlas, "shared/deep/x.md", base);
+    const d = accessChecker(atlas, base)("shared/deep/x.md");
     expect(d.rule?.path).toBe("shared");
     expect(d.rule?.builtin).toBe(true);
   });
@@ -213,26 +213,6 @@ describe("pickReviewer", () => {
 
   it("among reviewers, takes the one on another harness", () => {
     expect(pickReviewer(builder, [c("a", "codex", "Reviewer"), c("z", "claude-code", "Reviewer")])).toBe("z");
-  });
-});
-
-describe("team templates", () => {
-  it("have one lead each, unique roles, and only known harnesses", () => {
-    expect(TEAM_TEMPLATES.map((t) => t.id)).toEqual(["build", "research", "solo-reviewer"]);
-    for (const t of TEAM_TEMPLATES) {
-      expect(t.roles.filter((r) => r.lead)).toHaveLength(1);
-      expect(new Set(t.roles.map((r) => r.role)).size).toBe(t.roles.length);
-      for (const r of t.roles) {
-        expect(r.notes.length).toBeGreaterThan(10);
-        expect(HARNESS_IDS).toContain(r.harness);
-      }
-    }
-    expect(TEAM_TEMPLATES[0].roles.map((r) => [r.role, r.harness])).toEqual([
-      ["Lead & builder", "hermes"],
-      ["Backend", "codex"],
-      ["Frontend & design", "kimi"],
-      ["Reviewer", "claude-code"],
-    ]);
   });
 });
 

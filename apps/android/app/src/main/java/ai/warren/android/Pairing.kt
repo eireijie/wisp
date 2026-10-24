@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * What a pairing QR code from Warren → Settings → Mobile carries:
- * `warren://pair?v=1&id=…&s=…&u=http://192.168.1.20:4747&u=…` (the pairing, its one-time secret,
+ * `warren://pair?v=1&id=…&s=…&u=http://warren.local:4747&u=…` (the pairing, its one-time secret,
  * and the addresses this phone might reach the computer at, best first).
  */
 data class PairLink(val id: String, val secret: String, val addresses: List<String>) {
@@ -25,7 +25,7 @@ data class PairLink(val id: String, val secret: String, val addresses: List<Stri
             return if (addresses.isEmpty()) null else PairLink(id, secret, addresses)
         }
 
-        /** "http://192.168.1.20:4747/" → "http://192.168.1.20:4747"; anything else that isn't http(s) → null */
+        /** "http://warren.local:4747/" → "http://warren.local:4747"; anything else that isn't http(s) → null */
         fun normalize(address: String): String? {
             val u = Uri.parse(address.trim())
             if (u.scheme != "http" && u.scheme != "https" || u.host.isNullOrEmpty()) return null

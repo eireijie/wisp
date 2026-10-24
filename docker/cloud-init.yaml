@@ -1,7 +1,7 @@
 #cloud-config
 # Warren on a new Linux server (Ubuntu 24.04 or Debian 12/13), as its first-boot "user data".
 #
-# It installs Docker, runs the hub (ghcr.io/eireijie/warren) behind Caddy, and gets HTTPS without a
+# It installs Docker, runs the hub (the configured Warren image) behind Caddy, and gets HTTPS without a
 # domain: a Let's Encrypt certificate for the server's own IP address (https://203.0.113.7), and one
 # for <ip-with-dashes>.sslip.io as a second address in case the first can't be issued. The address is
 # written to /opt/warren/url and to the login message.
@@ -21,6 +21,10 @@ packages:
   - curl
 
 write_files:
+  - path: /opt/warren/.env
+    content: |
+      WARREN_REPO=eireijie/warren
+
   - path: /opt/warren/setup-key
     permissions: "0600"
     content: "__WARREN_SETUP_KEY__"
@@ -29,7 +33,7 @@ write_files:
     content: |
       services:
         warren:
-          image: ghcr.io/eireijie/warren:latest
+          image: ghcr.io/${WARREN_REPO}:latest
           restart: unless-stopped
           volumes:
             - ./data:/data

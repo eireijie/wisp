@@ -332,7 +332,7 @@ export const useStore = create<State>((set, get) => ({
 
   handle(e, notify = true) {
     const before = get();
-    // features changed for this organization (an owner flipped one in Settings → Features)
+    // features changed for this organization (an owner flipped one in Settings → General → Mods)
     if (e.type === "features") {
       set((s) => (s.me ? { me: { ...s.me, features: e.features } } : {}));
       return;

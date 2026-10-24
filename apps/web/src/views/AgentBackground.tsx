@@ -21,15 +21,6 @@ const PACES = [
 
 const CAPS = [6, 12, 24, 48, 96] as const;
 
-/** One plain sentence on what background work means, for the Simple view. */
-export function backgroundSummary({ name, scope, everyMinutes, dailyCap, enabled }: { name: string; scope: string; everyMinutes: number; dailyCap: number | null; enabled: boolean }): string {
-  const what = scope.trim().replace(/[.\s]+$/, "") || "everything it can reach";
-  const pace = PACES.find(([m]) => m === everyMinutes)?.[1] ?? `every ${everyMinutes} minutes`;
-  const limit = dailyCap ? `at most ${dailyCap} ${dailyCap === 1 ? "time" : "times"} a day` : "with no daily limit";
-  const head = enabled ? "While" : "If you turn this on, while";
-  return `${head} you're away, ${name} ${enabled ? "will" : "would"} check ${what} ${pace}, ${limit}, and ${enabled ? "" : "would "}message you when something needs you.`;
-}
-
 /** A memory folder as a person would name it: "agents/agt_x/" becomes "@handle". */
 const folderName = (path: string, agents: Agent[], members: { id: string; name: string }[]) => {
   const p = path.replace(/\/+$/, "");

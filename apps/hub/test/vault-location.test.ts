@@ -35,7 +35,7 @@ async function withHub<T>(fn: (h: { hub: Awaited<ReturnType<typeof buildHub>>["h
     return res.json();
   };
   try {
-    const r = existing ? await api("POST", "/api/auth/login", { email: "me@example.com", password: "password123", features: "everything" }) : await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", workspaceName: "Lab" });
+    const r = existing ? await api("POST", "/api/auth/login", { email: "me@example.com", password: "password123", features: "everything" }) : await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", workspaceName: "Lab" });
     token = r.token;
     return await fn({ hub: built.hub, api });
   } finally {

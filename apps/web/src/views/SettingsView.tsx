@@ -1,3 +1,4 @@
+import { GITHUB_URL } from "@warren/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { Bell, ChevronLeft, ChevronRight, Gauge, Monitor, Palette, Settings, SlidersHorizontal, Users } from "lucide-react";
 import { resolveFeatures, type Features } from "@warren/core";
@@ -376,7 +377,7 @@ function UpdatesPage() {
     <Section title="About">
       <Card>
         <Row label="Source code" hint="Issues, ideas and contributions welcome.">
-          <a className="text-sm text-accent-text hover:underline" href="https://github.com/eireijie/warren" target="_blank" rel="noreferrer">
+          <a className="text-sm text-accent-text hover:underline" href={GITHUB_URL} target="_blank" rel="noreferrer">
             GitHub
           </a>
         </Row>

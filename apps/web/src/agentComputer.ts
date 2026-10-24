@@ -67,23 +67,3 @@ export async function resolveComputer(
 export function vmOnDevice(choice: ComputerChoice, nodeId: string, computers: ComputerInfo[]): boolean {
   return choice.kind === "vm" || (choice.kind === "existing" && computers.some((c) => c.id === choice.id && c.kind === "vm" && c.nodeId === nodeId));
 }
-
-/**
- * The computer a new agent in a team gets. Like Add agent, except an agent gets its own VM when its
- * device can run them, rather than sharing one that's already there.
- */
-export function ownComputer(node: NodeInfo | undefined, computers: ComputerInfo[]): ComputerChoice {
-  const choice = defaultComputer(node, computers);
-  const sharedVm = choice.kind === "existing" && computers.some((c) => c.id === choice.id && c.kind === "vm");
-  return sharedVm && node?.capabilities?.vm.ok ? { kind: "vm" } : choice;
-}
-
-/** What a new agent will get, in words for the person. */
-export function computerNote(choice: ComputerChoice, node: NodeInfo | undefined): string {
-  const where = node ? ` on ${node.name}` : "";
-  if (choice.kind === "vm") return `Gets its own VM${where}.`;
-  if (choice.kind === "screen") return `Uses ${node?.name ?? "the device"}'s own screen.`;
-  if (choice.kind === "existing") return "Uses a computer that's already set up.";
-  if (choice.kind === "headless") return `${node?.name ?? "That device"} is set to run agents without a computer, so it won't have one.`;
-  return `${node?.name ?? "That device"} can't run VMs, so it starts without a computer. You can give it one later.`;
-}

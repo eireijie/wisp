@@ -175,10 +175,6 @@ export function accessChecker(v: Viewer, rules: AccessRule[]): (path: string) =>
   };
 }
 
-export function resolveAccess(v: Viewer, path: string, rules: AccessRule[]): Decision {
-  return accessChecker(v, rules)(path);
-}
-
 /** Stored rules asking for notes to be loaded into this agent's prompt. */
 export function startupRules(v: Viewer, rules: AccessRule[]): AccessRule[] {
   return rules.filter((r) => r.startup && !r.builtin && specificity(v, r.subject) > 0);

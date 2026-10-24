@@ -7,7 +7,7 @@
 //
 //   Mac      Warren-mac-<arch>.zip      unzip, replace the .app, open it again
 //   Windows  Warren-win-x64.exe         run the installer silently; it opens Warren when done
-//   Linux    Warren-linux-x86_64.AppImage  replace the AppImage you ran (a .deb install updates through apt)
+//   Linux    Warren-linux-x86_64.AppImage  replace the AppImage you ran (download and install a newer .deb manually)
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -16,9 +16,9 @@ const { spawn } = require("node:child_process");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 
-const REPO = "eireijie/warren";
+const { GITHUB_REPO } = require("./repo.cjs");
 // WARREN_UPDATE_FEED points a build at another list of releases (for trying an update locally)
-const RELEASES = process.env.WARREN_UPDATE_FEED || `https://api.github.com/repos/${REPO}/releases?per_page=30`;
+const RELEASES = process.env.WARREN_UPDATE_FEED || `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`;
 const TAG = /^desktop-v(\d+\.\d+\.\d+)$/;
 const FIRST_CHECK_MS = 30_000;
 const EVERY_MS = 6 * 60 * 60_000;

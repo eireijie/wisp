@@ -60,11 +60,6 @@ export function cleanFolder(folder: string): string {
   return folder.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
 }
 
-/** Is a team's own data (roles, folder, repo, boss) off? Nothing beyond the chart itself. */
-export function plainTeam(t: ChannelTeam): boolean {
-  return !t.folder && !t.repo && !t.reportsTo && t.nodes.every((n) => !n.role && !n.roleNotes);
-}
-
 /**
  * Everyone a team reports to, nearest first: its boss, then whoever a team the boss leads
  * reports to, and so on. Stops at the top or at a loop.

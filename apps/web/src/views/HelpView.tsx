@@ -1,3 +1,4 @@
+import { GITHUB_URL } from "@warren/core";
 import { useState, type ReactNode } from "react";
 import { AlertTriangle, Check, ChevronLeft, CircleHelp, ExternalLink, LifeBuoy } from "lucide-react";
 import { setExperience, useExperience, type Experience } from "../experience.tsx";
@@ -7,7 +8,7 @@ import { href } from "../router.ts";
 import { useStore } from "../store.ts";
 import { Button, cx } from "../components/ui.tsx";
 
-const ISSUES_URL = "https://github.com/eireijie/warren/issues";
+const ISSUES_URL = `${GITHUB_URL}/issues`;
 
 const SECTIONS = [
   { id: "setup", title: "Finish setup" },

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Warren on macOS or Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash
+#   Run install.sh from a checkout, or use the command in INSTALL.md.
 #
 # With no options it asks what this computer is for. Options:
 #   --hub-server                 run the hub here (the workspace and web app), started at boot/login
@@ -17,7 +17,8 @@
 # `warren` command on your PATH, and sets it up to keep running. Nothing is installed with sudo.
 set -euo pipefail
 
-WARREN_REPO="${WARREN_REPO:-https://github.com/eireijie/warren.git}"
+GITHUB_REPO="eireijie/warren"
+WARREN_REPO="${WARREN_REPO:-https://github.com/$GITHUB_REPO.git}"
 DIR="${WARREN_DIR:-$HOME/warren}"
 MODE="" HUB="" TOKEN="" NAME="" YES="" SERVICE=1 DEVICE=1 OPEN=1
 

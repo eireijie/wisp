@@ -53,11 +53,6 @@ function rgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
-function mix(hex: string, to: [number, number, number], t: number) {
-  const [r, g, b] = rgb(hex);
-  const c = (a: number, z: number) => Math.round(a + (z - a) * t);
-  return `rgb(${c(r, to[0])} ${c(g, to[1])} ${c(b, to[2])})`;
-}
 function luminance([r, g, b]: [number, number, number]) {
   const lin = (v: number) => {
     const s = v / 255;

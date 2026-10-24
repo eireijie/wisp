@@ -24,7 +24,6 @@ export class Push {
     return keys;
   }
 
-  /** Who a new message should reach by push, if anyone: people in a DM an agent wrote in, or whoever an approval asks. */
   /**
    * Who hears about an agent's message: in a DM, its person; in a channel, whoever it's answering
    * (and anyone it asks for an OK), plus people who asked for every message there. Muting a

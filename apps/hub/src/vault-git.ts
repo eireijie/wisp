@@ -9,7 +9,6 @@ import zlib from "node:zlib";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { accessChecker, atLeast, type Decision, type Viewer } from "@warren/core";
 import { VaultError, isHiddenPath } from "@warren/vault";
-import { id } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
 /**
@@ -377,5 +376,3 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
     }
   });
 }
-
-export const newTokenId = () => id("vtk");

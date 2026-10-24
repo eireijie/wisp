@@ -92,12 +92,6 @@ async function plans(token, opts = {}) {
 }
 const round = (n) => Math.round(n * 100) / 100;
 
-/** The size to suggest: the cheapest with 4 GB (a hub plus a couple of agent computers), else the cheapest. */
-function recommended(list, location) {
-  const here = list.filter((p) => p.location === location);
-  return here.find((p) => p.memory >= 4) || here[0] || null;
-}
-
 /**
  * docker/cloud-init.yaml with a fresh setup key as the key file's content. Only that line: the
  * script itself also names the placeholder, to tell a pasted copy (no key) from one with a key.
@@ -220,4 +214,4 @@ async function deleteServer(token, id, opts) {
   await hetzner(token, "DELETE", `/servers/${id}`, null, opts);
 }
 
-module.exports = { CloudError, plans, recommended, userData, templatePath, hubUrls, createWarren, waitForHub, claim, deleteServer, PLACEHOLDER };
+module.exports = { CloudError, plans, userData, templatePath, hubUrls, createWarren, waitForHub, claim, deleteServer, PLACEHOLDER };

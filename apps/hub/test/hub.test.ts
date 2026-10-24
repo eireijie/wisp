@@ -117,7 +117,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${addr.port}`;
   close = () => app.close();
 
-  const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Test" }, "");
+  const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Test" }, "");
   token = setup.data.token;
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general").id;
 
@@ -444,7 +444,7 @@ describe("teams and layered memory", () => {
     // finishing a plan takes it out of what agents load
     expect((await remember({ kind: "plan", replaces: plan.path, status: "done" })).data.saved).toBe(true);
     const ctx = (await api<any>("GET", "/api/memory/context?q=answers", undefined, nodeToken, as(atlas))).data.text;
-    expect(ctx).toContain("## What you know about Yug");
+    expect(ctx).toContain("## What you know about Alex");
     expect(ctx).toContain("Prefers short, direct answers with examples");
     expect(ctx).toContain("Deployed the hub");
     expect(ctx).not.toContain("Rename the repo folder");
@@ -461,7 +461,7 @@ describe("teams and layered memory", () => {
     await api("POST", `/api/channels/${general}/messages`, { body: "@nova layered check about answers" });
     const run = await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.prompt.includes("layered check")));
     const prompt = run.type === "run" ? run.run.prompt : "";
-    expect(prompt).toContain("## What you know about Yug");
+    expect(prompt).toContain("## What you know about Alex");
     expect(prompt).toContain("Prefers short, direct answers with examples");
     expect(prompt).toContain('### Team "web"; your role: reviewer');
     expect(prompt).toContain("Channel: #web · Team memory: teams/web/");
@@ -481,7 +481,7 @@ describe("teams and layered memory", () => {
     const samSees = (await api<any[]>("GET", "/api/vault/changes?limit=50", undefined, sam)).data;
     expect(samSees.some((ch) => ch.files.some((f: any) => f.path.startsWith(`people/${owner.id}/`)))).toBe(false);
     const blame = (await api<any[]>("GET", "/api/vault/blame?path=teams/web/README.md")).data;
-    expect(blame[0].author).toBe("Yug");
+    expect(blame[0].author).toBe("Alex");
     const note = (await api<any>("GET", "/api/vault/note?path=teams/web/notes.md")).data;
     expect(note.editedBy).toBe("@nova");
   });
@@ -904,9 +904,9 @@ describe("agent context", () => {
 describe("agents inside their computers", () => {
   it("runs a harness that comes with the VM inside it, and then takes requests from anyone", async () => {
     const sam = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
-    // running directly on Yug's device, Atlas only works for Yug
+    // running directly on Alex's device, Atlas only works for Alex
     await api("POST", `/api/channels/${general}/messages`, { body: "@atlas hi from sam" }, sam);
-    await waitFor(async () => (await channelMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("only Yug can ask it"))));
+    await waitFor(async () => (await channelMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("only Alex can ask it"))));
 
     const vm = (await api("POST", "/api/computers", { kind: "vm", nodeId: atlas.nodeId, name: "Atlas desk" })).data;
     await api("PATCH", `/api/agents/${atlas.id}`, { computerId: vm.id, settings: { runIn: "computer" } });
@@ -916,7 +916,7 @@ describe("agents inside their computers", () => {
     expect(run.type === "run" && run.run).toMatchObject({ inComputer: true, computer: { id: vm.id, kind: "vm" } });
     expect(run.type === "run" && run.run.prompt).toContain("You run inside this computer");
 
-    // a member can't put it back onto Yug's device
+    // a member can't put it back onto Alex's device
     expect((await api("PATCH", `/api/agents/${atlas.id}`, { settings: { runIn: "device" } }, sam)).status).toBe(403);
     expect((await api("PATCH", `/api/agents/${atlas.id}`, { settings: { runIn: "device" } })).status).toBe(200);
   });

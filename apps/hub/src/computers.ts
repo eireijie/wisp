@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import WebSocket from "ws";
 import { ComputerAction, LOAN_MAX_MINUTES, TRANSFER_ACTIONS, activeLoan, lentNow, tunnelFrame, type Actor, type Approval, type DeviceConfig, type DeviceLoan, type Computer, type ComputerController, type ComputerSpec, type NodeToHub, type OrgoConfig, type Screenshot } from "@warren/core";
 import { id, now } from "./auth.ts";
-import { OrgoClient, parseResolution } from "./orgo.ts";
+import { OrgoClient } from "./orgo.ts";
 import { relayVnc } from "./vnc-relay.ts";
 import type { Hub } from "./hub.ts";
 
@@ -820,11 +820,6 @@ export class Computers {
     this.viewers.delete(c.id);
     this.hub.store.deleteComputer(c.id);
     this.hub.broadcast(c.workspaceId, { type: "computer_removed", computerId: c.id });
-  }
-
-  /** Screen size used for coordinates on cloud computers. */
-  static orgoScreen(c: Computer) {
-    return parseResolution((c.config as { resolution?: string }).resolution);
   }
 }
 

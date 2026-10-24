@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remove Warren from this Mac or Linux computer, to start over or to stop using it.
 #
-#   curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/uninstall.sh | bash
+#   Use the uninstall command in README.md
 #   (or, from a clone: bash uninstall.sh)
 #
 # It asks before each step and only touches Warren's own things:
@@ -15,6 +15,8 @@
 # was installed, default ~/warren).
 # Nothing else is touched: not Docker or container themselves, not Tailscale, not your agents' CLIs.
 set -uo pipefail
+
+GITHUB_REPO="eireijie/warren"
 
 DIR="${WARREN_DIR:-$HOME/warren}"
 YES="" DRY=""
@@ -93,7 +95,7 @@ fi
 images=""
 command -v container >/dev/null 2>&1 && container image list 2>/dev/null | grep -q '^warren-computer' && images="container"
 command -v docker >/dev/null 2>&1 && docker images -q 'warren-computer' 2>/dev/null | grep -q . && images="$images docker"
-command -v docker >/dev/null 2>&1 && docker images -q 'ghcr.io/eireijie/warren-computer' 2>/dev/null | grep -q . && images="$images docker"
+command -v docker >/dev/null 2>&1 && docker images -q "ghcr.io/${GITHUB_REPO}-computer" 2>/dev/null | grep -q . && images="$images docker"
 if [ -n "$images" ] && confirm "Delete the VM image (warren-computer, a few GB)?"; then
   if [[ "$images" == *container* ]]; then
     container image list 2>/dev/null | awk 'NR > 1 && $1 == "warren-computer" {print $1":"$2}' | while read -r ref; do container image rm "$ref" >/dev/null 2>&1; done
@@ -148,4 +150,4 @@ fi
 
 echo
 bold "Done."
-echo "To install again: curl -fsSL https://raw.githubusercontent.com/eireijie/warren/main/install.sh | bash -s -- --hub-server"
+echo "To install again: curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/main/install.sh | bash -s -- --hub-server"

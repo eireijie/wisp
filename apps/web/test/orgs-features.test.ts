@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { FEATURE_KEYS, FEATURE_PRESETS } from "@warren/core";
+import { FEATURE_PRESETS } from "@warren/core";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 const { inviteCode, orgInitials, orgSummary, orgTone, ORG_TONES } = await import("../src/orgs.ts");
-const { featurePreset, featuresIn, FEATURE_GROUPS } = await import("../src/features.ts");
 const { featuresForExperience } = await import("../src/onboarding.ts");
 
 describe("organizations", () => {
@@ -30,16 +29,6 @@ describe("organizations", () => {
 });
 
 describe("features", () => {
-  it("names the Quick start choice a set of features matches", () => {
-    expect(featurePreset(FEATURE_PRESETS.simple)).toBe("simple");
-    expect(featurePreset(FEATURE_PRESETS.everything)).toBe("everything");
-    expect(featurePreset({ ...FEATURE_PRESETS.simple, voice: true })).toBe("custom");
-  });
-
-  it("puts every feature in exactly one group", () => {
-    expect(FEATURE_GROUPS.flatMap((g) => featuresIn(g.id)).sort()).toEqual([...FEATURE_KEYS].sort());
-  });
-
   it("maps the onboarding choice to a preset", () => {
     expect(featuresForExperience("simple")).toEqual(FEATURE_PRESETS.simple);
     expect(featuresForExperience("advanced")).toEqual(FEATURE_PRESETS.everything);

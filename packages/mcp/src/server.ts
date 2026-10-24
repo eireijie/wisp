@@ -3,7 +3,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { WarrenClient } from "@warren/sdk";
-import type { Screenshot } from "@warren/core";
+import { SETTINGS_HARNESSES, type Screenshot } from "@warren/core";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 const text = (t: string): { content: Content[] } => ({ content: [{ type: "text" as const, text: t }] });
@@ -233,7 +233,7 @@ export async function createWarrenMcp(client: WarrenClient) {
         "Remember something about a person so every agent knows it later. kind: 'preference' (how they like things), 'plan' (something they intend to do; add due as YYYY-MM-DD if there is one), 'did' (something they did; goes in a dated journal), or 'detail' (a fact about them, their setup, people, tools). One fact per call, in plain words. Defaults to the person you're working with. If a similar memory exists you'll get it back: pass its path as replaces to update it, e.g. to mark a plan done with status 'done'. Never save passwords, keys or secrets.",
       inputSchema: {
         kind: z.enum(["preference", "plan", "did", "detail"]),
-        text: z.string().optional().describe("the fact; optional only when replacing to change status/due/pinned"),
+        text: z.string().optional().describe("the fact; optional only when replacing to change status/due"),
         about: z.string().optional().describe("person's name; default: who you're working with"),
         status: z.enum(["active", "done", "dropped"]).optional(),
         due: z.string().optional(),
@@ -458,7 +458,7 @@ export async function createWarrenMcp(client: WarrenClient) {
 
   server.registerTool(
     "harness_settings",
-    { description: "See your harness's own settings on your device (its config file): the model and provider it uses by default, its apps (MCP servers), plugins and skills, and which are on. Give harness to see another harness on the same device (hermes, codex, claude-code).", inputSchema: { harness: z.string().optional() } },
+    { description: `See your harness's own settings on your device (its config file): the model and provider it uses by default, its apps (MCP servers), plugins and skills, and which are on. Give harness to see another harness on the same device (${SETTINGS_HARNESSES.join(", ")}).`, inputSchema: { harness: z.string().optional() } },
     safe(async ({ harness }) => text(settingsLine(await client.harnessSettings(harness)))),
   );
 
@@ -468,7 +468,7 @@ export async function createWarrenMcp(client: WarrenClient) {
       description:
         "Change your harness's own settings on your device when its owner asks (\"switch Hermes to GPT-5\", \"turn off the GitHub plugin\", \"use my work account\"): its default model, provider, which of its accounts you use, and turning apps, plugins and skills on or off. Only works while you're doing something the device's owner asked for. Names come from harness_settings. The change applies from your next reply on.",
       inputSchema: {
-        harness: z.string().optional().describe("hermes, codex or claude-code; default: your own"),
+        harness: z.string().optional().describe(`${SETTINGS_HARNESSES.join(", ")}; default: your own`),
         model: z.string().optional(),
         provider: z.string().optional(),
         turn_on: z.array(z.object({ kind: z.enum(["app", "plugin", "skill"]), name: z.string() })).optional(),

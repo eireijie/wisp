@@ -1,6 +1,6 @@
 # Install Warren on Windows. In PowerShell:
 #
-#   irm https://raw.githubusercontent.com/eireijie/warren/main/install.ps1 | iex
+#   Run install.ps1 from a checkout, or use the command in INSTALL.md.
 #
 # To connect this computer to a hub as a device in one step (the command in Warren → Devices → Add device):
 #
@@ -22,7 +22,8 @@ param(
   [switch]$NoOpen
 )
 $ErrorActionPreference = "Stop"
-$Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "https://github.com/eireijie/warren.git" }
+$GitHubRepo = "eireijie/warren"
+$Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "https://github.com/$GitHubRepo.git" }
 
 function Bold($text) { Write-Host $text -ForegroundColor White }
 function Fail($text) { Write-Host $text -ForegroundColor Red; exit 1 }

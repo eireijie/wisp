@@ -265,7 +265,7 @@ export class Apns {
   }
 }
 
-/** "@yug", "@yugal": what people are @mentioned as (their preferred name and first name). */
+/** "@alex", "@alexandra": what people are @mentioned as (their preferred name and first name). */
 function handlesOf(p: { name: string; preferredName: string | null }) {
   return [p.preferredName, p.name.split(/\s+/)[0]].filter((x): x is string => !!x).map((x) => x.toLowerCase());
 }

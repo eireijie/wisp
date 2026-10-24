@@ -93,15 +93,29 @@ export function MobilePage() {
   };
   const reject = async () => {
     if (!pairing) return;
-    await api("POST", `/api/pair/${pairing.id}/cancel`).catch(() => {});
-    live.current = null;
-    setPairing({ ...pairing, state: "rejected" });
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/pair/${pairing.id}/cancel`);
+      live.current = null;
+      setPairing({ ...pairing, state: "rejected" });
+    } catch (e) {
+      setError(`Couldn't cancel pairing: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
   };
   const copy = async () => {
     if (!started) return;
-    await navigator.clipboard.writeText(started.link).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setCopied(false);
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(started.link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      setError(`Couldn't copy pairing link: ${(e as Error).message}`);
+    }
   };
 
   const step = state === "claimed" ? 2 : state === "approved" ? 3 : 1;
@@ -154,7 +168,7 @@ export function MobilePage() {
                   <Button variant="primary" onClick={confirm} disabled={busy}>
                     Yes, pair it
                   </Button>
-                  <Button variant="ghost" onClick={reject}>
+                  <Button variant="ghost" onClick={reject} disabled={busy}>
                     No, cancel
                   </Button>
                 </div>
@@ -163,7 +177,7 @@ export function MobilePage() {
             )}
             {state === "approved" && (
               <>
-                <p className="text-sm">Your phone is ready. It stays signed in until you sign it out under Security → Sign-ins.</p>
+                <p className="text-sm">Your phone is ready. It stays signed in until you sign it out under Settings → Advanced → Security → Where you're signed in.</p>
                 <Button onClick={start} disabled={busy}>
                   Pair another phone
                 </Button>

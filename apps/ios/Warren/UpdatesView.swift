@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum WarrenRepo {
+  static let github = "eireijie/warren"
+  static let url = "https://github.com/\(github)"
+}
+
 struct UpdatesView: View {
   @Environment(Store.self) private var store
   @State private var info: HubUpdate?
@@ -21,7 +26,7 @@ struct UpdatesView: View {
       }
       Section("About") {
         Text("Warren is free and open source (Apache-2.0). Your data stays on this hub.")
-        if let url = URL(string: "https://github.com/eireijie/warren") { Link("Source code", destination: url) }
+        if let url = URL(string: WarrenRepo.url) { Link("Source code", destination: url) }
       }
       InlineError(error: action.error)
     }.navigationTitle("Updates & about")

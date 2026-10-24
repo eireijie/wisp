@@ -1,11 +1,12 @@
+import { GITHUB_URL } from "@warren/core";
 /**
  * Where to download the Warren app. Release file names never change between versions
  * (.github/workflows/desktop-release.yml), so "latest/download/<name>" is always the newest build.
  * Keep in step with site/src/lib/site.ts.
  */
-const latest = (file: string) => `https://github.com/eireijie/warren/releases/latest/download/${file}`;
+const latest = (file: string) => `${GITHUB_URL}/releases/latest/download/${file}`;
 
-export const RELEASES = "https://github.com/eireijie/warren/releases/latest";
+export const RELEASES = `${GITHUB_URL}/releases/latest`;
 
 export const DOWNLOADS = {
   macArm: latest("Warren-mac-arm64.dmg"),

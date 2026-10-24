@@ -36,7 +36,7 @@ export function agentPolicy(hub: Hub, workspaceId: string) {
     maxHops: num("agents.maxHops", 6, 1, 30),
     maxRunsPerMinute: num("agents.maxRunsPerMinute", 20, 1, 200),
     defaultAccess: ((a) => (a === "read-only" || a === "full" ? a : "edit"))(get("agents.defaultAccess")) as "read-only" | "edit" | "full",
-    /** leads (of a channel's team, a team, or the organization) may create agents; off unless an owner turns it on */
+    /** leads (of a channel's team or the organization) may create agents; off unless an owner turns it on */
     leadsCreateAgents: get("agents.leadsCreateAgents") === "true",
     /** agents a lead made may make sub-agents of their own (up to MAX_MADE_DEPTH down) */
     subAgents: get("agents.subAgents") === "true",

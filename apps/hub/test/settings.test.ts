@@ -46,7 +46,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex Morgan", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
 });
 
 afterAll(async () => {
@@ -56,8 +56,8 @@ afterAll(async () => {
 
 describe("your settings", () => {
   it("keeps your profile and preferences, and agents see your name and local time", async () => {
-    const me = (await api("PATCH", "/api/me", { preferredName: "Yug", timezone: "America/New_York" })).data;
-    expect(me).toMatchObject({ name: "Yugal Patel", preferredName: "Yug", timezone: "America/New_York" });
+    const me = (await api("PATCH", "/api/me", { preferredName: "Alex", timezone: "America/New_York" })).data;
+    expect(me).toMatchObject({ name: "Alex Morgan", preferredName: "Alex", timezone: "America/New_York" });
     expect((await api("PATCH", "/api/me", { timezone: "Mars/Olympus" })).status).toBe(400);
     expect((await api("PUT", "/api/me/prefs", { sendWith: "mod-enter", clock: "24h" })).data).toEqual({ sendWith: "mod-enter", clock: "24h" });
     expect((await api("GET", "/api/me")).data.prefs).toEqual({ sendWith: "mod-enter", clock: "24h" });
@@ -66,8 +66,8 @@ describe("your settings", () => {
     const general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");
     const msg = (await api("POST", `/api/channels/${general.id}/messages`, { body: "@atlas hi" })).data;
     const prompt = await hub.buildPrompt(agent.id, general.id, null, msg.id);
-    expect(prompt).toContain("New message from Yug:");
-    expect(prompt).toMatch(/It's \w+day, .* for Yug \(America\/New_York\)\./);
+    expect(prompt).toContain("New message from Alex:");
+    expect(prompt).toMatch(/It's \w+day, .* for Alex \(America\/New_York\)\./);
   });
 
   it("closes every socket for a revoked sign-in while keeping other sign-ins connected", async () => {
@@ -162,7 +162,7 @@ describe("workspace settings", () => {
     expect((await api("DELETE", `/api/members/${sam.id}`)).status).toBe(200);
     expect(await browser.closed).toBe(4401);
     expect((await api("GET", "/api/me", undefined, samToken)).status).toBe(401);
-    expect((await api<any[]>("GET", "/api/members")).data.map((m) => m.name)).toEqual(["Yugal Patel"]);
+    expect((await api<any[]>("GET", "/api/members")).data.map((m) => m.name)).toEqual(["Alex Morgan"]);
     // the laptop is off the hub, its token and the agent's harness token no longer work, and it belongs to nobody
     expect(await live.closed).toBe(4401);
     expect(await nodeSocket(laptop.token).opened).toBe(false);
@@ -224,6 +224,6 @@ describe("workspace settings", () => {
     expect(zip.headers.get("content-type")).toBe("application/zip");
     expect(Buffer.from(await zip.arrayBuffer()).subarray(0, 2).toString()).toBe("PK");
     const conv = (await api("GET", "/api/export/conversations.json")).data;
-    expect(conv.channels.find((c: any) => c.name === "#general").messages.some((m: any) => m.text === "@atlas hi" && m.from === "Yugal Patel")).toBe(true);
+    expect(conv.channels.find((c: any) => c.name === "#general").messages.some((m: any) => m.text === "@atlas hi" && m.from === "Alex Morgan")).toBe(true);
   });
 });

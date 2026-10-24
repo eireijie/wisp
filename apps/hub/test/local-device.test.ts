@@ -28,7 +28,7 @@ afterAll(async () => {
 
 describe("the hub's own computer as a device", () => {
   it("names the computer without its .local suffix", () => {
-    expect(localName("Yugs-MacBook-Air.local")).toBe("Yugs-MacBook-Air");
+    expect(localName("Alexs-MacBook-Air.local")).toBe("Alexs-MacBook-Air");
     expect(localName("")).toBe("This computer");
   });
 

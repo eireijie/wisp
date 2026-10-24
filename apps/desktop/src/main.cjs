@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const engine = require("./engine.cjs");
+const { GITHUB_URL } = require("./repo.cjs");
 const cloud = require("./cloud.cjs");
 const screenCode = require("./screen-code.cjs");
 const { onOrigin, isPage, mainFrameUrl } = require("./trust.cjs");
@@ -70,7 +71,7 @@ const device = new engine.Child("device", logDir, () => {
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on("second-instance", () => showWindow());
 
-app.setAboutPanelOptions?.({ applicationName: "Warren", copyright: "Apache-2.0", website: "https://github.com/eireijie/warren" });
+app.setAboutPanelOptions?.({ applicationName: "Warren", copyright: "Apache-2.0", website: GITHUB_URL });
 
 // ---------------------------------------------------------------- window
 
@@ -374,7 +375,7 @@ async function stopAndWait() {
   for (let i = 0; i < 50 && device.running(); i++) await new Promise((r) => setTimeout(r, 200));
 }
 
-/** "Yug's MacBook Air" on a Mac; elsewhere the host name without its network domain. */
+/** "Alex's MacBook Air" on a Mac; elsewhere the host name without its network domain. */
 function deviceName() {
   if (process.platform === "darwin") {
     try {
@@ -551,7 +552,7 @@ function appMenu() {
       ],
     },
     { role: "windowMenu" },
-    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal("https://github.com/eireijie/warren") }, ...(mac ? [] : [{ label: "Check for Updates…", click: () => updater.check() }]), { label: "Show Logs", click: () => shell.openPath(logDir) }] },
+    { role: "help", submenu: [{ label: "Warren on GitHub", click: () => shell.openExternal(GITHUB_URL) }, ...(mac ? [] : [{ label: "Check for Updates…", click: () => updater.check() }]), { label: "Show Logs", click: () => shell.openPath(logDir) }] },
   ]);
 }
 

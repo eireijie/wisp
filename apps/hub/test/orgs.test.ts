@@ -38,7 +38,7 @@ const login = async (email: string) => (await api<{ token: string }>("POST", "/a
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-orgs-"));
   await start();
-  const setup = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", workspaceName: "Home" }, "")).data;
+  const setup = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", workspaceName: "Home" }, "")).data;
   owner = setup.token;
   firstOrg = setup.workspace.id;
 });
@@ -164,7 +164,7 @@ describe("who an agent answers", () => {
     expect(runs(mine.id)).toBe(0);
     // nothing is posted about it (only Sam's own message)
     expect((await api<{ messages: any[] }>("GET", `/api/channels/${general}/messages`)).data.messages.length).toBe(before + 1);
-    await say("@mine hello from yug", owner);
+    await say("@mine hello from alex", owner);
     expect(runs(mine.id)).toBe(1);
     // a DM from someone else doesn't wake it either
     const dm = (await api("POST", `/api/dm/${mine.id}`, undefined, sam)).data;
@@ -183,7 +183,7 @@ describe("who an agent answers", () => {
     expect(p.data.settings.createdBy).toBe(helper.settings.createdBy);
     await say("@helper hi from sam", sam);
     expect(runs(helper.id)).toBe(1);
-    await say("@helper hi from yug", owner);
+    await say("@helper hi from alex", owner);
     expect(runs(helper.id)).toBe(2);
 
     const open = (await api("POST", "/api/agents", { handle: "open", name: "Open", harness: "custom", settings: { respondTo: "anyone" } })).data;

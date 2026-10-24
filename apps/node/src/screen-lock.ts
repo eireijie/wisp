@@ -80,10 +80,6 @@ export class ScreenLock {
     return !!this.code();
   }
 
-  get kind(): CodeKind | undefined {
-    return this.code()?.kind;
-  }
-
   /** Check a code. Wrong ones count toward a lockout; a right one clears the count. */
   check(code: string | undefined): CheckResult {
     const saved = this.code();

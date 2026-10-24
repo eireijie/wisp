@@ -2,7 +2,7 @@ import { shareOrigin, useAccess } from "../access.ts";
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { HARNESSES, type Agent } from "@warren/core";
+import { type Agent } from "@warren/core";
 import { defaultAppearance } from "@warren/core/src/appearance.ts";
 import { Ghost, type GhostMood } from "./Ghost.tsx";
 import { useStore } from "../store.ts";
@@ -109,10 +109,7 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
   );
 }
 
-/** Harness names; device-declared ACP agents ("acp:my-bot") show their own name. */
-export const HARNESS_LABELS: Record<string, string> = new Proxy(Object.fromEntries(HARNESSES.map((h) => [h.id, h.label])), {
-  get: (t, k: string) => t[k] ?? (typeof k === "string" && k.startsWith("acp:") ? k.slice(4) : k),
-});
+export { harnessLabel } from "@warren/core";
 
 type AgentLike = { name: string; handle?: string; settings?: Agent["settings"] };
 

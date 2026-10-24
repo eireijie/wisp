@@ -19,7 +19,7 @@ export interface LocalDeviceGrant {
   name: string;
 }
 
-/** This computer's name for the device list ("Yugs-MacBook-Air.local" → "Yugs-MacBook-Air"). */
+/** This computer's name for the device list ("Alexs-MacBook-Air.local" → "Alexs-MacBook-Air"). */
 export const localName = (host = os.hostname()) => host.replace(/\.(local|lan|home)$/i, "").slice(0, 80) || "This computer";
 
 /** Answer a waiting request, if there is one and an owner to give the device to. True when a device was made. */

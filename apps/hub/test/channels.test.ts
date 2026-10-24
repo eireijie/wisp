@@ -34,7 +34,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   me = (await api("GET", "/api/me")).data.user;
   sam = (await api("POST", "/api/members", { email: "sam@example.com", name: "Sam", password: "password123", role: "member" })).data;
   await api("POST", "/api/members", { email: "gus@example.com", name: "Gus", password: "password123", role: "guest" });
@@ -50,12 +50,12 @@ afterAll(async () => {
 describe("channel members", () => {
   it("lists, adds and removes people and agents", async () => {
     const ch = (await api("POST", "/api/channels", { name: "launch" })).data;
-    expect((await api("GET", `/api/channels/${ch.id}/members`)).data).toEqual([{ kind: "user", id: me.id, name: "Yug", handle: null, role: "owner" }]);
+    expect((await api("GET", `/api/channels/${ch.id}/members`)).data).toEqual([{ kind: "user", id: me.id, name: "Alex", handle: null, role: "owner" }]);
 
     await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
     const added = await api<any[]>("PUT", `/api/channels/${ch.id}/members/user/${sam.id}`);
     expect(added.status).toBe(200);
-    expect(added.data.map((m) => `${m.kind}:${m.name}`)).toEqual(["user:Sam", "user:Yug", "agent:Atlas"]);
+    expect(added.data.map((m) => `${m.kind}:${m.name}`)).toEqual(["user:Alex", "user:Sam", "agent:Atlas"]);
     // adding twice is fine
     expect((await api<any[]>("PUT", `/api/channels/${ch.id}/members/user/${sam.id}`)).data).toHaveLength(3);
     expect((await channelNamed("launch")).memberCount).toBe(3);
@@ -172,7 +172,7 @@ describe("who answers in a channel", () => {
     expect(res.status).toBe(200);
     expect(res.data.private).toBe(true);
     const members = (await api<any[]>("GET", `/api/channels/${res.data.id}/members`)).data.map((m) => m.name);
-    expect(members).toEqual(["Sam", "Yug", "Nova"]);
+    expect(members).toEqual(["Alex", "Sam", "Nova"]);
     expect((await api("POST", "/api/channels", { name: "ops-team-2", members: [{ kind: "agent", id: "agt_nope" }] })).status).toBe(400);
   });
 });
@@ -190,7 +190,7 @@ describe("private channels", () => {
     expect(await visible(samToken)).toBe(true);
   });
 
-  it("can't be #general or a team's channel", async () => {
+  it("can't be #general", async () => {
     const general = await channelNamed("general");
     expect((await api("PATCH", `/api/channels/${general.id}`, { private: true })).status).toBe(409);
     expect((await api("PATCH", `/api/channels/${general.id}`, { name: "everyone" })).status).toBe(409);

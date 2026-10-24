@@ -27,7 +27,7 @@ fs.mkdirSync(out, { recursive: true });
 const skip = (src) => !/[\\/](node_modules|test|\.DS_Store)([\\/]|$)/.test(path.relative(repo, src));
 const copy = (rel) => fs.cpSync(path.join(repo, rel), path.join(out, rel), { recursive: true, filter: skip });
 
-for (const rel of ["bin", "apps/hub", "apps/node", "apps/web/dist", "docker/computer", "docker/cloud-init.yaml", "LICENSE"]) copy(rel);
+for (const rel of ["bin", "apps/hub", "apps/node", "apps/web/dist", "docker/computer", "docker/cloud-init.yaml", "install.sh", "install.ps1", "LICENSE"]) copy(rel);
 for (const pkg of fs.readdirSync(path.join(repo, "packages"))) copy(`packages/${pkg}`);
 
 // a better-sqlite3 with Node-API prebuilds, which load in any Node or Electron on every platform

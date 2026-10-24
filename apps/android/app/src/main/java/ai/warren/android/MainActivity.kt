@@ -82,6 +82,7 @@ class MainActivity : Activity() {
         web?.destroy()
         web = null
         setContentView(R.layout.pair)
+        findViewById<TextView>(R.id.pairHelp).text = getString(R.string.pair_help, getString(R.string.github_repo))
         fitSystemBars(findViewById(R.id.root))
         findViewById<Button>(R.id.scan).setOnClickListener { scan() }
         findViewById<Button>(R.id.paste).setOnClickListener { askForLink() }

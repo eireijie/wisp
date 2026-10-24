@@ -19,7 +19,7 @@ export const LEVEL_LABEL: Record<MemoryLevel, string> = { none: "No access", rea
 
 const key = (s: Subject) => (s.kind === "user" || s.kind === "agent" ? `${s.kind}:${s.id}` : s.kind === "team" ? `team:${s.name}` : s.kind === "role" ? `role:${s.team}/${s.role}` : s.kind);
 
-/** "agents/agt_x/notes" → "@atlas/notes", "people/usr_x/plans" → "Yug/plans"; "" → "the whole vault". */
+/** "agents/agt_x/notes" → "@atlas/notes", "people/usr_x/plans" → "Alex/plans"; "" → "the whole vault". */
 export function pathLabel(path: string, agents: Pick<Agent, "id" | "handle">[], members: Pick<Member, "id" | "name">[] = []): string {
   if (!path) return "the whole vault";
   const m = path.match(/^(agents|people)\/([^/]+)(.*)$/);

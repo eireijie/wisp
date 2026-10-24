@@ -10,7 +10,7 @@ import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
-import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Field, harnessLabel, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
@@ -277,6 +277,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
       await load();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -433,6 +434,7 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -530,6 +532,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -540,13 +543,13 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       <div>
         <Intro title="Model">
           <p>
-            {HARNESS_LABELS[agent.harness]} joins through warren-mcp, so its model and permissions are set inside {HARNESS_LABELS[agent.harness]} itself.
+            {harnessLabel(agent.harness)} joins through warren-mcp, so its model and permissions are set inside {harnessLabel(agent.harness)} itself.
           </p>
         </Intro>
       </div>
     );
 
-  const hLabel = HARNESS_LABELS[agent.harness];
+  const hLabel = harnessLabel(agent.harness);
   const isAuto = !form.model && !form.effort && !form.fast;
   const deviceGone = !agent.nodeId || !!(info?.device && !info.device.online);
 
@@ -556,7 +559,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       ? null
       : !info.catalog
         ? info.device.online
-          ? `${info.device.name} hasn't reported ${HARNESS_LABELS[agent.harness]} models. Make sure it's installed there (warren doctor) and restart the device.`
+          ? `${info.device.name} hasn't reported ${harnessLabel(agent.harness)} models. Make sure it's installed there (warren doctor) and restart the device.`
           : `${info.device.name} is offline. Start it to see the models it offers.`
         : null;
 
@@ -567,11 +570,11 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           <p>
             {info?.catalog ? (
               <>
-                What {HARNESS_LABELS[agent.harness]} offers on <b>{info.device?.name}</b>
+                What {harnessLabel(agent.harness)} offers on <b>{info.device?.name}</b>
                 {info.catalog.version && <span className="text-faint"> ({info.catalog.version})</span>}.
               </>
             ) : (
-              `Which ${HARNESS_LABELS[agent.harness]} model this agent uses.`
+              `Which ${harnessLabel(agent.harness)} model this agent uses.`
             )}
           </p>
         </Intro>
@@ -757,6 +760,7 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -767,8 +771,8 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
       <Intro title="Device">
         <p>
           {runsOnDevice(agent.harness)
-            ? `The device that runs ${HARNESS_LABELS[agent.harness]} for @${agent.handle} whenever it's mentioned. It works in ~/.warren/agents/${agent.handle}/ there (or in the folder it shares with its VM). Where it clicks and types is its Computer.`
-            : `Optional: ${HARNESS_LABELS[agent.harness]} can also join through warren-mcp from wherever it runs (see Connect).`}
+            ? `The device that runs ${harnessLabel(agent.harness)} for @${agent.handle} whenever it's mentioned. It works in ~/.warren/agents/${agent.handle}/ there (or in the folder it shares with its VM). Where it clicks and types is its Computer.`
+            : `Optional: ${harnessLabel(agent.harness)} can also join through warren-mcp from wherever it runs (see Connect).`}
         </p>
       </Intro>
       <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
@@ -870,6 +874,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1045,7 +1050,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   const accessCard: Card = { label: "Access", value: ACCESS[agent.settings.access ?? "edit"].label, to: "permissions" };
   // Simple leads with where it runs; the model and access settings fold under "Technical details".
   const cards: Card[] = simple ? [deviceCard, computerCard] : [modelCard, deviceCard, computerCard, accessCard];
-  const technicalCards: Card[] = [modelCard, { label: "Harness", value: HARNESS_LABELS[agent.harness], to: "device" }, accessCard];
+  const technicalCards: Card[] = [modelCard, { label: "Harness", value: harnessLabel(agent.harness), to: "device" }, accessCard];
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
   const next = simple ? setupNextStep(agent, devices) : null;
@@ -1091,7 +1096,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
               </h2>
               <p className="text-sm text-muted flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                 <span>
-                  @{agent.handle} · {HARNESS_LABELS[agent.harness]}
+                  @{agent.handle} · {harnessLabel(agent.harness)}
                 </span>
                 <StatusChip status={agent.status} />
               </p>
@@ -1287,9 +1292,9 @@ function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] })
         <p className="text-sm text-muted">
           {runsOnDevice(agent.harness)
             ? device
-              ? `When someone @mentions @${agent.handle}, ${device.name} starts ${HARNESS_LABELS[agent.harness]}, gives it the warren tools, and posts the reply.`
+              ? `When someone @mentions @${agent.handle}, ${device.name} starts ${harnessLabel(agent.harness)}, gives it the warren tools, and posts the reply.`
               : "Pick a device in General so the agent can answer when it's mentioned."
-            : `${HARNESS_LABELS[agent.harness]} doesn't have a headless adapter yet. Connect a running session below.`}
+            : `${harnessLabel(agent.harness)} doesn't have a headless adapter yet. Connect a running session below.`}
         </p>
       </section>
       <section className="space-y-3">

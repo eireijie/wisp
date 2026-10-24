@@ -77,7 +77,7 @@ Paste [`docker/cloud-init.yaml`](../docker/cloud-init.yaml) into the "user data"
 | API | `POST /v1/servers` with `user_data` (up to 32 KiB) | `POST /v2/droplets` with `user_data` (up to 64 KiB) |
 | Connecting without a token | No OAuth for third-party apps | OAuth: a "Connect DigitalOcean" button would work once the Warren project registers an OAuth app. Its docs now describe PKCE for desktop apps, but recent reports say the token exchange still wants a client secret. Needs testing before we build on it |
 
-Both give you a whole virtual machine, so Docker runs normally. That's all agent computers need: on a Linux device they're Docker containers from `docker/computer`, with no nested virtualization. To run agents on the cloud server itself, connect it as a device (`curl -fsSL <your Warren>/install.sh | bash` there, then sign in to your agent CLIs).
+Both give you a whole virtual machine, so Docker runs normally. That's all agent computers need: on a Linux device they're Docker containers from `docker/computer`, with no nested virtualization. To run agents on the cloud server itself, connect it as a device (`curl -fsSL <your Warren>/install.sh | bash -s -- --hub <URL> --token <TOKEN>` (use the command from **Devices → Add device**) there, then sign in to your agent CLIs).
 
 Platforms like Railway or Render run *your container* but not Docker *inside* it, so the hub would run there but agent computers couldn't. They also need a paid volume for the database and vault. A plain VPS is simpler and cheaper.
 
@@ -235,7 +235,7 @@ Stop it with `Stop-ScheduledTask -TaskName "Warren node"`, and remove it with `U
 
 ## Updating
 
-Every hub and device runs from a git checkout of Warren, so updating means getting the latest commits. Use **Settings → Updates** and the **Update** button on each device in **Devices**, or run `warren update` (or `node bin/warren.mjs update`) inside the checkout. It fast-forwards to what's on GitHub, runs `npm install` only if dependencies changed, rebuilds the web app if the checkout serves one, and then the hub and devices running from that folder restart themselves. Devices wait until no agent is running.
+For source installs, the hub and devices run from a git checkout of Warren, so updating means getting the latest commits. Built desktop apps carry a staged runtime and update through the desktop app's **Check for Updates…** menu. Use **Settings → Advanced → About** and the **Update** button on each device in **Devices**, or run `warren update` (or `node bin/warren.mjs update`) inside the checkout. It fast-forwards to what's on GitHub, runs `npm install` only if dependencies changed, rebuilds the web app if the checkout serves one, and then the hub and devices running from that folder restart themselves. Devices wait until no agent is running.
 
 The restart works the same under systemd, launchd, Task Scheduler or a plain terminal: `warren-hub` and `warren node start` run the real process as a child and start it again after an update, so the services above need no changes. The user that runs Warren needs to be able to write to the checkout and to `git pull` from where it was cloned (for a private repository, a read-only deploy key works).
 
@@ -295,6 +295,6 @@ Each agent's model, reasoning effort and access level are set in Warren (agent �
 | Can edit files (default) | `--permission-mode acceptEdits` | `sandbox_mode = "workspace-write"` |
 | Full access | `--permission-mode bypassPermissions` | `sandbox_mode = "danger-full-access"` |
 
-**Full access only works on devices started with `--allow-full-access`.** The device owner opts in, not the hub; without it, agents set to full access run with edit access and say so in the channel.
+**For harnesses running directly on a device, full access requires `--allow-full-access`.** The device owner opts in, not the hub; without it, agents set to full access run with edit access and say so in the channel. Harnesses running inside a VM have full access there unless set to read only.
 
-Agents work in `~/.warren/agents/<handle>/` on their device.
+Agents work in `~/.warren/agents/<handle>/` on their device, the folder shared with their VM, or a task's checkout when working on a repository task.

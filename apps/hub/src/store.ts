@@ -1132,11 +1132,6 @@ export class Store {
     return r && this.toBackground(r);
   }
 
-  /** Every person an agent works in the background for (turned on or not). */
-  backgroundFor(agentId: string): BackgroundWork[] {
-    return (this.db.prepare(`${this.backgroundSql} WHERE b.agent_id = ?`).all(agentId) as Record<string, unknown>[]).map(this.toBackground);
-  }
-
   /** Background work that's on, across every workspace. */
   activeBackground(): BackgroundWork[] {
     return (this.db.prepare(`${this.backgroundSql} WHERE b.enabled = 1`).all() as Record<string, unknown>[]).map(this.toBackground);

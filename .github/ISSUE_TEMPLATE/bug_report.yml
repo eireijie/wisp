@@ -32,7 +32,7 @@ body:
     id: version
     attributes:
       label: Warren version
-      description: From Settings → Updates, or `git log -1 --format='%h %cs'` in the Warren folder
+      description: From Settings → Advanced → About, or `git log -1 --format='%h %cs'` in the Warren folder
   - type: input
     id: os
     attributes:

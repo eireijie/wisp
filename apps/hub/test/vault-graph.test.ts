@@ -29,7 +29,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  token = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", workspaceName: "Test" }, "")).data.token;
+  token = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", workspaceName: "Test" }, "")).data.token;
   await api("POST", "/api/members", { email: "sam@example.com", name: "Sam", password: "password123", role: "member" });
   member = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
   const n = await api("POST", "/api/nodes", { name: "box" });

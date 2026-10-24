@@ -31,7 +31,7 @@ struct GhostView: View {
         GhostRenderer(look: appearance, mood: currentMood, size: size, time: time, animated: animated,
           poke: poke, pokeCount: pokeCount, darkMode: colorScheme == .dark).draw(context)
       }
-      // SVG overflow is visible on the web, including hats, hops and glow.
+      // SVG overflow is visible on the web, including hats and hops.
       .frame(width: size + overflow * 2, height: size + overflow * 2)
     }
     .frame(width: size, height: size)

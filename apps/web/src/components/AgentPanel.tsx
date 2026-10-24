@@ -14,7 +14,7 @@ import { useComputerState } from "../views/ComputersView.tsx";
 import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
 import { prettyModel, effortName } from "./EffortSlider.tsx";
-import { AgentAvatar, AGENT_STATUS, Button, HARNESS_LABELS, Pill, cx, timeAgo } from "./ui.tsx";
+import { AgentAvatar, AGENT_STATUS, Button, Pill, cx, timeAgo } from "./ui.tsx";
 import { RightPane } from "./RightPane.tsx";
 import { runActivity, stopRuns } from "./ActivityPill.tsx";
 import { minutesSince, runStartedAt, workSteps } from "./agentActivity.ts";
@@ -157,7 +157,7 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
   const statusRow: Row = ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>];
   const deviceRow: Row = ["Device", device ? device.name : "None yet"];
   const computerRow: Row = ["Computer", computer ? computer.name : agent.settings.headless ? "None (headless)" : "None yet"];
-  const harnessRow: Row = ["Harness", HARNESS_LABELS[agent.harness]];
+  const harnessRow: Row = ["Harness", harnessLabel(agent.harness)];
   const modelRow: Row = ["Model", agent.model ? `${prettyModel(agent.model)}${agent.settings.effort ? ` · ${effortName(agent.settings.effort)}` : ""}${agent.settings.fast ? " · Fast" : ""}` : "Default"];
   const accessRow: Row = ["Access", ACCESS_LABEL[agent.settings.access ?? "edit"]];
   const onTeams = teams.filter((t) => t.members.some((m) => m.agentId === agent.id)).map((t) => `#${t.name}`);

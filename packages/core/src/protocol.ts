@@ -242,7 +242,7 @@ export type ClientEvent =
   | { type: "tasks_changed" }
   /** notes were changed outside Warren (Obsidian, a git pull or push) */
   | { type: "memory_changed" }
-  /** an owner switched optional features on or off (Settings → Features) */
+  /** an owner switched optional features on or off (Settings → General → Mods) */
   | { type: "features"; features: import("./features.ts").Features };
 
 /**

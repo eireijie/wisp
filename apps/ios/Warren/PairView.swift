@@ -89,7 +89,7 @@ struct PairView: View {
           }
         }
 
-        Text("Don't have Warren on a computer yet? Get it free at github.com/eireijie/warren.")
+        Text("Don't have Warren on a computer yet? Get it free at github.com/\(WarrenRepo.github).")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }

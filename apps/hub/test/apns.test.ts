@@ -68,7 +68,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   await new Promise<void>((r) => apns.listen(0, "127.0.0.1", r));
   hub.apns.origin = `http://127.0.0.1:${(apns.address() as { port: number }).port}`;
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex Morgan", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
 });
 
 afterAll(async () => {
@@ -127,7 +127,7 @@ describe("push notifications", () => {
     const atlas = (await api<any[]>("GET", "/api/agents")).data.find((a) => a.handle === "atlas");
     const agentToken = (await api("POST", `/api/agents/${atlas.id}/token`, {})).data.token;
     const n = got.length;
-    await api("POST", `/api/channels/${general.id}/messages`, { body: "@yugal the deploy is done" }, agentToken);
+    await api("POST", `/api/channels/${general.id}/messages`, { body: "@alex the deploy is done" }, agentToken);
     const mention = await waitFor(() => got.slice(n).find((g) => g.body.aps.alert.title.includes("mentioned you")));
     expect(mention.body.aps.alert.title).toBe("Atlas mentioned you in #general");
     expect(mention.body.warren.category).toBe("mention");
@@ -148,7 +148,7 @@ describe("push notifications", () => {
     const dm = hub.store.dmChannel(workspace.id, user.id, atlas.id);
     const general = hub.store.channelByName(workspace.id, "general")!;
     const root = (channelId: string) => hub.store.insertMessage({ channelId, author: { kind: "user", id: user.id }, body: "Question" });
-    const message = (channelId: string, threadId: string | null, body = "@yugal here you go") => hub.store.insertMessage({ channelId, threadId, author: { kind: "agent", id: atlas.id }, body });
+    const message = (channelId: string, threadId: string | null, body = "@alex here you go") => hub.store.insertMessage({ channelId, threadId, author: { kind: "agent", id: atlas.id }, body });
     const category = (m: ReturnType<typeof message>) => hub.apns.decide(workspace.id, { type: "message", message: m }).find(([id]) => id === user.id)?.[1].warren.category;
     hub.store.setChannelPrefs(user.id, general.id, { notify: "all" });
     try {

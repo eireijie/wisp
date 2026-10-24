@@ -81,13 +81,6 @@ describe("Hetzner sizes and prices", () => {
     expect(calls.every((c) => c.method === "GET" && c.headers.authorization === "Bearer good-token")).toBe(true);
   });
 
-  it("suggests the cheapest size with 4 GB", async () => {
-    const { fetchImpl } = mockCloud();
-    const r = await cloud.plans("good-token", { fetchImpl });
-    expect(cloud.recommended(r.plans, "fsn1")).toMatchObject({ type: "cax11" });
-    expect(cloud.recommended(r.plans, "nowhere")).toBeNull();
-  });
-
   it("follows the API's pages", async () => {
     let n = 0;
     const fetchImpl = async (url: URL) => {

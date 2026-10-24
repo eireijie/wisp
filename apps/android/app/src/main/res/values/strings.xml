@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="github_repo" translatable="false">eireijie/warren</string>
+    <string name="pair_help">Don\'t have Warren on a computer yet? Get it free at github.com/%1$s.</string>
+</resources>

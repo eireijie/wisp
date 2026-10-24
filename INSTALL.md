@@ -55,7 +55,7 @@ Use `pvesh get /cluster/nextid` for a free ID, `pvesm status` for storage that a
 
 ## 2. Get the code
 
-- **Linux hub:** create a user to run Warren (`useradd -m -s /bin/bash warren`, and add it to the `docker` group if Docker is installed), clone to `/opt/warren` owned by that user, and keep data in `/var/lib/warren`.
+- **Linux hub:** create a user to run Warren (`useradd -m -s /bin/bash warren`, and add it to the `docker` group if Docker is installed), clone to `/opt/warren` owned by that user, and create its data folder before starting the service: `install -d -o warren -g warren /var/lib/warren`.
 - **Device:** clone to `~/warren` as the person who signed in to the harnesses (not root).
 
 ```bash
@@ -142,4 +142,4 @@ To remove Warren from a machine:
 
 ## Updating later
 
-`warren update` in the folder, or **Settings → Updates** and the **Update** button on each device. See [README → Updating](README.md#updating).
+`warren update` in the folder, or **Settings → Advanced → About** and the **Update** button on each device. See [README → Updating](README.md#updating).

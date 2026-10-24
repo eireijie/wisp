@@ -120,7 +120,7 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     return { token: moveSession(req, c.actor.id, usable.workspaceId) };
   });
 
-  // --- optional features (Settings → Features) ----------------------------------------------------
+  // --- optional features (Settings → General → Mods) ----------------------------------------------------
 
   app.get("/api/features", async (req, reply) => {
     const c = need(req, reply);

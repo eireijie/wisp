@@ -1,8 +1,9 @@
+import { isLocalOnlyHost } from "./loopback.ts";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api } from "./api.ts";
 
-/** Tailscale on the hub's computer, as GET /api/access reports it (owners get every field). */
+/** Tailscale on the hub's computer, as GET /api/reach reports it (owners get every field). */
 export interface TailscaleInfo {
   state: "missing" | "needs-login" | "stopped" | "starting" | "running" | "error";
   dnsName: string | null;
@@ -25,11 +26,10 @@ export interface AccessInfo {
   hubPlatform: string;
 }
 
-const isLoopback = (host: string) => /^(localhost|127\.|\[?::1\]?$)/i.test(host);
 
 /** The page is already open at an address other computers can use over https (a cloud hub, a domain, Tailscale). */
 export function onPublicAddress(loc: Pick<Location, "protocol" | "hostname"> | undefined = typeof location === "undefined" ? undefined : location): boolean {
-  return !!loc && loc.protocol === "https:" && !isLoopback(loc.hostname);
+  return !!loc && loc.protocol === "https:" && !isLocalOnlyHost(loc.hostname);
 }
 
 export const useAccessStore = create<{ info: AccessInfo | null; failed: boolean; refresh: (fresh?: boolean) => Promise<AccessInfo | null>; act: (action: string) => Promise<AccessInfo> }>((set) => ({
@@ -68,7 +68,7 @@ export function useAccess(everyMs = 0): AccessInfo | null {
  */
 export function shareOrigin(info: AccessInfo | null = useAccessStore.getState().info, loc: Pick<Location, "origin" | "hostname"> = location): string {
   if (info?.publicUrl) return info.publicUrl;
-  if (!isLoopback(loc.hostname)) return loc.origin;
+  if (!isLocalOnlyHost(loc.hostname)) return loc.origin;
   return info?.lan[0] ?? loc.origin;
 }
 
@@ -76,7 +76,7 @@ export function shareOrigin(info: AccessInfo | null = useAccessStore.getState().
 export function originReach(origin: string): "anywhere" | "network" | "this-computer" {
   try {
     const u = new URL(origin);
-    if (isLoopback(u.hostname)) return "this-computer";
+    if (isLocalOnlyHost(u.hostname)) return "this-computer";
     if (u.protocol === "https:") return "anywhere";
     return "network";
   } catch {

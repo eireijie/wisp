@@ -2,11 +2,13 @@ name: App release
 # Push a tag like desktop-v0.2.0 to build Warren for Mac (Apple silicon and Intel), Windows,
 # Linux and Android and attach the builds to a GitHub release, marked latest. Installed apps find it there and update
 # themselves (apps/desktop/src/updater.cjs). The file names never change between versions, so
-# https://github.com/eireijie/warren/releases/latest/download/<name> always links the newest one.
+# The repository's releases/latest/download/<name> URL always links the newest one.
 # Builds are unsigned for now (Macs: ad hoc, see scripts/after-sign.cjs).
 on:
   push:
     tags: ["desktop-v*"]
+env:
+  GH_REPO: ${{ github.repository }}
 permissions:
   contents: write
 jobs:
