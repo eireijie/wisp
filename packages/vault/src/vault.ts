@@ -4,7 +4,8 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type Database from "better-sqlite3";
-import { basename, normalizeTarget, parseNote } from "./markdown.ts";
+import { fillFrontmatter, guessType, linkNames, mentions, noteWords, overlap } from "./filing.ts";
+import { basename, normalizeTarget, parseNote, withoutCode } from "./markdown.ts";
 
 const exec = promisify(execFile);
 
@@ -44,6 +45,12 @@ export interface SearchHit {
   path: string;
   title: string;
   snippet: string;
+}
+
+/** What an agent hears back after saving: notes on the same idea, and names it could link. */
+export interface SaveHints {
+  similar: { path: string; title: string }[];
+  links: string[];
 }
 
 /** A run of consecutive lines last changed by the same commit. */
@@ -169,6 +176,79 @@ export class Vault {
     }
     const sep = existing && !existing.endsWith("\n") ? "\n" : "";
     return this.write(rel, existing + sep + text + (text.endsWith("\n") ? "" : "\n"), author, `Append to ${notePath(rel)}`);
+  }
+
+  /**
+   * Save a note the way agents do (memory_write, or memory_append with `append`): fill in the
+   * front matter it's missing (type, created, updated), save, and return hints. `fill: false`
+   * saves the text as given; `allow` limits the hints to notes the writer can read.
+   */
+  async save(
+    rel: string,
+    text: string,
+    author: CommitAuthor,
+    opts: { append?: boolean; message?: string; fill?: boolean; allow?: (path: string) => boolean; today?: string } = {},
+  ): Promise<NoteMeta & SaveHints> {
+    const p = notePath(rel);
+    const old = await this.read(p).catch((e) => {
+      if (e instanceof VaultError && e.status === 404) return null;
+      throw e;
+    });
+    let content = text;
+    if (opts.append && old) content = old.content + (old.content.endsWith("\n") ? "" : "\n") + text;
+    if (opts.append && !content.endsWith("\n")) content += "\n";
+    if (opts.fill !== false) {
+      const today = opts.today ?? new Date().toISOString().slice(0, 10);
+      const was = (k: string) => (typeof old?.frontmatter[k] === "string" ? (old.frontmatter[k] as string) : null);
+      content = fillFrontmatter(content, { type: was("type") ?? guessType(p), created: was("created") ?? today, updated: today });
+    }
+    const hints = this.hints(p, opts.append ? text : content, opts.allow);
+    const meta = await this.write(p, content, author, opts.message ?? (opts.append ? `Append to ${p}` : undefined));
+    return { ...meta, ...(await hints) };
+  }
+
+  /**
+   * Hints for saving `text` at `rel`: up to `limit` existing notes on the same idea (to merge
+   * into instead of keeping two), and notes the text names without linking them.
+   */
+  async hints(rel: string, text: string, allow?: (path: string) => boolean, limit = 3): Promise<SaveHints> {
+    const p = notePath(rel);
+    const parsed = parseNote(p, text);
+    const readable = (q: string) => q !== p && !isMachinery(q) && (!allow || allow(q));
+
+    const similar: { path: string; title: string; score: number }[] = [];
+    const mine = noteWords(`${parsed.title} ${parsed.body}`);
+    const myTitle = noteWords(parsed.title);
+    if (mine.size >= 3) {
+      for (const hit of this.search(`${parsed.title} ${parsed.body}`, readable, 10, "any")) {
+        const other = await this.read(hit.path).catch(() => null);
+        if (!other) continue;
+        const o = parseNote(hit.path, other.content);
+        const body = overlap(mine, noteWords(`${o.title} ${o.body}`));
+        const title = overlap(myTitle, noteWords(o.title));
+        const score = Math.max(body.shared >= 3 ? body.score : 0, title.shared >= 2 ? title.score : 0);
+        if (score >= 0.5) similar.push({ path: hit.path, title: o.title, score });
+      }
+    }
+    similar.sort((a, b) => b.score - a.score);
+
+    const linked = new Set(parsed.links);
+    const plain = withoutCode(parsed.body).replace(/!?\[\[[^\]]*\]\]/g, " ").toLowerCase();
+    const notes = this.list(readable);
+    const byName = new Map<string, number>();
+    for (const n of notes) byName.set(normalizeTarget(basename(n.path)), (byName.get(normalizeTarget(basename(n.path))) ?? 0) + 1);
+    const links: { link: string; weight: number }[] = [];
+    for (const n of notes) {
+      const name = normalizeTarget(basename(n.path));
+      if (linked.has(name) || linked.has(normalizeTarget(n.path))) continue;
+      const hit = linkNames(n.path, n.title).filter((m) => mentions(plain, m));
+      if (!hit.length) continue;
+      // two notes with the same file name need the full path to tell them apart
+      links.push({ link: `[[${(byName.get(name) ?? 0) > 1 ? n.path.replace(/\.md$/i, "") : basename(n.path)}]]`, weight: Math.max(...hit.map((m) => m.length)) });
+    }
+    links.sort((a, b) => b.weight - a.weight);
+
+    return { similar: similar.slice(0, limit).map(({ path, title }) => ({ path, title })), links: [...new Set(links.map((l) => l.link))].slice(0, 5) };
   }
 
   async remove(rel: string, author: CommitAuthor): Promise<void> {
@@ -605,6 +685,9 @@ export class VaultError extends Error {
 }
 
 type Row = { path: string; title: string; tags: string; updated_at: number };
+
+/** Notes that run agents rather than hold knowledge (skills, souls): never suggested as links or merges. */
+const isMachinery = (p: string) => /(^|\/)skills\/[^/]+\/SKILL\.md$/i.test(p) || /(^|\/)SOUL\.md$/i.test(p);
 
 /** A note's vault path: forward slashes, no leading slash, ending in .md. */
 export function notePath(rel: string): string {

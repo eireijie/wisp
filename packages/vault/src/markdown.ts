@@ -17,9 +17,12 @@ export function parseNote(path: string, raw: string): ParsedNote {
     body = raw.slice(fm[0].length);
   }
   const links = new Set<string>();
-  for (const m of body.matchAll(/!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g)) {
+  // like Obsidian, a [[link]] inside code is an example, not a link
+  for (const m of withoutCode(body).matchAll(/!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g)) {
     links.add(normalizeTarget(m[1]));
   }
+  // links in front matter (`related: ["[[acme]]"]`) count too, as they do in Obsidian
+  for (const m of (fm?.[1] ?? "").matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g)) links.add(normalizeTarget(m[1]));
   const tags = new Set<string>();
   for (const m of body.replace(/```[\s\S]*?```/g, "").matchAll(/(^|\s)#([\w/-]+)/g)) tags.add(m[2]);
   const fmTags = frontmatter.tags;
@@ -59,6 +62,11 @@ function parseFrontmatter(src: string): ParsedNote["frontmatter"] {
 
 function unquote(s: string) {
   return s.replace(/^["']|["']$/g, "");
+}
+
+/** The text with fenced and inline code taken out. */
+export function withoutCode(text: string): string {
+  return text.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
 }
 
 export function normalizeTarget(target: string): string {

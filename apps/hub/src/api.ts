@@ -216,6 +216,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return (p: string) => atLeast(check(p).level, "read");
   };
 
+  /** Notes with a format of their own (souls, skills, what's remembered about people): no front matter is added. */
+  const ownFormat = (p: string) => /^people\//i.test(p) || /(^|\/)SOUL\.md$/i.test(p) || /(^|\/)skills\/[^/]+\/SKILL\.md$/i.test(p);
+
   /** Validate a note path and require at least `need` on it. Returns the normalized path. */
   function noteFor(c: Caller, raw: string, need: MemoryLevel, reply: FastifyReply): string | null {
     let p: string;
@@ -385,7 +388,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       )
       .get(c.workspaceId) as { id: string; channelId: string; agentId: string } | undefined;
     const canRead = readable(c);
-    const agentNotes = vaultOf(c).list((p) => canRead(p) && agents.some((a) => p.startsWith(`agents/${a.id}/`))).filter((n) => !/\/(About|SOUL)\.md$/.test(n.path));
+    const agentNotes = vaultOf(c).list((p) => canRead(p) && agents.some((a) => p.startsWith(`agents/${a.id}/`))).filter((n) => !/\/(About|SOUL)\.md$/.test(n.path) && !/\/skills\/[^/]+\/SKILL\.md$/.test(n.path));
     const sharedNotes = vaultOf(c).list((p) => canRead(p) && p.startsWith("shared/")).filter((n) => n.path !== "shared/Welcome.md");
     return {
       devices: nodes.map((n) => ({ id: n.id, name: n.name, online: hub.isNodeOnline(n.id), mine: n.ownerId === c.actor.id, role: n.role })),
@@ -970,6 +973,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const general = store.channelByName(c.workspaceId, "general");
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
     await vaultOf(c).write(soulPath(agent.id), soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
+    await hub.ensureBuiltinSkills([agent.id]);
     // it joins the chart of the channel its maker is working in, under its maker
     const run = hub.currentRun(maker.id);
     const ch = run ? store.channel(run.channelId) : undefined;
@@ -1048,6 +1052,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (general) store.addChannelMember(general.id, { kind: "agent", id: agent.id });
     await vaultOf(c).write(soulPath(agent.id), body.soul ?? soulTemplate(agent.name, agent.handle), commitAuthor(c), `Create soul for @${agent.handle}`);
     hub.broadcast(c.workspaceId, { type: "agents_changed" });
+    await hub.ensureBuiltinSkills([agent.id]);
     return agentView(agent);
   });
 
@@ -1638,6 +1643,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ path: z.string().min(1), content: z.string().max(2_000_000), message: z.string().max(200).optional() }), req.body, reply);
     const p = body && noteFor(c, body.path, "edit", reply);
     if (!body || !p) return;
+    // agents get front matter filled in and hints back (similar notes, names to link); people's edits are saved as typed
+    if (c.actor.kind === "agent") return vaultOf(c).save(p, body.content, commitAuthor(c), { message: body.message, fill: !ownFormat(p), allow: readable(c) });
     return vaultOf(c).write(p, body.content, commitAuthor(c), body.message);
   });
 
@@ -1647,6 +1654,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ path: z.string().min(1), text: z.string().max(200_000) }), req.body, reply);
     const p = body && noteFor(c, body.path, "edit", reply);
     if (!body || !p) return;
+    if (c.actor.kind === "agent") return vaultOf(c).save(p, body.text, commitAuthor(c), { append: true, fill: !ownFormat(p), allow: readable(c) });
     return vaultOf(c).append(p, body.text, commitAuthor(c));
   });
 
