@@ -15,6 +15,7 @@ import { useMemo, useSyncExternalStore } from "react";
  *   #/connectors, #/skills           older addresses of the marketplace (installed apps, skills)
  *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
  *   #/join/<code>                    accept an invite (signed out)
+ *   #/authorize/<requestId>          let an app (Grok, ChatGPT, Claude…) connect as an agent (the hub's /oauth/authorize sends people here)
  *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Warren is" and Simple or Advanced
  *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
  *   #/mods                           mods: optional parts of Warren, switched on or off
@@ -24,6 +25,7 @@ import { useMemo, useSyncExternalStore } from "react";
  */
 export type Route =
   | { view: "buddy" }
+  | { view: "authorize"; requestId: string }
   | { view: "chat"; channelId: string | null; threadId: string | null; messageId?: string; call?: boolean }
   | { view: "dashboard" }
   | { view: "vault"; path: string | null }
@@ -44,7 +46,7 @@ export type Route =
 
 export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
-export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "mobile", "general", "access", "agent-defaults", "features", "people", "agents", "runtimes", "harnesses", "memory", "computers", "apps", "connections", "data", "updates"] as const;
+export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "features", "people", "agents", "runtimes", "harnesses", "memory", "computers", "apps", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 export const MARKET_SECTIONS = ["all", "apps", "skills", "devices", "installed"] as const;
 export type MarketSection = (typeof MARKET_SECTIONS)[number];
@@ -63,6 +65,8 @@ export function parseRoute(hash: string): Route {
   switch (parts[0]) {
     case "buddy":
       return { view: "buddy" };
+    case "authorize":
+      return parts[1] ? { view: "authorize", requestId: parts[1] } : { view: "dashboard" };
     case "dashboard":
     case "inbox":
       return { view: "dashboard" };
@@ -113,6 +117,8 @@ export function href(r: Route): string {
   switch (r.view) {
     case "buddy":
       return "#/buddy";
+    case "authorize":
+      return `#/authorize/${encodeURIComponent(r.requestId)}`;
     case "dashboard":
       return "#/dashboard";
     case "marketplace":

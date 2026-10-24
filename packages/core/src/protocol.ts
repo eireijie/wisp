@@ -214,7 +214,18 @@ export const HubToNode = z.discriminatedUnion("type", [
 export type HubToNode = z.infer<typeof HubToNode>;
 
 /** hub -> browser clients */
+export interface JoinRequestView {
+  id: string;
+  name: string;
+  kind: "computer";
+  platform: string;
+  code: string;
+  createdAt: string;
+}
+
 export type ClientEvent =
+  | { type: "join_request"; request: JoinRequestView }
+  | { type: "join_request_done"; id: string }
   | { type: "message"; message: import("./types.ts").Message }
   /** an edited message, or a deleted thread root kept for its replies */
   | { type: "message_updated"; message: import("./types.ts").Message }

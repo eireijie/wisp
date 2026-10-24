@@ -8,7 +8,7 @@ import { useStore } from "../../store.ts";
 import { Button, CopyBlock, Input, Menu, Modal, Pill, cx } from "../../components/ui.tsx";
 import { Card, Section, Select, Toggle } from "./parts.tsx";
 
-interface HarnessesResponse {
+export interface HarnessesResponse {
   device: { id: string; name: string };
   harnesses: HarnessSettings[];
   agents: { id: string; handle: string; name: string; harness: string }[];
@@ -544,7 +544,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
           </div>
         ))}
       {error && <p className="px-4 py-3 text-sm text-bad">{error}</p>}
-      {signingIn && current && <SignIn device={device} settings={settings} account={current} onClose={() => setSigningIn(false)} onDone={() => onLoad(current.id)} />}
+      {signingIn && current && <HarnessSignIn device={device} settings={settings} account={current} onClose={() => setSigningIn(false)} onDone={() => onLoad(current.id)} />}
     </Card>
   );
 }
@@ -553,7 +553,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
  * Signing an account in without the device's terminal: the device runs the harness's sign-in and
  * Warren shows the link and code it prints (and passes back a code the page gives you).
  */
-function SignIn({ device, settings, account, onClose, onDone }: { device: HarnessesResponse["device"]; settings: HarnessSettings; account: HarnessSettings["accounts"][number]; onClose: () => void; onDone: () => void }) {
+export function HarnessSignIn({ device, settings, account, onClose, onDone }: { device: HarnessesResponse["device"]; settings: HarnessSettings; account: HarnessSettings["accounts"][number]; onClose: () => void; onDone: () => void }) {
   const label = harnessLabel(settings.harness);
   const perProvider = settings.harness === "hermes";
   const [provider, setProvider] = useState(settings.provider ?? settings.providers?.[0]?.id ?? "");

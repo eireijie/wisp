@@ -49,6 +49,8 @@ interface LiveRun {
  * and turns messages into agent runs.
  */
 export class Hub {
+  /** Stable across restarts and address changes; joined computers use it to find this Wisp again. */
+  id = "";
   private closed = false;
   private clients = new Set<ClientConn>();
   private nodes = new Map<string, NodeConn>();
@@ -143,6 +145,7 @@ export class Hub {
   /** Stop handling events and drop every connection (before the database closes). */
   shutdown() {
     this.closed = true;
+    this.reach.cloudflare.close();
     this.computers.shutdown();
     this.routines.stop();
     this.background.stop();

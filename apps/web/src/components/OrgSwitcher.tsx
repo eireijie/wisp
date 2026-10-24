@@ -112,7 +112,6 @@ export function OrgSwitcher({ large }: { large?: boolean }) {
 /** Name it, make it, and you're in it. */
 export function NewOrgDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
-  const [start, setStart] = useState<"simple" | "everything">("simple");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -125,7 +124,7 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
           setBusy(true);
           setError(null);
           try {
-            await createOrg(name, start);
+            await createOrg(name);
           } catch (err) {
             setBusy(false);
             setError((err as Error).message);
@@ -135,20 +134,6 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
         <p className="text-sm text-muted">A separate place with its own agents, channels and memory. You can switch between organizations any time.</p>
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Studio" maxLength={60} />
-        </Field>
-        <Field label="Start with" hint={start === "simple" ? "Just chat, agents and memory. Turn on more in Mods." : "Every feature on: teams, tasks, routines, voice and more."}>
-          <div role="radiogroup" aria-label="Start with" className="flex rounded-xl bg-chip p-0.5">
-            {(
-              [
-                ["simple", "Simple"],
-                ["everything", "Advanced"],
-              ] as const
-            ).map(([id, label]) => (
-              <button key={id} type="button" role="radio" aria-checked={start === id} onClick={() => setStart(id)} className={cx("flex-1 h-8 rounded-[10px] text-[13px] font-semibold", start === id ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
-                {label}
-              </button>
-            ))}
-          </div>
         </Field>
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2">

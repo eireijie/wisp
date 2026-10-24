@@ -33,10 +33,11 @@ for (const pkg of fs.readdirSync(path.join(repo, "packages"))) copy(`packages/${
 // a better-sqlite3 with Node-API prebuilds, which load in any Node or Electron on every platform
 // (11.x is built per Node version and doesn't compile against this Electron's V8)
 const SQLITE = "^13.0.3";
+const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, "package.json"), "utf8"));
 const root = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
 fs.writeFileSync(
   path.join(out, "package.json"),
-  JSON.stringify({ name: "warren-runtime", private: true, version: root.version, type: "module", license: root.license, workspaces: ["apps/hub", "apps/node", "packages/*"], dependencies: { ...root.dependencies, "better-sqlite3": SQLITE }, overrides: { "better-sqlite3": SQLITE } }, null, 2),
+  JSON.stringify({ name: "warren-runtime", private: true, version: root.version, type: "module", license: root.license, workspaces: ["apps/hub", "apps/node", "packages/*"], dependencies: { ...root.dependencies, ...desktopPackage.dependencies, "better-sqlite3": SQLITE }, overrides: { "better-sqlite3": SQLITE } }, null, 2),
 );
 
 console.log("installing production dependencies");

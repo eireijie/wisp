@@ -4,6 +4,8 @@ export interface WarrenClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
   token: string; // agent token, or node token + agentId
   agentId?: string;
+  /** used instead of the global fetch, e.g. by the hub calling its own API in-process */
+  fetch?: typeof fetch;
 }
 
 export class WarrenError extends Error {
@@ -23,7 +25,7 @@ export class WarrenClient {
   }
 
   async request<T = any>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
-    const res = await fetch(this.url + path, {
+    const res = await (this.opts.fetch ?? fetch)(this.url + path, {
       method,
       headers: {
         authorization: `Bearer ${this.opts.token}`,
@@ -209,7 +211,7 @@ export class WarrenClient {
     });
   }
   async downloadFile(id: string): Promise<{ data: Uint8Array; name: string; mime: string }> {
-    const res = await fetch(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}) } });
+    const res = await (this.opts.fetch ?? fetch)(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}) } });
     if (!res.ok) throw new WarrenError(`download failed: ${res.status}`, res.status);
     const cd = res.headers.get("content-disposition") ?? "";
     const name = decodeURIComponent(cd.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? id);

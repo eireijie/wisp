@@ -47,8 +47,10 @@ import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
+import { registerJoinApi } from "./join.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { registerReachApi } from "./api-reach.ts";
+import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
@@ -331,7 +333,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   app.post("/api/setup", async (req, reply) => {
     if (store.userCount() > 0) return reply.code(409).send({ error: "already set up" });
     const body = parse(
-      z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Warren"), features: FEATURE_PRESET.default("simple") }),
+      z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Your Wisp"), features: FEATURE_PRESET.default("simple") }),
       req.body,
       reply,
     );
@@ -2003,8 +2005,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
+  registerJoinApi(app, hub, { need, parse });
   registerPairingApi(app, hub, { need, parse });
   registerReachApi(app, hub, { need, parse });
+  registerRemoteMcp(app, hub, { need, parse, deviceOwnerOf });
 
   // --- websockets -------------------------------------------------------------
 
