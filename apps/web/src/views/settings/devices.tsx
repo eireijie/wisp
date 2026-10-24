@@ -183,7 +183,7 @@ export function McpConnections({ info, allowed }: { info: AccessInfo | null; all
             Grok, ChatGPT and Claude
           </span>
         }
-        hint="Talk to your agents from their apps, and from Grok in your car."
+        hint="Talk to your agents from their apps."
       >
         <Toggle label="Grok, ChatGPT and Claude" on={!!origin} disabled={!allowed || busy} onChange={(value) => void toggle(value)} />
       </Row>
