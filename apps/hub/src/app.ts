@@ -110,9 +110,27 @@ function registerInstallers(app: FastifyInstance) {
   ] as const) {
     app.get(`/${file}`, async (_req, reply) => {
       let text = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
+      if (file === "install.sh") text = joinInstaller(text);
       if (repo)
         text = text.replace(pattern, file === "install.sh" ? `WARREN_REPO="\${WARREN_REPO:-${repo}}"` : `$Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "${repo}" }`);
       return reply.type(`${type}; charset=utf-8`).header("cache-control", "no-cache").send(text);
     });
   }
+}
+
+/** Compatibility for older checkouts; the canonical installer is maintained separately. */
+export function joinInstaller(source: string): string {
+  let text = source;
+  if (!/^\s*join\)/m.test(text)) {
+    text = text.replace('while [ $# -gt 0 ]; do', 'INVITE=""\nwhile [ $# -gt 0 ]; do');
+    text = text.replace('  case "$1" in', `  case "$1" in
+    join) MODE=join; if [ -n "\${2:-}" ] && [ "\${2#--}" = "$2" ]; then INVITE="$2"; shift; fi ;;`);
+    text = text.replace('if [ "$MODE" = hub ]; then', `if [ "$MODE" = join ]; then
+  if [ -n "$INVITE" ]; then warren join "$INVITE"; else warren join; fi
+elif [ "$MODE" = hub ]; then`);
+  }
+  // The documented command pipes to sh; parse the actual installer with Bash on every platform.
+  let delimiter = "WISP_INSTALLER_BASH";
+  while (text.split("\n").includes(delimiter)) delimiter += "_";
+  return `#!/usr/bin/env bash\nexec bash -s -- "$@" <<'${delimiter}'\n${text}\n${delimiter}\n`;
 }
