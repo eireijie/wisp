@@ -74,6 +74,7 @@ async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, head
   const res = await fetchImpl(url, { headers, signal });
   if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`);
   let bytes = 0;
+  const out = fs.createWriteStream(dest);
   try {
     await pipeline(
       Readable.fromWeb(res.body),
@@ -84,12 +85,14 @@ async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, head
           yield chunk;
         }
       },
-      fs.createWriteStream(dest),
+      out,
       { signal },
     );
     if (typeof size === "number" && bytes !== size) throw new Error("the download was cut short");
     if ((await fileDigest(dest)) !== digest) throw new Error("the download didn't match the release, so it was thrown away");
   } catch (e) {
+    // the file may still be opening when the download fails; wait for it to close, or it comes back after the delete
+    if (!out.closed) await new Promise((done) => { out.once("close", done); out.destroy(); });
     fs.rmSync(dest, { force: true });
     throw signal.aborted ? signal.reason : e;
   }
