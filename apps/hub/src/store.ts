@@ -1,4 +1,4 @@
-import { channelTeams, cleanRulePath, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
+import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -567,7 +567,11 @@ export class Store {
       if (!settings) continue;
       if (settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
       const team = settings.team;
-      if (team?.nodes.some((n) => n.agentId === agentId)) {
+      if (hasSteps(team) && team!.roles!.some((r) => r.agentId === agentId)) {
+        // a team with roles and steps keeps them; the agent's roles just need someone new
+        const roles = team!.roles!.map((r) => (r.agentId === agentId ? { ...r, agentId: null } : r));
+        this.updateChannel(r.id, { settings: { team: { ...team!, roles, ...chartFromSteps({ roles, steps: team!.steps }, team!.nodes) } } });
+      } else if (team?.nodes.some((n) => n.agentId === agentId)) {
         const above = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
         const below = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
         const edges = [...team.edges.filter((e) => e.from !== agentId && e.to !== agentId), ...above.flatMap((from) => below.map((to) => ({ from, to })))];

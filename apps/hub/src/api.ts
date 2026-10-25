@@ -596,6 +596,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.name && body.name !== ch.name && store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.name && body.name !== ch.name && ch.name === "general") return reply.code(409).send({ error: "#general can't be renamed: everyone in the workspace lands there" });
+    if (body.settings?.team && hasSteps(ch.settings.team) && body.settings.team.roles === undefined && body.settings.team.steps === undefined) {
+      // an app that only draws the chart can move people around it, not change who's on the team
+      const onTeam = new Set(chartFromSteps(ch.settings.team!).nodes.map((n) => n.agentId));
+      const sent = new Set(body.settings.team.nodes.map((n) => n.agentId));
+      if (onTeam.size !== sent.size || [...sent].some((a) => !onTeam.has(a))) return reply.code(409).send({ error: "This team runs on roles and steps. Change who's on it from the channel's Team tab in the web app." });
+    }
     if (body.settings?.team) body.settings.team = withChart(keepTeamExtras(body.settings.team, ch.settings.team));
     const problem = settingsProblem(c, body.settings);
     if (problem) return reply.code(400).send({ error: problem });
@@ -607,6 +613,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     joinTeam(ch.id, body.settings);
     const updated = store.updateChannel(ch.id, body);
+    if (body.settings && "team" in body.settings) hub.flows.teamChanged(ch.id, ch.settings.team, updated!.settings.team);
     if (body.settings?.team?.folder !== ch.settings.team?.folder) await briefFor(c, updated!.name, body.settings?.team?.folder);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return updated;
@@ -1189,7 +1196,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     for (const r of store.activeRuns(agent.id)) hub.cancelRun(r.id);
     // work it never finished fails; finished tasks stay, with nobody assigned
-    for (const t of store.tasks(c.workspaceId).filter((t) => t.toAgentId === agent.id && (t.status === "open" || t.status === "in_progress"))) store.updateTask(t.id, "failed", `@${agent.handle} was removed before finishing this.`);
+    for (const t of store.tasks(c.workspaceId).filter((t) => t.toAgentId === agent.id && (t.status === "open" || t.status === "in_progress"))) {
+      const failed = store.updateTask(t.id, "failed", `@${agent.handle} was removed before finishing this.`);
+      if (failed) hub.flows.taskFinished(failed, null);
+    }
     revokeSubjectTokens(db, "agent", agent.id);
     store.removeRulesFor(c.workspaceId, { kind: "agent", id: agent.id });
     store.deleteAgent(agent.id);
@@ -1572,7 +1582,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       });
       if (body.result) hub.taskReplyPosted(task, message, body.result);
     }
-    const flowReviews = body.status === "done" || body.status === "failed" ? hub.flows.taskFinished(updated, body.verdict ?? null) : false;
+    // a task that was already finished doesn't move a team's request on again
+    const wasFinished = task.status === "done" || task.status === "failed";
+    const flowReviews = (body.status === "done" || body.status === "failed") && !wasFinished ? hub.flows.taskFinished(updated, body.verdict ?? null) : false;
     if (body.status === "done" && !flowReviews && !hub.flows.inFlow(updated)) requestReview(updated, requesterOf(c));
     return updated;
   });
@@ -1595,6 +1607,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (task.channelId) {
       hub.postMessage({ channelId: task.channelId, threadId: task.threadId, author: { kind: "user", id: "system" }, body: `Task **${task.title}** was cancelled by ${name}.`, hop: 1, route: false });
     }
+    // a team's request waiting on this task hears it won't finish
+    hub.flows.taskFinished(updated, null);
     return updated;
   });
 
@@ -1647,6 +1661,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!f || f.workspaceId !== c.workspaceId || !channelVisible(c, f.channelId)) return reply.code(404).send({ error: "not found" });
     const body = parse(z.object({ action: z.enum(["approve", "retry", "stop"]) }), req.body, reply);
     if (!body) return;
+    if (f.status !== "waiting" && (body.action !== "stop" || f.status !== "running")) return reply.code(409).send({ error: f.status === "running" ? "it's still running; only Stop works now" : `it's already ${f.status === "done" ? "done" : "stopped"}` });
     return hub.flows.decide(f.id, body.action);
   });
 
@@ -1746,6 +1761,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (problem) return reply.code(400).send({ error: problem });
     joinTeam(ch.id, { team });
     const updated = store.updateChannel(ch.id, { settings: { team } });
+    hub.flows.teamChanged(ch.id, ch.settings.team, updated!.settings.team);
     hub.broadcast(c.workspaceId, { type: "channels_changed" });
     return updated;
   });

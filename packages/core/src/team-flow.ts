@@ -261,6 +261,21 @@ export function stepLabel(step: TeamStep, roles: TeamRole[]): string {
 }
 
 /** One request going through a stepped team: where it is, and what happened so far. */
+/** One piece of a hand-out, by the first task for it. */
+export interface TeamFlowPiece {
+  taskId: string;
+  agentId: string | null;
+  title: string;
+  rounds: number;
+  reviewTaskId: string | null;
+  /** the latest task that built it, and the latest review of it */
+  lastTaskId?: string;
+  lastReviewId?: string;
+  status: "building" | "reviewing" | "approved" | "failed";
+  /** why a failed piece waits for a person, and what trying again redoes */
+  problem?: { why: string; options: "retry" | "rounds"; redo: "build" | "review" };
+}
+
 export interface TeamFlow {
   id: string;
   workspaceId: string;
@@ -280,10 +295,11 @@ export interface TeamFlow {
   carry?: { from: string; text: string; sentBack?: boolean } | null;
   history: { stepId: string; taskId: string; round: number; verdict: "done" | "approved" | "changes" | "failed" | null; at: string }[];
   /** a hand-out's pieces, by the first task of each */
-  pieces: Record<string, { taskId: string; agentId: string | null; title: string; rounds: number; reviewTaskId: string | null; lastTaskId?: string; status: "building" | "reviewing" | "approved" | "failed" }>;
+  pieces: Record<string, TeamFlowPiece>;
   /** follow-up tasks, by the piece they belong to */
   pieceOf?: Record<string, string>;
-  waitingFor: { why: string; options: "retry" | "rounds" } | null;
+  /** `piece` when it's one piece of a hand-out that needs a person, not the whole step */
+  waitingFor: { why: string; options: "retry" | "rounds"; piece?: string } | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -185,3 +185,179 @@ describe("an agent setting up a team from a description", () => {
     expect(bad.data.error).toMatch(/no agent called nobody/);
   });
 });
+
+/** A Plan and challenge team with some roles filled differently. */
+function teamWith(fill: Record<string, string>, maxRounds?: number) {
+  const t = planTeam();
+  return { ...t, roles: t.roles.map((r) => (fill[r.id] ? { ...r, agentId: agents[fill[r.id]].id } : r)), steps: maxRounds ? t.steps.map((s) => (s.kind === "review" || s.kind === "hand_out" ? { ...s, maxRounds } : s)) : t.steps };
+}
+const tasksIn = (handle: string, channelId: string) => hub.store.tasks(agents[handle].workspaceId, { agentId: agents[handle].id }).filter((t) => t.toAgentId === agents[handle].id && t.channelId === channelId);
+const openIn = (handle: string, channelId: string) => tasksIn(handle, channelId).filter((t) => t.status === "open").sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1)!;
+const flowIn = async (channelId: string) => (await flowsOf(channelId))[0];
+const decide = (flowId: string, action: "approve" | "retry" | "stop") => api<TeamFlow>("POST", `/api/flows/${flowId}/decide`, { action });
+/** A new channel for the team, with a request already planned and approved: the hand-out is open. */
+async function atHandOut(name: string, team: ReturnType<typeof planTeam>) {
+  const ch = (await api("POST", "/api/channels", { name, settings: { team } })).data;
+  await api("POST", `/api/channels/${ch.id}/messages`, { body: `Do ${name}` });
+  await finish("atlas", openIn("atlas", ch.id).id, "Plan");
+  await finish("sol", openIn("sol", ch.id).id, "Fine", "approved");
+  return { ch, handOut: openIn("atlas", ch.id) };
+}
+const piece = async (handOut: { id: string }, to: string, title: string) => (await api("POST", "/api/tasks", { to: `@${to}`, title, brief: title, parentTaskId: handOut.id }, tokens.atlas)).data;
+
+describe("a stepped team when things go wrong", () => {
+  it("waits for a person when a step's task is cancelled, instead of hanging", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "cancelled", settings: { team: planTeam() } })).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
+    await api("POST", `/api/tasks/${openIn("atlas", ch.id).id}/cancel`);
+    const flow = await flowIn(ch.id);
+    expect(flow.status).toBe("waiting");
+    expect(flow.waitingFor?.why).toMatch(/didn't finish: Cancelled/);
+  });
+
+  it("waits for a person when a role's agent is removed mid-step, then says the role needs someone", async () => {
+    const temp = (await api("POST", "/api/agents", { handle: "temp", name: "Temp", harness: "custom" })).data;
+    agents.temp = temp;
+    const ch = (await api("POST", "/api/channels", { name: "removed", settings: { team: teamWith({ lead: "temp", reviewer: "atlas" }) } })).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
+    await api("DELETE", `/api/agents/${temp.id}`);
+    let flow = await flowIn(ch.id);
+    expect(flow.status).toBe("waiting");
+    // the team keeps its roles and steps; the Lead role is just empty now
+    const team = hub.store.channel(ch.id)!.settings.team!;
+    expect(team.steps).toHaveLength(4);
+    expect(team.roles!.find((r) => r.id === "lead")?.agentId).toBeNull();
+    flow = (await decide(flow.id, "retry")).data;
+    expect(flow.status).toBe("waiting");
+    expect(flow.waitingFor?.why).toMatch(/Lead has nobody/);
+  });
+
+  it("asks about a failed piece, and trying again hands it back to its builder", async () => {
+    const { ch, handOut } = await atHandOut("failed-piece", planTeam());
+    const p = await piece(handOut, "forge", "API");
+    await api("PATCH", `/api/tasks/${p.id}`, { status: "failed", result: "Out of disk" }, tokens.forge);
+    let flow = await flowIn(ch.id);
+    expect(flow.status).toBe("waiting");
+    expect(flow.waitingFor?.piece).toBe(p.id);
+    expect(flow.waitingFor?.why).toMatch(/API\*\* didn't finish: Out of disk/);
+    flow = (await decide(flow.id, "retry")).data;
+    expect(flow.status).toBe("running");
+    const again = openIn("forge", ch.id);
+    expect(again.title).toBe("Try again: API");
+    await finish("forge", again.id, "Done now");
+    expect(openIn("atlas", ch.id).title).toBe("Review: Try again: API");
+  });
+
+  it("gives a piece that ran out of rounds another round with its builder, instead of approving it", async () => {
+    const { ch, handOut } = await atHandOut("piece-rounds", teamWith({}, 1));
+    const p = await piece(handOut, "forge", "API");
+    await finish("forge", p.id, "API v1");
+    await finish("atlas", openIn("atlas", ch.id).id, "1. Validate input", "changes");
+    let flow = await flowIn(ch.id);
+    expect(flow.waitingFor).toMatchObject({ options: "rounds", piece: p.id });
+    await finish("atlas", handOut.id, "Handed out");
+    flow = (await decide(flow.id, "retry")).data;
+    expect(flow.stepId).toBe("hand-out");
+    expect(flow.pieces[p.id].status).toBe("building");
+    const changes = openIn("forge", ch.id);
+    expect(changes.title).toBe("Changes: API");
+    expect(changes.brief).toMatch(/Validate input/);
+    // approved this time: the flow moves on to the report
+    await finish("forge", changes.id, "API v2");
+    await finish("atlas", openIn("atlas", ch.id).id, "Good", "approved");
+    expect((await flowIn(ch.id)).stepId).toBe("report");
+  });
+
+  it("stops a request whose step was edited away, and cancels its open task", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "edited", settings: { team: planTeam() } })).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
+    const plan = openIn("atlas", ch.id);
+    const team = ch.settings.team;
+    const renamed = team.steps.map((s: any) => (s.id === "plan" ? { ...s, id: "plan-2" } : s.sendBackTo === "plan" ? { ...s, sendBackTo: "plan-2" } : s));
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: { ...team, steps: renamed } } })).status).toBe(200);
+    const flow = await flowIn(ch.id);
+    expect(flow.status).toBe("failed");
+    expect(hub.store.task(plan.id)?.status).toBe("failed");
+  });
+
+  it("starts one review when a piece is finished twice", async () => {
+    const { ch, handOut } = await atHandOut("twice", planTeam());
+    const p = await piece(handOut, "forge", "API");
+    await finish("forge", p.id, "Done");
+    await finish("forge", p.id, "Done again");
+    expect(tasksIn("atlas", ch.id).filter((t) => t.title === "Review: API")).toHaveLength(1);
+  });
+
+  it("doesn't let a piece's builder be its only reviewer", async () => {
+    const { ch, handOut } = await atHandOut("self-review", teamWith({ reviewer: "forge" }));
+    const p = await piece(handOut, "forge", "API");
+    await finish("forge", p.id, "Done");
+    const flow = await flowIn(ch.id);
+    expect(flow.pieces[p.id].status).toBe("failed");
+    expect(flow.waitingFor?.why).toMatch(/built by Forge, who is also the Reviewer/);
+  });
+
+  it("doesn't let an agent review its own step", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "own-step", settings: { team: teamWith({ challenger: "atlas" }) } })).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
+    await finish("atlas", openIn("atlas", ch.id).id, "Plan");
+    const flow = await flowIn(ch.id);
+    expect(flow).toMatchObject({ status: "waiting", stepId: "challenge" });
+    expect(flow.waitingFor?.why).toMatch(/reviewing its own work/);
+  });
+
+  it("asks a person when a review says neither approved nor changes", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "no-verdict", settings: { team: planTeam() } })).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
+    await finish("atlas", openIn("atlas", ch.id).id, "Plan");
+    await finish("sol", openIn("sol", ch.id).id, "Hmm");
+    let flow = await flowIn(ch.id);
+    expect(flow).toMatchObject({ status: "waiting", stepId: "challenge" });
+    // trying again asks the challenger again
+    flow = (await decide(flow.id, "retry")).data;
+    expect(openIn("sol", ch.id).title).toMatch(/challenge the plan/i);
+    // a piece's review without a verdict waits too
+    const { ch: ch2, handOut } = await atHandOut("piece-no-verdict", planTeam());
+    const p = await piece(handOut, "forge", "API");
+    await finish("forge", p.id, "Done");
+    await finish("atlas", openIn("atlas", ch2.id).id, "Looks ok?");
+    expect((await flowIn(ch2.id)).pieces[p.id].status).toBe("failed");
+  });
+
+  it("Stop cancels the work still open, and only Stop works on a running request", async () => {
+    const { ch, handOut } = await atHandOut("stop", planTeam());
+    const p = await piece(handOut, "forge", "API");
+    const flow = await flowIn(ch.id);
+    expect((await decide(flow.id, "approve")).status).toBe(409);
+    expect((await decide(flow.id, "stop")).data.status).toBe("failed");
+    expect(hub.store.task(handOut.id)?.status).toBe("failed");
+    expect(hub.store.task(p.id)?.status).toBe("failed");
+  });
+
+  it("tries again the step that had nobody, not the one before it", async () => {
+    const temp2 = (await api("POST", "/api/agents", { handle: "temp2", name: "Temp2", harness: "custom" })).data;
+    agents.temp2 = temp2;
+    const ch = (await api("POST", "/api/channels", { name: "nobody", settings: { team: teamWith({ challenger: "temp2" }) } })).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
+    // the challenger leaves mid-request, so the challenge step has nobody when the plan is done
+    await api("DELETE", `/api/agents/${temp2.id}`);
+    await finish("atlas", openIn("atlas", ch.id).id, "Plan");
+    let flow = await flowIn(ch.id);
+    expect(flow).toMatchObject({ status: "waiting", stepId: "challenge" });
+    // someone fills the role, then tries again: the challenge runs, not a new plan
+    const team = hub.store.channel(ch.id)!.settings.team!;
+    expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: { ...team, roles: team.roles!.map((r) => (r.id === "challenger" ? { ...r, agentId: agents.sol.id } : r)) } } })).status).toBe(200);
+    flow = (await decide(flow.id, "retry")).data;
+    expect(flow.stepId).toBe("challenge");
+    expect(openIn("sol", ch.id).brief).toMatch(/Plan/);
+    expect(tasksIn("atlas", ch.id).filter((t) => t.title === "Draft a thorough plan")).toHaveLength(1);
+  });
+
+  it("tells an app that only draws the chart it can't change who's on a stepped team", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "old-app", settings: { team: planTeam() } })).data;
+    const { nodes, edges } = ch.settings.team;
+    const r = await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: { nodes: nodes.filter((n: any) => n.agentId !== agents.pixel.id), edges } } });
+    expect(r.status).toBe(409);
+    expect(r.data.error).toMatch(/Team tab in the web app/);
+  });
+});

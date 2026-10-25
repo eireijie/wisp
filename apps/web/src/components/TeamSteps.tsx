@@ -1143,6 +1143,11 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
           );
         })}
         {flow.status === "failed" && <span className="ml-1 text-bad">Stopped</span>}
+        {flow.status === "running" && (
+          <button type="button" disabled={busy} onClick={() => void decide("stop")} className="ml-auto text-faint hover:text-ink">
+            Stop
+          </button>
+        )}
       </div>
       {flow.status === "waiting" && flow.waitingFor && (
         <div className="flex flex-wrap items-center gap-2">
