@@ -5,7 +5,7 @@ import net from "node:net";
 import { Duplex } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ComputerSpec, PageElement, RunOutput, VmConfig } from "@warren/core";
+import type { ComputerSpec, PageElement, RunOutput, VmConfig } from "@wisp/core";
 import { ActionError, exec, has, must, type Driver } from "./driver.ts";
 import { X11Driver } from "./x11.ts";
 import { shellFiles, x11Clipboard, type Clipboard, type Files, type ShRunner } from "./transfer.ts";
@@ -13,8 +13,8 @@ import { shellFiles, x11Clipboard, type Clipboard, type Files, type ShRunner } f
 const IMAGE_DIR = fileURLToPath(new URL("../../../../docker/computer", import.meta.url));
 const DISPLAY = ":1";
 /** The VM's home folder and the folder it shares with the device. */
-export const VM_HOME = "/home/warren";
-export const VM_FILES = "/home/warren/files";
+export const VM_HOME = "/home/wisp";
+export const VM_FILES = "/home/wisp/files";
 /** Where the VM image installs Hermes (outside the home folder, which is a volume). */
 const HERMES_DIR = "/opt/hermes/hermes-agent";
 
@@ -118,15 +118,15 @@ export async function detectEngine(prefer?: string): Promise<{ engine: Engine | 
   if (stopped.length) return { engine: null, detail: `${stopped[0]}.` };
   const how =
     process.platform === "darwin"
-      ? "Run `warren setup` to install Apple's container (free, from Apple), or install OrbStack or Docker Desktop"
+      ? "Run `wisp setup` to install Apple's container (free, from Apple), or install OrbStack or Docker Desktop"
       : process.platform === "win32"
         ? "Install Docker Desktop (it uses WSL 2)"
-        : "Run `warren setup`, or install Docker Engine or Podman";
+        : "Run `wisp setup`, or install Docker Engine or Podman";
   return { engine: null, detail: `This device can't run VMs yet. ${how}.` };
 }
 
 /**
- * The VM image for this copy of Warren: named after a hash of its recipe (docker/computer), so a
+ * The VM image for this copy of Wisp: named after a hash of its recipe (docker/computer), so a
  * changed recipe means a new image, and a published image is only used when it's built from the
  * same recipe.
  */
@@ -138,21 +138,32 @@ export function recipeTag(dir = IMAGE_DIR): string {
   return h.digest("hex").slice(0, 12);
 }
 
-export const LOCAL_IMAGE = "warren-computer";
+export const LOCAL_IMAGE = "wisp-computer";
 
-/** Where this copy of Warren's VM images are published: ghcr.io/<owner>/warren-computer for a GitHub checkout. */
+/** Where this copy of Wisp's VM images are published: ghcr.io/<owner>/wisp-computer for a GitHub checkout. */
 export function publishedImage(repoDir = path.resolve(IMAGE_DIR, "../..")): string | null {
   try {
     const head = fs.readFileSync(path.join(repoDir, ".git", "config"), "utf8");
     const url = head.match(/\[remote "origin"\][^[]*?url\s*=\s*(\S+)/)?.[1] ?? "";
     const owner = url.match(/github\.com[:/]([A-Za-z0-9-]+)\//)?.[1];
-    return owner ? `ghcr.io/${owner.toLowerCase()}/warren-computer` : null;
+    return owner ? `ghcr.io/${owner.toLowerCase()}/wisp-computer` : null;
   } catch {
     return null;
   }
 }
 
 const relays = new Map<string, Promise<number>>();
+
+/** Old containers keep their image/user/home; orphaned old home volumes are mounted into new images. */
+export async function existingComputer(engine: Engine, id: string, run: typeof exec = exec) {
+  const safe = id.replace(/[^a-zA-Z0-9_.-]/g, "-");
+  const name = `wisp-${safe}`, old = `warren-${safe}`;
+  const inspect = (args: string[]) => run(engine.bin, args, { timeoutMs: 15_000 });
+  if ((await inspect(["inspect", name])).code === 0) return { name, volume: `${name}-home`, user: "wisp", home: VM_HOME };
+  if ((await inspect(["inspect", old])).code === 0) return { name: old, volume: `${old}-home`, user: "warren", home: "/home/warren" };
+  const legacyVolume = (await inspect(["volume", "inspect", `${old}-home`])).code === 0;
+  return { name, volume: `${legacyVolume ? old : name}-home`, user: "wisp", home: VM_HOME };
+}
 
 /**
  * A relay from the address VMs reach this device at to a port on its loopback: a hub listening only
@@ -189,14 +200,14 @@ export function runArgs(spec: ComputerSpec, o: { name: string; volume: string; f
       .toLowerCase()
       .replace(/[^a-z0-9-]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "warren";
-  const args = ["run", "-d", "--name", o.name, "--label", `warren.computer=${spec.id}`, "--shm-size", "1g"];
-  // Apple's container has no hostname or restart policy; Warren starts a stopped VM when it's next used
+      .slice(0, 40) || "wisp";
+  const args = ["run", "-d", "--name", o.name, "--label", `wisp.computer=${spec.id}`, "--shm-size", "1g"];
+  // Apple's container has no hostname or restart policy; Wisp starts a stopped VM when it's next used
   if (kind !== "apple") args.push("--hostname", hostname, "--restart", "unless-stopped");
   // the hub, when it runs on this same device (Docker Engine on Linux needs to be told the name)
   if (kind === "docker") args.push("--add-host", "host.docker.internal:host-gateway");
   // no published ports: VNC listens inside the container and the device reaches it with exec
-  args.push("-e", `RESOLUTION=${resolution}`, "-v", `${o.volume}:/home/warren`, "-v", `${o.files}:/home/warren/files`);
+  args.push("-e", `RESOLUTION=${resolution}`, "-v", `${o.volume}:/home/wisp`, "-v", `${o.files}:/home/wisp/files`);
   if (cfg.cpus && cfg.cpus > 0) args.push("--cpus", String(Math.min(Math.ceil(cfg.cpus), 64)));
   if (cfg.memoryGb && cfg.memoryGb > 0) args.push("--memory", `${Math.min(cfg.memoryGb, 256)}g`);
   args.push(o.image);
@@ -238,8 +249,11 @@ export class DockerVm implements Driver {
   readonly label = "Linux VM";
   private desktop: X11Driver;
   private starting: Promise<void> | null = null;
-  readonly name: string;
-  readonly volume: string;
+  name: string;
+  user = "wisp";
+  home = VM_HOME;
+  private identity: Promise<void> | null = null;
+  volume: string;
   /** shared with the agents that use this computer: their working folder */
   readonly filesDir: string;
 
@@ -251,13 +265,13 @@ export class DockerVm implements Driver {
     private report: (status: "starting" | "ready" | "error", text: string) => void = () => {},
   ) {
     const safe = spec.id.replace(/[^a-zA-Z0-9_.-]/g, "-");
-    this.name = `warren-${safe}`;
-    this.volume = `warren-${safe}-home`;
+    this.name = `wisp-${safe}`;
+    this.volume = `wisp-${safe}-home`;
     this.filesDir = path.join(nodeDir, "computers", safe, "files");
-    const inVm = (argv: string[], opts: { input?: string; timeoutMs?: number } = {}) => this.ready().then(() => exec(this.engine.bin, ["exec", "-i", "-u", "warren", "-e", `DISPLAY=${DISPLAY}`, this.name, ...argv], opts));
+    const inVm = (argv: string[], opts: { input?: string; timeoutMs?: number } = {}) => this.ready().then(() => exec(this.engine.bin, ["exec", "-i", "-u", this.user, "-e", `DISPLAY=${DISPLAY}`, this.name, ...argv], opts));
     this.desktop = new X11Driver(this.label, inVm, (command, timeoutSec) => this.shell(command, timeoutSec));
     const sh: ShRunner = (script, args, input) =>
-      this.ready().then(() => exec(this.engine.bin, ["exec", "-i", "-u", "warren", "-w", VM_HOME, "-e", `DISPLAY=${DISPLAY}`, "-e", `HOME=${VM_HOME}`, this.name, "sh", "-c", script, "sh", ...args], { input, timeoutMs: 5 * 60_000 }));
+      this.ready().then(() => exec(this.engine.bin, ["exec", "-i", "-u", this.user, "-w", this.home, "-e", `DISPLAY=${DISPLAY}`, "-e", `HOME=${this.home}`, this.name, "sh", "-c", script, "sh", ...args], { input, timeoutMs: 5 * 60_000 }));
     this.clipboard = x11Clipboard(sh);
     this.files = shellFiles(sh);
   }
@@ -269,8 +283,13 @@ export class DockerVm implements Driver {
     return this.engine.bin;
   }
 
+  private resolveIdentity() {
+    return this.identity ??= existingComputer(this.engine, this.spec.id).then((found) => { Object.assign(this, found); });
+  }
+
   /** true, false (stopped), or null when there's no such container. */
   private async running(): Promise<boolean | null> {
+    await this.resolveIdentity();
     if (this.engine.kind === "apple") {
       const info = await this.appleInfo();
       if (!info) return null;
@@ -337,7 +356,7 @@ export class DockerVm implements Driver {
     }
     // wait for the desktop to come up
     for (let i = 0; i < 90; i++) {
-      const r = await exec(this.bin, ["exec", "-u", "warren", "-e", `DISPLAY=${DISPLAY}`, this.name, "xdotool", "getdisplaygeometry"], { timeoutMs: 10_000 });
+      const r = await exec(this.bin, ["exec", "-u", this.user, "-e", `DISPLAY=${DISPLAY}`, this.name, "xdotool", "getdisplaygeometry"], { timeoutMs: 10_000 });
       if (r.code === 0) return;
       await new Promise((res) => setTimeout(res, 1000));
     }
@@ -346,7 +365,7 @@ export class DockerVm implements Driver {
 
   private async shell(command: string, timeoutSec: number): Promise<RunOutput> {
     await this.ready();
-    const r = await exec(this.bin, ["exec", "-i", "-u", "warren", "-w", "/home/warren", "-e", `DISPLAY=${DISPLAY}`, this.name, "bash", "-lc", command], { timeoutMs: timeoutSec * 1000 });
+    const r = await exec(this.bin, ["exec", "-i", "-u", this.user, "-w", this.home, "-e", `DISPLAY=${DISPLAY}`, this.name, "bash", "-lc", command], { timeoutMs: timeoutSec * 1000 });
     const output = (r.stdout.toString() + (r.stderr ? `\n${r.stderr}` : "")).trim();
     return { exitCode: r.code, output: output.length > 50_000 ? output.slice(0, 25_000) + "\n…\n" + output.slice(-25_000) : output };
   }
@@ -372,6 +391,7 @@ export class DockerVm implements Driver {
   }
 
   async destroy() {
+    await this.resolveIdentity();
     if (this.engine.kind === "apple") {
       await exec(this.bin, ["delete", "--force", this.name], { timeoutMs: 60_000 });
       await exec(this.bin, ["volume", "delete", this.volume], { timeoutMs: 60_000 });
@@ -394,21 +414,21 @@ export class DockerVm implements Driver {
   vmPath(hostPath: string): string {
     const rel = path.relative(this.filesDir, hostPath);
     if (rel.startsWith("..") || path.isAbsolute(rel)) throw new ActionError(`${hostPath} isn't in the folder this VM shares`);
-    return rel ? path.posix.join(VM_FILES, ...rel.split(path.sep)) : VM_FILES;
+    return rel ? path.posix.join(`${this.home}/files`, ...rel.split(path.sep)) : `${this.home}/files`;
   }
 
   /**
-   * How a harness starts inside this VM, as the warren user, in its own process group so a
+   * How a harness starts inside this VM, as the wisp user, in its own process group so a
    * cancelled run can be stopped there (stopping `exec` alone leaves the process running).
    */
   launcher(runId: string) {
     const safe = runId.replace(/[^\w-]/g, "");
-    const pidFile = `/tmp/warren-run-${safe}.pid`;
+    const pidFile = `/tmp/wisp-run-${safe}.pid`;
     return async (l: { command: string; args: string[]; cwd: string; env: Record<string, string>; files?: { path: string; content: string }[] }) => {
       // files the harness needs (its MCP config) go into the VM, and the arguments point at them there
       let args = l.args;
       for (const f of l.files ?? []) {
-        const inVm = `/tmp/warren-run-${safe}/${path.basename(f.path)}`;
+        const inVm = `/tmp/wisp-run-${safe}/${path.basename(f.path)}`;
         await this.writeFile(inVm, f.content, "600");
         args = args.map((a) => a.split(f.path).join(inVm));
       }
@@ -423,13 +443,13 @@ export class DockerVm implements Driver {
         "exec",
         "-i",
         "-u",
-        "warren",
+        this.user,
         "-w",
         this.vmPath(l.cwd),
         "-e",
         `DISPLAY=${DISPLAY}`,
         "-e",
-        `HOME=${VM_HOME}`,
+        `HOME=${this.home}`,
         ...Object.entries(l.env).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
         this.name,
         "setsid",
@@ -449,14 +469,14 @@ export class DockerVm implements Driver {
 
   /** Stop what a run started inside the VM. */
   async stopRun(runId: string) {
-    const pidFile = `/tmp/warren-run-${runId.replace(/[^\w-]/g, "")}.pid`;
+    const pidFile = `/tmp/wisp-run-${runId.replace(/[^\w-]/g, "")}.pid`;
     await exec(this.bin, ["exec", this.name, "sh", "-c", `p=$(cat ${pidFile} 2>/dev/null) && { kill -TERM -$p 2>/dev/null || kill -TERM $p; }; rm -f ${pidFile}`], { timeoutMs: 15_000 }).catch(() => undefined);
   }
 
-  /** Put a file in the VM (as warren), e.g. Warren's tools for harnesses that run in here. */
+  /** Put a file in the VM (as wisp), e.g. Wisp's tools for harnesses that run in here. */
   async writeFile(vmPath: string, content: string | Buffer, mode = "644") {
     await this.ready();
-    await must(this.bin, ["exec", "-i", "-u", "warren", this.name, "sh", "-c", `mkdir -p "$(dirname '${vmPath}')" && cat > '${vmPath}' && chmod ${mode} '${vmPath}'`], { input: content, timeoutMs: 60_000 });
+    await must(this.bin, ["exec", "-i", "-u", this.user, this.name, "sh", "-c", `mkdir -p "$(dirname '${vmPath}')" && cat > '${vmPath}' && chmod ${mode} '${vmPath}'`], { input: content, timeoutMs: 60_000 });
   }
 
   /** Is this harness signed in inside the VM? null when it isn't one that comes with the VM. */
@@ -464,13 +484,13 @@ export class DockerVm implements Driver {
     const test = SIGNED_IN[harness];
     if (!test) return null;
     await this.ready();
-    return (await exec(this.bin, ["exec", "-u", "warren", "-e", `HOME=${VM_HOME}`, this.name, "sh", "-c", test], { timeoutMs: 15_000 })).code === 0;
+    return (await exec(this.bin, ["exec", "-u", this.user, "-e", `HOME=${this.home}`, this.name, "sh", "-c", test], { timeoutMs: 15_000 })).code === 0;
   }
 
   /** The web page element under a screen point, in the Chrome people see. */
   async inspectAt(x: number, y: number): Promise<PageElement | null> {
     await this.ready();
-    const r = await exec(this.bin, ["exec", "-u", "warren", this.name, "node", "--input-type=module", "-e", INSPECT_SCRIPT, String(Math.round(x)), String(Math.round(y))], { timeoutMs: 15_000 });
+    const r = await exec(this.bin, ["exec", "-u", this.user, this.name, "node", "--input-type=module", "-e", INSPECT_SCRIPT, String(Math.round(x)), String(Math.round(y))], { timeoutMs: 15_000 });
     if (r.code !== 0) return null;
     try {
       return JSON.parse(r.stdout.toString().trim().split("\n").pop() ?? "null");
@@ -486,7 +506,7 @@ export class DockerVm implements Driver {
     await this.ready();
     await must(
       this.bin,
-      ["exec", "-d", "-u", "warren", "-e", `DISPLAY=${DISPLAY}`, "-e", `HOME=${VM_HOME}`, "-w", VM_FILES, this.name, "xfce4-terminal", "--maximize", "--title", "Sign in", "--command", `bash -lc '${cmd}; exec bash'`],
+      ["exec", "-d", "-u", this.user, "-e", `DISPLAY=${DISPLAY}`, "-e", `HOME=${this.home}`, "-w", `${this.home}/files`, this.name, "xfce4-terminal", "--maximize", "--title", "Sign in", "--command", `bash -lc '${cmd}; exec bash'`],
       { timeoutMs: 30_000 },
     );
   }

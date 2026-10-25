@@ -1,4 +1,4 @@
-import type { AgentSettings } from "@warren/core";
+import type { AgentSettings } from "@wisp/core";
 import { getToken } from "../api.ts";
 import { voiceIndex } from "./text.ts";
 
@@ -35,7 +35,10 @@ const recognitionClass = () => {
   const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 };
-export function canRecognize() { return !!recognitionClass(); }
+// The desktop app has no speech service behind the browser's recognition, so it listens through OpenAI instead.
+export const inDesktopApp = () => typeof window !== "undefined" && !!window.wispDesktop;
+export function canRecognize() { return !inDesktopApp() && !!recognitionClass(); }
+export const effectiveListen = (listen: VoiceSettings["listen"]): VoiceSettings["listen"] => (inDesktopApp() ? "openai" : listen);
 export function deviceVoices() { return window.speechSynthesis?.getVoices().slice().sort((a, b) => a.voiceURI.localeCompare(b.voiceURI)) ?? []; }
 
 async function voiceRequest(body: unknown, signal: AbortSignal): Promise<Response> {
@@ -55,7 +58,7 @@ class Microphone {
   private generation = 0;
   async start(level: (value: number) => void, activity: (active: boolean) => void): Promise<MediaStream | null> {
     const generation = ++this.generation;
-    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access needs HTTPS or localhost. Open Warren on a secure connection to call.");
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access needs HTTPS or localhost. Open Wisp on a secure connection to call.");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     if (generation !== this.generation) { stream.getTracks().forEach((t) => t.stop()); return null; }
     this.stream = stream;
@@ -96,7 +99,8 @@ class Microphone {
   }
 }
 
-export function createListener(engine: VoiceSettings["listen"], callbacks: ListenCallbacks): VoiceListener {
+export function createListener(chosen: VoiceSettings["listen"], callbacks: ListenCallbacks): VoiceListener {
+  const engine = effectiveListen(chosen);
   const mic = new Microphone();
   let active = false, generation = 0;
   let recognition: Recognition | undefined;

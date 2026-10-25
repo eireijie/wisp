@@ -1,5 +1,5 @@
 name: Hub image
-# Publishes the hub (API, realtime, memory vault and the web app) as ghcr.io/<owner>/warren for
+# Publishes the hub (API, realtime, memory vault and the web app) as ghcr.io/<owner>/wisp for
 # Intel and ARM: `latest` and `main` from main, and `0.2.0`/`0.2` from a v0.2.0 tag. The package has
 # to be public for people to pull it without signing in.
 on:
@@ -19,7 +19,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/warren
+          images: ghcr.io/${{ github.repository_owner }}/wisp
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch

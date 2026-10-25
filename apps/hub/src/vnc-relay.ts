@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
-import { ByteReader, rfbLetIn, rfbSignIn } from "@warren/core/src/vnc.ts";
+import { ByteReader, rfbLetIn, rfbSignIn } from "@wisp/core/src/vnc.ts";
 
-export { desEncrypt, vncAuthResponse } from "@warren/core/src/vnc.ts";
+export { desEncrypt, vncAuthResponse } from "@wisp/core/src/vnc.ts";
 
 /**
  * The hub between a browser's noVNC and a VNC server that wants a password (an Orgo cloud

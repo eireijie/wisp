@@ -23,7 +23,7 @@ vi.mock("../store.ts", () => ({
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.stubGlobal("location", new URL("https://warren.test/"));
+  vi.stubGlobal("location", new URL("https://wisp.test/"));
   vi.mocked(api).mockReset();
   vi.mocked(useState).mockImplementation((initial?: any): [any, any] => [typeof initial === "function" ? initial() : initial, vi.fn()]);
 });

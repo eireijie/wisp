@@ -8,7 +8,7 @@ import { AgentDetail, type NodeInfo } from "./AgentSettings.tsx";
 import { useSimple } from "../experience.tsx";
 import { agentReadiness, useDevices } from "../devices.ts";
 import { SetupIncomplete, setupNextStep } from "../components/AgentPanel.tsx";
-import { AgentAvatar, Button, Empty, HARNESS_LABELS, StatusChip, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, Empty, harnessLabel, StatusChip, cx } from "../components/ui.tsx";
 
 import { CreateAgent } from "./CreateAgent.tsx";
 export { freeHandle, importFound } from "./CreateAgent.tsx";
@@ -115,7 +115,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                       </span>
                       {/* machine facts in mono, like Paperclip's adapter column */}
                       <span className="hidden @3xl:block w-48 min-w-0 leading-tight">
-                        <span className="block truncate font-mono text-xs text-muted">{HARNESS_LABELS[a.harness]}</span>
+                        <span className="block truncate font-mono text-xs text-muted">{harnessLabel(a.harness)}</span>
                         <span className="block truncate font-mono text-[11px] text-muted/70">
                           {device ? device.name : "no device"} · {computer}
                         </span>

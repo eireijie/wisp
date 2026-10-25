@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Message } from "@warren/core";
+import type { Message } from "@wisp/core";
 import { ChannelView } from "./ChannelView.tsx";
 
 const h = vi.hoisted(() => ({

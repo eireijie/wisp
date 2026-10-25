@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Warren doesn't work the way it should
+description: Something in Wisp doesn't work the way it should
 labels: [bug]
 body:
   - type: textarea
@@ -18,10 +18,10 @@ body:
         - Installing or updating
         - The web app
         - The hub
-        - A device (warren node)
+        - A device (wisp node)
         - An agent's VM
         - Memory
-        - warren-mcp
+        - wisp-mcp
         - Something else
   - type: input
     id: harness
@@ -31,8 +31,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Warren version
-      description: From Settings → Updates, or `git log -1 --format='%h %cs'` in the Warren folder
+      label: Wisp version
+      description: From Settings → Advanced → About, or `git log -1 --format='%h %cs'` in the Wisp folder
   - type: input
     id: os
     attributes:
@@ -42,5 +42,5 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: The hub's or device's output around the problem (`~/.warren/hub.log`, `~/.warren/node.log`, or the terminal). Remove tokens and anything private.
+      description: The hub's or device's output around the problem (`~/.wisp/hub.log`, `~/.wisp/node.log`, or the terminal). Remove tokens and anything private.
       render: text

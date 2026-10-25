@@ -1,19 +1,20 @@
+import { GITHUB_URL } from "@wisp/core";
 /**
- * Where to download the Warren app. Release file names never change between versions
+ * Where to download the Wisp app. Release file names never change between versions
  * (.github/workflows/desktop-release.yml), so "latest/download/<name>" is always the newest build.
  * Keep in step with site/src/lib/site.ts.
  */
-const latest = (file: string) => `https://github.com/eireijie/warren/releases/latest/download/${file}`;
+const latest = (file: string) => `${GITHUB_URL}/releases/latest/download/${file}`;
 
-export const RELEASES = "https://github.com/eireijie/warren/releases/latest";
+export const RELEASES = `${GITHUB_URL}/releases/latest`;
 
 export const DOWNLOADS = {
-  macArm: latest("Warren-mac-arm64.dmg"),
-  macIntel: latest("Warren-mac-x64.dmg"),
-  windows: latest("Warren-win-x64.exe"),
-  linuxAppImage: latest("Warren-linux-x86_64.AppImage"),
-  linuxDeb: latest("Warren-linux-amd64.deb"),
-  android: latest("Warren-android.apk"),
+  macArm: latest("Wisp-mac-arm64.dmg"),
+  macIntel: latest("Wisp-mac-x64.dmg"),
+  windows: latest("Wisp-win-x64.exe"),
+  linuxAppImage: latest("Wisp-linux-x86_64.AppImage"),
+  linuxDeb: latest("Wisp-linux-amd64.deb"),
+  android: latest("Wisp-android.apk"),
 };
 
 export type DesktopOs = "mac" | "windows" | "linux" | "other";
@@ -36,6 +37,6 @@ export function downloadsFor(os: DesktopOs): { label: string; href: string; more
     case "linux":
       return { label: "Download for Linux", href: DOWNLOADS.linuxAppImage, more: [{ label: ".deb", href: DOWNLOADS.linuxDeb }] };
     default:
-      return { label: "Download Warren", href: RELEASES, more: [] };
+      return { label: "Download Wisp", href: RELEASES, more: [] };
   }
 }

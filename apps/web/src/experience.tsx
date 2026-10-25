@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { usePrefs, useStore } from "./store.ts";
 
 /**
- * Simple or Advanced: how much of Warren a person sees. Simple keeps advanced setup (teams,
+ * Simple or Advanced: how much of Wisp a person sees. Simple keeps advanced setup (teams,
  * harness details, VM sizes, tokens, raw files) behind "Advanced" disclosures; Advanced shows it
  * all. Picked during onboarding and in Settings → App behavior; stored in the person's prefs.
  */

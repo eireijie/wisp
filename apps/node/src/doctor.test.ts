@@ -80,11 +80,11 @@ describe("wisp doctor", () => {
     try {
       expect(connectionLogged(dir)).toBe(false);
       const file = path.join(dir, "node.log");
-      fs.writeFileSync(file, `${"old text\n".repeat(10_000)}[warren] connected to http://mac as "Laptop"\n`);
+      fs.writeFileSync(file, `${"old text\n".repeat(10_000)}[wisp] connected to http://mac as "Laptop"\n`);
       expect(connectionLogged(dir)).toBe(true);
-      fs.appendFileSync(file, "[warren] disconnected (1006); retrying in 1s\n");
+      fs.appendFileSync(file, "[wisp] disconnected (1006); retrying in 1s\n");
       expect(connectionLogged(dir)).toBe(false);
-      fs.appendFileSync(file, '[warren] connected to http://mac as "Laptop"\n');
+      fs.appendFileSync(file, '[wisp] connected to http://mac as "Laptop"\n');
       expect(connectionLogged(dir)).toBe(true);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });

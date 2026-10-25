@@ -7,9 +7,8 @@ import { PassThrough, type Readable } from "node:stream";
 import { promisify } from "node:util";
 import zlib from "node:zlib";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { accessChecker, atLeast, type Decision, type Viewer } from "@warren/core";
-import { VaultError, isHiddenPath } from "@warren/vault";
-import { id } from "./auth.ts";
+import { accessChecker, atLeast, type Decision, type Viewer } from "@wisp/core";
+import { VaultError, isHiddenPath } from "@wisp/vault";
 import type { Hub } from "./hub.ts";
 
 /**
@@ -41,7 +40,7 @@ export const GIT_PATH = "/git/vault.git";
  * entire history, so they must be allowed to read every note that ever existed.
  */
 export async function syncProblem(hub: Hub, workspaceId: string, viewer: Viewer): Promise<string | null> {
-  if (viewer.role === "guest") return "Guests can read memory in Warren but can't sync it with Obsidian.";
+  if (viewer.role === "guest") return "Guests can read memory in Wisp but can't sync it with Obsidian.";
   if (viewer.role === "owner") return null;
   const check = hub.access.checker(workspaceId, viewer);
   const hidden = (await hub.vault(workspaceId).pathsEver()).find((p) => !atLeast(check(p).level, "read"));
@@ -81,7 +80,7 @@ const packet = (data: string | Buffer) => {
 export function pushRefusal(caps: string[], refs: string[], reason: string): Buffer {
   const text = reason.replace(/\s+/g, " ").slice(0, 400);
   const status = Buffer.concat([packet("unpack ok\n"), ...refs.map((r) => packet(`ng ${r} ${text}\n`)), Buffer.from("0000")]);
-  if (caps.includes("side-band-64k") || caps.includes("side-band")) return Buffer.concat([packet(Buffer.concat([Buffer.from([2]), Buffer.from(`Warren: ${text}\n`)])), packet(Buffer.concat([Buffer.from([1]), status])), Buffer.from("0000")]);
+  if (caps.includes("side-band-64k") || caps.includes("side-band")) return Buffer.concat([packet(Buffer.concat([Buffer.from([2]), Buffer.from(`Wisp: ${text}\n`)])), packet(Buffer.concat([Buffer.from([1]), status])), Buffer.from("0000")]);
   return caps.includes("report-status") || caps.includes("report-status-v2") ? status : Buffer.alloc(0);
 }
 
@@ -246,8 +245,8 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
   async function gate(req: FastifyRequest, reply: FastifyReply, readOnlyCopy = true) {
     const person = who(req);
     if (!person) {
-      reply.header("www-authenticate", 'Basic realm="Warren memory"');
-      denied(reply, 401, "Sign in with a sync token from Warren: Settings, Memory.");
+      reply.header("www-authenticate", 'Basic realm="Wisp memory"');
+      denied(reply, 401, "Sign in with a sync token from Wisp: Settings, Memory.");
       return null;
     }
     const problem = await syncProblem(hub, person.workspaceId, person.viewer);
@@ -256,7 +255,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
       return null;
     }
     if (readOnlyCopy && !(await refreshGateway(person.workspaceId))) {
-      denied(reply, 503, "Memory has no saved notes yet, or isn't on a branch. Open Warren and add a note first.");
+      denied(reply, 503, "Memory has no saved notes yet, or isn't on a branch. Open Wisp and add a note first.");
       return null;
     }
     return person;
@@ -267,8 +266,8 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
   // before any of it is read
   const signedIn = async (req: FastifyRequest, reply: FastifyReply) => {
     if (who(req)) return;
-    reply.header("www-authenticate", 'Basic realm="Warren memory"');
-    return denied(reply, 401, "Sign in with a sync token from Warren: Settings, Memory.");
+    reply.header("www-authenticate", 'Basic realm="Wisp memory"');
+    return denied(reply, 401, "Sign in with a sync token from Wisp: Settings, Memory.");
   };
   app.addContentTypeParser(/^application\/x-git-.*-request$/, raw, (_req, body, done) => done(null, body));
 
@@ -345,7 +344,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
         await tx.sync();
         const head = await tx.head();
         if (!head) return refuse("memory has no saved notes yet");
-        const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "warren-push-"));
+        const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-push-"));
         try {
           const repo = path.join(scratch, "vault.git");
           await git(scratch, ["init", "-q", "--bare", repo]);
@@ -376,7 +375,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
           try {
             await tx.adopt(repo, branch!, head, to, person.name);
           } catch (e) {
-            return refuse(e instanceof VaultError ? e.message : "Warren couldn't take that in; try again");
+            return refuse(e instanceof VaultError ? e.message : "Wisp couldn't take that in; try again");
           }
           hub.broadcast(person.workspaceId, { type: "memory_changed" });
           return send200();
@@ -386,9 +385,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
       });
     } catch (e) {
       app.log.error(e);
-      return denied(reply, 500, "Warren couldn't take that push.");
+      return denied(reply, 500, "Wisp couldn't take that push.");
     }
   });
 }
-
-export const newTokenId = () => id("vtk");

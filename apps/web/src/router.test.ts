@@ -13,7 +13,7 @@ let router: typeof import("./router.ts");
 beforeEach(async () => {
   vi.resetModules();
   changed.mockClear();
-  const url = new URL("https://warren.test/?keep=1#/vault/note.md");
+  const url = new URL("https://wisp.test/?keep=1#/vault/note.md");
   vi.stubGlobal("location", url);
   vi.stubGlobal("window", new EventTarget());
   vi.stubGlobal("history", {
@@ -95,5 +95,14 @@ describe("guest routes", () => {
   it("keeps guests' other pages available", () => {
     const route = router.parseRoute("#/agents/atlas");
     expect(router.routeForRole(route, "guest")).toEqual(route);
+  });
+});
+
+describe("device pages", () => {
+  it("opens one device by its id, and goes back to the list without one", () => {
+    expect(router.parseRoute("#/nodes/box")).toEqual({ view: "nodes", nodeId: "box" });
+    expect(router.href({ view: "nodes", nodeId: "box" })).toBe("#/nodes/box");
+    expect(router.parseRoute("#/nodes")).toEqual({ view: "nodes", nodeId: null });
+    expect(router.href({ view: "nodes" })).toBe("#/nodes");
   });
 });

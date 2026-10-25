@@ -10,7 +10,7 @@ interface Props {
   current?: "home" | "download" | "docs" | "privacy" | "terms";
 }
 const { title, description, current } = Astro.props;
-const fullTitle = current === "home" ? title : `${title} · Warren`;
+const fullTitle = current === "home" ? title : `${title} · Wisp`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const nav = [
   { href: "/download/", label: "Download", key: "download" },
@@ -42,9 +42,9 @@ const nav = [
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="wrap"><div class="bar glass">
-        <a class="brand" href="/" aria-label="Warren home" aria-current={current === "home" ? "page" : undefined}>
+        <a class="brand" href="/" aria-label="Wisp home" aria-current={current === "home" ? "page" : undefined}>
           <span class="tile"><Ghost size={22} color="#ffffff" color2="#d9d4ff" /></span>
-          <span>Warren</span>
+          <span>Wisp</span>
         </a>
         <nav aria-label="Main">
           <ul>
@@ -74,7 +74,7 @@ const nav = [
         <div class="foot-brand">
           <span class="tile"><Ghost size={20} color="#ffffff" color2="#d9d4ff" /></span>
           <p>
-            <strong>Warren</strong> is free and open source under the{" "}
+            <strong>Wisp</strong> is free and open source under the{" "}
             <a href={`${REPO}/blob/main/LICENSE`} rel="noopener">Apache-2.0 license</a>.
           </p>
         </div>

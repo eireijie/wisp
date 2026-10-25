@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
-import { catalogSkill, type Agent, type CatalogSkill, type Skill } from "@warren/core";
+import { catalogSkill, type Agent, type CatalogSkill, type Skill } from "@wisp/core";
 import { api } from "../api.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { Advanced, useSimple } from "../experience.tsx";
@@ -72,8 +72,6 @@ export function skillFromGuide(g: { name: string; what: string; when: string; re
   const description = !lead ? "" : /^use (when|for)\b/i.test(lead) ? lead : `Use when ${lowerFirst(lead)}`;
   return { description: description.slice(0, 500), content: [`# ${name || "New skill"}`, ...body].join("\n\n") + "\n" };
 }
-
-export const skillMarkdownFromGuide = (g: Parameters<typeof skillFromGuide>[0]) => skillFromGuide(g).content;
 
 /**
  * The plain-words version of a skill for Simple mode. A library entry (skill null) or an installed,
@@ -260,7 +258,7 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
   );
 }
 
-/** After a skill is installed: a request to paste into chat (Warren can't prefill the message) and a shortcut to the helper's chat. */
+/** After a skill is installed: a request to paste into chat (Wisp can't prefill the message) and a shortcut to the helper's chat. */
 function TryIt({ skill, agents, onClose }: { skill: Skill; agents: Agent[]; onClose: () => void }) {
   const holders = skill.agentIds.map((id) => agents.find((a) => a.id === id)).filter((a): a is Agent => !!a);
   const [pick, setPick] = useState(holders[0]?.id ?? "");

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { isMasked, maskSecret } from "@warren/core";
+import { isMasked, maskSecret } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 

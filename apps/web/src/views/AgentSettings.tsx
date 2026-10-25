@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Activity, BookOpen, Radar, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
-import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@warren/core";
-import { soulPath, soulTemplate } from "@warren/core/src/soul.ts";
+import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@wisp/core";
+import { soulPath, soulTemplate } from "@wisp/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { originReach, shareOrigin, useAccess } from "../access.ts";
 import { ApiError, api } from "../api.ts";
@@ -11,7 +11,7 @@ import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
-import { AgentAvatar, Button, CopyBlock, Field, HARNESS_LABELS, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Field, harnessLabel, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
@@ -278,6 +278,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
       await load();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -434,6 +435,7 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -531,6 +533,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -541,13 +544,13 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       <div>
         <Intro title="Model">
           <p>
-            {HARNESS_LABELS[agent.harness]} joins through warren-mcp, so its model and permissions are set inside {HARNESS_LABELS[agent.harness]} itself.
+            {harnessLabel(agent.harness)} joins through wisp-mcp, so its model and permissions are set inside {harnessLabel(agent.harness)} itself.
           </p>
         </Intro>
       </div>
     );
 
-  const hLabel = HARNESS_LABELS[agent.harness];
+  const hLabel = harnessLabel(agent.harness);
   const isAuto = !form.model && !form.effort && !form.fast;
   const deviceGone = !agent.nodeId || !!(info?.device && !info.device.online);
 
@@ -557,7 +560,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
       ? null
       : !info.catalog
         ? info.device.online
-          ? `${info.device.name} hasn't reported ${HARNESS_LABELS[agent.harness]} models. Make sure it's installed there (warren doctor) and restart the device.`
+          ? `${info.device.name} hasn't reported ${harnessLabel(agent.harness)} models. Make sure it's installed there (wisp doctor) and restart the device.`
           : `${info.device.name} is offline. Start it to see the models it offers.`
         : null;
 
@@ -568,11 +571,11 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           <p>
             {info?.catalog ? (
               <>
-                What {HARNESS_LABELS[agent.harness]} offers on <b>{info.device?.name}</b>
+                What {harnessLabel(agent.harness)} offers on <b>{info.device?.name}</b>
                 {info.catalog.version && <span className="text-faint"> ({info.catalog.version})</span>}.
               </>
             ) : (
-              `Which ${HARNESS_LABELS[agent.harness]} model this agent uses.`
+              `Which ${harnessLabel(agent.harness)} model this agent uses.`
             )}
           </p>
         </Intro>
@@ -661,7 +664,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
         <section className="rounded-xl border border-accent bg-accent-soft p-3 text-sm">
           <div className="font-medium">{isAuto ? "Automatic (recommended)" : `Custom: ${form.model ? prettyModel(form.model) : "your own settings"}`}</div>
           <p className="mt-0.5 text-muted">
-            {isAuto ? `Warren lets ${hLabel} pick the model and effort. That's right for most people.` : `You chose the model or effort yourself. Automatic lets ${hLabel} pick for you.`}
+            {isAuto ? `Wisp lets ${hLabel} pick the model and effort. That's right for most people.` : `You chose the model or effort yourself. Automatic lets ${hLabel} pick for you.`}
           </p>
           {!isAuto && (
             <Button className="mt-2" onClick={() => (setForm({ model: "", effort: "", fast: false }), setCustom(false))}>
@@ -758,6 +761,7 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -768,8 +772,8 @@ function DevicePanel({ agent, nodes, onDirty, active }: { agent: FullAgent; node
       <Intro title="Device">
         <p>
           {runsOnDevice(agent.harness)
-            ? `The device that runs ${HARNESS_LABELS[agent.harness]} for @${agent.handle} whenever it's mentioned. It works in ~/.warren/agents/${agent.handle}/ there (or in the folder it shares with its VM). Where it clicks and types is its Computer.`
-            : `Optional: ${HARNESS_LABELS[agent.harness]} can also join through warren-mcp from wherever it runs (see Connect).`}
+            ? `The device that runs ${harnessLabel(agent.harness)} for @${agent.handle} whenever it's mentioned. It works in ~/.wisp/agents/${agent.handle}/ there (or in the folder it shares with its VM). Where it clicks and types is its Computer.`
+            : `Optional: ${harnessLabel(agent.harness)} can also join through wisp-mcp from wherever it runs (see Connect).`}
         </p>
       </Intro>
       <div className="grid sm:grid-cols-2 gap-2 max-w-2xl">
@@ -838,7 +842,7 @@ function WhoCanAsk({ agent, device }: { agent: FullAgent; device: NodeInfo | und
 export function accessScope(access: AccessLevel, name: string, handle: string, device: string | undefined): string {
   if (!device) return "It has no device yet, so it can't touch any files.";
   if (access === "read-only") return `${name} asks before changing any file on ${device}.`;
-  if (access === "edit") return `${name} may change files in its own working folder on ${device} (~/.warren/agents/${handle}) and asks before changing files elsewhere. Some harnesses can't enforce this strictly.`;
+  if (access === "edit") return `${name} may change files in its own working folder on ${device} (~/.wisp/agents/${handle}) and asks before changing files elsewhere. Some harnesses can't enforce this strictly.`;
   return `${name} may change files and run commands on ${device}, if ${device} allows full access (a device can refuse and drop it to Edit).`;
 }
 
@@ -871,6 +875,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
       await refreshAgents();
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -893,7 +898,7 @@ function PermissionsPanel({ agent, nodes, onDirty, active }: { agent: FullAgent;
         {access === "full" && (
           <p className="mt-3 flex gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
             <ShieldAlert size={16} className="shrink-0 mt-0.5" />
-            The agent can run any command as the device's user. The device must opt in with <code>warren node start --allow-full-access</code>; otherwise it runs with edit access.
+            The agent can run any command as the device's user. The device must opt in with <code>wisp node start --allow-full-access</code>; otherwise it runs with edit access.
           </p>
         )}
       </section>
@@ -1046,7 +1051,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   const accessCard: Card = { label: "Access", value: ACCESS[agent.settings.access ?? "edit"].label, to: "permissions" };
   // Simple leads with where it runs; the model and access settings fold under "Technical details".
   const cards: Card[] = simple ? [deviceCard, computerCard] : [modelCard, deviceCard, computerCard, accessCard];
-  const technicalCards: Card[] = [modelCard, { label: "Harness", value: HARNESS_LABELS[agent.harness], to: "device" }, accessCard];
+  const technicalCards: Card[] = [modelCard, { label: "Harness", value: harnessLabel(agent.harness), to: "device" }, accessCard];
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
   const next = simple ? setupNextStep(agent, devices) : null;
@@ -1092,7 +1097,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
               </h2>
               <p className="text-sm text-muted flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                 <span>
-                  @{agent.handle} · {HARNESS_LABELS[agent.harness]}
+                  @{agent.handle} · {harnessLabel(agent.harness)}
                 </span>
                 <StatusChip status={agent.status} />
               </p>
@@ -1288,9 +1293,9 @@ function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] })
         <p className="text-sm text-muted">
           {runsOnDevice(agent.harness)
             ? device
-              ? `When someone @mentions @${agent.handle}, ${device.name} starts ${HARNESS_LABELS[agent.harness]}, gives it the warren tools, and posts the reply.`
+              ? `When someone @mentions @${agent.handle}, ${device.name} starts ${harnessLabel(agent.harness)}, gives it the wisp tools, and posts the reply.`
               : "Pick a device in General so the agent can answer when it's mentioned."
-            : `${HARNESS_LABELS[agent.harness]} doesn't have a headless adapter yet. Connect a running session below.`}
+            : `${harnessLabel(agent.harness)} doesn't have a headless adapter yet. Connect a running session below.`}
         </p>
       </section>
       <section className="space-y-3">

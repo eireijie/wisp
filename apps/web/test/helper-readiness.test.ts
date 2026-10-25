@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 import type { DeviceInfo } from "../src/devices.ts";
 import { helperChecklist, homeReadiness, nextStep, pickHelper } from "../src/onboarding.ts";
 

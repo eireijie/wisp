@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-function fixture(pending = false, saved: Record<string, any> = {}) {
+function fixture(pending = false, saved: Record<string, any> = {}, migrationDone: Promise<unknown> = Promise.resolve()) {
   const handlers = new Map<string, (...args: any[]) => any>();
-  let ready: () => void = () => {};
+  let ready: () => Promise<void> = async () => {};
   const app = Object.assign(new EventEmitter(), {
     getPath: () => "/desktop-test", getVersion: () => "0.0.1", requestSingleInstanceLock: () => true,
-    setAboutPanelOptions: vi.fn(), isReady: () => false, whenReady: () => ({ then: (fn: () => void) => { ready = fn; } }),
+    setName: vi.fn(), setPath: vi.fn(), setAsDefaultProtocolClient: vi.fn(), setAboutPanelOptions: vi.fn(), isReady: () => false, whenReady: () => ({ then: (fn: () => Promise<void>) => { ready = fn; return { catch: vi.fn() }; } }),
   });
   const loadFile = vi.fn();
   const writeFileSync = vi.fn();
@@ -48,7 +48,7 @@ function fixture(pending = false, saved: Record<string, any> = {}) {
     lanAddresses: () => [],
     serviceRunning: vi.fn().mockResolvedValue(true),
     restartService: vi.fn().mockResolvedValue(false),
-    runtime: () => ({ node: "node", warrenDir: "/runtime" }),
+    runtime: () => ({ node: "node", wispDir: "/runtime" }),
     deviceConnected: vi.fn().mockResolvedValue(false),
     deviceLogConnected: vi.fn(() => false),
   };
@@ -76,6 +76,7 @@ function fixture(pending = false, saved: Record<string, any> = {}) {
         Notification: class { static isSupported = () => true; show = showNotification; },
       };
       if (name === "node:fs") return { readFileSync: () => JSON.stringify(config), mkdirSync: vi.fn(), writeFileSync, existsSync: () => false };
+      if (name === "./migration.cjs") return { createMigration: () => ({ prepare: () => ({ userData: "/desktop-test" }), migrateServices: () => migrationDone }) };
       if (name === "./engine.cjs") return engine;
       if (name === "./cloud.cjs") return cloud;
       if (name === "./buddy.cjs") return () => buddy;
@@ -146,7 +147,7 @@ describe("desktop approval IPC", () => {
     await f.handlers.get("setup:request-join")!(event, "http://home:4747");
     f.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "approved", nodeId: "n", nodeToken: "t" }) });
     expect(await f.handlers.get("setup:poll-join")!(event)).toEqual({ ok: true, status: "approved" });
-    expect(f.main.device.start).toHaveBeenCalledWith("node", "/runtime", ["node", "start"], { WARREN_EXIT_IF_REJECTED: "1" });
+    expect(f.main.device.start).toHaveBeenCalledWith("node", "/runtime", ["node", "start"], { WISP_EXIT_IF_REJECTED: "1" });
     expect(f.cfg).toMatchObject({ hub: "http://home:4747", token: "t", nodeId: "n" });
     expect(f.fetch).toHaveBeenCalledTimes(2);
   });
@@ -243,9 +244,9 @@ describe("desktop device status", () => {
     expect(f.executeJavaScript).toHaveBeenCalledWith('location.hash = "#/dashboard"');
   });
 
-  it("restores the pending cloud card at startup without exposing the saved key", () => {
+  it("restores the pending cloud card at startup without exposing the saved key", async () => {
     const f = fixture(true);
-    f.ready();
+    await f.ready();
     expect(f.loadFile).toHaveBeenCalledWith(expect.anything(), { query: { state: JSON.stringify({ step: "cloud", server: f.server }) } });
     expect(JSON.stringify(f.loadFile.mock.calls)).not.toContain("secret-key");
   });
@@ -257,12 +258,12 @@ describe("pending cloud server dismissal", () => {
 
   it("keeps the server and setup key after Keep it, returns to the saved hub, and restores access in the tray", async () => {
     const f = fixture(true, remote);
-    f.ready();
+    await f.ready();
     await f.handlers.get("setup:cloud-keep")!(f.setupEvent());
     expect(f.main.config.cloudPending).toMatchObject({ dismissed: true, key: "secret-key", server: f.server });
     expect(f.windows[0].loadURL).toHaveBeenCalledWith("https://hub/");
     const relaunched = fixture(false, f.savedConfig());
-    relaunched.ready();
+    await relaunched.ready();
     await vi.waitFor(() => expect(relaunched.windows[0].loadURL).toHaveBeenCalledWith("https://hub/"));
     expect(relaunched.loadFile).not.toHaveBeenCalled();
     const entry = relaunched.main.trayMenu().find((i: any) => i.label === "Unfinished Cloud Server…");
@@ -273,7 +274,7 @@ describe("pending cloud server dismissal", () => {
 
   it("persists window dismissal and opens the saved hub on reactivation", async () => {
     const f = fixture(true, remote);
-    f.ready();
+    await f.ready();
     f.windows[0].emit("close", { preventDefault: vi.fn() });
     expect(f.savedConfig().cloudPending).toMatchObject({ dismissed: true, key: "secret-key" });
     expect(f.windows[0].hide).toHaveBeenCalled();
@@ -283,7 +284,7 @@ describe("pending cloud server dismissal", () => {
 
   it("still lets the person delete a kept server from the reopened card", async () => {
     const f = fixture(true, remote);
-    f.ready();
+    await f.ready();
     await f.handlers.get("setup:cloud-keep")!(f.setupEvent());
     f.main.showPendingCloud();
     expect(await f.handlers.get("setup:cloud-delete")!(f.setupEvent(), "token", 42)).toEqual({ ok: true });
@@ -303,5 +304,32 @@ describe("pending cloud server dismissal", () => {
   it("only shows the pending server entry while the record exists", () => {
     const f = fixture();
     expect(f.main.trayMenu().some((i: any) => i.label === "Unfinished Cloud Server…")).toBe(false);
+  });
+});
+
+
+describe("desktop startup migration ordering", () => {
+  it("waits for services before creating windows or connecting, including activation and protocol events", async () => {
+    let finish: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { finish = resolve; });
+    const f = fixture(false, { mode: "remote", hubUrl: "https://hub", device: false }, gate);
+    const ready = f.ready();
+    f.app.emit("activate");
+    f.app.emit("second-instance", {}, ["wisp://pair?id=p&s=s"]);
+    expect(f.windows).toHaveLength(0);
+    expect(f.engine.hubUp).not.toHaveBeenCalled();
+    finish();
+    await ready;
+    await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("https://hub/#/settings/mobile"));
+  });
+
+  it.each(["wisp", "warren"])("opens pairing instructions for %s links without following their address", async (scheme) => {
+    const f = fixture(false, { mode: "remote", hubUrl: "https://hub", device: false });
+    await f.ready();
+    await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("https://hub/"));
+    const event = { preventDefault: vi.fn() };
+    f.app.emit("open-url", event, `${scheme}://pair?id=p&s=s&u=https%3A%2F%2Funtrusted.example`);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(f.windows[0].loadURL).toHaveBeenLastCalledWith("https://hub/#/settings/mobile");
   });
 });

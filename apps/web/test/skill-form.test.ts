@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { helperLine, skillFromGuide, skillMarkdownFromGuide, trySuggestion, whatItsFor } from "../src/views/SkillsView.tsx";
+import { helperLine, skillFromGuide, trySuggestion, whatItsFor } from "../src/views/SkillsView.tsx";
 
 vi.mock("../src/api.ts", () => ({ api: vi.fn() }));
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
@@ -58,6 +58,6 @@ describe("skillFromGuide", () => {
     const r = skillFromGuide({ name: "A", what: "x", when: "Asked for:\nreports\r\nweekly", result: "" });
     expect(r.description).toBe("Use when asked for: reports weekly");
     expect(r.description).not.toMatch(/\n/);
-    expect(skillMarkdownFromGuide({ name: "", what: "x", when: "", result: "" })).toContain("# New skill");
+    expect(skillFromGuide({ name: "", what: "x", when: "", result: "" }).content).toContain("# New skill");
   });
 });

@@ -40,7 +40,7 @@ describe("runStatusLabel", () => {
 describe("accessScope", () => {
   it("states what each level asks for, not a guarantee", () => {
     expect(accessScope("read-only", "Nova", "nova", "Mac")).toBe("Nova asks before changing any file on Mac.");
-    expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("~/.warren/agents/nova");
+    expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("~/.wisp/agents/nova");
     expect(accessScope("edit", "Nova", "nova", "Mac")).toContain("can't enforce this strictly");
     expect(accessScope("full", "Nova", "nova", "Mac")).toContain("if Mac allows full access");
     expect(accessScope("full", "Nova", "nova", undefined)).toContain("no device yet");

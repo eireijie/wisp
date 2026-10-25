@@ -9,7 +9,7 @@ let base: string;
 let close: () => Promise<void>;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-install-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-install-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
@@ -27,12 +27,12 @@ describe("installers", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text.startsWith("#!/usr/bin/env bash")).toBe(true);
-    expect(text).toMatch(/^WARREN_REPO="\$\{WARREN_REPO:-https:\/\/[^}]+\}"$/m);
+    expect(text).toContain('WISP_REPO="${WISP_REPO-${WARREN_REPO-https://');
   });
 
   it("serves install.ps1", async () => {
     const text = await (await fetch(`${base}/install.ps1`)).text();
-    expect(text).toMatch(/^\$Repo = if \(\$env:WARREN_REPO\) \{ \$env:WARREN_REPO \} else \{ "https:\/\/[^"]+" \}$/m);
+    expect(text).toContain("elseif (Test-Path Env:WARREN_REPO) { $env:WARREN_REPO }");
   });
 });
 
@@ -60,7 +60,7 @@ describe("hub installer join compatibility", () => {
     const fixture = `#!/usr/bin/env bash
 set -euo pipefail
 MODE="" HUB="" TOKEN=""
-warren() { printf '<%s>' "$@"; }
+wisp() { printf '<%s>' "$@"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --hub-server) MODE=hub ;;

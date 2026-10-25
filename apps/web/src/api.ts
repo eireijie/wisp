@@ -1,6 +1,6 @@
-import type { ClientEvent } from "@warren/core";
+import type { ClientEvent } from "@wisp/core";
 
-const TOKEN_KEY = "warren.token";
+const TOKEN_KEY = "wisp.token";
 
 export function getToken(): string | null {
   try {

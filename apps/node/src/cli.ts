@@ -1,19 +1,25 @@
 #!/usr/bin/env -S npx tsx
+import { envVar } from "@wisp/core";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { deviceAdapters } from "@warren/adapters";
+import { REMOTE_APPS, formatRustdeskId } from "@wisp/core";
+import { deviceAdapters } from "@wisp/adapters";
 import { detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
+import { detectRemoteApps } from "./remote-apps.ts";
+import { rustdeskId, rustdeskInstalled, setUpRustdesk } from "./rustdesk.ts";
 import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
-import { installService, isService, serviceStatus, uninstallService, type ServiceKind } from "./service.ts";
+import { installService, isService, serviceStatus, servicePort, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
-import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@warren/update";
+import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@wisp/update";
 
+import { migrateHome, defaultHubDataDir } from "./migrate-home.ts";
+import { migrateServices } from "./migrate-services.ts";
 import { findMovedWisp, joinTarget, joinWisp } from "./join.ts";
 import { doctor } from "./doctor.ts";
 import { Reach } from "../../hub/src/reach.ts";
@@ -40,8 +46,12 @@ Usage:
       Connect with saved settings; the older --hub and --token flags still work.
   wisp node screen on|off|code|remote [off]
       Control screen sharing and its code on this computer.
+  wisp node rustdesk [off]
+      Set up RustDesk to reach this computer from anywhere; its ID shows on this device's page.
   wisp node pause | wisp node resume
       Pause or resume agents on this computer.
+  wisp migrate [--json]
+      Move an existing Warren home and services to Wisp. Safe to repeat.
   wisp update [--check]
       Update Wisp and restart after agents finish; --check only shows what is new.
 
@@ -50,7 +60,7 @@ Settings in DIR/node.json (all optional):
                  "acp:my-bot": { "label": "My bot", "command": "my-bot", "args": ["acp"] } }
       Change how an ACP harness starts here, or add your own ACP agent.
   "vmEngine": "podman"     use Podman instead of Docker for VMs
-  "shareScreen": true      what \`warren node screen on\` sets
+  "shareScreen": true      what \`wisp node screen on\` sets
   "noScreen": true         never offer this device's own screen, even if shareScreen is on
 `;
 
@@ -65,14 +75,18 @@ const { values, positionals } = parseArgs({
     local: { type: "boolean" },
     "no-service": { type: "boolean" },
     check: { type: "boolean" },
+    json: { type: "boolean" },
     yes: { type: "boolean", short: "y" },
     help: { type: "boolean", short: "h" },
   },
 });
 
-const dir = path.resolve(values.dir ?? process.env.WARREN_NODE_DIR ?? path.join(os.homedir(), ".warren"));
+const migrationLines: string[] = [];
+const migration = migrateHome({ home: os.homedir(), log: (line) => migrationLines.push(line) });
+if (!values.json) for (const line of migrationLines) console.log(line);
+const dir = path.resolve(values.dir ?? envVar("NODE_DIR") ?? migration.dir);
 const configFile = path.join(dir, "node.json");
-/** `node start` exits with this once the hub turns its token down, when $WARREN_EXIT_IF_REJECTED asks it to (the desktop app does) */
+/** `node start` exits with this once the hub turns its token down, when $WISP_EXIT_IF_REJECTED asks it to (the desktop app does) */
 const REJECTED_CODE = 78;
 const [cmd, sub] = positionals;
 function isInviteAddress(raw: string): boolean {
@@ -81,6 +95,10 @@ function isInviteAddress(raw: string): boolean {
 
 if (values.help || !cmd) {
   console.log(HELP);
+} else if (cmd === "migrate") {
+  const services = migrateServices({ home: os.homedir(), log: (line) => migrationLines.push(line) });
+  if (values.json) console.log(JSON.stringify({ home: migration, services, messages: migrationLines }));
+  else console.log(services.length ? migrationLines.slice(migration.moved ? 1 : 0).join("\n") : "No old services to migrate.");
 } else if (cmd === "join") {
   try {
     await joinWisp({ dir, address: sub ?? values.hub, name: values.name, service: !values["no-service"] });
@@ -90,6 +108,7 @@ if (values.help || !cmd) {
   }
 } else if (cmd === "doctor") {
   if (!(await doctor(dir))) process.exitCode = 1;
+  await remoteDesktopDoctor();
 } else if (cmd === "setup") {
   await setup(values.yes ?? false);
 } else if (cmd === "setup-code") {
@@ -97,6 +116,7 @@ if (values.help || !cmd) {
 } else if (cmd === "service") {
   await service(sub, positionals[2]);
 } else if (cmd === "node" && sub === "start") {
+  migrateServices({ home: os.homedir(), log: console.log });
   if (values.hub && isInviteAddress(values.hub)) {
     await joinWisp({ dir, address: values.hub, name: values.name, service: false });
     values.hub = undefined;
@@ -106,7 +126,7 @@ if (values.help || !cmd) {
   const kept = underKeeper();
   // two daemons with one token would take turns replacing each other on the hub
   // the installed service uses the default folder, so a device kept in another folder (--dir) is a different device
-  const service = process.env.WARREN_SERVICE || dir !== path.join(os.homedir(), ".warren") ? null : serviceStatus("node", dir);
+  const service = envVar("SERVICE") || dir !== path.join(os.homedir(), ".wisp") ? null : serviceStatus("node", dir);
   if (service?.running && !isService(service)) {
     console.error(`This computer is already connected to your Wisp in the background, so there's nothing to start. To run it in this terminal instead: wisp service uninstall node`);
     process.exit(1);
@@ -121,7 +141,7 @@ if (values.help || !cmd) {
       return url;
     };
   // the desktop app asks for this, so it can add this computer again instead of leaving a dead device running
-  if (process.env.WARREN_EXIT_IF_REJECTED) daemon.onRejected = () => process.exit(REJECTED_CODE);
+  if (envVar("EXIT_IF_REJECTED")) daemon.onRejected = () => process.exit(REJECTED_CODE);
   daemon.start();
   watchForUpdates(async () => {
     if (!kept) return console.log("[wisp] Wisp was updated; restart `wisp node start` to use the new version");
@@ -140,12 +160,14 @@ if (values.help || !cmd) {
     });
 } else if (cmd === "node" && sub === "screen") {
   await screen(positionals[2], positionals[3]);
+} else if (cmd === "node" && sub === "rustdesk") {
+  await rustdesk(positionals[2]);
 } else if (cmd === "node" && (sub === "pause" || sub === "resume")) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   saved.paused = sub === "pause";
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
-  console.log(saved.paused ? "Paused. Wisp stops agents and computers on this device within a second or two. `warren node resume` to continue." : "Resumed.");
+  console.log(saved.paused ? "Paused. Wisp stops agents and computers on this device within a second or two. `wisp node resume` to continue." : "Resumed.");
 } else if (cmd === "update") {
   const v = await version();
   console.log(`Wisp ${v.commit ?? "(not a git checkout)"}${v.date ? ` from ${v.date.slice(0, 10)}` : ""}`);
@@ -216,7 +238,7 @@ async function pickCode(): Promise<NonNullable<NodeConfig["screenCode"]> | null>
   return null;
 }
 
-/** `warren node screen on|off|code|remote`: everything about this device's own screen, decided here. */
+/** `wisp node screen on|off|code|remote`: everything about this device's own screen, decided here. */
 async function screen(what: string | undefined, arg: string | undefined) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   const save = () => {
@@ -241,15 +263,15 @@ async function screen(what: string | undefined, arg: string | undefined) {
     saved.shareScreen = true;
     delete saved.noScreen;
     save();
-    console.log("This screen is on. In Wisp, only the person who connected this device can see or use it, and agents only while they lend it.");
+    console.log("This screen is on. In Wisp, only the person who connected this device can see or use it, and agents only if they run on this device.");
     if (!saved.screenCode) {
       console.log("\nPick a code. Opening this screen from Wisp will need it, so someone who gets into your Wisp account still can't see this computer.");
       const code = await pickCode();
       if (code) {
         saved.screenCode = code;
         save();
-        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen or lend it to an agent.`);
-      } else console.log("   No code set, so your Wisp sign-in alone opens this screen. Pick one any time: warren node screen code");
+        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen.`);
+      } else console.log("   No code set, so your Wisp sign-in alone opens this screen. Pick one any time: wisp node screen code");
     }
     if (!saved.remoteDesktop && remoteDesktopSupport().ok) {
       console.log("");
@@ -258,7 +280,7 @@ async function screen(what: string | undefined, arg: string | undefined) {
           save();
           console.log("   Remote Desktop is on.");
         }
-      } else console.log("   Live view uses screenshots. Turn Remote Desktop on any time: warren node screen remote");
+      } else console.log("   Live view uses screenshots. Turn Remote Desktop on any time: wisp node screen remote");
     }
     return;
   }
@@ -287,12 +309,51 @@ async function screen(what: string | undefined, arg: string | undefined) {
     }
     if (!(await setUpRemote())) process.exit(1);
     save();
-    return console.log(on ? "Remote Desktop is on." : "Remote Desktop is set up. Turn the screen on to use it: warren node screen on");
+    return console.log(on ? "Remote Desktop is on." : "Remote Desktop is set up. Turn the screen on to use it: wisp node screen on");
   }
 
   console.log(`This screen is ${on ? "on" : "off"}${saved.screenCode ? `, opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : ", with no code"}${saved.remoteDesktop ? ", with Remote Desktop" : ""}.`);
-  console.log("Use `warren node screen on|off`, `warren node screen code`, or `warren node screen remote`.");
+  console.log("Use `wisp node screen on|off`, `wisp node screen code`, or `wisp node screen remote`.");
   process.exit(what ? 1 : 0);
+}
+
+/** `wisp node rustdesk [off]`: set RustDesk up here and show its ID in Wisp, or stop showing it. */
+/** `wisp doctor`'s Remote desktop lines (the mod): what else reaches this computer from anywhere. */
+async function remoteDesktopDoctor() {
+  let saved: Partial<NodeConfig> = {};
+  try { saved = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {}; } catch {}
+  const lines: string[] = [];
+  if (saved.rustdesk) lines.push(`RustDesk on, ID ${formatRustdeskId(saved.rustdesk.id)}`);
+  else if (await rustdeskInstalled().catch(() => false)) lines.push("RustDesk installed, not shown in Wisp (`wisp node rustdesk`)");
+  const others = await detectRemoteApps().catch(() => []);
+  if (others.length) lines.push(`Also here: ${others.map((a) => REMOTE_APPS[a].label).join(", ")} (pick it under Remote desktop on this device's page)`);
+  if (!lines.length) return;
+  console.log("\nRemote desktop");
+  for (const line of lines) console.log(`  ${line}`);
+}
+
+async function rustdesk(what: string | undefined) {
+  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
+  const save = () => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
+  };
+  if (what === "off") {
+    delete saved.rustdesk;
+    save();
+    return console.log("Wisp doesn't show this computer's RustDesk ID anymore. RustDesk itself stays installed and works as before.");
+  }
+  if (what) {
+    console.log("Use `wisp node rustdesk` or `wisp node rustdesk off`.");
+    process.exit(1);
+  }
+  // already set up: just make sure the ID is current
+  const known = saved.rustdesk && (await rustdeskInstalled()) ? await rustdeskId() : null;
+  const r = known ? { id: known } : await setUpRustdesk(dir, { ask: (q) => ask(q), run, say: (l) => console.log(l) });
+  if (!r) process.exit(1);
+  saved.rustdesk = r;
+  save();
+  console.log(known ? `RustDesk is set up. This computer's ID is ${formatRustdeskId(r.id)}.` : "RustDesk is set up. Its ID is on this device's page in Wisp (turn on the Remote desktop mod to see it).");
 }
 
 /** Run a command with the terminal attached, showing it first. */
@@ -311,8 +372,8 @@ function saveNodeConfig(): NodeConfig {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   const cfg: NodeConfig = {
     ...saved,
-    hub: values.hub ?? process.env.WARREN_HUB ?? saved.hub ?? "",
-    token: values.token ?? process.env.WARREN_NODE_TOKEN ?? saved.token ?? "",
+    hub: values.hub ?? envVar("HUB") ?? saved.hub ?? "",
+    token: values.token ?? envVar("NODE_TOKEN") ?? saved.token ?? "",
     // "Mac.fios-router.home" → "Mac": the network's domain isn't part of the computer's name
     name: values.name ?? saved.name ?? (os.hostname().split(".")[0] || os.hostname()),
     allowFullAccess: values["allow-full-access"] ?? saved.allowFullAccess ?? false,
@@ -343,7 +404,7 @@ function saveNodeConfig(): NodeConfig {
 
 /** Where the hub on this computer keeps its data (the same default as the hub itself). */
 function hubDataDir(): string {
-  return path.resolve(process.env.WARREN_DATA_DIR ?? path.join(REPO_ROOT, "data"));
+  return path.resolve(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? defaultHubDataDir(migration.dir));
 }
 
 /** A new Wisp's setup link (apps/hub/src/setup-code.ts), when nobody has made the first account yet. */
@@ -379,18 +440,21 @@ async function waitForLocalHub(cfg: NodeConfig): Promise<NodeConfig> {
   return next;
 }
 
-/** `warren service`: start the hub or this device at login and keep it running. */
+/** `wisp service`: start the hub or this device at login and keep it running. */
 async function service(action: string | undefined, kind: string | undefined) {
   const kinds: ServiceKind[] = ["hub", "node"];
   if (action === "status") {
+    const states = [];
     for (const k of kind ? [kind as ServiceKind] : kinds) {
       const s = serviceStatus(k, dir);
-      console.log(`${(k === "hub" ? "Wisp" : "This computer").padEnd(13)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
+      states.push({ kind: k, ...s, ...(k === "hub" ? { port: servicePort(k, dir) } : {}) });
+      if (!values.json) console.log(`${(k === "hub" ? "Wisp" : "This computer").padEnd(13)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
     }
+    if (values.json) console.log(JSON.stringify(states));
     return;
   }
   if ((action !== "install" && action !== "uninstall") || !kinds.includes(kind as ServiceKind)) {
-    console.log("Usage: warren service install|uninstall hub|node, or warren service status");
+    console.log("Usage: wisp service install|uninstall hub|node, or wisp service status");
     process.exit(1);
   }
   const k = kind as ServiceKind;
@@ -432,7 +496,7 @@ async function service(action: string | undefined, kind: string | undefined) {
   console.log(`✓ ${k === "hub" ? "Started Wisp" : "Started this computer's connection"} (starts again when you log in)`);
   // wait for it to come up, so problems show here instead of in a log nobody reads
   const deadline = Date.now() + 30_000;
-  const port = process.env.PORT ?? "4747";
+  const port = servicePort(k, dir);
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 1000));
     if (k === "hub") {
@@ -451,7 +515,7 @@ async function service(action: string | undefined, kind: string | undefined) {
   console.log(`It hasn't ${k === "hub" ? "answered yet" : "connected yet"}. Check ${s.log}${process.platform === "linux" ? ` or journalctl ${process.getuid?.() === 0 ? "" : "--user "}-u ${s.name}` : ""}.`);
 }
 
-/** `warren setup`: harnesses, a VM engine, and the VM image, so agents get their own computers here. */
+/** `wisp setup`: harnesses, a VM engine, and the VM image, so agents get their own computers here. */
 async function setup(yes: boolean) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   const askHere = (q: string) => ask(q, yes);
@@ -479,9 +543,9 @@ async function setup(yes: boolean) {
         if (run("brew", ["install", "container"])) run("container", ["system", "start", "--enable-kernel-install"]);
       }
     } else if (process.arch === "arm64") {
-      console.log("   Install Apple's container from https://github.com/apple/container/releases (the .pkg), then run `warren setup` again.");
+      console.log("   Install Apple's container from https://github.com/apple/container/releases (the .pkg), then run `wisp setup` again.");
     } else {
-      console.log("   On an Intel Mac, install OrbStack (https://orbstack.dev) or Docker Desktop, then run `warren setup` again.");
+      console.log("   On an Intel Mac, install OrbStack (https://orbstack.dev) or Docker Desktop, then run `wisp setup` again.");
     }
     ({ engine, detail } = await detectEngine(saved.vmEngine));
   } else if (!engine && process.platform === "linux") {
@@ -489,7 +553,7 @@ async function setup(yes: boolean) {
     console.log("     curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER   # then log out and in");
     console.log("     sudo apt-get install -y podman                                             # or this");
   } else if (!engine && process.platform === "win32") {
-    console.log("   Install Docker Desktop (https://www.docker.com/products/docker-desktop/), start it, then run `warren setup` again.");
+    console.log("   Install Docker Desktop (https://www.docker.com/products/docker-desktop/), start it, then run `wisp setup` again.");
   }
   console.log(`   ${detail}`);
   if (!engine) {
@@ -505,5 +569,5 @@ async function setup(yes: boolean) {
   console.log(`   ready: ${image}`);
 
   console.log("\nThis device is ready to give agents their own computers.");
-  console.log(saved.hub ? "If `warren node start` is running, Wisp sees it within a few seconds." : "Next: connect it to your hub with the command from Wisp → Devices → Add device.");
+  console.log(saved.hub ? "If `wisp node start` is running, Wisp sees it within a few seconds." : "Next: connect it to your hub with the command from Wisp → Devices → Add device.");
 }

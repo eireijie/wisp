@@ -73,12 +73,12 @@ export function MemoryHome({
   for (const n of notes) counts.set(n.kind, (counts.get(n.kind) ?? 0) + 1);
   const lastChange = changes?.[0]?.date;
 
-  /** Who made a change: an agent (by its @handle), Obsidian, Warren itself, or a person. */
+  /** Who made a change: an agent (by its @handle), Obsidian, Wisp itself, or a person. */
   const who = (author: string) => {
     const agent = author.startsWith("@") ? agents.find((a) => `@${a.handle}` === author) : undefined;
     if (agent) return { name: agent.name, kind: simple ? "helper" : "agent", avatar: <AgentAvatar agent={agent} size={28} interactive={false} /> };
     if (author === "Edited in Obsidian") return { name: "Obsidian", kind: "on disk", avatar: <span className="size-7 rounded-full bg-chip grid place-items-center text-muted"><PencilLine size={14} /></span> };
-    if (author === "Warren") return { name: "Warren", kind: null, avatar: <span className="size-7 rounded-full bg-chip grid place-items-center text-muted"><GhostMark size={16} /></span> };
+    if (author === "Wisp" || author === "Warren") return { name: "Wisp", kind: null, avatar: <span className="size-7 rounded-full bg-chip grid place-items-center text-muted"><GhostMark size={16} /></span> };
     return { name: author, kind: "person", avatar: <UserAvatar name={author} size={28} /> };
   };
 

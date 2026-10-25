@@ -28,11 +28,13 @@ import {
   type AccessRule,
   type Actor,
   type ChannelTeam,
+  OwnRemoteDesktop,
+  type DeviceCapabilities,
   type MemoryLevel,
   type Subject,
   type Viewer,
-} from "@warren/core";
-import { VaultError, notePath } from "@warren/vault";
+} from "@wisp/core";
+import { VaultError, notePath } from "@wisp/vault";
 import { MEMORY_KINDS } from "./profile.ts";
 import { MAX_ROUNDS } from "./discussions.ts";
 import { bearer, hashPassword, issueToken, resolveToken, revokeSubjectTokens, revokeToken, verifyPassword, type Principal } from "./auth.ts";
@@ -171,7 +173,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     let agentId = p.kind === "agent" ? p.subjectId : null;
     // Nodes act on behalf of the agents they host (the harness gets the node token + agent id).
     if (p.kind === "node") {
-      const as = req.headers["x-warren-agent"];
+      const as = req.headers["x-wisp-agent"] ?? req.headers["x-warren-agent"];
       if (typeof as === "string") {
         const a = store.agent(as);
         if (!a || a.nodeId !== p.subjectId) return null;
@@ -279,7 +281,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   function commitAuthor(c: Caller) {
     if (c.actor.kind === "agent") {
       const a = store.agent(c.actor.id)!;
-      return { name: `@${a.handle}`, email: `${a.handle}@agents.warren` };
+      return { name: `@${a.handle}`, email: `${a.handle}@agents.wisp` };
     }
     const u = store.user(c.actor.id)!;
     return { name: u.name, email: u.email };
@@ -325,6 +327,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return !!comp && comp.workspaceId === c.workspaceId && hub.computers.canSee(comp, c.actor.id);
   };
 
+  /** A device's own screen only goes to agents that run on that device. */
+  const screenProblem = (computerId: string | null | undefined, nodeId: string | null) => {
+    const comp = computerId ? store.computer(computerId) : undefined;
+    return comp ? hub.computers.whyNotOnDevice(comp, null, nodeId) : null;
+  };
+
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     if (err instanceof VaultError) return reply.code(err.status).send({ error: err.message });
     const status = err.statusCode ?? 500;
@@ -345,7 +353,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     );
     if (!body) return;
     // a cloud server's app sends its key as a header (docker/cloud-init.yaml)
-    const attempt = body.setupCode ?? req.headers["x-wisp-setup-code"] ?? req.headers["x-warren-setup-key"];
+    const attempt = body.setupCode ?? req.headers["x-wisp-setup-code"] ?? req.headers["x-wisp-setup-key"] ?? req.headers["x-warren-setup-key"];
     if (opts.setupCode && !opts.setupCode.matches(attempt))
       return reply.code(403).send({ error: attempt ? "That setup code isn't right. Check it on the computer Wisp runs on." : "Enter the setup code from the computer Wisp runs on." });
     const user = store.createUser(body.email, body.name, hashPassword(body.password));
@@ -1056,6 +1064,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
+    const screenWhy = screenProblem(body.computerId, fields.nodeId ?? null);
+    if (screenWhy) return reply.code(400).send({ error: screenWhy });
     if (body.settings?.anyoneCanAsk && (!body.nodeId || store.node(body.nodeId)?.ownerId !== c.actor.id)) delete body.settings.anyoneCanAsk;
     // new agents start at the workspace's default access unless someone picked one
     if (!body.settings?.access) body.settings = { ...body.settings, access: agentPolicy(hub, c.workspaceId).defaultAccess };
@@ -1114,6 +1124,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && body.computerId !== agent.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
+    if (body.computerId !== undefined || body.nodeId !== undefined) {
+      const screenWhy = screenProblem(after.computerId, after.nodeId);
+      if (screenWhy) return reply.code(400).send({ error: screenWhy });
+    }
     if (body.settings?.anyoneCanAsk !== undefined) {
       const target = store.node(body.nodeId ?? agent.nodeId ?? "");
       if (target?.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the device's owner decides who can ask an agent that runs on it" });
@@ -1149,7 +1163,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { ok: true };
   });
 
-  /** A token for connecting an existing harness session directly (warren-mcp), without a node. */
+  /** A token for connecting an existing harness session directly (wisp-mcp), without a node. */
   app.post("/api/agents/:id/token", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
@@ -1218,6 +1232,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     };
   });
 
+  /** A device's RustDesk ID is a way into it: only its owner sees it. */
+  const withoutRustdesk = (caps: DeviceCapabilities | null) => {
+    if (!caps?.rustdesk) return caps;
+    const { rustdesk: _, ...rest } = caps;
+    return rest;
+  };
+
   app.get("/api/nodes", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
@@ -1228,7 +1249,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       online: hub.isNodeOnline(n.id),
       paused: hub.isNodePaused(n.id),
       agents: store.agentsOnNode(n.id).map((a) => a.handle),
-      capabilities: store.nodeCapabilities(n.id),
+      capabilities: n.ownerId === c.actor.id ? store.nodeCapabilities(n.id) : withoutRustdesk(store.nodeCapabilities(n.id)),
+      // how its owner reaches it is theirs alone
+      remoteDesktop: n.ownerId === c.actor.id ? store.nodeRemoteDesktop(n.id) : null,
       // what else lives on someone's device is theirs to see
       discovered: n.ownerId === c.actor.id || n.shared ? store.nodeDiscovered(n.id) : [],
       harnesses: store.nodeCatalog(n.id).map((h) => ({ id: h.harness, version: h.version })),
@@ -1268,9 +1291,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const node = store.node((req.params as { id: string }).id);
     if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
     if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the person who connected this device can change it" });
-    const body = parse(z.object({ shared: z.boolean(), role: z.enum(["vms", "screen", "headless"]).nullable() }).partial(), req.body, reply);
+    const body = parse(z.object({ shared: z.boolean(), role: z.enum(["vms", "screen", "headless"]).nullable(), remoteDesktop: OwnRemoteDesktop.nullable() }).partial(), req.body, reply);
     if (!body) return;
     if (body.shared !== undefined) store.setNodeShared(node.id, body.shared);
+    if (body.remoteDesktop !== undefined) store.setNodeRemoteDesktop(node.id, body.remoteDesktop);
     if (body.role !== undefined) store.setNodeRole(node.id, body.role);
     return { ...store.node(node.id), ok: true };
   });
@@ -1369,7 +1393,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const team = here?.members.some((m) => m.agentId === o.target.id) || o.team ? (here ?? null) : null;
     const task = store.createTask({ workspaceId: o.workspaceId, from: o.from, toAgentId: o.target.id, title: o.title, brief: o.brief, channelId: o.channelId, threadId: null, teamId: team?.id ?? null, reviewOf: o.reviewOf ?? null, parentId: o.parentId ?? null });
     let branch = o.branch ?? null;
-    if (!branch && team?.repo && !o.reviewOf) branch = `warren/${o.target.handle}/${branchSlug(o.title)}-${task.id.slice(-5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
+    if (!branch && team?.repo && !o.reviewOf) branch = `wisp/${o.target.handle}/${branchSlug(o.title)}-${task.id.slice(-5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
     if (branch) store.setTaskBranch(task.id, branch);
     const files = (o.fileIds ?? []).map((f) => store.file(f)).filter((f) => f && f.workspaceId === o.workspaceId);
     const msg = hub.postMessage({
@@ -1743,7 +1767,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { content: await vaultOf(c).readAt(p, q.rev ?? "") };
   });
 
-  /** Pick up edits made outside Warren (Obsidian, git pull). */
+  /** Pick up edits made outside Wisp (Obsidian, git pull). */
   app.post("/api/vault/sync", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
@@ -1839,7 +1863,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return { ...result, person: { id: person.id, name: person.name } };
   });
 
-  /** The memory an agent starts with (for MCP sessions that don't get Warren's prompt). */
+  /** The memory an agent starts with (for MCP sessions that don't get Wisp's prompt). */
   app.get("/api/memory/context", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;

@@ -4,11 +4,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { vncAuthResponse } from "@warren/core/src/vnc.ts";
+import { vncAuthResponse } from "@wisp/core/src/vnc.ts";
 import { signedInVnc, tightVncMsiArgs, x11vncArgs, newRemoteDesktop } from "../src/computers/remote-desktop.ts";
 import { MAX_TRIES, ScreenLock, codeProblem, hashCode } from "../src/screen-lock.ts";
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "warren-lock-"));
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "wisp-lock-"));
 
 describe("the screen's code", () => {
   it("takes a 6-digit PIN or a password of 8+ characters", () => {
@@ -37,9 +37,9 @@ describe("the screen's code", () => {
     const code = hashCode("pin", "246810");
     const lock = new ScreenLock(tmp(), () => code, () => t);
     expect(lock.open()).toBe(false);
-    expect(lock.unlock("lend", "000000", t + 60_000).ok).toBe(false);
+    expect(lock.unlock("view:1", "000000", t + 60_000).ok).toBe(false);
     expect(lock.open()).toBe(false);
-    const r = lock.unlock("lend", "246810", t + 60_000);
+    const r = lock.unlock("view:1", "246810", t + 60_000);
     expect(r.ok && r.until).toBe(t + 60_000);
     expect(lock.open()).toBe(true);
     t += 61_000;
@@ -53,7 +53,7 @@ describe("the screen's code", () => {
     const t = 5_000_000;
     const code = hashCode("password", "open sesame");
     const lock = new ScreenLock(tmp(), () => code, () => t);
-    const r = lock.unlock("lend", "open sesame", t + 30 * 24 * 60 * 60_000);
+    const r = lock.unlock("view:1", "open sesame", t + 30 * 24 * 60 * 60_000);
     expect(r.ok && r.until).toBe(t + 24 * 60 * 60_000);
   });
 
@@ -84,7 +84,7 @@ describe("the screen's code", () => {
     const t = 20_000_000;
     const code = hashCode("pin", "246810");
     const lock = new ScreenLock(tmp(), () => code, () => t);
-    lock.unlock("lend", "246810", t + 60_000);
+    lock.unlock("view:1", "246810", t + 60_000);
     for (let i = 0; i < MAX_TRIES; i++) lock.check("999999");
     expect(lock.open()).toBe(false);
   });

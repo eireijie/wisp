@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ClientEvent, Message } from "@warren/core";
+import type { ClientEvent, Message } from "@wisp/core";
 import { VoiceCall } from "../src/voice/call.ts";
 import { spokenReply, isSpeechEcho, voiceIndex } from "../src/voice/text.ts";
 import type { ListenCallbacks } from "../src/voice/providers.ts";

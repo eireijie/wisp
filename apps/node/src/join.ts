@@ -32,7 +32,7 @@ export interface JoinDependencies {
 }
 
 /** `--dir <folder>` when it isn't the default, so a printed follow-up command finds this computer's settings. */
-const dirFlag = (dir: string) => (path.resolve(dir) === path.join(os.homedir(), ".warren") ? "" : ` --dir ${JSON.stringify(dir)}`);
+const dirFlag = (dir: string) => (path.resolve(dir) === path.join(os.homedir(), ".wisp") ? "" : ` --dir ${JSON.stringify(dir)}`);
 
 /** Persist credentials before starting the service; a service failure must not lose a one-use grant. */
 export function saveJoinedComputer(dir: string, grant: Grant, name: string) {

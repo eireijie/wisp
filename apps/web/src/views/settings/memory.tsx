@@ -63,7 +63,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
     }
   };
   return (
-    <Section title="Where memory is kept" description="A folder on the computer that runs Warren. It can be an existing Obsidian vault.">
+    <Section title="Where memory is kept" description="A folder on the computer that runs Wisp. It can be an existing Obsidian vault.">
       {storage.path && (
         <Card>
           <div className="px-4 py-3.5 space-y-1.5">
@@ -71,7 +71,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
             <div>
               <Code>{storage.path}</Code>
             </div>
-            <div className="text-xs text-muted">{storage.movable === false ? "Each extra organization keeps its memory in Warren's own data folder, so it can't be moved." : fixed ? "Set by WARREN_VAULT_DIR where Warren runs, so it can only be changed there." : storage.source === "default" ? "Warren's own data folder, the default." : "Chosen here."}</div>
+            <div className="text-xs text-muted">{storage.movable === false ? "Each extra organization keeps its memory in Wisp's own data folder, so it can't be moved." : fixed ? "Set by WISP_VAULT_DIR where Wisp runs, so it can only be changed there." : storage.source === "default" ? "Wisp's own data folder, the default." : "Chosen here."}</div>
           </div>
           {!fixed && (
             <form
@@ -96,7 +96,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
                 )}
               </div>
               <p className="text-xs text-muted">
-                Type the full path on the machine that runs Warren. If the folder is an Obsidian vault, its notes are used as they are and its <Code>.obsidian</Code> settings are never touched or saved. If you were already using Warren, your earlier notes are copied across the next time Warren starts: an empty folder gets everything (history included); a folder with notes only gets the files it doesn't have. Your earlier folder is left exactly as it was. Running in Docker? The folder has to be inside a volume you mounted.
+                Type the full path on the machine that runs Wisp. If the folder is an Obsidian vault, its notes are used as they are and its <Code>.obsidian</Code> settings are never touched or saved. If you were already using Wisp, your earlier notes are copied across the next time Wisp starts: an empty folder gets everything (history included); a folder with notes only gets the files it doesn't have. Your earlier folder is left exactly as it was. Running in Docker? The folder has to be inside a volume you mounted.
               </p>
               {error && <p className="text-sm text-bad">{error}</p>}
             </form>
@@ -106,7 +106,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
       {storage.pendingRestart && (
         <div className="mt-3 rounded-xl bg-accent-soft p-4 text-sm space-y-2">
           <p>
-            Warren will use <Code>{storage.nextPath}</Code> after it restarts. Nothing changes until then.
+            Wisp will use <Code>{storage.nextPath}</Code> after it restarts. Nothing changes until then.
           </p>
           {storage.restartable ? (
             <Button
@@ -118,21 +118,21 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
                 setTimeout(() => window.location.reload(), 4000);
               }}
             >
-              {restarting ? "Restarting…" : "Restart Warren now"}
+              {restarting ? "Restarting…" : "Restart Wisp now"}
             </Button>
           ) : (
-            <p className="text-muted">Stop Warren and start it again to switch.</p>
+            <p className="text-muted">Stop Wisp and start it again to switch.</p>
           )}
         </div>
       )}
       {storage.moved && storage.moved.how !== "none" && (
         <p className="mt-3 text-sm text-muted">
-          {storage.moved.how === "copied" ? "Your earlier memory was copied here" : `${storage.moved.files} notes from your earlier memory were added here, and nothing in this folder was overwritten`} the last time Warren started.
+          {storage.moved.how === "copied" ? "Your earlier memory was copied here" : `${storage.moved.files} notes from your earlier memory were added here, and nothing in this folder was overwritten`} the last time Wisp started.
         </p>
       )}
       {storage.previous && (
         <p className="mt-3 text-sm text-muted">
-          Your earlier memory is still in <Code>{storage.previous}</Code>. Warren never deletes it; remove it yourself once you're happy with the new place.
+          Your earlier memory is still in <Code>{storage.previous}</Code>. Wisp never deletes it; remove it yourself once you're happy with the new place.
         </p>
       )}
     </Section>
@@ -146,7 +146,7 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
   const local = onHubMachine();
   const remoteUrl = (token: string) => {
     const u = new URL(window.location.origin);
-    u.username = "warren";
+    u.username = "wisp";
     u.password = token;
     u.pathname = storage.sync.urlPath;
     return u.toString();
@@ -163,12 +163,12 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
     }
   };
   return (
-    <Section title="Use it in Obsidian" description="Obsidian is where you browse and edit notes. Anything you change there shows up in Warren, and your name goes on it.">
+    <Section title="Use it in Obsidian" description="Obsidian is where you browse and edit notes. Anything you change there shows up in Wisp, and your name goes on it.">
       <div className="space-y-6">
         {storage.path && (
           <Card>
             <div className="px-4 py-3.5 space-y-2">
-              <div className="text-sm font-medium">On the computer that runs Warren</div>
+              <div className="text-sm font-medium">On the computer that runs Wisp</div>
               <p className="text-sm text-muted">
                 In Obsidian choose <b>Open folder as vault</b> and pick <Code>{storage.path}</Code>. Edits you make are picked up within a few seconds and saved as "Edited in Obsidian".
               </p>
@@ -185,7 +185,7 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
           <div>
             <h4 className="text-sm font-semibold">On another computer</h4>
             <p className="mt-0.5 text-sm text-muted">
-              Warren shares memory as a git repository, which Obsidian's free <b>Git</b> plugin can copy to your computer and keep in step, both ways.
+              Wisp shares memory as a git repository, which Obsidian's free <b>Git</b> plugin can copy to your computer and keep in step, both ways.
             </p>
           </div>
 
@@ -210,7 +210,7 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
                 <li>
                   Copy memory to that computer. In a terminal, in the folder where you keep your vaults:
                   <div className="mt-2">
-                    <CopyBlock text={`git clone "${remoteUrl(fresh ?? "YOUR-TOKEN")}" "Warren memory"`} />
+                    <CopyBlock text={`git clone "${remoteUrl(fresh ?? "YOUR-TOKEN")}" "Wisp memory"`} />
                   </div>
                   {!fresh && <p className="mt-1 text-xs text-muted">Replace YOUR-TOKEN with the token from step 2.</p>}
                   {window.location.protocol === "http:" && !local && (
@@ -218,15 +218,15 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
                   )}
                 </li>
                 <li>
-                  In Obsidian choose <b>Open folder as vault</b> and pick the new <Code>Warren memory</Code> folder. Then open <b>Settings → Community plugins → Browse</b>, install <b>Git</b> (by Vinzent03) and turn it on.
+                  In Obsidian choose <b>Open folder as vault</b> and pick the new <Code>Wisp memory</Code> folder. Then open <b>Settings → Community plugins → Browse</b>, install <b>Git</b> (by Vinzent03) and turn it on.
                 </li>
                 <li>
                   In the Git plugin's settings set <b>Auto pull interval</b> and <b>Auto commit-and-sync interval</b> (called "Vault backup interval" in older versions) to a few minutes, and turn on <b>Pull on startup</b>. From then on it brings in what agents and others wrote, and sends what you write.
                 </li>
               </ol>
               <ul className="list-disc pl-5 space-y-1.5 text-sm text-muted marker:text-faint">
-                <li>Your changes show up in Warren under your name, in Activity.</li>
-                <li>Warren checks every change against the same rules as the app. If you edit a note you're not allowed to edit, the sync is refused and the plugin says so; undo that edit and sync again.</li>
+                <li>Your changes show up in Wisp under your name, in Activity.</li>
+                <li>Wisp checks every change against the same rules as the app. If you edit a note you're not allowed to edit, the sync is refused and the plugin says so; undo that edit and sync again.</li>
                 <li>If you and an agent changed the same note, the plugin shows a merge conflict the way any git project does. Keep the text you want and sync again.</li>
                 <li>Obsidian's own settings and plugins (the <Code>.obsidian</Code> folder) stay on your computer and are never synced.</li>
                 <li>Syncing hands over all of memory, history included, so it's only for people who are allowed to read every note. Revoke a token below the moment a computer is lost.</li>
@@ -255,7 +255,7 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
               ))}
             </Card>
             <p className="mt-2 text-xs text-muted">
-              Sync with the <Pill>{storage.sync.branch ?? "main"}</Pill> branch. Tokens work only for syncing memory, not for signing in to Warren.
+              Sync with the <Pill>{storage.sync.branch ?? "main"}</Pill> branch. Tokens work only for syncing memory, not for signing in to Wisp.
             </p>
           </div>
         )}

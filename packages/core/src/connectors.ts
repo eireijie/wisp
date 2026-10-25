@@ -61,8 +61,8 @@ export function connectorSlug(name: string): string {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
-  // "warren" and "browser" are the servers Warren itself gives every agent
-  return !s ? "connector" : s === "warren" || s === "browser" ? `${s}-2` : s;
+  // "wisp" and "browser" are the servers Wisp itself gives every agent
+  return !s ? "connector" : s === "wisp" || s === "browser" ? `${s}-2` : s;
 }
 
 /** Replace `{{KEY}}` with the connector's own values (unknown keys are left as they are). */
@@ -70,7 +70,7 @@ export function fillTemplate(s: string, env: Record<string, string>): string {
   return s.replace(/\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (m, k: string) => env[k] ?? m);
 }
 
-/** How a harness talks to Warren: from the harness list, "acp" for acp:<name> ones, else "mcp". */
+/** How a harness talks to Wisp: from the harness list, "acp" for acp:<name> ones, else "mcp". */
 function harnessProtocol(harnessId: string): "native" | "acp" | "mcp" {
   return harnessInfo(harnessId)?.protocol ?? (harnessId.startsWith("acp:") ? "acp" : "mcp");
 }
@@ -90,17 +90,10 @@ export function harnessSupportsConnectors(harnessId: string, kind: ConnectorKind
 export function connectorUnsupportedReason(harnessId: string, kind: ConnectorKind = "mcp-http"): string | null {
   if (harnessSupportsConnectors(harnessId, kind)) return null;
   const label = harnessLabel(harnessId);
-  return harnessProtocol(harnessId) === "mcp" ? `${label} connects through warren-mcp, so it can't use connected apps here` : `${label} can't use connected apps yet`;
+  return harnessProtocol(harnessId) === "mcp" ? `${label} connects through wisp-mcp, so it can't use connected apps here` : `${label} can't use connected apps yet`;
 }
 
 export const CONNECTOR_HELP = "Pick a helper that can use connected apps, or make one with Claude Code or Codex.";
-
-/** Harnesses each kind of connector reaches today (see docs/adapters.md). */
-export function connectorWorksWith(kind: ConnectorKind): string[] {
-  const out = ["claude-code", "codex"];
-  if (harnessSupportsConnectors("acp:any", kind)) out.push("acp");
-  return out;
-}
 
 /** One value a catalog connector asks for. */
 export interface CatalogField {
@@ -307,7 +300,7 @@ export const CONNECTOR_CATALOG: CatalogConnector[] = [
   {
     id: "memory",
     name: "Knowledge graph",
-    description: "A small graph memory of people, things and how they relate. (Warren's vault is the shared memory; this is extra.)",
+    description: "A small graph memory of people, things and how they relate. (Wisp's vault is the shared memory; this is extra.)",
     icon: "Network",
     category: "Data",
     kind: "mcp-stdio",
@@ -452,51 +445,12 @@ export function catalogConnector(id: string): CatalogConnector | undefined {
 export interface EverydayApp {
   name: string;
   aliases: string[];
-  /** built-in catalog id when Warren's catalog has it, else connected through Zapier */
+  /** built-in catalog id when Wisp's catalog has it, else connected through Zapier */
   catalogId: string | null;
   /** one plain line: what the helper will be able to do */
   does: string;
   /** what account is needed */
   account: string;
-}
-
-const viaZapier = (google = false) => `A Zapier account${google ? ", and your Google account (you sign in to Zapier, then pick the app there)" : " and an account with the app (you sign in to Zapier, then pick the app there)"}.`;
-
-export const EVERYDAY_APPS: EverydayApp[] = [
-  { name: "Slack", aliases: ["slack"], catalogId: "slack", does: "Your helper can read channels and threads, and post messages and replies, as a Slack bot.", account: "A Slack bot token and your workspace's Team ID, from Slack's app settings." },
-  { name: "Notion", aliases: ["notion"], catalogId: "notion", does: "Your helper can search, read and write your Notion pages and databases.", account: "A Notion integration token, with the pages you want shared with it." },
-  { name: "Google Drive", aliases: ["drive", "gdrive", "google drive"], catalogId: "gdrive", does: "Your helper can search and read files in your Google Drive; Docs and Sheets are read as text.", account: "Your Google account, plus a one-time setup on the helper's computer." },
-  { name: "Gmail", aliases: ["gmail", "google mail"], catalogId: null, does: "Your helper can search, read and draft emails in your Gmail.", account: "A Zapier account, and your Google account (you sign in to Zapier, then pick Gmail there)." },
-  { name: "Google Calendar", aliases: ["calendar", "google calendar", "gcal"], catalogId: null, does: "Your helper can look at your Google Calendar and add or change events.", account: viaZapier(true) },
-  { name: "Google Sheets", aliases: ["sheets", "spreadsheet", "google sheets", "gsheets"], catalogId: null, does: "Your helper can read rows from your Google Sheets and add or update them.", account: viaZapier(true) },
-  { name: "Google Docs", aliases: ["docs", "google docs", "gdocs"], catalogId: null, does: "Your helper can read and create documents in your Google Docs.", account: viaZapier(true) },
-  { name: "Outlook", aliases: ["outlook", "microsoft outlook", "hotmail"], catalogId: null, does: "Your helper can read and draft emails and handle events in your Outlook.", account: viaZapier() },
-  { name: "Todoist", aliases: ["todoist"], catalogId: null, does: "Your helper can add, look up and complete tasks in your Todoist.", account: viaZapier() },
-  { name: "Trello", aliases: ["trello"], catalogId: null, does: "Your helper can look at your Trello boards and add or move cards.", account: viaZapier() },
-  { name: "Asana", aliases: ["asana"], catalogId: null, does: "Your helper can look up, create and update tasks in your Asana.", account: viaZapier() },
-  { name: "Dropbox", aliases: ["dropbox"], catalogId: null, does: "Your helper can find files in your Dropbox and add new ones.", account: viaZapier() },
-  { name: "Airtable", aliases: ["airtable"], catalogId: null, does: "Your helper can read and add records in your Airtable bases.", account: viaZapier() },
-  { name: "Calendly", aliases: ["calendly"], catalogId: null, does: "Your helper can see your Calendly bookings and event types.", account: viaZapier() },
-];
-
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-/** The everyday app a search word means ("gmail inbox", "google cal", "calendar"), or null. */
-export function everydayAppFor(query: string): EverydayApp | null {
-  const q = norm(query);
-  if (q.length < 3) return null;
-  let best: { tier: number; app: EverydayApp } | null = null;
-  for (const app of EVERYDAY_APPS) {
-    let tier = 9;
-    for (const c of [app.name, ...app.aliases].map(norm)) {
-      if (c === q) tier = Math.min(tier, 0);
-      else if (c.startsWith(q)) tier = Math.min(tier, 1);
-      else if (new RegExp(`(^| )${escapeRe(c)}( |$)`).test(q)) tier = Math.min(tier, 2);
-    }
-    if (tier < 9 && (!best || tier < best.tier)) best = { tier, app };
-  }
-  return best?.app ?? null;
 }
 
 /** Catalog ids of the everyday apps, in the order a non-technical person would want them. */

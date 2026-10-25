@@ -13,7 +13,7 @@ const write = (rel: string, text: string) => {
 const skill = (name: string, description: string) => `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`;
 
 beforeEach(() => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-shelf-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-shelf-"));
 });
 afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 

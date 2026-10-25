@@ -1,9 +1,9 @@
-import { FEATURE_KEYS, resolveFeatures, type FeatureKey, type Features } from "@warren/core";
+import { FEATURE_KEYS, resolveFeatures, type FeatureKey, type Features } from "@wisp/core";
 import type { Store } from "./store.ts";
 
 const KEY = "features";
 
-/** The organization's optional features (Settings → Features). Organizations from before Features have everything on. */
+/** The organization's optional features (Settings → General → Mods). Organizations from before Features have everything on. */
 export function workspaceFeatures(store: Store, workspaceId: string): Features {
   let stored: Partial<Features> | null = null;
   try {

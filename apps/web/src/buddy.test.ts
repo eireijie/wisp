@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Message } from "@warren/core";
+import type { Message } from "@wisp/core";
 import { buddyNotice, buddyNoticeWithRoot } from "./buddy.ts";
 
 const state = {

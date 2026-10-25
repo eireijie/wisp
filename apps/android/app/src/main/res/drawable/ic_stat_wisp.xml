@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- a simple ghost: the status-bar icon is a single-colour shape -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2C7.6,2 4,5.6 4,10v10.5c0,0.8 0.9,1.2 1.5,0.7l1.7,-1.5l1.8,1.6c0.6,0.5 1.4,0.5 2,0l1,-0.9l1,0.9c0.6,0.5 1.4,0.5 2,0l1.8,-1.6l1.7,1.5c0.6,0.5 1.5,0.1 1.5,-0.7V10C20,5.6 16.4,2 12,2zM9,11.5c-0.8,0 -1.5,-0.7 -1.5,-1.5S8.2,8.5 9,8.5S10.5,9.2 10.5,10S9.8,11.5 9,11.5zM15,11.5c-0.8,0 -1.5,-0.7 -1.5,-1.5s0.7,-1.5 1.5,-1.5s1.5,0.7 1.5,1.5S15.8,11.5 15,11.5z" />
+</vector>

@@ -9,14 +9,14 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  /** what agents call them ("Yug"); null = their name */
+  /** what agents call them ("Alex"); null = their name */
   preferredName: string | null;
   /** IANA time zone, e.g. "America/New_York"; agents see their local time, routines run in it */
   timezone: string | null;
   createdAt: string;
 }
 
-/** How Warren behaves for one person, on every device they use. */
+/** How Wisp behaves for one person, on every device they use. */
 export interface UserPrefs {
   /** Enter sends (Shift+Enter for a new line), or ⌘/Ctrl+Enter sends */
   sendWith?: "enter" | "mod-enter";
@@ -25,7 +25,7 @@ export interface UserPrefs {
   /** the tools an agent used for a reply: a collapsed line, open, or not shown */
   toolCalls?: "collapsed" | "expanded" | "hidden";
   /**
-   * How much of Warren to show. "simple" keeps advanced setup (teams, harness details, VM sizing,
+   * How much of Wisp to show. "simple" keeps advanced setup (teams, harness details, VM sizing,
    * tokens, raw files) behind "Advanced" disclosures or out of the way; "advanced" shows everything.
    * Chosen during onboarding; unset means advanced, so existing accounts see no change.
    */
@@ -33,8 +33,8 @@ export interface UserPrefs {
 }
 
 /**
- * What a device does for agents, picked by its owner: run their computers (VMs), lend them its own
- * screen, or neither (agents there run headless). Null until someone picks.
+ * What a device does for agents, picked by its owner: run their computers (VMs), let agents that
+ * run on it use its own screen, or neither (agents there run headless). Null until someone picks.
  */
 export type DeviceRole = "vms" | "screen" | "headless";
 
@@ -292,7 +292,7 @@ export type MessagePart =
   | { type: "tool_call"; name: string; input: unknown; output?: unknown }
   | { type: "file"; fileId: string; name: string }
   | { type: "status"; text: string }
-  /** a quiet line from Warren, e.g. "Round 2 of 3" */
+  /** a quiet line from Wisp, e.g. "Round 2 of 3" */
   | { type: "notice"; text: string }
   /** this message starts a discussion; its thread is where it happens */
   | { type: "discussion"; discussionId: string }
@@ -325,8 +325,6 @@ export interface Approval {
   note: string;
   createdAt: string;
   decidedAt: string | null;
-  /** set when the agent is asking to borrow a device's screen: only that device's owner can decide, and picks how long */
-  loan?: import("./computers.ts").DeviceLoanRequest | null;
 }
 
 /**

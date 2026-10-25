@@ -8,7 +8,7 @@ import { acpAdapter, acpModels, deviceAdapters, parseAcpUpdate, permissionOutcom
 const FAKE = fileURLToPath(new URL("./fake-acp-agent.mjs", import.meta.url));
 
 function setup(mode?: string) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-acp-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-acp-test-"));
   const logFile = path.join(dir, "log.jsonl");
   const adapter = acpAdapter({ id: "fake", label: "Fake", binary: process.execPath, args: [FAKE] });
   const env = { FAKE_ACP_LOG: logFile, ...(mode ? { FAKE_ACP_MODE: mode } : {}) };
@@ -23,23 +23,23 @@ function setup(mode?: string) {
   return { dir, adapter, env, received };
 }
 
-const mcp = { command: "node", args: ["warren-mcp.mjs"], env: { WARREN_URL: "http://hub", WARREN_TOKEN: "t", WARREN_AGENT: "a1" } };
+const mcp = { command: "node", args: ["wisp-mcp.mjs"], env: { WISP_URL: "http://hub", WISP_TOKEN: "t", WISP_AGENT: "a1" } };
 
 describe("ACP adapter", () => {
-  it("runs a prompt: starts a session with Warren's tools, streams tool calls and text, answers permissions", async () => {
+  it("runs a prompt: starts a session with Wisp's tools, streams tool calls and text, answers permissions", async () => {
     const { dir, adapter, env, received } = setup();
     const events: AdapterEvent[] = [];
     const res = await adapter.run({ prompt: "hi there", cwd: dir, env, mcp, model: "m2", access: "full" }, (e) => events.push(e));
     expect(res).toEqual({ finalText: "Hello world (8 chars)", sessionId: "sess-1" });
     expect(events).toContainEqual({ type: "session", id: "sess-1" });
-    expect(events).toContainEqual({ type: "tool_call", name: "warren.memory_search", input: { query: "launch" } });
-    expect(events).toContainEqual({ type: "tool_result", name: "warren.memory_search", output: "found 2 notes" });
+    expect(events).toContainEqual({ type: "tool_call", name: "wisp.memory_search", input: { query: "launch" } });
+    expect(events).toContainEqual({ type: "tool_result", name: "wisp.memory_search", output: "found 2 notes" });
     expect(events).toContainEqual({ type: "tool_result", name: "execute: rm -rf build", output: "removed" });
 
     const msgs = received();
     const newSession = msgs.find((m) => m.method === "session/new");
     expect(newSession.params.cwd).toBe(dir);
-    expect(newSession.params.mcpServers).toEqual([{ name: "warren", command: "node", args: ["warren-mcp.mjs"], env: [{ name: "WARREN_URL", value: "http://hub" }, { name: "WARREN_TOKEN", value: "t" }, { name: "WARREN_AGENT", value: "a1" }] }]);
+    expect(newSession.params.mcpServers).toEqual([{ name: "wisp", command: "node", args: ["wisp-mcp.mjs"], env: [{ name: "WISP_URL", value: "http://hub" }, { name: "WISP_TOKEN", value: "t" }, { name: "WISP_AGENT", value: "a1" }] }]);
     expect(msgs.find((m) => m.method === "session/set_model").params).toEqual({ sessionId: "sess-1", modelId: "m2" });
     // full access switches the agent to its no-approvals mode
     expect(msgs.find((m) => m.method === "session/set_mode").params).toEqual({ sessionId: "sess-1", modeId: "yolo" });
@@ -68,7 +68,7 @@ describe("ACP adapter", () => {
     const events: AdapterEvent[] = [];
     const res = await adapter.run({ prompt: "x", cwd: dir, env, mcp }, (e) => events.push(e));
     expect(res.finalText).toMatch(/^Hello world/);
-    expect(events.some((e) => e.type === "status" && /warren-mcp/.test(e.text))).toBe(true);
+    expect(events.some((e) => e.type === "status" && /wisp-mcp/.test(e.text))).toBe(true);
   });
 
   it("starts the copy that comes with a VM when a launcher takes it there, not the device's own command", async () => {
@@ -80,13 +80,13 @@ describe("ACP adapter", () => {
       started = l;
       return { command: process.execPath, args: [FAKE], cwd: l.cwd, env: l.env };
     };
-    const res = await adapter.run({ prompt: "hi", cwd: dir, env, launch, browser: { command: "warren-browser-mcp", args: [], env: {} } }, () => {});
+    const res = await adapter.run({ prompt: "hi", cwd: dir, env, launch, browser: { command: "wisp-browser-mcp", args: [], env: {} } }, () => {});
     expect(started).toMatchObject({ command: "fake-in-vm", args: ["acp"], cwd: dir });
     expect(res.finalText).toMatch(/^Hello world/);
   });
 
   it("reports a missing binary as an error", async () => {
-    const adapter = acpAdapter({ id: "nope", label: "Nope", binary: "warren-no-such-binary", args: [] });
+    const adapter = acpAdapter({ id: "nope", label: "Nope", binary: "wisp-no-such-binary", args: [] });
     await expect(adapter.run({ prompt: "x", cwd: os.tmpdir() }, () => {})).rejects.toThrow();
   });
 });
@@ -95,10 +95,10 @@ describe("ACP pieces", () => {
   it("maps updates", () => {
     const tools = new Map<string, string>();
     expect(parseAcpUpdate({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi" } }, tools)).toEqual([{ type: "text", text: "hi" }]);
-    expect(parseAcpUpdate({ sessionUpdate: "tool_call", toolCallId: "a", title: "mcp__warren__chat_send", kind: "other", rawInput: { channel: "general" } }, tools)).toEqual([
-      { type: "tool_call", name: "warren.chat_send", input: { channel: "general" } },
+    expect(parseAcpUpdate({ sessionUpdate: "tool_call", toolCallId: "a", title: "mcp__wisp__chat_send", kind: "other", rawInput: { channel: "general" } }, tools)).toEqual([
+      { type: "tool_call", name: "wisp.chat_send", input: { channel: "general" } },
     ]);
-    expect(parseAcpUpdate({ sessionUpdate: "tool_call_update", toolCallId: "a", status: "failed", rawOutput: "nope" }, tools)).toEqual([{ type: "tool_result", name: "warren.chat_send", output: { error: "nope" } }]);
+    expect(parseAcpUpdate({ sessionUpdate: "tool_call_update", toolCallId: "a", status: "failed", rawOutput: "nope" }, tools)).toEqual([{ type: "tool_result", name: "wisp.chat_send", output: { error: "nope" } }]);
     expect(parseAcpUpdate({ sessionUpdate: "plan", entries: [{ content: "Read the docs", status: "completed" }, { content: "Write the summary", status: "in_progress" }] })).toEqual([{ type: "status", text: "Write the summary" }]);
     expect(parseAcpUpdate({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "hmm" } })).toEqual([]);
   });

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { RegistryServer } from "@warren/core";
+import type { RegistryServer } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 
@@ -29,7 +29,7 @@ async function api<T = any>(method: string, url: string, body?: unknown, token: 
 const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200 });
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-shop-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-shop-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
@@ -148,7 +148,7 @@ describe("what your devices already have", () => {
     expect((await api("GET", "/api/shelf", undefined, other)).data).toEqual([]);
   });
 
-  it("brings a device's skill into Warren and shares it with agents", async () => {
+  it("brings a device's skill into Wisp and shares it with agents", async () => {
     const asked: unknown[] = [];
     const real = hub.computers.nodeRequest.bind(hub.computers);
     hub.computers.nodeRequest = async (id, build) => {

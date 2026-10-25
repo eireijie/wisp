@@ -32,7 +32,7 @@ describe("push categories", () => {
   });
 
   it.each(["dms", "replies", "approvals", "help", "tasks"] as const)("resends the subscription when %s changes while push is on", async (key) => {
-    localStorage.setItem("warren.push", "1");
+    localStorage.setItem("wisp.push", "1");
     notifications.setNotifyPrefs({ [key]: false });
     await vi.waitFor(() => expectSubscription({ ...defaults, [key]: false }));
     expect(getSubscription).toHaveBeenCalledOnce();
@@ -46,7 +46,7 @@ describe("push categories", () => {
     notifications.setNotifyPrefs({ dms: false });
     await Promise.resolve();
     expect(getSubscription).not.toHaveBeenCalled();
-    localStorage.setItem("warren.push", "1");
+    localStorage.setItem("wisp.push", "1");
     vi.mocked(api).mockRejectedValue(new Error("Offline"));
     notifications.setNotifyPrefs({ dms: true });
     await vi.waitFor(() => expect(api).toHaveBeenCalledOnce());
@@ -56,7 +56,7 @@ describe("push categories", () => {
 
 describe("startup push reconciliation", () => {
   it("clears a stale flag during notification initialization when the subscription is gone", async () => {
-    localStorage.setItem("warren.push", "1");
+    localStorage.setItem("wisp.push", "1");
     getSubscription.mockResolvedValue(null);
     notifications.primeTasks();
     await vi.waitFor(() => expect(push.pushOnHere()).toBe(false));
@@ -64,14 +64,14 @@ describe("startup push reconciliation", () => {
   });
 
   it.each(["denied", "default"])("clears the flag when notification permission is %s", async (permission) => {
-    localStorage.setItem("warren.push", "1");
+    localStorage.setItem("wisp.push", "1");
     vi.stubGlobal("Notification", { permission });
     await push.reconcilePush();
     expect(push.pushOnHere()).toBe(false);
   });
 
   it("keeps the flag for a live, permitted subscription", async () => {
-    localStorage.setItem("warren.push", "1");
+    localStorage.setItem("wisp.push", "1");
     await push.reconcilePush();
     expect(push.pushOnHere()).toBe(true);
   });

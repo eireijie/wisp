@@ -4,7 +4,7 @@ import { unified } from "@astrojs/markdown-remark";
 import rehypeDocLinks from "./src/lib/rehype-doc-links.mjs";
 
 // The site's public address. The domain isn't chosen yet: change it here, and only here.
-export const SITE_URL = "https://warren.example";
+export const SITE_URL = "https://wisp-app.pages.dev";
 
 export default defineConfig({
   site: SITE_URL,

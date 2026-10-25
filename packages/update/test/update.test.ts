@@ -33,7 +33,7 @@ function publish(files: Record<string, string>, message: string) {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-update-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-update-"));
   const origin = path.join(dir, "origin.git");
   upstream = path.join(dir, "upstream");
   install = path.join(dir, "install");
@@ -86,7 +86,7 @@ describe("runUpdate", () => {
     expect(r).toMatchObject({ from: before, installed: false, built: false });
     expect(r.to).toBe(git(upstream, "rev-parse", "--short", "HEAD"));
     expect(npm).toEqual([]);
-    expect(fs.readFileSync(path.join(install, ".warren-updated"), "utf8").trim()).toBe(r.to);
+    expect(fs.readFileSync(path.join(install, ".wisp-updated"), "utf8").trim()).toBe(r.to);
   });
 
   it("installs dependencies, and rebuilds the web app on a hub", async () => {
@@ -108,17 +108,27 @@ describe("runUpdate", () => {
     npmFails = true;
     await expect(runUpdate(install, { runner })).rejects.toThrow(/went back to/);
     expect(git(install, "rev-parse", "HEAD")).toBe(before);
-    expect(fs.existsSync(path.join(install, ".warren-updated"))).toBe(false);
+    expect(fs.existsSync(path.join(install, ".wisp-updated"))).toBe(false);
   });
 
   it("does nothing when already up to date", async () => {
     const r = await runUpdate(install, { runner });
     expect(r.from).toBe(r.to);
-    expect(fs.existsSync(path.join(install, ".warren-updated"))).toBe(false);
+    expect(fs.existsSync(path.join(install, ".wisp-updated"))).toBe(false);
   });
 });
 
 describe("watchForUpdates", () => {
+  it("also reads the legacy marker and fires only once across both names", async () => {
+    let calls = 0;
+    const stop = watchForUpdates(() => calls++, install, 20);
+    fs.writeFileSync(path.join(install, ".warren-updated"), "old updater");
+    await new Promise((r) => setTimeout(r, 100));
+    fs.writeFileSync(path.join(install, ".wisp-updated"), "new updater");
+    await new Promise((r) => setTimeout(r, 100));
+    stop();
+    expect(calls).toBe(1);
+  });
   it("fires once when this checkout is updated", async () => {
     let calls = 0;
     const stop = watchForUpdates(() => calls++, install, 20);

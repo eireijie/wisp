@@ -59,7 +59,7 @@ class Provider implements OAuthClientProvider {
   }
 
   get clientMetadata(): OAuthClientMetadata {
-    return { client_name: "Warren", redirect_uris: [this.redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" };
+    return { client_name: "Wisp", redirect_uris: [this.redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" };
   }
 
   state() {
@@ -135,7 +135,7 @@ export class ConnectorAuth {
       const res = await this.fetchFn(url, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "warren", version: "0.1" } } }),
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "wisp", version: "0.1" } } }),
         signal: AbortSignal.timeout(15_000),
       });
       required = res.status === 401;

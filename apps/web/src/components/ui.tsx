@@ -2,8 +2,8 @@ import { shareOrigin, useAccess } from "../access.ts";
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { HARNESSES, type Agent } from "@warren/core";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { type Agent } from "@wisp/core";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost, type GhostMood } from "./Ghost.tsx";
 import { useStore } from "../store.ts";
 import { agentMood } from "../ghostMood.ts";
@@ -109,10 +109,7 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
   );
 }
 
-/** Harness names; device-declared ACP agents ("acp:my-bot") show their own name. */
-export const HARNESS_LABELS: Record<string, string> = new Proxy(Object.fromEntries(HARNESSES.map((h) => [h.id, h.label])), {
-  get: (t, k: string) => t[k] ?? (typeof k === "string" && k.startsWith("acp:") ? k.slice(4) : k),
-});
+export { harnessLabel } from "@wisp/core";
 
 type AgentLike = { name: string; handle?: string; settings?: Agent["settings"] };
 
@@ -217,7 +214,7 @@ export function StatusChip({ status }: { status: Agent["status"] }) {
   );
 }
 
-/** Warren's mark: a ghost outline. `draw` animates it drawing itself (the loading state). */
+/** Wisp's mark: a ghost outline. `draw` animates it drawing itself (the loading state). */
 export function GhostMark({ size = 20, draw, className }: { size?: number; draw?: boolean; className?: string }) {
   return (
     <svg viewBox="22 10 76 104" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={draw ? 4.5 : 9} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -426,9 +423,9 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
 }
 
 /**
- * The one-line command that installs Warren on a device and connects it, served by this hub
+ * The one-line command that installs Wisp on a device and connects it, served by this hub
  * (GET /install.sh, /install.ps1), with a tab per OS and the manual command for a device that
- * already has Warren.
+ * already has Wisp.
  */
 export function DeviceInstall({ token, name }: { token: string; name: string }) {
   const windowsGuess = /Windows/.test(navigator.userAgent);
@@ -440,12 +437,12 @@ export function DeviceInstall({ token, name }: { token: string; name: string }) 
   const commands = {
     unix: `curl -fsSL ${hub}/install.sh | bash -s -- --hub ${hub} --token ${token} --name ${sh(name)}`,
     windows: `& ([scriptblock]::Create((irm ${hub}/install.ps1))) -Hub ${hub} -Token ${token} -Name ${pwsh(name)}`,
-    manual: `warren node start --hub ${hub} --token ${token} --name ${sh(name)}`,
+    manual: `wisp node start --hub ${hub} --token ${token} --name ${sh(name)}`,
   };
   const tabs = [
     ["unix", "Mac or Linux"],
     ["windows", "Windows"],
-    ["manual", "Warren already installed"],
+    ["manual", "Wisp already installed"],
   ] as const;
   return (
     <div className="space-y-2">
@@ -463,9 +460,9 @@ export function DeviceInstall({ token, name }: { token: string; name: string }) 
       </div>
       <CopyBlock text={commands[os]} />
       <p className="text-xs text-muted">
-        {os === "unix" && "In Terminal. It installs Warren in ~/warren (it needs git and Node 22+, and offers Node with Homebrew on a Mac), checks for a VM engine, and keeps the device connected from then on."}
-        {os === "windows" && "In PowerShell. It installs Warren in your home folder (offering git and Node with winget) and keeps the device connected whenever you're signed in."}
-        {os === "manual" && "Inside the Warren folder on that device. It stays connected until you close the terminal; `warren service install node` keeps it running."}
+        {os === "unix" && "In Terminal. It installs Wisp in ~/wisp (it needs git and Node 22+, and offers Node with Homebrew on a Mac), checks for a VM engine, and keeps the device connected from then on."}
+        {os === "windows" && "In PowerShell. It installs Wisp in your home folder (offering git and Node with winget) and keeps the device connected whenever you're signed in."}
+        {os === "manual" && "Inside the Wisp folder on that device. It stays connected until you close the terminal; `wisp service install node` keeps it running."}
       </p>
     </div>
   );

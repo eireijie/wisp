@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { HarnessAdapter, RunInput } from "@warren/adapters";
-import type { ClientEvent } from "@warren/core";
-import { WarrenClient } from "@warren/sdk";
+import type { HarnessAdapter, RunInput } from "@wisp/adapters";
+import type { ClientEvent } from "@wisp/core";
+import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
@@ -13,7 +13,7 @@ let dir: string;
 let url: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon | undefined;
-let owner: WarrenClient;
+let owner: WispClient;
 let hub: Hub;
 let agentId: string;
 let nodeToken: string;
@@ -42,7 +42,7 @@ const waitFor = async <T>(fn: () => Promise<T | undefined> | T | undefined, ms =
 };
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-waiting-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-waiting-"));
   const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
   hub = built.hub;
   const broadcast = hub.broadcast.bind(hub);
@@ -54,7 +54,7 @@ beforeAll(async () => {
   url = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
-  owner = new WarrenClient({ url, token: setup.token });
+  owner = new WispClient({ url, token: setup.token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeToken = token;
   agentId = (await owner.request("POST", "/api/agents", { handle: "dot", name: "Dot", harness: "custom", nodeId: node.id })).id;

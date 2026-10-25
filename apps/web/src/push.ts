@@ -2,11 +2,12 @@ import { api } from "./api.ts";
 import { getNotifyPrefs } from "./notifications.ts";
 
 /**
- * Web push for this device: the hub sends to it while Warren is closed (an agent writing to you,
+ * Web push for this device: the hub sends to it while Wisp is closed (an agent writing to you,
  * or asking for your OK). Needs the service worker, so it works in the installed app on iPhone and
  * in desktop browsers served over HTTPS (or localhost).
  */
-export const pushSupported = () => typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+// (The desktop app has no push service; its window stays loaded in the menu bar and shows notifications itself.)
+export const pushSupported = () => typeof window !== "undefined" && !window.wispDesktop && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
 async function registration() {
   if (!pushSupported()) return null;
@@ -24,7 +25,7 @@ const toBytes = (base64url: string) => {
   return Uint8Array.from(s, (c) => c.charCodeAt(0));
 };
 
-const KEY = "warren.push";
+const KEY = "wisp.push";
 /** whether this device gets push, so the page doesn't also show its own notification */
 export const pushOnHere = () => {
   try {
@@ -64,11 +65,11 @@ export async function syncPushPrefs() {
 
 /** Ask the browser (it must follow a tap or click), subscribe, and tell the hub. */
 export async function enablePush(): Promise<{ ok: true } | { ok: false; reason: string }> {
-  if (!pushSupported()) return { ok: false, reason: /iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add Warren to your Home Screen (Share → Add to Home Screen) and open it from there first." : "This browser can't receive push notifications." };
+  if (!pushSupported()) return { ok: false, reason: /iPhone|iPad/.test(navigator.userAgent) ? "On iPhone, add Wisp to your Home Screen (Share → Add to Home Screen) and open it from there first." : "This browser can't receive push notifications." };
   const reg = await registration();
-  if (!reg) return { ok: false, reason: "Warren's app isn't installed in this browser yet. Reload the page and try again." };
+  if (!reg) return { ok: false, reason: "Wisp's app isn't installed in this browser yet. Reload the page and try again." };
   const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
-  if (permission !== "granted") return { ok: false, reason: "Notifications are blocked for Warren in this browser's settings." };
+  if (permission !== "granted") return { ok: false, reason: "Notifications are blocked for Wisp in this browser's settings." };
   const { publicKey } = await api<{ publicKey: string }>("GET", "/api/push/key");
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: toBytes(publicKey) }));
   await subscribe(sub);

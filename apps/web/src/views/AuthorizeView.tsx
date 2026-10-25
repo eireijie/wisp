@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { AgentAvatar, Button, GhostMark, Input, cx } from "../components/ui.tsx";
 

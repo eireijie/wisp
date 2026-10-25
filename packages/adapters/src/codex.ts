@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@warren/core";
+import type { AccessLevel, AgentEvent, HarnessCatalog, ModelOption } from "@wisp/core";
 import type { AdapterEvent, HarnessAdapter, RunInput, RunResult } from "./types.ts";
 import { codexCommands } from "./commands.ts";
 import { commandVersion, execCommand, launched, runJsonl } from "./process.ts";
@@ -33,7 +33,7 @@ export function codexMcpConfig(input: RunInput): { overrides: string[]; env: Rec
     if (Object.keys(inline).length) set(`${key}.env`, tomlTable(inline));
   };
   const servers: [string, { command: string; args: string[]; env?: Record<string, string> }][] = [];
-  if (input.mcp) servers.push(["warren", input.mcp]);
+  if (input.mcp) servers.push(["wisp", input.mcp]);
   if (input.browser) servers.push(["browser", input.browser]);
   for (const [name, spec] of servers) {
     const key = `mcp_servers.${name}`;
@@ -44,7 +44,7 @@ export function codexMcpConfig(input: RunInput): { overrides: string[]; env: Rec
     set(`${key}.default_tools_approval_mode`, `"approve"`);
   }
   for (const c of input.connectors ?? []) {
-    if (c.name === "warren" || c.name === "browser" || c.kind === "secret") continue;
+    if (c.name === "wisp" || c.name === "browser" || c.kind === "secret") continue;
     const key = `mcp_servers.${tomlKey(c.name)}`;
     if (c.kind === "mcp-stdio") {
       set(`${key}.command`, tomlString(c.command ?? ""));
@@ -55,7 +55,7 @@ export function codexMcpConfig(input: RunInput): { overrides: string[]; env: Rec
       // each header's value lives in a variable named after the connector and header
       const headers = Object.entries(c.headers ?? {});
       if (headers.length) {
-        const byVar = Object.fromEntries(headers.map(([h, v]) => [`WARREN_HEADER_${(c.name + "_" + h).toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`, v]));
+        const byVar = Object.fromEntries(headers.map(([h, v]) => [`WISP_HEADER_${(c.name + "_" + h).toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`, v]));
         Object.assign(env, byVar);
         set(`${key}.env_http_headers`, `{${headers.map(([h], i) => `${tomlKey(h)}=${tomlString(Object.keys(byVar)[i])}`).join(",")}}`);
       }
@@ -82,7 +82,7 @@ export function codexEnv(input: RunInput): Record<string, string> {
   return { ...input.env, ...codexMcpConfig(input).env };
 }
 
-/** Turn `codex debug models` output into Warren model options (listed models only). Exported for tests. */
+/** Turn `codex debug models` output into Wisp model options (listed models only). Exported for tests. */
 export function parseCodexCatalog(raw: string): ModelOption[] {
   const data = JSON.parse(raw);
   const models: any[] = Array.isArray(data) ? data : (data.models ?? []);
@@ -234,7 +234,7 @@ export const codex: HarnessAdapter = {
   },
 };
 
-/** Translate one `codex exec --json` event into Warren events. Exported for tests. */
+/** Translate one `codex exec --json` event into Wisp events. Exported for tests. */
 export function parseCodexLine(m: any): AdapterEvent[] {
   switch (m.type) {
     case "thread.started":

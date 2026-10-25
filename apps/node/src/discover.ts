@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { DiscoveredAgent } from "@warren/core";
+import type { DiscoveredAgent } from "@wisp/core";
 
 /**
  * Agents that already live on this device: Hermes profiles, OpenClaw workspaces, Claude Code
- * subagents and OpenCode agents. People can bring them into Warren with their soul,
+ * subagents and OpenCode agents. People can bring them into Wisp with their soul,
  * instructions and notes. The list carries only names and counts; contents are read when
  * someone imports one.
  */

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, ArrowLeft, ArrowRight, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
-import { teamProblem, type Agent, type ChannelNotify, type ChannelSettings as AgentRules, type ChannelTeam, type Section } from "@warren/core";
+import { teamProblem, type Agent, type ChannelNotify, type ChannelSettings as AgentRules, type ChannelTeam, type Section } from "@wisp/core";
 import { CreateAgent } from "../views/CreateAgent.tsx";
 import { useDevices } from "../devices.ts";
 import { EMPTY_TEAM, TeamChart, TeamRules, addToTeam, liveTeam } from "./TeamChart.tsx";
@@ -708,7 +708,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
       <p className="text-sm text-muted">
         {saved.nodes.length
           ? `The leads read every new message in #${channel.name} and hand out the work along the arrows.`
-          : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Rules) answer here. Build one: drag agents onto the chart and make one of them a lead.`}
+          : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Build one: drag agents onto the chart and make one of them a lead.`}
       </p>
       <TeamChart team={team} onChange={canManage ? onChange : undefined} readOnly={!canManage} working={working} onCreateAgent={canManage ? onCreateAgent : undefined} />
       <details className="rounded-xl bg-bg px-3.5 py-2.5">
@@ -876,8 +876,8 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
 }
 
 interface PinRow {
-  message: import("@warren/core").Message;
-  pinnedBy: import("@warren/core").Actor;
+  message: import("@wisp/core").Message;
+  pinnedBy: import("@wisp/core").Actor;
   pinnedAt: string;
 }
 
@@ -897,7 +897,7 @@ function ChannelPins({ channel, onClose }: { channel: ChannelInfo; onClose: () =
       live = false;
     };
   }, [channel.id, key]);
-  const who = (a: import("@warren/core").Actor) => (a.kind === "agent" ? names.agent(a.id)?.name : names.member(a.id)?.name) ?? "Someone";
+  const who = (a: import("@wisp/core").Actor) => (a.kind === "agent" ? names.agent(a.id)?.name : names.member(a.id)?.name) ?? "Someone";
   if (error) return <p className="text-sm text-bad">{error}</p>;
   if (!pins) return <p className="text-sm text-muted py-6 text-center">Loading pins…</p>;
   if (!pins.length)

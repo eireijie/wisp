@@ -1,6 +1,7 @@
 // Native shell for the web app's real Ghost. The renderer uses the existing hub stream.
 const { BrowserWindow, ipcMain, screen } = require("electron");
 const path = require("node:path");
+const { mainFrameUrl, onOrigin } = require("./trust.cjs");
 
 module.exports = function deskBuddy({ config, save, mainWindow, open, refresh }) {
   let win = null;
@@ -15,10 +16,7 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
   const agentId = () => agents.find((a) => a.id === choice())?.id ?? agents.find((a) => a.id === leadId)?.id ?? agents[0]?.id ?? null;
   const overFullscreen = () => process.platform === "darwin" && config.buddyOverFullscreen === true;
   const settings = () => ({ agentId: agentId() });
-  const trusted = (e, window) => {
-    if (!window || e.sender !== window.webContents || e.senderFrame !== e.sender.mainFrame) return false;
-    try { return new URL(e.senderFrame.url).origin === origin; } catch { return false; }
-  };
+  const trusted = (e, window) => onOrigin(mainFrameUrl(e, window), origin);
   const clamp = (bounds) => {
     const area = screen.getDisplayMatching(bounds).workArea;
     return { ...bounds, x: Math.round(Math.max(area.x, Math.min(bounds.x, area.x + area.width - bounds.width))), y: Math.round(Math.max(area.y, Math.min(bounds.y, area.y + area.height - bounds.height))) };
@@ -49,7 +47,7 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
       ...(overFullscreen() ? { type: "panel" } : {}),
       ...bounds, frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true,
       resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
-      hasShadow: false, show: false, backgroundColor: "#00000000", title: "Warren desk buddy",
+      hasShadow: false, show: false, backgroundColor: "#00000000", title: "Wisp desk buddy",
       webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: false },
     });
     win.setAlwaysOnTop(true, overFullscreen() ? "screen-saver" : "floating");

@@ -5,7 +5,7 @@ import { Input } from "./ui.tsx";
 
 /**
  * Codes people typed for their screens in this tab, so watching a screen again doesn't ask again.
- * Only in memory: a reload or another tab asks once more. The device checks them; Warren keeps none.
+ * Only in memory: a reload or another tab asks once more. The device checks them; Wisp keeps none.
  */
 const typed = new Map<string, string>();
 

@@ -4,10 +4,10 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
-import type { ComputerSpec, DeviceCapabilities, KeyCombo, Message } from "@warren/core";
+import type { ComputerSpec, DeviceCapabilities, KeyCombo, Message } from "@wisp/core";
 import { vncAuthResponse } from "../src/vnc-relay.ts";
-import type { HarnessAdapter, RunInput } from "@warren/adapters";
-import { WarrenClient } from "@warren/sdk";
+import type { HarnessAdapter, RunInput } from "@wisp/adapters";
+import { WispClient } from "@wisp/sdk";
 import { ComputerHost } from "../../node/src/computers/index.ts";
 import type { Driver, Shot } from "../../node/src/computers/driver.ts";
 import { localFiles } from "../../node/src/computers/transfer.ts";
@@ -83,15 +83,15 @@ let url: string;
 let hub: Hub;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
-let owner: WarrenClient;
-let agentApi: WarrenClient;
+let owner: WispClient;
+let agentApi: WispClient;
 let nodeId: string;
 let agentId: string;
 let rfb: net.Server;
 /** a fake Orgo websockify: wants the password as ?token=, then again as VNC authentication, then echoes */
 let websockify: WebSocketServer;
 let nodeDir: string;
-let member: WarrenClient;
+let member: WispClient;
 const orgoCalls: { method: string; url: string; body: any }[] = [];
 
 const waitFor = async <T>(fn: () => Promise<T | undefined> | T | undefined, ms = 5000): Promise<T> => {
@@ -111,7 +111,7 @@ const allMessages = async (): Promise<Message[]> => {
 };
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-computers-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-computers-"));
   // a fake VNC server: says hello like RFB, then echoes
   rfb = net.createServer((s) => {
     s.write("RFB 003.008\n");
@@ -185,12 +185,12 @@ beforeAll(async () => {
   close = () => built.app.close();
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
-  owner = new WarrenClient({ url, token: setup.token });
+  owner = new WispClient({ url, token: setup.token });
   const created = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeId = created.node.id;
   const agent = await owner.request("POST", "/api/agents", { handle: "nova", name: "Nova", harness: "custom", nodeId, settings: { respondTo: "anyone" } });
   agentId = agent.id;
-  agentApi = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${agentId}/token`)).token });
+  agentApi = new WispClient({ url, token: (await owner.request("POST", `/api/agents/${agentId}/token`)).token });
   nodeDir = path.join(dir, "node");
   daemon = new NodeDaemon({ hub: url, token: created.token, name: "box", dir: nodeDir, discoverHome: home }, () => {}, { custom: fake }, new FakeHost({ dir: nodeDir }));
   daemon.start();
@@ -219,7 +219,7 @@ describe("computers", () => {
     const vm = await owner.request("POST", "/api/computers", { kind: "vm", nodeId, name: "Nova's desk" });
     await owner.request("POST", "/api/members", { email: "m@example.com", name: "Mem", password: "password123", role: "member" });
     const memberToken = (await (await fetch(url + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "m@example.com", password: "password123" }) })).json()).token;
-    member = new WarrenClient({ url, token: memberToken });
+    member = new WispClient({ url, token: memberToken });
     // someone else's device takes VMs only once its owner shares it, and never a custom image from a member
     await expect(member.request("POST", "/api/computers", { kind: "vm", nodeId, name: "x" })).rejects.toThrow(/Me's device/);
     await owner.request("PATCH", `/api/nodes/${nodeId}`, { shared: true });
@@ -361,9 +361,9 @@ describe("computers", () => {
     expect(code).toBe(4401);
   });
 
-  it("keeps a device's own screen to its owner, and lends it to agents only for the owner's work", async () => {
-    await expect(owner.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/warren node screen on/);
-    // `warren node screen on`, at the device
+  it("keeps a device's own screen to its owner and agents that run on it, only for the owner's work", async () => {
+    await expect(owner.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/wisp node screen on/);
+    // `wisp node screen on`, at the device
     await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
     await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.ok);
     await expect(member.request("POST", "/api/computers", { kind: "device", nodeId })).rejects.toThrow(/only Me can use its screen/);
@@ -379,10 +379,8 @@ describe("computers", () => {
     await expect(member.request("PATCH", `/api/agents/${agentId}`, { computerId: screen.id })).rejects.toThrow(/only Me can change it/);
 
     const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    // nova runs on this device, so it can have the screen; an agent made by the owner works for the owner
     await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: screen.id });
-    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/isn't lent/);
-    await owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 60 });
-    // an agent connected with the owner's token works for the owner
     await agentApi.computer({ action: "screenshot" });
 
     // a member can't ask an agent that runs on someone else's device…
@@ -393,7 +391,7 @@ describe("computers", () => {
     await owner.request("PATCH", `/api/agents/${agentId}`, { settings: { anyoneCanAsk: true } });
     let refused = "";
     duringRun = async (input) => {
-      const harness = new WarrenClient({ url, token: input.mcp!.env.WARREN_TOKEN });
+      const harness = new WispClient({ url, token: input.mcp!.env.WISP_TOKEN });
       refused = await harness.computer({ action: "screenshot" }).then(() => "", (e: Error) => e.message);
     };
     const before = calls.length;
@@ -409,9 +407,7 @@ describe("computers", () => {
     duringRun = null;
 
     const log = await owner.request<any[]>("GET", `/api/computers/${screen.id}/log`);
-    expect(log.map((l) => l.text)).toEqual(expect.arrayContaining(["Looking at the screen", "Lent it to agents for 1 hour"]));
-    await owner.request("POST", `/api/computers/${screen.id}/lend`, { off: true });
-    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/isn't lent/);
+    expect(log.map((l) => l.text)).toEqual(expect.arrayContaining(["Looking at the screen"]));
     await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: vm.id, settings: { anyoneCanAsk: false } });
   });
 
@@ -472,7 +468,7 @@ describe("approvals", () => {
     const a = await agentApi.requestApproval("Delete the old drafts", "");
     await owner.request("POST", "/api/members", { email: "pat@example.com", name: "Pat", password: "password123", role: "member" });
     const login = await (await fetch(url + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "pat@example.com", password: "password123" }) })).json();
-    const pat = new WarrenClient({ url, token: login.token });
+    const pat = new WispClient({ url, token: login.token });
     // asked in the agent's DM with the owner: Pat isn't in it
     expect((await owner.request("GET", "/api/approvals?status=pending")).map((x: any) => x.id)).toContain(a.id);
     expect((await pat.request("GET", "/api/approvals?status=pending")).map((x: any) => x.id)).not.toContain(a.id);
@@ -482,158 +478,48 @@ describe("approvals", () => {
   });
 });
 
-describe("borrowing a device", () => {
-  const nodeJson = async (cfg: object) => fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify(cfg));
-  const screenOf = async () => (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "device");
-  const pushed: any[] = [];
-  let kai: WarrenClient;
+describe("a device's own screen, for agents", () => {
+  const screenOf = async () => owner.request("POST", "/api/computers", { kind: "device", nodeId });
 
-  /** the agent asks, the owner answers; returns the approval */
-  const ask = async (reason: string, minutes: number | null | "deny") => {
-    const { approvalId } = await agentApi.requestDevice("box", reason);
-    const before = calls.length;
-    const body = minutes === "deny" ? { approve: false } : { approve: true, minutes };
-    const decided = await owner.request("POST", `/api/approvals/${approvalId}/decide`, body);
-    await waitFor(() => calls.length > before);
-    return { approvalId, decided };
-  };
-
-  it("can't ask for a device whose screen is off, or that is paused", async () => {
-    await nodeJson({});
-    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.off);
-    await expect(agentApi.requestDevice("box", "enter the sales")).rejects.toThrow(/screen is off.*warren node screen on/);
-    expect(await agentApi.borrowableDevices()).toEqual([expect.objectContaining({ name: "box", owner: "Me", available: false })]);
-    await expect(agentApi.requestDevice("nope", "x")).rejects.toThrow(/no device called "nope".*"box"/);
-    await nodeJson({ shareScreen: true, paused: true });
-    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].paused);
-    await expect(agentApi.requestDevice("box", "x")).rejects.toThrow(/paused.*warren node resume/);
-    await nodeJson({ shareScreen: true });
-    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.ok && !(await owner.request<any[]>("GET", "/api/nodes"))[0].paused);
-    expect((await agentApi.borrowableDevices())[0].available).toBe(true);
-  });
-
-  it("asks the owner, who alone decides, and lends the screen to that agent only", async () => {
-    hub.push.send = async (sub, payload) => void pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(payload as string) });
-    await owner.request("POST", "/api/push/subscribe", { endpoint: "https://push.example.com/owner", keys: { p256dh: "BNcR", auth: "tBHI" } });
-    kai = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${(await owner.request("POST", "/api/agents", { handle: "kai", name: "Kai", harness: "custom", nodeId })).id}/token`)).token });
-
-    const { approvalId } = await agentApi.requestDevice("Box", "Enter today's sales in the POS app");
-    await expect(agentApi.requestDevice("box", "again")).rejects.toThrow(/already asked/);
-    // the card is in the owner's DM with the agent, and reaches their phone
-    const card = await waitFor(async () => (await allMessages()).find((m) => m.parts.some((p) => p.type === "approval" && p.approvalId === approvalId)));
-    expect(card.body).toContain("Can I use box's screen? Enter today's sales");
-    expect((await owner.channels()).find((c) => c.id === card.channelId)?.kind).toBe("dm");
-    await waitFor(() => pushed.find((p) => p.payload.title.includes("wants your OK")));
-    const pending = await owner.request("GET", `/api/approvals/${approvalId}`);
-    expect(pending.loan).toMatchObject({ deviceName: "box", reason: "Enter today's sales in the POS app" });
-
-    // nobody else can say yes: not another member, not the agent, not another agent
-    // the card is in the owner's DM, so another member doesn't even see it
-    await expect(member.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 60 })).rejects.toThrow(/not found/);
-    await expect(agentApi.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true })).rejects.toThrow();
-    await expect(kai.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true })).rejects.toThrow();
-    expect((await screenOf())?.config.loan).toBeUndefined();
-    await expect(agentApi.computer({ action: "screenshot" }, "box")).rejects.toThrow(/aren't borrowing "box"/);
-
-    const before = calls.length;
-    const decided = await owner.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 15, note: "Back by 4." });
-    expect(decided.status).toBe("approved");
-    await waitFor(() => calls.length > before);
-    expect(calls.at(-1)!.prompt).toContain('Approved: you can use "box" for 15 minutes');
-    expect(calls.at(-1)!.prompt).toContain('computer: "box"');
-
-    const screen = await screenOf();
-    const until = new Date(screen.config.loan.until).getTime();
-    expect(screen.config.loan).toMatchObject({ agentId });
-    expect(until - Date.now()).toBeGreaterThan(14 * 60_000);
-    expect(until - Date.now()).toBeLessThanOrEqual(15 * 60_000);
-
-    // with `computer` it acts on the device; without, on the agent's own VM
-    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
-    await agentApi.computer({ action: "click", x: 10, y: 10, space: { width: 1280, height: 800 } }, "box");
-    expect(did.at(-1)).toMatchObject({ computer: screen.id, op: "click" });
-    await agentApi.computer({ action: "click", x: 10, y: 10, space: { width: 1280, height: 800 } });
-    expect(did.at(-1)).toMatchObject({ computer: vm.id, op: "click" });
-    // a borrowed screen is a screen, not a shell, and it isn't kai's
-    await expect(agentApi.computer({ action: "run", command: "ls" }, "box")).rejects.toThrow(/screen, not a shell/);
-    await expect(kai.computer({ action: "screenshot" }, "box")).rejects.toThrow(/aren't borrowing/);
-    // and the prompt says what's on loan
-    expect(hub.borrowSection(agentId)).toContain('borrowing right now: "box"');
-    const log = await owner.request<any[]>("GET", `/api/computers/${screen.id}/log`);
-    expect(log.map((l) => l.text)).toEqual(expect.arrayContaining([expect.stringMatching(/^Lent it to @nova until/), "Clicking"]));
-    // nobody else can have it meanwhile
-    await expect(kai.requestDevice("box", "x")).rejects.toThrow(/lent to @nova until/);
-
-    // the owner can take control (the agent waits), and hand back; the loan goes on
-    await owner.request("POST", `/api/computers/${screen.id}/control`, { take: true });
-    await expect(agentApi.computer({ action: "click", x: 1, y: 1, space: { width: 1280, height: 800 } }, "box")).rejects.toThrow(/is using box right now/);
-    await owner.request("POST", `/api/computers/${screen.id}/control`, { take: false });
-    await agentApi.computer({ action: "screenshot" }, "box");
-
-    // the agent hands it back
-    await expect(kai.returnDevice()).rejects.toThrow(/aren't borrowing/);
-    expect(await agentApi.returnDevice()).toMatchObject({ deviceName: "box" });
-    expect((await screenOf()).config.loan).toBeUndefined();
-    await expect(agentApi.computer({ action: "screenshot" }, "box")).rejects.toThrow(/aren't borrowing/);
-    expect((await owner.request<any[]>("GET", `/api/computers/${screen.id}/log`)).map((l) => l.text)).toContain("@nova handed it back");
-  });
-
-  it("ends by itself when the time is up, and tells the agent", async () => {
-    await ask("Check the till report", 1);
-    const screen = await screenOf();
-    expect(screen.config.loan).toBeTruthy();
-    // time runs out: use is refused right away, even before anything sweeps
-    hub.store.updateComputer(screen.id, { config: { ...screen.config, loan: { ...screen.config.loan, until: new Date(Date.now() - 1000).toISOString() } } });
-    const before = calls.length;
-    await expect(agentApi.computer({ action: "screenshot" }, "box")).rejects.toThrow(/aren't borrowing|time on box is up/);
-    expect((await screenOf()).config.loan).toBeUndefined();
-    await waitFor(() => calls.length > before);
-    expect(calls.at(-1)!.prompt).toContain('Your time on "box" is up');
-
-    // a sweep also ends loans nobody tried to use
-    await ask("Again", 5);
-    const again = await screenOf();
-    hub.store.updateComputer(again.id, { config: { ...again.config, loan: { ...again.config.loan, until: new Date(Date.now() - 1000).toISOString() } } });
-    const mark = calls.length;
-    hub.computers.sweepLoans();
-    expect((await screenOf()).config.loan).toBeUndefined();
-    await waitFor(() => calls.length > mark);
-    expect(calls.at(-1)!.prompt).toContain("is up");
-  });
-
-  it("lets the owner take it back at any moment, and ends it if the screen is turned off", async () => {
-    await ask("Print the invoice", null);
-    const screen = await screenOf();
-    // "until it hands it back" is still capped
-    expect(new Date(screen.config.loan.until).getTime() - Date.now()).toBeLessThanOrEqual(12 * 3600_000);
-    await expect(member.request("POST", `/api/computers/${screen.id}/loan/end`)).rejects.toThrow(/not found/);
-    const before = calls.length;
-    await owner.request("POST", `/api/computers/${screen.id}/loan/end`);
-    expect((await screenOf()).config.loan).toBeUndefined();
-    await waitFor(() => calls.length > before);
-    expect(calls.at(-1)!.prompt).toContain('Me took "box" back');
-    await expect(agentApi.computer({ action: "screenshot" }, "box")).rejects.toThrow(/aren't borrowing/);
-
-    // "Stop lending" also covers a loan
-    await ask("One more", 30);
-    await owner.request("POST", `/api/computers/${screen.id}/lend`, { off: true });
-    expect((await screenOf()).config.loan).toBeUndefined();
-
-    // turning the screen off at the device ends it
-    await ask("Last one", 30);
-    await nodeJson({});
-    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.off);
-    await expect(agentApi.computer({ action: "screenshot" }, "box")).rejects.toThrow(/screen off|turned off/);
-    expect((await screenOf()).config.loan).toBeUndefined();
-    await nodeJson({ shareScreen: true });
+  it("only goes to agents that run on that device", async () => {
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
     await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.screen.ok);
+    const screen = await screenOf();
+    // an agent that runs nowhere (or anywhere else) can't be given it
+    await expect(owner.request("POST", "/api/agents", { handle: "far", name: "Far", harness: "custom", computerId: screen.id })).rejects.toThrow(/Only agents that run on it can use its screen/);
+    const far = await owner.request("POST", "/api/agents", { handle: "far", name: "Far", harness: "custom" });
+    await expect(owner.request("PATCH", `/api/agents/${far.id}`, { computerId: screen.id })).rejects.toThrow(/run the agent on box/);
+    // nor can one that has it move away and keep it
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: screen.id });
+    await expect(owner.request("PATCH", `/api/agents/${agentId}`, { nodeId: null })).rejects.toThrow(/Only agents that run on it/);
+    // the old ways in are gone
+    await expect(owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 60 })).rejects.toThrow();
+    await expect(agentApi.request("POST", "/api/computers/loans", { device: "box", reason: "x" })).rejects.toThrow();
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: vm.id });
+  });
+});
+
+describe("RustDesk", () => {
+  it("shows a device's RustDesk ID to its owner only", async () => {
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true, rustdesk: { id: "482117903" } }));
+    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.rustdesk?.id === "482117903");
+    const theirs = (await member.request<any[]>("GET", "/api/nodes"))[0];
+    expect(theirs.capabilities.screen).toBeTruthy();
+    expect(theirs.capabilities.rustdesk).toBeUndefined();
+    // `wisp node rustdesk off`
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
+    await waitFor(async () => !(await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.rustdesk);
   });
 
-  it("tells the agent when the owner says no", async () => {
-    const { decided } = await ask("Look around", "deny");
-    expect(decided.status).toBe("denied");
-    expect(calls.at(-1)!.prompt).toContain('Denied: Me didn\'t lend you "box"');
-    expect((await screenOf()).config.loan).toBeUndefined();
+  it("keeps the app its owner already uses to themselves, and checks what they enter", async () => {
+    await expect(owner.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: { app: "rdp", value: "javascript:alert(1)" } })).rejects.toThrow(/computer name or address/);
+    await expect(member.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: { app: "anydesk", value: "123456789" } })).rejects.toThrow(/only the person who connected/);
+    await owner.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: { app: "anydesk", value: "123456789" } });
+    expect((await owner.request<any[]>("GET", "/api/nodes"))[0].remoteDesktop).toEqual({ app: "anydesk", value: "123456789" });
+    expect((await member.request<any[]>("GET", "/api/nodes"))[0].remoteDesktop).toBeNull();
+    await owner.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: null });
+    expect((await owner.request<any[]>("GET", "/api/nodes"))[0].remoteDesktop).toBeNull();
   });
 });
 
@@ -662,23 +548,26 @@ describe("a screen's code", () => {
     await waitFor(() => owner.request("GET", `/api/computers/${screen.id}/screen?maxAge=1000`).then(() => false, (e: Error) => /locked/.test(e.message)));
   });
 
-  it("needs the code to lend it, or to let an agent borrow it", async () => {
+  it("lets an agent that runs on the device use it while it works, without the code", async () => {
     const screen = await screenOf();
-    await expect(owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 30 })).rejects.toThrow(/Enter box's PIN/);
-    await owner.request("POST", `/api/computers/${screen.id}/lend`, { minutes: 30, code: "246810" });
-    expect((await screenOf()).config.lend.until).toBeTruthy();
-    await owner.request("POST", `/api/computers/${screen.id}/lend`, { off: true });
-
-    const { approvalId } = await agentApi.requestDevice("box", "Check the shop's sales");
-    await expect(owner.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 15 })).rejects.toThrow(/Enter box's PIN/);
-    expect((await owner.request("GET", `/api/approvals/${approvalId}`)).status).toBe("pending");
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: screen.id });
+    // outside a run on the device, the code still guards it
+    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/locked with its code/);
+    let seen = "";
+    duringRun = async (input) => {
+      const harness = new WispClient({ url, token: input.mcp!.env.WISP_TOKEN });
+      seen = await harness.computer<{ width: number }>({ action: "screenshot" }).then((s) => `${s.width}`, (e: Error) => e.message);
+    };
     const before = calls.length;
-    await owner.request("POST", `/api/approvals/${approvalId}/decide`, { approve: true, minutes: 15, code: "246810" });
-    await waitFor(() => calls.length > before);
-    await agentApi.computer({ action: "screenshot" }, "box");
-    // taking it back closes it at the device too
-    await owner.request("POST", `/api/computers/${screen.id}/loan/end`);
-    await waitFor(() => owner.request("GET", `/api/computers/${screen.id}/screen?maxAge=1000`).then(() => false, (e: Error) => /locked/.test(e.message)));
+    const general = (await owner.channels()).find((c) => c.name === "general")!;
+    await owner.send(general.id, "@nova look at the screen");
+    await waitFor(() => calls.length > before && seen);
+    expect(seen).toMatch(/^\d+$/);
+    duringRun = null;
+    await waitFor(async () => !(await owner.agents()).find((a) => a.id === agentId && a.status === "busy"));
+    await expect(agentApi.computer({ action: "screenshot" })).rejects.toThrow(/locked with its code/);
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: vm.id });
   });
 
   it("stops taking codes after too many wrong ones, and tells its owner", async () => {
@@ -767,7 +656,7 @@ describe("Orgo", () => {
     const cloud = await owner.request("POST", "/api/computers", { kind: "orgo", name: "Cloud" });
     expect(cloud).toMatchObject({ kind: "orgo", online: true, transport: "vnc", config: { computerId: "11111111-1111-4111-8111-111111111111", instanceId: "inst-1" } });
     const scout = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "custom", nodeId, computerId: cloud.id });
-    const scoutApi = new WarrenClient({ url, token: (await owner.request("POST", `/api/agents/${scout.id}/token`)).token });
+    const scoutApi = new WispClient({ url, token: (await owner.request("POST", `/api/agents/${scout.id}/token`)).token });
     await scoutApi.computer({ action: "click", x: 640, y: 400, space: { width: 1280, height: 800 }, double: true });
     expect(orgoCalls.at(-1)).toMatchObject({ method: "POST", url: expect.stringContaining("/computers/11111111-1111-4111-8111-111111111111/click"), body: { x: 640, y: 400, button: "left", double: true } });
     await scoutApi.computer({ action: "key", keys: "Enter" });

@@ -1,5 +1,5 @@
-// The code that opens this computer's own screen from Warren, picked here. Same rules and the same
-// scrypt hash as the device (apps/node/src/screen-lock.ts codeProblem/hashCode), so `warren node`
+// The code that opens this computer's own screen from Wisp, picked here. Same rules and the same
+// scrypt hash as the device (apps/node/src/screen-lock.ts codeProblem/hashCode), so `wisp node`
 // checks it. Only the hash is saved, in node.json; the code itself never leaves this app.
 const crypto = require("node:crypto");
 

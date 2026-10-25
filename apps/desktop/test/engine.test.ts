@@ -13,20 +13,20 @@ const refused = () => Object.assign(new TypeError("fetch failed"), { cause: { co
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
 
 describe("server addresses", () => {
-  it("tries plain HTTP first on a home network, and Warren's port when none is given", () => {
+  it("tries plain HTTP first on a home network, and Wisp's port when none is given", () => {
     expect(engine.candidates("192.168.1.20")).toEqual(["http://192.168.1.20", "https://192.168.1.20", "http://192.168.1.20:4747"]);
     expect(engine.candidates("homeserver:4747/")).toEqual(["http://homeserver:4747", "https://homeserver:4747"]);
   });
 
   it("tries HTTPS first for a domain, and only what was typed when a scheme is given", () => {
-    expect(engine.candidates("warren.example.com")).toEqual(["https://warren.example.com", "http://warren.example.com", "http://warren.example.com:4747"]);
-    expect(engine.candidates("http://warren.example.com/#/login")).toEqual(["http://warren.example.com"]);
+    expect(engine.candidates("wisp.example.com")).toEqual(["https://wisp.example.com", "http://wisp.example.com", "http://wisp.example.com:4747"]);
+    expect(engine.candidates("http://wisp.example.com/#/login")).toEqual(["http://wisp.example.com"]);
     expect(engine.candidates("  ")).toEqual([]);
   });
 });
 
 describe("testing a server before joining", () => {
-  it("joins the first address where a Warren answers", async () => {
+  it("joins the first address where a Wisp answers", async () => {
     const tried: string[] = [];
     const r = await engine.testHub("192.168.1.20", {
       fetchImpl: async (url: URL) => {
@@ -40,20 +40,20 @@ describe("testing a server before joining", () => {
     expect(r.checks.every((c: { ok: boolean }) => c.ok)).toBe(true);
   });
 
-  it("says when something answers that isn't Warren", async () => {
+  it("says when something answers that isn't Wisp", async () => {
     const r = await engine.testHub("https://example.com", { fetchImpl: async () => json("<html>", 404) });
     expect(r).toMatchObject({ ok: false, url: "https://example.com" });
-    expect(r.error).toMatch(/isn't a Warren server/);
+    expect(r.error).toMatch(/isn't a Wisp server/);
   });
 
   it("says why nothing answered", async () => {
-    const r = await engine.testHub("https://warren.example.com", {
+    const r = await engine.testHub("https://wisp.example.com", {
       fetchImpl: async () => {
         throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
       },
     });
     expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/Couldn't find warren\.example\.com/);
+    expect(r.error).toMatch(/Couldn't find wisp\.example\.com/);
   });
 
   it("tells a new server's first person they'll make the first account", async () => {
@@ -64,11 +64,11 @@ describe("testing a server before joining", () => {
 });
 
 describe("the processes the app runs", () => {
-  /** A pretend Warren whose `warren.mjs` stays up until it's told to stop. */
-  const fakeWarren = () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-child-"));
+  /** A pretend Wisp whose `wisp.mjs` stays up until it's told to stop. */
+  const fakeWisp = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-child-"));
     fs.mkdirSync(path.join(dir, "bin"));
-    fs.writeFileSync(path.join(dir, "bin", "warren.mjs"), "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 300)); setInterval(() => {}, 1000);\n");
+    fs.writeFileSync(path.join(dir, "bin", "wisp.mjs"), "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 300)); setInterval(() => {}, 1000);\n");
     return dir;
   };
   const until = async (ok: () => boolean, ms = 5000) => {
@@ -76,7 +76,7 @@ describe("the processes the app runs", () => {
   };
 
   it("says it couldn't start when there's no Node to run, instead of crashing the app", async () => {
-    const dir = fakeWarren();
+    const dir = fakeWisp();
     const child = new engine.Child("test", dir, () => {});
     child.start(path.join(dir, "no-such-node"), dir, ["hub", "start"]);
     await until(() => child.state === "error");
@@ -85,7 +85,7 @@ describe("the processes the app runs", () => {
   });
 
   it("starts again once a stopped one has exited, when asked before it did", async () => {
-    const dir = fakeWarren();
+    const dir = fakeWisp();
     const child = new engine.Child("test", dir, () => {});
     child.start(process.execPath, dir, ["node", "start"]);
     await until(() => child.running());
@@ -102,7 +102,7 @@ describe("the processes the app runs", () => {
   });
 
   it("stops the copy an earlier run left behind (a crash or Force Quit) before starting another", async () => {
-    const dir = fakeWarren();
+    const dir = fakeWisp();
     const crashed = new engine.Child("device", dir, () => {}); // the app that was force quit
     crashed.start(process.execPath, dir, ["node", "start"]);
     await until(() => crashed.running());
@@ -119,8 +119,8 @@ describe("the processes the app runs", () => {
   });
 
   it("leaves a process alone when its saved id now belongs to something else", async () => {
-    const dir = fakeWarren();
-    fs.writeFileSync(path.join(dir, "device.pid"), String(process.ppid)); // alive, but not a Warren device
+    const dir = fakeWisp();
+    fs.writeFileSync(path.join(dir, "device.pid"), String(process.ppid)); // alive, but not a Wisp device
     const child = new engine.Child("device", dir, () => {});
     child.start(process.execPath, dir, ["node", "start"]);
     expect(child.running()).toBe(true); // started at once: nothing to stop first
@@ -135,20 +135,20 @@ describe("hub identification", () => {
     const tried: string[] = [];
     const r = await engine.testHub("home", { fetchImpl: async (url: URL) => {
       tried.push(url.origin);
-      if (url.port === "4747") return { ...json({ needsSetup: false }), url: "https://warren.example.com/api/setup" };
+      if (url.port === "4747") return { ...json({ needsSetup: false }), url: "https://wisp.example.com/api/setup" };
       return json({ unrelated: true });
     } });
     expect(tried).toEqual(["http://home", "https://home", "http://home:4747"]);
-    expect(r).toMatchObject({ ok: true, url: "https://warren.example.com" });
+    expect(r).toMatchObject({ ok: true, url: "https://wisp.example.com" });
   });
 
-  it("reports the non-Warren response when the remaining candidates are unreachable", async () => {
+  it("reports the non-Wisp response when the remaining candidates are unreachable", async () => {
     const r = await engine.testHub("home", { fetchImpl: async (url: URL) => {
       if (url.protocol === "https:") return json({ unrelated: true });
       throw refused();
     } });
     expect(r).toMatchObject({ ok: false, url: "https://home" });
-    expect(r.error).toMatch(/isn't a Warren server/);
+    expect(r.error).toMatch(/isn't a Wisp server/);
   });
 
   it("requires a boolean needsSetup on startup, including hubs that are already set up", async () => {
@@ -169,7 +169,7 @@ describe("installed services", () => {
     const require = createRequire(filename);
     const module = { exports: {} as typeof engine };
     runInNewContext(readFileSync(filename, "utf8"), { module, __dirname: path.dirname(filename), URL, AbortSignal,
-      process: { ...process, platform, getuid: () => uid, env: { WARREN_NODE_DIR: dir } },
+      process: { ...process, platform, getuid: () => uid, env: { WISP_NODE_DIR: dir } },
       require: (name: string) => name === "node:child_process" ? { execFile } : require(name),
     });
     return { engine: module.exports, execFile };
@@ -178,23 +178,23 @@ describe("installed services", () => {
   it("uses the CLI's user and system systemd units", async () => {
     const user = fixture("linux");
     expect(await user.engine.serviceRunning("node")).toBe(true);
-    expect(user.execFile.mock.calls[0].slice(0, 2)).toEqual(["systemctl", ["--user", "is-active", "--quiet", "warren-node"]]);
+    expect(user.execFile.mock.calls[0].slice(0, 2)).toEqual(["systemctl", ["--user", "is-active", "--quiet", "wisp-node"]]);
     expect(await user.engine.restartService("node")).toBe(true);
-    expect(user.execFile.mock.calls[1][1]).toEqual(["--user", "restart", "warren-node"]);
+    expect(user.execFile.mock.calls[1][1]).toEqual(["--user", "restart", "wisp-node"]);
     const root = fixture("linux", 0);
     await root.engine.serviceRunning("hub");
-    expect(root.execFile.mock.calls[0][1]).toEqual(["is-active", "--quiet", "warren"]);
+    expect(root.execFile.mock.calls[0][1]).toEqual(["is-active", "--quiet", "wisp"]);
     expect(await fixture("linux", 501, "", true).engine.serviceRunning("node")).toBe(false);
   });
 
   it("uses Scheduled Task state on Windows and propagates restart failure", async () => {
     const f = fixture("win32", 501, "Running\r\n");
     expect(await f.engine.serviceRunning("hub")).toBe(true);
-    expect(f.execFile.mock.calls[0].slice(0, 2)).toEqual(["powershell.exe", ["-NoProfile", "-Command", "(Get-ScheduledTask -TaskName 'Warren hub').State"]]);
+    expect(f.execFile.mock.calls[0].slice(0, 2)).toEqual(["powershell.exe", ["-NoProfile", "-Command", "(Get-ScheduledTask -TaskName 'Wisp hub').State"]]);
     expect(await fixture("win32", 501, "Ready").engine.serviceRunning("hub")).toBe(false);
     expect(await fixture("win32", 501, "", true).engine.restartService("node")).toBe(false);
     await f.engine.restartService("node");
-    expect(f.execFile.mock.calls[1][1][2]).toContain("Stop-ScheduledTask -TaskName 'Warren node'; Start-ScheduledTask -TaskName 'Warren node'");
+    expect(f.execFile.mock.calls[1][1][2]).toContain("Stop-ScheduledTask -TaskName 'Wisp node'; Start-ScheduledTask -TaskName 'Wisp node'");
   });
 
   it("preserves macOS detection and ignores services for an isolated node directory", async () => {
@@ -233,19 +233,19 @@ describe("device connection state", () => {
 
 describe("device status without a session", () => {
   it("uses the latest connection event for the current hub and invalidates it on disconnect, rejection, or restart", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-device-status-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-device-status-"));
     const log = path.join(dir, "device.log");
-    const connected = '[warren] connected to https://hub as "My Mac" hosting no agents yet\n';
+    const connected = '[wisp] connected to https://hub as "My Mac" hosting no agents yet\n';
     try {
       expect(engine.deviceLogConnected("https://hub", log)).toBe(false);
-      fs.writeFileSync(log, connected + "[warren] @agent: working\n");
+      fs.writeFileSync(log, connected + "[wisp] @agent: working\n");
       expect(engine.deviceLogConnected("https://hub", log)).toBe(true);
       expect(engine.deviceLogConnected("https://other", log)).toBe(false);
       for (const event of [
-        "[warren] disconnected (1006); retrying in 1s",
-        "[warren] connection error: socket closed",
-        "[warren] hub rejected the node token. Create a new node in Warren",
-        "[warren] another `warren node start` is running with this device's token",
+        "[wisp] disconnected (1006); retrying in 1s",
+        "[wisp] connection error: socket closed",
+        "[wisp] hub rejected the node token. Create a new node in Wisp",
+        "[wisp] another `wisp node start` is running with this device's token",
         "--- 2026-10-23T12:00:00Z starting node start",
       ]) {
         fs.writeFileSync(log, connected + event + "\n");
@@ -255,7 +255,7 @@ describe("device status without a session", () => {
       }
       fs.writeFileSync(log, "x".repeat(70_000) + "\n" + connected);
       expect(engine.deviceLogConnected("https://hub", log)).toBe(true);
-      fs.writeFileSync(log, "[warren] connected to invalid-url as device\n");
+      fs.writeFileSync(log, "[wisp] connected to invalid-url as device\n");
       expect(engine.deviceLogConnected("https://hub", log)).toBe(false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -266,16 +266,16 @@ describe("device status without a session", () => {
 describe("a new Wisp's setup code", () => {
   it("reads it from this computer's Wisp data, and only something that looks like a code", () => {
     const data = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-setup-code-"));
-    const before = process.env.WARREN_DATA_DIR;
-    process.env.WARREN_DATA_DIR = data;
+    const before = process.env.WISP_DATA_DIR;
+    process.env.WISP_DATA_DIR = data;
     try {
       fs.writeFileSync(path.join(data, "setup-code"), "k7qm-29xd-hp4c\n");
       expect(engine.localSetupCode()).toBe("k7qm-29xd-hp4c");
       fs.writeFileSync(path.join(data, "setup-code"), "<script>\n");
       expect(engine.localSetupCode()).not.toBe("<script>");
     } finally {
-      if (before === undefined) delete process.env.WARREN_DATA_DIR;
-      else process.env.WARREN_DATA_DIR = before;
+      if (before === undefined) delete process.env.WISP_DATA_DIR;
+      else process.env.WISP_DATA_DIR = before;
       fs.rmSync(data, { recursive: true, force: true });
     }
   });

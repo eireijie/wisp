@@ -1,6 +1,7 @@
+import { GITHUB_URL } from "@wisp/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { Bell, ChevronLeft, ChevronRight, Gauge, Monitor, Palette, Settings, SlidersHorizontal, Users } from "lucide-react";
-import { resolveFeatures, type Features } from "@warren/core";
+import { resolveFeatures, type Features } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { appHashBeforeSettings, go, href, type SettingsPage } from "../router.ts";
@@ -323,7 +324,7 @@ function UpdatesPage() {
           <p className="text-sm text-muted">
             {v?.commit ? (
               <>
-                This hub runs Warren <code>{v.commit}</code>
+                This hub runs Wisp <code>{v.commit}</code>
                 {v.date && <> from {new Date(v.date).toLocaleDateString()}</>}. Update devices from{" "}
                 <a className="text-accent-text hover:underline" href="#/nodes">
                   Devices
@@ -331,7 +332,7 @@ function UpdatesPage() {
                 .
               </>
             ) : (
-              "Which version of Warren this hub runs, and what's new."
+              "Which version of Wisp this hub runs, and what's new."
             )}
           </p>
         </div>
@@ -379,7 +380,7 @@ function UpdatesPage() {
     <Section title="About">
       <Card>
         <Row label="Source code" hint="Issues, ideas and contributions welcome.">
-          <a className="text-sm text-accent-text hover:underline" href="https://github.com/eireijie/warren" target="_blank" rel="noreferrer">
+          <a className="text-sm text-accent-text hover:underline" href={GITHUB_URL} target="_blank" rel="noreferrer">
             GitHub
           </a>
         </Row>

@@ -60,7 +60,7 @@ const waitFor = async <T>(fn: () => T | undefined, ms = 3000): Promise<T> => {
 const PHONE = "a".repeat(64);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-apns-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-apns-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
@@ -68,7 +68,7 @@ beforeAll(async () => {
   close = () => built.app.close();
   await new Promise<void>((r) => apns.listen(0, "127.0.0.1", r));
   hub.apns.origin = `http://127.0.0.1:${(apns.address() as { port: number }).port}`;
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal Patel", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex Morgan", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
 });
 
 afterAll(async () => {
@@ -79,24 +79,24 @@ afterAll(async () => {
 
 describe("push notifications", () => {
   it("is optional: phones register before a key is set, and nothing is sent", async () => {
-    expect((await api("GET", "/api/me/push")).data).toEqual({ available: false, devices: 0 });
+    expect((await api("GET", "/api/me/push")).data).toMatchObject({ available: false, devices: 0 });
     expect((await api("POST", "/api/me/push", { token: "not hex" })).status).toBe(400);
-    expect((await api("POST", "/api/me/push", { token: PHONE.toUpperCase(), bundleId: "ai.warren.ios", environment: "sandbox" })).data).toEqual({ ok: true, available: false });
-    expect((await api("GET", "/api/me/push")).data).toEqual({ available: false, devices: 1 });
+    expect((await api("POST", "/api/me/push", { token: PHONE.toUpperCase(), bundleId: "ai.wisp.ios", environment: "sandbox" })).data).toEqual({ ok: true, available: false });
+    expect((await api("GET", "/api/me/push")).data).toMatchObject({ available: false, devices: 1 });
     expect((await api("POST", "/api/me/push/test")).status).toBe(409);
   });
 
   it("takes an APNs key from Settings (owners only, never shown back)", async () => {
     expect((await api("PUT", "/api/settings/push", { keyId: "KEY1234567", teamId: "TEAM123456", key: "nope" })).status).toBe(400);
     const saved = (await api("PUT", "/api/settings/push", { keyId: "KEY1234567", teamId: "TEAM123456", key: p8, environment: "sandbox" })).data;
-    expect(saved).toEqual({ configured: true, source: "settings", keyId: "KEY1234567", teamId: "TEAM123456", topic: "ai.warren.ios", environment: "sandbox" });
+    expect(saved).toEqual({ configured: true, source: "settings", keyId: "KEY1234567", teamId: "TEAM123456", topic: "ai.wisp.ios", environment: "sandbox" });
     expect(JSON.stringify((await api("GET", "/api/settings/push")).data)).not.toContain("PRIVATE KEY");
     const test = (await api("POST", "/api/me/push/test")).data;
     expect(test).toEqual({ sent: 1, failed: [] });
     const last = got.at(-1)!;
     expect(last.path).toBe(`/3/device/${PHONE}`);
-    expect(last.headers).toMatchObject({ "apns-topic": "ai.warren.ios", "apns-push-type": "alert" });
-    expect(last.body).toMatchObject({ aps: { alert: { title: "Warren" }, sound: "default", badge: 0 }, warren: { kind: "test", category: "other" } });
+    expect(last.headers).toMatchObject({ "apns-topic": "ai.wisp.ios", "apns-push-type": "alert" });
+    expect(last.body).toMatchObject({ aps: { alert: { title: "Wisp" }, sound: "default", badge: 0 }, wisp: { kind: "test", category: "other" } });
   });
 
   it("pushes an agent's DM and its reply in your thread, with your unread count as the badge", async () => {
@@ -105,16 +105,16 @@ describe("push notifications", () => {
     const dm = (await api("POST", `/api/dm/${atlas.id}`, {})).data;
     const before = got.length;
     expect((await api("POST", `/api/channels/${dm.id}/messages`, { body: "The report is ready." }, agentToken)).status).toBe(200);
-    const push = await waitFor(() => got.slice(before).find((g) => g.body.warren.channelId === dm.id));
-    expect(push.body).toMatchObject({ aps: { alert: { title: "Atlas", body: "The report is ready." }, "thread-id": dm.id, badge: 1 }, warren: { kind: "message", category: "dm", channelId: dm.id, threadId: null } });
+    const push = await waitFor(() => got.slice(before).find((g) => g.body.wisp.channelId === dm.id));
+    expect(push.body).toMatchObject({ aps: { alert: { title: "Atlas", body: "The report is ready." }, "thread-id": dm.id, badge: 1 }, wisp: { kind: "message", category: "dm", channelId: dm.id, threadId: null } });
 
     const general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");
     const root = (await api("POST", `/api/channels/${general.id}/messages`, { body: "can someone look at the logs?" })).data;
     const n = got.length;
     await api("POST", `/api/channels/${general.id}/messages`, { body: "On it.", threadId: root.id }, agentToken);
-    const reply = await waitFor(() => got.slice(n).find((g) => g.body.warren.threadId === root.id));
+    const reply = await waitFor(() => got.slice(n).find((g) => g.body.wisp.threadId === root.id));
     expect(reply.body.aps.alert.title).toBe("Atlas in a thread");
-    expect(reply.body.warren.category).toBe("reply");
+    expect(reply.body.wisp.category).toBe("reply");
     // your own messages never push to you
     const m = got.length;
     await api("POST", `/api/channels/${dm.id}/messages`, { body: "thanks" });
@@ -127,18 +127,18 @@ describe("push notifications", () => {
     const atlas = (await api<any[]>("GET", "/api/agents")).data.find((a) => a.handle === "atlas");
     const agentToken = (await api("POST", `/api/agents/${atlas.id}/token`, {})).data.token;
     const n = got.length;
-    await api("POST", `/api/channels/${general.id}/messages`, { body: "@yugal the deploy is done" }, agentToken);
+    await api("POST", `/api/channels/${general.id}/messages`, { body: "@alex the deploy is done" }, agentToken);
     const mention = await waitFor(() => got.slice(n).find((g) => g.body.aps.alert.title.includes("mentioned you")));
     expect(mention.body.aps.alert.title).toBe("Atlas mentioned you in #general");
-    expect(mention.body.warren.category).toBe("mention");
+    expect(mention.body.wisp.category).toBe("mention");
 
     const ws = (await api("GET", "/api/me")).data.workspace.id;
     const approval = { id: "apv_1", agentId: atlas.id, channelId: general.id, threadId: null, summary: "Send the invoice", details: "", status: "pending" } as any;
-    expect(hub.apns.decide(ws, { type: "approval", approval })).toMatchObject([[expect.any(String), { warren: { category: "approval" } }]]);
+    expect(hub.apns.decide(ws, { type: "approval", approval })).toMatchObject([[expect.any(String), { wisp: { category: "approval" } }]]);
     expect(hub.apns.decide(ws, { type: "approval", approval })).toHaveLength(0);
     const computer = { id: "cmp_1", name: "Lab VM", help: { agentId: atlas.id, request: "Sign in to Stripe", channelId: general.id, threadId: null, at: "" } } as any;
     const [[, help]] = hub.apns.decide(ws, { type: "computer", computer });
-    expect(help).toMatchObject({ aps: { alert: { title: "Atlas needs you on Lab VM", body: "Sign in to Stripe" } }, warren: { kind: "computer", category: "help", computerId: "cmp_1" } });
+    expect(help).toMatchObject({ aps: { alert: { title: "Atlas needs you on Lab VM", body: "Sign in to Stripe" } }, wisp: { kind: "computer", category: "help", computerId: "cmp_1" } });
     expect(hub.apns.decide(ws, { type: "computer", computer })).toHaveLength(0);
   });
 
@@ -148,8 +148,8 @@ describe("push notifications", () => {
     const dm = hub.store.dmChannel(workspace.id, user.id, atlas.id);
     const general = hub.store.channelByName(workspace.id, "general")!;
     const root = (channelId: string) => hub.store.insertMessage({ channelId, author: { kind: "user", id: user.id }, body: "Question" });
-    const message = (channelId: string, threadId: string | null, body = "@yugal here you go") => hub.store.insertMessage({ channelId, threadId, author: { kind: "agent", id: atlas.id }, body });
-    const category = (m: ReturnType<typeof message>) => hub.apns.decide(workspace.id, { type: "message", message: m }).find(([id]) => id === user.id)?.[1].warren.category;
+    const message = (channelId: string, threadId: string | null, body = "@alex here you go") => hub.store.insertMessage({ channelId, threadId, author: { kind: "agent", id: atlas.id }, body });
+    const category = (m: ReturnType<typeof message>) => hub.apns.decide(workspace.id, { type: "message", message: m }).find(([id]) => id === user.id)?.[1].wisp.category;
     hub.store.setChannelPrefs(user.id, general.id, { notify: "all" });
     try {
       expect(category(message(dm.id, root(dm.id).id))).toBe("dm");
@@ -167,7 +167,7 @@ describe("push notifications", () => {
     const token = issueToken(hub.store.db, "session", user.id, workspace.id);
     const phone = "c".repeat(64);
     await api("POST", "/api/me/push", { token: phone }, token);
-    await api("PUT", "/api/settings/push", { keyId: "KEY7654321", teamId: "TEAM123456", key: p8, topic: "ai.warren.side" }, token);
+    await api("PUT", "/api/settings/push", { keyId: "KEY7654321", teamId: "TEAM123456", key: p8, topic: "ai.wisp.side" }, token);
     try {
       const agent = (await api("POST", "/api/agents", { handle: "side", name: "Side", harness: "custom" }, token)).data;
       const agentToken = (await api("POST", `/api/agents/${agent.id}/token`, {}, token)).data.token;
@@ -180,7 +180,7 @@ describe("push notifications", () => {
       expect(pushes).toHaveLength(2);
       for (const push of pushes) {
         expect(push.path).toBe(`/3/device/${phone}`);
-        expect(push.headers["apns-topic"]).toBe("ai.warren.side");
+        expect(push.headers["apns-topic"]).toBe("ai.wisp.side");
         expect(JSON.parse(Buffer.from(String(push.headers.authorization).split(" ")[1].split(".")[0], "base64url").toString()).kid).toBe("KEY7654321");
         expect(push.body.aps.badge).toBe(1);
       }

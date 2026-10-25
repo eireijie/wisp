@@ -1,5 +1,3 @@
 #!/usr/bin/env node
-// `warren-mcp`: stdio MCP server that gives any harness Warren's chat, task, memory and file tools.
-import { register } from "tsx/esm/api";
-register();
-await import("../packages/mcp/src/main.ts");
+// `warren-mcp` from before the rename: shims, services and harness configs made by older installs still run this.
+await import("./wisp-mcp.mjs");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_SKILLS, MEMORY_SKILL, SKILL_CATALOG, catalogSkill, everydaySkills } from "../src/index.ts";
+import { BUILTIN_SKILLS, MEMORY_SKILL, SKILL_CATALOG, catalogSkill } from "../src/index.ts";
 
 const banned = ["memory_search", "vault", "SKILL.md", "Markdown", "`"];
 
@@ -23,8 +23,6 @@ describe("skill catalog plain-language text", () => {
   it("puts the everyday skills first", () => {
     const first = SKILL_CATALOG.slice(0, 3).map((s) => s.id);
     expect(first).toEqual(["meal-plan", "summarize-document", "polite-message"]);
-    const ids = everydaySkills().map((s) => s.id);
-    for (const id of first) expect(ids).toContain(id);
   });
 
   it("writes new skill descriptions as 'Use when'", () => {

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Mic, MicOff, PhoneOff } from "lucide-react";
-import type { Agent } from "@warren/core";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import type { Agent } from "@wisp/core";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api, observeEvents } from "../api.ts";
 import { useStore } from "../store.ts";
 import { useMotionReduced } from "../theme.ts";
 import { Ghost } from "../components/Ghost.tsx";
 import { Button, Modal } from "../components/ui.tsx";
 import { VoiceCall, INITIAL_CALL } from "./call.ts";
-import { createListener, createSpeaker, type VoiceSettings } from "./providers.ts";
+import { createListener, createSpeaker, effectiveListen, type VoiceSettings } from "./providers.ts";
 import "./voice.css";
 
 export function CallScreen({ agent, channelId, onClose }: { agent: Agent; channelId: string; onClose(): void }) {
@@ -28,9 +28,9 @@ export function CallScreen({ agent, channelId, onClose }: { agent: Agent; channe
     const unsubscribe = observeEvents((e) => call.current?.event(e));
     void api<VoiceSettings>("GET", "/api/voice/settings").then(async (settings) => {
       if (disposed) return;
-      setEngine(`${settings.listen === "openai" ? "OpenAI listening · " : ""}${settings.speak === "device" ? "On this device" : settings.speak === "openai" ? "OpenAI · AI voice" : "ElevenLabs · AI voice"}`);
+      setEngine(`${effectiveListen(settings.listen) === "openai" ? "OpenAI listening · " : ""}${settings.speak === "device" ? "On this device" : settings.speak === "openai" ? "OpenAI · AI voice" : "ElevenLabs · AI voice"}`);
       const session = new VoiceCall({
-        agentId: agent.id, channelId, cloudListening: settings.listen === "openai",
+        agentId: agent.id, channelId, cloudListening: effectiveListen(settings.listen) === "openai",
         listener: (cb) => createListener(settings.listen, cb),
         speaker: createSpeaker(settings.speak, agent.settings.voice, agent.handle),
         send: (body) => api("POST", `/api/channels/${channelId}/messages`, { body, voice: true }),

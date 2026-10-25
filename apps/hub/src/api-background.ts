@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { FEATURE_INFO, FEATURE_KEYS, type BackgroundWork, type FeatureKey } from "@warren/core";
+import { FEATURE_INFO, FEATURE_KEYS, type BackgroundWork, type FeatureKey } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { DEFAULT_DAILY_CAP, parseWhen } from "./background.ts";
 import { setWorkspaceFeatures, workspaceFeatures } from "./features.ts";
@@ -345,7 +345,7 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
   app.post("/api/push/test", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    const sent = await hub.push.notify(c.workspaceId, [c.actor.id], { title: "Warren", body: "Notifications reach this device.", tag: "test", url: "/#/settings/notifications" });
+    const sent = await hub.push.notify(c.workspaceId, [c.actor.id], { title: "Wisp", body: "Notifications reach this device.", tag: "test", url: "/#/settings/notifications" });
     return { sent };
   });
 }

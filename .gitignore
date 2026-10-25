@@ -3,8 +3,8 @@ dist
 data
 *.db
 .env
-.warren-updated
+.wisp-updated
 .claude/
 apps/ios/**/xcuserdata/
 apps/ios/build/
-apps/desktop/build/warren-runtime/
+apps/desktop/build/wisp-runtime/

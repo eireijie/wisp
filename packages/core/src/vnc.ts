@@ -77,12 +77,12 @@ export async function rfbSignIn(server: RfbSide, password: string): Promise<void
     if (n === 0) throw new Error(await reason(up));
     const offered = [...(await up.read(n))];
     type = offered.includes(1) ? 1 : offered.includes(2) ? 2 : 0;
-    if (!type) throw new Error(`the screen wants a kind of sign-in Warren doesn't do (types ${offered.join(", ")})`);
+    if (!type) throw new Error(`the screen wants a kind of sign-in Wisp doesn't do (types ${offered.join(", ")})`);
     server.send(Buffer.from([type]));
   } else {
     type = (await up.read(4)).readUInt32BE(0);
     if (type === 0) throw new Error(await reason(up));
-    if (type !== 1 && type !== 2) throw new Error(`the screen wants a kind of sign-in Warren doesn't do (type ${type})`);
+    if (type !== 1 && type !== 2) throw new Error(`the screen wants a kind of sign-in Wisp doesn't do (type ${type})`);
   }
   if (type === 2) server.send(vncAuthResponse(await up.read(16), password));
   if (type === 2 || minor >= 8) {

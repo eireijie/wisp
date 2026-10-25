@@ -16,7 +16,7 @@ const json = (rel: string) => JSON.parse(read(rel));
 const skill = (rel: string, name: string) => write(path.join(rel, "SKILL.md"), `---\nname: ${name}\ndescription: Does ${name}\n---\nSteps.\n`);
 
 beforeEach(() => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), "warren-more-"));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-more-"));
 });
 afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 
@@ -134,9 +134,9 @@ describe("JSON with comments", () => {
 });
 
 describe("accounts", () => {
-  let warren: string;
+  let wisp: string;
   beforeEach(() => {
-    warren = path.join(home, ".warren");
+    wisp = path.join(home, ".wisp");
     write(".codex/config.toml", 'model = "gpt-6"\n');
     write(".codex/auth.json", "{}");
     write(".gemini/settings.json", "{}");
@@ -145,11 +145,11 @@ describe("accounts", () => {
   });
 
   it("adds an account with the default's settings and none of its logins", () => {
-    const a = new HarnessAccounts(warren, { home });
+    const a = new HarnessAccounts(wisp, { home });
     const work = a.add("codex", "Work ChatGPT");
     expect(work).toEqual({ id: "work-chatgpt", label: "Work ChatGPT", isDefault: false, signedIn: false });
     const dir = a.dir("codex", "work-chatgpt");
-    expect(dir).toBe(path.join(warren, "accounts", "codex", "work-chatgpt"));
+    expect(dir).toBe(path.join(wisp, "accounts", "codex", "work-chatgpt"));
     expect(fs.readFileSync(path.join(dir, "config.toml"), "utf8")).toBe('model = "gpt-6"\n');
     expect(fs.existsSync(path.join(dir, "auth.json"))).toBe(false);
     expect(a.list("codex").map((x) => [x.id, x.signedIn])).toEqual([
@@ -162,14 +162,14 @@ describe("accounts", () => {
   });
 
   it("points Gemini's variable at the folder above .gemini", () => {
-    const a = new HarnessAccounts(warren, { home });
+    const a = new HarnessAccounts(wisp, { home });
     a.add("gemini", "Personal");
-    expect(a.dir("gemini", "personal")).toBe(path.join(warren, "accounts", "gemini", "personal", ".gemini"));
-    expect(a.env("gemini", "personal")).toEqual({ GEMINI_CLI_HOME: path.join(warren, "accounts", "gemini", "personal") });
+    expect(a.dir("gemini", "personal")).toBe(path.join(wisp, "accounts", "gemini", "personal", ".gemini"));
+    expect(a.env("gemini", "personal")).toEqual({ GEMINI_CLI_HOME: path.join(wisp, "accounts", "gemini", "personal") });
   });
 
-  it("uses Hermes's own profiles, including ones made outside Warren", () => {
-    const a = new HarnessAccounts(warren, { home });
+  it("uses Hermes's own profiles, including ones made outside Wisp", () => {
+    const a = new HarnessAccounts(wisp, { home });
     expect(a.list("hermes").map((x) => x.id)).toEqual(["default", "coder"]);
     expect(a.dir("hermes", "coder")).toBe(path.join(home, ".hermes", "profiles", "coder"));
     a.add("hermes", "Research");
@@ -177,7 +177,7 @@ describe("accounts", () => {
   });
 
   it("remembers which agent uses which, and forgets an account without deleting it", () => {
-    const a = new HarnessAccounts(warren, { home });
+    const a = new HarnessAccounts(wisp, { home });
     a.add("codex", "Work");
     a.assign("agt_1", "codex", "work");
     expect(a.accountOf("agt_1", "codex")).toBe("work");
@@ -190,7 +190,7 @@ describe("accounts", () => {
   });
 
   it("won't add a second account where logins can't be kept apart", () => {
-    const a = new HarnessAccounts(warren, { home });
+    const a = new HarnessAccounts(wisp, { home });
     expect(() => a.add("goose", "Two")).toThrow(/keychain/);
     expect(a.env("goose", "two")).toEqual({});
   });
@@ -203,7 +203,7 @@ describe("accounts", () => {
   });
 
   it("reads an account's own settings", async () => {
-    const a = new HarnessAccounts(warren, { home });
+    const a = new HarnessAccounts(wisp, { home });
     a.add("codex", "Work");
     await changeHarnessSettings("codex", [{ op: "model", model: "gpt-5" }], { home, dirs: { codex: a.dir("codex", "work") } });
     expect((await readHarnessSettings("codex", { home })).model).toBe("gpt-6");

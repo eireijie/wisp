@@ -8,13 +8,13 @@ describe("claude stream-json", () => {
     const names = new Map<string, string>();
     expect(parseClaudeLine({ type: "system", subtype: "init", session_id: "s1" }, names)).toEqual([{ type: "session", id: "s1" }]);
     expect(
-      parseClaudeLine({ type: "assistant", message: { content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t1", name: "mcp__warren__memory_search", input: { q: "x" } }] } }, names),
+      parseClaudeLine({ type: "assistant", message: { content: [{ type: "text", text: "hi" }, { type: "tool_use", id: "t1", name: "mcp__wisp__memory_search", input: { q: "x" } }] } }, names),
     ).toEqual([
       { type: "text", text: "hi" },
-      { type: "tool_call", name: "mcp__warren__memory_search", input: { q: "x" } },
+      { type: "tool_call", name: "mcp__wisp__memory_search", input: { q: "x" } },
     ]);
     expect(parseClaudeLine({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "found" }] }] } }, names)).toEqual([
-      { type: "tool_result", name: "mcp__warren__memory_search", output: "found" },
+      { type: "tool_result", name: "mcp__wisp__memory_search", output: "found" },
     ]);
   });
 });
@@ -149,7 +149,7 @@ describe("token usage", () => {
 });
 
 describe("claude env", () => {
-  it("turns off Claude Code's device-local auto memory so memory lives in Warren", () => {
+  it("turns off Claude Code's device-local auto memory so memory lives in Wisp", () => {
     expect(claudeEnv({ prompt: "", cwd: "/", env: { A: "1" } })).toEqual({ A: "1", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
   });
 });
@@ -170,18 +170,18 @@ import fsp from "node:fs/promises";
 import { RunFiles, claudeMcpConfig, runJsonl } from "../src/index.ts";
 
 describe("secrets stay off the command line", () => {
-  const mcp = { command: "node", args: ["warren-mcp.mjs"], env: { WARREN_URL: "http://hub", WARREN_TOKEN: "wr_agent_secret" } };
+  const mcp = { command: "node", args: ["wisp-mcp.mjs"], env: { WISP_URL: "http://hub", WISP_TOKEN: "wr_agent_secret" } };
 
   it("claude gets its MCP config (tokens and all) as a private file", async () => {
     const input = { prompt: "", cwd: "/", mcp };
-    const files = new RunFiles("warren-test-");
+    const files = new RunFiles("wisp-test-");
     const file = await files.add("mcp.json", JSON.stringify(claudeMcpConfig(input)));
     try {
       const a = claudeArgs(input, { mcpConfigFile: file.path });
       expect(a[a.indexOf("--mcp-config") + 1]).toBe(file.path);
-      expect(a[a.indexOf("--allowedTools") + 1]).toBe("mcp__warren");
+      expect(a[a.indexOf("--allowedTools") + 1]).toBe("mcp__wisp");
       expect(a.join(" ")).not.toContain("wr_agent_secret");
-      expect(JSON.parse(fs.readFileSync(file.path, "utf8")).mcpServers.warren.env.WARREN_TOKEN).toBe("wr_agent_secret");
+      expect(JSON.parse(fs.readFileSync(file.path, "utf8")).mcpServers.wisp.env.WISP_TOKEN).toBe("wr_agent_secret");
       if (process.platform !== "win32") expect((await fsp.stat(file.path)).mode & 0o777).toBe(0o600);
     } finally {
       await files.cleanup();
@@ -208,7 +208,7 @@ describe("cancelling a run", () => {
 describe("harness commands on the device", () => {
   it("finds Claude Code's commands, skills and enabled plugins' ones", async () => {
     const { claudeCommands } = await import("../src/commands.ts");
-    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "warren-cmds-"));
+    const home = await fsp.mkdtemp(path.join(os.tmpdir(), "wisp-cmds-"));
     const w = async (f: string, t: string) => (await fsp.mkdir(path.dirname(path.join(home, f)), { recursive: true }), fsp.writeFile(path.join(home, f), t));
     await w(".claude/commands/ship.md", "---\ndescription: Ship it\nargument-hint: version\n---\nDo it");
     await w(".claude/skills/pdf/SKILL.md", "---\nname: pdf\ndescription: Read PDFs\n---\n");

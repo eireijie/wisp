@@ -1,4 +1,4 @@
-import { teamProblem, type ChannelTeam, type ChannelTeamNode } from "@warren/core";
+import { teamProblem, type ChannelTeam, type ChannelTeamNode } from "@wisp/core";
 import type { Store } from "./store.ts";
 
 type TeamRow = { id: string; workspace_id: string; name: string; emoji: string; description: string; lead_id: string | null; reports_to: string | null; channel_id: string | null; folder: string; repo: string | null; base_branch: string };

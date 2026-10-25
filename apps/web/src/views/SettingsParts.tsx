@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { Button, cx } from "../components/ui.tsx";
 
 /** Sticky save bar. ⌘/Ctrl+S saves while the panel is visible. */
-export function SaveBar({ dirty, saving, onSave, onDiscard, active, note }: { dirty: boolean; saving: boolean; onSave: () => Promise<void> | void; onDiscard: () => void; active: boolean; note?: ReactNode }) {
+export function SaveBar({ dirty, saving, onSave, onDiscard, active, note }: { dirty: boolean; saving: boolean; onSave: () => Promise<void | boolean> | void | boolean; onDiscard: () => void; active: boolean; note?: ReactNode }) {
   const [justSaved, setJustSaved] = useState(false);
   useEffect(() => {
     if (!active) return;
@@ -21,7 +21,12 @@ export function SaveBar({ dirty, saving, onSave, onDiscard, active, note }: { di
     setJustSaved(false);
   }, [dirty, saving]);
   const save = async () => {
-    await onSave();
+    setJustSaved(false);
+    try {
+      if (await onSave() === false) return;
+    } catch {
+      return;
+    }
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1800);
   };

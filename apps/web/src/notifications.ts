@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { ClientEvent } from "@warren/core";
+import type { ClientEvent } from "@wisp/core";
 import { api } from "./api.ts";
 import { go } from "./router.ts";
 import { pushOnHere, reconcilePush, syncPushPrefs } from "./push.ts";
@@ -7,7 +7,7 @@ import type { useStore } from "./store.ts";
 
 /**
  * Desktop notifications, set up per device (Settings → Notifications): the browser asks once for
- * permission, and Warren then tells you about the things you choose, by default only while you're
+ * permission, and Wisp then tells you about the things you choose, by default only while you're
  * looking at something else.
  */
 export interface NotifyPrefs {
@@ -23,11 +23,11 @@ export interface NotifyPrefs {
   /** a task you handed off is done or failed */
   tasks: boolean;
   sound: boolean;
-  /** only when Warren isn't the window you're in */
+  /** only when Wisp isn't the window you're in */
   onlyAway: boolean;
 }
 
-const KEY = "warren.notify";
+const KEY = "wisp.notify";
 const DEFAULTS: NotifyPrefs = { enabled: false, dms: true, replies: true, approvals: true, help: true, tasks: true, sound: false, onlyAway: true };
 const listeners = new Set<() => void>();
 
@@ -100,6 +100,7 @@ export function show(title: string, body: string, open?: () => void, opts: { tes
   try {
     const n = new Notification(title, { body: body.slice(0, 180), icon: "/icon-192.png", tag: `${title}:${body.slice(0, 40)}` });
     n.onclick = () => {
+      window.wispDesktop?.focus();
       window.focus();
       open?.();
       n.close();

@@ -552,9 +552,6 @@ Update the snapshot note so next time compares against today. Stay on public pag
   },
 ];
 
-/** Library skills for ordinary life (meals, summaries, messages), shown first for beginners. */
-export const everydaySkills = (): CatalogSkill[] => SKILL_CATALOG.filter((s) => s.tags.includes("everyday"));
-
 export function catalogSkill(id: string): CatalogSkill | undefined {
   return SKILL_CATALOG.find((s) => s.id === id);
 }
@@ -611,7 +608,7 @@ related: ["[[acme]]", "[[pricing]]"]
 ---
 \`\`\`
 
-Warren fills in \`type\`, \`created\` and \`updated\` if you leave them out, but never changes what you wrote.
+Wisp fills in \`type\`, \`created\` and \`updated\` if you leave them out, but never changes what you wrote.
 
 ## 6. Link it
 - Link to at least one existing note with \`[[note-name]]\` (the file name without .md).

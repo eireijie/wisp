@@ -7,28 +7,28 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { WarrenClient } from "@warren/sdk";
+import { WispClient } from "@wisp/sdk";
 import { buildHub } from "../src/app.ts";
 import { validRedirectUri } from "../src/remote-mcp.ts";
 
 let dir: string;
 let url: string;
 let close: () => Promise<void>;
-let owner: WarrenClient;
+let owner: WispClient;
 let ownerToken: string;
 let agentId: string;
 
 const REDIRECT = "http://127.0.0.1:6274/oauth/callback";
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-remote-mcp-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-remote-mcp-"));
   const { app } = await buildHub({ dataDir: dir, setupCode: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
   ownerToken = setup.token;
-  owner = new WarrenClient({ url, token: ownerToken });
+  owner = new WispClient({ url, token: ownerToken });
   agentId = (await owner.request("POST", "/api/agents", { handle: "grok", name: "Grok", harness: "grok" })).id;
 });
 
@@ -227,14 +227,14 @@ describe("remote MCP", () => {
       expect(back.searchParams.get("state")).toBe("xyz");
       const first = await (await token({ grant_type: "authorization_code", code: back.searchParams.get("code")!, redirect_uri: REDIRECT, code_verifier: verifier })).json();
       expect(first).toMatchObject({ token_type: "Bearer", expires_in: 3600 });
-      const me = await new WarrenClient({ url, token: first.access_token }).me();
+      const me = await new WispClient({ url, token: first.access_token }).me();
       expect(me.agent?.id).toBe(agentId);
 
       const second = await (await token({ grant_type: "refresh_token", refresh_token: first.refresh_token })).json();
       expect(second.access_token).toMatch(/^wr_agent_/);
       expect(second.refresh_token).not.toBe(first.refresh_token);
       expect((await token({ grant_type: "refresh_token", refresh_token: first.refresh_token })).status).toBe(400);
-      expect((await new WarrenClient({ url, token: second.access_token }).me()).agent?.id).toBe(agentId);
+      expect((await new WispClient({ url, token: second.access_token }).me()).agent?.id).toBe(agentId);
     });
 
     it("needs a signed-in member to approve", async () => {

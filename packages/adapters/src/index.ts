@@ -1,4 +1,4 @@
-import { HARNESSES } from "@warren/core";
+import { HARNESSES } from "@wisp/core";
 import { acpAdapter } from "./acp.ts";
 import { claudeCode } from "./claude-code.ts";
 import { codex } from "./codex.ts";
@@ -8,7 +8,7 @@ export * from "./types.ts";
 export { claudeCommands, codexCommands, commandsIn, skillsIn } from "./commands.ts";
 export { scanShelf, serverItem } from "./shelf.ts";
 export { HarnessAccounts, loginCommand } from "./harness-accounts.ts";
-export { changeHarnessSettings, editClaude, editCodex, editHermes, HARNESS_HOME, harnessConfigPath, harnessConfigured, harnessDir, parseToml, readHarnessSettings, readHarnessSkill, type HarnessHomes } from "./harness-config.ts";
+export { changeHarnessSettings, editClaude, editCodex, editHermes, HARNESS_SPECS, harnessConfigPath, harnessConfigured, harnessDir, parseToml, readHarnessSettings, readHarnessSkill, type HarnessHomes } from "./harness-config.ts";
 export { RunFiles, commandVersion, execCommand, runJsonl, spawnCommand, stopProcess } from "./process.ts";
 export { claudeCode, claudeArgs, claudeEnv, claudeMcpConfig, claudeUsage, parseClaudeLine } from "./claude-code.ts";
 export { codex, codexArgs, codexDefaults, codexEnv, codexMcpConfig, codexTokens, codexUsageFromRollout, parseCodexCatalog, parseCodexLine } from "./codex.ts";

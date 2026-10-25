@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONNECTOR_CATALOG, CONNECTOR_HELP, EVERYDAY_APPS, catalogConnector, connectorUnsupportedReason, connectorWorksWith, everydayAppFor, everydayFirst, harnessSupportsConnectors, type ConnectorKind } from "../src/connectors.ts";
+import { CONNECTOR_CATALOG, CONNECTOR_HELP, connectorUnsupportedReason, everydayFirst, harnessSupportsConnectors, type ConnectorKind } from "../src/connectors.ts";
 
 const kinds: ConnectorKind[] = ["mcp-http", "mcp-stdio", "secret"];
 
@@ -21,35 +21,10 @@ describe("harnessSupportsConnectors", () => {
   });
   it("explains why in plain words", () => {
     expect(connectorUnsupportedReason("gemini")).toBe("Gemini CLI can't use connected apps yet");
-    expect(connectorUnsupportedReason("grok")).toBe("Grok connects through warren-mcp, so it can't use connected apps here");
+    expect(connectorUnsupportedReason("grok")).toBe("Grok connects through wisp-mcp, so it can't use connected apps here");
     expect(connectorUnsupportedReason("codex")).toBeNull();
     expect(connectorUnsupportedReason("gemini", "secret")).toBeNull();
     expect(CONNECTOR_HELP).toMatch(/Claude Code or Codex/);
-  });
-  it("connectorWorksWith stays as before", () => {
-    expect(connectorWorksWith("mcp-http")).toEqual(["claude-code", "codex"]);
-    expect(connectorWorksWith("mcp-stdio")).toEqual(["claude-code", "codex", "acp"]);
-    expect(connectorWorksWith("secret")).toEqual(["claude-code", "codex", "acp"]);
-  });
-});
-
-describe("everydayAppFor", () => {
-  it("finds apps by name, alias and partial words", () => {
-    expect(everydayAppFor("gmail")?.name).toBe("Gmail");
-    expect(everydayAppFor("gmail")?.catalogId).toBeNull();
-    expect(everydayAppFor("  Gmail   inbox ")?.name).toBe("Gmail");
-    expect(everydayAppFor("slack")?.catalogId).toBe("slack");
-    expect(everydayAppFor("google cal")?.name).toBe("Google Calendar");
-    expect(everydayAppFor("calendar")?.name).toBe("Google Calendar");
-    expect(everydayAppFor("drive")?.name).toBe("Google Drive");
-  });
-  it("does not match developer things or tiny queries", () => {
-    expect(everydayAppFor("git")).toBeNull();
-    expect(everydayAppFor("gi")).toBeNull();
-    expect(everydayAppFor("")).toBeNull();
-  });
-  it("every built-in catalogId exists in the catalog", () => {
-    for (const a of EVERYDAY_APPS) if (a.catalogId) expect(catalogConnector(a.catalogId)).toBeTruthy();
   });
 });
 

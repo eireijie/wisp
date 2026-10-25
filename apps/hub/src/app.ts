@@ -6,8 +6,9 @@ import path from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
-import { REPO_ROOT, RESTART_CODE } from "@warren/update";
-import { Vault } from "@warren/vault";
+import { REPO_ROOT, RESTART_CODE } from "@wisp/update";
+import { Vault } from "@wisp/vault";
+import { envVar } from "@wisp/core";
 import { registerApi } from "./api.ts";
 import { openDb } from "./db.ts";
 import { Hub } from "./hub.ts";
@@ -25,15 +26,28 @@ export interface HubOptions {
   setupCode?: string | false;
 }
 
+/** A data folder from before the rename to Wisp holds warren.db (and maybe its -wal/-shm); take it over once. */
+export function adoptWarrenDb(dataDir: string) {
+  const to = path.join(dataDir, "wisp.db");
+  const from = path.join(dataDir, "warren.db");
+  if (fs.existsSync(to) || !fs.existsSync(from)) return false;
+  // companions first, so a crash in between never leaves wisp.db without its write-ahead log
+  for (const suffix of ["-wal", "-shm"]) if (fs.existsSync(from + suffix)) fs.renameSync(from + suffix, to + suffix);
+  fs.renameSync(from, to);
+  console.log(`[wisp] using the database from before the rename (${from} -> ${to})`);
+  return true;
+}
+
 export async function buildHub(opts: HubOptions) {
   fs.mkdirSync(opts.dataDir, { recursive: true });
-  const db = openDb(path.join(opts.dataDir, "warren.db"));
+  adoptWarrenDb(opts.dataDir);
+  const db = openDb(path.join(opts.dataDir, "wisp.db"));
   // memory lives in <data>/vault unless the owner pointed it at another folder (maybe an Obsidian vault)
   const location = resolveVaultLocation(opts.dataDir);
   const moved = carryOverVault(opts.dataDir, location.path);
   const vault = new Vault(location.path, db);
   await vault.init();
-  if (moved && moved.files > 0) await vault.syncFromDisk({ name: "Warren", email: "warren@localhost" }, "Brought over memory from the earlier folder");
+  if (moved && moved.files > 0) await vault.syncFromDisk({ name: "Wisp", email: "wisp@localhost" }, "Brought over memory from the earlier folder");
   rememberVaultDir(opts.dataDir, location.path);
   const store = new Store(db);
   // each organization's memory: the first keeps this vault, the others get their own under <data>/orgs
@@ -48,7 +62,7 @@ export async function buildHub(opts: HubOptions) {
   await hub.ensureBuiltinSkills(undefined, true);
   hub.routines.start();
   hub.background.start();
-  // edits made in Obsidian on this machine show up in Warren
+  // edits made in Obsidian on this machine show up in Wisp
   const stopWatching = vault.watch({
     onChange: () => {
       const ws = store.firstWorkspace();
@@ -60,7 +74,7 @@ export async function buildHub(opts: HubOptions) {
   const redact = (url: string) => url.replace(/^\/join\/[^/?#]+/, "/join/[invite]");
   const logger = opts.logger ? { serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redact(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
   const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024 });
-  const setupCode = new SetupCode(path.resolve(opts.dataDir), store.userCount() === 0, opts.setupCode ?? (process.env.WARREN_SETUP_CODE || undefined));
+  const setupCode = new SetupCode(path.resolve(opts.dataDir), store.userCount() === 0, opts.setupCode ?? (envVar("SETUP_CODE") || undefined));
   // the consent and approve screens can't be framed by another site and clicked through
   app.addHook("onSend", async (_req, reply, payload) => {
     if (!reply.hasHeader("x-frame-options")) reply.header("x-frame-options", "SAMEORIGIN");
@@ -123,14 +137,14 @@ function registerInstallers(app: FastifyInstance) {
   } catch {}
   const repo = /^https:\/\/[^@\s]+$/.test(origin) ? origin : "";
   for (const [file, type, pattern] of [
-    ["install.sh", "text/x-shellscript", /^WARREN_REPO="\$\{WARREN_REPO:-[^}]*\}"$/m],
+    ["install.sh", "text/x-shellscript", /^WISP_REPO=.*$/m],
     ["install.ps1", "text/plain", /^\$Repo = .*$/m],
   ] as const) {
     app.get(`/${file}`, async (_req, reply) => {
       let text = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
       if (file === "install.sh") text = joinInstaller(text);
       if (repo)
-        text = text.replace(pattern, file === "install.sh" ? `WARREN_REPO="\${WARREN_REPO:-${repo}}"` : `$Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "${repo}" }`);
+        text = text.replace(pattern, file === "install.sh" ? `WISP_REPO="\${WISP_REPO-\${WARREN_REPO-${repo}}}"` : `$Repo = if (Test-Path Env:WISP_REPO) { $env:WISP_REPO } elseif (Test-Path Env:WARREN_REPO) { $env:WARREN_REPO } else { "${repo}" }`);
       return reply.type(`${type}; charset=utf-8`).header("cache-control", "no-cache").send(text);
     });
   }
@@ -144,7 +158,7 @@ export function joinInstaller(source: string): string {
     text = text.replace('  case "$1" in', `  case "$1" in
     join) MODE=join; if [ -n "\${2:-}" ] && [ "\${2#--}" = "$2" ]; then INVITE="$2"; shift; fi ;;`);
     text = text.replace('if [ "$MODE" = hub ]; then', `if [ "$MODE" = join ]; then
-  if [ -n "$INVITE" ]; then warren join "$INVITE"; else warren join; fi
+  if [ -n "$INVITE" ]; then wisp join "$INVITE"; else wisp join; fi
 elif [ "$MODE" = hub ]; then`);
   }
   // The documented command pipes to sh; parse the actual installer with Bash on every platform.

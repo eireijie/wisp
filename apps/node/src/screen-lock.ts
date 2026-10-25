@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * The code that opens this device's own screen from Warren, picked at the device. Only a hash of
- * it is kept here, and the hub never stores it: someone signed in to Warren as the owner still
+ * The code that opens this device's own screen from Wisp, picked at the device. Only a hash of
+ * it is kept here, and the hub never stores it: someone signed in to Wisp as the owner still
  * can't see or use the screen without it. The device itself counts wrong codes and locks out
  * guessing, so nothing on the hub can get around that.
  */
@@ -22,7 +22,7 @@ export const MAX_TRIES = 5;
 /** The first lockout; each one after it is twice as long, up to a day. */
 const LOCKOUT_MS = 15 * 60_000;
 const MAX_LOCKOUT_MS = 24 * 60 * 60_000;
-/** The longest one code entry keeps the screen open (a lend "until I stop" included). */
+/** The longest one code entry keeps the screen open. */
 export const MAX_UNLOCK_MS = 24 * 60 * 60_000;
 
 /** Is this a code people can pick? A PIN is 6 digits; a password is 8 characters or more. */
@@ -80,10 +80,6 @@ export class ScreenLock {
     return !!this.code();
   }
 
-  get kind(): CodeKind | undefined {
-    return this.code()?.kind;
-  }
-
   /** Check a code. Wrong ones count toward a lockout; a right one clears the count. */
   check(code: string | undefined): CheckResult {
     const saved = this.code();
@@ -132,7 +128,7 @@ export class ScreenLock {
     this.grants.clear();
   }
 
-  /** May Warren use the screen right now (screenshots, input, files)? Always, when no code is set. */
+  /** May Wisp use the screen right now (screenshots, input, files)? Always, when no code is set. */
   open(): boolean {
     if (!this.enabled) return true;
     const t = this.now();

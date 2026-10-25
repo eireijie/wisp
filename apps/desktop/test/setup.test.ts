@@ -20,7 +20,7 @@ function fixture(state: Record<string, any> = { step: "cloud", server: { id: 42,
   const html = readFileSync(new URL("../src/setup.html", import.meta.url), "utf8");
   const code = html.match(/<script>([\s\S]*?)<\/script>/)![1];
   runInNewContext(code, {
-    window: { warrenSetup: setup, addEventListener: vi.fn() }, location: { search: `?state=${encodeURIComponent(JSON.stringify(state))}` },
+    window: { wispSetup: setup, addEventListener: vi.fn() }, location: { search: `?state=${encodeURIComponent(JSON.stringify(state))}` },
     setTimeout: (fn: () => Promise<void>) => { timers.set(++timerId, fn); return timerId; },
     clearTimeout: (id: number) => timers.delete(id),
     URLSearchParams, URL, Intl, Option: class {},

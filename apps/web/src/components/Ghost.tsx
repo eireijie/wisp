@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { GhostAppearance, GhostShape } from "@warren/core";
-import { GHOST_ASLEEP } from "@warren/core/src/appearance.ts";
+import type { GhostAppearance, GhostShape } from "@wisp/core";
+import { GHOST_ASLEEP } from "@wisp/core/src/appearance.ts";
 import { useMotionReduced } from "../theme.ts";
 import { useGhostActivity } from "../ghostActivity.ts";
 import { ghostArms } from "./GhostArms.tsx";
@@ -52,11 +52,6 @@ export const SHAPES: Record<GhostShape, ShapeDef> = {
 function rgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-function mix(hex: string, to: [number, number, number], t: number) {
-  const [r, g, b] = rgb(hex);
-  const c = (a: number, z: number) => Math.round(a + (z - a) * t);
-  return `rgb(${c(r, to[0])} ${c(g, to[1])} ${c(b, to[2])})`;
 }
 function luminance([r, g, b]: [number, number, number]) {
   const lin = (v: number) => {

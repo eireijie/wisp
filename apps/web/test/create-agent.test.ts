@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CreateAgent } from "../src/views/CreateAgent.tsx";
 import { useStore } from "../src/store.ts";
-import { HARNESSES, type Agent } from "@warren/core";
+import { HARNESSES, type Agent } from "@wisp/core";
 import { HarnessLogo } from "../src/components/HarnessLogo.tsx";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, useMotionReduced: () => false }));

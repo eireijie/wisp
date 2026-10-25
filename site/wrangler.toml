@@ -1,4 +1,4 @@
-# Cloudflare Pages project for Warren's website. `npm run deploy` builds and uploads dist/.
-name = "warren"
+# Cloudflare Pages project for Wisp's website. `npm run deploy` builds and uploads dist/.
+name = "wisp-app"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-10-01"

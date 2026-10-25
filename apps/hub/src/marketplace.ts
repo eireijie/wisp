@@ -1,4 +1,4 @@
-import { marketplaceEntry, rankMarketplace, storeApp, type AppCategory, type MarketplaceEntry, type RegistryServer, type StoreApp } from "@warren/core";
+import { marketplaceEntry, rankMarketplace, storeApp, type AppCategory, type MarketplaceEntry, type RegistryServer, type StoreApp } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 const REGISTRY = "https://registry.modelcontextprotocol.io/v0/servers";

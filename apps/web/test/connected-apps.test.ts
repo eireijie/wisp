@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONNECTOR_CATALOG, everydayAppFor, type MarketplaceEntry, type MarketplaceInstall } from "@warren/core";
-import { connectBlocked, catalogFor, connectSummary, recommendedFirst } from "../src/views/ConnectorsView.tsx";
+import { CONNECTOR_CATALOG, type MarketplaceEntry, type MarketplaceInstall } from "@wisp/core";
+import { connectBlocked, connectSummary } from "../src/views/ConnectorsView.tsx";
 
 vi.mock("../src/api.ts", () => ({ api: vi.fn() }));
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
@@ -11,18 +11,18 @@ const entry = (o: Partial<MarketplaceEntry>): MarketplaceEntry => ({ id: "com.za
 describe("connectSummary", () => {
   it("names the maker for an official server", () => {
     const s = connectSummary({ entry: entry({}), install });
-    expect(s.runBy).toBe("Made and run by Zapier (zapier.com), not by Warren.");
+    expect(s.runBy).toBe("Made and run by Zapier (zapier.com), not by Wisp.");
     expect(s.can).toContain("use Zapier through this connection");
     expect(s.caution).toBeNull();
   });
   it("says a verified third party is not the app's maker", () => {
     const s = connectSummary({ entry: entry({ id: "com.acme/gmail", name: "Gmail helper", publisher: "com.acme", brand: "acme", domain: "acme.com" }), install });
-    expect(s.runBy).toContain("Run by com.acme (acme.com), not by Warren");
+    expect(s.runBy).toContain("Run by com.acme (acme.com), not by Wisp");
     expect(s.runBy).toContain("doesn't mean Gmail helper's own maker endorses it");
   });
   it("warns plainly for an unverified server", () => {
     const s = connectSummary({ entry: entry({ id: "io.github.bob/gmail", name: "Gmail", publisher: "bob", brand: "bob", domain: null, verified: false }), install });
-    expect(s.runBy).toBe("Run by bob, not by the app's maker or Warren.");
+    expect(s.runBy).toBe("Run by bob, not by the app's maker or Wisp.");
     expect(s.caution).toContain("Only connect if you trust them");
   });
   it("describes keys honestly", () => {
@@ -54,29 +54,5 @@ describe("connectBlocked", () => {
     expect(connectBlocked([gem, cod], [], "mcp-http")).toBe(false);
     expect(connectBlocked([gem], [], "mcp-http")).toBe(true);
     expect(connectBlocked([], [], "mcp-http")).toBe(false);
-  });
-});
-
-describe("recommendedFirst", () => {
-  const z = entry({});
-  const other = entry({ id: "io.x/y", name: "Other" });
-  it("puts Zapier first for an app that goes through it", () => {
-    expect(recommendedFirst([other, z], z, everydayAppFor("gmail")).map((e) => e.id)).toEqual([z.id, "io.x/y"]);
-    expect(recommendedFirst([other], z, everydayAppFor("gmail")).map((e) => e.id)).toEqual([z.id, "io.x/y"]);
-  });
-  it("leaves the order for built-in apps and no match", () => {
-    expect(recommendedFirst([other, z], z, everydayAppFor("slack"))).toEqual([other, z]);
-    expect(recommendedFirst([other, z], z, null)).toEqual([other, z]);
-  });
-});
-
-describe("catalogFor", () => {
-  it("lists everyday apps first in Simple", () => {
-    const ids = catalogFor(true, "All").map((c) => c.id);
-    expect(ids.slice(0, 3)).toEqual(["slack", "notion", "gdrive"]);
-    expect(ids.indexOf("github")).toBeGreaterThan(2);
-  });
-  it("keeps the catalog order in Advanced", () => {
-    expect(catalogFor(false, "All").map((c) => c.id)).toEqual(CONNECTOR_CATALOG.map((c) => c.id));
   });
 });

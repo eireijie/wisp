@@ -1,4 +1,4 @@
-import { BUILTIN_SKILLS, BUILTIN_SKILL_SLUGS, catalogConnector, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type Skill, type SkillSource } from "@warren/core";
+import { BUILTIN_SKILLS, BUILTIN_SKILL_SLUGS, catalogConnector, connectorSlug, fillTemplate, isMasked, maskSecret, type Connector, type ConnectorKind, type ConnectorSpec, type Skill, type SkillSource } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 import { ConnectorAuth } from "./connector-auth.ts";

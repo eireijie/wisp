@@ -1,18 +1,18 @@
 #cloud-config
-# Warren on a new Linux server (Ubuntu 24.04 or Debian 12/13), as its first-boot "user data".
+# Wisp on a new Linux server (Ubuntu 24.04 or Debian 12/13), as its first-boot "user data".
 #
-# It installs Docker, runs the hub (ghcr.io/eireijie/warren) behind Caddy, and gets HTTPS without a
+# It installs Docker, runs the hub (the configured Wisp image) behind Caddy, and gets HTTPS without a
 # domain: a Let's Encrypt certificate for the server's own IP address (https://203.0.113.7), and one
 # for <ip-with-dashes>.sslip.io as a second address in case the first can't be issued. The address is
-# written to /opt/warren/url and to the login message.
+# written to /opt/wisp/url and to the login message.
 #
 # The desktop app's "Create one in your cloud account" sends this file when it creates a server, with
-# __WARREN_SETUP_KEY__ replaced by a random key: until the first account exists, only a request that
+# __WISP_SETUP_KEY__ replaced by a random key: until the first account exists, only a request that
 # carries that key can make it, so nobody who finds the new server first can claim it. Pasted by hand
 # (for example into Hetzner's or DigitalOcean's "Cloud config" box) with the placeholder left as it
-# is, there's no key: the hub makes its own setup code, in /opt/warren/data/setup-code and its log.
+# is, there's no key: the hub makes its own setup code, in /opt/wisp/data/setup-code and its log.
 #
-# Data lives in /opt/warren/data (back it up). The hub image is pulled again every night.
+# Data lives in /opt/wisp/data (back it up). The hub image is pulled again every night.
 
 package_update: true
 packages:
@@ -21,19 +21,23 @@ packages:
   - curl
 
 write_files:
-  - path: /opt/warren/setup-key
-    permissions: "0600"
-    content: "__WARREN_SETUP_KEY__"
+  - path: /opt/wisp/.env
+    content: |
+      WISP_REPO=eireijie/wisp
 
-  - path: /opt/warren/compose.yaml
+  - path: /opt/wisp/setup-key
+    permissions: "0600"
+    content: "__WISP_SETUP_KEY__"
+
+  - path: /opt/wisp/compose.yaml
     content: |
       services:
-        warren:
-          image: ghcr.io/eireijie/warren:latest
+        wisp:
+          image: ghcr.io/${WISP_REPO}:latest
           restart: unless-stopped
           environment:
             # the hub checks the setup key too, not only Caddy
-            WARREN_SETUP_CODE: ${WARREN_SETUP_CODE:-}
+            WISP_SETUP_CODE: ${WISP_SETUP_CODE:-}
           volumes:
             - ./data:/data
         caddy:
@@ -51,21 +55,21 @@ write_files:
         caddy-data:
         caddy-config:
 
-  - path: /opt/warren/start.sh
+  - path: /opt/wisp/start.sh
     permissions: "0755"
     content: |
       #!/bin/sh
-      # Writes the Caddyfile for this server's public IPv4 address, then starts Warren.
+      # Writes the Caddyfile for this server's public IPv4 address, then starts Wisp.
       set -eu
-      cd /opt/warren
+      cd /opt/wisp
 
-      ip="${WARREN_IP:-}"
+      ip="${WISP_IP-${WARREN_IP-}}"
       # the provider's metadata service (Hetzner, then DigitalOcean), else the address the server sends from
       [ -n "$ip" ] || ip=$(curl -fsS --max-time 3 http://169.254.169.254/hetzner/v1/metadata/public-ipv4 2>/dev/null || true)
       [ -n "$ip" ] || ip=$(curl -fsS --max-time 3 http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || true)
       [ -n "$ip" ] || ip=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
       case "$ip" in
-        *[!0-9.]* | "") echo "Warren: couldn't find this server's public IPv4 address" >&2; exit 1 ;;
+        *[!0-9.]* | "") echo "Wisp: couldn't find this server's public IPv4 address" >&2; exit 1 ;;
       esac
       sslip="$(echo "$ip" | tr . -).sslip.io"
 
@@ -73,51 +77,51 @@ write_files:
       guard=""
       : > .env
       case "$key" in
-        "" | __WARREN_SETUP_KEY__) ;;
-        *) printf 'WARREN_SETUP_CODE=%s\n' "$key" > .env; chmod 600 .env; guard="
-      	@claim {
-      		method POST
-      		path /api/setup
-      		not header X-Warren-Setup-Key \"$key\"
-      	}
-      	respond @claim \"This Warren is being set up by the app that created it.\" 403" ;;
+        "" | __WISP_SETUP_KEY__) ;;
+        *) printf 'WISP_SETUP_CODE=%s\n' "$key" > .env; chmod 600 .env; guard="
+        @claim {
+          method POST
+          path /api/setup
+          not header X-Wisp-Setup-Key \"$key\"
+        }
+        respond @claim \"This Wisp is being set up by the app that created it.\" 403" ;;
       esac
 
       cat > Caddyfile <<EOF
-      (warren) {$guard
-      	reverse_proxy warren:4747
+      (wisp) {$guard
+        reverse_proxy wisp:4747
       }
 
       # Let's Encrypt only certifies a bare IP address on its short-lived (six-day) profile; Caddy renews it.
       https://$ip {
-      	tls {
-      		issuer acme {
-      			profile shortlived
-      		}
-      	}
-      	import warren
+        tls {
+          issuer acme {
+            profile shortlived
+          }
+        }
+        import wisp
       }
 
       https://$sslip {
-      	import warren
+        import wisp
       }
       EOF
 
       echo "https://$ip" > url
       echo "https://$sslip" >> url
-      printf '\nWarren: https://%s (also https://%s)\nData: /opt/warren/data   Logs: cd /opt/warren && docker compose logs\nSetup code (until the first account exists): cat /opt/warren/data/setup-code\n\n' "$ip" "$sslip" > /etc/motd
+      printf '\nWisp: https://%s (also https://%s)\nData: /opt/wisp/data   Logs: cd /opt/wisp && docker compose logs\nSetup code (until the first account exists): cat /opt/wisp/data/setup-code\n\n' "$ip" "$sslip" > /etc/motd
 
       docker compose pull
       docker compose up -d
-      echo "Warren is starting at https://$ip"
+      echo "Wisp is starting at https://$ip"
 
-  - path: /etc/cron.daily/warren-update
+  - path: /etc/cron.daily/wisp-update
     permissions: "0755"
     content: |
       #!/bin/sh
       # A hub in Docker can't update itself: get the newest image and restart on it if it changed.
-      cd /opt/warren && docker compose pull -q && docker compose up -d && docker image prune -f >/dev/null
+      cd /opt/wisp && docker compose pull -q && docker compose up -d && docker image prune -f >/dev/null
 
 runcmd:
   - [systemctl, enable, --now, docker]
-  - [/opt/warren/start.sh]
+  - [/opt/wisp/start.sh]

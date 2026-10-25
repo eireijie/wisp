@@ -4,16 +4,16 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { Duplex } from "node:stream";
-import { ByteReader, rfbLetIn, rfbSignIn } from "@warren/core/src/vnc.ts";
+import { ByteReader, rfbLetIn, rfbSignIn } from "@wisp/core/src/vnc.ts";
 import { exec, has } from "./driver.ts";
 
 /**
  * Remote Desktop: a real VNC server on this device for its own screen, so live view streams only
  * what changed instead of screenshots. The server only listens on this device (127.0.0.1) and has
- * a random password that never leaves it: Warren's device program signs in with it and relays the
+ * a random password that never leaves it: Wisp's device program signs in with it and relays the
  * connection to the hub, after the person's own screen code was checked (see screen-lock.ts).
  *
- *   Linux    x11vnc, started and kept running by `warren node` (X11 only)
+ *   Linux    x11vnc, started and kept running by `wisp node` (X11 only)
  *   Windows  TightVNC, installed as a Windows service
  *   macOS    not yet: Screen Sharing can't be set to listen on this device alone
  */
@@ -55,7 +55,7 @@ export async function signedInVnc(rd: RemoteDesktopConfig): Promise<Duplex> {
   const sock = net.connect(rd.port, "127.0.0.1");
   await new Promise<void>((resolve, reject) => {
     sock.once("connect", () => resolve());
-    sock.once("error", (e) => reject(new Error(`Remote Desktop isn't running on this device (${e.message}). Run \`warren node screen remote\` here to set it up again.`)));
+    sock.once("error", (e) => reject(new Error(`Remote Desktop isn't running on this device (${e.message}). Run \`wisp node screen remote\` here to set it up again.`)));
   });
   const up = new ByteReader();
   const feedUp = (b: Buffer) => up.feed(b);
@@ -228,24 +228,24 @@ export async function setUpRemoteDesktop(dir: string, io: SetupIO): Promise<Remo
   if (process.platform === "win32") {
     const installed = (await exec("sc", ["query", "tvnserver"]).catch(() => null))?.code === 0;
     if (installed) {
-      io.say("   TightVNC is already installed here with its own settings, so Warren leaves it alone.");
-      io.say("   To let Warren set it up: uninstall TightVNC (Settings → Apps), then run `warren node screen remote` again.");
+      io.say("   TightVNC is already installed here with its own settings, so Wisp leaves it alone.");
+      io.say("   To let Wisp set it up: uninstall TightVNC (Settings → Apps), then run `wisp node screen remote` again.");
       return null;
     }
     if (!(await has("winget"))) {
-      io.say("   Warren installs TightVNC with winget, which isn't here. Install \"App Installer\" from the Microsoft Store, then run `warren node screen remote` again.");
+      io.say("   Wisp installs TightVNC with winget, which isn't here. Install \"App Installer\" from the Microsoft Store, then run `wisp node screen remote` again.");
       return null;
     }
-    io.say("   TightVNC is a free, open-source VNC server. Warren sets it to listen on this computer only.");
+    io.say("   TightVNC is a free, open-source VNC server. Wisp sets it to listen on this computer only.");
     if (!(await io.ask("   Install it now? Windows asks for permission once."))) return null;
     const rd = newRemoteDesktop("tightvnc");
     if (!io.run("winget", ["install", "--id", "GlavSoft.TightVNC", "--exact", "--override", tightVncMsiArgs(rd).join(" ")])) {
-      io.say("   The install didn't finish. Run `warren node screen remote` to try again.");
+      io.say("   The install didn't finish. Run `wisp node screen remote` to try again.");
       return null;
     }
     for (let i = 0; i < 10 && !(await listening(rd.port)); i++) await new Promise((r) => setTimeout(r, 1000));
     if (!(await listening(rd.port))) {
-      io.say("   TightVNC is installed but isn't answering yet. Restart this computer, then check with `warren doctor`.");
+      io.say("   TightVNC is installed but isn't answering yet. Restart this computer, then check with `wisp doctor`.");
     }
     return rd;
   }
@@ -254,13 +254,13 @@ export async function setUpRemoteDesktop(dir: string, io: SetupIO): Promise<Remo
   if (!(await has("x11vnc"))) {
     const cmd = await linuxInstall("x11vnc");
     if (!cmd) {
-      io.say("   Install x11vnc with your package manager, then run `warren node screen remote` again.");
+      io.say("   Install x11vnc with your package manager, then run `wisp node screen remote` again.");
       return null;
     }
-    io.say("   x11vnc is a free, open-source VNC server. Warren runs it for this screen, on this computer only.");
+    io.say("   x11vnc is a free, open-source VNC server. Wisp runs it for this screen, on this computer only.");
     if (!(await io.ask(`   Install it now (${[cmd[0], ...cmd[1]].join(" ")})?`))) return null;
     if (!io.run(cmd[0], cmd[1]) || !(await has("x11vnc"))) {
-      io.say("   x11vnc didn't install. Run `warren node screen remote` to try again.");
+      io.say("   x11vnc didn't install. Run `wisp node screen remote` to try again.");
       return null;
     }
   }

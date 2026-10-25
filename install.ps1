@@ -1,4 +1,4 @@
-# Install Wisp without questions: irm https://wisp.pages.dev/install.ps1 | iex
+# Install Wisp without questions: irm https://raw.githubusercontent.com/eireijie/wisp/main/install.ps1 | iex
 # Join: & ([scriptblock]::Create((irm <origin>/install.ps1))) join [invite-link]
 param(
   [Parameter(Position=0)][string]$Command = "",
@@ -7,14 +7,17 @@ param(
   [string]$Hub = "",
   [string]$Token = "",
   [string]$Name = "",
-  [string]$Dir = $(if ($env:WARREN_DIR) { $env:WARREN_DIR } else { Join-Path $HOME "warren" }),
+  [string]$Dir = $(if (Test-Path Env:WISP_DIR) { $env:WISP_DIR } elseif (Test-Path Env:WARREN_DIR) { $env:WARREN_DIR } else { Join-Path $HOME "wisp" }),
   [switch]$Yes,
   [switch]$NoService,
   [switch]$NoDevice,
   [switch]$NoOpen
 )
 $ErrorActionPreference = "Stop"
-$Repo = if ($env:WARREN_REPO) { $env:WARREN_REPO } else { "https://github.com/eireijie/warren.git" }
+$GitHubRepo = "eireijie/wisp"
+$Repo = if (Test-Path Env:WISP_REPO) { $env:WISP_REPO } elseif (Test-Path Env:WARREN_REPO) { $env:WARREN_REPO } else { "https://github.com/$GitHubRepo.git" }
+# Reuse the old checkout when no directory was chosen.
+if (-not $PSBoundParameters.ContainsKey("Dir") -and -not (Test-Path Env:WISP_DIR) -and -not (Test-Path Env:WARREN_DIR) -and -not (Test-Path $Dir) -and (Test-Path (Join-Path $HOME "warren/.git"))) { $Dir = Join-Path $HOME "warren" }
 $Check = [char]0x2713
 $Work = [char]0x25cc
 $Arrow = [char]0x2192
@@ -25,7 +28,10 @@ if ($Hub -match '/join/[^/]+/?$') { $Mode = "join"; $Invite = $Hub }
 if ($Mode -eq "device" -and (-not $Hub -or -not $Token)) { Fail "Use join [invite-link], or provide both -Hub and -Token." }
 Write-Host "Wisp"
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "Install Git, then run this installer again." }
-$State = Join-Path $HOME ".warren"
+$State = Join-Path $HOME ".wisp"
+# An older Warren home moves to ~\.wisp with `wisp migrate` below; until then it stays in use.
+$OldState = Join-Path $HOME ".warren"
+if (-not (Test-Path $State) -and (Test-Path $OldState) -and -not ((Get-Item $OldState -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { $State = $OldState }
 $Runtime = Join-Path $State "runtime\node"
 $Log = Join-Path $State "install.log"
 New-Item -ItemType Directory -Path $State -Force | Out-Null
@@ -76,7 +82,11 @@ if (-not $Node -or (NodeMajor $Node) -lt 22) {
 }
 $env:Path = (Split-Path $Node) + ";" + $env:Path
 $Npm = Join-Path (Split-Path $Node) "npm.cmd"
-if (Test-Path (Join-Path $Dir ".git")) { Quiet git @("-C", $Dir, "pull", "--ff-only") }
+if (Test-Path (Join-Path $Dir ".git")) {
+  $Origin = git -C $Dir remote get-url origin
+  if ($Origin -match "^(https://github.com/eireijie/warren(?:\.git)?|git@github.com:eireijie/warren\.git)$") { git -C $Dir remote set-url origin $Repo }
+  Quiet git @("-C", $Dir, "pull", "--ff-only")
+}
 else {
   if (Test-Path $Dir) { Fail "$Dir exists; choose another folder with -Dir." }
   Quiet git @("clone", $Repo, $Dir)
@@ -89,11 +99,24 @@ try {
   Quiet $Npm @("ci", "--prefix", "bin", "--no-audit", "--no-fund", "--loglevel=error")
   if ($Mode -eq "hub") { Quiet $Npm @("run", "build", "--silent") }
   Write-Host "$Check Downloaded Wisp"
+  # Move an older Warren home and services to Wisp before starting anything under the new name.
+  Quiet $Node @((Join-Path $Dir "bin\wisp.mjs"), "migrate")
+  if ($State -eq $OldState -and (Test-Path (Join-Path $HOME ".wisp"))) {
+    if ($Node.StartsWith($OldState + "\")) { $Node = (Join-Path $HOME ".wisp") + $Node.Substring($OldState.Length) }
+    $State = Join-Path $HOME ".wisp"
+    $Log = Join-Path $State "install.log"
+  }
   $Bin = Join-Path $HOME ".local\bin"
   New-Item -ItemType Directory -Path $Bin -Force | Out-Null
-  foreach ($Alias in @("wisp", "warren", "warren-mcp", "warren-hub")) {
-    $Entry = if ($Alias -eq "wisp") { "warren" } else { $Alias }
-    $Script = Join-Path $Dir "bin\$Entry.mjs"
+  # the old Warren commands, when they belong to this checkout or the old ~\warren one
+  foreach ($Old in @("warren", "warren-mcp", "warren-hub")) {
+    $OldEntry = Join-Path $Bin "$Old-entry.ps1"
+    if ((Test-Path $OldEntry) -and ((Get-Content $OldEntry -Raw).Contains((Join-Path $Dir "bin\")) -or (Get-Content $OldEntry -Raw).Contains((Join-Path $HOME "warren\bin\")))) {
+      Remove-Item $OldEntry, (Join-Path $Bin "$Old.cmd") -Force -ErrorAction SilentlyContinue
+    }
+  }
+  foreach ($Alias in @("wisp", "wisp-mcp", "wisp-hub")) {
+    $Script = Join-Path $Dir "bin\$Alias.mjs"
     # A distinct helper name avoids PowerShell selecting a script blocked by its execution policy.
     # An ASCII trampoline preserves Unicode paths through a UTF-8 PowerShell wrapper.
     $NodeLiteral = "'" + $Node.Replace("'", "''") + "'"
@@ -105,7 +128,7 @@ try {
   if ($Bin -notin ($UserPath -split ';')) { [Environment]::SetEnvironmentVariable("Path", "$Bin;$UserPath", "User") }
   $env:Path = "$Bin;" + $env:Path
   # Invoke the selected runtime directly so the current PowerShell also works before PATH refresh.
-  $Cli = Join-Path $Dir "bin\warren.mjs"
+  $Cli = Join-Path $Dir "bin\wisp.mjs"
   if ($Mode -eq "join") {
     $JoinArgs = @($Cli, "join")
     if ($Invite) { $JoinArgs += $Invite }
@@ -125,7 +148,9 @@ try {
     Write-Host "$Check Installed Wisp; start it with: wisp service install hub"
   } else {
     Quiet $Node @($Cli, "service", "install", "hub")
-    $Port = if ($env:PORT) { $env:PORT } else { "4747" }
+    $Port = $null
+    try { $Port = (& $Node $Cli "service" "status" "hub" "--json" | ConvertFrom-Json)[0].port } catch {}
+    if (-not $Port) { $Port = if ($env:PORT) { $env:PORT } else { "4747" } }
     $Up = $false
     foreach ($i in 1..30) {
       try { Invoke-WebRequest "http://127.0.0.1:$Port/healthz" -UseBasicParsing -TimeoutSec 2 | Out-Null; $Up = $true; break } catch { Start-Sleep -Seconds 1 }

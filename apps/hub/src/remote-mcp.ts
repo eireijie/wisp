@@ -3,15 +3,16 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { WarrenClient } from "@warren/sdk";
-import { createWarrenMcp } from "@warren/mcp/src/server.ts";
+import { envVar } from "@wisp/core";
+import { WispClient } from "@wisp/sdk";
+import { createWispMcp } from "@wisp/mcp/src/server.ts";
 import { z } from "zod";
 import type { Caller } from "./api.ts";
 import { bearer, id, issueToken, now, resolveToken, sha } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
 /**
- * The remote MCP endpoint: `/mcp` speaks Streamable HTTP with the same tools as warren-mcp, for
+ * The remote MCP endpoint: `/mcp` speaks Streamable HTTP with the same tools as wisp-mcp, for
  * cloud MCP clients that connect by URL (Grok connectors, ChatGPT connectors, Claude custom
  * connectors). They sign in with OAuth 2.1 as the MCP spec describes: protected-resource and
  * authorization-server metadata, dynamic client registration, PKCE, and a consent page in the web
@@ -40,7 +41,7 @@ const grantLabel = (grantId: string) => `oauth:${grantId}`;
 
 /** This hub as the caller reached it (behind a tunnel or Tailscale, its public https address). */
 export function publicOrigin(req: FastifyRequest): string {
-  const fixed = process.env.WARREN_PUBLIC_URL?.replace(/\/+$/, "");
+  const fixed = envVar("PUBLIC_URL")?.replace(/\/+$/, "");
   if (fixed) return fixed;
   const first = (v: unknown) => (typeof v === "string" ? v.split(",")[0].trim() : "");
   const host = first(req.headers["x-forwarded-host"]) || req.headers.host || "localhost";
@@ -507,7 +508,7 @@ export function registerRemoteMcp(app: FastifyInstance, hub: Hub, h: Helpers) {
     const auth = { token };
     let server: McpServer;
     try {
-      server = await createWarrenMcp(new WarrenClient({ url: "http://hub.internal", token, fetch: inProcess(auth) }), { localFiles: false });
+      server = await createWispMcp(new WispClient({ url: "http://hub.internal", token, fetch: inProcess(auth) }), { localFiles: false });
     } catch (e) {
       return rpcError(reply, 500, (e as Error).message);
     }

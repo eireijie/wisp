@@ -3,8 +3,8 @@ import { activityPhrase, minutesSince, workKind, workSteps, workSummary } from "
 
 describe("plain words for what an agent is doing", () => {
   it("names the current tool in a few plain words", () => {
-    expect(activityPhrase("mcp__warren__memory_search")).toBe("searching memory");
-    expect(activityPhrase("mcp__warren__computer_click")).toBe("using its computer");
+    expect(activityPhrase("mcp__wisp__memory_search")).toBe("searching memory");
+    expect(activityPhrase("mcp__wisp__computer_click")).toBe("using its computer");
     expect(activityPhrase("Edit")).toBe("editing files");
     expect(activityPhrase("apply_patch")).toBe("editing files");
     expect(activityPhrase("WebSearch")).toBe("searching the web");
@@ -16,7 +16,7 @@ describe("plain words for what an agent is doing", () => {
   });
 
   it("folds repeated work into steps, the last one live", () => {
-    const steps = workSteps(["Read", "Read", "Edit", "mcp__warren__memory_search"], true);
+    const steps = workSteps(["Read", "Read", "Edit", "mcp__wisp__memory_search"], true);
     expect(steps.map((s) => s.text)).toEqual(["Read 2 files", "Edited files", "Searching memory"]);
     expect(steps.map((s) => s.now)).toEqual([false, false, true]);
     expect(workSteps([], true)).toEqual([]);

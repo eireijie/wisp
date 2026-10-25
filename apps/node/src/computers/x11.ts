@@ -1,4 +1,4 @@
-import { x11Combo, type KeyCombo, type RunOutput } from "@warren/core";
+import { x11Combo, type KeyCombo, type RunOutput } from "@wisp/core";
 import { ActionError, cached, jpegSize, type Button, type Direction, type Driver, type ExecResult, type Shot, type Size } from "./driver.ts";
 
 /** Runs a command where the X display is (locally, or inside a VM). */

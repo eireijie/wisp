@@ -1,4 +1,4 @@
-import type { ClientEvent, Message } from "@warren/core";
+import type { ClientEvent, Message } from "@wisp/core";
 
 const computerTool = (name: string) => /(?:^|[_./:-])(?:computer|browser)(?:_|$)/.test(name);
 

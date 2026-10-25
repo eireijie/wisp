@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Crown, Plus, Search, X } from "lucide-react";
-import { teamProblem, type Agent, type ChannelTeam, type ChannelTeamNode } from "@warren/core";
+import { teamProblem, type Agent, type ChannelTeam, type ChannelTeamNode } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { AgentAvatar, Input, agentVar, cx } from "./ui.tsx";
 
@@ -196,9 +196,9 @@ export function TeamChart({
           ref={canvas}
           className={cx("relative flex-1 min-w-0 overflow-auto bg-bg", link && "cursor-crosshair")}
           style={{ height, backgroundImage: "radial-gradient(var(--line) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
-          onDragOver={(e) => !readOnly && e.dataTransfer.types.includes("text/x-warren-agent") && e.preventDefault()}
+          onDragOver={(e) => !readOnly && e.dataTransfer.types.includes("text/x-wisp-agent") && e.preventDefault()}
           onDrop={(e) => {
-            const id = e.dataTransfer.getData("text/x-warren-agent");
+            const id = e.dataTransfer.getData("text/x-wisp-agent");
             if (!id || readOnly) return;
             e.preventDefault();
             const p = point(e);
@@ -350,7 +350,7 @@ function AgentRow({ agent, onChart, onAdd }: { agent: Agent; onChart: boolean; o
     <div
       draggable={!onChart}
       onDragStart={(e) => {
-        e.dataTransfer.setData("text/x-warren-agent", agent.id);
+        e.dataTransfer.setData("text/x-wisp-agent", agent.id);
         e.dataTransfer.effectAllowed = "copy";
       }}
       // an agent already on the chart reads muted; not with opacity, which Android's WebView fails to paint around an animated ghost

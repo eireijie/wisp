@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isLocalOnlyHost } from "./loopback.ts";
 import { api } from "./api.ts";
 
 /** What Settings → Memory knows: where the vault is and how to sync it from another computer. */
@@ -6,7 +7,7 @@ export interface MemoryStorage {
   /** the folder on the hub's machine; owners only */
   path: string | null;
   source: "env" | "setting" | "default";
-  /** false for organizations other than the first: their memory lives in Warren's data folder and can't be moved (older hubs leave it out) */
+  /** false for organizations other than the first: their memory lives in Wisp's data folder and can't be moved (older hubs leave it out) */
   movable?: boolean;
   setting: string | null;
   pendingRestart: boolean;
@@ -19,7 +20,7 @@ export interface MemoryStorage {
 }
 
 /** Is this browser on the same machine as the hub? Only then can obsidian:// reach the vault's folder. */
-export const onHubMachine = () => ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+export const onHubMachine = () => isLocalOnlyHost(window.location.hostname);
 
 /** A link that opens the vault (or one note) in Obsidian on this computer. */
 export function obsidianLink(root: string, note?: string): string {

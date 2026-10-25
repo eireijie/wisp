@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Wrench, Pin, PinOff, Square, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
-import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@warren/core";
+import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -10,7 +10,7 @@ import { ChannelIcon, ChannelMembers, ChannelSettings, NOTIFY, isProtected, setA
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ChangeCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
-import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, HARNESS_LABELS, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, agentVar, clockTime, EmojiPicker, Empty, Field, harnessLabel, Input, Menu, Modal, Pill, Popover, StatusDot, UserAvatar, cx } from "../components/ui.tsx";
 import { AgentPill } from "../components/AgentPill.tsx";
 import { CallScreen } from "../voice/CallScreen.tsx";
 import { takeDraft } from "../draft.ts";
@@ -30,7 +30,7 @@ type Side = { kind: "agent"; agentId: string; tab: AgentPanelTab } | { kind: "me
 /** The DM's own agent panel stays open across DMs once you open it. */
 function storedDmPanel(): AgentPanelTab | null {
   try {
-    return (localStorage.getItem("warren.agentPanel") as AgentPanelTab | null) || null;
+    return (localStorage.getItem("wisp.agentPanel") as AgentPanelTab | null) || null;
   } catch {
     return null;
   }
@@ -60,8 +60,8 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
     // remember the DM's own panel, so it's there in the next DM too
     if (!dmAgentId) return;
     try {
-      if (next?.kind === "agent" && next.agentId === dmAgentId) localStorage.setItem("warren.agentPanel", next.tab);
-      else if (!next) localStorage.removeItem("warren.agentPanel");
+      if (next?.kind === "agent" && next.agentId === dmAgentId) localStorage.setItem("wisp.agentPanel", next.tab);
+      else if (!next) localStorage.removeItem("wisp.agentPanel");
     } catch {}
   };
   /** Open a pane; a thread that's open closes first, since they share the space. */
@@ -462,7 +462,7 @@ function ModelControl({ agent, ctx, catalog, canEdit }: { agent: Agent; ctx: Age
         <button
           type="button"
           onClick={canEdit ? toggle : undefined}
-          title={`${HARNESS_LABELS[ctx.harness] ?? ctx.harness} · ${ctx.model ?? "default model"}${ctx.effort ? ` · ${ctx.effort} effort` : ""}${ctx.fast ? " · fast" : ""}`}
+          title={`${harnessLabel(ctx.harness) ?? ctx.harness} · ${ctx.model ?? "default model"}${ctx.effort ? ` · ${ctx.effort} effort` : ""}${ctx.fast ? " · fast" : ""}`}
           className={cx("h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13px] min-w-0", canEdit && "hover:bg-hover", open && "bg-hover")}
         >
           {ctx.fast && ctx.fastAvailable && <Zap size={13} className="text-accent-text fill-accent shrink-0" />}
@@ -892,7 +892,7 @@ function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: Chan
 }
 
 /** "Add files" on a new channel's intro asks the composer to open its file picker. */
-const COMPOSER_ATTACH = "warren:composer-attach";
+const COMPOSER_ATTACH = "wisp:composer-attach";
 
 function isGrouped(prev: Message | undefined, m: Message) {
   return !!prev && prev.author.kind === m.author.kind && prev.author.id === m.author.id && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000 && m.author.id !== "system";
@@ -978,7 +978,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
               {name}
             </span>
             {agent && (
-              <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-semibold" title={`Agent · ${HARNESS_LABELS[agent.harness]}`}>
+              <span className="text-[10.5px] px-1.5 rounded bg-chip text-muted font-semibold" title={`Agent · ${harnessLabel(agent.harness)}`}>
                 agent
               </span>
             )}
@@ -1245,7 +1245,7 @@ function Parts({ parts, body = "" }: { parts: MessagePart[]; body?: string }) {
   );
 }
 
-const prettyTool = (n: string) => n.replace(/^mcp__warren__/, "").replace(/^mcp__/, "").replace(/^warren\./, "");
+const prettyTool = (n: string) => n.replace(/^mcp__(?:wisp|warren)__/, "").replace(/^mcp__/, "").replace(/^(?:wisp|warren)\./, "");
 
 const KIND_LABEL: Record<string, string> = { preference: "preference", plan: "plan", did: "what you did", detail: "detail" };
 

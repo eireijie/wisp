@@ -1,4 +1,4 @@
-import { logoIndex, logoSlug, type LogoIndex } from "@warren/core";
+import { logoIndex, logoSlug, type LogoIndex } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 /** Simple Icons (simpleicons.org, CC0): brand logos as one-color SVGs, with each brand's color. */

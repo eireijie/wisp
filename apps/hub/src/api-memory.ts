@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { RESTART_CODE, underKeeper } from "@warren/update";
+import { RESTART_CODE, underKeeper } from "@wisp/update";
 import type { Caller } from "./api.ts";
 import { id } from "./auth.ts";
 import type { Hub } from "./hub.ts";
@@ -26,7 +26,7 @@ export function registerMemoryStorageApi(app: FastifyInstance, hub: Hub, h: Help
   async function describe(c: Caller) {
     const owner = c.viewer.role === "owner";
     const vault = hub.vault(c.workspaceId);
-    // only the first organization's memory can live in a folder of the owner's choosing; the others stay in Warren's data folder
+    // only the first organization's memory can live in a folder of the owner's choosing; the others stay in Wisp's data folder
     const movable = hub.vaults.isPrimary(c.workspaceId);
     const next = resolveVaultLocation(h.dataDir);
     const problem = await syncProblem(hub, c.workspaceId, c.viewer);
@@ -52,14 +52,14 @@ export function registerMemoryStorageApi(app: FastifyInstance, hub: Hub, h: Help
     return describe(c);
   });
 
-  /** Choose the folder memory lives in. It takes effect the next time Warren starts. */
+  /** Choose the folder memory lives in. It takes effect the next time Wisp starts. */
   app.put("/api/memory/storage", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
     const body = parse(z.object({ path: z.string().max(1000).nullable() }), req.body, reply);
     if (!body) return;
-    if (!hub.vaults.isPrimary(c.workspaceId)) return reply.code(409).send({ error: "Only the first organization's memory can be moved to another folder; this one stays in Warren's data folder." });
-    if (h.started.location.source === "env") return reply.code(409).send({ error: "This is set by the WARREN_VAULT_DIR setting where Warren runs; change it there." });
+    if (!hub.vaults.isPrimary(c.workspaceId)) return reply.code(409).send({ error: "Only the first organization's memory can be moved to another folder; this one stays in Wisp's data folder." });
+    if (h.started.location.source === "env") return reply.code(409).send({ error: "This is set by the WISP_VAULT_DIR setting where Wisp runs; change it there." });
     const saved = saveVaultLocation(h.dataDir, body.path);
     if (!saved.ok) return reply.code(400).send({ error: saved.error });
     return describe(c);
@@ -68,7 +68,7 @@ export function registerMemoryStorageApi(app: FastifyInstance, hub: Hub, h: Help
   app.post("/api/memory/storage/restart", async (req, reply) => {
     const c = need(req, reply, { owner: true });
     if (!c) return;
-    if (!underKeeper()) return reply.code(400).send({ error: "Warren can't restart itself here. Stop it and start it again." });
+    if (!underKeeper()) return reply.code(400).send({ error: "Wisp can't restart itself here. Stop it and start it again." });
     setTimeout(() => h.restart(), 300);
     return { ok: true, code: RESTART_CODE };
   });

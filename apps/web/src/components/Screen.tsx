@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { KeyRound, Loader2, MonitorOff, RefreshCw, Sparkle } from "lucide-react";
-import type { ComputerAction, RecordedStep } from "@warren/core";
+import type { ComputerAction, RecordedStep } from "@wisp/core";
 import { ApiError, api, getToken } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { cx } from "./ui.tsx";
@@ -189,7 +189,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
           setState(e.detail?.clean ? "closed" : "error");
           if (!e.detail?.clean) setError("The connection to the screen dropped.");
         });
-        r.addEventListener("credentialsrequired", () => !disposed && (setState("error"), setError("The screen asked for a password Warren doesn't have.")));
+        r.addEventListener("credentialsrequired", () => !disposed && (setState("error"), setError("The screen asked for a password Wisp doesn't have.")));
         r.addEventListener("securityfailure", (e: any) => !disposed && (setState("error"), setError(`The screen refused the connection: ${e.detail?.reason ?? "security failure"}`)));
         rfb.current = r;
       } else {
@@ -376,7 +376,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
           ) : (
             <div className="space-y-3">
               <MonitorOff size={22} className="mx-auto opacity-70" />
-              <p>{!computer.online ? `${computer.name} is offline.` : computer.paused ? `${computer.name} is paused at its device. Someone there can run warren node resume.` : (error ?? "Disconnected.")}</p>
+              <p>{!computer.online ? `${computer.name} is offline.` : computer.paused ? `${computer.name} is paused at its device. Someone there can run wisp node resume.` : (error ?? "Disconnected.")}</p>
               {computer.online && !computer.paused && (
                 <button onClick={() => setAttempt((n) => n + 1)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 h-8 hover:bg-white/10">
                   <RefreshCw size={14} /> Reconnect
