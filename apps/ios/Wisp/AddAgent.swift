@@ -26,6 +26,10 @@ struct AddAgent: View {
   @State private var respondPeople: Set<String> = []
   @State private var apps: Set<String> = []
   @State private var skills: Set<String> = []
+  @State private var invite = false
+  @State private var importing = false
+  @State private var created: Agent?
+  @State private var token: String?
   @State private var action = FormAction()
 
   private var finalHandle: String { handle.isEmpty ? ManagementText.handle(name) : handle }
@@ -41,12 +45,17 @@ struct AddAgent: View {
       HarnessChoice(id: $0, label: HarnessChoice.label($0), blurb: "Available on a connected device", account: "", protocolName: "acp")
     } + HarnessChoice.all.filter { $0.id == "custom" }
   }
-  private var external: Bool { choices.first { $0.id == harness }?.protocolName == "mcp" }
+  private var external: Bool { invite || choices.first { $0.id == harness }?.protocolName == "mcp" }
   /** more than one person here: who the agent answers is a real choice */
   private var askWho: Bool { store.features.invite || store.otherPeople.count > 0 }
 
   var body: some View {
     NavigationStack {
+      if let created, let token { invitation(created, token) } else { form }
+    }
+  }
+
+  private var form: some View {
       Form {
         lookSection
         Section("Name") {
@@ -63,8 +72,9 @@ struct AddAgent: View {
         Section("Instructions") {
           TextField("What should it do, and how?", text: $instructions, axis: .vertical).lineLimit(4...12)
         }
-        aiSection
+        if invite { inviteNote } else { aiSection }
         advancedSection
+        bringYourOwnSection
         Section { InlineError(error: action.error) }
       }
       .navigationTitle("New agent")
@@ -88,8 +98,10 @@ struct AddAgent: View {
       .sheet(isPresented: $editingLook) {
         LookEditor(look: $look, name: name, seed: finalHandle)
       }
+      .sheet(isPresented: $importing) {
+        ImportAgent { agent in dismiss(); onCreated(agent) }
+      }
       .interactiveDismissDisabled(action.busy)
-    }
   }
 
   private var firstNode: String? {
@@ -230,7 +242,11 @@ struct AddAgent: View {
       var fields: Fields = [
         "name": AnyEncodable(name.trimmed), "handle": AnyEncodable(finalHandle), "instructions": AnyEncodable(instructions),
       ]
-      if custom {
+      if invite {
+        // an outside agent connects from wherever it already runs, so it has no device or computer
+        fields["harness"] = AnyEncodable(harness)
+        fields["nodeId"] = .null
+      } else if custom {
         fields["harness"] = AnyEncodable(harness)
         fields["model"] = .nullable(model.trimmed)
         if external {
@@ -268,9 +284,80 @@ struct AddAgent: View {
         guard let skill = store.skills.first(where: { $0.id == id }) else { continue }
         _ = try? await store.saveSkill(id, ["agentIds": AnyEncodable(Array(Set(skill.agentIds ?? []).union([agent.id])).sorted())])
       }
+      if external {
+        // it joins from outside, so it needs a token and setup steps before the person leaves
+        // (if the token can't be made, the agent still exists: its Connect screen makes one)
+        if let made = try? await store.createAgentToken(agent.id) {
+          token = made
+          created = agent
+          return
+        }
+      }
       dismiss()
       onCreated(agent)
     }
+  }
+
+  // MARK: bring your own
+
+  private var inviteNote: some View {
+    Section {
+      Text("It connects from where it already runs. After you create it you get a setup to copy into its MCP settings.")
+        .font(.footnote).foregroundStyle(.secondary)
+      Button("Use a Wisp-run agent instead") { invite = false }
+    } header: { Text("Outside agent") }
+  }
+
+  private var bringYourOwnSection: some View {
+    Section {
+      if !invite {
+        Button { invite = true } label: {
+          row("Invite an outside agent", "Connect any MCP-capable session with a setup code.", "person.badge.plus")
+        }
+      }
+      Button { importing = true } label: {
+        row("Find on a connected device", "Import a saved setup with its personality, instructions and notes.", "magnifyingglass")
+      }
+    } header: { Text("Already have an agent?") } footer: {
+      Text("Neither option copies skills. Once connected, it can save selected notes to memory itself.")
+    }
+  }
+
+  private func row(_ title: String, _ detail: String, _ icon: String) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: icon).frame(width: 24).foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).foregroundStyle(.primary)
+        Text(detail).font(.caption).foregroundStyle(.secondary)
+      }
+      Spacer()
+      Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+    }
+  }
+
+  private func invitation(_ agent: Agent, _ token: String) -> some View {
+    Form {
+      Section {
+        HStack(spacing: 14) {
+          GhostView(look: look, seed: agent.handle, size: 64)
+          VStack(alignment: .leading, spacing: 3) {
+            Text("Invite \(agent.name) to Wisp").font(.headline)
+            Text("Add this connection to its existing session.").font(.footnote).foregroundStyle(.secondary)
+          }
+        }
+      }
+      ConnectionInstructions(token: token, harness: agent.harness)
+      Section {
+        Text("Once connected, ask it to introduce itself in #general and save selected notes with memory_write. Its local profile and skills aren't imported automatically.")
+          .font(.footnote).foregroundStyle(.secondary)
+      }
+    }
+    .navigationTitle("Invite")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar {
+      ToolbarItem(placement: .confirmationAction) { Button("Open agent") { dismiss(); onCreated(agent) }.bold() }
+    }
+    .interactiveDismissDisabled()
   }
 }
 
