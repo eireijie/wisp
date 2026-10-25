@@ -10,7 +10,7 @@ import { useMemo, useSyncExternalStore } from "react";
  *   #/about                          what agents remember about you
  *   #/tasks                          work handed to agents, by status
  *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
- *   #/nodes                          devices
+ *   #/nodes[/<nodeId>]               devices, and one device's page
  *   #/marketplace[/<section>]        apps and skills to get, and what devices already have (MARKET_SECTIONS)
  *   #/connectors, #/skills           older addresses of the marketplace (installed apps, skills)
  *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
@@ -31,7 +31,7 @@ export type Route =
   | { view: "about" }
   | { view: "tasks" }
   | { view: "computers"; computerId: string | null; teach?: string | null }
-  | { view: "nodes" }
+  | { view: "nodes"; nodeId?: string | null }
   | { view: "marketplace"; section?: MarketSection | null }
   | { view: "connectors" }
   | { view: "skills" }
@@ -86,7 +86,7 @@ export function parseRoute(hash: string): Route {
     case "computers":
       return { view: "computers", computerId: parts[1] ?? null, teach: parts[2] === "teach" ? (parts[3] ?? null) : null };
     case "nodes":
-      return { view: "nodes" };
+      return { view: "nodes", nodeId: parts[1] ?? null };
     case "settings":
       return { view: "settings", page: SETTINGS_PAGES.find((p) => p === parts[1]) ?? null };
     case "welcome":
@@ -132,7 +132,7 @@ export function href(r: Route): string {
     case "computers":
       return "#/computers" + (r.computerId ? `/${r.computerId}${r.teach ? `/teach/${r.teach}` : ""}` : "");
     case "nodes":
-      return "#/nodes";
+      return "#/nodes" + (r.nodeId ? `/${r.nodeId}` : "");
     case "settings":
       return "#/settings" + (r.page ? `/${r.page}` : "");
     case "welcome":

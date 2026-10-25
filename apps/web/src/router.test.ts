@@ -97,3 +97,12 @@ describe("guest routes", () => {
     expect(router.routeForRole(route, "guest")).toEqual(route);
   });
 });
+
+describe("device pages", () => {
+  it("opens one device by its id, and goes back to the list without one", () => {
+    expect(router.parseRoute("#/nodes/box")).toEqual({ view: "nodes", nodeId: "box" });
+    expect(router.href({ view: "nodes", nodeId: "box" })).toBe("#/nodes/box");
+    expect(router.parseRoute("#/nodes")).toEqual({ view: "nodes", nodeId: null });
+    expect(router.href({ view: "nodes" })).toBe("#/nodes");
+  });
+});

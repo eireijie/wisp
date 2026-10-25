@@ -1,15 +1,16 @@
 import { originReach, shareOrigin, useAccess } from "../access.ts";
 import { desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
 import type { DeviceCapabilities, DeviceRole } from "@wisp/core";
 import { api } from "../api.ts";
+import { href } from "../router.ts";
 import { useStore } from "../store.ts";
 import { useDesktopInfo } from "../desktop.ts";
 import { Toggle } from "./settings/parts.tsx";
 import { AgentAvatar, Button, CopyBlock, DeviceInstall, Empty, Field, Input, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
 
-interface NodeInfo {
+export interface NodeInfo {
   id: string;
   name: string;
   ownerName: string | null;
@@ -56,7 +57,7 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
  * One that never connected can get a fresh connection code here, so a lost code or a failed setup
  * is never a dead end; inside the Wisp app it's one button that makes this computer that device.
  */
-function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+export function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
   useAccess();
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState<string | null>(null);
@@ -137,7 +138,7 @@ function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => 
 }
 
 /** The device's tile: a server that lights up and pulses while it's connected. */
-function DeviceIcon({ online }: { online: boolean }) {
+export function DeviceIcon({ online }: { online: boolean }) {
   return (
     <div className={cx("relative size-11 shrink-0 rounded-xl grid place-items-center transition-colors", online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
       <Server size={19} />
@@ -245,7 +246,9 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     <DeviceIcon online={n.online} />
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium truncate">{n.name}</span>
+                        <a href={href({ view: "nodes", nodeId: n.id })} className="font-medium truncate hover:underline">
+                          {n.name}
+                        </a>
                         {n.paused && (
                           <Pill tone="warn">
                             <Pause size={11} /> Paused
@@ -262,6 +265,9 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                         <Download size={15} /> {busy ? "Updating…" : "Update"}
                       </Button>
                     )}
+                    <a href={href({ view: "nodes", nodeId: n.id })} className="p-1.5 rounded-md text-faint hover:bg-hover hover:text-ink" aria-label={`Open ${n.name}`}>
+                      <ChevronRight size={16} />
+                    </a>
                     {menu.length > 0 && (
                       <Menu
                         align="right"
@@ -276,7 +282,6 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                   </div>
                   <DeviceAgents handles={n.agents} online={n.online} />
                   {(n.mine || isOwner) && <ConnectDevice node={n} onChange={refresh} />}
-                  <DeviceAccess node={n} onChange={refresh} />
                   {n.update?.message && (
                     <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
                       {n.update.state !== "idle" && (
@@ -318,7 +323,7 @@ function screenSummary(n: NodeInfo): { short: string; long: string } {
 }
 
 /** One quiet row of settings: its job, its screen, and who else can use it. Explanations live in tooltips. */
-function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+export function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
   const screen = screenSummary(n);
   const patch = async (body: object) => {
     await api("PATCH", `/api/nodes/${n.id}`, body).catch((err) => alert((err as Error).message));

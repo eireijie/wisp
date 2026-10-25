@@ -229,8 +229,8 @@ export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "
  * are under Advanced, open from the start in the Advanced experience. Agents that already run
  * somewhere come in through the link at the bottom.
  */
-/** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. */
-export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void }) {
+/** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. `nodeId`: start on this device. */
+export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void; nodeId?: string }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
@@ -257,11 +257,12 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
 
   // which AI and computer
   const [defaults, setDefaults] = useState<AgentDefaults | null | "error">(null);
-  const [mode, setMode] = useState<"defaults" | "custom">("defaults");
+  // a device picked already (its page's "Add an agent here") overrides the default device
+  const [mode, setMode] = useState<"defaults" | "custom">(startOn ? "custom" : "defaults");
   const [harness, setHarness] = useState("claude-code");
   const [model, setModel] = useState("");
   const usable = usableDevices(nodes);
-  const [nodeId, setNodeId] = useState(usable.find((n) => n.online)?.id ?? usable[0]?.id ?? "");
+  const [nodeId, setNodeId] = useState((startOn && usable.some((n) => n.id === startOn) ? startOn : null) ?? usable.find((n) => n.online)?.id ?? usable[0]?.id ?? "");
   const [computer, setComputer] = useState<ComputerChoice>(() => defaultComputer(nodes.find((n) => n.id === nodeId), computers));
   const createdVm = useRef<{ id: string; nodeId: string } | null>(null);
   const [invite, setInvite] = useState(false);
@@ -276,7 +277,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
         if (touched.current) return;
         if (d.harness) setHarness(d.harness);
         if (d.model) setModel(d.model);
-        if (d.nodeId && usable.some((n) => n.id === d.nodeId)) {
+        if (d.nodeId && !startOn && usable.some((n) => n.id === d.nodeId)) {
           setNodeId(d.nodeId);
           setComputer(d.computer === "none" ? { kind: "headless" } : defaultComputer(nodes.find((n) => n.id === d.nodeId), computers));
         }

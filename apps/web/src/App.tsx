@@ -13,6 +13,7 @@ import { ChannelView } from "./views/ChannelView.tsx";
 import { VaultView } from "./views/VaultView.tsx";
 import { AgentsView } from "./views/AgentsView.tsx";
 import { NodesView } from "./views/NodesView.tsx";
+import { DevicePage } from "./views/DevicePage.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
 import { WelcomeView } from "./views/WelcomeView.tsx";
@@ -150,7 +151,7 @@ function Workspace() {
       case "computers":
         return <ComputersView computerId={route.computerId} teach={route.teach ?? null} />;
       case "nodes":
-        return <NodesView onBack={phone ? toYou : undefined} />;
+        return route.nodeId ? <DevicePage nodeId={route.nodeId} /> : <NodesView onBack={phone ? toYou : undefined} />;
       case "settings":
         return <SettingsView page={route.page ?? null} onBack={toYou} />;
       case "welcome":
