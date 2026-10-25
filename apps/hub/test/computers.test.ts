@@ -538,9 +538,9 @@ describe("logins from a password manager", () => {
     await owner.request("POST", `/api/approvals/${asked.approvalId}/decide`, { approve: true, always: true });
     await waitFor(() => fills().length === 1);
     expect(fills()[0].args[0]).toEqual({ site: "zendesk.com", username: "support@shop.test", password: "hunter2" });
-    await waitFor(() => calls.length > before);
-    expect(calls.at(-1)!.prompt).toContain("Wisp filled the Zendesk login (username, password) and pressed sign in");
-    expect(calls.at(-1)!.prompt).not.toContain("hunter2");
+    // other runs can wake the agent too: find the one that says it was filled
+    await waitFor(() => calls.slice(before).some((c) => c.prompt.includes("Wisp filled the Zendesk login (username, password) and pressed sign in")));
+    expect(calls.slice(before).some((c) => c.prompt.includes("hunter2"))).toBe(false);
     expect((await owner.request("GET", "/api/logins")).logins[0].always).toEqual([agentId]);
     await noSecrets();
   });
@@ -565,8 +565,7 @@ describe("logins from a password manager", () => {
     const denied = await agentApi.fillLogin("github.com");
     const before = calls.length;
     await owner.request("POST", `/api/approvals/${denied.approvalId}/decide`, { approve: false });
-    await waitFor(() => calls.length > before);
-    expect(calls.at(-1)!.prompt).toContain("Not allowed: don't use the GitHub login");
+    await waitFor(() => calls.slice(before).some((c) => c.prompt.includes("Not allowed: don't use the GitHub login")));
   });
 });
 
