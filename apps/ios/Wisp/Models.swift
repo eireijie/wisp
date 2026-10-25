@@ -66,6 +66,10 @@ struct Agent: Codable, Identifiable, Hashable {
     var roleNotes: String?
     var runIn: String?
     var headless: Bool?
+    /** what it may do on its device: "read-only", "edit" (the default) or "full" */
+    var access: String?
+    /** the voice it speaks with, per speech engine */
+    var voice: AgentVoice?
     /** who it answers: "me" (its creator), "anyone", or "people" (respondPeople); unset is anyone */
     var respondTo: String?
     var respondPeople: [String]?
