@@ -395,9 +395,9 @@ final class ChatTests: XCTestCase {
         XCTFail("Keychain failure must prevent adoption")
       } catch let error as Session.PersistenceFailure {
         XCTAssertEqual(error.status, -34018)
-        let logout = try XCTUnwrap(ManagementHTTPStub.requests.withLock { $0.first })
+        // other tests' stores may still be finishing requests, so look for the logout itself
+        let logout = try XCTUnwrap(ManagementHTTPStub.requests.withLock { $0.first { $0.url?.path == "/api/auth/logout" } })
         XCTAssertEqual(logout.httpMethod, "POST")
-        XCTAssertEqual(logout.url?.path, "/api/auth/logout")
         XCTAssertEqual(logout.value(forHTTPHeaderField: "Authorization"), "Bearer just-paired")
       }
       XCTAssertEqual(store.phase, .signedOut)

@@ -1,46 +1,55 @@
-# Wisp on every platform: what each app has (2026-10-25)
+# Wisp on every platform (2026-10-25)
 
 ## How each app is built
 
-| App | What it is | What that means for features |
+| App | What it is | Where its features come from |
 |---|---|---|
 | **Web** (`apps/web`) | The full React app, served by the hub | The reference: every feature lives here |
-| **Desktop** (`apps/desktop`) | Electron window that loads the hub's web app, plus a tray, local hub, this-computer-as-device, screen code, desk buddy, auto-update | Has every web feature; a few break inside Electron (below) |
-| **Android** (`apps/android`) | Native pairing screen, then a WebView of the hub's web app (phone layout) | Has every web feature; nothing native beyond pairing, file picker, mic |
-| **iPhone** (`apps/ios`) | Fully native SwiftUI app | Has a lot already; many web features still missing (below) |
+| **Desktop** (`apps/desktop`) | Electron window that loads the hub's web app, plus a tray, local hub, this computer as a device, screen code, desk buddy, auto-update | The web app, plus desktop-only extras |
+| **Android** (`apps/android`) | Native pairing screen, then a WebView of the hub's web app (phone layout), plus native push | The web app |
+| **iPhone** (`apps/ios`) | Fully native SwiftUI app | Its own screens, built to match the web |
 
-## Desktop: web features that break inside Electron
+## What was missing, and what fills it now
 
-| Feature | Problem |
+### Desktop
+
+| Feature | Was | Now |
+|---|---|---|
+| Notifications | Web Push fails in Electron | Web Push isn't offered; notifications arrive while Wisp runs in the menu bar, and clicking one brings the window back |
+| Open in Obsidian | `obsidian://` blocked by the window | Handed to the Obsidian app |
+| Voice listening | Browser engine errors in Electron | Not offered; OpenAI listening is used instead |
+
+### Android
+
+| Feature | Was | Now |
+|---|---|---|
+| Push notifications | None | FCM, sent by the hub alongside APNs. The hub owner brings their own Firebase project (see `docs/deploy.md`); with none, the app stays quiet |
+
+### iPhone
+
+| Area | Added |
 |---|---|
-| Push notifications (Settings → Notifications) | Electron has no Web Push service, so turning it on fails |
-| Open in Obsidian | `obsidian://` links are blocked by the window's navigation lock |
-| Voice "browser" listening engine | Chromium in Electron has no Google speech key, so it errors |
+| Chat | `/` command menu; add reactions; pin and unpin; a note on approve/deny; live streaming replies; per-chat drafts |
+| DM controls | Access chip (read only / edit files / full); context ring with Compact |
+| Search | Search messages, notes, channels and agents from the Chats tab |
+| Inbox | What agents are doing, new replies, recent chats, tasks to check, setup card, allowance |
+| Help | Help screen from You |
+| Agents | Permissions; Connect (MCP token) and invite an outside agent; import from a device; computer and where the harness runs; personality history and template; connected apps; voice |
+| Computers | Add, rename, start, stop, remove; save screenshot; files; clipboard and open a link; details and activity; hand back with a note; teach a task |
+| Memory | Home with recent changes and most linked; graph; activity; who wrote what; view as an agent; properties and connected notes; folder picker; journal |
+| Marketplace | One Marketplace (All / Apps / Skills / On your devices / Installed); hub skill store; bring in from devices; try a skill; trust labels |
+| Settings | Ask an agent + recently changed with Undo; workspace lead; Harnesses; Access (Tailscale / Cloudflare); Devices and connected MCP apps; approve computers asking to join + join link; color theme, text size, reduce motion; memory rules |
+| Voice | Voice calls with agents; mic and speaker test |
 
-## Android: missing
+## Still different on purpose
 
-| Feature | Problem |
-|---|---|
-| Push notifications | iPhone has APNs; Android has FCM (the hub owner brings their own Firebase project, see deploy.md). Both are optional per hub |
+- Desktop only: tray, setup window, local hub, this computer as a device, screen code, auto-update, desk buddy window, Dock badge, open a harness's settings file.
+- Phone only: QR pairing, APNs/FCM, Quick Look, paste to and copy from the phone.
+- Not on phones: pairing a phone, first-account setup (both done on a computer).
+- Screen lending: removed from Wisp on purpose.
 
-## iPhone: missing compared with web
+## Small gaps left
 
-| Area | Missing on iPhone |
-|---|---|
-| Chat | `/` slash-command menu; adding reactions; pinning messages; note on approve/deny; live streaming replies; per-chat drafts |
-| DM controls | Access level chip (read only / edit files / full); context ring with compact |
-| Search | Global search across messages, notes, channels, agents (`/api/search`) |
-| Inbox | What agents are doing, tasks to check, recent conversations, setup readiness card |
-| Agents | Permissions page (access level, shared folders); Connect (MCP token for outside agents); import an agent from a device; assign an existing computer and where the harness runs; personality history and templates; agent voice |
-| Computers | Add a computer (VM / Orgo); rename, start, stop, remove; save screenshot; remote files (browse, download, upload, new folder); details and activity log; teach a task |
-| Memory | Graph view; activity feed; who-wrote-what (blame); view as an agent; recent changes on the memory home |
-| Marketplace | Hub skill store; "On your devices" (bring in apps and skills found on devices); try a skill |
-| Settings | Recently changed with Undo + ask an agent to change a setting; workspace lead; Harnesses page; Access (Tailscale / Cloudflare); Devices page (connected MCP apps); approve computers asking to join + join codes; connected OAuth apps per agent; color theme and text size; Help page |
-| Voice | Voice calls with agents |
-
-## Not counted as gaps
-
-- Desktop-only by nature: tray, setup window, local hub engine, this computer as a device, screen code, auto-update, desk buddy window, Dock badge.
-- Phone-only by nature: QR pairing, APNs, Quick Look, paste to/copy from the phone.
-- Pairing a phone from a phone, and first-account setup on the phone (done on a computer).
-- Screen lending, which the Wisp branch removed on purpose.
+- iPhone: no composer model picker (the agent page has one); search lands on the chat or thread, not the exact message; teach records single taps only; calls pause when Wisp goes to the background.
+- Android: no per-kind notification switches or launcher badge yet.
+- Nobody pushes "finished task" notifications yet (iPhone shows a local one while open).
