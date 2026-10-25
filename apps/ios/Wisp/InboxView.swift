@@ -3,6 +3,12 @@ import SwiftUI
 /** Everything agents asked you, waiting and decided (opened from Needs you in Chats, or You). */
 struct InboxView: View {
   @Environment(Store.self) private var store
+  @State private var chat: Channel?
+  @State private var thread: ThreadRef?
+  @State private var agentPage: Agent?
+  @State private var showDevices = false
+  @State private var addingAgent = false
+  @State private var action = FormAction()
 
   private var helpWanted: [Computer] { store.canViewComputers ? store.computers.filter { $0.help != nil } : [] }
   private var decided: [Approval] { store.approvals.filter { $0.status != "pending" }.prefix(20).map { $0 } }
@@ -43,6 +49,7 @@ struct InboxView: View {
             ForEach(store.pendingApprovals) { a in approvalRow(a) }
           }
         }
+        InboxSections(open: open)
         if !decided.isEmpty {
           Section("Decided") {
             ForEach(decided) { a in approvalRow(a) }
@@ -51,10 +58,44 @@ struct InboxView: View {
       }
       .listStyle(.insetGrouped)
       .navigationTitle("Inbox")
+      .toolbar {
+        if store.features.background, let a = store.allowance {
+          ToolbarItem(placement: .topBarTrailing) {
+            NavigationLink { UsageView() } label: { Text(Store.allowanceText(a)).font(.footnote.weight(.semibold)) }
+              .accessibilityLabel("\(Store.allowanceText(a)). Open usage")
+          }
+        }
+      }
+      .task { await load() }
       .refreshable {
         await store.refreshApprovals()
         await store.refreshComputers()
+        await load()
       }
+      .navigationDestination(item: $chat) { ChannelView(channel: $0) }
+      .navigationDestination(item: $thread) { ThreadView(ref: $0) }
+      .navigationDestination(item: $agentPage) { AgentPage(agent: $0) }
+      .navigationDestination(isPresented: $showDevices) { DevicesView() }
+      .sheet(isPresented: $addingAgent) { AddAgent { chat = nil; agentPage = $0 } }
+      .managementAlert(action)
+  }
+
+  /** The pieces the sections show that the app doesn't already keep fresh. */
+  private func load() async {
+    try? await store.refreshOnboarding()
+    if store.features.tasks { try? await store.refreshTasks() }
+    if store.features.background { try? await store.refreshAllowance() }
+  }
+
+  private func open(_ target: InboxTarget) {
+    switch target {
+    case .chat(let c): chat = c
+    case .thread(let t): thread = t
+    case .agent(let a): agentPage = a
+    case .devices: showDevices = true
+    case .addAgent: addingAgent = true
+    case .dm(let a): action.run { chat = try await store.dm(with: a) }
+    }
   }
 
   private func approvalRow(_ a: Approval) -> some View {
