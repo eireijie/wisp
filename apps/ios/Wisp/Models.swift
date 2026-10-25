@@ -258,6 +258,15 @@ struct Computer: Codable, Identifiable, Hashable {
   var help: Help?
   /** "pin" or "password" when opening this screen needs the code picked at the device */
   var code: String?
+  /** whether its device is connected (older hubs don't say) */
+  var online: Bool?
+  /** a device's own screen: whose it is */
+  var ownerId: String?
+  /** the agents that use it */
+  var agents: [String]?
+  /** what an agent did on it last */
+  var activity: Activity?
+  struct Activity: Codable, Hashable { var agentId: String; var text: String; var at: String }
 
   /** The word for this screen's code. */
   var codeLabel: String { code == "pin" ? "PIN" : "password" }
