@@ -10,7 +10,7 @@ struct NativeSettingsView: View {
         NavigationLink("Notifications") { NotificationSettingsView() }
         NavigationLink("Usage") { UsageView() }.accessibilityIdentifier("settings-usage")
         if store.features.voice { NavigationLink("Voice") { VoiceSettingsView() } }
-        NavigationLink("Appearance") { Form { ModePicker(); Text("Text size and reduced motion follow this iPhone's Accessibility settings.").font(.footnote) }.navigationTitle("Appearance") }
+        NavigationLink("Appearance") { AppearanceSettingsView() }.accessibilityIdentifier("settings-appearance")
         NavigationLink("Security") { SecuritySettingsView() }
         NavigationLink("Mobile") { Form { Text("This iPhone is connected to \(store.workspace?.name ?? "Wisp")."); Text("To connect another phone, open Settings → Mobile on the computer, scan its QR code, then match the code."); NavigationLink("Where you're signed in") { SecuritySettingsView() } }.navigationTitle("Mobile") }
       }
@@ -26,6 +26,8 @@ struct NativeSettingsView: View {
           NavigationLink("Computers") { ComputerSettingsView() }
           if !store.simple { advanced }
         }
+        NavigationLink("Devices") { DevicesSettingsView() }.accessibilityIdentifier("settings-devices")
+        if store.isOwner { NavigationLink("Access") { AccessView() }.accessibilityIdentifier("settings-access") }
         NavigationLink("Memory storage") { MemoryStorageView() }
         NavigationLink("Data & export") { DataExportView() }
         NavigationLink("Updates & about") { UpdatesView() }
@@ -37,6 +39,7 @@ struct NativeSettingsView: View {
   }
   @ViewBuilder private var advanced: some View {
     NavigationLink("Agent runtimes") { AgentRuntimesView() }
+    NavigationLink("Harnesses") { HarnessesView() }.accessibilityIdentifier("settings-harnesses")
     NavigationLink("Connections") { ConnectionsSettingsView() }
   }
 }

@@ -17,6 +17,7 @@ struct AgentPolicyView: View {
   private let actions = [("send", "Sending email or messages outside Wisp"), ("spend", "Buying or paying for anything"), ("delete", "Deleting files, data or accounts"), ("post", "Posting publicly"), ("signup", "Signing up for new accounts or services"), ("share", "Sharing files or private information outside Wisp")]
   var body: some View {
     Form {
+      LeadSection()
       Section("Ask before") {
         Text("Checked actions need your OK. If you explicitly ask a helper to do it, it just does it. If it decides on its own, it asks first.").font(.footnote)
         ForEach(actions, id: \.0) { key, title in Toggle(title, isOn: Binding(get: { ask.contains(key) }, set: { if $0 { ask.insert(key) } else { ask.remove(key) } })) }
@@ -130,6 +131,24 @@ struct DataExportView: View {
         if let info { Text(info.dataDir ?? "").textSelection(.enabled); Text("\(info.notes ?? 0) notes, \(info.messages ?? 0) messages, \(info.files ?? 0) files and \(info.agents ?? 0) agents.").font(.footnote) }
         else if !store.isOwner { Text("Ask an organization owner for the backup folder.").font(.footnote) }
       }
+      Section("What is not in it") {
+        Text("Sign-ins for agent tools (like Claude Code or Codex). Those stay on each device.")
+        Text("Agents' own computers (VMs). They live on the device that runs them.")
+        Text("Settings saved only on this iPhone or in a browser, like appearance and notifications.")
+        if store.isOwner, let memory = store.memoryStorage?.path, let folder = info?.dataDir, !memory.hasPrefix(folder) { Text("The memory folder, because it was moved to a different place: \(memory)").textSelection(.enabled) }
+      }.font(.footnote)
+      Section("How to back up") {
+        Text("1. Quit Wisp on the computer that runs the hub, so the copy is complete.")
+        Text("2. Copy the whole folder to a USB drive or a cloud folder.")
+        Text("3. Start Wisp again.")
+      }.font(.footnote)
+      Section("How to restore") {
+        Text("1. Install Wisp on the computer, or keep the install you already have.")
+        Text("2. Quit Wisp.")
+        Text("3. Put your copied folder back in the same place, replacing the folder there.")
+        Text("4. If your memory notes were in a separate folder, put that folder back too.")
+        Text("5. Start Wisp again. Your devices reconnect by themselves when they are online.")
+      }.font(.footnote)
       Section("Download copies") {
         Text("These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.").font(.footnote)
         if store.isOwner { Button("Download my notes (Markdown ZIP)") { export("/api/export/vault.zip", name: "wisp-memory.zip") }.disabled(action.busy) }
@@ -139,7 +158,7 @@ struct DataExportView: View {
       }
       InlineError(error: action.error)
     }.navigationTitle("Data & export")
-      .task { if store.isOwner { do { info = try await store.connection().get("/api/settings/data") } catch { action.error = error.localizedDescription } } }
+      .task { if store.isOwner { do { info = try await store.connection().get("/api/settings/data"); try? await store.refreshMemoryStorage() } catch { action.error = error.localizedDescription } } }
   }
   private func export(_ path: String, name: String) { action.run { exported = try await store.exportData(path, name: name) } }
 }

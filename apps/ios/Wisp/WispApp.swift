@@ -12,7 +12,7 @@ struct WispApp: App {
       RootView()
         .environment(store)
         .preferredColorScheme(mode == "dark" ? .dark : mode == "light" ? .light : nil)
-        .tint(.primary)
+        .appearance()
         .fontDesign(.rounded)
         .onOpenURL { url in
           if let link = PairLink(url.absoluteString) { store.pendingPair = link }
@@ -49,6 +49,7 @@ struct RootView: View {
       }
     case .ready:
       MainTabs()
+        .joinApproval()
         // a pairing code scanned while signed in: offer to switch to that Wisp
         .alert("Pair with another Wisp?", isPresented: Binding(get: { store.pendingPair != nil }, set: { if !$0 { store.pendingPair = nil } })) {
           Button("Sign out and pair", role: .destructive) {

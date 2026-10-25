@@ -9,7 +9,9 @@ struct GhostView: View {
   var mood: GhostMood = .awake
   var interactive = false
   var animate = true
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+  @AppStorage(ThemeSettings.motionKey, store: WispPreferences.standard) private var motionSetting = false
+  private var reduceMotion: Bool { systemReduceMotion || motionSetting }
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.colorScheme) private var colorScheme
   @State private var pokeAt: Date?
