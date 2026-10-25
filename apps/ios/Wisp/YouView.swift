@@ -32,6 +32,7 @@ struct YouView: View {
           NavigationLink { DevicesView() } label: { YouRow("Devices", "Computers running Wisp", "server.rack", .gray) }.accessibilityIdentifier("you-devices")
         }
         Section {
+          NavigationLink { HelpView() } label: { YouRow("Help", "Setup, fixes and plain words", "lifepreserver", .teal) }.accessibilityIdentifier("you-help")
           NavigationLink { NativeSettingsView() } label: { YouRow("Settings", nil, "gearshape.fill", .gray) }.accessibilityIdentifier("you-settings")
         }
         Section { ExperiencePicker(); ModePicker() }

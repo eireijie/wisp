@@ -9,6 +9,11 @@ struct ChatsView: View {
   @State private var editingSection: ChannelSection?
   @State private var deletingSection: ChannelSection?
   @State private var action = FormAction()
+  /** what the hub found for the search box, with the text it was found for */
+  @State private var found: (query: String, results: SearchResults)?
+  @State private var searching = false
+
+  private var query: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
 
   private var rooms: [Channel] {
     store.channels.filter { !$0.isDM && $0.joined == true && $0.archivedAt == nil }
@@ -64,9 +69,11 @@ struct ChatsView: View {
           ForEach(rooms.filter { ch in ch.starred != true && !store.sections.contains { $0.id == ch.sectionId } }) { ChatChannelRow(channel: $0) }
           Button("Add channels", systemImage: "plus") { sheet = "browse" }
         }
+        if !query.isEmpty { searchResults }
       }
       .listStyle(.insetGrouped)
-      .searchable(text: $search, prompt: "Search chats")
+      .searchable(text: $search, prompt: "Search chats, messages and notes")
+      .task(id: query) { await runSearch() }
       .orgSwitcher()
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) { ConnectionDot() }
@@ -95,6 +102,7 @@ struct ChatsView: View {
         switch screen {
         case .inbox: InboxView()
         case .approval(let id): ApprovalDetail(approvalId: id)
+        case .note(let path): NoteView(path: path)
         }
       }
       .sheet(isPresented: Binding(get: { sheet != nil }, set: { if !$0 { sheet = nil } })) {
@@ -115,6 +123,56 @@ struct ChatsView: View {
       .managementAlert(action)
     }
     .task(id: store.route) { await open(store.route) }
+  }
+
+  /** Asks the hub once typing pauses; a newer search drops this one. */
+  private func runSearch() async {
+    guard !query.isEmpty else { found = nil; searching = false; return }
+    searching = true
+    try? await Task.sleep(for: .milliseconds(250))
+    guard !Task.isCancelled else { return }
+    let q = query
+    let results = try? await store.search(q)
+    guard !Task.isCancelled else { return }
+    found = results.map { (q, $0) }
+    searching = false
+  }
+
+  @ViewBuilder private var searchResults: some View {
+    if let found, found.query == query {
+      SearchResultsSections(
+        results: found.results, query: query,
+        shownChannels: Set(rooms.map(\.id)),
+        shownAgents: Set(store.agents.filter { $0.name.localizedCaseInsensitiveContains(query) || $0.handle.localizedCaseInsensitiveContains(query) }.map(\.id)),
+        open: openResult
+      )
+      if found.results.isEmpty && rooms.isEmpty {
+        Section { Text("Nothing found for “\(query)”.").foregroundStyle(.secondary) }
+      }
+    } else if searching {
+      Section { HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(.secondary) } }
+    }
+  }
+
+  private func openResult(_ target: SearchTarget) {
+    action.run {
+      switch target {
+      case .channel(let c):
+        if c.joined != true && c.isDM == false { try await store.joinChannel(c.id); await store.refreshChannels() }
+        path.append(store.channels.first { $0.id == c.id } ?? c)
+      case .agent(let a):
+        path.append(try await store.dm(with: store.agent(a.id) ?? a))
+      case .message(let m):
+        if !store.channels.contains(where: { $0.id == m.message.channelId }) { await store.refreshChannels() }
+        guard let ch = store.channels.first(where: { $0.id == m.message.channelId }) else {
+          throw API.Failure(status: 404, message: "That conversation isn't available any more.")
+        }
+        path.append(ch)
+        if let thread = m.message.threadId { path.append(ThreadRef(channelId: ch.id, rootId: thread)) }
+      case .note(let notePath):
+        path.append(ChatsScreen.note(path: notePath))
+      }
+    }
   }
 
   private func open(_ route: Route?) async {
@@ -208,7 +266,7 @@ struct ChatChannelRow: View {
   }
 }
 
-enum ChatsScreen: Hashable { case inbox, approval(id: String) }
+enum ChatsScreen: Hashable { case inbox, approval(id: String), note(path: String) }
 
 /** The first row in Chats: what's waiting on you (approvals and computers that need you). */
 struct InboxRow: View {
