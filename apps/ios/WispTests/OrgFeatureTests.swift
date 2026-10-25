@@ -29,11 +29,11 @@ final class OrgFeatureTests: XCTestCase {
     XCTAssertFalse(some.buddy); XCTAssertFalse(some.voice); XCTAssertTrue(some.tasks)
     XCTAssertEqual(some.preset, "custom")
     XCTAssertEqual(Features.simple.preset, "simple")
-    let me = try Wire.decoder.decode(Me.self, from: Data(#"{"kind":"user","features":{"background":false,"routines":false,"teach":false,"tasks":false,"voice":false,"buddy":false,"invite":false}}"#.utf8))
+    let me = try Wire.decoder.decode(Me.self, from: Data(#"{"kind":"user","features":{"background":false,"routines":false,"teach":false,"tasks":false,"voice":false,"buddy":false,"invite":false,"remoteDesktop":false}}"#.utf8))
     XCTAssertEqual(me.features, .simple)
     XCTAssertNil(try Wire.decoder.decode(Me.self, from: Data(#"{"kind":"user"}"#.utf8)).features)
-    XCTAssertEqual(FeatureKey.allCases.count, 7)
-    XCTAssertEqual(FeatureKey.Group.allCases.flatMap(\.keys).count, 7)
+    XCTAssertEqual(FeatureKey.allCases.count, 8)
+    XCTAssertEqual(FeatureKey.Group.allCases.flatMap(\.keys).count, 8)
   }
 
   func testOrgsAndInviteLinks() throws {
@@ -60,7 +60,7 @@ final class OrgFeatureTests: XCTestCase {
 
   func testFeaturesSaveAndLiveEvent() async throws {
     let store = makeStore()
-    reply("PUT", "/api/features", #"{"features":{"background":false,"routines":false,"teach":false,"tasks":false,"voice":true,"buddy":false,"invite":false}}"#)
+    reply("PUT", "/api/features", #"{"features":{"background":false,"routines":false,"teach":false,"tasks":false,"voice":true,"buddy":false,"invite":false,"remoteDesktop":false}}"#)
     var next = Features.simple
     next.voice = true
     try await store.setFeatures(next)

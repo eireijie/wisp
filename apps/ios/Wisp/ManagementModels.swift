@@ -36,6 +36,9 @@ struct AgentNode: Decodable, Identifiable, Hashable {
   var lastSeen: String?
   var agents: [String]?
   var harnesses: [Harness]?
+  var capabilities: DeviceCapabilities?
+  /** the remote desktop app its owner uses to reach it; only they get it */
+  var remoteDesktop: OwnRemoteDesktop?
   var usable: Bool { mine == true || shared == true }
 }
 
