@@ -257,5 +257,6 @@ function say(login: LoginSummary, r: LoginFillResult): string {
   if (r.wrongSite) return `Nothing was filled: the page open is on ${r.wrongSite}, not ${login.site}. Open ${login.site}'s sign-in page and call login_fill again.`;
   if (!r.filled.length) return `Nothing was filled: ${r.problem ?? "no sign-in boxes on the page"}. Open ${login.site}'s sign-in page and call login_fill again.`;
   const what = r.filled.length === 1 && r.filled[0] === "username" ? `filled the ${login.title} username${r.submitted ? " and went on" : ""}; if a password page comes next, call login_fill again` : `filled the ${login.title} login (${r.filled.join(", ")})${r.submitted ? " and pressed sign in" : ""}`;
+  if (r.cleared) return `Wisp ${what}, but ${r.submitted ? "the page didn't move on" : r.problem ?? "nothing pressed sign in"}, so Wisp took the password back out. Take a screenshot: if it shows why, fix that and call login_fill again; otherwise use computer_ask_human.`;
   return `Wisp ${what}. Take a screenshot to check it worked.`;
 }

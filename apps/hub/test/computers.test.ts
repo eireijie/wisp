@@ -550,7 +550,11 @@ describe("logins from a password manager", () => {
     expect(fills()).toHaveLength(2);
     fillAnswer = () => ({ filled: [], submitted: false, wrongSite: "zendesk-login.evil.test" });
     expect(await agentApi.fillLogin("zendesk.com")).toMatchObject({ status: "not_filled", message: expect.stringContaining("the page open is on zendesk-login.evil.test") });
+    fillAnswer = () => ({ filled: ["username", "password"], submitted: true, cleared: true });
+    expect((await agentApi.fillLogin("zendesk.com")).message).toMatch(/the page didn't move on, so Wisp took the password back out/);
     fillAnswer = () => ({ filled: ["username", "password"], submitted: true });
+    // a subdomain anyone can sign up for isn't the saved site
+    await expect(agentApi.fillLogin("acme-help.zendesk.com")).rejects.toThrow(/no saved login for acme-help.zendesk.com/);
     await owner.request("DELETE", `/api/logins/it-1/always/${agentId}`);
     expect((await agentApi.fillLogin("zendesk.com")).status).toBe("asked");
   });

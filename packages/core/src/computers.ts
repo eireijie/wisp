@@ -162,6 +162,8 @@ export interface LoginFillResult {
   wrongSite?: string;
   /** why nothing was filled */
   problem?: string;
+  /** the password was taken out of its box again: nothing pressed sign in, or the page didn't move on after it */
+  cleared?: boolean;
 }
 
 export interface Screenshot {

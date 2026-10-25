@@ -45,9 +45,11 @@ export function siteOf(url: string): string | null {
   }
 }
 
-/** A page on `host` may use a login saved for `site` (the site itself or one of its subdomains). */
+/**
+ * A page on `host` may use a login saved for `site` only when it's that exact site (with or
+ * without www.): on a subdomain anyone can sign up for (acme.zendesk.com), the page could be theirs.
+ */
 export function siteMatches(host: string, site: string): boolean {
-  const h = host.toLowerCase().replace(/^www\./, "");
-  const s = site.toLowerCase();
-  return h === s || h.endsWith(`.${s}`);
+  const bare = (h: string) => h.toLowerCase().replace(/^www\./, "");
+  return bare(host) === bare(site);
 }

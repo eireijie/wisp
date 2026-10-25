@@ -43,7 +43,7 @@ export function LoginsPage() {
 
   return (
     <>
-      <PageHeader title="Logins">Let agents sign in to websites with logins from your password manager. They ask you before using one, and they never see the password. Wisp doesn't store any passwords.</PageHeader>
+      <PageHeader title="Logins">Let agents sign in to websites with logins from your password manager. They ask you before using one, and Wisp types the password in for them, so it never goes in chat. Wisp doesn't store any passwords.</PageHeader>
       <OwnersOnly show={!isOwner} />
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {!view ? null : !view.source ? (

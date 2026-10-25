@@ -21,6 +21,13 @@ const PAGES: Record<string, string> = {
   "/step1": `<form id="f"><input name="identifier" type="email" placeholder="Email"><button>Next</button></form>
     <script>f.onsubmit = (e) => { e.preventDefault(); window.got = { email: f.identifier.value }; };</script>`,
   "/none": `<h1>Hello</h1>`,
+  // a page (or an agent before the fill) that swaps out the value setter to catch what's typed
+  "/hijack": `<form id="f"><input name="email" type="email"><input name="password" type="password"><button type="submit">Sign in</button></form>
+    <script>const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+    Object.defineProperty(HTMLInputElement.prototype, "value", { get: d.get, set(v) { (window.stolen ||= []).push(v); d.set.call(this, v); } });
+    f.onsubmit = (e) => e.preventDefault();</script>`,
+  // a password box with nothing to press
+  "/nobutton": `<input name="email" type="email"><input name="password" type="password">`,
 };
 
 let server: http.Server;
@@ -44,7 +51,7 @@ async function goTo(p: string) {
   for (let i = 0; i < 50 && (await evalIn("location.pathname + document.readyState").catch(() => "")) !== `${p}complete`; i++) await new Promise((r) => setTimeout(r, 100));
 }
 async function fill(login: { site: string; username: string; password: string; otp?: string }) {
-  const r = await exec(process.execPath, ["--input-type=module", "-e", FILL_LOGIN_SCRIPT], { input: JSON.stringify(login), env: { CDP: cdp }, timeoutMs: 20_000 });
+  const r = await exec(process.execPath, ["--input-type=module", "-e", FILL_LOGIN_SCRIPT], { input: JSON.stringify(login), env: { CDP: cdp, CLEAR_AFTER_MS: "300" }, timeoutMs: 20_000 });
   return JSON.parse(r.stdout.toString().trim().split("\n").pop()!);
 }
 
@@ -67,15 +74,28 @@ describe.skipIf(!CHROME)("filling a login in Chrome", () => {
     fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
   });
 
-  it("fills the username and password and signs in", async () => {
+  it("fills the username and password, signs in, and empties the box when the page doesn't move on", async () => {
     await goTo("/form");
-    expect(await fill({ site: "localhost", username: "bot@shop.test", password: "s3cret!" })).toEqual({ filled: ["username", "password"], submitted: true });
+    expect(await fill({ site: "localhost", username: "bot@shop.test", password: "s3cret!" })).toEqual({ filled: ["username", "password"], submitted: true, cleared: true });
     expect(await evalIn("window.got")).toEqual({ email: "bot@shop.test", password: "s3cret!" });
+    expect(await evalIn("document.querySelector('input[type=password]').value")).toBe("");
+  }, 20_000);
+
+  it("doesn't call a value setter the page swapped in", async () => {
+    await goTo("/hijack");
+    expect(await fill({ site: "localhost", username: "bot", password: "s3cret!" })).toMatchObject({ filled: ["username", "password"], submitted: true });
+    expect(await evalIn("window.stolen ?? null")).toBeNull();
+  }, 20_000);
+
+  it("empties the password right away when there's no sign-in button", async () => {
+    await goTo("/nobutton");
+    expect(await fill({ site: "localhost", username: "bot", password: "s3cret!" })).toEqual({ filled: ["username", "password"], submitted: false, cleared: true, problem: "there's no sign-in button to press" });
+    expect(await evalIn("document.querySelector('input[type=password]').value")).toBe("");
   }, 20_000);
 
   it("works on pages that keep their own state and have no form", async () => {
     await goTo("/app");
-    expect(await fill({ site: "localhost", username: "bot", password: "pw" })).toEqual({ filled: ["username", "password"], submitted: true });
+    expect(await fill({ site: "localhost", username: "bot", password: "pw" })).toEqual({ filled: ["username", "password"], submitted: true, cleared: true });
     expect(await evalIn("window.got")).toEqual({ u: "bot", p: "pw" });
   }, 20_000);
 

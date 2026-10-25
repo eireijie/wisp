@@ -127,7 +127,7 @@ function LoginApprovalCard({ approval }: { approval: Approval }) {
             {login.username || login.site} · from {LOGIN_SOURCE_LABEL[login.source]}
           </div>
           <div className="text-xs text-muted mt-1">
-            Wisp types it into {login.site} on {name}'s computer. {name} never sees the password.
+            Wisp types it into {login.site} on {name}'s computer, so it never goes in chat. Only allow agents you'd trust with this account.
           </div>
         </div>
       </div>
