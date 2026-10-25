@@ -212,7 +212,8 @@ enum GraphLayout {
       x[i] = cos(angle) * dist; y[i] = sin(angle) * dist
     }
     guard n > 1 else { return [graph.nodes[0].id: .zero] }
-    let steps = iterations ?? max(60, min(300, 150_000 / max(n, 1) / 2))
+    // big graphs get fewer rounds: the pairwise pushes cost n² each
+    let steps = iterations ?? (n > 2000 ? 25 : max(60, min(300, 150_000 / max(n, 1) / 2)))
     let alphaDecay = 1 - pow(0.001, 1 / CGFloat(steps))
     var alpha: CGFloat = 1
     for _ in 0..<steps {
