@@ -132,6 +132,11 @@ export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("harness_status"), harness: z.string().max(60) }),
   /** open a terminal on the VM's screen that signs this harness in; a person finishes it there */
   z.object({ action: z.literal("signin"), harness: z.string().max(60) }),
+  /**
+   * Sign in on the page open in the VM's browser, only if it's on `site`: the hub sends this with
+   * a login from the password manager, never an agent. → LoginFillResult
+   */
+  z.object({ action: z.literal("fill_login"), site: z.string().min(1).max(253), username: z.string().max(1000), password: z.string().max(1000), otp: z.string().max(20).optional() }),
   /** the web page element at a point on the screen (VMs' browser), for recordings → { element: PageElement | null } */
   z.object({ action: z.literal("inspect"), x: coord, y: coord, space: Space.optional() }),
   // --- keeping a computer in step with yours: its clipboard and files ---
@@ -148,6 +153,18 @@ export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("file_mkdir"), folder: z.string().max(4000), name: FileName }),
 ]);
 export type ComputerAction = z.infer<typeof ComputerAction>;
+
+/** What filling a login did: which boxes it filled and whether it pressed sign in. */
+export interface LoginFillResult {
+  filled: ("username" | "password" | "otp")[];
+  submitted: boolean;
+  /** the page's site, when it isn't the login's (nothing was filled) */
+  wrongSite?: string;
+  /** why nothing was filled */
+  problem?: string;
+  /** the password was taken out of its box again: nothing pressed sign in, or the page didn't move on after it */
+  cleared?: boolean;
+}
 
 export interface Screenshot {
   /** base64 JPEG */

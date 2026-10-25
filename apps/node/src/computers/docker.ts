@@ -5,7 +5,8 @@ import net from "node:net";
 import { Duplex } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ComputerSpec, PageElement, RunOutput, VmConfig } from "@wisp/core";
+import type { ComputerSpec, LoginFillResult, PageElement, RunOutput, VmConfig } from "@wisp/core";
+import { FILL_LOGIN_SCRIPT } from "./fill-login.ts";
 import { ActionError, exec, has, must, type Driver } from "./driver.ts";
 import { X11Driver } from "./x11.ts";
 import { shellFiles, x11Clipboard, type Clipboard, type Files, type ShRunner } from "./transfer.ts";
@@ -496,6 +497,18 @@ export class DockerVm implements Driver {
       return JSON.parse(r.stdout.toString().trim().split("\n").pop() ?? "null");
     } catch {
       return null;
+    }
+  }
+
+  /** Put a login into the page open in the VM's Chrome; the login goes in on stdin, never as an argument. */
+  async fillLogin(login: { site: string; username: string; password: string; otp?: string }): Promise<LoginFillResult> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-i", "-u", this.user, this.name, "node", "--input-type=module", "-e", FILL_LOGIN_SCRIPT], { input: JSON.stringify(login), timeoutMs: 30_000 });
+    if (r.code !== 0) throw new ActionError(`couldn't reach the browser on ${this.label}`);
+    try {
+      return JSON.parse(r.stdout.toString().trim().split("\n").pop() ?? "");
+    } catch {
+      throw new ActionError(`the browser on ${this.label} didn't answer`);
     }
   }
 

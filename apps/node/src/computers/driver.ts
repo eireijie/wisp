@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import type { Duplex } from "node:stream";
-import { AGENT_SCREEN, MAX_TRANSFER_BYTES, parseKeys, toScreen, type ComputerAction, type FileData, type KeyCombo, type PageElement, type RunOutput, type Screenshot } from "@wisp/core";
+import { AGENT_SCREEN, MAX_TRANSFER_BYTES, parseKeys, toScreen, type ComputerAction, type FileData, type KeyCombo, type LoginFillResult, type PageElement, type RunOutput, type Screenshot } from "@wisp/core";
 import type { Clipboard, Files } from "./transfer.ts";
 
 export interface Size {
@@ -48,6 +48,8 @@ export interface Driver {
   openSignIn?(harness: string): Promise<void>;
   /** VMs: the web page element under a screen point, in the browser people see */
   inspectAt?(x: number, y: number): Promise<PageElement | null>;
+  /** VMs: put a login into the page open in the browser people see, only if it's on `site` */
+  fillLogin?(login: { site: string; username: string; password: string; otp?: string }): Promise<LoginFillResult>;
   /** its clipboard, to copy and paste between it and people's devices */
   clipboard?: Clipboard;
   /** its files, to move them between it and people's devices */
@@ -131,6 +133,9 @@ export async function perform(driver: Driver, a: ComputerAction): Promise<unknow
       const p = await at(a.x, a.y, a.space);
       return { element: await driver.inspectAt(p.x, p.y).catch(() => null) };
     }
+    case "fill_login":
+      if (!driver.fillLogin) throw new ActionError(`${driver.label} can't fill logins: only VMs can`);
+      return driver.fillLogin({ site: a.site, username: a.username, password: a.password, ...(a.otp ? { otp: a.otp } : {}) });
     case "clipboard_get":
       return { text: await clipboardOf(driver).get() };
     case "clipboard_set":

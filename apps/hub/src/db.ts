@@ -286,6 +286,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["background", "daily_cap", "INTEGER DEFAULT 24"],
   // from when agents could borrow a device's screen; only migrateLoans reads it now
   ["approvals", "loan_json", "TEXT"],
+  ["approvals", "login_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
   ["messages", "edited_at", "TEXT"],

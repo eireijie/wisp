@@ -345,7 +345,7 @@ Never include internal notes, other customers' data, or secrets in a reply.`,
 1. **Collect the data first.** List every field the form will need, and where each value comes from (the request, the vault, a file). Ask for anything missing *before* starting, in one message.
 2. **Open the page** with the browser tools (browser_navigate, browser_snapshot). Read the whole form, including fine print and every step of a multi-page form.
 3. **Fill one section at a time**, using the element refs from the snapshot. After each section, take a fresh snapshot and check every value landed in the right field (dates and phone formats especially).
-4. **Never type passwords, card numbers or one-time codes yourself.** When a sign-in, payment or CAPTCHA appears, call computer_ask_human with exactly what's needed and stop.
+4. **Never type passwords, card numbers or one-time codes yourself.** For a sign-in, call login_fill if you have it (it fills a saved login without you seeing it). Otherwise, or for a payment or CAPTCHA, call computer_ask_human with exactly what's needed and stop.
 5. **Before submitting**, stop and ask with approval_request: summarize what will be submitted (key fields, totals, what it commits to). Submit only after a yes.
 6. **After submitting**, capture the confirmation (number, page text, screenshot) and save it to the vault with the date.
 

@@ -58,7 +58,7 @@ RUN chmod +x /usr/local/bin/google-chrome \
  && cp /usr/local/share/wisp/desktop/*.desktop /usr/share/applications/ \
  && mkdir -p /usr/share/xfce4/helpers && cp /usr/local/share/wisp/desktop/wisp-chrome-helper.desktop /usr/share/xfce4/helpers/wisp-chrome.desktop \
  && mkdir -p /etc/opt/chrome/policies/managed \
- && printf '{ "DownloadDirectory": "/home/wisp/files", "PromptForDownloadLocation": false, "DefaultBrowserSettingEnabled": false, "MetricsReportingEnabled": false, "PromotionalTabsEnabled": false, "PrivacySandboxPromptEnabled": false, "AutofillCreditCardEnabled": false }\n' > /etc/opt/chrome/policies/managed/wisp.json \
+ && printf '{ "DownloadDirectory": "/home/wisp/files", "PromptForDownloadLocation": false, "DefaultBrowserSettingEnabled": false, "MetricsReportingEnabled": false, "PromotionalTabsEnabled": false, "PrivacySandboxPromptEnabled": false, "AutofillCreditCardEnabled": false, "PasswordManagerEnabled": false }\n' > /etc/opt/chrome/policies/managed/wisp.json \
  && userdel -r node \
  && useradd -m -u 1000 -s /bin/bash wisp \
  && echo 'wisp ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/wisp
