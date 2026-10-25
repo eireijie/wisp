@@ -54,8 +54,15 @@ struct AgentPage: View {
         }
         NavigationLink("Model") { AgentEditor(agent: current, panel: .model) }
         if store.canViewComputers { NavigationLink("Device") { AgentEditor(agent: current, panel: .device) } }
+        if store.canViewComputers { NavigationLink("Computer") { AgentComputerView(agent: current) }.accessibilityIdentifier("agent-computer") }
         if device != nil && store.harnessOnDevice(current) {
           NavigationLink("Who can ask it") { AgentEditor(agent: current, panel: .who) }
+        }
+      }
+      Section {
+        TechnicalDetails(title: "Advanced") {
+          NavigationLink("Permissions") { AgentPermissions(agent: current) }.accessibilityIdentifier("agent-permissions")
+          NavigationLink("Connect") { AgentConnect(agent: current) }.accessibilityIdentifier("agent-connect")
         }
       }
       Section("Recent activity") {
@@ -193,10 +200,13 @@ struct AgentEditor: View {
       .disabled(!store.canManage || action.busy)
   }
 
-  private var personalityFields: some View {
+  @ViewBuilder private var personalityFields: some View {
     Group {
       Section {
         TextField("Personality, voice, values and boundaries", text: $text, axis: .vertical).lineLimit(12...30)
+        if store.canManage && loaded && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          Button("Start from a template", systemImage: "sparkles") { text = SoulText.template(name: current.name, handle: current.handle) }
+        }
       } footer: { Text("Read at the start of every conversation. Keep it short; every line should change how the agent behaves.") }
       Section {
         Toggle("Let @\(current.handle) refine its own personality", isOn: Binding(get: { current.settings?.soulLocked != true }, set: { value in
@@ -204,6 +214,9 @@ struct AgentEditor: View {
         }))
       }
     }.disabled(!store.canManage || !loaded || action.busy)
+    Section {
+      NavigationLink("History") { SoulHistory(agent: current, canRestore: store.canManage) { text = $0 } }
+    } footer: { Text("Every change to it is kept, whether you or @\(current.handle) made it.") }
   }
 
   private var instructionFields: some View {

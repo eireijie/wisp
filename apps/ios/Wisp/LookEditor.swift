@@ -13,6 +13,7 @@ struct LookEditor: View {
   private var seed: String
   @State private var look: GhostLook
   @State private var mood: GhostMood = .awake
+  @State private var voice = AgentVoice()
   @State private var saving = false
   @State private var error: String?
 
@@ -22,6 +23,7 @@ struct LookEditor: View {
     name = agent.name
     seed = agent.handle
     _look = State(initialValue: (agent.settings?.appearance ?? GhostLook.defaultAppearance(agent.handle)).resolved)
+    _voice = State(initialValue: agent.settings?.voice ?? AgentVoice())
   }
 
   /** Edits the look of an agent that doesn't exist yet (New agent); Done hands it back. */
@@ -47,6 +49,7 @@ struct LookEditor: View {
           options("Accessory", values: GhostLook.accessories, key: \.accessory)
           options("Motion", values: GhostLook.motions, key: \.motion)
           switches
+          if let agent, store.features.voice { AgentVoicePicker(agent: agent, voice: $voice) }
           if let error { Text(error).foregroundStyle(.red).font(.footnote).accessibilityLabel("Could not save: \(error)") }
         }
         .padding(20)
@@ -67,7 +70,11 @@ struct LookEditor: View {
             Task {
               saving = true
               error = nil
-              do { try await store.saveLook(look, for: agent); dismiss() }
+              do {
+                try await store.saveLook(look, for: agent)
+                if voice != (agent.settings?.voice ?? AgentVoice()) { try await store.saveVoice(voice, for: agent) }
+                dismiss()
+              }
               catch { self.error = error.localizedDescription }
               saving = false
             }
