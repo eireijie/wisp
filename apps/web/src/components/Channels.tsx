@@ -769,7 +769,8 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
           onCreateAgent={(roleId) => onCreateAgent(roleId)}
           onDrawOwn={() => {
             setPicking(false);
-            onChange(saved.roles?.length ? EMPTY_TEAM : saved);
+            // empty roles and steps say to drop them (left out, the hub keeps the old ones)
+            onChange(saved.roles?.length ? { ...EMPTY_TEAM, roles: [], steps: [] } : saved);
           }}
         />
       ) : stepped ? (

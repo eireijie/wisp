@@ -14,6 +14,10 @@ struct NewChannel: View {
   @State private var isPrivate = false
   @State private var team = ChannelTeam.empty
   @State private var step2 = false
+  /** roles and steps (from a template) or a plain chart of who hands work to whom */
+  @State private var stepped = true
+  @State private var customizing = false
+  @State private var editing: TeamEditTarget?
   @State private var action = FormAction()
 
   private var slug: String { ManagementText.channelName(name) }
@@ -50,19 +54,58 @@ struct NewChannel: View {
 
   private var teamStep: some View {
     Form {
-      Section {
-        Text("Pick who works in #\(slug), make one or more of them leads, and say who hands each of the others work.")
-          .font(.subheadline).foregroundStyle(.secondary)
-      } header: { StepsHeader(at: 2) }
-      ChannelTeamEditor(team: $team)
-      Section { InlineError(error: action.error) }
+      if stepped {
+        if customizing && team.hasSteps {
+          TeamStepsEditor(team: $team, editing: $editing, header: StepsHeader.text(2))
+          Section { Button("Start from a template") { customizing = false } }
+        } else {
+          TeamTemplatePicker(team: $team, onCustomize: { customizing = true }, onDescribe: describe, onDrawOwn: {
+            stepped = false
+            team = .empty
+          }, busy: action.busy, header: StepsHeader.text(2))
+        }
+        if action.error != nil { Section { InlineError(error: action.error) } }
+      } else {
+        Section {
+          Text("Pick who works in #\(slug), make one or more of them leads, and say who hands each of the others work.")
+            .font(.subheadline).foregroundStyle(.secondary)
+          Button("Use roles and steps instead") {
+            stepped = true
+            team = .empty
+          }
+        } header: { StepsHeader(at: 2) }
+        ChannelTeamEditor(team: $team)
+        Section { InlineError(error: action.error) }
+      }
     }
     .navigationTitle("#\(slug): its team")
     .navigationBarTitleDisplayMode(.inline)
+    .navigationDestination(item: $editing) { TeamEditForm(team: $team, target: $0) }
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
         Button("Create") { create() }.bold().disabled(action.busy || team.problem != nil)
       }
+    }
+  }
+
+  /**
+   * Someone described the team: make the channel with the workspace's lead alone, ask the lead
+   * (in a DM) to set it up, and open that DM.
+   */
+  private func describe(_ text: String) {
+    action.run {
+      guard let lead = try await store.currentLead(), let agent = store.agent(lead) else {
+        throw API.Failure(status: 0, message: "Add an agent first: it sets the team up.")
+      }
+      _ = try await store.createChannel([
+        "name": AnyEncodable(slug), "topic": AnyEncodable(topic), "sectionId": .nullable(section),
+        "private": AnyEncodable(isPrivate),
+        "settings": AnyEncodable(["team": AnyEncodable(TeamTemplate.starter(lead: lead)), "replyInThread": AnyEncodable(true)]),
+      ])
+      let dm = try await store.dm(with: agent)
+      try await store.send("Set up how the team in #\(slug) works, with team_setup:\n\n\(text)", in: dm.id)
+      dismiss()
+      onCreated(dm)
     }
   }
 
@@ -82,9 +125,8 @@ struct NewChannel: View {
 /** "Step 1 of 2 · Name and description" over each step of making a channel. */
 private struct StepsHeader: View {
   var at: Int
-  var body: some View {
-    Text("Step \(at) of 2 · \(at == 1 ? "Name and description" : "Its team")")
-  }
+  var body: some View { Text(Self.text(at)) }
+  static func text(_ at: Int) -> String { "Step \(at) of 2 · \(at == 1 ? "Name and description" : "Its team")" }
 }
 
 /** A channel's team, from its details: edit the chart and save it, or remove the team. */
@@ -95,6 +137,9 @@ struct ChannelTeamScreen: View {
   @State private var team = ChannelTeam.empty
   @State private var loaded = false
   @State private var removing = false
+  /** starting from a template: a new team, or a switch from a plain chart */
+  @State private var picking = false
+  @State private var editing: TeamEditTarget?
   @State private var action = FormAction()
 
   private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
@@ -103,13 +148,27 @@ struct ChannelTeamScreen: View {
 
   var body: some View {
     Form {
-      Section {
-        Text(saved.nodes.isEmpty
-          ? "#\(current.name) has no team yet, so only agents someone @mentions (or the one that answers here) reply. Build one: add agents and make one of them a lead."
-          : "The leads read every new message in #\(current.name) and hand out the work along the arrows.")
-          .font(.subheadline).foregroundStyle(.secondary)
+      if picking && editable {
+        TeamTemplatePicker(team: $team, onCustomize: { picking = false }, onDrawOwn: {
+          picking = false
+          // empty roles and steps, so the hub drops the old ones instead of keeping them
+          team = saved.hasSteps ? ChannelTeam(nodes: [], edges: [], roles: [], steps: []) : saved
+        })
+      } else if team.hasSteps {
+        TeamStepsEditor(team: $team, editing: $editing, editable: editable, channelId: saved.hasSteps ? channel.id : nil)
+        if editable {
+          Section { Button("Start from a template") { picking = true } }
+        }
+      } else {
+        Section {
+          Text(saved.nodes.isEmpty
+            ? "#\(current.name) has no team yet, so only agents someone @mentions (or the one that answers here) reply. Build one: add agents and make one of them a lead."
+            : "The leads read every new message in #\(current.name) and hand out the work along the arrows.")
+            .font(.subheadline).foregroundStyle(.secondary)
+          if editable { Button("Use roles and steps instead") { picking = true } }
+        }
+        ChannelTeamEditor(team: $team, editable: editable, channelId: channel.id, more: true)
       }
-      ChannelTeamEditor(team: $team, editable: editable, channelId: channel.id, more: true)
       if !editable {
         Section { Text(current.archivedAt != nil ? "This channel is archived." : "Guests can't change channels.").font(.footnote).foregroundStyle(.secondary) }
       }
@@ -129,7 +188,14 @@ struct ChannelTeamScreen: View {
         }
       }
     }
-    .onAppear { if !loaded { team = saved; loaded = true } }
+    .navigationDestination(item: $editing) { TeamEditForm(team: $team, target: $0, editable: editable) }
+    .onAppear {
+      if !loaded {
+        team = saved
+        picking = saved.nodes.isEmpty
+        loaded = true
+      }
+    }
     .confirmationDialog("Remove the team from #\(current.name)?", isPresented: $removing, titleVisibility: .visible) {
       Button("Remove the team", role: .destructive) { save(nil) }
     } message: { Text("The agents stay in the channel, but only answer when someone @mentions them.") }

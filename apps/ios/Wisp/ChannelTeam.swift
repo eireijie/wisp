@@ -13,8 +13,9 @@ extension ChannelTeam {
   // the web chart's card size and spacing, so a team made here lays out the same there
   private static let cardWidth = 184.0, cardHeight = 64.0, gap = 28.0, row = 132.0, pad = 24.0
 
-  /** What's wrong with the chart, in plain words, or nil when it's fine (teamProblem in packages/core). */
+  /** What's wrong with the team, in plain words, or nil when it's fine (teamProblem in packages/core): its steps first. */
   var problem: String? {
+    if let steps = stepsProblem { return steps }
     if nodes.isEmpty { return "Add at least one agent to the team." }
     if !nodes.contains(where: \.lead) { return "Make at least one agent a lead." }
     let ids = Set(nodes.map(\.agentId))
@@ -128,6 +129,12 @@ extension ChannelTeam {
     var team = self
     team.nodes = nodes.filter { agentIds.contains($0.agentId) }
     team.edges = edges.filter { agentIds.contains($0.from) && agentIds.contains($0.to) }
+    // a role whose agent is gone has nobody again
+    team.roles = roles?.map { r in
+      var r = r
+      if let a = r.agentId, !agentIds.contains(a) { r.agentId = nil }
+      return r
+    }
     return team
   }
 

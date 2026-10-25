@@ -477,29 +477,36 @@ export function TeamSteps({
       <div className="flex flex-col lg:flex-row rounded-2xl border border-line overflow-hidden bg-panel" style={{ minHeight: height }}>
         <aside className="lg:w-56 shrink-0 border-b lg:border-b-0 lg:border-r border-line p-2.5 flex flex-col gap-1" aria-label="Roles">
           <div className="px-1.5 pt-1 pb-2 text-sm font-semibold">Roles</div>
-          {roles.map((r) => {
-            const a = r.agentId ? byId.get(r.agentId) : undefined;
-            return (
+          {/* a row that scrolls sideways on a phone, a list beside the chart on a wide screen */}
+          <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible -mx-1 px-1 pb-1 lg:pb-0">
+            {roles.map((r) => {
+              const a = r.agentId ? byId.get(r.agentId) : undefined;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSel({ kind: "role", id: r.id })}
+                  className={cx("shrink-0 max-w-48 lg:max-w-none text-left rounded-xl px-2.5 py-2 flex items-center gap-2", sel?.id === r.id ? "bg-accent-soft" : "hover:bg-hover")}
+                >
+                  {a ? <AgentAvatar agent={a} size={24} interactive={false} /> : <span className="size-6 rounded-full border border-dashed border-warn shrink-0" />}
+                  <span className="min-w-0">
+                    <span className={cx("block text-sm font-medium truncate", sel?.id === r.id && "text-accent-text")}>{r.name || "Untitled role"}</span>
+                    <span className={cx("block text-[11px] truncate", a ? "text-muted" : "text-warn")}>{a ? `${a.name} · ${harnessLabel(a.harness)}` : "Nobody yet"}</span>
+                  </span>
+                </button>
+              );
+            })}
+            {!readOnly && (
               <button
-                key={r.id}
                 type="button"
-                onClick={() => setSel({ kind: "role", id: r.id })}
-                className={cx("text-left rounded-xl px-2.5 py-2 flex items-center gap-2", sel?.id === r.id ? "bg-accent-soft" : "hover:bg-hover")}
+                onClick={addRole}
+                className="shrink-0 lg:mt-1 h-9 self-center lg:self-auto rounded-xl border border-dashed border-line text-sm text-accent-text text-left px-2.5 hover:bg-hover whitespace-nowrap"
               >
-                {a ? <AgentAvatar agent={a} size={24} interactive={false} /> : <span className="size-6 rounded-full border border-dashed border-warn shrink-0" />}
-                <span className="min-w-0">
-                  <span className={cx("block text-sm font-medium truncate", sel?.id === r.id && "text-accent-text")}>{r.name || "Untitled role"}</span>
-                  <span className={cx("block text-[11px] truncate", a ? "text-muted" : "text-warn")}>{a ? `${a.name} · ${harnessLabel(a.harness)}` : "Nobody yet"}</span>
-                </span>
+                + Add role
               </button>
-            );
-          })}
-          {!readOnly && (
-            <button type="button" onClick={addRole} className="mt-1 h-9 rounded-xl border border-dashed border-line text-sm text-accent-text text-left px-2.5 hover:bg-hover">
-              + Add role
-            </button>
-          )}
-          <div className="flex-1" />
+            )}
+          </div>
+          <div className="hidden lg:block flex-1" />
           {channelId && !readOnly && <SaveTemplate channelId={channelId} />}
         </aside>
 
@@ -923,7 +930,7 @@ function StepCanvas({
   const mk = Math.min(mini.w / b.w, mini.h / b.h);
 
   return (
-    <div className="relative flex-1 min-w-0" style={{ height }}>
+    <div className="relative min-w-0 lg:flex-1" style={{ height }}>
       <div
         ref={el}
         className="absolute inset-0 overflow-hidden touch-none select-none cursor-grab active:cursor-grabbing bg-bg"

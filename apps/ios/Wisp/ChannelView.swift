@@ -190,7 +190,7 @@ struct ThreadView: View {
     ScrollViewReader { proxy in
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 0) {
-        if let parent { upLink(parent) }
+        if let parent { upLink(parent) } else { FlowStrip(channelId: ref.channelId, threadId: ref.rootId) }
         if loading {
           ProgressView().frame(maxWidth: .infinity).padding(.vertical, 10)
         }
