@@ -52,6 +52,7 @@ struct AddDeviceView: View {
     NavigationStack {
       Form {
         if token == nil {
+          if store.isOwner { Section { NavigationLink("Another computer running Wisp") { JoinInviteView() } } footer: { Text("Make a join link to paste on a computer that already has Wisp.") } }
           TextField("Device name", text: $name)
           Button("Add a device") { action.run { token = try await store.addDevice(name.trimmed) } }.disabled(action.busy || name.trimmed.isEmpty || name.count > 80)
         } else {

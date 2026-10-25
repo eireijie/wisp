@@ -43,19 +43,22 @@ struct SecuritySettingsView: View {
         SecureField("New password", text: $next).textContentType(.newPassword)
         SecureField("New password again", text: $again).textContentType(.newPassword)
         Text("At least 8 characters. Your other sign-ins will end.").font(.footnote)
+        if !again.isEmpty && next != again { Text("The new passwords don't match.").font(.footnote).foregroundStyle(.red) }
         Button("Change password") { action.run { try await store.changePassword(current: current, next: next); current = ""; next = ""; again = ""; saved = true } }.disabled(action.busy || current.isEmpty || next.count < 8 || next.count > 200 || next != again)
         if saved { Text("Password changed.").foregroundStyle(.green) }
       }
       Section("Where you're signed in") {
         ForEach(store.sessions) { session in
           VStack(alignment: .leading) {
-            Text(session.label ?? "Unknown device")
+            Text(["login", "setup"].contains(session.label ?? "") ? "A browser" : session.label ?? "Unknown device")
             if session.current == true { Text("This device").font(.caption).foregroundStyle(.secondary) }
             else { Button("Sign out") { action.run { try await store.revokeSession(session.id) } }.disabled(action.busy) }
-            if let last = session.lastUsed, let date = Wire.date(last) { Text("Last used \(date, format: .relative(presentation: .named))").font(.caption).foregroundStyle(.secondary) }
+            if session.current != true, let made = session.createdAt, let date = Wire.date(made) { Text("Signed in \(date, format: .relative(presentation: .named))").font(.caption).foregroundStyle(.secondary) }
+            if let last = session.lastUsed, session.current != true, let date = Wire.date(last) { Text("Last used \(date, format: .relative(presentation: .named))").font(.caption).foregroundStyle(.secondary) }
           }
         }
-        Button("Sign out others", role: .destructive) { others = true }.disabled(action.busy)
+        if store.sessions.contains(where: { $0.current != true }) { Button("Sign out everywhere else", role: .destructive) { others = true }.disabled(action.busy) }
+        Text("Sign out of anything you don't recognize. Changing your password signs out everything else too.").font(.footnote)
       }
       InlineError(error: action.error)
     }.navigationTitle("Security")

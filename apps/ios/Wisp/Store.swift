@@ -45,6 +45,8 @@ final class Store {
   /** what setup has so far (GET /api/onboarding), for the Inbox's readiness card */
   var onboarding: OnboardingState?
   var changes: [Change]?
+  /** computers waiting for an owner to let them join (see Store+Settings) */
+  var joinRequests: [JoinRequest] = []
   var simple = false
   /** the optional features this organization has on (all on when the hub doesn't say) */
   var features: Features = .everything
@@ -240,7 +242,7 @@ final class Store {
     activityThread = [:]; activityPath = [:]; discussions = [:]
     openChannel = nil; openThreads = [:]
     noEarlierThreads = []; seenReplies = []; removedReplies = []
-    allowance = nil; changes = nil; pushAvailable = false; pushRegistrationError = nil
+    allowance = nil; changes = nil; joinRequests = []; pushAvailable = false; pushRegistrationError = nil
     route = nil
   }
 
@@ -767,6 +769,8 @@ final class Store {
         Task { do { try await refreshBackground(id) } catch { recordSyncError(error) } }
       }
       if allowance != nil { Task { try? await refreshAllowance() } }
+    case "join_request", "join_request_done":
+      handleJoinEvent(env.type, data)
     case "changes_changed":
       Task { try? await refreshChanges() }
     case "memory_changed":
