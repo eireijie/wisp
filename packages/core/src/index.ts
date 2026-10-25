@@ -5,6 +5,7 @@ export * from "./access.ts";
 export * from "./soul.ts";
 export * from "./appearance.ts";
 export * from "./teams.ts";
+export * from "./team-flow.ts";
 export * from "./computers.ts";
 export * from "./harnesses.ts";
 export * from "./schedule.ts";

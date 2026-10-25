@@ -388,6 +388,12 @@ export function TeamRules({ className }: { className?: string }) {
 export function liveTeam(team: ChannelTeam | null, agents: Pick<Agent, "id">[]): ChannelTeam | null {
   if (!team) return null;
   const ids = new Set(agents.map((a) => a.id));
-  return { ...team, nodes: team.nodes.filter((n) => ids.has(n.agentId)), edges: team.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
+  return {
+    ...team,
+    nodes: team.nodes.filter((n) => ids.has(n.agentId)),
+    edges: team.edges.filter((e) => ids.has(e.from) && ids.has(e.to)),
+    // a role whose agent is gone needs someone new
+    ...(team.roles ? { roles: team.roles.map((r) => (r.agentId && !ids.has(r.agentId) ? { ...r, agentId: null } : r)) } : {}),
+  };
 }
 

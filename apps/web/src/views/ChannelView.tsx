@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { FlowStrip } from "../components/TeamSteps.tsx";
 import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Wrench, Pin, PinOff, Square, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
@@ -925,7 +926,8 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
       <div className="px-5 py-1.5 text-xs text-muted flex items-center gap-2">
         <span className="h-px flex-1 bg-line" />
         {m.parts.map((p, i) => (p.type === "status" || p.type === "notice") && <span key={i}>{p.text}</span>)}
-        {m.body && <span>{m.body.replace(/\*\*/g, "")}</span>}
+        {/* a step Wisp handed out shows who got it; the brief is on the task */}
+        {m.body && (m.parts.some((p) => p.type === "task") ? <span className="shrink-0">{m.body.match(/^@[\w-]+/)?.[0]}</span> : <span className="text-center">{m.body.replace(/\*\*/g, "")}</span>)}
         {m.parts.map((p) => p.type === "routine" && <RoutineChip key={p.routineId} id={p.routineId} />)}
         {m.parts.map((p) => p.type === "task" && <TaskChip key={p.taskId} id={p.taskId} />)}
         <span className="h-px flex-1 bg-line" />
@@ -1366,6 +1368,7 @@ function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: str
           <X size={18} />
         </button>
       </header>
+      {!parent && <FlowStrip channelId={channelId} threadId={rootId} />}
       <div ref={ref} className="flex-1 overflow-y-auto py-3">
         {history.controls}
         {removed && <p role="status" className="px-5 py-2 text-xs text-muted">This message was deleted.</p>}

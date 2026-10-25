@@ -85,6 +85,7 @@ describe("wisp-mcp", () => {
       "task_delegate",
       "task_list",
       "task_update",
+      "team_setup",
       "teams_list",
     ]);
   });

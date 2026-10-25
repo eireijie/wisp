@@ -108,6 +108,33 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     }),
   );
 
+  server.registerTool(
+    "team_setup",
+    {
+      description:
+        "Set up how a channel's team works, when a person describes it (\"Opus plans, GPT challenges it until it approves, then Opus hands out the work\"). Give each role a name, a description every agent on the team will read, and the agent who fills it; then the steps in order. A new message in the channel goes through the steps: Wisp hands each step to its role's agent. Kinds: do (does it, passes the result on), review (approves, or sends it back to an earlier step, up to max_rounds before asking a person), hand_out (splits the work into pieces for hand_to roles; review_by checks each piece). Replaces the channel's roles and steps. Only the workspace's lead or the channel's lead can.",
+      inputSchema: {
+        channel: z.string().describe("e.g. #launch-site"),
+        roles: z.array(z.object({ name: z.string(), description: z.string(), agent: z.string().describe("agent handle") })),
+        steps: z.array(
+          z.object({
+            role: z.string().describe("a role name from roles"),
+            kind: z.enum(["do", "review", "hand_out"]).optional(),
+            action: z.string().describe("what the role does in this step, e.g. Draft a thorough plan"),
+            send_back_to: z.number().int().optional().describe("review: step number (1-based) that gets the work back"),
+            max_rounds: z.number().int().optional(),
+            hand_to: z.array(z.string()).optional().describe("hand_out: role names the pieces go to"),
+            review_by: z.string().optional().describe("hand_out: role name that checks each piece"),
+          }),
+        ),
+      },
+    },
+    safe(async ({ channel, roles, steps }) => {
+      await client.setTeamSteps(channel, { roles, steps });
+      return text(`#${channel.replace(/^#/, "")} now works in ${steps.length} step${steps.length === 1 ? "" : "s"} with ${roles.length} role${roles.length === 1 ? "" : "s"}. Tell the person it's set up; they can change it in the channel's Team tab.`);
+    }),
+  );
+
   // --- tasks ------------------------------------------------------------------
 
   server.registerTool(
@@ -151,9 +178,9 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
 
   server.registerTool(
     "task_update",
-    { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason. A task you split into subtasks isn't finished on its own: mark it done once its subtasks are in (results of subtasks come back to you with how many are done).", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional() } },
-    safe(async ({ task_id, status, result }) => {
-      await client.updateTask(task_id, status, result);
+    { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason. A task you split into subtasks isn't finished on its own: mark it done once its subtasks are in (results of subtasks come back to you with how many are done). For a review, say whether it's approved or needs changes with verdict.", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional(), verdict: z.enum(["approved", "changes"]).optional().describe("for a review: approved moves the work on, changes sends it back with your result as the notes") } },
+    safe(async ({ task_id, status, result, verdict }) => {
+      await client.updateTask(task_id, status, result, verdict);
       return text(`Task ${task_id} is now ${status}.`);
     }),
   );
