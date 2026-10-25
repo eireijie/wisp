@@ -117,6 +117,7 @@ elif [ -n "$SERVICE" ]; then
   done
   [ -n "$up" ] || fail 'Wisp did not start; run wisp doctor.'
   printf '%s\n' '✓ Started Wisp (starts again when you log in)'
+  wisp setup-code 2>/dev/null | grep -v 'already has an owner' || true
   if [ -n "$DEVICE" ]; then
     set -- --local
     [ -z "$NAME" ] || set -- "$@" --name "$NAME"

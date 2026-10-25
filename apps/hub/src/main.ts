@@ -10,7 +10,7 @@ const webDir = path.resolve(process.env.WARREN_WEB_DIR ?? path.join(here, "../..
 const port = Number(process.env.PORT ?? 4747);
 const host = process.env.HOST ?? "0.0.0.0";
 
-const { app, hub } = await buildHub({ dataDir, webDir, logger: true });
+const { app, hub, setupCode } = await buildHub({ dataDir, webDir, logger: true });
 let stopDiscovery: () => void | Promise<void> = () => {};
 app.addHook("onListen", async () => {
   const address = app.server.address();
@@ -20,6 +20,7 @@ app.addHook("onListen", async () => {
 app.addHook("preClose", async () => { await stopDiscovery(); });
 await app.listen({ port, host });
 app.log.info(`Wisp on http://localhost:${port} (data: ${dataDir})`);
+if (setupCode.code) app.log.info(`Set up Wisp at http://localhost:${port}/#/setup/${setupCode.code} (setup code ${setupCode.code}, also in ${path.join(dataDir, "setup-code")})`);
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => app.close().then(() => process.exit(0)));
 

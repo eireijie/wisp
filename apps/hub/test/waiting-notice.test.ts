@@ -43,7 +43,7 @@ const waitFor = async <T>(fn: () => Promise<T | undefined> | T | undefined, ms =
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-waiting-"));
-  const built = await buildHub({ dataDir: path.join(dir, "hub") });
+  const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
   hub = built.hub;
   const broadcast = hub.broadcast.bind(hub);
   hub.broadcast = (workspaceId, event, only) => {

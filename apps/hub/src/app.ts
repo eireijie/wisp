@@ -15,11 +15,14 @@ import { registerVaultGit } from "./vault-git.ts";
 import { carryOverVault, rememberVaultDir, resolveVaultLocation } from "./vault-location.ts";
 import { Store } from "./store.ts";
 import { Vaults } from "./vaults.ts";
+import { SetupCode } from "./setup-code.ts";
 
 export interface HubOptions {
   dataDir: string;
   webDir?: string;
   logger?: boolean;
+  /** what making the first account needs: by default a code saved in <data>/setup-code; false for none (tests) */
+  setupCode?: string | false;
 }
 
 export async function buildHub(opts: HubOptions) {
@@ -57,6 +60,7 @@ export async function buildHub(opts: HubOptions) {
   const redact = (url: string) => url.replace(/^\/join\/[^/?#]+/, "/join/[invite]");
   const logger = opts.logger ? { serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redact(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
   const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024 });
+  const setupCode = new SetupCode(path.resolve(opts.dataDir), store.userCount() === 0, opts.setupCode ?? (process.env.WARREN_SETUP_CODE || undefined));
   // the consent and approve screens can't be framed by another site and clicked through
   app.addHook("onSend", async (_req, reply, payload) => {
     if (!reply.hasHeader("x-frame-options")) reply.header("x-frame-options", "SAMEORIGIN");
@@ -72,6 +76,7 @@ export async function buildHub(opts: HubOptions) {
     dataDir: path.resolve(opts.dataDir),
     vault: { location, moved },
     restart: () => app.close().then(() => process.exit(RESTART_CODE)),
+    setupCode,
   });
   registerVaultGit(app, hub, { dataDir: path.resolve(opts.dataDir) });
   // the hub's own computer becomes a device once someone asks for it and there's an owner
@@ -104,7 +109,7 @@ export async function buildHub(opts: HubOptions) {
     vaults.close();
     db.close();
   });
-  return { app, hub };
+  return { app, hub, setupCode };
 }
 
 /**

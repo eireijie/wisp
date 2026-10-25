@@ -31,7 +31,7 @@ const post = async (channelId: string, body: string, threadId?: string) => (awai
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-channel-teams-"));
-  const built = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;

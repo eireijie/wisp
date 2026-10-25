@@ -22,7 +22,7 @@ async function api(method: "GET" | "POST" | "PATCH", url: string, payload?: any,
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-task-completion-"));
-  ({ app, hub } = await buildHub({ dataDir: dir }));
+  ({ app, hub } = await buildHub({ dataDir: dir, setupCode: false }));
   owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", features: "everything" }, "")).token;
 });
 afterAll(async () => {

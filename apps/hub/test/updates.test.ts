@@ -56,7 +56,7 @@ const nodeInfo = async () => (await api<any[]>("GET", "/api/nodes")).data.find((
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-updates-"));
-  const built = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   // not a git checkout, so the hub's own update is explained rather than run
   hub.updates.root = await fs.mkdtemp(path.join(dir, "install-"));

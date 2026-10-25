@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { awayEnabled, connectorOrigin, enableTailscale } from "./Access.tsx";
-import { useAccessStore, type AccessInfo } from "../access.ts";
+import { linkReach, useAccessStore, type AccessInfo } from "../access.ts";
 vi.mock("../theme.ts", () => ({ motionReduced: () => false }));
 const base: AccessInfo = {
   publicUrl: "https://wisp.tail.ts.net",
@@ -60,5 +60,17 @@ describe("reach setup", () => {
   it("handles an older Wisp without the reach API", async () => {
     useAccessStore.setState({ refresh: vi.fn(async () => null) });
     await expect(enableTailscale()).rejects.toThrow("isn't available yet");
+  });
+});
+
+describe("linkReach", () => {
+  it("tells who can open a link to this Wisp", () => {
+    expect(linkReach("http://192.168.1.20:4747/join/x", base)).toBe("wifi");
+    expect(linkReach("http://wisp.local:4747", base)).toBe("wifi");
+    expect(linkReach(null, base)).toBe("wifi");
+    expect(linkReach("https://wisp.tail.ts.net/join/x", base)).toBe("tailscale");
+    expect(linkReach("https://wisp.tail.ts.net/join/x", { ...base, tailscale: { ...base.tailscale, funnel: true } })).toBe("anywhere");
+    expect(linkReach("https://wisp.example.com/join/x", base)).toBe("anywhere");
+    expect(linkReach("http://203.0.113.9:4747/join/x", base)).toBe("anywhere");
   });
 });

@@ -54,7 +54,7 @@ const dm = () => hub.store.dmChannel(hub.store.agent(agentId)!.workspaceId, me, 
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-background-"));
-  const built = await buildHub({ dataDir: path.join(dir, "hub") });
+  const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
   hub = built.hub;
   hub.push.send = async (sub, payload) => void pushed.push({ endpoint: sub.endpoint, payload: JSON.parse(payload as string) });
   await built.app.listen({ port: 0, host: "127.0.0.1" });

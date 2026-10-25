@@ -22,7 +22,7 @@ const REDIRECT = "http://127.0.0.1:6274/oauth/callback";
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-remote-mcp-"));
-  const { app } = await buildHub({ dataDir: dir });
+  const { app } = await buildHub({ dataDir: dir, setupCode: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();

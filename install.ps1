@@ -132,6 +132,7 @@ try {
     }
     if (-not $Up) { Fail "Wisp did not start; run wisp doctor." }
     Write-Host "$Check Started Wisp (starts again when you log in)"
+    try { & $Node $Cli "setup-code" 2>$null | Where-Object { $_ -notmatch "already has an owner" } | ForEach-Object { Write-Host $_ } } catch {}
     if (-not $NoDevice) {
       $LocalArgs = @($Cli, "service", "install", "node", "--local")
       if ($Name) { $LocalArgs += @("--name", $Name) }

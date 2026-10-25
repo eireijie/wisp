@@ -55,7 +55,7 @@ const waitFor = async <T>(fn: () => Promise<T | undefined>, ms = 4000): Promise<
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-node-"));
-  const { app } = await buildHub({ dataDir: path.join(dir, "hub") });
+  const { app } = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();

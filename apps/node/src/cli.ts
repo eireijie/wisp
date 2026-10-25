@@ -16,6 +16,7 @@ import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, versio
 
 import { findMovedWisp, joinTarget, joinWisp } from "./join.ts";
 import { doctor } from "./doctor.ts";
+import { Reach } from "../../hub/src/reach.ts";
 
 const HELP = `wisp — start Wisp on this computer, or join your Wisp
 
@@ -26,6 +27,8 @@ Usage:
       Check Wisp, this computer, agent apps, VM engine and Away from home.
   wisp hub start
       Start Wisp on this computer (default http://localhost:4747).
+  wisp setup-code
+      Show the code (and link) that makes the first account on a new Wisp.
   wisp service install hub
   wisp service install node [--hub URL --token TOKEN | --local] [--name NAME]
       Start Wisp or this computer's connection again when you log in.
@@ -89,6 +92,8 @@ if (values.help || !cmd) {
   if (!(await doctor(dir))) process.exitCode = 1;
 } else if (cmd === "setup") {
   await setup(values.yes ?? false);
+} else if (cmd === "setup-code") {
+  if (!printSetupLink()) console.log("This Wisp already has an owner, so it doesn't need a setup code.");
 } else if (cmd === "service") {
   await service(sub, positionals[2]);
 } else if (cmd === "node" && sub === "start") {
@@ -341,6 +346,16 @@ function hubDataDir(): string {
   return path.resolve(process.env.WARREN_DATA_DIR ?? path.join(REPO_ROOT, "data"));
 }
 
+/** A new Wisp's setup link (apps/hub/src/setup-code.ts), when nobody has made the first account yet. */
+function printSetupLink(): boolean {
+  let code = "";
+  try { code = fs.readFileSync(path.join(hubDataDir(), "setup-code"), "utf8").trim(); } catch {}
+  if (!code) return false;
+  console.log(`Make your account at http://localhost:${process.env.PORT ?? "4747"}/#/setup/${code}`);
+  console.log(`(setup code: ${code})`);
+  return true;
+}
+
 /**
  * `--local`: ask the hub on this computer to make it a device, then wait (as long as it takes,
  * since the first account is made in the browser) for it to hand over the connection.
@@ -382,6 +397,16 @@ async function service(action: string | undefined, kind: string | undefined) {
   if (action === "uninstall") {
     const s = uninstallService(k, dir);
     console.log(`Removed ${s.name}. Wisp's data and settings are untouched.`);
+    // Tailscale keeps serving the address on its own; left on, it would send visitors to whatever
+    // uses this port next
+    if (k === "hub") {
+      const reach = new Reach(Number(process.env.PORT ?? 4747));
+      const t = await reach.tailscale(true).catch(() => null);
+      if (t?.serving) {
+        const after = await reach.act("unserve").catch(() => null);
+        console.log(after && !after.serving ? "Turned off Wisp's Tailscale address." : "Turn off Wisp's Tailscale address yourself: tailscale funnel --https=443 off && tailscale serve --https=443 off");
+      }
+    }
     return;
   }
   if (k === "node" && values.hub && isInviteAddress(values.hub)) {
@@ -412,7 +437,10 @@ async function service(action: string | undefined, kind: string | undefined) {
     await new Promise((r) => setTimeout(r, 1000));
     if (k === "hub") {
       const ok = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok, () => false);
-      if (ok) return console.log(`✓ Wisp is running at http://localhost:${port}`);
+      if (ok) {
+        console.log(`✓ Wisp is running at http://localhost:${port}`);
+        return void printSetupLink();
+      }
     } else if (cfg?.local && !cfg.token) {
       return console.log("This computer becomes a device as soon as you've made your account in the browser.");
     } else if (fs.existsSync(s.log)) {

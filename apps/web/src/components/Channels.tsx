@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, ArrowLeft, ArrowRight, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
 import { teamProblem, type Agent, type ChannelNotify, type ChannelSettings as AgentRules, type ChannelTeam, type Section } from "@warren/core";
 import { CreateAgent } from "../views/CreateAgent.tsx";
@@ -1035,7 +1036,8 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           ...(role !== "guest" && !isProtected(channel) && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
         ]}
       />
-      {settings && <ChannelSettings channel={channel} tab={settings} onClose={() => setSettings(null)} />}
+      {/* the sidebar row only shows this button on hover (opacity-0 otherwise), which would hide the dialog too: draw it on the page */}
+      {settings && createPortal(<ChannelSettings channel={channel} tab={settings} onClose={() => setSettings(null)} />, document.body)}
     </>
   );
 }

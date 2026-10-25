@@ -596,6 +596,16 @@ export class Computers {
     this.changed(c.id);
   }
 
+  /**
+   * An agent ended its turn asking for a hand on its screen in plain words instead of with
+   * computer_ask_human: mark it the same way so the person gets the popup, without a second message.
+   */
+  flagHelp(c: Computer, agentId: string, request: string, where: { channelId: string; threadId: string | null }) {
+    if (c.help) return;
+    this.hub.store.updateComputer(c.id, { help: { agentId, request, channelId: where.channelId, threadId: where.threadId, at: now() } });
+    this.changed(c.id);
+  }
+
   /** An agent asks a person to do something on its computer, e.g. sign in somewhere. */
   requestHelp(c: Computer, agentId: string, request: string, where: { channelId: string; threadId: string | null }) {
     const help = { agentId, request, channelId: where.channelId, threadId: where.threadId, at: now() };

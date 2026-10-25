@@ -34,6 +34,7 @@ function fixture(pending = false, saved: Record<string, any> = {}) {
   }
   const cfg: Record<string, any> = { hub: "https://old", token: "old-token", name: "device" };
   const engine = {
+    localSetupCode: vi.fn(() => null as string | null),
     Child: class {
       state = "starting";
       log = "/desktop-test/device.log";
@@ -155,6 +156,14 @@ describe("desktop approval IPC", () => {
     f.main.init();
     expect(await f.handlers.get("setup:create")!(f.setupEvent())).toEqual({ ok: true });
     await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://localhost:4747/#/welcome/intro"));
+  });
+
+  it("opens a new Wisp's setup link, so making the account doesn't ask for its code", async () => {
+    const f = fixture();
+    f.engine.localSetupCode.mockReturnValue("k7qm-29xd-hp4c");
+    f.main.init();
+    expect(await f.handlers.get("setup:create")!(f.setupEvent())).toEqual({ ok: true });
+    await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://localhost:4747/#/setup/k7qm-29xd-hp4c"));
   });
 });
 

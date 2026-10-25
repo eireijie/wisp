@@ -262,3 +262,21 @@ describe("device status without a session", () => {
     }
   });
 });
+
+describe("a new Wisp's setup code", () => {
+  it("reads it from this computer's Wisp data, and only something that looks like a code", () => {
+    const data = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-setup-code-"));
+    const before = process.env.WARREN_DATA_DIR;
+    process.env.WARREN_DATA_DIR = data;
+    try {
+      fs.writeFileSync(path.join(data, "setup-code"), "k7qm-29xd-hp4c\n");
+      expect(engine.localSetupCode()).toBe("k7qm-29xd-hp4c");
+      fs.writeFileSync(path.join(data, "setup-code"), "<script>\n");
+      expect(engine.localSetupCode()).not.toBe("<script>");
+    } finally {
+      if (before === undefined) delete process.env.WARREN_DATA_DIR;
+      else process.env.WARREN_DATA_DIR = before;
+      fs.rmSync(data, { recursive: true, force: true });
+    }
+  });
+});
