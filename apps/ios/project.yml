@@ -33,6 +33,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Wisp connects to Wisp on your computer over your own network.
         INFOPLIST_KEY_NSCameraUsageDescription: Wisp uses the camera to scan the pairing code on your computer.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Wisp uses the microphone so you can talk with your agents in a voice call.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Wisp turns what you say into text so your agent can answer.
         CODE_SIGN_STYLE: Automatic
         # push notifications; Xcode switches this to production when you archive for TestFlight / the App Store
         CODE_SIGN_ENTITLEMENTS: Wisp/Wisp.entitlements

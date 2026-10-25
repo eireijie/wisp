@@ -158,7 +158,7 @@ struct VoiceSettingsView: View {
       Section("Your voice choices") {
         Picker("Listening", selection: $listen) { Text("On this device").tag("device"); Text("OpenAI (online)").tag("openai") }
         Picker("Speaking", selection: $speak) { Text("On this device").tag("device"); Text("OpenAI (online)").tag("openai"); Text("ElevenLabs (online)").tag("elevenlabs") }
-        Text("These settings belong to you. Voice calls and microphone tests are available in Wisp on the computer.").font(.footnote)
+        Text("These settings belong to you. Your next call will use them.").font(.footnote)
       }
       TechnicalDetails(title: "API keys") { SecureField("OpenAI key", text: $openai); SecureField("ElevenLabs key", text: $elevenlabs); Text("Keys stay on your hub and are hidden when shown again. Clear a key and save to remove it. Online voice providers bill you separately.").font(.footnote) }
       Button("Save") {
@@ -170,6 +170,7 @@ struct VoiceSettingsView: View {
       }.disabled(preferences == nil || action.busy)
       if saved { Text("Saved. Your next call will use these settings.") }
       InlineError(error: action.error)
+      VoiceTryOut(speak: speak)
     }.navigationTitle("Voice")
       .task { do { preferences = try await store.connection().get("/api/voice/settings"); listen = preferences?.listen ?? "device"; speak = preferences?.speak ?? "device"; openai = preferences?.openaiKey ?? ""; elevenlabs = preferences?.elevenlabsKey ?? "" } catch { action.error = error.localizedDescription } }
   }
