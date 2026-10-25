@@ -94,6 +94,22 @@ export function originReach(origin: string): "anywhere" | "network" | "this-comp
   }
 }
 
+/**
+ * Who can open a link to this Wisp: anyone, only devices on the same Tailscale account
+ * (a .ts.net address without Funnel), or only devices on this Wi-Fi.
+ */
+export function linkReach(url: string | null | undefined, info: AccessInfo | null): "anywhere" | "tailscale" | "wifi" {
+  let u: URL;
+  try {
+    u = new URL(url ?? "");
+  } catch {
+    return "wifi";
+  }
+  // a cloud server's plain-http public IP still works from anywhere
+  if (!onPublicAddress({ protocol: "https:", hostname: u.hostname })) return "wifi";
+  return u.hostname.endsWith(".ts.net") && !info?.tailscale.funnel ? "tailscale" : "anywhere";
+}
+
 const SKIP_KEY = "warren.access.skipped";
 /** "Only on this Wi-Fi for now": the setup step counts as done on this browser. */
 export function accessSkipped(): boolean {
