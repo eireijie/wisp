@@ -1,4 +1,4 @@
-import { channelTeams, cleanRulePath, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup, type Change } from "@wisp/core";
+import { channelTeams, cleanRulePath, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -205,6 +205,16 @@ export class Store {
 
   setNodeShared(nodeId: string, shared: boolean) {
     this.db.prepare("UPDATE nodes SET shared = ? WHERE id = ?").run(shared ? 1 : 0, nodeId);
+  }
+
+  /** The remote desktop app the device's owner already uses, or null. */
+  nodeRemoteDesktop(nodeId: string): OwnRemoteDesktop | null {
+    const r = this.db.prepare("SELECT remote_desktop_json FROM nodes WHERE id = ?").get(nodeId) as { remote_desktop_json: string | null } | undefined;
+    return r?.remote_desktop_json ? JSON.parse(r.remote_desktop_json) : null;
+  }
+
+  setNodeRemoteDesktop(nodeId: string, remote: OwnRemoteDesktop | null) {
+    this.db.prepare("UPDATE nodes SET remote_desktop_json = ? WHERE id = ?").run(remote ? JSON.stringify(remote) : null, nodeId);
   }
 
   setNodeRole(nodeId: string, role: DeviceRole | null) {

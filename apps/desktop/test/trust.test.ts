@@ -37,3 +37,10 @@ describe("which pages the app trusts", () => {
     expect(trust.mainFrameUrl({ sender: webContents, senderFrame: mainFrame }, null)).toBeNull();
   });
 });
+
+describe("remote desktop links", () => {
+  it("opens the apps a device's page links to, and nothing that only looks like them", () => {
+    for (const u of ["rustdesk://482117903", "anydesk:123456789", "anydesk:shop@ad", "teamviewer10://control?device=123456789", "rdp://full%20address=s:shop-pc.local", "vnc://192.168.1.20:5900"]) expect(trust.isRemoteDesktopLink(u)).toBe(true);
+    for (const u of ["javascript:alert(1)", "vnc://x;rm -rf", "file:///etc/passwd", "rustdesk://a b", "teamviewer10://control?device=1&password=x", "rdp://full%20address=s:x&shell=y"]) expect(trust.isRemoteDesktopLink(u)).toBe(false);
+  });
+});

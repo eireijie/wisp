@@ -111,6 +111,19 @@ It installs [RustDesk](https://rustdesk.com), free and open-source remote deskto
 
 Connections go through RustDesk's own servers, the same as using RustDesk on its own.
 
+**Already use another app?** On the device's page choose **I already use one**, pick the app, and paste what identifies the device in it:
+
+| App | What you paste | Open |
+| --- | --- | --- |
+| TeamViewer | its ID | opens TeamViewer (`teamviewer10://`, which some TeamViewer versions ignore; Copy always works) |
+| AnyDesk | its ID or alias | opens AnyDesk (`anydesk:`) |
+| Chrome Remote Desktop | a link (remotedesktop.google.com/access) | opens the page |
+| Windows Remote Desktop | the computer's name or address | opens Microsoft's Remote Desktop app on a Mac, iPhone or Android (`rdp://`); on Windows, copy it into Remote Desktop Connection |
+| Screen Sharing (Mac), VNC | the computer's name or address | opens Screen Sharing or your VNC viewer (`vnc://`) |
+| Another app | its name and an https link | opens the link |
+
+The device notices which of these are installed (or, for VNC and Remote Desktop, answering on it) and lists them first; `wisp doctor` shows them too. Like the RustDesk ID, what you paste is shown to you only, and Wisp never asks for the app's password.
+
 ## Watching and taking control
 
 Open **Computers** to see every screen, which agents use it, and whether one is **Working**. A computer an agent is using also shows up live in the conversation.

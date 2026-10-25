@@ -15,7 +15,7 @@ const { GITHUB_URL } = require("./repo.cjs");
 const { isPairingLink, registerProtocols } = require("./protocol.cjs");
 const cloud = require("./cloud.cjs");
 const screenCode = require("./screen-code.cjs");
-const { onOrigin, isPage, mainFrameUrl } = require("./trust.cjs");
+const { onOrigin, isPage, mainFrameUrl, isRemoteDesktopLink } = require("./trust.cjs");
 
 const PORT = Number(process.env.PORT || 4747);
 const LOCAL_HUB = `http://localhost:${PORT}`;
@@ -135,14 +135,14 @@ function createWindow() {
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (onOrigin(url, hubOrigin)) return { action: "allow" };
-    // a RustDesk link from a device's page opens RustDesk on this computer
-    if (/^https?:|^mailto:|^rustdesk:\/\/[A-Za-z0-9_-]+$/.test(url)) shell.openExternal(url);
+    // a device page's Open for RustDesk, AnyDesk and the like opens that app on this computer
+    if (/^https?:|^mailto:/.test(url) || isRemoteDesktopLink(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => {
     if (isPage(url, SETUP_PAGE) || onOrigin(url, hubOrigin)) return;
     e.preventDefault();
-    if (/^https?:|^rustdesk:\/\/[A-Za-z0-9_-]+$/.test(url)) shell.openExternal(url);
+    if (/^https?:/.test(url) || isRemoteDesktopLink(url)) shell.openExternal(url);
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     if (code === -3 || !onOrigin(url, hubOrigin)) return; // -3: aborted by a navigation

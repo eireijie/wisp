@@ -511,6 +511,16 @@ describe("RustDesk", () => {
     await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
     await waitFor(async () => !(await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.rustdesk);
   });
+
+  it("keeps the app its owner already uses to themselves, and checks what they enter", async () => {
+    await expect(owner.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: { app: "rdp", value: "javascript:alert(1)" } })).rejects.toThrow(/computer name or address/);
+    await expect(member.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: { app: "anydesk", value: "123456789" } })).rejects.toThrow(/only the person who connected/);
+    await owner.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: { app: "anydesk", value: "123456789" } });
+    expect((await owner.request<any[]>("GET", "/api/nodes"))[0].remoteDesktop).toEqual({ app: "anydesk", value: "123456789" });
+    expect((await member.request<any[]>("GET", "/api/nodes"))[0].remoteDesktop).toBeNull();
+    await owner.request("PATCH", `/api/nodes/${nodeId}`, { remoteDesktop: null });
+    expect((await owner.request<any[]>("GET", "/api/nodes"))[0].remoteDesktop).toBeNull();
+  });
 });
 
 describe("a screen's code", () => {

@@ -33,4 +33,9 @@ function mainFrameUrl(e, win) {
   return frame.url || null;
 }
 
-module.exports = { onOrigin, isPage, mainFrameUrl };
+/** A device page's "Open" for a remote desktop app (RustDesk, AnyDesk, TeamViewer, Remote Desktop, VNC): opens that app here. */
+function isRemoteDesktopLink(url) {
+  return /^(rustdesk:\/\/|anydesk:)[A-Za-z0-9@._-]+$|^teamviewer10:\/\/control\?device=\d+$|^rdp:\/\/full%20address=s:[A-Za-z0-9.-]+(:\d+)?$|^vnc:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(url);
+}
+
+module.exports = { onOrigin, isPage, mainFrameUrl, isRemoteDesktopLink };

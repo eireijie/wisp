@@ -28,6 +28,7 @@ import {
   type AccessRule,
   type Actor,
   type ChannelTeam,
+  OwnRemoteDesktop,
   type DeviceCapabilities,
   type MemoryLevel,
   type Subject,
@@ -1224,6 +1225,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       paused: hub.isNodePaused(n.id),
       agents: store.agentsOnNode(n.id).map((a) => a.handle),
       capabilities: n.ownerId === c.actor.id ? store.nodeCapabilities(n.id) : withoutRustdesk(store.nodeCapabilities(n.id)),
+      // how its owner reaches it is theirs alone
+      remoteDesktop: n.ownerId === c.actor.id ? store.nodeRemoteDesktop(n.id) : null,
       // what else lives on someone's device is theirs to see
       discovered: n.ownerId === c.actor.id || n.shared ? store.nodeDiscovered(n.id) : [],
       harnesses: store.nodeCatalog(n.id).map((h) => ({ id: h.harness, version: h.version })),
@@ -1263,9 +1266,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const node = store.node((req.params as { id: string }).id);
     if (!node || node.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "node not found" });
     if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the person who connected this device can change it" });
-    const body = parse(z.object({ shared: z.boolean(), role: z.enum(["vms", "screen", "headless"]).nullable() }).partial(), req.body, reply);
+    const body = parse(z.object({ shared: z.boolean(), role: z.enum(["vms", "screen", "headless"]).nullable(), remoteDesktop: OwnRemoteDesktop.nullable() }).partial(), req.body, reply);
     if (!body) return;
     if (body.shared !== undefined) store.setNodeShared(node.id, body.shared);
+    if (body.remoteDesktop !== undefined) store.setNodeRemoteDesktop(node.id, body.remoteDesktop);
     if (body.role !== undefined) store.setNodeRole(node.id, body.role);
     return { ...store.node(node.id), ok: true };
   });

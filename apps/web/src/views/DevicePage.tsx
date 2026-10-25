@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, Copy, Download, ExternalLink, Eye, Lock, Monitor, MoreHorizontal, Pause, Plus, Trash2 } from "lucide-react";
-import { formatRustdeskId, runsInVm, type Agent } from "@wisp/core";
+import { Check, ChevronDown, ChevronLeft, Copy, Download, ExternalLink, Eye, Link2, Lock, Monitor, MoreHorizontal, Pause, Plus, Trash2 } from "lucide-react";
+import { OwnRemoteDesktop, REMOTE_APPS, REMOTE_APP_IDS, formatRustdeskId, remoteDesktopLink, runsInVm, type Agent, type RemoteApp } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -8,7 +8,7 @@ import { osName, useDevices } from "../devices.ts";
 import { useFeature } from "../features.ts";
 import { CreateAgent } from "./CreateAgent.tsx";
 import { ConnectDevice, DeviceAccess, DeviceIcon, type NodeInfo } from "./NodesView.tsx";
-import { AgentAvatar, Button, CopyBlock, Empty, Loader, Menu, Pill, StatusChip, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Empty, Field, Input, Loader, Menu, Pill, StatusChip, cx } from "../components/ui.tsx";
 
 /**
  * One device: the agents that run on it and what each works on, its own screen, and the rest of
@@ -105,7 +105,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
           {(n.mine || isOwner) && <ConnectDevice node={n} onChange={refresh} />}
           <AgentsHere node={n} onAdd={() => setCreating(true)} />
           {n.mine && <YourScreen node={n} />}
-          {n.mine && remoteDesktop && <RemoteDesktop node={n} />}
+          {n.mine && remoteDesktop && <RemoteDesktop node={n} onChange={refresh} />}
           <section className="rounded-2xl border border-line bg-panel">
             <button className="w-full px-4 py-3 flex items-center text-sm text-muted hover:text-ink" aria-expanded={more} onClick={() => setMore(!more)}>
               <span className="flex-1 text-left">More</span>
@@ -298,44 +298,173 @@ function YourScreen({ node: n }: { node: NodeInfo }) {
   );
 }
 
-/** The Remote desktop mod: RustDesk's ID for this device and a link that opens RustDesk on it. Its owner's alone. */
-function RemoteDesktop({ node: n }: { node: NodeInfo }) {
-  const [copied, setCopied] = useState(false);
+/** What to put in each kind of field, and an example. */
+const FIELD_HINT = {
+  id: { label: "Its ID", placeholder: "123 456 789" },
+  address: { label: "Computer name or address", placeholder: "shop-pc.local or 192.168.1.20" },
+  link: { label: "Link", placeholder: "https://…" },
+} as const;
+
+/**
+ * The Remote desktop mod: how its owner reaches this device from anywhere. RustDesk (set up at the
+ * device), or the app they already use, by its ID, address or link. Never a password. Its owner's alone.
+ */
+function RemoteDesktop({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [showRustdesk, setShowRustdesk] = useState(false);
   const rustdesk = n.capabilities?.rustdesk;
-  const copy = async () => {
-    if (!rustdesk) return;
-    await navigator.clipboard.writeText(rustdesk.id).catch(() => {});
+  const own = n.remoteDesktop;
+  const save = async (remoteDesktop: OwnRemoteDesktop | null) => {
+    await api("PATCH", `/api/nodes/${n.id}`, { remoteDesktop });
+    setEditing(false);
+    onChange();
+  };
+  const remove = () => {
+    if (confirm(`Stop showing ${own ? REMOTE_APPS[own.app].label : "this app"} here? The app itself isn't changed.`)) void save(null).catch((e) => alert((e as Error).message));
+  };
+  return (
+    <section className="rounded-2xl border border-line bg-panel p-4">
+      <h2 className="font-semibold text-sm">Remote desktop</h2>
+      {rustdesk && <RemoteRow label="RustDesk" value={formatRustdeskId(rustdesk.id)} copy={rustdesk.id} link={`rustdesk://${encodeURIComponent(rustdesk.id)}`} note="Use the password you set in RustDesk. Wisp never sees it." />}
+      {own && !editing && <RemoteRow label={own.app === "other" && own.name ? own.name : REMOTE_APPS[own.app].label} value={REMOTE_APPS[own.app].field === "id" ? formatRustdeskId(own.value) : own.value} copy={own.value} link={remoteDesktopLink(own)} onChange={() => setEditing(true)} onRemove={remove} />}
+      {editing ? (
+        <OwnAppForm node={n} current={own ?? null} onSave={save} onCancel={() => setEditing(false)} />
+      ) : !rustdesk && !own ? (
+        showRustdesk ? (
+          <div className="mt-2 space-y-2 text-sm">
+            <p className="text-muted">Run this at {n.name}. It asks before installing RustDesk, then shows its ID here.</p>
+            <CopyBlock text="wisp node rustdesk" />
+            <button className="text-xs text-muted hover:text-ink" onClick={() => setShowRustdesk(false)}>
+              Back
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="mt-0.5 text-xs text-muted">Reach {n.name} from anywhere.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button onClick={() => setShowRustdesk(true)} className="rounded-xl border-2 border-accent/60 p-3 text-left hover:bg-hover">
+                <div className="text-sm font-medium flex items-center gap-1.5">
+                  <Download size={15} /> Set up RustDesk
+                </div>
+                <p className="mt-0.5 text-xs text-muted">Free and open source. {n.name} installs it after asking you there.</p>
+              </button>
+              <button onClick={() => setEditing(true)} className="rounded-xl border border-line p-3 text-left hover:bg-hover">
+                <div className="text-sm font-medium flex items-center gap-1.5">
+                  <Link2 size={15} /> I already use one
+                </div>
+                <p className="mt-0.5 text-xs text-muted">{n.capabilities?.remoteApps?.length ? `${n.capabilities.remoteApps.map((a) => REMOTE_APPS[a as RemoteApp]?.label ?? a).join(", ")} ${n.capabilities.remoteApps.length === 1 ? "is" : "are"} on ${n.name}.` : "TeamViewer, AnyDesk, Chrome Remote Desktop, Windows Remote Desktop, VNC…"}</p>
+              </button>
+            </div>
+          </>
+        )
+      ) : (
+        !own && (
+          <button className="mt-2 text-xs text-muted hover:text-ink" onClick={() => setEditing(true)}>
+            Add another app you use
+          </button>
+        )
+      )}
+    </section>
+  );
+}
+
+/** One way in: the app, the device's ID or address in it, Copy, and Open where the app has a link. */
+function RemoteRow({ label, value, copy, link, note, onChange, onRemove }: { label: string; value: string; copy: string; link: string | null; note?: string; onChange?: () => void; onRemove?: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const doCopy = async () => {
+    await navigator.clipboard.writeText(copy).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <section className="rounded-2xl border border-line bg-panel p-4">
-      <div className="flex items-center gap-2">
-        <h2 className="font-semibold text-sm flex-1">Remote desktop</h2>
-        {rustdesk && <Pill>RustDesk</Pill>}
-      </div>
-      {rustdesk ? (
-        <>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <div className="flex-1 min-w-36">
-              <div className="text-xs text-muted">ID</div>
-              <div className="font-mono text-base tabular-nums">{formatRustdeskId(rustdesk.id)}</div>
-            </div>
-            <Button onClick={copy}>
-              {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy ID"}
-            </Button>
-            <a href={`rustdesk://${encodeURIComponent(rustdesk.id)}`} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-full bg-accent text-accent-ink text-sm font-medium whitespace-nowrap hover:bg-accent/90">
-              <ExternalLink size={15} /> Open in RustDesk
-            </a>
-          </div>
-          <p className="mt-2 text-xs text-muted">Use the password you set in RustDesk and saved in your password manager. Wisp never sees it.</p>
-        </>
-      ) : (
-        <div className="mt-2 space-y-2 text-sm">
-          <p className="text-muted">Reach {n.name} from anywhere with RustDesk, free and open source. Run this at {n.name}; it asks before installing anything.</p>
-          <CopyBlock text="wisp node rustdesk" />
+    <div className="mt-2 pt-2 first-of-type:pt-0 border-t first-of-type:border-t-0 border-line">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-1 min-w-36">
+          <div className="text-xs text-muted">{label}</div>
+          <div className="font-mono text-base tabular-nums break-all">{value}</div>
         </div>
+        <Button onClick={doCopy}>
+          {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}
+        </Button>
+        {link && (
+          <a href={link} target={link.startsWith("https:") ? "_blank" : undefined} rel="noopener noreferrer" className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-full bg-accent text-accent-ink text-sm font-medium whitespace-nowrap hover:bg-accent/90">
+            <ExternalLink size={15} /> Open
+          </a>
+        )}
+        {(onChange || onRemove) && (
+          <Menu
+            align="right"
+            items={[...(onChange ? [{ label: "Change", onSelect: onChange }] : []), ...(onRemove ? [{ label: "Remove", danger: true, onSelect: onRemove }] : [])]}
+            trigger={(open, toggle) => (
+              <button className={cx("p-1.5 rounded-md text-muted hover:bg-hover hover:text-ink", open && "bg-hover text-ink")} aria-label={`More for ${label}`} onClick={toggle}>
+                <MoreHorizontal size={16} />
+              </button>
+            )}
+          />
+        )}
+      </div>
+      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
+    </div>
+  );
+}
+
+/** Which app, and the device's ID, address or link in it. Apps found on the device come first. */
+function OwnAppForm({ node: n, current, onSave, onCancel }: { node: NodeInfo; current: OwnRemoteDesktop | null; onSave: (r: OwnRemoteDesktop) => Promise<void>; onCancel: () => void }) {
+  const found = (n.capabilities?.remoteApps ?? []).filter((a): a is RemoteApp => a in REMOTE_APPS);
+  const order = [...found, ...REMOTE_APP_IDS.filter((a) => !found.includes(a))];
+  const [app, setApp] = useState<RemoteApp>(current?.app ?? order[0]);
+  const [value, setValue] = useState(current?.value ?? "");
+  const [name, setName] = useState(current?.name ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const field = FIELD_HINT[REMOTE_APPS[app].field];
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // IDs are often copied with spaces ("123 456 789")
+    const v = REMOTE_APPS[app].field === "id" ? value.replace(/\s+/g, "") : value.trim();
+    const r = { app, value: v, ...(app === "other" && name.trim() ? { name: name.trim() } : {}) };
+    const check = OwnRemoteDesktop.safeParse(r);
+    if (!check.success) return setError(check.error.issues[0]?.message ?? "Check what you entered.");
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave(check.data);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-3">
+      <Field label="App">
+        <select value={app} onChange={(e) => setApp(e.target.value as RemoteApp)} className="h-9 w-full rounded-xl border border-input bg-panel px-3 text-sm text-ink">
+          {order.map((a) => (
+            <option key={a} value={a}>
+              {REMOTE_APPS[a].label}
+              {found.includes(a) ? ` (on ${n.name})` : ""}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {app === "other" && (
+        <Field label="Its name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Parsec" maxLength={60} />
+        </Field>
       )}
-    </section>
+      <Field label={field.label} hint={app === "chrome" ? "From remotedesktop.google.com/access, or leave it at that page." : undefined}>
+        <Input value={value} onChange={(e) => (setValue(e.target.value), setError(null))} placeholder={app === "chrome" ? "https://remotedesktop.google.com/access" : field.placeholder} autoFocus />
+      </Field>
+      <p className="text-xs text-muted">Only you see this. Keep the app's password in your password manager; Wisp never asks for it.</p>
+      {error && <p className="text-xs text-bad">{error}</p>}
+      <div className="flex gap-2">
+        <Button variant="primary" disabled={busy || !value.trim()}>
+          Save
+        </Button>
+        <Button type="button" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }

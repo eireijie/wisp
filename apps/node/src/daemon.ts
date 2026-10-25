@@ -12,6 +12,7 @@ import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
 import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remote-desktop.ts";
 import type { RustdeskConfig } from "./rustdesk.ts";
+import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
@@ -217,6 +218,8 @@ export class NodeDaemon {
       if (this.local.code) caps.screen.code = this.local.code.kind;
     }
     if (this.local.rustdesk) caps.rustdesk = this.local.rustdesk;
+    const apps = await detectRemoteApps().catch(() => []);
+    if (apps.length) caps.remoteApps = apps;
     caps.paused = this.local.paused;
     caps.commands = this.commandsHere();
     this.send({ type: "capabilities", capabilities: caps });

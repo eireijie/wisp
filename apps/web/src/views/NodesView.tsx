@@ -2,7 +2,7 @@ import { originReach, shareOrigin, useAccess } from "../access.ts";
 import { desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
-import type { DeviceCapabilities, DeviceRole } from "@wisp/core";
+import type { DeviceCapabilities, DeviceRole, OwnRemoteDesktop } from "@wisp/core";
 import { api } from "../api.ts";
 import { href } from "../router.ts";
 import { useStore } from "../store.ts";
@@ -26,6 +26,8 @@ export interface NodeInfo {
   /** the Wisp version it runs; null for devices from before updates */
   version: { commit: string | null; date: string | null } | null;
   update: { state: "idle" | "updating" | "restarting" | "failed"; message: string } | null;
+  /** the remote desktop app its owner uses to reach it; only they get it */
+  remoteDesktop?: OwnRemoteDesktop | null;
 }
 
 /** "Connected" while online; otherwise when it was last seen. Never both, so it can't contradict the pill. */

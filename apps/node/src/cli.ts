@@ -11,7 +11,8 @@ import { deviceAdapters } from "@wisp/adapters";
 import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { listening, remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
-import { formatRustdeskId } from "@wisp/core";
+import { REMOTE_APPS, formatRustdeskId } from "@wisp/core";
+import { detectRemoteApps } from "./remote-apps.ts";
 import { rustdeskId, rustdeskInstalled, setUpRustdesk } from "./rustdesk.ts";
 import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
 import { discoverAgents } from "./discover.ts";
@@ -133,6 +134,8 @@ if (values.help || !cmd) {
     console.log(`               Remote Desktop ${saved.remoteDesktop ? `on (${saved.remoteDesktop.server}${(await listening(saved.remoteDesktop.port)) ? "" : ", not answering right now"})` : rd.ok ? "off (`wisp node screen remote`)" : `unavailable: ${rd.detail}`}`);
   }
   console.log(`  VMs          ${caps.vm.ok ? "yes" : "no"}: ${caps.vm.detail}`);
+  const others = await detectRemoteApps();
+  if (others.length) console.log(`  Also here    ${others.map((a) => REMOTE_APPS[a].label).join(", ")} (pick it under Remote desktop on this device's page)`);
   console.log(`  RustDesk     ${saved.rustdesk ? `on, ID ${formatRustdeskId(saved.rustdesk.id)}` : (await rustdeskInstalled()) ? "installed, not shown in Wisp (`wisp node rustdesk`)" : "not set up (`wisp node rustdesk`)"}`);
   const found = discoverAgents();
   console.log("\nExisting agents Wisp can import");

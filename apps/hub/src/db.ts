@@ -277,6 +277,8 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["messages", "edited_at", "TEXT"],
   ["messages", "deleted_at", "TEXT"],
   ["discussions", "kind", "TEXT"],
+  // the remote desktop app its owner already uses (OwnRemoteDesktop), shown to them only
+  ["nodes", "remote_desktop_json", "TEXT"],
 ];
 
 export function openDb(file: string): Database.Database {

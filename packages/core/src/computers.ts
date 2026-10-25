@@ -83,6 +83,8 @@ export const DeviceCapabilities = z.object({
   }),
   /** RustDesk is set up for this device (`wisp node rustdesk`): its ID, for its owner to connect with. Its password stays in RustDesk */
   rustdesk: z.object({ id: z.string().max(40) }).optional(),
+  /** other remote desktop apps found here (installed, or a VNC or Remote Desktop server answering), to suggest on the device's page */
+  remoteApps: z.array(z.string().max(40)).max(10).optional(),
   /** someone ran `wisp node pause` on the device: no agent runs and no computer use until they resume */
   paused: z.boolean().optional(),
   /** which commands connectors need are on the device's PATH (npx, uvx, docker…), so a connector that can't start is caught before it's enabled */
@@ -229,6 +231,58 @@ export function sortEntries(entries: FileEntry[]): FileEntry[] {
 export interface RunOutput {
   exitCode: number;
   output: string;
+}
+
+/**
+ * Remote desktop apps a person may already use to reach a device (besides RustDesk, which Wisp sets
+ * up). They paste the app's ID, address or link on the device's page; Wisp only keeps that and opens
+ * the app with it, never a password. `field`: what identifies the device in that app.
+ */
+export const REMOTE_APPS = {
+  teamviewer: { label: "TeamViewer", field: "id" },
+  anydesk: { label: "AnyDesk", field: "id" },
+  chrome: { label: "Chrome Remote Desktop", field: "link" },
+  rdp: { label: "Windows Remote Desktop", field: "address" },
+  "screen-sharing": { label: "Screen Sharing (Mac)", field: "address" },
+  vnc: { label: "VNC", field: "address" },
+  other: { label: "Another app", field: "link" },
+} as const;
+export type RemoteApp = keyof typeof REMOTE_APPS;
+export const REMOTE_APP_IDS = Object.keys(REMOTE_APPS) as RemoteApp[];
+
+/** The pattern each kind of field must match: an app's ID, a host[:port], or an https link. */
+const REMOTE_FIELD = {
+  id: /^[A-Za-z0-9@._-]{3,60}$/,
+  address: /^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/,
+  link: /^https:\/\/[^\s<>"']{4,500}$/,
+};
+
+/** The remote desktop app a device's owner already uses, saved on the hub for them only. */
+export const OwnRemoteDesktop = z
+  .object({ app: z.enum(REMOTE_APP_IDS as [RemoteApp, ...RemoteApp[]]), value: z.string().trim(), name: z.string().trim().max(60).optional() })
+  .superRefine((r, ctx) => {
+    const field = REMOTE_APPS[r.app].field;
+    if (!REMOTE_FIELD[field].test(r.value)) ctx.addIssue({ code: "custom", path: ["value"], message: field === "id" ? "That doesn't look like an ID." : field === "address" ? "Enter a computer name or address, like shop-pc.local or 192.168.1.20." : "Paste a link that starts with https://" });
+  });
+export type OwnRemoteDesktop = z.infer<typeof OwnRemoteDesktop>;
+
+/** A link that opens the app on this device, or null when the app has none (copy the ID instead). */
+export function remoteDesktopLink(r: OwnRemoteDesktop): string | null {
+  const v = r.value;
+  switch (r.app) {
+    case "anydesk":
+      return `anydesk:${v}`;
+    case "teamviewer":
+      return /^\d+$/.test(v) ? `teamviewer10://control?device=${v}` : null;
+    case "rdp":
+      return `rdp://full%20address=s:${v}`;
+    case "screen-sharing":
+    case "vnc":
+      return `vnc://${v}`;
+    case "chrome":
+    case "other":
+      return REMOTE_FIELD.link.test(v) ? v : null;
+  }
 }
 
 /** "482117903" → "482 117 903", the way RustDesk shows an ID. */
