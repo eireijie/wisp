@@ -14,6 +14,7 @@ struct ChannelView: View {
   var channel: Channel
   @State private var error: String?
   @State private var loadingEarlier = false
+  @State private var calling = false
   @State private var noEarlier = false
   @Environment(\.dismiss) private var dismiss
 
@@ -115,6 +116,16 @@ struct ChannelView: View {
           }.buttonStyle(.plain)
         }
       }
+    }
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        if store.features.voice, current.archivedAt == nil, let agent = store.dmAgent(current) {
+          Button { calling = true } label: { Image(systemName: "phone") }.accessibilityLabel("Call \(agent.name)")
+        }
+      }
+    }
+    .fullScreenCover(isPresented: $calling) {
+      if let agent = store.dmAgent(current) { CallScreen(agent: agent, channel: current) }
     }
     .onChange(of: store.channels) { old, new in
       if old.contains(where: { $0.id == channel.id }) && !new.contains(where: { $0.id == channel.id }) { dismiss() }
