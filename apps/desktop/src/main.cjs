@@ -470,7 +470,7 @@ ipcMain.handle("screen-code:save", (e, input) => {
   if (r.error) return { error: r.error };
   engine.writeNodeConfig({ screenCode: r.screenCode });
   codeSaved = true;
-  notify("Screen code saved", `You'll enter this ${r.screenCode.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen or lend it to an agent.`);
+  notify("Screen code saved", `You'll enter this ${r.screenCode.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen.`);
   codeWin.close();
   refresh();
   return { ok: true };

@@ -9,7 +9,7 @@ There are three kinds of computer:
 | Kind | What it is | Needs |
 | --- | --- | --- |
 | **VM on a device** | A Debian 13 desktop with a dock (Google Chrome, Terminal, Files) on one of your devices. Its own screen, files and sign-ins, so agents never touch yours. | Apple's `container` (Macs with Apple silicon), Docker (Docker Desktop, OrbStack, Colima, Docker Engine) or Podman. `wisp setup` installs one. |
-| **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, it opens with a code you pick there, and agents use it only while you lend it. | macOS, Windows, or Linux with X11 (see below) |
+| **Your own screen** | The screen of a device you connected, apps and all. Off unless you turn it on at that device; only you can see it, it opens with a code you pick there, and only agents that run on that device can use it. | macOS, Windows, or Linux with X11 (see below) |
 | **Orgo cloud computer** | A Linux desktop from [orgo.ai](https://orgo.ai) that keeps running when your devices are off. | An Orgo API key in **Settings → Computers** |
 
 Several agents can share one computer. They share its files, browser and sign-ins, so they can hand work to each other.
@@ -51,7 +51,7 @@ A device's own screen is its owner's: the person who connected the device. It's 
 wisp node screen on     # on that device; `wisp node screen off` turns it off again
 ```
 
-Turning it on asks you to pick a **code**: a 6-digit PIN or a password (8 characters or more). Opening the screen from Wisp needs it, and so does lending it to agents or approving an agent's request to borrow it. So someone who gets into your Wisp account still can't see or use your computer. The code is checked on the device, which keeps only a hash of it. The hub passes it along and never saves it. After 5 wrong codes in a row the device stops taking codes for 15 minutes (twice as long each time after that, up to a day), even after a restart, and you get a notification. One code entry opens the screen for a day at most.
+Turning it on asks you to pick a **code**: a 6-digit PIN or a password (8 characters or more). Opening the screen from Wisp needs it. So someone who gets into your Wisp account still can't see or use your computer. The code is checked on the device, which keeps only a hash of it. The hub passes it along and never saves it. After 5 wrong codes in a row the device stops taking codes for 15 minutes (twice as long each time after that, up to a day), even after a restart, and you get a notification. One code entry opens the screen for a day at most.
 
 ```bash
 wisp node screen code        # pick a new code (only at the device)
@@ -60,7 +60,9 @@ wisp node screen code off    # no code: your Wisp sign-in alone opens the screen
 
 In the desktop app it's the menu bar menu: **Let Me Use This Screen from Wisp** asks for a code when there isn't one, and **Change Screen Code…** picks a new one.
 
-Then **Computers → Add computer → Your own screen**. Agents can't use it until you **Lend it to agents** (for an hour, four hours, the rest of the day, or until you stop), and even then only for things you asked for, directly or through other agents. Or an agent can ask for it mid-task, and you approve just that ([below](#borrowing-your-device-mid-task)). An agent working on someone else's request is turned away. Everything done on it shows under **Activity** on its page.
+Then **Computers → Add computer → Your own screen**. Only agents that **run on that device** can use it: give one the screen as its computer on its **Computer** tab (Wisp refuses it for an agent that runs anywhere else). Even then it works only on things you asked for, directly or through other agents; an agent working on someone else's request is turned away. Agents on other devices or in VMs can't reach your screen at all. To have an agent work on a computer, run it on that computer. Everything done on it shows under **Activity** on its page.
+
+The code guards the screen from Wisp, not from what already runs on the device: an agent whose harness is running there uses the screen without it while it works.
 
 Use it when a task needs an app or file that only lives on your computer. For everything else, agents have their own VMs.
 
@@ -84,18 +86,9 @@ If the device already runs a VNC server of its own, you can set its port on the 
 
 `"noScreen": true` in `node.json` stops a device from ever offering its screen, whatever `wisp node screen on` says. Shell commands from Wisp (`computer_run`) only run on a device's own screen when the device opted in with `--allow-full-access`.
 
-### Borrowing your device mid-task
+### A program that only lives on one computer
 
-An agent works on its own VM and asks for your device only when a task needs it, say a Windows POS app that exists only on the shop PC. The agent calls `device_request` ("I need the shop PC to enter today's sales in the POS") and you get an **Approve / Deny** card in your chat with that agent (and a push notification, like any approval). You pick how long it gets: 15 minutes, 1 hour, or until it hands the device back (never more than 12 hours).
-
-- **Only the device's owner can say yes**, with the screen's code if it has one. Nobody else in the workspace can approve it, and an agent can't approve its own request.
-- **The screen has to be on.** If `wisp node screen on` was never run at the device, the agent is told the owner has to turn it on there; Wisp can't do that remotely. A device that is paused (`wisp node pause`) or offline can't be asked either, and pausing during a loan stops the agent at once.
-- **One agent, one loan, a screen and no shell.** Only the agent you approved can use the device; other agents are turned away, and `computer_run` is refused on a borrowed device. This works even if the agent is doing a task for someone else, because you decided. The loan is separate from **Lend it to agents**, which lets agents use the screen for things you ask them.
-- **It always ends.** When the time is up, when the agent calls `device_return`, when you press **Take back**, when you press **Stop lending it**, or when the screen is turned off at the device. The agent is told in the conversation it was working in (except when it handed the device back itself), and the loan can't outlive its limit: every use is checked against it, whether or not anything has cleaned up yet. Taking control and handing back works as before and leaves the loan alone; agents wait while you have control.
-
-While a device is on loan, its page and its card on **Computers** say "Lent to @hermes until 3:40 PM" with a **Take back** button. Everything the agent does shows under **Activity**.
-
-**How an agent picks which computer.** Its own computer stays the default: every `computer_*` tool acts on it, borrowed device or not. To act on the device, the agent adds `computer: "<device name>"` to the tool call (`computer_screenshot`, `computer_click`, …). Leaving it out never touches your device, and naming a device it isn't borrowing is refused. Agents without a computer of their own can borrow too; they have to pass `computer` every time. Agents that were set up as headless can't borrow.
+Say a Windows POS app that exists only on the shop PC. Connect the shop PC as a device, add an agent that runs there, turn its screen on at the PC (`wisp node screen on`), and give the agent that screen as its computer. It works there like it would on a VM, only for things you ask. Agents elsewhere hand it work with `task_delegate` instead of reaching in.
 
 ### Orgo
 
@@ -128,6 +121,6 @@ Routines run when someone presses **Run now**, when you ask the agent, or on a s
 
 ## The tools agents get
 
-With a computer, an agent's `wisp-mcp` tools include `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run` (VMs and cloud computers) and `computer_ask_human`. Coordinates are pixels in the latest screenshot (scaled to fit 1280×800), and every action returns a fresh screenshot. Every computer tool takes an optional `computer` (the name of a device the agent is borrowing). Every agent also has `device_list`, `device_request` and `device_return` (see [Borrowing your device mid-task](#borrowing-your-device-mid-task)), `approval_request`, `routine_save`, `routine_list` and `file_view`.
+With a computer, an agent's `wisp-mcp` tools include `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run` (VMs and cloud computers) and `computer_ask_human`. Coordinates are pixels in the latest screenshot (scaled to fit 1280×800), and every action returns a fresh screenshot. Every agent also has `approval_request`, `routine_save`, `routine_list` and `file_view`.
 
 **Browser tools.** With a VM, an agent also gets [Playwright MCP](https://github.com/microsoft/playwright-mcp) on the VM's own Chrome, the one you watch, with its sign-ins: `browser_navigate`, `browser_snapshot` (the page as text, with a ref for each element), `browser_click`, `browser_type`, `browser_fill_form`, `browser_select_option`, `browser_tabs`, `browser_wait_for` and more. Working with page elements instead of pixels is faster, cheaper and much more reliable on websites; agents use the screenshot tools for everything else. The browser tools run inside the VM whichever way the agent runs.

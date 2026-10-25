@@ -258,23 +258,9 @@ struct Computer: Codable, Identifiable, Hashable {
   var help: Help?
   /** "pin" or "password" when opening this screen needs the code picked at the device */
   var code: String?
-  var config: Config?
-
-  struct Config: Codable, Hashable {
-    /** a device's own screen lent to agents: until when (nil until you stop it) */
-    struct Lend: Codable, Hashable { var until: String? }
-    var lend: Lend?
-  }
 
   /** The word for this screen's code. */
   var codeLabel: String { code == "pin" ? "PIN" : "password" }
-
-  /** Is a device's own screen lent to agents right now? */
-  var lentNow: Bool {
-    guard kind == "device", let lend = config?.lend else { return false }
-    guard let until = lend.until else { return true }
-    return (Wire.date(until) ?? .distantPast) > Date()
-  }
 
   var kindLabel: String {
     switch kind {
@@ -297,14 +283,6 @@ struct Approval: Codable, Identifiable, Hashable {
   var note: String
   var createdAt: String
   var decidedAt: String?
-  /** an agent asking to borrow a device's own screen */
-  var loan: Loan?
-
-  struct Loan: Codable, Hashable {
-    var nodeId: String
-    var deviceName: String
-    var ownerId: String
-  }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }

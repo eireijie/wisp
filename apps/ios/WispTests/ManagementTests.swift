@@ -104,12 +104,12 @@ final class ManagementTests: XCTestCase {
     XCTAssertEqual(Set(prefs.keys), ["notify"])
   }
 
-  func testScreenCodeGoesWithViewLendAndLoanApproval() async throws {
+  func testScreenCodeGoesWithViewAndApprovalIsPlain() async throws {
     let store = try makeStore()
+    // fields this app doesn't know, like an old hub's "lend", are skipped
     let screen = #"{"id":"k1","name":"My Mac","kind":"device","nodeId":"n1","status":"ready","statusText":"","code":"pin","config":{"lend":{"until":null}}}"#
     let computer = try Wire.decoder.decode(Computer.self, from: Data(screen.utf8))
     XCTAssertEqual(computer.code, "pin")
-    XCTAssertTrue(computer.lentNow)
     store.computers = [computer]
 
     reply("POST", "/api/computers/k1/view", #"{"error":"Wrong PIN. 4 tries left before this screen locks for a while."}"#, status: 403)
@@ -125,19 +125,13 @@ final class ManagementTests: XCTestCase {
     XCTAssertEqual(ws.originalRequest?.url?.absoluteString.replacingOccurrences(of: "https://", with: "wss://"), "wss://management.test/ws/computers/k1/frames?ticket=t1")
     ws.cancel()
 
-    reply("POST", "/api/computers/k1/lend", screen)
-    try await store.lend(computer, minutes: nil, code: "123456")
-    reply("POST", "/api/approvals/p1/decide", #"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Borrow My Mac","details":"","status":"approved","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#)
-    let approval = try Wire.decoder.decode(Approval.self, from: Data(#"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Borrow My Mac","details":"","status":"pending","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#.utf8))
-    XCTAssertEqual(store.loanScreen(approval)?.code, "pin")
-    try await store.decide(approval, approve: true, code: "123456")
+    reply("POST", "/api/approvals/p1/decide", #"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Send the report","details":"","status":"approved","note":"","createdAt":"2026-10-22T12:00:00Z"}"#)
+    let approval = try Wire.decoder.decode(Approval.self, from: Data(#"{"id":"p1","agentId":"a1","channelId":"c1","summary":"Send the report","details":"","status":"pending","note":"","createdAt":"2026-10-22T12:00:00Z","loan":{"nodeId":"n1","deviceName":"My Mac","ownerId":"u1"}}"#.utf8))
+    try await store.decide(approval, approve: true)
 
     let requests = ManagementHTTPStub.requests.withLock { $0 }.filter { $0.httpMethod == "POST" }
     XCTAssertEqual(try body(of: requests[0])["code"] as? String, "123456")
-    let lend = try body(of: requests[2])
-    XCTAssertTrue(lend["minutes"] is NSNull) // until you stop it
-    XCTAssertEqual(lend["code"] as? String, "123456")
-    XCTAssertEqual(try body(of: requests[3])["code"] as? String, "123456")
+    XCTAssertEqual(Set(try body(of: requests[2]).keys), ["approve", "note"])
   }
 
   func testChannelMoveAndAgentCreationSendExplicitNulls() async throws {

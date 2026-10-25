@@ -533,7 +533,7 @@ export function useHandleColors(): Map<string, string> {
   return useMemo(() => new Map(agents.map((a) => [a.handle, agentColor(a)])), [agents]);
 }
 
-/** What agents are waiting on you for: approvals (a device loan only for its owner) and help on their computers. Guests answer none. */
+/** What agents are waiting on you for: approvals and help on their computers. Guests answer none. */
 export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[] } {
   const me = useStore((s) => s.me);
   const approvals = useStore((s) => s.approvals);
@@ -541,7 +541,7 @@ export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[]
   return useMemo(() => {
     if (!me || me.role === "guest") return { approvals: [], help: [] };
     return {
-      approvals: Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me.user.id)),
+      approvals: Object.values(approvals).filter((a) => a.status === "pending"),
       help: computers.filter((c) => c.help),
     };
   }, [me, approvals, computers]);

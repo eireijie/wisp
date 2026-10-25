@@ -117,7 +117,7 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
                   ? `Off. Turn it on at ${device.name} with: wisp node screen on`
                   : device.capabilities?.screen.ok === false
                     ? device.capabilities.screen.detail
-                    : "Only while you lend it, and only for things you ask. For apps that only live on your computer."
+                    : "It runs on this computer and only does things you ask. For apps that only live on your computer."
               }
               disabled={device.capabilities?.screen.ok === false || others.some((c) => c.kind === "device" && c.nodeId === device.id) || current?.kind === "device"}
               busy={busy === "screen"}

@@ -44,7 +44,7 @@ Usage:
       --allow-full-access lets agents set to "Full access" run without a sandbox here (saved).
   wisp node screen on|off
       Let the person who connected this device see and use its own screen from Wisp, and
-      lend it to agents for a while. Off by default; it can only be turned on here. Turning it
+      let agents that run on this device use it. Off by default; it can only be turned on here. Turning it
       on asks for a code (a 6-digit PIN or a password) that's needed to open the screen from
       Wisp, and offers Remote Desktop.
   wisp node screen code [off]
@@ -120,7 +120,7 @@ if (values.help || !cmd) {
   const caps = await new ComputerHost({ dir, vmEngine: saved.vmEngine }).capabilities();
   console.log("\nComputers");
   const shared = saved.shareScreen && !saved.noScreen;
-  console.log(`  This screen  ${!caps.screen.ok ? "no" : shared ? "on (only you can use it, and lend it to agents)" : "off (turn on with `wisp node screen on`)"}: ${caps.screen.detail}`);
+  console.log(`  This screen  ${!caps.screen.ok ? "no" : shared ? "on (only you and agents that run here can use it)" : "off (turn on with `wisp node screen on`)"}: ${caps.screen.detail}`);
   if (caps.screen.ok && shared) {
     console.log(`               ${saved.screenCode ? `opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : "no code: your Wisp sign-in alone opens it (`wisp node screen code`)"}`);
     const rd = remoteDesktopSupport();
@@ -268,14 +268,14 @@ async function screen(what: string | undefined, arg: string | undefined) {
     saved.shareScreen = true;
     delete saved.noScreen;
     save();
-    console.log("This screen is on. In Wisp, only the person who connected this device can see or use it, and agents only while they lend it.");
+    console.log("This screen is on. In Wisp, only the person who connected this device can see or use it, and agents only if they run on this device.");
     if (!saved.screenCode) {
       console.log("\nPick a code. Opening this screen from Wisp will need it, so someone who gets into your Wisp account still can't see this computer.");
       const code = await pickCode();
       if (code) {
         saved.screenCode = code;
         save();
-        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen or lend it to an agent.`);
+        console.log(`   Done. You'll enter this ${code.kind === "pin" ? "PIN" : "password"} in Wisp to watch this screen.`);
       } else console.log("   No code set, so your Wisp sign-in alone opens this screen. Pick one any time: wisp node screen code");
     }
     if (!saved.remoteDesktop && remoteDesktopSupport().ok) {

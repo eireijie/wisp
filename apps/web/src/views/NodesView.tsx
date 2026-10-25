@@ -306,13 +306,13 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
 }
 
 /** What the device does for agents. */
-const ROLES: Record<DeviceRole, string> = { vms: "Runs agents' VMs", screen: "Lends agents its screen", headless: "Runs agents headless" };
+const ROLES: Record<DeviceRole, string> = { vms: "Runs agents' VMs", screen: "Lets its agents use its screen", headless: "Runs agents headless" };
 
 /** The device's own screen in two words; the full story goes in the tooltip. */
 function screenSummary(n: NodeInfo): { short: string; long: string } {
   const screen = n.capabilities?.screen;
   if (!screen || !n.online) return { short: n.online ? "Screen not checked" : "Screen unknown", long: screenLine(n) };
-  if (screen.ok) return { short: "Screen on", long: n.mine ? "Only you can see it, and agents only while you lend it to them (Computers)." : `It's ${n.ownerName ?? "its owner"}'s alone.` };
+  if (screen.ok) return { short: "Screen on", long: n.mine ? "Only you can see it, and only agents that run on it can use it." : `It's ${n.ownerName ?? "its owner"}'s alone.` };
   if (screen.off) return { short: "Screen off", long: n.mine ? `Agents use VMs instead. To use it yourself from Wisp, run "wisp node screen on" on ${n.name}.` : "Its own screen is off." };
   return { short: "No screen", long: `Its own screen can't be used: ${screen.detail}` };
 }

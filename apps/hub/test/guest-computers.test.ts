@@ -51,7 +51,7 @@ afterAll(async () => {
 
 describe("guests and computers", () => {
   it("forbids every computer read and live-view ticket for guests", async () => {
-    for (const url of ["/api/computers", `/api/computers/${computer.id}`, `/api/computers/${computer.id}/screen`, `/api/computers/${computer.id}/log`, `/api/computers/${computer.id}/clipboard`, `/api/computers/${computer.id}/files`, `/api/computers/${computer.id}/files/download?path=secret`, "/api/computers/mine", "/api/computers/borrowable", "/api/settings/computers", `/ws/computers/${computer.id}/frames`, `/ws/computers/${computer.id}/vnc`])
+    for (const url of ["/api/computers", `/api/computers/${computer.id}`, `/api/computers/${computer.id}/screen`, `/api/computers/${computer.id}/log`, `/api/computers/${computer.id}/clipboard`, `/api/computers/${computer.id}/files`, `/api/computers/${computer.id}/files/download?path=secret`, "/api/computers/mine", "/api/settings/computers", `/ws/computers/${computer.id}/frames`, `/ws/computers/${computer.id}/vnc`])
       expect((await api("GET", url, guest)).statusCode, url).toBe(403);
     expect((await api("POST", `/api/computers/${computer.id}/view`, guest, {})).statusCode).toBe(403);
   });

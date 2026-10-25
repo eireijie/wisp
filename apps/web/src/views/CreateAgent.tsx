@@ -108,8 +108,8 @@ export function ComputerPicker({
               : node.capabilities?.screen.ok === false
                 ? node.capabilities.screen.detail
                 : simple
-                  ? "Only while you lend it."
-                  : "Only while you lend it, and only for things you ask.",
+                  ? "It runs on this computer."
+                  : "It runs on this computer and only does things you ask.",
             node.capabilities?.screen.ok !== true,
           )}
         {computers.map((c) =>

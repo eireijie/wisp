@@ -3,7 +3,7 @@ import { onPublicAddress, originReach, shareOrigin, skipAccess, useAccess } from
 import { RELEASES, desktopOs, downloadsFor } from "../downloads.ts";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BookOpen, Bot, Check, Download, FileText, KeyRound, Laptop, Loader2, MessageSquareText, Monitor, Plus, Server, Smartphone, Sparkles, TerminalSquare, UtensilsCrossed, Users } from "lucide-react";
-import { HARNESSES, harnessInfo, harnessLabel, lentNow, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@wisp/core";
+import { HARNESSES, harnessInfo, harnessLabel, runsInVm, type Agent, type DeviceRole, type MessagePart } from "@wisp/core";
 import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
@@ -15,7 +15,6 @@ import { useDesktopInfo } from "../desktop.ts";
 import { Advanced, setExperience, useSimple, type Experience } from "../experience.tsx";
 import { usableDevices, useDevices, type DeviceInfo } from "../devices.ts";
 import { ComputerMini } from "./ComputersView.tsx";
-import { CodeInput, codeReady } from "../components/ScreenCode.tsx";
 import { freeHandle, importFound } from "./AgentsView.tsx";
 import { Ghost } from "../components/Ghost.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
@@ -636,7 +635,7 @@ function RoleScreen({ device, onBack, onNext }: { device: DeviceInfo; onBack: ()
           title={ROLE_TEXT.screen}
           selected={role === "screen"}
           onClick={() => setRole("screen")}
-          body={`Agents use ${device.name}'s own screen and apps, but only while you lend it, and only for things you ask. For apps that only live on this computer.`}
+          body={`Agents run on ${device.name} and use its own screen and apps, only for things you ask. For apps that only live on this computer.`}
         />
         <Choice
           icon={<TerminalSquare size={19} />}
@@ -661,7 +660,7 @@ function RoleScreen({ device, onBack, onNext }: { device: DeviceInfo; onBack: ()
           )
         ) : role === "screen" ? (
           caps.screen.ok ? (
-            <Status ok>Its screen is on. Agents still only use it while you lend it.</Status>
+            <Status ok>Its screen is on. Only agents that run here can use it.</Status>
           ) : caps.screen.off ? (
             <div className="rounded-xl border border-line p-4 space-y-3 text-sm">
               <p>{device.name}'s screen is off, which is how every device starts. Only you can turn it on, at {device.name} itself:</p>
@@ -678,7 +677,7 @@ function RoleScreen({ device, onBack, onNext }: { device: DeviceInfo; onBack: ()
   );
 }
 
-const ROLE_TEXT: Record<DeviceRole, string> = { vms: "Run their computers", screen: "Lend them this screen", headless: "Neither: run them headless" };
+const ROLE_TEXT: Record<DeviceRole, string> = { vms: "Run their computers", screen: "Let them use this screen", headless: "Neither: run them headless" };
 
 // --- 3. the agent ------------------------------------------------------------------------------------
 
@@ -987,7 +986,7 @@ function SignIn({ agent, device, onBack, onNext }: { agent: Agent; device: Devic
             Run this there once{login.then ? `, then ${login.then}` : ""}.
           </Command>
         )}
-        {computer?.kind === "device" && <p className="mt-5 text-sm text-muted">It works on {device.name}'s own screen while you lend it. You'll lend it in the next step.</p>}
+        {computer?.kind === "device" && <p className="mt-5 text-sm text-muted">It runs on {device.name} and works on its own screen, only for things you ask.</p>}
         {!computer && <p className="mt-5 text-sm text-muted">It runs headless, so it has no apps or websites. You can give it a computer later on its page.</p>}
         <Footer onBack={onBack} label="Continue" onNext={onNext} />
       </>
@@ -1105,7 +1104,6 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
   return (
     <>
       <Heading title="Let's get started">{agent.name} is ready to work. {computer ? "Ask for something on the web and watch it happen." : "Say hello and give it something to do."}</Heading>
-      {computer?.kind === "device" && <Lend computer={computer} agent={agent} />}
       {!sentAt ? (
         <label className="block space-y-2">
           <span className="text-sm font-medium">First task</span>
@@ -1140,38 +1138,6 @@ function HelloScreen({ state, agent, onBack, onFinish }: { state: OnboardingStat
       {error && <p className="mt-3 text-sm text-bad">{error}</p>}
       <Footer onBack={onBack} label={sentAt ? "Go to #general" : "Send"} busy={busy} disabled={!sentAt && !text.trim()} onNext={sentAt ? () => onFinish(general?.id) : send} />
     </>
-  );
-}
-
-/** A device's own screen only works for agents while it's lent. */
-function Lend({ computer, agent }: { computer: ComputerInfo; agent: Agent }) {
-  const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  if (lentNow(computer))
-    return (
-      <div className="mb-5">
-        <Status ok>Your screen is lent to agents for now. Stop anytime from Computers.</Status>
-      </div>
-    );
-  return (
-    <div className="mb-5 rounded-xl border border-line p-4 flex flex-wrap items-center gap-3 text-sm">
-      <span className="flex-1 min-w-48">{agent.name} works on your screen, and only while you lend it.</span>
-      {computer.code && <CodeInput kind={computer.code} value={code} onChange={setCode} className="w-36" />}
-      <Button
-        disabled={busy || !codeReady(computer.code, code)}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          await api("POST", `/api/computers/${computer.id}/lend`, { minutes: 60, ...(computer.code ? { code } : {}) }).catch((e) => setError((e as Error).message));
-          await useStore.getState().refreshComputers();
-          setBusy(false);
-        }}
-      >
-        {busy && <Loader2 size={15} className="animate-spin" />} Lend it for an hour
-      </Button>
-      {error && <p className="w-full text-xs text-bad">{error}</p>}
-    </div>
   );
 }
 

@@ -408,17 +408,10 @@ final class Store {
     return channels.first { $0.id == ch.id } ?? ch
   }
 
-  /** `code`: the screen's code, when saying yes lends a device's own screen that has one. */
-  func decide(_ approval: Approval, approve: Bool, note: String = "", code: String? = nil) async throws {
-    struct Body: Encodable { var approve: Bool; var note: String; var code: String? }
-    let a: Approval = try await fetch { try await $0.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note, code: approve ? code : nil)) }
+  func decide(_ approval: Approval, approve: Bool, note: String = "") async throws {
+    struct Body: Encodable { var approve: Bool; var note: String }
+    let a: Approval = try await fetch { try await $0.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note)) }
     upsert(a)
-  }
-
-  /** The computer a device-loan approval would lend, for its code. */
-  func loanScreen(_ approval: Approval) -> Computer? {
-    guard let loan = approval.loan else { return nil }
-    return computers.first { $0.kind == "device" && $0.nodeId == loan.nodeId }
   }
 
   /**
@@ -444,28 +437,6 @@ final class Store {
     let ws = URLSession.shared.webSocketTask(with: url.absoluteURL)
     ws.maximumMessageSize = 16 << 20 // a frame is a whole screenshot
     return (view, ws)
-  }
-
-  /** Lend a device's own screen to agents for `minutes` (nil: until you stop it), or stop with `off`. */
-  func lend(_ computer: Computer, minutes: Int?, code: String?) async throws {
-    struct Body: Encodable {
-      var minutes: Int?
-      var code: String?
-      func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(minutes, forKey: .minutes) // null means until you stop it, so it's always sent
-        try c.encodeIfPresent(code, forKey: .code)
-      }
-      enum CodingKeys: String, CodingKey { case minutes, code }
-    }
-    let c: Computer = try await fetch { try await $0.post("/api/computers/\(computer.id)/lend", Body(minutes: minutes, code: code)) }
-    upsert(c)
-  }
-
-  func stopLending(_ computer: Computer) async throws {
-    struct Body: Encodable { var off = true }
-    let c: Computer = try await fetch { try await $0.post("/api/computers/\(computer.id)/lend", Body()) }
-    upsert(c)
   }
 
   func control(_ computer: Computer, take: Bool) async throws {

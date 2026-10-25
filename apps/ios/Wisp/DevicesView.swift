@@ -56,7 +56,7 @@ struct DeviceDetail: View {
         if !current.online { Text("Open Wisp on this computer to bring it back.") }
         Toggle("Let others in the organization add agents and VMs here", isOn: Binding(get: { current.shared == true }, set: { on in action.run { try await store.updateNode(current.id, ["shared": AnyEncodable(on)]) } })).disabled(!store.canManage || current.mine != true || action.busy)
         Picker("What this device does for agents", selection: Binding(get: { current.role ?? "" }, set: { role in action.run { try await store.updateNode(current.id, ["role": .nullable(role)]) } })) {
-          Text("Not chosen").tag(""); Text("Runs agents' VMs").tag("vms"); Text("Lends agents its screen").tag("screen"); Text("Runs agents headless").tag("headless")
+          Text("Not chosen").tag(""); Text("Runs agents' VMs").tag("vms"); Text("Lets its agents use its screen").tag("screen"); Text("Runs agents headless").tag("headless")
         }.disabled(!store.canManage || current.mine != true || action.busy)
       }
       Section("On this device") {

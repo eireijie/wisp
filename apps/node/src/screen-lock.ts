@@ -22,7 +22,7 @@ export const MAX_TRIES = 5;
 /** The first lockout; each one after it is twice as long, up to a day. */
 const LOCKOUT_MS = 15 * 60_000;
 const MAX_LOCKOUT_MS = 24 * 60 * 60_000;
-/** The longest one code entry keeps the screen open (a lend "until I stop" included). */
+/** The longest one code entry keeps the screen open. */
 export const MAX_UNLOCK_MS = 24 * 60 * 60_000;
 
 /** Is this a code people can pick? A PIN is 6 digits; a password is 8 characters or more. */

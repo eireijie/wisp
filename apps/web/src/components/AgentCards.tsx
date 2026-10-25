@@ -8,7 +8,6 @@ import { undoChange, useChanges } from "../changes.ts";
 import { href } from "../router.ts";
 import { ComputerMini } from "../views/ComputersView.tsx";
 import { AgentAvatar, Button, Pill, Textarea, agentVar, cx, timeAgo } from "./ui.tsx";
-import { CodeInput, codeLabel, codeReady } from "./ScreenCode.tsx";
 
 /** An agent's request on its computer ("Sign in to Zendesk…"), with the screen live. */
 export function ComputerPart({ computerId, request }: { computerId: string; request?: string }) {
@@ -22,12 +21,6 @@ export function ComputerPart({ computerId, request }: { computerId: string; requ
   );
 }
 
-const LOAN_FOR = [
-  { label: "15 minutes", minutes: 15 as number | null },
-  { label: "1 hour", minutes: 60 as number | null },
-  { label: "Until it hands it back", minutes: null as number | null },
-];
-
 /** "Can I go ahead?" with Approve / Deny, and the outcome once someone decides. */
 export function ApprovalCard({ id }: { id: string }) {
   const approval = useStore((s) => s.approvals[id]);
@@ -37,10 +30,6 @@ export function ApprovalCard({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [minutes, setMinutes] = useState<number | null>(60);
-  const [code, setCode] = useState("");
-  // a screen with a code: its owner types it to say yes, and the device checks it
-  const codeKind = useStore((s) => (approval?.loan ? (s.computers.find((c) => c.kind === "device" && c.nodeId === approval.loan!.nodeId)?.code ?? null) : null));
   useEffect(() => {
     if (!approval) useStore.getState().loadApproval(id);
   }, [id, approval]);
@@ -49,7 +38,7 @@ export function ApprovalCard({ id }: { id: string }) {
     setBusy(true);
     setError(null);
     try {
-      const a = await api("POST", `/api/approvals/${id}/decide`, { approve, note, ...(approval?.loan && approve ? { minutes, ...(codeKind ? { code } : {}) } : {}) });
+      const a = await api("POST", `/api/approvals/${id}/decide`, { approve, note });
       useStore.setState((s) => ({ approvals: { ...s.approvals, [id]: a } }));
     } catch (e) {
       setError((e as Error).message);
@@ -59,10 +48,6 @@ export function ApprovalCard({ id }: { id: string }) {
   };
   const decider = members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone";
   const pending = approval.status === "pending";
-  // borrowing a device: only its owner can say yes, and picks how long
-  const loan = approval.loan;
-  const canDecide = !loan || loan.ownerId === me?.user.id;
-  const ownerName = loan ? (members.find((m) => m.id === loan.ownerId)?.name ?? "its owner") : "";
   return (
     <div className={cx("mt-1.5 max-w-lg rounded-2xl border p-3", pending ? "border-accent/40 bg-accent-soft/40" : "border-line bg-panel")}>
       <div className="flex items-start gap-2">
@@ -79,32 +64,11 @@ export function ApprovalCard({ id }: { id: string }) {
       </div>
       {open && approval.details && <pre className="mt-2 whitespace-pre-wrap text-xs bg-bg rounded-lg p-2 max-h-72 overflow-y-auto">{approval.details}</pre>}
       {pending ? (
-        !canDecide ? (
-          <p className="mt-1.5 text-xs text-muted">Waiting for {ownerName}: only they can lend {loan!.deviceName}.</p>
-        ) : (
         me?.role !== "guest" && (
           <div className="mt-2.5 space-y-2">
-            {loan && (
-              <div className="space-y-1">
-                <div className="text-xs text-muted">How long can it use it?</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {LOAN_FOR.map((o) => (
-                    <button
-                      key={o.label}
-                      onClick={() => setMinutes(o.minutes)}
-                      className={cx("h-8 px-3 rounded-lg border text-xs", minutes === o.minutes ? "border-accent bg-accent-soft text-accent-text font-medium" : "border-line hover:bg-hover")}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted">It only gets the screen, never a shell, and never for more than 12 hours. You can take it back any time.</p>
-                {codeKind && <CodeInput kind={codeKind} value={code} onChange={setCode} className="max-w-48" />}
-              </div>
-            )}
             <Textarea rows={1} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)" className="text-sm" />
             <div className="flex gap-2">
-              <Button variant="primary" disabled={busy || !codeReady(codeKind, code)} title={codeReady(codeKind, code) ? undefined : `Enter its ${codeLabel(codeKind)} first`} onClick={() => decide(true)}>
+              <Button variant="primary" disabled={busy} onClick={() => decide(true)}>
                 <Check size={15} /> Approve
               </Button>
               <Button disabled={busy} onClick={() => decide(false)}>
@@ -113,7 +77,6 @@ export function ApprovalCard({ id }: { id: string }) {
             </div>
             {error && <p className="text-xs text-bad">{error}</p>}
           </div>
-        )
         )
       ) : (
         <p className="mt-1 text-xs text-muted">

@@ -165,7 +165,7 @@ struct ComputerDetail: View {
           }
           Text(hint(c)).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
           if let error { Text(error).font(.footnote).foregroundStyle(.red) }
-          if c.kind == "device" { LendPanel(computer: c) }
+          if c.kind == "device" { OwnScreenNote() }
         }
         .padding(16)
       }
@@ -543,74 +543,16 @@ private struct CodePrompt: View {
   }
 }
 
-/** Your own screen: lend it to agents for a while. They use it only for things you ask them. */
-private struct LendPanel: View {
-  @Environment(Store.self) private var store
-  var computer: Computer
-  @State private var code = ""
-  @State private var busy = false
-  @State private var error: String?
-
-  private static let options: [(label: String, minutes: Int?, today: Bool)] = [("1 hour", 60, false), ("4 hours", 240, false), ("Today", nil, true), ("Until I stop it", nil, false)]
-
+/** Your own screen: only agents that run on it can use it. */
+private struct OwnScreenNote: View {
   var body: some View {
-    let c = computer
     VStack(alignment: .leading, spacing: 10) {
       Label("Your own screen", systemImage: "lock").font(.subheadline.weight(.semibold))
-      Text(c.lentNow ? "Only you can see it. Agents can use it \(Self.label(c.config?.lend?.until)), and only for things you ask them." : "Only you can see it. Agents can't use it right now; they work on their own VMs.")
+      Text("Only you can see it. Only agents that run on it can use it, and only for things you ask them.")
         .font(.footnote)
         .foregroundStyle(.secondary)
-      if c.lentNow {
-        Button("Stop lending it") { run { try await store.stopLending(c) } }
-          .secondaryButton()
-          .disabled(busy)
-      } else {
-        if let kind = c.code { ScreenCodeField(kind: kind, code: $code) }
-        Text("Lend it to agents for").font(.footnote.weight(.medium))
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 8)], spacing: 8) {
-          ForEach(Self.options, id: \.label) { o in
-            Button {
-              let minutes = o.today ? Self.untilTonight() : o.minutes
-              let typed = c.code != nil ? code : nil
-              run {
-                try await store.lend(c, minutes: minutes, code: typed)
-                code = ""
-              }
-            } label: {
-              Text(o.label).frame(maxWidth: .infinity)
-            }
-            .secondaryButton()
-            .disabled(busy || !ScreenCodeField.ready(c.code, code))
-          }
-        }
-      }
-      if let error { Text(error).font(.footnote).foregroundStyle(.red) }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .card(Corner.card, padding: 14)
-  }
-
-  private func run(_ work: @escaping () async throws -> Void) {
-    busy = true
-    error = nil
-    Task {
-      do { try await work() } catch { self.error = error.localizedDescription }
-      busy = false
-    }
-  }
-
-  static func untilTonight() -> Int {
-    var end = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-    end.hour = 23
-    end.minute = 59
-    let t = Calendar.current.date(from: end) ?? Date()
-    return max(1, Int((t.timeIntervalSinceNow / 60).rounded()))
-  }
-
-  static func label(_ until: String?) -> String {
-    guard let until, let d = Wire.date(until) else { return "until you stop it" }
-    let f = DateFormatter()
-    f.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(d) ? "jmm" : "EEEjmm")
-    return "until \(f.string(from: d))"
   }
 }

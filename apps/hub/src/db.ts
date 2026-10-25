@@ -270,6 +270,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   ["background", "effort", "TEXT"],
   // NULL means no limit, so existing rows get the default of 24 from the column itself
   ["background", "daily_cap", "INTEGER DEFAULT 24"],
+  // from when agents could borrow a device's screen; only migrateLoans reads it now
   ["approvals", "loan_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
@@ -294,7 +295,22 @@ export function openDb(file: string): Database.Database {
   migrateNodeOwners(db);
   if (added.has("nodes.role")) migrateNodeRoles(db);
   migrateTaskAssignee(db);
+  migrateLoans(db);
   return db;
+}
+
+/**
+ * Agents used to borrow a device's screen, or have it lent to them. Now only agents that run on a
+ * device use its screen, so old lends and loans go, and requests nobody answered are turned down.
+ */
+function migrateLoans(db: Database.Database) {
+  db.prepare(`UPDATE approvals SET status = 'denied', note = 'Agents no longer borrow devices; run an agent on the device instead.', decided_at = ? WHERE status = 'pending' AND loan_json IS NOT NULL`).run(new Date().toISOString());
+  const rows = db.prepare(`SELECT id, config_json FROM computers WHERE kind = 'device' AND (config_json LIKE '%"lend"%' OR config_json LIKE '%"loan"%')`).all() as { id: string; config_json: string }[];
+  const update = db.prepare("UPDATE computers SET config_json = ? WHERE id = ?");
+  for (const r of rows) {
+    const { lend: _lend, loan: _loan, ...config } = JSON.parse(r.config_json) as Record<string, unknown>;
+    update.run(JSON.stringify(config), r.id);
+  }
 }
 
 /**

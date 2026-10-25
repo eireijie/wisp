@@ -33,8 +33,8 @@ export interface UserPrefs {
 }
 
 /**
- * What a device does for agents, picked by its owner: run their computers (VMs), lend them its own
- * screen, or neither (agents there run headless). Null until someone picks.
+ * What a device does for agents, picked by its owner: run their computers (VMs), let agents that
+ * run on it use its own screen, or neither (agents there run headless). Null until someone picks.
  */
 export type DeviceRole = "vms" | "screen" | "headless";
 
@@ -325,8 +325,6 @@ export interface Approval {
   note: string;
   createdAt: string;
   decidedAt: string | null;
-  /** set when the agent is asking to borrow a device's screen: only that device's owner can decide, and picks how long */
-  loan?: import("./computers.ts").DeviceLoanRequest | null;
 }
 
 /**

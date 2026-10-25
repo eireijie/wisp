@@ -176,18 +176,19 @@ export const HubToNode = z.discriminatedUnion("type", [
   /** merge a task branch into the base branch, in the device's checkout of the repo */
   z.object({ type: z.literal("merge"), requestId: z.string(), agentId: z.string(), repo: z.string(), branch: z.string(), base: z.string() }),
   /** do something on a computer this device runs */
-  z.object({ type: z.literal("computer"), requestId: z.string(), computer: ComputerSpec, action: ComputerAction }),
+  /** `agentId`: the agent doing it, so a device can let agents whose harness runs on it use its screen */
+  z.object({ type: z.literal("computer"), requestId: z.string(), computer: ComputerSpec, action: ComputerAction, agentId: z.string().optional() }),
   /** start or stop streaming a computer's screen to people watching it */
   z.object({ type: z.literal("screen_watch"), computer: ComputerSpec, on: z.boolean(), fps: z.number().min(0.2).max(10).optional() }),
   /** relay a computer's VNC server: binary frames carry the bytes (see tunnelFrame) */
   z.object({ type: z.literal("tunnel_open"), tunnelId: z.string(), computer: ComputerSpec, code: z.string().max(200).optional() }),
   /**
-   * Open the device's own screen for `purpose` (a viewer, a lend, a loan) until `until`, if `code` is
+   * Open the device's own screen for `purpose` (a viewer) until `until`, if `code` is
    * the one picked at the device; answered with a result ({ until }). The device checks the code and
    * keeps the time limit itself, so the hub never holds the code.
    */
   z.object({ type: z.literal("screen_unlock"), requestId: z.string(), purpose: z.string().max(100), code: z.string().max(200), until: z.string() }),
-  /** close the screen again for `purpose` (the viewer left, the lend or loan ended) */
+  /** close the screen again for `purpose` (the viewer left) */
   z.object({ type: z.literal("screen_lock"), purpose: z.string().max(100) }),
   z.object({ type: z.literal("tunnel_close"), tunnelId: z.string() }),
   /** look again for agents that already exist on this device */

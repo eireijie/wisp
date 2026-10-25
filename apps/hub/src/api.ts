@@ -317,6 +317,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     return !!comp && comp.workspaceId === c.workspaceId && hub.computers.canSee(comp, c.actor.id);
   };
 
+  /** A device's own screen only goes to agents that run on that device. */
+  const screenProblem = (computerId: string | null | undefined, nodeId: string | null) => {
+    const comp = computerId ? store.computer(computerId) : undefined;
+    return comp ? hub.computers.whyNotOnDevice(comp, null, nodeId) : null;
+  };
+
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     if (err instanceof VaultError) return reply.code(err.status).send({ error: err.message });
     const status = err.statusCode ?? 500;
@@ -1031,6 +1037,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
+    const screenWhy = screenProblem(body.computerId, fields.nodeId ?? null);
+    if (screenWhy) return reply.code(400).send({ error: screenWhy });
     if (body.settings?.anyoneCanAsk && (!body.nodeId || store.node(body.nodeId)?.ownerId !== c.actor.id)) delete body.settings.anyoneCanAsk;
     // new agents start at the workspace's default access unless someone picked one
     if (!body.settings?.access) body.settings = { ...body.settings, access: agentPolicy(hub, c.workspaceId).defaultAccess };
@@ -1089,6 +1097,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && body.computerId !== agent.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
+    if (body.computerId !== undefined || body.nodeId !== undefined) {
+      const screenWhy = screenProblem(after.computerId, after.nodeId);
+      if (screenWhy) return reply.code(400).send({ error: screenWhy });
+    }
     if (body.settings?.anyoneCanAsk !== undefined) {
       const target = store.node(body.nodeId ?? agent.nodeId ?? "");
       if (target?.ownerId !== c.actor.id) return reply.code(403).send({ error: "only the device's owner decides who can ask an agent that runs on it" });

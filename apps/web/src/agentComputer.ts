@@ -12,7 +12,7 @@ export type ComputerChoice =
 
 /**
  * Follow what the device does for agents (its role); otherwise reuse a shared computer first.
- * Someone's own screen is only the default on their own device set to lend it.
+ * Someone's own screen is only the default on their own device set to let agents use it.
  */
 export function defaultComputer(
   node: NodeInfo | undefined,

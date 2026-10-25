@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
+import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
@@ -853,31 +853,12 @@ export class Hub {
     }
     if (c.kind === "device") {
       const owner = node?.ownerId ? (this.store.user(node.ownerId)?.name ?? "its owner") : "its owner";
+      const away = this.computers.whyNotOnDevice(c, agent.id);
       lines.push(
-        `This is ${owner}'s own computer. You can use it only while ${owner} lends it to you, and only for things ${owner} asked for. Don't close their windows, change settings or read private things unless the task needs it.`,
+        away ?? `This is ${owner}'s own computer, and you run on it. Use it only for things ${owner} asked for. Don't close their windows, change settings or read private things unless the task needs it.`,
       );
     }
     return lines.join("\n");
-  }
-
-  /** How an agent borrows a person's device when a task needs one, and what it has on loan now. */
-  borrowSection(agentId: string): string {
-    const agent = this.store.agent(agentId);
-    if (!agent || agent.settings.headless) return "";
-    const loans = this.store
-      .loanedComputers()
-      .filter((c) => c.workspaceId === agent.workspaceId && activeLoan(c)?.agentId === agentId)
-      .map((c) => `"${c.name}" until ${new Date(activeLoan(c)!.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}`);
-    const devices = this.computers.borrowable(agent.workspaceId, agentId).filter((d) => d.available);
-    if (!loans.length && !devices.length) return "";
-    return [
-      `\n## Borrowing a person's device`,
-      `Your own computer is your default: every computer_* tool acts on it. Only when a task needs an app or file that lives on a person's own device (say, the POS app on the shop PC), ask for its screen with device_request, say why, and end your turn; its owner decides how long you get and you'll be woken with the answer. Once you have it, add computer: "<device name>" to a computer_* tool to act on the device; leave it out to act on your own computer. Stay on what you asked for: it's their personal computer. Call device_return the moment you're done. The loan also ends when its time runs out or the owner takes it back, and you'll be told.`,
-      loans.length ? `You're borrowing right now: ${loans.join(", ")}.` : "",
-      devices.length ? `Devices you could ask for (device_list has the latest): ${devices.map((d) => `"${d.name}" (${d.owner}'s)`).join(", ")}.` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
   }
 
   /** A message as an agent reads it in its history; an approval card shows the draft it was about and the answer. */
@@ -1035,7 +1016,6 @@ export class Hub {
       background ? "" : `When someone asks you to change how Wisp works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
       localTime,
       this.computerSection(agent.id),
-      this.borrowSection(agent.id),
       skills ? `\n${skills}` : "",
       connectors ? `\n${connectors}` : "",
       routines ? `\n${routines}` : "",

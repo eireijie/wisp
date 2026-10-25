@@ -40,7 +40,7 @@ export interface NodeConfig {
   /** "docker" or "podman" for VMs; default: whichever is installed */
   vmEngine?: string;
   /**
-   * Offer this device's own screen to its owner, who can lend it to agents. Off by default, and
+   * Offer this device's own screen to its owner and to agents that run here. Off by default, and
    * only someone at the device can turn it on (`wisp node screen on`), not the hub.
    */
   shareScreen?: boolean;
@@ -72,6 +72,8 @@ export class NodeDaemon {
   private backoff = 1000;
   private queues = new Map<string, Promise<void>>();
   private aborts = new Map<string, AbortController>();
+  /** agents whose harness is running right here (not in a VM), with how many runs each: they may use this screen */
+  private runningHere = new Map<string, number>();
   private sessions: Record<string, string>;
   private api: WispClient;
   private catalog: Promise<HarnessCatalog[]> | null = null;
@@ -197,7 +199,7 @@ export class NodeDaemon {
       this.closeTunnels();
       this.lock.lockAll();
     }
-    if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Wisp (agents only when you lend it)" : "off"}`);
+    if (!before.paused && !this.local.paused) this.log(`this screen is now ${this.local.shareScreen ? "shared with you in Wisp (and agents that run here)" : "off"}`);
     if (before.paused && !this.local.paused) this.log("resumed");
     void this.sendCapabilities();
   };
@@ -332,7 +334,9 @@ export class NodeDaemon {
     } else if (msg.type === "computer") {
       if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`wisp node resume\`` });
       if (msg.computer.kind === "device" && !this.local.shareScreen) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is off; only someone at the device can turn it on (\`wisp node screen on\`)` });
-      if (msg.computer.kind === "device" && msg.action.action !== "status" && !this.lock.open()) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is locked with its code. Its owner opens it by entering the code in Wisp (to watch it, or when lending it).` });
+      // an agent running on this device uses its screen without the code, which guards it from Wisp, not from what runs here
+      const here = !!msg.agentId && this.runningHere.has(msg.agentId);
+      if (msg.computer.kind === "device" && msg.action.action !== "status" && !here && !this.lock.open()) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name}'s screen is locked with its code. Its owner opens it by entering the code in Wisp to watch it; agents that run on this device can use it while they work.` });
       this.computers.act(msg.computer, msg.action).then(
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
@@ -356,7 +360,7 @@ export class NodeDaemon {
       const { tunnelId } = msg;
       if (this.local.paused || (msg.computer.kind === "device" && !this.local.shareScreen)) return this.send({ type: "tunnel_closed", tunnelId, error: this.local.paused ? "the device is paused" : "the screen is off" });
       if (msg.computer.kind === "device" && this.lock.enabled) {
-        // the code itself, every time: a screen opened for a lend doesn't let a viewer in without it
+        // the code itself, every time: a screen opened for one viewer doesn't let another in without it
         const r = this.lock.check(msg.code);
         this.codeResult(r);
         if (!r.ok) return this.send({ type: "tunnel_closed", tunnelId, error: r.error });
@@ -562,6 +566,7 @@ export class NodeDaemon {
         },
       );
 
+    if (!inside) this.runningHere.set(agent.id, (this.runningHere.get(agent.id) ?? 0) + 1);
     try {
       let result;
       const resumeId = run.fresh ? null : (this.sessions[sessionKey] ?? null);
@@ -586,6 +591,11 @@ export class NodeDaemon {
       this.log(`@${agent.handle} failed ${run.runId}: ${message}`);
     } finally {
       this.aborts.delete(run.runId);
+      if (!inside) {
+        const left = (this.runningHere.get(agent.id) ?? 1) - 1;
+        if (left > 0) this.runningHere.set(agent.id, left);
+        else this.runningHere.delete(agent.id);
+      }
     }
   }
 
