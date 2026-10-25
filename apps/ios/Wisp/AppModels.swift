@@ -11,6 +11,7 @@ struct HelperSkill: Decodable, Identifiable {
   var source: String?
   var catalogId: String?
   var plain: Plain?
+  var slug: String?
 }
 struct AppConnector: Decodable, Identifiable {
   struct Auth: Decodable { var required: Bool?; var signedIn: Bool?; var error: String? }
@@ -53,6 +54,8 @@ struct MarketplaceEntry: Decodable, Identifiable {
   var publisher: String?
   var domain: String?
   var verified: Bool?
+  /** the publisher's brand, used for the trust label */
+  var brand: String?
   var website: String?
   var repository: String?
   var installs: [MarketplaceInstall]

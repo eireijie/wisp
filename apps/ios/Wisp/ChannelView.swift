@@ -12,6 +12,8 @@ struct ThreadRef: Hashable {
 struct ChannelView: View {
   @Environment(Store.self) private var store
   var channel: Channel
+  /** text to start the message with (a request to try a skill) */
+  var draft = ""
   @State private var error: String?
   @State private var loadingEarlier = false
   @State private var noEarlier = false
@@ -73,7 +75,7 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder, channelId: channel.id) { text, files in
+          Composer(placeholder: placeholder, channelId: channel.id, draft: draft) { text, files in
             try await store.send(text, in: channel.id, files: files)
           }
         }
@@ -312,6 +314,8 @@ struct Composer: View {
   var placeholder: String
   /** where attachments are shared, so only people who can see the conversation can open them */
   var channelId: String?
+  /** what the message starts with */
+  var draft = ""
   var send: (String, [String]) async throws -> Void
   @State private var text = ""
   @State private var selection: TextSelection?
@@ -410,6 +414,7 @@ struct Composer: View {
     .padding(.horizontal, 12)
     .padding(.bottom, 6)
     .padding(.top, 4)
+    .onAppear { if text.isEmpty && !draft.isEmpty { text = draft } }
     .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
     .onChange(of: photos) { _, items in
       guard !items.isEmpty else { return }

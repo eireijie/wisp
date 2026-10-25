@@ -1,35 +1,8 @@
 import SwiftUI
 
+/** The skills list now lives in the Marketplace; this opens it on the Skills tab. */
 struct SkillsView: View {
-  @Environment(Store.self) private var store
-  @State private var catalog: [HelperSkill] = []
-  @State private var tab = "installed"
-  @State private var query = ""
-  @State private var creating = false
-  @State private var action = FormAction()
-  private var shown: [HelperSkill] {
-    let list = tab == "installed" ? store.skills : catalog
-    return list.filter { query.isEmpty || ($0.name + " " + ($0.description ?? "") + " " + ($0.tags ?? []).joined(separator: " ")).localizedCaseInsensitiveContains(query) }
-  }
-  var body: some View {
-    List {
-      Picker("Skills", selection: $tab) { Text("Installed").tag("installed"); Text("Skill library").tag("shop") }.pickerStyle(.segmented)
-      InlineError(error: action.error)
-      if shown.isEmpty { Text(tab == "installed" ? "No skills installed yet" : "No matches.").foregroundStyle(.secondary) }
-      ForEach(shown) { skill in
-        NavigationLink { SkillDetail(skill: skill, library: tab == "shop") } label: {
-          VStack(alignment: .leading, spacing: 5) { Text(skill.name).font(.headline); Text(skill.description ?? "").font(.caption).foregroundStyle(.secondary) }
-        }
-      }
-    }.sectionScreen("Skills", id: "skills").searchable(text: $query)
-      .toolbar { if store.canManage { Button("Create a skill", systemImage: "plus") { creating = true } } }
-      .sheet(isPresented: $creating) { SkillEditor() }
-      .task { await load() }.refreshable { await load() }
-  }
-  private func load() async {
-    do { catalog = try NativeCatalog.read("SkillCatalog", as: [HelperSkill].self); try await store.refreshSkills() }
-    catch { action.error = error.localizedDescription }
-  }
+  var body: some View { MarketplaceView(start: .skills) }
 }
 
 struct SkillDetail: View {
@@ -48,18 +21,17 @@ struct SkillDetail: View {
       if let plain = skill.plain {
         Section("What it does") { Text(plain.does) }
         Section("What it needs") { Text(plain.needs) }
-        Section("Try it") { Text(plain.example).textSelection(.enabled) }
+        Section("Example") { Text(plain.example).textSelection(.enabled) }
       }
+      if let installed { TryItSection(skill: installed) }
       Section { TechnicalDetails(title: "Full instructions") { NoteMarkdown(text: current.content ?? "") } }
       if store.canManage {
         Section(store.simple ? "Helpers with this skill" : "Agents with this skill") {
           ForEach(store.agents) { agent in
             Toggle(agent.name, isOn: Binding(get: { installed?.agentIds?.contains(agent.id) == true }, set: { on in
               action.run {
-                var ids = Set(installed?.agentIds ?? [])
-                if on { ids.insert(agent.id) } else { ids.remove(agent.id) }
-                if let installed { try await store.saveSkill(installed.id, ["agentIds": AnyEncodable(Array(ids).sorted())]) }
-                else { try await store.saveSkill(nil, ["catalogId": AnyEncodable(skill.id), "agentIds": AnyEncodable(Array(ids).sorted())]) }
+                if let installed { try await store.setSkillAgent(installed.id, agent: agent.id, on: on) }
+                else if on { try await store.saveSkill(nil, ["catalogId": AnyEncodable(skill.id), "agentIds": AnyEncodable([agent.id])]) }
               }
             })).disabled(action.busy)
           }
