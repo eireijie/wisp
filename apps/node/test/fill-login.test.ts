@@ -60,7 +60,7 @@ describe.skipIf(!CHROME)("filling a login in Chrome", () => {
     server = http.createServer((req, res) => res.end(`<!doctype html><html><body>${PAGES[req.url ?? ""] ?? ""}</body></html>`));
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     profile = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-fill-"));
-    chrome = spawn(CHROME!, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, "--no-first-run", "about:blank"], { stdio: "ignore" });
+    chrome = spawn(CHROME!, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, "--no-first-run", "about:blank"], { stdio: "ignore", detached: true });
     for (let i = 0; i < 100; i++) {
       if (await fetch(`${cdp}/json/version`).then((r) => r.ok, () => false)) break;
       await new Promise((r) => setTimeout(r, 100));
@@ -68,10 +68,11 @@ describe.skipIf(!CHROME)("filling a login in Chrome", () => {
   }, 20_000);
   afterAll(async () => {
     const gone = new Promise((r) => chrome?.once("exit", r));
-    chrome?.kill();
+    // Chrome's helper processes outlive it and keep writing to the profile: stop them all
+    try { process.kill(-chrome!.pid!, "SIGKILL"); } catch { chrome?.kill("SIGKILL"); }
     await gone;
     server?.close();
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5 });
+    try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* a leftover temp profile is harmless */ }
   });
 
   it("fills the username and password, signs in, and empties the box when the page doesn't move on", async () => {
