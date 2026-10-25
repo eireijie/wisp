@@ -16,12 +16,19 @@ struct UpdatesView: View {
       Section("Updates") {
         if let version = info?.version?.commit { LabeledContent("This hub runs Wisp", value: version) }
         if let value = info?.version?.date, let date = Wire.date(value) { LabeledContent("Version date") { Text(date, format: .dateTime.year().month().day()) } }
+        if let check = info?.check {
+          if check.canUpdate == true { Label("Update available", systemImage: "arrow.down.circle").foregroundStyle(.tint) }
+          else if check.behind == 0 { Label("Up to date", systemImage: "checkmark.circle").foregroundStyle(.green) }
+          else { Label("Can't update here", systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
+        }
         Text(info?.check?.reason ?? "Which version of Wisp this hub runs, and what's new.")
         Button("Check now") { action.run { info = try await store.connection().post("/api/updates/check", Empty()) } }.disabled(action.busy || updating)
         if info?.check?.canUpdate == true && store.isOwner { Button("Update hub") { confirming = true }.disabled(action.busy || updating) }
         if updating { ProgressView(info?.update?.state == "restarting" ? "Restarting…" : "Updating…") }
         if let message = info?.update?.message, !message.isEmpty { Text(message) }
-        ForEach(info?.check?.changes ?? [], id: \.self) { Text($0).font(.caption) }
+        ForEach(Array((info?.check?.changes ?? []).prefix(8)), id: \.self) { Text($0).font(.caption) }
+        if let more = info?.check?.changes?.count, more > 8 { Text("…and \(more - 8) more").font(.caption).foregroundStyle(.secondary) }
+        if info?.check?.canUpdate == true && !store.isOwner { Text("Only owners can update.").font(.caption).foregroundStyle(.secondary) }
         if let lines = info?.update?.log, !lines.isEmpty { TechnicalDetails(title: "Update log") { Text(lines.joined(separator: "\n")).font(.caption.monospaced()).textSelection(.enabled) } }
       }
       Section("About") {

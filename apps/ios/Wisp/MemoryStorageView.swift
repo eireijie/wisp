@@ -59,21 +59,3 @@ struct MemoryStorageView: View {
       }
   }
 }
-
-struct MemoryRulesView: View {
-  @Environment(Store.self) private var store
-  @State private var rules: [MemoryRule] = []
-  @State private var path = ""
-  @State private var action = FormAction()
-  var body: some View {
-    List {
-      Section {
-        TextField("Folder or note", text: $path).textInputAutocapitalization(.never).autocorrectionDisabled()
-        NavigationLink("Manage access") { MemoryAccessView(path: path.trimmed) }
-      }
-      ForEach(rules) { rule in NavigationLink(rule.path.isEmpty ? "Whole vault" : rule.path) { MemoryAccessView(path: rule.path) } }
-      InlineError(error: action.error)
-    }.navigationTitle("Who can see and edit what")
-      .task { do { rules = try await store.connection().get("/api/access/rules") } catch { action.error = error.localizedDescription } }
-  }
-}
