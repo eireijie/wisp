@@ -79,10 +79,10 @@ afterAll(async () => {
 
 describe("push notifications", () => {
   it("is optional: phones register before a key is set, and nothing is sent", async () => {
-    expect((await api("GET", "/api/me/push")).data).toEqual({ available: false, devices: 0 });
+    expect((await api("GET", "/api/me/push")).data).toMatchObject({ available: false, devices: 0 });
     expect((await api("POST", "/api/me/push", { token: "not hex" })).status).toBe(400);
     expect((await api("POST", "/api/me/push", { token: PHONE.toUpperCase(), bundleId: "ai.wisp.ios", environment: "sandbox" })).data).toEqual({ ok: true, available: false });
-    expect((await api("GET", "/api/me/push")).data).toEqual({ available: false, devices: 1 });
+    expect((await api("GET", "/api/me/push")).data).toMatchObject({ available: false, devices: 1 });
     expect((await api("POST", "/api/me/push/test")).status).toBe(409);
   });
 

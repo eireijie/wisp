@@ -9,6 +9,7 @@ import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
 import { DEFAULT_TOPIC } from "./apns.ts";
+import { parseServiceAccount } from "./fcm.ts";
 import { registerHarnessSettingsApi } from "./api-harness-settings.ts";
 import { featureOn } from "./features.ts";
 
@@ -121,22 +122,27 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.get("/api/me/push", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return { available: !!hub.apns.config(c.workspaceId), devices: hub.apns.devices(c.actor.id).length };
+    // `android` is what the Android app starts Firebase with (null when this hub has no Firebase set up)
+    const firebase = hub.fcm.client(c.workspaceId);
+    return { available: !!hub.apns.config(c.workspaceId), devices: hub.apns.devices(c.actor.id).length, android: { available: !!firebase, firebase } };
   });
 
-  /** The iOS app sends its APNs device token here after you allow notifications. */
+  /** The iOS app sends its APNs device token here after you allow notifications; the Android app its FCM token (platform "android"). */
   app.post("/api/me/push", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
     const body = parse(
-      z.object({ token: z.string().regex(/^[0-9a-fA-F]{32,200}$/, "an APNs device token in hex"), bundleId: z.string().max(200).nullish(), environment: z.enum(["production", "sandbox"]).nullish() }),
-      req.body,
+      z.discriminatedUnion("platform", [
+        z.object({ platform: z.literal("ios").default("ios"), token: z.string().regex(/^[0-9a-fA-F]{32,200}$/, "an APNs device token in hex"), bundleId: z.string().max(200).nullish(), environment: z.enum(["production", "sandbox"]).nullish() }),
+        z.object({ platform: z.literal("android"), token: z.string().regex(/^[A-Za-z0-9:_-]{20,4096}$/, "an FCM registration token"), bundleId: z.string().max(200).nullish() }),
+      ]),
+      { platform: "ios", ...(req.body as object) },
       reply,
     );
     if (!body) return;
     if (c.principal.kind !== "session") return reply.code(403).send({ error: "only a signed-in app can get pushes" });
     hub.apns.register(sha(bearer(req.headers.authorization) ?? ""), c.actor.id, c.workspaceId, body);
-    return { ok: true, available: !!hub.apns.config(c.workspaceId) };
+    return { ok: true, available: body.platform === "android" ? !!hub.fcm.config(c.workspaceId) : !!hub.apns.config(c.workspaceId) };
   });
 
   /** Stop pushes to this sign-in (or one of its phones). Signing out does this too. */
@@ -151,7 +157,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.post("/api/me/push/test", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    if (!hub.apns.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key first" });
+    if (!hub.apns.config(c.workspaceId) && !hub.fcm.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key (iPhone) or a Firebase service account (Android) first" });
     return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Wisp", body: "Notifications work on this phone." } }, wisp: { kind: "test", category: "other" } });
   });
 
@@ -196,6 +202,47 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     hub.apns.saveConfig(c.workspaceId, null);
     return pushSettings(c.workspaceId);
+  });
+
+  /** The Firebase setup for Android push, without the service account's key. */
+  const androidSettings = (workspaceId: string) => {
+    const cfg = hub.fcm.config(workspaceId);
+    return cfg ? { configured: true, source: cfg.source, projectId: cfg.serviceAccount.project_id, clientEmail: cfg.serviceAccount.client_email, applicationId: cfg.applicationId, apiKey: cfg.apiKey, senderId: cfg.senderId } : { configured: false };
+  };
+
+  app.get("/api/settings/push/android", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    return androidSettings(c.workspaceId);
+  });
+
+  app.put("/api/settings/push/android", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    const body = parse(
+      z.object({
+        serviceAccount: z.string().trim().max(20_000),
+        applicationId: z.string().trim().regex(/^\d+:\d+:android:[0-9a-f]+$/, "the Android app id, like 1:1234567890:android:abc123"),
+        apiKey: z.string().trim().min(10).max(200),
+        senderId: z.string().trim().regex(/^\d+$/, "the numeric sender id (project number)"),
+      }),
+      req.body,
+      reply,
+    );
+    if (!body) return;
+    try {
+      hub.fcm.saveConfig(c.workspaceId, { ...body, serviceAccount: parseServiceAccount(body.serviceAccount) });
+    } catch {
+      return reply.code(400).send({ error: "that isn't a Firebase service account key; paste the whole JSON file" });
+    }
+    return androidSettings(c.workspaceId);
+  });
+
+  app.delete("/api/settings/push/android", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    hub.fcm.saveConfig(c.workspaceId, null);
+    return androidSettings(c.workspaceId);
   });
 
   // --- the workspace and its people ------------------------------------------------------------------

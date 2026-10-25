@@ -21,7 +21,7 @@
 
 | Feature | Problem |
 |---|---|
-| Push notifications | None. iPhone has APNs; Android has no FCM, so nothing arrives while the app is closed |
+| Push notifications | iPhone has APNs; Android has FCM (the hub owner brings their own Firebase project, see deploy.md). Both are optional per hub |
 
 ## iPhone: missing compared with web
 

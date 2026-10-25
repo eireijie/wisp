@@ -36,4 +36,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
     // Google's ready-made QR scanner (through Play services): no camera permission for Wisp itself
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    // Push notifications. Firebase starts at runtime from settings the hub hands over (see Push.kt),
+    // so there is no google-services plugin and no google-services.json in this build.
+    implementation("com.google.firebase:firebase-messaging:24.1.0")
 }

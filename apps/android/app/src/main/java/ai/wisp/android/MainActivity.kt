@@ -64,10 +64,15 @@ class MainActivity : Activity() {
     @Volatile private var pairing = 0
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var micRequest: PermissionRequest? = null
+    /** a tapped notification's hash route (#/c/…) waiting for the web view to load */
+    private var pendingRoute: String? = null
+    /** whether this run already asked the hub about push (once per signed-in web view) */
+    private var pushChecked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val link = PairLink.parse(intent?.dataString)
+        pendingRoute = intent?.getStringExtra(ROUTE)?.ifEmpty { null }
         if (hub != null && token != null) showWorkspace() else showPairing()
         link?.let(::offer)
     }
@@ -75,6 +80,24 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         PairLink.parse(intent.dataString)?.let(::offer)
+        intent.getStringExtra(ROUTE)?.ifEmpty { null }?.let(::open)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Push.foreground = true
+    }
+
+    override fun onPause() {
+        Push.foreground = false
+        super.onPause()
+    }
+
+    /** A tapped notification: go to its chat, approval or computer in the web app. */
+    private fun open(route: String) {
+        val v = web
+        if (v == null) { pendingRoute = route; return }
+        v.evaluateJavascript("location.hash=${JSONObject.quote(route)}", null)
     }
 
     private var hub: String?
@@ -216,6 +239,14 @@ class MainActivity : Activity() {
         view.addJavascriptInterface(object {
             @JavascriptInterface
             fun signedOut() = runOnUiThread { if (web === view) signOut() }
+
+            /** Settings → Notifications asks: this app handles push itself (a web view can't do Web Push). */
+            @JavascriptInterface
+            fun pushState(): String = Push.state(this@MainActivity).toString()
+
+            /** "Turn on": the system permission prompt (Android 13+), then register with the hub. */
+            @JavascriptInterface
+            fun enablePush() = runOnUiThread { if (web === view) askForNotifications() }
         }, "WispAndroid")
         val early = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         if (early) WebViewCompat.addDocumentStartJavaScript(view, setToken, setOf(origin))
@@ -244,6 +275,7 @@ class MainActivity : Activity() {
             }
 
             override fun onPageFinished(v: WebView, url: String) {
+                if (tokenSet && !pushChecked) setUpPush()
                 if (tokenSet) return
                 tokenSet = true
                 v.evaluateJavascript(setToken) { v.reload() }
@@ -269,11 +301,42 @@ class MainActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), ASK_MIC)
             }
         }
-        view.loadUrl("$origin/")
+        pushChecked = false
+        view.loadUrl("$origin/" + (pendingRoute ?: ""))
+        pendingRoute = null
+    }
+
+    // ---------------------------------------------------------------- push notifications
+
+    /** Once the workspace has loaded: if the hub can push to Android, ask for permission (once) and register this phone. */
+    private fun setUpPush() {
+        pushChecked = true
+        val h = hub ?: return
+        val t = token ?: return
+        Thread {
+            if (!Push.sync(this, h, t)) return@Thread
+            runOnUiThread {
+                if (!Push.hasPermission(this) && !prefs.getBoolean("askedPush", false)) {
+                    prefs.edit().putBoolean("askedPush", true).apply()
+                    askForNotifications()
+                }
+            }
+        }.start()
+    }
+
+    private fun askForNotifications() {
+        if (Push.hasPermission(this)) {
+            val h = hub ?: return
+            val t = token ?: return
+            Thread { if (Push.sync(this, h, t)) Push.register(this, h, t) }.start()
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), ASK_NOTIFICATIONS)
+        }
     }
 
     private fun signOut() {
         pairing++
+        Push.forget(this, hub, token)
         prefs.edit().clear().apply()
         WebStorage.getInstance().deleteAllData()
         CookieManager.getInstance().removeAllCookies(null)
@@ -289,6 +352,11 @@ class MainActivity : Activity() {
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, results: IntArray) {
+        if (requestCode == ASK_NOTIFICATIONS) {
+            if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) askForNotifications()
+            web?.evaluateJavascript("window.dispatchEvent(new CustomEvent('wisp-push-state'))", null)
+            return
+        }
         if (requestCode != ASK_MIC) return
         val r = micRequest ?: return
         micRequest = null
@@ -311,8 +379,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private companion object {
-        const val PICK_FILES = 1
-        const val ASK_MIC = 2
+    companion object {
+        /** the hash route a tapped notification opens (see WispMessagingService) */
+        const val ROUTE = "route"
+
+        private const val PICK_FILES = 1
+        private const val ASK_MIC = 2
+        private const val ASK_NOTIFICATIONS = 3
     }
 }

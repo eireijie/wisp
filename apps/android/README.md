@@ -12,6 +12,12 @@ The phone must be able to reach the computer: the same Wi-Fi, Tailscale, or a pu
 
 Signing out in Wisp, or signing the phone out from the computer (**Settings → Security → Sign-ins**), brings the app back to the pairing screen.
 
+## Notifications
+
+The app can tell you about agent replies, @mentions, approvals and agents that need you on their computer while it's closed, through Firebase Cloud Messaging. It's optional and **the person running the hub sets it up**: make a Firebase project and give the hub its service-account key (see [Push notifications for the Android app](../../docs/deploy.md#push-notifications-for-the-android-app)). Nothing about Firebase is baked into this app (no `google-services.json`, no Gradle plugin): after you sign in, the hub hands the app its project's client settings, the app starts Firebase with them, and uploads its push token to the hub. A hub without Firebase set up gets no prompts and no pushes.
+
+On Android 13 and newer the app asks to allow notifications once, after Wisp has loaded and only if the hub can send them. **Settings → Notifications** (inside the app) shows the status and has a test button. Tapping a notification opens that chat, approval or computer. A notification isn't shown while the app is open on screen. Notifications are split into Messages, Approvals and Needs-you-on-a-computer channels you can tune in Android's settings.
+
 ## Build it
 
 Needs JDK 17 or newer and the Android SDK (platform 35). With Homebrew:
@@ -30,5 +36,5 @@ Release builds (`./gradlew assembleRelease`) are signed with the debug key for n
 
 ## Not yet
 
-- Push notifications (needs Firebase Cloud Messaging and a key on the hub).
+- Per-kind notification switches inside Wisp (use Android's own notification channels for now), and the unread count as an app badge.
 - Watching an agent's computer uses the web app's viewer, which works but isn't tuned for touch like the iPhone app's.
