@@ -99,7 +99,7 @@ final class ComputerTests: XCTestCase {
   func testVMNoteExplainsWhyNot() throws {
     XCTAssertNil(ComputerAdd.vmNote([try node("1")]))
     XCTAssertEqual(ComputerAdd.vmNote([]), "Connect a device first.")
-    XCTAssertTrue(ComputerAdd.vmNote([try node("1", online: false)])!.contains("disconnected"))
+    XCTAssertTrue(ComputerAdd.vmNote([try node("1", online: false, vm: #"{"ok":false,"detail":""}"#)])!.contains("disconnected"))
     let refused = try node("1", vm: #"{"ok":false,"detail":"Docker isn't installed."}"#)
     XCTAssertEqual(ComputerAdd.vmNote([refused]), "Mac 1: Docker isn't installed.")
     XCTAssertEqual(ComputerAdd.list(["A", "B", "C"]), "A, B, and C")
