@@ -135,13 +135,14 @@ function createWindow() {
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (onOrigin(url, hubOrigin)) return { action: "allow" };
-    if (/^https?:|^mailto:/.test(url)) shell.openExternal(url);
+    // a RustDesk link from a device's page opens RustDesk on this computer
+    if (/^https?:|^mailto:|^rustdesk:\/\/[A-Za-z0-9_-]+$/.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => {
     if (isPage(url, SETUP_PAGE) || onOrigin(url, hubOrigin)) return;
     e.preventDefault();
-    if (/^https?:/.test(url)) shell.openExternal(url);
+    if (/^https?:|^rustdesk:\/\/[A-Za-z0-9_-]+$/.test(url)) shell.openExternal(url);
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     if (code === -3 || !onOrigin(url, hubOrigin)) return; // -3: aborted by a navigation

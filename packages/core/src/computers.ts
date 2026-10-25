@@ -81,6 +81,8 @@ export const DeviceCapabilities = z.object({
     engine: z.string().max(60).optional(),
     image: z.enum(["ready", "preparing", "missing", "failed"]).optional(),
   }),
+  /** RustDesk is set up for this device (`wisp node rustdesk`): its ID, for its owner to connect with. Its password stays in RustDesk */
+  rustdesk: z.object({ id: z.string().max(40) }).optional(),
   /** someone ran `wisp node pause` on the device: no agent runs and no computer use until they resume */
   paused: z.boolean().optional(),
   /** which commands connectors need are on the device's PATH (npx, uvx, docker…), so a connector that can't start is caught before it's enabled */
@@ -227,6 +229,11 @@ export function sortEntries(entries: FileEntry[]): FileEntry[] {
 export interface RunOutput {
   exitCode: number;
   output: string;
+}
+
+/** "482117903" → "482 117 903", the way RustDesk shows an ID. */
+export function formatRustdeskId(id: string): string {
+  return /^\d+$/.test(id) ? id.replace(/\B(?=(\d{3})+(?!\d))/g, " ") : id;
 }
 
 /** Screenshots for agents are scaled to fit this box: big enough to read, small enough to be cheap. */

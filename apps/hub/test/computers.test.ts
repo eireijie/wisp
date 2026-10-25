@@ -500,6 +500,19 @@ describe("a device's own screen, for agents", () => {
   });
 });
 
+describe("RustDesk", () => {
+  it("shows a device's RustDesk ID to its owner only", async () => {
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true, rustdesk: { id: "482117903" } }));
+    await waitFor(async () => (await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.rustdesk?.id === "482117903");
+    const theirs = (await member.request<any[]>("GET", "/api/nodes"))[0];
+    expect(theirs.capabilities.screen).toBeTruthy();
+    expect(theirs.capabilities.rustdesk).toBeUndefined();
+    // `wisp node rustdesk off`
+    await fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify({ shareScreen: true }));
+    await waitFor(async () => !(await owner.request<any[]>("GET", "/api/nodes"))[0].capabilities?.rustdesk);
+  });
+});
+
 describe("a screen's code", () => {
   const nodeJson = async (cfg: object) => fs.writeFile(path.join(nodeDir, "node.json"), JSON.stringify(cfg));
   // the device's own screen (made once, then the same one comes back)

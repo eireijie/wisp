@@ -11,6 +11,7 @@ import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
 import { RemoteDesktopServer, type RemoteDesktopConfig } from "./computers/remote-desktop.ts";
+import type { RustdeskConfig } from "./rustdesk.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
@@ -50,6 +51,8 @@ export interface NodeConfig {
   screenCode?: ScreenCode;
   /** Remote Desktop: this device's own VNC server for its screen (`wisp node screen remote`) */
   remoteDesktop?: RemoteDesktopConfig;
+  /** RustDesk, set up with `wisp node rustdesk`: its ID goes to the hub for the device's owner */
+  rustdesk?: RustdeskConfig;
   /** `wisp node pause`: take no work from the hub (no agent runs, no computer use) until resumed */
   paused?: boolean;
   /** where to look for existing agents (default: the home folder); for tests */
@@ -87,7 +90,7 @@ export class NodeDaemon {
   /** which version of Wisp's tools each VM has (by container name) */
   private vmTools = new Map<string, string>();
   /** the switches people flip at the device, as last read from node.json (people change them there with the CLI) */
-  private local: { shareScreen: boolean; paused: boolean; code?: ScreenCode; remote?: RemoteDesktopConfig };
+  private local: { shareScreen: boolean; paused: boolean; code?: ScreenCode; remote?: RemoteDesktopConfig; rustdesk?: RustdeskConfig };
   /** the screen's code: checked here, with its own count of wrong tries */
   private lock: ScreenLock;
   private remoteServer: RemoteDesktopServer;
@@ -150,7 +153,9 @@ export class NodeDaemon {
       shareScreen: !!(file.shareScreen ?? this.cfg.shareScreen) && !(file.noScreen ?? this.cfg.noScreen),
       paused: !!(file.paused ?? this.cfg.paused),
       code: file.screenCode ?? this.cfg.screenCode,
-      remote: file.remoteDesktop ?? this.cfg.remoteDesktop,
+      // these are removed from the file to turn them off, so once there's a file, it alone decides
+      remote: fs.existsSync(this.configFile) ? file.remoteDesktop : this.cfg.remoteDesktop,
+      rustdesk: fs.existsSync(this.configFile) ? file.rustdesk : this.cfg.rustdesk,
     };
   }
 
@@ -187,7 +192,7 @@ export class NodeDaemon {
     }
     this.applyRemoteServer();
     if (before.shareScreen === this.local.shareScreen && before.paused === this.local.paused) {
-      if (codeChanged || remoteChanged) void this.sendCapabilities();
+      if (codeChanged || remoteChanged || before.rustdesk?.id !== this.local.rustdesk?.id) void this.sendCapabilities();
       return;
     }
     if (this.local.paused && !before.paused) {
@@ -211,6 +216,7 @@ export class NodeDaemon {
       if (this.local.remote) caps.screen.remote = true;
       if (this.local.code) caps.screen.code = this.local.code.kind;
     }
+    if (this.local.rustdesk) caps.rustdesk = this.local.rustdesk;
     caps.paused = this.local.paused;
     caps.commands = this.commandsHere();
     this.send({ type: "capabilities", capabilities: caps });

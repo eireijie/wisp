@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronLeft, Download, Eye, Lock, Monitor, MoreHorizontal, Pause, Plus, Trash2 } from "lucide-react";
-import { runsInVm, type Agent } from "@wisp/core";
+import { Check, ChevronDown, ChevronLeft, Copy, Download, ExternalLink, Eye, Lock, Monitor, MoreHorizontal, Pause, Plus, Trash2 } from "lucide-react";
+import { formatRustdeskId, runsInVm, type Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { osName, useDevices } from "../devices.ts";
+import { useFeature } from "../features.ts";
 import { CreateAgent } from "./CreateAgent.tsx";
 import { ConnectDevice, DeviceAccess, DeviceIcon, type NodeInfo } from "./NodesView.tsx";
-import { AgentAvatar, Button, Empty, Loader, Menu, Pill, StatusChip, cx } from "../components/ui.tsx";
+import { AgentAvatar, Button, CopyBlock, Empty, Loader, Menu, Pill, StatusChip, cx } from "../components/ui.tsx";
 
 /**
  * One device: the agents that run on it and what each works on, its own screen, and the rest of
@@ -19,6 +20,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
   const [more, setMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isOwner = useStore((s) => s.me)?.role === "owner";
+  const remoteDesktop = useFeature("remoteDesktop");
   const refresh = () => api<NodeInfo[]>("GET", "/api/nodes").then(setNodes, () => setNodes([]));
   useEffect(() => {
     refresh();
@@ -103,6 +105,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
           {(n.mine || isOwner) && <ConnectDevice node={n} onChange={refresh} />}
           <AgentsHere node={n} onAdd={() => setCreating(true)} />
           {n.mine && <YourScreen node={n} />}
+          {n.mine && remoteDesktop && <RemoteDesktop node={n} />}
           <section className="rounded-2xl border border-line bg-panel">
             <button className="w-full px-4 py-3 flex items-center text-sm text-muted hover:text-ink" aria-expanded={more} onClick={() => setMore(!more)}>
               <span className="flex-1 text-left">More</span>
@@ -291,6 +294,48 @@ function YourScreen({ node: n }: { node: NodeInfo }) {
         )}
       </div>
       {error && <p className="mt-2 text-xs text-bad">{error}</p>}
+    </section>
+  );
+}
+
+/** The Remote desktop mod: RustDesk's ID for this device and a link that opens RustDesk on it. Its owner's alone. */
+function RemoteDesktop({ node: n }: { node: NodeInfo }) {
+  const [copied, setCopied] = useState(false);
+  const rustdesk = n.capabilities?.rustdesk;
+  const copy = async () => {
+    if (!rustdesk) return;
+    await navigator.clipboard.writeText(rustdesk.id).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <section className="rounded-2xl border border-line bg-panel p-4">
+      <div className="flex items-center gap-2">
+        <h2 className="font-semibold text-sm flex-1">Remote desktop</h2>
+        {rustdesk && <Pill>RustDesk</Pill>}
+      </div>
+      {rustdesk ? (
+        <>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="flex-1 min-w-36">
+              <div className="text-xs text-muted">ID</div>
+              <div className="font-mono text-base tabular-nums">{formatRustdeskId(rustdesk.id)}</div>
+            </div>
+            <Button onClick={copy}>
+              {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy ID"}
+            </Button>
+            <a href={`rustdesk://${encodeURIComponent(rustdesk.id)}`} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-full bg-accent text-accent-ink text-sm font-medium whitespace-nowrap hover:bg-accent/90">
+              <ExternalLink size={15} /> Open in RustDesk
+            </a>
+          </div>
+          <p className="mt-2 text-xs text-muted">Use the password you set in RustDesk and saved in your password manager. Wisp never sees it.</p>
+        </>
+      ) : (
+        <div className="mt-2 space-y-2 text-sm">
+          <p className="text-muted">Reach {n.name} from anywhere with RustDesk, free and open source. Run this at {n.name}; it asks before installing anything.</p>
+          <CopyBlock text="wisp node rustdesk" />
+        </div>
+      )}
     </section>
   );
 }

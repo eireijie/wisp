@@ -28,6 +28,7 @@ import {
   type AccessRule,
   type Actor,
   type ChannelTeam,
+  type DeviceCapabilities,
   type MemoryLevel,
   type Subject,
   type Viewer,
@@ -1205,6 +1206,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     };
   });
 
+  /** A device's RustDesk ID is a way into it: only its owner sees it. */
+  const withoutRustdesk = (caps: DeviceCapabilities | null) => {
+    if (!caps?.rustdesk) return caps;
+    const { rustdesk: _, ...rest } = caps;
+    return rest;
+  };
+
   app.get("/api/nodes", async (req, reply) => {
     const c = need(req, reply);
     if (!c) return;
@@ -1215,7 +1223,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       online: hub.isNodeOnline(n.id),
       paused: hub.isNodePaused(n.id),
       agents: store.agentsOnNode(n.id).map((a) => a.handle),
-      capabilities: store.nodeCapabilities(n.id),
+      capabilities: n.ownerId === c.actor.id ? store.nodeCapabilities(n.id) : withoutRustdesk(store.nodeCapabilities(n.id)),
       // what else lives on someone's device is theirs to see
       discovered: n.ownerId === c.actor.id || n.shared ? store.nodeDiscovered(n.id) : [],
       harnesses: store.nodeCatalog(n.id).map((h) => ({ id: h.harness, version: h.version })),

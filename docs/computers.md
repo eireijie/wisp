@@ -94,6 +94,23 @@ Say a Windows POS app that exists only on the shop PC. Connect the shop PC as a 
 
 Add your key under **Settings → Computers** (owners only). Wisp checks it, then makes computers in an Orgo workspace called "Wisp", or connects one you already have by its ID. The key stays on the hub. Watching an Orgo computer gives your browser that computer's VNC password, which Orgo designed for exactly this; anyone who can watch can also control it.
 
+## Reaching your devices: the Remote desktop mod
+
+Agents never remote into a person's computer; for that, run an agent on it. Remote desktop is for **you**: reaching your own devices from anywhere. Turn on **Remote desktop** under **Mods**, then on a device:
+
+```bash
+wisp node rustdesk        # at that device
+```
+
+It installs [RustDesk](https://rustdesk.com), free and open-source remote desktop, after asking (Homebrew on a Mac, winget on Windows, RustDesk's own .deb from its GitHub releases on Debian and Ubuntu; anywhere else, install it yourself and run the command again). Then it opens RustDesk and reads the device's RustDesk ID.
+
+- **The password is yours.** Set a permanent password in RustDesk (**Settings → Security → Use permanent password**) and keep it in your password manager. Wisp never sees or stores it.
+- **Only you see the ID.** It shows on the device's page under **Remote desktop**, with **Copy ID** and **Open in RustDesk** (which opens the RustDesk app on the computer or phone you're using). Nobody else in the organization gets it.
+- **On a Mac**, RustDesk asks for Screen Recording and Accessibility in System Settings → Privacy & Security.
+- `wisp node rustdesk off` stops showing the ID in Wisp. RustDesk stays installed and works as before. `wisp doctor` shows whether it's set up.
+
+Connections go through RustDesk's own servers, the same as using RustDesk on its own.
+
 ## Watching and taking control
 
 Open **Computers** to see every screen, which agents use it, and whether one is **Working**. A computer an agent is using also shows up live in the conversation.

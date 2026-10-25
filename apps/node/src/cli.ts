@@ -11,6 +11,8 @@ import { deviceAdapters } from "@wisp/adapters";
 import { ComputerHost, detectEngine } from "./computers/index.ts";
 import { ensureImage } from "./computers/docker.ts";
 import { listening, remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
+import { formatRustdeskId } from "@wisp/core";
+import { rustdeskId, rustdeskInstalled, setUpRustdesk } from "./rustdesk.ts";
 import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
 import { discoverAgents } from "./discover.ts";
 import { installService, isService, serviceStatus, servicePort, uninstallService, type ServiceKind } from "./service.ts";
@@ -52,6 +54,10 @@ Usage:
   wisp node screen remote [off]
       Set up Remote Desktop: a VNC server for this screen that only listens on this device, for
       smooth live view (Linux with X11, and Windows). \`off\` goes back to screenshots.
+  wisp node rustdesk [off]
+      Set up RustDesk, to reach this computer from anywhere (the Remote desktop mod):
+      installs it (asking first) and shows its ID on this device's page, for you only.
+      You set its password in RustDesk; Wisp never sees it. \`off\` hides the ID again.
   wisp node pause | wisp node resume
       Stop everything Wisp does on this device right away (agent runs, computer use, live
       views) until you resume. Works while \`wisp node start\` is running.
@@ -127,6 +133,7 @@ if (values.help || !cmd) {
     console.log(`               Remote Desktop ${saved.remoteDesktop ? `on (${saved.remoteDesktop.server}${(await listening(saved.remoteDesktop.port)) ? "" : ", not answering right now"})` : rd.ok ? "off (`wisp node screen remote`)" : `unavailable: ${rd.detail}`}`);
   }
   console.log(`  VMs          ${caps.vm.ok ? "yes" : "no"}: ${caps.vm.detail}`);
+  console.log(`  RustDesk     ${saved.rustdesk ? `on, ID ${formatRustdeskId(saved.rustdesk.id)}` : (await rustdeskInstalled()) ? "installed, not shown in Wisp (`wisp node rustdesk`)" : "not set up (`wisp node rustdesk`)"}`);
   const found = discoverAgents();
   console.log("\nExisting agents Wisp can import");
   if (!found.length) console.log("  none found");
@@ -167,6 +174,8 @@ if (values.help || !cmd) {
     });
 } else if (cmd === "node" && sub === "screen") {
   await screen(positionals[2], positionals[3]);
+} else if (cmd === "node" && sub === "rustdesk") {
+  await rustdesk(positionals[2]);
 } else if (cmd === "node" && (sub === "pause" || sub === "resume")) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   saved.paused = sub === "pause";
@@ -320,6 +329,31 @@ async function screen(what: string | undefined, arg: string | undefined) {
   console.log(`This screen is ${on ? "on" : "off"}${saved.screenCode ? `, opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : ", with no code"}${saved.remoteDesktop ? ", with Remote Desktop" : ""}.`);
   console.log("Use `wisp node screen on|off`, `wisp node screen code`, or `wisp node screen remote`.");
   process.exit(what ? 1 : 0);
+}
+
+/** `wisp node rustdesk [off]`: set RustDesk up here and show its ID in Wisp, or stop showing it. */
+async function rustdesk(what: string | undefined) {
+  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
+  const save = () => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify(saved, null, 2), { mode: 0o600 });
+  };
+  if (what === "off") {
+    delete saved.rustdesk;
+    save();
+    return console.log("Wisp doesn't show this computer's RustDesk ID anymore. RustDesk itself stays installed and works as before.");
+  }
+  if (what) {
+    console.log("Use `wisp node rustdesk` or `wisp node rustdesk off`.");
+    process.exit(1);
+  }
+  // already set up: just make sure the ID is current
+  const known = saved.rustdesk && (await rustdeskInstalled()) ? await rustdeskId() : null;
+  const r = known ? { id: known } : await setUpRustdesk(dir, { ask: (q) => ask(q), run, say: (l) => console.log(l) });
+  if (!r) process.exit(1);
+  saved.rustdesk = r;
+  save();
+  console.log(known ? `RustDesk is set up. This computer's ID is ${formatRustdeskId(r.id)}.` : "RustDesk is set up. Its ID is on this device's page in Wisp (turn on the Remote desktop mod to see it).");
 }
 
 /** Run a command with the terminal attached, showing it first. */
