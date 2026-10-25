@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("wispDesktop", {
   setBadge: (n) => ipcRenderer.send("badge", n),
+  focus: () => ipcRenderer.send("desktop:focus"),
   info: () => ipcRenderer.invoke("desktop:info"),
   connectDevice: (claim) => ipcRenderer.invoke("desktop:connect-device", claim),
   buddy: {

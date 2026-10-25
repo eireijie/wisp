@@ -100,6 +100,7 @@ export function show(title: string, body: string, open?: () => void, opts: { tes
   try {
     const n = new Notification(title, { body: body.slice(0, 180), icon: "/icon-192.png", tag: `${title}:${body.slice(0, 40)}` });
     n.onclick = () => {
+      window.wispDesktop?.focus();
       window.focus();
       open?.();
       n.close();

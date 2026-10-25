@@ -6,7 +6,8 @@ import { getNotifyPrefs } from "./notifications.ts";
  * or asking for your OK). Needs the service worker, so it works in the installed app on iPhone and
  * in desktop browsers served over HTTPS (or localhost).
  */
-export const pushSupported = () => typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+// (The desktop app has no push service; its window stays loaded in the menu bar and shows notifications itself.)
+export const pushSupported = () => typeof window !== "undefined" && !window.wispDesktop && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
 async function registration() {
   if (!pushSupported()) return null;

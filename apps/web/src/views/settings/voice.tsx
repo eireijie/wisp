@@ -4,7 +4,7 @@ import { Button, Input } from "../../components/ui.tsx";
 import { Advanced } from "../../experience.tsx";
 import { href } from "../../router.ts";
 import { useStore } from "../../store.ts";
-import { canRecognize, createSpeaker, DEFAULT_VOICE, type VoiceSettings, type VoiceSpeaker } from "../../voice/providers.ts";
+import { canRecognize, createSpeaker, DEFAULT_VOICE, effectiveListen, inDesktopApp, type VoiceSettings, type VoiceSpeaker } from "../../voice/providers.ts";
 import { Card, PageHeader, Row, Section, Select } from "./parts.tsx";
 
 type Result = { ok: boolean; text: string } | null;
@@ -103,7 +103,8 @@ export function VoicePage() {
   };
   const canListen = typeof window !== "undefined" && canRecognize();
   // the engines come from the draft (picking OpenAI asks for its key right away); whether a key exists comes from the hub
-  const needOpenai = (settings.listen === "openai" || settings.speak === "openai") && !saved.openaiKey;
+  const listen = effectiveListen(settings.listen);
+  const needOpenai = (listen === "openai" || settings.speak === "openai") && !saved.openaiKey;
   const needEleven = settings.speak === "elevenlabs" && !saved.elevenlabsKey;
   const openaiRow = <Row key="openai" label="OpenAI key" hint="Needed for OpenAI listening and voices. OpenAI bills you for it."><Input aria-label="OpenAI API key" type="password" autoComplete="off" disabled={!loaded} value={settings.openaiKey} onChange={(e) => setSettings({ ...settings, openaiKey: e.target.value })} /></Row>;
   const elevenRow = <Row key="eleven" label="ElevenLabs key" hint="Needed for ElevenLabs voices. ElevenLabs bills you for it."><Input aria-label="ElevenLabs API key" type="password" autoComplete="off" disabled={!loaded} value={settings.elevenlabsKey} onChange={(e) => setSettings({ ...settings, elevenlabsKey: e.target.value })} /></Row>;
@@ -119,14 +120,14 @@ export function VoicePage() {
     </Section>
     <Section title="Your voice choices" description="These settings belong to you.">
       <Card>
-        <Row label="Listening" hint="How your speech becomes a chat message."><Select label="Listening engine" disabled={!loaded} value={settings.listen} onChange={(listen) => setSettings({ ...settings, listen: listen as VoiceSettings["listen"] })}><option value="device">On this device</option><option value="openai">OpenAI (online)</option></Select></Row>
+        <Row label="Listening" hint="How your speech becomes a chat message."><Select label="Listening engine" disabled={!loaded} value={listen} onChange={(listen) => setSettings({ ...settings, listen: listen as VoiceSettings["listen"] })}>{!inDesktopApp() && <option value="device">On this device</option>}<option value="openai">OpenAI (online)</option></Select></Row>
         <Row label="Speaking" hint="An AI voice reads a short version. The complete reply stays in chat."><Select label="Speaking engine" disabled={!loaded} value={settings.speak} onChange={(speak) => setSettings({ ...settings, speak: speak as VoiceSettings["speak"] })}><option value="device">On this device</option><option value="openai">OpenAI (online)</option><option value="elevenlabs">ElevenLabs (online)</option></Select></Row>
       </Card>
     </Section>
     {neededRows.length > 0 && <Section title="One more thing" description="The voices you picked need a key from the company that provides them. They bill you directly."><Card>{neededRows}</Card></Section>}
     <Advanced className="mb-8" title="Advanced: API keys and troubleshooting">
       {otherRows.length > 0 && <Section title="API keys" description="Optional. Keys stay on your hub and are hidden when shown again. Clear a key and save to remove it."><Card>{otherRows}</Card></Section>}
-      <p className="mb-8 text-xs text-muted">Calls need a secure connection (HTTPS, or localhost on this computer). In the desktop app, if listening doesn't work, choose OpenAI for listening. Headphones help when you interrupt, and stop your speakers from echoing into the microphone.</p>
+      <p className="mb-8 text-xs text-muted">Calls need a secure connection (HTTPS, or localhost on this computer). Headphones help when you interrupt, and stop your speakers from echoing into the microphone.</p>
     </Advanced>
     <Button variant="primary" disabled={!loaded || saving} onClick={save}>{saving ? "Saving…" : "Save voice settings"}</Button>
     {message && <p role="status" className="text-sm text-muted mt-3">{message}</p>}
@@ -134,7 +135,7 @@ export function VoicePage() {
     <div className="mt-10" />
     <Section title="Try it out" description="Check that your microphone and speakers work. Save first if you changed the speaking voice.">
       <Card>
-        <Row label="Listening in this browser" hint={settings.listen === "openai" ? "You chose OpenAI for listening, so this browser's own listening isn't needed." : canListen ? "Listening on this device works in this browser." : "This browser can't listen on its own. Try Chrome or Safari, or choose OpenAI above."} />
+        <Row label="Listening in this browser" hint={listen === "openai" ? "You chose OpenAI for listening, so this browser's own listening isn't needed." : canListen ? "Listening on this device works in this browser." : "This browser can't listen on its own. Try Chrome or Safari, or choose OpenAI above."} />
         <Row label="Microphone" hint={<>
           {mic.testing ? `Say something. Listening for ${MIC_SECONDS} seconds…` : "Say a few words while it listens."}
           {mic.testing && <span className="mt-1.5 block h-1.5 w-40 max-w-full overflow-hidden rounded-full bg-chip" aria-hidden><span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round(mic.level * 100)}%` }} /></span>}

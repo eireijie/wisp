@@ -342,7 +342,15 @@ export function NotificationsPage() {
           )}
         </Card>
       </Section>
-      <PushSection push={push} />
+      {window.wispDesktop ? (
+        <Section title="When Wisp is closed">
+          <Card>
+            <Row label="Desktop app" hint="Notifications arrive while Wisp is running. Closing the window keeps it going in the menu bar." />
+          </Card>
+        </Section>
+      ) : (
+        <PushSection push={push} />
+      )}
       <Section title="Tell me about">
         <p className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted">
           <Pill tone={on ? "ok" : "warn"}>{on ? "Active" : "Paused"}</Pill>

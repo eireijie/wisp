@@ -17,7 +17,10 @@ const cloud = require("./cloud.cjs");
 const screenCode = require("./screen-code.cjs");
 const { reachableAddresses } = require("./addresses.cjs");
 const { Discovery, JoinClient } = require("./join.cjs");
-const { onOrigin, isPage, mainFrameUrl, isRemoteDesktopLink } = require("./trust.cjs");
+const { onOrigin, isPage, mainFrameUrl, isRemoteDesktopLink, isObsidianLink } = require("./trust.cjs");
+
+// links that hand off to another app on this computer: remote desktop apps, and Obsidian for the vault
+const isExternalAppLink = (url) => isRemoteDesktopLink(url) || isObsidianLink(url);
 
 const PORT = Number(process.env.PORT || 4747);
 const LOCAL_HUB = `http://localhost:${PORT}`;
@@ -124,7 +127,7 @@ function createWindow() {
     icon: ICON,
     show: false,
     backgroundColor: "#ffffff",
-    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: true },
+    webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: true, backgroundThrottling: false }, // so notifications keep coming while the window is hidden
   });
   win.once("ready-to-show", () => win?.show());
   const remember = () => {
@@ -148,13 +151,13 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (onOrigin(url, hubOrigin)) return { action: "allow" };
     // a device page's Open for RustDesk, AnyDesk and the like opens that app on this computer
-    if (/^https?:|^mailto:/.test(url) || isRemoteDesktopLink(url)) shell.openExternal(url);
+    if (/^https?:|^mailto:/.test(url) || isExternalAppLink(url)) shell.openExternal(url);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (e, url) => {
     if (isPage(url, SETUP_PAGE) || onOrigin(url, hubOrigin)) return;
     e.preventDefault();
-    if (/^https?:/.test(url) || isRemoteDesktopLink(url)) shell.openExternal(url);
+    if (/^https?:/.test(url) || isExternalAppLink(url)) shell.openExternal(url);
   });
   win.webContents.on("did-fail-load", (_e, code, desc, url) => {
     if (code === -3 || !onOrigin(url, hubOrigin)) return; // -3: aborted by a navigation
@@ -755,6 +758,9 @@ function switchTo(next) {
 
 setup("setup:retry", () => connect());
 
+ipcMain.on("desktop:focus", (e) => {
+  if (fromHub(e)) showWindow();
+});
 ipcMain.on("badge", (_e, n) => {
   const count = Math.max(0, Math.floor(Number(n) || 0));
   app.setBadgeCount?.(count);

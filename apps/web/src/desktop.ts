@@ -10,6 +10,8 @@ declare global {
   interface Window {
     wispDesktop?: {
       setBadge(n: number): void;
+      /** bring the window back from the menu bar (a clicked notification) */
+      focus(): void;
       info(): Promise<{ version: string; platform: string; device: boolean }>;
       /** with a claim, this computer becomes that waiting device; without one, a new device */
       connectDevice(claim?: { token: string; name: string }): Promise<void>;
