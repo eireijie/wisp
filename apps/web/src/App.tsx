@@ -16,6 +16,7 @@ import { NodesView } from "./views/NodesView.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
 import { JoinApproval } from "./components/JoinApproval.tsx";
+import { HelpPopup } from "./components/HelpPopup.tsx";
 import { WelcomeView } from "./views/WelcomeView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
@@ -178,6 +179,7 @@ function Workspace() {
     <>
       <CommandPalette />
       <JoinApproval />
+      <HelpPopup />
       {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
       {channelBrowser && <ChannelBrowser sectionId={channelBrowser.sectionId} onClose={() => useStore.setState({ channelBrowser: null })} />}
     </>

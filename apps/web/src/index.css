@@ -309,6 +309,18 @@ body {
 :root[data-mode="dark"] .prose-w .mention.agent { color: oklch(from var(--agent) clamp(0.74, l, 0.86) min(c, 0.16) h); }
 .prose-w .tag { color: var(--muted); }
 
+/* chat bubbles, like Messages: yours blue on the right, everyone else's grey on the left */
+:root { --bubble-me: #0a84ff; --bubble-me-ink: #ffffff; --bubble-them: oklch(0.93 calc(var(--gc) * 1.25) var(--gh)); }
+:root[data-mode="dark"] { --bubble-them: oklch(0.3 calc(var(--gc) * 1.5) var(--gh)); }
+.bubble { padding: 0.45em 0.8em; border-radius: 1.15rem; width: fit-content; max-width: min(36rem, 100%); }
+.bubble.them { background: var(--bubble-them); color: var(--ink); }
+.bubble.me { background: var(--bubble-me); color: var(--bubble-me-ink); margin-left: auto; }
+.bubble.me a, .bubble.me .wikilink { color: inherit; background: none; }
+.bubble.me code, .bubble.me pre { background: rgb(0 0 0 / 0.18); }
+.bubble.me .mention, .bubble.me .mention.user, .bubble.me .mention.agent { background: rgb(255 255 255 / 0.22); color: inherit; }
+.bubble.me blockquote { color: inherit; opacity: 0.85; border-color: rgb(255 255 255 / 0.4); }
+.bubble.them pre, .bubble.them code { background: var(--panel); }
+
 /* inline links are underlined (Paperclip's "Create one") in the readable mint */
 :is(p, li) a.text-accent {
   color: var(--accent-text);

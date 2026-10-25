@@ -452,7 +452,10 @@ export class Hub {
         store.db.prepare("UPDATE messages SET parts_json = ? WHERE id = ?").run(JSON.stringify(message.parts), message.id);
         this.broadcast(workspaceId, { type: "message_updated", message: store.withReactions([message])[0] }, this.audience(message.channelId));
       }
-      if (body && !gone && !repeated) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts: live.parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
+      // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
+      const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
+      const parts = screen ? [...live.parts, screen] : live.parts;
+      if (body && !gone && !repeated) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
     } else {
       store.setRunStatus(run.id, "failed", result.error);
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
@@ -463,6 +466,21 @@ export class Hub {
     }
     if (agent) this.broadcast(workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
     if (run.discussionId) void this.discussions.onRunFinished(run, body);
+  }
+
+  /**
+   * After a run that used the agent's own computer: the screen to show with its reply, and when
+   * the reply asks the person to do something there ("sign in to Zendesk"), the same "needs you"
+   * as computer_ask_human. Nothing when it already asked properly (that message has the screen).
+   */
+  private screenAfterRun(computerId: string, parts: MessagePart[], body: string, run: { agentId: string; channelId: string; threadId: string | null }): MessagePart | null {
+    const calls = parts.filter((p) => p.type === "tool_call").map((p) => (p.type === "tool_call" ? p.name : ""));
+    if (!calls.some((n) => /computer_/.test(n)) || calls.some((n) => /computer_ask_human/.test(n))) return null;
+    const c = this.store.computer(computerId);
+    if (!c) return null;
+    const request = asksForHand(body);
+    if (request) this.computers.flagHelp(c, run.agentId, request, { channelId: run.channelId, threadId: run.threadId });
+    return { type: "computer", computerId, ...(request ? { request } : {}) };
   }
 
   /** A failure in plain words when it's a known one (a harness that needs signing in again), else as reported. */
@@ -1051,6 +1069,18 @@ export class Hub {
       .filter(Boolean)
       .join("\n");
   }
+}
+
+/**
+ * A reply that asks the person to do something on the screen ("Please sign in to Zendesk and
+ * I'll continue"), as the sentence that says so; null for an ordinary answer.
+ */
+export function asksForHand(body: string): string | null {
+  const thing = /\b(sign(?:ing)?[ -]?in|log(?:ging)?[ -]?in|password|2fa|two[- ]factor|verification|one[- ]time|captcha|security code|passcode|authenticat\w*|approve the|take (?:over|control))\b/i;
+  const ask = /\b(please|can you|could you|would you|need you|needs you|i need|your help|once you(?:'ve| have)?|when you(?:'ve| have)?|let me know when|hand (?:it )?back)\b/i;
+  const sentences = body.replace(/\s+/g, " ").split(/(?<=[.!?])\s+/);
+  const hit = sentences.find((s) => thing.test(s) && ask.test(s));
+  return hit ? hit.trim().slice(0, 300) : null;
 }
 
 function collect(live: LiveRun, e: AgentEvent) {
