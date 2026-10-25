@@ -217,7 +217,13 @@ struct DiscussionCard: View {
 
 /** An agent's answer to /context: how full its conversation is. */
 struct ContextCard: View {
+  @Environment(Store.self) private var store
   var usage: ContextUsage?
+  /** the message it sits in, so the agent's own "compact" can be run from here */
+  var message: Message? = nil
+  @State private var shrink: AgentCommand?
+  @State private var running = false
+  @State private var error: String?
 
   var body: some View {
     let used = usage?.contextUsed
@@ -235,10 +241,30 @@ struct ContextCard: View {
         ProgressView(value: fraction).tint(fraction > 0.85 ? .red : fraction > 0.6 ? .orange : .green)
       }
       if used == nil { Text("This shows up after its first reply here.").font(.caption).foregroundStyle(.secondary) }
+      if let shrink, used != nil, store.role != "guest" {
+        Button(shrink.name == "compact" ? "Compact" : "Compress") { run(shrink) }
+          .secondaryButton().controlSize(.small).disabled(running)
+      }
+      if let error { Text(error).font(.caption).foregroundStyle(.red) }
     }
     .frame(maxWidth: 360, alignment: .leading)
     .card(Corner.card, padding: 12)
-    .accessibilityElement(children: .combine)
+    .task(id: message?.author.id) {
+      guard let message, message.author.kind == .agent else { return }
+      shrink = await SlashMenuModel.commands(store, agentId: message.author.id).first { $0.via == "raw" && ($0.name == "compact" || $0.name == "compress") }
+    }
+  }
+
+  /** Ask the agent to shrink its conversation by sending its command, in the same thread. */
+  private func run(_ command: AgentCommand) {
+    guard let message, let agent = store.agent(message.author.id) else { return }
+    let dm = store.channels.first { $0.id == message.channelId }.map { store.dmAgent($0) != nil } ?? false
+    running = true; error = nil
+    Task {
+      do { try await store.send("\(dm ? "" : "@\(agent.handle) ")/\(command.name)", in: message.channelId, thread: message.threadId) }
+      catch { self.error = error.localizedDescription }
+      running = false
+    }
   }
 
   /** 1234 → "1.2k", 200000 → "200k" */
