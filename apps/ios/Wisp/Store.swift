@@ -42,6 +42,8 @@ final class Store {
   var routinesVersion = 0
   var backgroundVersion = 0
   var allowance: Allowance?
+  /** what setup has so far (GET /api/onboarding), for the Inbox's readiness card */
+  var onboarding: OnboardingState?
   var changes: [Change]?
   var simple = false
   /** the optional features this organization has on (all on when the hub doesn't say) */
@@ -227,6 +229,7 @@ final class Store {
     features = .everything; orgs = []; agentDefaults = nil
     activitySteps = [:]; activityRun = [:]; activitySince = [:]
     sections = []; nodes = []; teams = []; syncError = nil
+    onboarding = nil; allowance = nil
     tasks = []; notes = []; profiles = [:]; routines = []; backgrounds = [:]
     skills = []; connectors = []; sessions = []; invites = []; prefs = nil
     taskLead = nil; taskLeadOverride = nil; memoryStorage = nil; agentPolicy = nil
