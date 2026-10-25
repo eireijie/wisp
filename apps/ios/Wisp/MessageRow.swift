@@ -14,7 +14,9 @@ struct MessageRow: View {
   @State private var toolsOpen = false
   @State private var editing = false
   @State private var deleting = false
+  @State private var reacting = false
   @State private var error: String?
+  @State private var failure: String?
 
   private var tools: [String] {
     message.parts.compactMap { if case .toolCall(let n) = $0 { n } else { nil } }
@@ -74,17 +76,7 @@ struct MessageRow: View {
         ForEach(Array(message.parts.enumerated()), id: \.offset) { _, part in
           PartView(part: part, message: message)
         }
-        if let r = message.reactions, !r.isEmpty {
-          HStack(spacing: 4) {
-            ForEach(r, id: \.emoji) { x in
-              Text("\(x.emoji) \(x.actors.count)")
-                .font(.caption)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(Color(.secondarySystemFill)))
-            }
-          }
-        }
+        ReactionChips(message: message) { failure = $0 }
         if let thread, replies > 0 || !working.isEmpty {
           HStack(spacing: 8) {
             if replies > 0 {
@@ -106,11 +98,27 @@ struct MessageRow: View {
     .contentShape(Rectangle())
     .contextMenu {
       if !message.body.isEmpty { Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = message.body } }
+      if store.canReact(message) {
+        Menu("React", systemImage: "face.smiling") {
+          ForEach(ReactionSet.quick, id: \.self) { e in Button(e) { react(e) } }
+          Button("More…", systemImage: "ellipsis") { reacting = true }
+        }
+      }
       if let thread { NavigationLink(value: thread) { Label("Reply in thread", systemImage: "arrowshape.turn.up.left") } }
+      if store.canPin(message) {
+        let pinned = store.isPinned(message)
+        Button(pinned ? "Unpin" : "Pin to channel", systemImage: pinned ? "pin.slash" : "pin") {
+          Task { do { try await store.setPinned(message, !pinned) } catch { failure = error.localizedDescription } }
+        }
+      }
       if store.canEdit(message) { Button("Edit", systemImage: "pencil") { editing = true } }
       if store.canDelete(message) { Button("Delete", systemImage: "trash", role: .destructive) { deleting = true } }
     }
     .sheet(isPresented: $editing) { EditMessageSheet(message: message) }
+    .sheet(isPresented: $reacting) { EmojiPickerSheet { react($0) } }
+    .alert("Couldn't do that", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+      Button("OK") {}
+    } message: { Text(failure ?? "") }
     .confirmationDialog(mine ? "Delete this message?" : "Delete this message from someone else?", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete", role: .destructive) {
         Task {
@@ -121,6 +129,10 @@ struct MessageRow: View {
     .alert("Couldn't delete it", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
       Button("OK") {}
     } message: { Text(error ?? "") }
+  }
+
+  private func react(_ emoji: String) {
+    Task { do { try await store.toggleReaction(message, emoji: emoji) } catch { failure = error.localizedDescription } }
   }
 
   private var mine: Bool { message.author == Actor(kind: .user, id: store.me?.id ?? "") }
@@ -206,7 +218,7 @@ struct PartView: View {
     case .discussion(let id):
       DiscussionCard(discussionId: id)
     case .context(let usage):
-      ContextCard(usage: usage)
+      ContextCard(usage: usage, message: message)
     case .approval(let id):
       ApprovalCard(approvalId: id)
     case .change(let id):
@@ -355,6 +367,7 @@ struct ApprovalBox: View {
   @State private var busy = false
   @State private var error: String?
   @State private var expanded = false
+  @State private var note = ""
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -372,7 +385,14 @@ struct ApprovalBox: View {
           .font(.callout)
           .onTapGesture { expanded.toggle() }
       }
-      if approval.status == "pending" {
+      if approval.status == "pending" && store.role != "guest" {
+        TextField("Add a note (optional)", text: $note, axis: .vertical)
+          .lineLimit(1...4)
+          .font(.callout)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 8)
+          .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.tertiarySystemFill)))
+          .disabled(busy)
         HStack(spacing: 8) {
           Button {
             decide(false)
@@ -389,6 +409,9 @@ struct ApprovalBox: View {
           .primaryButton()
         }
         .disabled(busy)
+      } else if approval.status != "pending" {
+        Text(ApprovalText.decided(approval, by: approval.decidedBy.flatMap { id in store.members.first { $0.id == id }?.name }))
+          .font(.caption).foregroundStyle(.secondary)
       }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
     }
@@ -398,7 +421,7 @@ struct ApprovalBox: View {
   private func decide(_ yes: Bool) {
     busy = true
     Task {
-      do { try await store.decide(approval, approve: yes) } catch { self.error = error.localizedDescription }
+      do { try await store.decide(approval, approve: yes, note: note.trimmingCharacters(in: .whitespacesAndNewlines)) } catch { self.error = error.localizedDescription }
       busy = false
     }
   }
@@ -433,5 +456,13 @@ struct ComputerCard: View {
       }
       .buttonStyle(.plain)
     }
+  }
+}
+
+enum ApprovalText {
+  /** "Sam approved this: "go ahead"" (the note only when there is one) */
+  static func decided(_ a: Approval, by name: String?) -> String {
+    let note = a.note.trimmingCharacters(in: .whitespacesAndNewlines)
+    return "\(name ?? "Someone") \(a.status == "approved" ? "approved" : "denied") this\(note.isEmpty ? "." : ": “\(note)”")"
   }
 }
