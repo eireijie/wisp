@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
+import { Logins } from "./logins.ts";
 import { Discussions } from "./discussions.ts";
 import { Apns } from "./apns.ts";
 import { Reach } from "./reach.ts";
@@ -63,6 +64,8 @@ export class Hub {
   readonly memory: AgentMemory;
   readonly discussions: Discussions;
   readonly computers: Computers;
+  /** logins agents fill from the person's password manager */
+  readonly logins: Logins;
   readonly routines: Routines;
   readonly background: Background;
   readonly push: Push;
@@ -93,6 +96,7 @@ export class Hub {
     this.memory = new AgentMemory(store, (wsId) => this.vault(wsId), this.access);
     this.discussions = new Discussions(this);
     this.computers = new Computers(this);
+    this.logins = new Logins(this);
     this.routines = new Routines(this);
     this.background = new Background(this);
     this.push = new Push(this);
@@ -859,7 +863,7 @@ export class Hub {
       `\n## Your computer`,
       `You have a computer: "${c.name}", ${what}. Use it like a person would: computer_screenshot to look, then computer_click, computer_type, computer_key, computer_scroll and computer_drag; computer_open opens a link, file or app${c.kind === "device" ? "" : "; computer_run runs a shell command on it"}. Each action returns a fresh screenshot; coordinates are pixels in the latest screenshot.`,
       `It keeps its files, browser and sign-ins between runs${sharing.length ? `, and you share it with ${sharing.join(", ")}` : ""}. People can watch it live and take control.`,
-      `When you need a person (to sign in, enter a code, solve a captcha, or confirm something on screen), call computer_ask_human with exactly what you need and end your turn; you'll be woken when they hand the computer back. Never ask for passwords in chat.`,
+      `When you need a person (to sign in, enter a code, solve a captcha, or confirm something on screen), call computer_ask_human with exactly what you need and end your turn; you'll be woken when they hand the computer back. For a website sign-in, try login_fill first when you have it: it fills a login from the person's password manager without you seeing it. Never ask for passwords in chat.`,
     ];
     if (this.runsInComputer(agent)) {
       lines.push(

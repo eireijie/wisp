@@ -327,6 +327,8 @@ export interface Approval {
   decidedAt: string | null;
   /** set when the agent is asking to borrow a device's screen: only that device's owner can decide, and picks how long */
   loan?: import("./computers.ts").DeviceLoanRequest | null;
+  /** set when the agent is asking to use a login from the password manager: only whoever connected it can decide */
+  login?: import("./logins.ts").LoginRequest | null;
 }
 
 /**

@@ -147,6 +147,10 @@ export class WarrenClient {
   returnDevice(device?: string) {
     return this.request<{ ok: boolean; deviceName: string }>("POST", "/api/computers/loans/return", { device });
   }
+  /** Sign in to a website on this agent's own computer with a login from the person's password manager; may ask them first. */
+  fillLogin(site: string, account?: string) {
+    return this.request<{ status: "filled" | "not_filled" | "asked"; message: string; approvalId?: string }>("POST", "/api/logins/fill", { site, ...(account ? { account } : {}) });
+  }
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {
     return this.request<{ ok: boolean; messageId: string }>("POST", "/api/computers/mine/help", { request });

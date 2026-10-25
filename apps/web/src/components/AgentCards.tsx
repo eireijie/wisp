@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, ListChecks, RotateCcw, ShieldQuestion, X } from "lucide-react";
-import { describeCron, type Agent, type Routine } from "@warren/core";
+import { CalendarClock, Check, ListChecks, LockKeyhole, RotateCcw, ShieldQuestion, X } from "lucide-react";
+import { LOGIN_SOURCE_LABEL, describeCron, type Agent, type Approval, type Routine } from "@warren/core";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { undoChange, useChanges } from "../changes.ts";
@@ -44,6 +44,7 @@ export function ApprovalCard({ id }: { id: string }) {
     if (!approval) useStore.getState().loadApproval(id);
   }, [id, approval]);
   if (!approval) return null;
+  if (approval.login) return <LoginApprovalCard approval={approval} />;
   const decide = async (approve: boolean) => {
     setBusy(true);
     setError(null);
@@ -121,6 +122,74 @@ export function ApprovalCard({ id }: { id: string }) {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * "Nova wants to use your Zendesk login": only whoever connected the password manager answers,
+ * once, always for this agent, or no. Wisp fills it on the agent's computer; nobody sees the password.
+ */
+function LoginApprovalCard({ approval }: { approval: Approval }) {
+  const login = approval.login!;
+  const me = useStore((s) => s.me);
+  const agent = useStore((s) => s.agents.find((a) => a.id === approval.agentId));
+  const owner = useStore((s) => s.members.find((m) => m.id === login.ownerId)?.name ?? "whoever connected it");
+  const decider = useStore((s) => s.members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const name = agent?.name ?? "An agent";
+  const pending = approval.status === "pending";
+  const decide = async (approve: boolean, always = false) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const a = await api("POST", `/api/approvals/${approval.id}/decide`, { approve, always });
+      useStore.setState((s) => ({ approvals: { ...s.approvals, [approval.id]: a } }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section aria-label="Login request" className={cx("mt-1.5 max-w-md rounded-2xl border p-3.5", pending ? "border-accent/40 bg-panel" : "border-line bg-panel")}>
+      <div className="flex items-start gap-2.5">
+        <LockKeyhole size={17} className="mt-0.5 shrink-0 text-muted" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">
+            {name} wants to use your {login.title} login
+          </div>
+          <div className="text-xs text-muted mt-0.5">
+            {login.username || login.site} · from {LOGIN_SOURCE_LABEL[login.source]}
+          </div>
+          <div className="text-xs text-muted mt-1">
+            Wisp types it into {login.site} on {name}'s computer. {name} never sees the password.
+          </div>
+        </div>
+      </div>
+      {pending ? (
+        me?.user.id !== login.ownerId ? (
+          <p className="mt-2.5 text-xs text-muted">Waiting for {owner}: only they can let agents use their logins.</p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="primary" disabled={busy} onClick={() => decide(true)}>
+              Allow once
+            </Button>
+            <Button disabled={busy} onClick={() => decide(true, true)}>
+              Always for {name}
+            </Button>
+            <Button disabled={busy} onClick={() => decide(false)}>
+              No
+            </Button>
+          </div>
+        )
+      ) : (
+        <p className="mt-2 text-xs text-muted">
+          {approval.status === "approved" ? `${decider} allowed it` : `${decider} said no`} {approval.decidedAt ? timeAgo(approval.decidedAt) : ""}
+        </p>
+      )}
+      {error && <p className="mt-2 text-xs text-bad">{error}</p>}
+    </section>
   );
 }
 

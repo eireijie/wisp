@@ -15,7 +15,7 @@ describe("settings navigation", () => {
       ["People", ["people", "agents"]],
       ["Notifications", ["notifications", "voice"]],
       ["Appearance", ["appearance"]],
-      ["Devices", ["devices", "computers", "mobile", "access"]],
+      ["Devices", ["devices", "computers", "logins", "mobile", "access"]],
       ["Advanced", ["agent-defaults", "memory", "apps", "runtimes", "harnesses", "connections", "security", "data", "updates"]],
     ]);
   });
@@ -27,7 +27,7 @@ describe("settings navigation", () => {
 
   it("leaves out pages guests can't use", () => {
     const pages = settingsNav(true, FEATURE_PRESETS.everything).flatMap((s) => s.pages.map((p) => p.id));
-    for (const id of ["agents", "agent-defaults", "computers", "apps", "runtimes", "connections"]) expect(pages).not.toContain(id);
+    for (const id of ["agents", "agent-defaults", "computers", "logins", "apps", "runtimes", "connections"]) expect(pages).not.toContain(id);
   });
 
   it("hides pages for features that are off, and a section left empty", () => {

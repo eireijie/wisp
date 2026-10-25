@@ -373,11 +373,11 @@ export class Store {
 
   // --- approvals ------------------------------------------------------------
 
-  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; loan?: Approval["loan"] }): Approval {
+  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; loan?: Approval["loan"]; login?: Approval["login"] }): Approval {
     const approvalId = id("apr");
     this.db
-      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, loan_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)")
-      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.loan ? JSON.stringify(a.loan) : null);
+      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, loan_json, login_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)")
+      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.loan ? JSON.stringify(a.loan) : null, a.login ? JSON.stringify(a.login) : null);
     return this.approval(approvalId)!;
   }
 
@@ -1298,6 +1298,7 @@ type ApprovalRow = {
   created_at: string;
   decided_at: string | null;
   loan_json: string | null;
+  login_json: string | null;
 };
 
 function toApproval(r: ApprovalRow): Approval {
@@ -1315,6 +1316,7 @@ function toApproval(r: ApprovalRow): Approval {
     createdAt: r.created_at,
     decidedAt: r.decided_at,
     loan: r.loan_json ? JSON.parse(r.loan_json) : null,
+    login: r.login_json ? JSON.parse(r.login_json) : null,
   };
 }
 

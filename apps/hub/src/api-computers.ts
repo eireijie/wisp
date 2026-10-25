@@ -303,6 +303,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!comp) return reply.code(404).send({ error: "computer not found" });
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
+    if (action.action === "fill_login") return reply.code(403).send({ error: "Wisp fills logins itself, from the password manager" });
     try {
       return await computers.act(comp, action, c.actor);
     } catch (err) {
@@ -486,7 +487,8 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
-    if (["destroy", "stop", "signin"].includes(action.action)) return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : "only people can stop or remove a computer" });
+    if (["destroy", "stop", "signin", "fill_login"].includes(action.action))
+      return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : action.action === "fill_login" ? "use login_fill: Wisp fills logins from the password manager" : "only people can stop or remove a computer" });
     try {
       return await computers.act(comp, action, c.actor, { requester: h.requesterOf(c) });
     } catch (err) {
@@ -597,11 +599,24 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
     if (!a || !canSeeApproval(c, a)) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), minutes: z.number().int().min(1).max(LOAN_MAX_MINUTES).nullable().optional(), code: SCREEN_CODE.optional() }), req.body, reply);
+    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), minutes: z.number().int().min(1).max(LOAN_MAX_MINUTES).nullable().optional(), code: SCREEN_CODE.optional(), always: z.boolean().optional() }), req.body, reply);
     if (!body) return;
     if (a.status !== "pending") return reply.code(409).send({ error: `already ${a.status}` });
     const agent = store.agent(a.agentId);
     const note = body.note.trim() ? ` ${body.note.trim()}` : "";
+    if (a.login) {
+      // a login from the password manager is the call of whoever connected it
+      const ask = a.login;
+      const owner = store.user(ask.ownerId)?.name ?? "whoever connected the password manager";
+      if (c.actor.id !== ask.ownerId) return reply.code(403).send({ error: `Only ${owner} can let agents use the ${ask.title} login` });
+      const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
+      hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
+      // filling happens after answering, so the card doesn't wait on the computer
+      void hub.logins.decide(a, body.approve, !!body.always).then((verdict) => {
+        if (agent && store.channel(a.channelId)) hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}`, onBehalfOf: ask.requestedBy ?? c.actor.id });
+      });
+      return decided;
+    }
     if (a.loan) {
       // lending a device is its owner's call alone
       const owner = store.user(a.loan.ownerId)?.name ?? "its owner";

@@ -50,6 +50,7 @@ import { registerLeadApi, workspaceLead } from "./lead.ts";
 import { registerJoinApi } from "./join.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { registerReachApi } from "./api-reach.ts";
+import { registerLoginsApi } from "./api-logins.ts";
 import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
@@ -2037,6 +2038,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerJoinApi(app, hub, { need, parse });
   registerPairingApi(app, hub, { need, parse });
   registerReachApi(app, hub, { need, parse });
+  registerLoginsApi(app, hub, { need, parse, requesterOf });
   registerRemoteMcp(app, hub, { need, parse, deviceOwnerOf });
 
   // --- websockets -------------------------------------------------------------

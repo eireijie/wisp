@@ -285,6 +285,7 @@ const ADDED_COLUMNS: [table: string, column: string, definition: string][] = [
   // NULL means no limit, so existing rows get the default of 24 from the column itself
   ["background", "daily_cap", "INTEGER DEFAULT 24"],
   ["approvals", "loan_json", "TEXT"],
+  ["approvals", "login_json", "TEXT"],
   // last_run_at is when a run was requested; this is when one actually finished
   ["routines", "last_completed_at", "TEXT"],
   ["messages", "edited_at", "TEXT"],

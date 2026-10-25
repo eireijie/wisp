@@ -7,6 +7,7 @@ export * from "./appearance.ts";
 export * from "./teams.ts";
 export * from "./team-templates.ts";
 export * from "./computers.ts";
+export * from "./logins.ts";
 export * from "./harnesses.ts";
 export * from "./schedule.ts";
 export * from "./connectors.ts";

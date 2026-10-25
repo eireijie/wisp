@@ -274,6 +274,8 @@ export class Computers {
     }
     const timeoutMs = opts.timeoutMs ?? (action.action === "start" ? 60 * 60_000 : action.action === "run" ? ((action.timeout ?? 120) + 30) * 1000 : transfer ? 10 * 60_000 : 120_000);
     let result: unknown;
+    // a login is put into the page through the VM's own browser, which only VMs on a device have
+    if (action.action === "fill_login" && c.kind !== "vm") throw new ComputerError(`${c.name} can't fill logins: only VMs can`, 409);
     if (c.kind === "orgo") {
       const client = this.orgo(c.workspaceId);
       if (!client) throw new ComputerError("add an Orgo API key in Settings → Computers first", 412);
@@ -859,6 +861,8 @@ export function describe(a: ComputerAction): string {
       return `Opening ${a.target.slice(0, 60)}`;
     case "signin":
       return `Opening a sign-in for ${a.harness}`;
+    case "fill_login":
+      return `Signing in to ${a.site}`;
     case "clipboard_get":
       return "Reading the clipboard";
     case "clipboard_set":
