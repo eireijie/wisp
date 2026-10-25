@@ -4,6 +4,7 @@ import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Discussions } from "./discussions.ts";
 import { Apns } from "./apns.ts";
+import { Fcm } from "./fcm.ts";
 import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
@@ -76,6 +77,8 @@ export class Hub {
   readonly skills: SkillStore;
   /** iOS push notifications (optional; needs an APNs key) */
   readonly apns: Apns;
+  /** Android push notifications (optional; needs a Firebase service account) */
+  readonly fcm: Fcm;
   /** how people and devices reach this hub from elsewhere (home network, Tailscale) */
   reach = new Reach(Number(process.env.PORT ?? 4747));
   /** how the hub reaches outside services (Orgo); tests swap it */
@@ -103,6 +106,7 @@ export class Hub {
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
     this.apns = new Apns(this);
+    this.fcm = new Fcm(this);
   }
 
   /** An organization's memory vault (each organization has its own). */

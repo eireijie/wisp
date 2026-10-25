@@ -30,6 +30,7 @@ export interface PushDevice {
   workspaceId: string;
   bundleId: string | null;
   environment: "production" | "sandbox" | null;
+  platform: "ios" | "android";
 }
 
 export interface PushPayload {
@@ -103,26 +104,28 @@ export class Apns {
   // --- devices ----------------------------------------------------------------------------------
 
   /** Remember a phone for this sign-in. Signing out deletes the sign-in, and the phone with it. */
-  register(sessionHash: string, userId: string, workspaceId: string, d: { token: string; bundleId?: string | null; environment?: "production" | "sandbox" | null }) {
+  register(sessionHash: string, userId: string, workspaceId: string, d: { token: string; bundleId?: string | null; environment?: "production" | "sandbox" | null; platform?: "ios" | "android" }) {
+    const platform = d.platform ?? "ios";
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO push_devices (token, session_hash, user_id, workspace_id, bundle_id, environment, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (token) DO UPDATE SET session_hash = excluded.session_hash, user_id = excluded.user_id, workspace_id = excluded.workspace_id,
+        `INSERT INTO push_devices (token, session_hash, user_id, workspace_id, platform, bundle_id, environment, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (token) DO UPDATE SET session_hash = excluded.session_hash, user_id = excluded.user_id, workspace_id = excluded.workspace_id, platform = excluded.platform,
            bundle_id = excluded.bundle_id, environment = excluded.environment, updated_at = excluded.updated_at`,
       )
-      .run(d.token.toLowerCase(), sessionHash, userId, workspaceId, d.bundleId ?? null, d.environment ?? null, at, at);
+      // APNs tokens are hex (case doesn't matter); FCM tokens are case-sensitive
+      .run(platform === "ios" ? d.token.toLowerCase() : d.token, sessionHash, userId, workspaceId, platform, d.bundleId ?? null, d.environment ?? null, at, at);
   }
 
   /** Forget one phone, or every phone on this sign-in. */
   unregister(sessionHash: string, token?: string) {
-    if (token) return this.db.prepare("DELETE FROM push_devices WHERE token = ? AND session_hash = ?").run(token.toLowerCase(), sessionHash).changes;
+    if (token) return this.db.prepare("DELETE FROM push_devices WHERE (token = ? OR token = ?) AND session_hash = ?").run(token, token.toLowerCase(), sessionHash).changes;
     return this.db.prepare("DELETE FROM push_devices WHERE session_hash = ?").run(sessionHash).changes;
   }
 
   devices(userId: string): PushDevice[] {
     return this.db
-      .prepare("SELECT token, user_id AS userId, workspace_id AS workspaceId, bundle_id AS bundleId, environment FROM push_devices WHERE user_id = ?")
+      .prepare("SELECT token, user_id AS userId, workspace_id AS workspaceId, bundle_id AS bundleId, environment, platform FROM push_devices WHERE user_id = ?")
       .all(userId) as PushDevice[];
   }
 
@@ -194,12 +197,20 @@ export class Apns {
 
   /** Push to this person's phones in the event's workspace, with that workspace's unread badge. */
   async sendTo(workspaceId: string, userId: string, payload: PushPayload): Promise<{ sent: number; failed: { status: number; reason?: string }[] }> {
-    const devices = this.devices(userId).filter((d) => d.workspaceId === workspaceId);
+    const all = this.devices(userId).filter((d) => d.workspaceId === workspaceId);
     const result = { sent: 0, failed: [] as { status: number; reason?: string }[] };
-    if (!devices.length) return result;
-    const cfg = this.config(workspaceId);
+    if (!all.length) return result;
+    const badge = this.unread(userId, workspaceId);
+    // Android phones go through Firebase (fcm.ts)
+    if (all.some((d) => d.platform === "android")) {
+      const android = await this.hub.fcm.sendTo(workspaceId, userId, payload, badge);
+      result.sent += android.sent;
+      result.failed.push(...android.failed);
+    }
+    const devices = all.filter((d) => d.platform !== "android");
+    const cfg = devices.length ? this.config(workspaceId) : null;
     if (!cfg) return result;
-    const body = JSON.stringify({ ...payload, aps: { sound: "default", badge: this.unread(userId, workspaceId), ...payload.aps } });
+    const body = JSON.stringify({ ...payload, aps: { sound: "default", badge, ...payload.aps } });
     for (const d of devices) {
       const env = d.environment ?? cfg.environment;
       let r = await this.post(cfg, env, d, body).catch((err: Error) => ({ status: 0, reason: err.message }) as PushResult);

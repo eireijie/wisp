@@ -246,6 +246,19 @@ One key covers both of Apple's push servers: builds run from Xcode get developme
 
 A phone stops getting pushes when you sign out of the app (or end that sign-in in Settings), or when Apple says the app was deleted. The app's badge is your unread count.
 
+## Push notifications for the Android app
+
+Wisp's Android app gets the same notifications as the iPhone app (agent replies, @mentions, approvals, agents that need you on their computer) through Google's Firebase Cloud Messaging (FCM). Like APNs it's **your own Firebase project**, and it's optional: without it the app works and just doesn't notify while closed. The Android app has no Firebase settings baked in; your hub hands them to the app after it signs in, so the same APK works with any hub.
+
+1. In the [Firebase console](https://console.firebase.google.com/), create a project (Analytics isn't needed). **Project settings → General → Your apps → Add app → Android**, with package name `ai.wisp.android` (or your own if you rebuilt the app). Skip the `google-services.json` it offers. Note the **App ID** (`1:1234567890:android:abc123…`), the **Project number** (the sender ID) and the **Web API key**, all on that page.
+2. **Project settings → Service accounts → Generate new private key** downloads a JSON file. Keep it private: it lets anyone who has it send pushes as your project.
+3. Give the hub the file and the three values, either way:
+   - **Environment variables** (they win if set): `WISP_FCM_SERVICE_ACCOUNT_FILE=/path/to/service-account.json` (or the JSON itself in `WISP_FCM_SERVICE_ACCOUNT`), `WISP_FCM_APP_ID`, `WISP_FCM_API_KEY` and `WISP_FCM_SENDER_ID`. Restart the hub.
+   - **Or as an owner, from the API:** `PUT /api/settings/push/android` with `{"serviceAccount": "<contents of the JSON file>", "applicationId": "...", "apiKey": "...", "senderId": "..."}`. `GET` shows what's set (never the private key) and `DELETE` removes it.
+4. Open the app. After it loads it asks to allow notifications (Android 13 and newer), once. Check it under **Settings → Notifications**, which has a test button (or `POST /api/me/push/test`).
+
+The hub talks to `oauth2.googleapis.com` and `fcm.googleapis.com` over HTTPS, so it needs outbound internet; nothing has to reach the hub from outside. The phone needs Google Play services. A phone stops getting pushes when you sign out of the app (or end that sign-in in Settings), or when Google says the app was removed. If you change the Firebase settings later, restart the app on the phone once so it picks them up.
+
 ## Configuration
 
 | Variable | Default | Meaning |
@@ -260,6 +273,10 @@ A phone stops getting pushes when you sign out of the app (or end that sign-in i
 | `WISP_APNS_KEY_FILE` | | iOS push: path to the `.p8` key file (or put its contents in `WISP_APNS_KEY`) |
 | `WISP_APNS_TOPIC` | `ai.wisp.ios` | iOS push: the app's bundle ID, if you changed it |
 | `WISP_APNS_ENV` | `production` | iOS push: `sandbox` for builds run from Xcode |
+| `WISP_FCM_SERVICE_ACCOUNT_FILE` | | Android push: path to your Firebase service-account JSON (or put its contents in `WISP_FCM_SERVICE_ACCOUNT`) |
+| `WISP_FCM_APP_ID` | | Android push: the Firebase Android app's App ID |
+| `WISP_FCM_API_KEY` | | Android push: the Firebase project's Web API key |
+| `WISP_FCM_SENDER_ID` | | Android push: the Firebase project number |
 
 Device daemon (`wisp node start`): `--hub`, `--token`, `--name`, `--dir` (default `~/.wisp`), `--allow-full-access`. Settings are saved to `~/.wisp/node.json`. At the device: `wisp node screen on|off` offers its own screen to you (off by default), and `wisp node pause` / `wisp node resume` stop and restart everything Wisp does there.
 

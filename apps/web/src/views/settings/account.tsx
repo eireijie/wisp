@@ -5,6 +5,7 @@ import { useStore, usePrefs } from "../../store.ts";
 import { href } from "../../router.ts";
 import { THEMES, useAppearance, type ModeChoice } from "../../theme.ts";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "../../push.ts";
+import { androidPush, useAndroidPush } from "../../push-android.ts";
 import { chime, enableNotifications, permission, setNotifyPrefs, show, useNotifyPrefs, type NotifyPrefs } from "../../notifications.ts";
 import { Button, Field, IconButton, Input, Pill, UserAvatar, clockTime, cx, timeAgo } from "../../components/ui.tsx";
 import { Card, PageHeader, Row, SavedNote, Section, Segmented, Toggle, useSavedFlash } from "./parts.tsx";
@@ -259,6 +260,72 @@ function usePush() {
 }
 
 export function NotificationsPage() {
+  // Wisp's Android app: a web view can't do Web Push, so the app's own push is shown instead
+  if (androidPush()) return <AndroidNotificationsPage />;
+  return <BrowserNotificationsPage />;
+}
+
+/** Notifications in the Android app: status of its native push, and a test. */
+function AndroidNotificationsPage() {
+  const push = useAndroidPush();
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const status =
+    push.hubReady === null
+      ? { label: "Checking…", tone: "neutral" as const, hint: "Asking your Wisp whether it can send notifications." }
+      : !push.hubReady
+        ? { label: "Not set up", tone: "neutral" as const, hint: "The owner of this Wisp hasn't connected Firebase yet, so phones can't be notified while the app is closed. See the deploy guide's Android push section." }
+        : !push.allowed
+          ? { label: "Off", tone: "warn" as const, hint: "Allow notifications to hear from agents while Wisp is closed." }
+          : push.registered
+            ? { label: "On", tone: "ok" as const, hint: "You'll get notifications on this phone, even with Wisp closed." }
+            : { label: "Connecting…", tone: "warn" as const, hint: "Allowed. Registering this phone with your Wisp." };
+  const sendTest = async () => {
+    setBusy(true);
+    setNote(null);
+    const ok = await push.test();
+    setNote(ok ? "Sent. It should arrive in a few seconds." : "Nothing was sent. Check that notifications are on for Wisp in your phone's settings.");
+    setBusy(false);
+  };
+  return (
+    <>
+      <PageHeader title="Notifications">Get a notification when an agent writes to you, wants your OK, or needs you on its computer, even with Wisp closed.</PageHeader>
+      <Section title="On this phone">
+        <Card>
+          <Row
+            label={
+              <span className="inline-flex items-center gap-2">
+                <Smartphone size={15} /> Notifications on this phone
+              </span>
+            }
+            hint={status.hint}
+          >
+            <Pill tone={status.tone}>{status.label}</Pill>
+            {push.hubReady && !push.allowed && (
+              <Button variant="primary" onClick={push.turnOn}>
+                Turn on notifications
+              </Button>
+            )}
+          </Row>
+          {push.hubReady && push.allowed && push.registered && (
+            <Row label="Send a test notification" hint="Check that it reaches this phone.">
+              <Button disabled={busy} onClick={() => void sendTest()}>
+                Send a test notification
+              </Button>
+            </Row>
+          )}
+        </Card>
+        {note && (
+          <p role="status" className="mt-2 text-sm text-muted">
+            {note}
+          </p>
+        )}
+      </Section>
+    </>
+  );
+}
+
+function BrowserNotificationsPage() {
   const prefs = useNotifyPrefs();
   const tasksOn = useFeature("tasks");
   const push = usePush();
