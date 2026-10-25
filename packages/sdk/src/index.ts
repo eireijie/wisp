@@ -74,8 +74,8 @@ export class WispClient {
   delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[]; parentTaskId?: string } = {}) {
     return this.request("POST", "/api/tasks", { to, title, brief, ...opts });
   }
-  updateTask(id: string, status: "open" | "in_progress" | "done" | "failed", result?: string) {
-    return this.request("PATCH", `/api/tasks/${id}`, { status, result });
+  updateTask(id: string, status: "open" | "in_progress" | "done" | "failed", result?: string, verdict?: "approved" | "changes") {
+    return this.request("PATCH", `/api/tasks/${id}`, { status, result, ...(verdict ? { verdict } : {}) });
   }
   tasks(filter: { agent?: string; status?: string } = {}) {
     return this.request("GET", `/api/tasks?${new URLSearchParams(filter as Record<string, string>)}`);
@@ -115,6 +115,10 @@ export class WispClient {
     return this.request<{ ok: boolean; output: string }>("POST", `/api/tasks/${taskId}/merge`);
   }
   /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
+  /** Set up a channel's roles and steps by role names and agent handles. */
+  setTeamSteps(channel: string, team: { roles: { name: string; description: string; agent: string }[]; steps: { role: string; kind?: "do" | "review" | "hand_out"; action: string; send_back_to?: number; max_rounds?: number; hand_to?: string[]; review_by?: string }[] }) {
+    return this.request("PUT", `/api/channels/${encodeURIComponent(channel.replace(/^#/, ""))}/team-steps`, team);
+  }
   teams() {
     return this.request<{ id: string; channelId: string; name: string; leads: string[]; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
   }

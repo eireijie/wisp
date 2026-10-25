@@ -49,6 +49,7 @@ export function failTaskOfRun(hub: Hub, run: { agentId: string; channelId: strin
   const result = `${agent?.name ?? "The agent"}'s run failed: ${reason.trim().replace(/\.+$/, "")}`;
   store.updateTask(task.id, "failed", result);
   hub.broadcast(task.workspaceId, { type: "tasks_changed" });
+  hub.flows.taskFinished(store.task(task.id)!, null);
   const from = task.from.kind === "agent" ? store.agent(task.from.id) : undefined;
   const parent = task.parentId ? store.task(task.parentId) : undefined;
   hub.postMessage({

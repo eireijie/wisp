@@ -26,8 +26,33 @@ struct MessageRow: View {
     if message.author.id == "system" { systemLine } else { row }
   }
 
-  /** Wisp's own notes ("@scout isn't connected to a device yet") as a quiet line, not a person. */
-  private var systemLine: some View {
+  /** the task a step Wisp handed out, if this is one of those */
+  private var handedTask: String? {
+    message.parts.lazy.compactMap { if case .task(let id) = $0 { id } else { nil } }.first
+  }
+
+  /**
+   * Wisp's own notes ("@scout isn't connected to a device yet") as a quiet line, not a person. A
+   * step Wisp handed out shows who got it and the task; the brief is on the task.
+   */
+  @ViewBuilder private var systemLine: some View {
+    if let taskId = handedTask {
+      HStack(spacing: 6) {
+        if let handle = message.body.range(of: "^@[\\w-]+", options: .regularExpression).map({ String(message.body[$0]) }) {
+          Text(handle).font(.caption).foregroundStyle(.secondary)
+        }
+        TaskChip(taskId: taskId)
+      }
+      .padding(.horizontal, 16)
+      .padding(.leading, 44)
+      .padding(.vertical, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } else {
+      plainSystemLine
+    }
+  }
+
+  private var plainSystemLine: some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
       Image(systemName: "info.circle")
       Text(message.parts.compactMap { if case .status(let t) = $0 { t } else if case .notice(let t) = $0 { t } else { nil } }.joined(separator: " ") + message.body)

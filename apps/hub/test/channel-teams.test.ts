@@ -44,7 +44,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await close();
-  await fs.rm(dir, { recursive: true, force: true });
+  // the vault's git can still be writing as the hub closes: retry instead of failing on ENOTEMPTY
+  await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 describe("team charts", () => {

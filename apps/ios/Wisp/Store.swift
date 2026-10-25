@@ -56,6 +56,8 @@ final class Store {
   var syncError: String?
   var sessionMessage: String?
   var channelVersion = 0
+  /** bumped per channel when one of its requests moves through the team's steps */
+  var flowVersions: [String: Int] = [:]
   var memoryVersion = 0
   var agents: [Agent] = [] {
     didSet { recordCompletions(previous: oldValue) }
@@ -760,6 +762,10 @@ final class Store {
       Task { do { try await refreshTaskLead() } catch { recordSyncError(error) } }
     case "tasks_changed":
       Task { do { try await refreshTasks() } catch { recordSyncError(error) } }
+    case "flows_changed":
+      if let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let id = event["channelId"] as? String {
+        flowVersions[id, default: 0] += 1
+      }
     case "routines_changed":
       routinesVersion += 1
       Task { do { try await refreshRoutines() } catch { recordSyncError(error) } }

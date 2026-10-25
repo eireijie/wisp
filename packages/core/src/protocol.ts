@@ -252,6 +252,8 @@ export type ClientEvent =
   /** an agent changed a setting or mod for someone, or someone undid one */
   | { type: "changes_changed" }
   | { type: "tasks_changed" }
+  /** a stepped team's request moved on (team-flow.ts) */
+  | { type: "flows_changed"; channelId: string }
   /** notes were changed outside Wisp (Obsidian, a git pull or push) */
   | { type: "memory_changed" }
   /** an owner switched optional features on or off (Settings → General → Mods) */

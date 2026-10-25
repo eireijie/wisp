@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -23,6 +23,7 @@ import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
 import { foldTeams } from "./fold-teams.ts";
+import { TeamFlows } from "./team-flows.ts";
 import type { Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
 
@@ -64,6 +65,8 @@ export class Hub {
   readonly access: MemoryAccess;
   readonly memory: AgentMemory;
   readonly discussions: Discussions;
+  /** stepped teams: requests going through a channel team's roles and steps */
+  readonly flows: TeamFlows;
   readonly computers: Computers;
   /** logins agents fill from the person's password manager */
   readonly logins: Logins;
@@ -98,6 +101,7 @@ export class Hub {
     this.access = new MemoryAccess(store);
     this.memory = new AgentMemory(store, (wsId) => this.vault(wsId), this.access);
     this.discussions = new Discussions(this);
+    this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
     this.logins = new Logins(this);
     this.routines = new Routines(this);
@@ -601,6 +605,17 @@ export class Hub {
     const tidy = fromPerson && (channel?.settings.replyInThread || !!channel?.settings.team);
     // a hand-off asks for its own thread, even inside another thread (a sub-thread)
     const threadId = replyInThread ? msg.id : (msg.threadId ?? (tidy ? msg.id : null));
+    // a stepped team takes a person's new message through its steps instead of waking the leads
+    if (fromPerson && !msg.threadId && !parseMentions(msg.body).length && this.flows.runsSteps(channel)) {
+      const policy = agentPolicy(this, workspaceId);
+      const verdict = this.guard.allow(msg.channelId, msg.hop, Date.now(), { maxHops: policy.maxHops, maxRunsPerWindow: policy.maxRunsPerMinute });
+      if (!verdict.ok) {
+        this.postSystem(msg, `Not starting the team: ${verdict.reason}.`);
+        return;
+      }
+      this.flows.start(msg, workspaceId, requestedBy);
+      return;
+    }
     let targets = this.targets(msg, workspaceId);
     // two or more leads read a new request: they plan it together before anyone starts
     const leads = channel && fromPerson && !msg.threadId && !parseMentions(msg.body).length ? this.leads(channel) : [];
@@ -927,6 +942,7 @@ export class Hub {
    */
   teamSection(channel: { name: string; settings: { team: ChannelTeam | null } }, agentId: string): string {
     const team = channel.settings.team;
+    if (team && hasSteps(team)) return this.stepsSection(channel.name, team, agentId);
     const me = team?.nodes.find((n) => n.agentId === agentId);
     if (!team || !me) return "";
     const live = team.nodes.filter((n) => this.store.agent(n.agentId));
@@ -958,6 +974,35 @@ export class Hub {
         ];
     const role = me.role?.trim() ? `Your role here: ${me.role.trim()}.${me.roleNotes?.trim() ? ` ${me.roleNotes.trim()}` : ""}` : "";
     return [`## Your team in #${channel.name}`, role, ...job.filter(Boolean), `The whole team:\n${chart}`].filter(Boolean).join("\n");
+  }
+
+  /**
+   * A stepped team, as one of its agents sees it: its roles and what they mean, the steps in order,
+   * and who fills every role. Wisp hands out each step as a task, so agents don't chase each other.
+   */
+  stepsSection(channelName: string, team: ChannelTeam, agentId: string): string {
+    const roles = team.roles ?? [];
+    const mine = roles.filter((r) => r.agentId === agentId);
+    if (!mine.length) return "";
+    const order = stepOrder(team.steps ?? []);
+    const num = (id: string | null | undefined) => order.findIndex((s) => s.id === id) + 1;
+    const steps = order.map((s, i) => {
+      const extra =
+        s.kind === "review"
+          ? ` Approves, or sends it back to step ${num(s.sendBackTo)} (up to ${s.maxRounds ?? DEFAULT_ROUNDS} rounds).`
+          : s.kind === "hand_out"
+            ? ` Hands pieces to ${(s.handTo ?? []).map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean).join(", ")}${s.reviewBy ? `; ${roles.find((x) => x.id === s.reviewBy)?.name} checks each piece` : ""}.`
+            : "";
+      return `${i + 1}. ${stepLabel(s, roles)}.${extra}`;
+    });
+    const people = roles.filter((r) => r.agentId && this.store.agent(r.agentId)).map((r) => `- ${r.name}: ${this.handleOf(r.agentId!)}${r.agentId === agentId ? " (you)" : ""}`);
+    return [
+      `## Your team in #${channelName}`,
+      ...mine.map((r) => `You are the ${r.name}. ${r.description.trim()}`),
+      `How this team works. A new message in the channel starts at step 1; Wisp hands each step to whoever fills its role as a task, with what the step before produced. When you're handed a step, do it and finish the task with task_update; the next step starts on its own.\n${steps.join("\n")}`,
+      `Who fills each role:\n${people.join("\n")}`,
+      "Ask a teammate something with an @mention in the thread. Don't hand the steps themselves to anyone: Wisp does that. Use task_delegate only when your step tells you to hand out pieces.",
+    ].join("\n");
   }
 
   /**

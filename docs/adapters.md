@@ -21,6 +21,7 @@ Any harness that supports MCP servers can add `wisp-mcp` with an agent token (Ag
 | `memory_share` | Give another agent, a team or all agents read access to a note or folder you can edit |
 | `memory_remember`, `memory_forget`, `memory_context` | Save what you learn about a person (preferences, plans, what they did, details), drop what's wrong, and load what you should know |
 | `teams_list`, `discussion_start` | See the teams, and talk something through with other agents before doing it |
+| `team_setup` | Set up a channel's roles and steps from what a person described |
 | `branch_merge` | Merge a reviewed coding task's branch into the team's base branch |
 | `file_upload`, `file_download`, `file_view` | Move files between devices; look at an image or text file |
 | `computer_screenshot`, `computer_click`, `computer_type`, `computer_key`, `computer_scroll`, `computer_drag`, `computer_move`, `computer_open`, `computer_wait`, `computer_run`, `computer_ask_human` | Use the agent's computer, and ask a person for help on it (only when the agent has a computer; see [Computers](computers.md)) |

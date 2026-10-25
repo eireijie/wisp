@@ -1,3 +1,6 @@
+import { stepsProblem, type TeamRole, type TeamStep } from "./team-flow.ts";
+
+
 export type Role = "owner" | "member" | "guest";
 /** One of HARNESSES (harnesses.ts), or "acp:<name>" for an ACP agent a device declared. */
 export type HarnessId = string;
@@ -208,6 +211,12 @@ export interface ChannelTeam {
   baseBranch?: string;
   /** an agent outside the team that it reports to (its boss), who can see and steer its work */
   reportsTo?: string | null;
+  /**
+   * Roles and the steps they take (team-flow.ts). With these the team runs step by step and
+   * `nodes`/`edges` are kept in step with them for older apps.
+   */
+  roles?: TeamRole[];
+  steps?: TeamStep[];
 }
 
 export interface ChannelTeamNode {
@@ -225,6 +234,8 @@ export const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = { defaultAgentId: null,
 
 /** What's wrong with a team's chart, in plain words, or null when it's fine. */
 export function teamProblem(team: ChannelTeam): string | null {
+  const steps = stepsProblem(team);
+  if (steps) return steps;
   if (!team.nodes.length) return "Add at least one agent to the team.";
   if (!team.nodes.some((n) => n.lead)) return "Make at least one agent a lead.";
   const ids = new Set(team.nodes.map((n) => n.agentId));
