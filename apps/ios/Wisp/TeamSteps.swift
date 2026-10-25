@@ -766,6 +766,10 @@ struct FlowStrip: View {
           }
         }
         if flow.status == "failed" { Text("Stopped").font(.caption.weight(.semibold)).foregroundStyle(.red).padding(.leading, 4) }
+        // a running request can be stopped too (the hub cancels the work still open)
+        if flow.status == "running" {
+          Button("Stop", role: .destructive) { decide("stop") }.font(.caption).buttonStyle(.borderless).disabled(action.busy).padding(.leading, 4)
+        }
       }
       .padding(.horizontal, 16)
       if flow.status == "waiting", let waiting = flow.waitingFor {
