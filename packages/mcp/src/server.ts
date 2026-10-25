@@ -636,6 +636,20 @@ function registerComputerTools(server: McpServer, client: WispClient, own: { nam
       }),
     );
   }
+  if (own.kind === "vm") {
+    server.registerTool(
+      "login_fill",
+      {
+        description:
+          "Sign in to a website in your computer's browser with a login from the person's password manager. Open the site's sign-in page first, then call this with the site. Wisp fills the boxes and presses sign in; you never see the password. The first time, the person may be asked: then end your turn and you'll get a message once they answer. If there's no saved login, use computer_ask_human instead. Never ask for passwords in chat.",
+        inputSchema: {
+          site: z.string().describe('the website, e.g. "zendesk.com"'),
+          account: z.string().optional().describe("which account, when there's more than one login for the site"),
+        },
+      },
+      safe(async ({ site, account }) => text((await client.fillLogin(site, account)).message)),
+    );
+  }
   server.registerTool(
     "computer_ask_human",
     {

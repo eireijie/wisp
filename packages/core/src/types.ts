@@ -325,6 +325,8 @@ export interface Approval {
   note: string;
   createdAt: string;
   decidedAt: string | null;
+  /** set when the agent is asking to use a login from the password manager: only whoever connected it can decide */
+  login?: import("./logins.ts").LoginRequest | null;
 }
 
 /**

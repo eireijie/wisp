@@ -4,7 +4,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
-import type { ComputerSpec, DeviceCapabilities, KeyCombo, Message } from "@wisp/core";
+import type { ComputerSpec, DeviceCapabilities, KeyCombo, LoginFillResult, Message } from "@wisp/core";
+import { LoginError } from "../src/logins.ts";
 import { vncAuthResponse } from "../src/vnc-relay.ts";
 import type { HarnessAdapter, RunInput } from "@wisp/adapters";
 import { WispClient } from "@wisp/sdk";
@@ -19,6 +20,9 @@ import type { Hub } from "../src/hub.ts";
 
 // a 1x1 JPEG
 const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64");
+
+/** what the fake VM's browser says when asked to fill a login */
+let fillAnswer: () => LoginFillResult = () => ({ filled: ["username", "password"], submitted: true });
 
 /** Everything the fake computers were asked to do. */
 const did: { computer: string; op: string; args: unknown[] }[] = [];
@@ -48,6 +52,7 @@ function fakeDriver(spec: ComputerSpec): Driver {
     stop: async () => log("stop"),
     destroy: async () => log("destroy"),
     vnc: spec.kind === "vm" ? async () => net.connect(rfbPort, "127.0.0.1") : undefined,
+    fillLogin: spec.kind === "vm" ? async (l) => (log("fill_login", l), fillAnswer()) : undefined,
   };
 }
 
@@ -475,6 +480,89 @@ describe("approvals", () => {
     await expect(pat.request("GET", `/api/approvals/${a.id}`)).rejects.toThrow();
     await expect(pat.request("POST", `/api/approvals/${a.id}/decide`, { approve: true })).rejects.toThrow();
     expect((await owner.request("POST", `/api/approvals/${a.id}/decide`, { approve: false })).status).toBe("denied");
+  });
+});
+
+describe("logins from a password manager", () => {
+  const secrets: Record<string, { username: string; password: string }> = { "it-1": { username: "support@shop.test", password: "hunter2" } };
+  const fills = () => did.filter((d) => d.op === "fill_login");
+  const noSecrets = async () => {
+    const all = JSON.stringify(await allMessages()) + JSON.stringify(await owner.request("GET", "/api/logins")) + JSON.stringify(await owner.request("GET", "/api/approvals"));
+    expect(all).not.toContain("hunter2");
+    expect(all).not.toContain("ops_good");
+  };
+
+  beforeAll(async () => {
+    hub.logins.open = async (_kind, token) => {
+      if (token !== "ops_good") throw new LoginError("1Password didn't accept that token");
+      return {
+        vaultName: "Agents",
+        list: async () => [
+          { id: "it-1", title: "Zendesk", site: "zendesk.com", username: "support@shop.test" },
+          { id: "it-2", title: "GitHub", site: "github.com", username: "bot" },
+        ],
+        secret: async (id) => secrets[id],
+      };
+    };
+    const vm = (await owner.request<any[]>("GET", "/api/computers")).find((c) => c.kind === "vm");
+    await owner.request("PATCH", `/api/agents/${agentId}`, { computerId: vm.id });
+  });
+  afterAll(async () => {
+    await owner.request("DELETE", "/api/logins/source");
+    // these wake-ups count toward the channel's runs-per-minute limit; later tests start fresh
+    (hub.guard as unknown as { runs: Map<string, number[]> }).runs.clear();
+  });
+
+  it("connects with a working token, and only an owner can", async () => {
+    await expect(member.request("PUT", "/api/logins/source", { kind: "1password", token: "ops_good" })).rejects.toThrow(/owner only/);
+    await expect(owner.request("PUT", "/api/logins/source", { kind: "1password", token: "ops_bad" })).rejects.toThrow(/didn't accept/);
+    // nothing is connected yet: agents are told to ask a person instead
+    await expect(agentApi.fillLogin("zendesk.com")).rejects.toThrow(/computer_ask_human/);
+    expect(await owner.request("PUT", "/api/logins/source", { kind: "1password", token: "ops_good" })).toMatchObject({ label: "1Password", vaultName: "Agents", count: 2 });
+    const listed = await owner.request("GET", "/api/logins");
+    expect(listed.source).toMatchObject({ kind: "1password", vaultName: "Agents" });
+    expect(listed.logins.map((l: any) => l.site)).toEqual(["zendesk.com", "github.com"]);
+    await noSecrets();
+  });
+
+  it("asks first, fills after a yes, and the agent never sees the password", async () => {
+    const asked = await agentApi.fillLogin("https://www.zendesk.com/login");
+    expect(asked.status).toBe("asked");
+    const card = await waitFor(async () => (await allMessages()).find((m) => m.parts.some((p) => p.type === "approval" && p.approvalId === asked.approvalId)));
+    expect(card.body).toBe("Can I use your Zendesk login?");
+    expect((await owner.request("GET", `/api/approvals/${asked.approvalId}`)).login).toMatchObject({ site: "zendesk.com", username: "support@shop.test", source: "1password" });
+    expect(fills()).toHaveLength(0);
+    // only whoever connected the password manager decides
+    await expect(member.request("POST", `/api/approvals/${asked.approvalId}/decide`, { approve: true })).rejects.toThrow();
+    const before = calls.length;
+    await owner.request("POST", `/api/approvals/${asked.approvalId}/decide`, { approve: true, always: true });
+    await waitFor(() => fills().length === 1);
+    expect(fills()[0].args[0]).toEqual({ site: "zendesk.com", username: "support@shop.test", password: "hunter2" });
+    await waitFor(() => calls.length > before);
+    expect(calls.at(-1)!.prompt).toContain("Wisp filled the Zendesk login (username, password) and pressed sign in");
+    expect(calls.at(-1)!.prompt).not.toContain("hunter2");
+    expect((await owner.request("GET", "/api/logins")).logins[0].always).toEqual([agentId]);
+    await noSecrets();
+  });
+
+  it("fills right away once it's allowed always, and asks again after that's taken back", async () => {
+    expect(await agentApi.fillLogin("zendesk.com")).toMatchObject({ status: "filled", message: expect.stringContaining("Take a screenshot") });
+    expect(fills()).toHaveLength(2);
+    fillAnswer = () => ({ filled: [], submitted: false, wrongSite: "zendesk-login.evil.test" });
+    expect(await agentApi.fillLogin("zendesk.com")).toMatchObject({ status: "not_filled", message: expect.stringContaining("the page open is on zendesk-login.evil.test") });
+    fillAnswer = () => ({ filled: ["username", "password"], submitted: true });
+    await owner.request("DELETE", `/api/logins/it-1/always/${agentId}`);
+    expect((await agentApi.fillLogin("zendesk.com")).status).toBe("asked");
+  });
+
+  it("says no when there's no login, and agents can't fill one themselves", async () => {
+    await expect(agentApi.fillLogin("example.com")).rejects.toThrow(/no saved login for example.com/);
+    await expect(agentApi.computer({ action: "fill_login", site: "zendesk.com", username: "x", password: "y" })).rejects.toThrow(/login_fill/);
+    const denied = await agentApi.fillLogin("github.com");
+    const before = calls.length;
+    await owner.request("POST", `/api/approvals/${denied.approvalId}/decide`, { approve: false });
+    await waitFor(() => calls.length > before);
+    expect(calls.at(-1)!.prompt).toContain("Not allowed: don't use the GitHub login");
   });
 });
 
