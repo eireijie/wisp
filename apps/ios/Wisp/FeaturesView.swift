@@ -71,6 +71,7 @@ extension FeatureKey {
     case .voice: .teal
     case .buddy: .indigo
     case .invite: .gray
+    case .remoteDesktop: .orange
     }
   }
 }

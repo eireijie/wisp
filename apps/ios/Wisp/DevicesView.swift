@@ -35,56 +35,6 @@ struct DevicesView: View {
   }
 }
 
-struct DeviceDetail: View {
-  @Environment(Store.self) private var store
-  @Environment(\.dismiss) private var dismiss
-  var node: AgentNode
-  @State private var removing = false
-  @State private var installing: String?
-  @State private var output: String?
-  @State private var action = FormAction()
-  private var current: AgentNode { store.nodes.first { $0.id == node.id } ?? node }
-  private let installable = ["claude-code", "codex", "gemini", "opencode", "kimi", "qwen", "openclaw"]
-  var body: some View {
-    List {
-      Section {
-        LabeledContent("Name", value: current.name)
-        Text("The hub doesn't support renaming an existing device.").font(.footnote).foregroundStyle(.secondary)
-        LabeledContent("Status", value: current.online ? "Connected" : "Offline")
-        LabeledContent("Connected by", value: current.ownerName ?? "Nobody")
-        if current.paused == true { Text("Paused") }
-        if !current.online { Text("Open Wisp on this computer to bring it back.") }
-        Toggle("Let others in the organization add agents and VMs here", isOn: Binding(get: { current.shared == true }, set: { on in action.run { try await store.updateNode(current.id, ["shared": AnyEncodable(on)]) } })).disabled(!store.canManage || current.mine != true || action.busy)
-        Picker("What this device does for agents", selection: Binding(get: { current.role ?? "" }, set: { role in action.run { try await store.updateNode(current.id, ["role": .nullable(role)]) } })) {
-          Text("Not chosen").tag(""); Text("Runs agents' VMs").tag("vms"); Text("Lets its agents use its screen").tag("screen"); Text("Runs agents headless").tag("headless")
-        }.disabled(!store.canManage || current.mine != true || action.busy)
-      }
-      Section("On this device") {
-        ForEach(current.harnesses ?? [], id: \.id) { harness in LabeledContent(HarnessChoice.label(harness.id), value: harness.version ?? "Installed") }
-        if store.canManage && current.usable { Button("Refresh") { action.run { try await store.refreshDevice(current.id) } }.disabled(!current.online || action.busy) }
-      }
-      if store.canManage && current.mine == true {
-        Section("Install a harness") {
-          ForEach(installable.filter { id in !(current.harnesses ?? []).contains { $0.id == id } }, id: \.self) { id in
-            Button("Install \(HarnessChoice.label(id))") { installing = id }.disabled(!current.online || action.busy)
-          }
-          Text("Other harnesses use their own installer on the computer.").font(.footnote).foregroundStyle(.secondary)
-        }
-      }
-      if let output { Text(output).font(.caption).textSelection(.enabled) }
-      if action.busy { ProgressView("Working on the device…") }
-      InlineError(error: action.error)
-      if store.canManage && (current.mine == true || store.isOwner) { Button("Remove device", role: .destructive) { removing = true }.disabled(action.busy) }
-    }.sectionScreen(current.name, id: "device")
-      .confirmationDialog("Remove this device and its computers? It will need a new token to reconnect.", isPresented: $removing, titleVisibility: .visible) {
-        Button("Remove device", role: .destructive) { action.run { try await store.deleteNode(current.id); dismiss() } }
-      }
-      .confirmationDialog("Install this harness on \(current.name)?", isPresented: Binding(get: { installing != nil }, set: { if !$0 { installing = nil } }), titleVisibility: .visible) {
-        Button("Install") { if let harness = installing { action.run { output = try await store.installHarness(harness, node: current.id) } } }
-      }
-  }
-}
-
 struct AddDeviceView: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss

@@ -12,13 +12,14 @@ struct Features: Codable, Hashable {
   var voice = true
   var buddy = true
   var invite = true
+  var remoteDesktop = true
 
   static let everything = Features()
-  static let simple = Features(background: false, routines: false, teach: false, tasks: false, voice: false, buddy: false, invite: false)
+  static let simple = Features(background: false, routines: false, teach: false, tasks: false, voice: false, buddy: false, invite: false, remoteDesktop: false)
 
-  init(background: Bool = true, routines: Bool = true, teach: Bool = true, tasks: Bool = true, voice: Bool = true, buddy: Bool = true, invite: Bool = true) {
+  init(background: Bool = true, routines: Bool = true, teach: Bool = true, tasks: Bool = true, voice: Bool = true, buddy: Bool = true, invite: Bool = true, remoteDesktop: Bool = true) {
     self.background = background; self.routines = routines; self.teach = teach
-    self.tasks = tasks; self.voice = voice; self.buddy = buddy; self.invite = invite
+    self.tasks = tasks; self.voice = voice; self.buddy = buddy; self.invite = invite; self.remoteDesktop = remoteDesktop
   }
 
   init(from decoder: Decoder) throws {
@@ -42,6 +43,7 @@ struct Features: Codable, Hashable {
       case .voice: voice
       case .buddy: buddy
       case .invite: invite
+      case .remoteDesktop: remoteDesktop
       }
     }
     set {
@@ -53,6 +55,7 @@ struct Features: Codable, Hashable {
       case .voice: voice = newValue
       case .buddy: buddy = newValue
       case .invite: invite = newValue
+      case .remoteDesktop: remoteDesktop = newValue
       }
     }
   }
@@ -63,7 +66,7 @@ struct Features: Codable, Hashable {
 }
 
 enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
-  case background, routines, teach, tasks, voice, buddy, invite
+  case background, routines, teach, tasks, voice, buddy, invite, remoteDesktop
   var id: String { rawValue }
 
   enum Group: String, CaseIterable {
@@ -87,6 +90,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .voice: "Voice calls"
     case .buddy: "Desk buddy"
     case .invite: "Invite people"
+    case .remoteDesktop: "Remote desktop"
     }
   }
 
@@ -99,6 +103,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .voice: "Call an agent and talk instead of typing."
     case .buddy: "A small ghost on your desktop that shows what your agents are up to."
     case .invite: "Let other people into this organization. Adds a People page and lets agents answer more than just you."
+    case .remoteDesktop: "Reach your devices from anywhere with RustDesk, from each device's page."
     }
   }
 
@@ -106,7 +111,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     switch self {
     case .background, .routines, .teach: .own
     case .tasks: .many
-    case .voice, .buddy, .invite: .extras
+    case .voice, .buddy, .invite, .remoteDesktop: .extras
     }
   }
 
@@ -119,6 +124,7 @@ enum FeatureKey: String, CaseIterable, CodingKey, Identifiable {
     case .voice: "phone"
     case .buddy: "theatermask.and.paintbrush"
     case .invite: "person.badge.plus"
+    case .remoteDesktop: "display"
     }
   }
 }

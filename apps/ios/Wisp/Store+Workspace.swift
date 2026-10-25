@@ -17,6 +17,44 @@ extension Store {
     try await fetch { try await $0.delete("/api/nodes/\(id)") }
     nodes.removeAll { $0.id == id }
   }
+  /** Pick what an agent on this device works on. The device's screen is made a computer the first time. */
+  func setWorksOn(_ choice: WorksOn, agent: Agent, node: AgentNode) async throws {
+    switch choice {
+    case .none:
+      try await updateAgent(agent.id, ["computerId": .null, "settings": AnyEncodable(["headless": true])])
+    case .screen:
+      let screen = try await deviceScreen(node.id)
+      try await updateAgent(agent.id, ["computerId": AnyEncodable(screen.id)])
+    case .newVM:
+      let vm: Computer = try await fetch { try await $0.post("/api/computers", NewVM(nodeId: node.id, name: "\(agent.name)'s desk")) }
+      var fields: Fields = ["computerId": AnyEncodable(vm.id)]
+      // a harness that comes with the VM moves in with it, unless someone already chose where it runs
+      if ["claude-code", "codex", "hermes", "kimi"].contains(agent.harness) && agent.settings?.runIn == nil { fields["settings"] = AnyEncodable(["runIn": "computer"]) }
+      try await updateAgent(agent.id, fields)
+    case .computer(let id):
+      try await updateAgent(agent.id, ["computerId": AnyEncodable(id)])
+    }
+    await refreshComputers()
+  }
+
+  /** The device's own screen as a computer, made the first time someone needs it. */
+  func deviceScreen(_ nodeId: String) async throws -> Computer {
+    if let c = computers.first(where: { $0.kind == "device" && $0.nodeId == nodeId }) { return c }
+    let c: Computer = try await fetch { try await $0.post("/api/computers", ["kind": "device", "nodeId": nodeId]) }
+    if !computers.contains(where: { $0.id == c.id }) { computers.append(c) }
+    return c
+  }
+
+  /** Save (or with nil, forget) the remote desktop app its owner reaches this device with. */
+  func setRemoteDesktop(_ node: String, _ remote: OwnRemoteDesktop?) async throws {
+    try await updateNode(node, ["remoteDesktop": remote.map { AnyEncodable($0) } ?? .null])
+  }
+
+  func updateDeviceWisp(_ id: String) async throws {
+    try await fetch { try await $0.post("/api/nodes/\(id)/update", Empty()) }
+    try await refreshNodes()
+  }
+
   func addDevice(_ name: String) async throws -> String {
     let result: DeviceRegistration = try await fetch { try await $0.post("/api/nodes", ["name": name]) }
     try await refreshNodes()
@@ -103,4 +141,12 @@ extension Store {
     try data.write(to: url, options: .atomic)
     return url
   }
+}
+
+private struct NewVM: Encodable {
+  var kind = "vm"
+  var nodeId: String
+  var name: String
+  var cpus = 2
+  var memoryGb = 4
 }

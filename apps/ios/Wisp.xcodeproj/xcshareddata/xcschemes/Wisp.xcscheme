@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "78A67251A515F5EAE29B469B"
+               BlueprintIdentifier = "9FED08DA26E69D96AED0CA8F"
                BuildableName = "Wisp.app"
                BlueprintName = "Wisp"
                ReferencedContainer = "container:Wisp.xcodeproj">
@@ -32,7 +32,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "78A67251A515F5EAE29B469B"
+            BlueprintIdentifier = "9FED08DA26E69D96AED0CA8F"
             BuildableName = "Wisp.app"
             BlueprintName = "Wisp"
             ReferencedContainer = "container:Wisp.xcodeproj">
@@ -44,7 +44,7 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "B0B620DC117F1FAFA8821149"
+               BlueprintIdentifier = "B5F8519D0E8D4DCDA0099DF4"
                BuildableName = "WispTests.xctest"
                BlueprintName = "WispTests"
                ReferencedContainer = "container:Wisp.xcodeproj">
@@ -55,7 +55,7 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "F94608C934DF0DB51D7B41D7"
+               BlueprintIdentifier = "867D9A09C13A532B2B77E4AA"
                BuildableName = "WispUITests.xctest"
                BlueprintName = "WispUITests"
                ReferencedContainer = "container:Wisp.xcodeproj">
@@ -66,16 +66,6 @@
       </CommandLineArguments>
       <EnvironmentVariables>
          <EnvironmentVariable
-            key = "WISP_HUB"
-            value = "$(WISP_HUB)"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "WISP_TOKEN"
-            value = "$(WISP_TOKEN)"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
             key = "WARREN_HUB"
             value = "$(WARREN_HUB)"
             isEnabled = "YES">
@@ -83,6 +73,16 @@
          <EnvironmentVariable
             key = "WARREN_TOKEN"
             value = "$(WARREN_TOKEN)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "WISP_HUB"
+            value = "$(WISP_HUB)"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "WISP_TOKEN"
+            value = "$(WISP_TOKEN)"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
@@ -101,7 +101,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "78A67251A515F5EAE29B469B"
+            BlueprintIdentifier = "9FED08DA26E69D96AED0CA8F"
             BuildableName = "Wisp.app"
             BlueprintName = "Wisp"
             ReferencedContainer = "container:Wisp.xcodeproj">
@@ -118,7 +118,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "78A67251A515F5EAE29B469B"
+            BlueprintIdentifier = "9FED08DA26E69D96AED0CA8F"
             BuildableName = "Wisp.app"
             BlueprintName = "Wisp"
             ReferencedContainer = "container:Wisp.xcodeproj">
