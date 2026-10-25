@@ -153,7 +153,7 @@ struct CallScreen: View {
     do {
       let api = try store.connection()
       let prefs: VoicePreferences = try await api.get("/api/voice/settings")
-      let voice = await agentVoice(api)
+      let voice = agent.settings?.voice
       let hub = VoiceHub(api: { try store.connection() })
       let channelId = channel.id, agentId = agent.id
       let call = VoiceCallSession(
@@ -168,13 +168,6 @@ struct CallScreen: View {
       engine = CallEngines.engineLabel(prefs)
       if store.connected { await call.start() } else { call.disconnect() }
     } catch { loadError = error.localizedDescription }
-  }
-
-  /** The agent's own voice choice, if it has one. The list is the same one the app already loads. */
-  private func agentVoice(_ api: API) async -> AgentVoice? {
-    struct Row: Decodable { struct S: Decodable { var voice: AgentVoice? }; var id: String; var settings: S? }
-    let rows: [Row]? = try? await api.get("/api/agents")
-    return rows?.first { $0.id == agent.id }?.settings?.voice
   }
 
   private func retry() {

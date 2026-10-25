@@ -514,13 +514,6 @@ final class CloudSpeaker: NSObject, CallSpeaker, AVAudioPlayerDelegate {
 
 // MARK: choosing the engines
 
-/** An agent's chosen voices (`settings.voice` on the agent); only the ones for the engine in use matter. */
-struct AgentVoice: Decodable, Equatable {
-  var device: String?
-  var openai: String?
-  var elevenlabs: String?
-}
-
 @MainActor enum CallEngines {
   static func listener(engine: String, callbacks: ListenCallbacks, hub: VoiceHub) -> CallListener {
     engine == "openai" ? CloudListener(callbacks: callbacks, hub: hub) : DeviceListener(callbacks: callbacks)
