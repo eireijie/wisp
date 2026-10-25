@@ -26,7 +26,7 @@ afterEach(() => {
 
 /** Start a hub on a folder, sign up, run `fn`, stop it. */
 async function withHub<T>(fn: (h: { hub: Awaited<ReturnType<typeof buildHub>>["hub"]; api: (m: string, u: string, b?: unknown) => Promise<any> }) => Promise<T>, existing = false): Promise<T> {
-  const built = await buildHub({ dataDir: data });
+  const built = await buildHub({ dataDir: data, setupCode: false });
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   const base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   let token = "";

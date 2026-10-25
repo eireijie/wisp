@@ -10,7 +10,7 @@ let close: () => Promise<void>;
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-install-"));
-  const built = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
@@ -49,5 +49,42 @@ describe("install.sh", () => {
     const token = await run(["--hub", "http://h:4747", "--token"]);
     expect(token.code).toBe(1);
     expect(token.stderr).toContain("--token needs a value");
+  });
+});
+
+import { execFileSync } from "node:child_process";
+import { joinInstaller } from "../src/app.ts";
+
+describe("hub installer join compatibility", () => {
+  it("rewrites old installers for join with and without an invite, including when piped to sh", async () => {
+    const fixture = `#!/usr/bin/env bash
+set -euo pipefail
+MODE="" HUB="" TOKEN=""
+wisp() { printf '<%s>' "$@"; }
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --hub-server) MODE=hub ;;
+    *) exit 9 ;;
+  esac
+  shift
+done
+if [ "$MODE" = hub ]; then
+  printf hub
+else
+  printf default
+fi
+`;
+    const rewritten = joinInstaller(fixture);
+    const invite = "https://wisp.example/join/abc'$(exit 7)";
+    expect(execFileSync("sh", ["-s", "--", "join", invite], { input: rewritten, encoding: "utf8" })).toBe(`<join><${invite}>`);
+    expect(execFileSync("sh", ["-s", "--", "join"], { input: rewritten, encoding: "utf8" })).toBe("<join>");
+    expect(execFileSync("sh", ["-s", "--", "--hub-server"], { input: rewritten, encoding: "utf8" })).toBe("hub");
+    const served = await (await fetch(`${base}/install.sh`)).text();
+    expect(served).toMatch(/^\s*join\)/m);
+    expect(served).toContain("exec bash -s --");
+  });
+  it("leaves an installer with native join support intact inside its sh wrapper", () => {
+    const native = '#!/usr/bin/env bash\ncase "$1" in\njoin) printf "native:%s" "${2:-}" ;;\nesac\n';
+    expect(execFileSync("sh", ["-s", "--", "join", "https://wisp.example/join/a"], { input: joinInstaller(native), encoding: "utf8" })).toBe("native:https://wisp.example/join/a");
   });
 });

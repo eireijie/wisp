@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import os from "node:os";
+import { reachableAddresses } from "./reachable-addresses.ts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Caller } from "./api.ts";
@@ -44,39 +44,8 @@ interface Helpers {
   parse<S extends z.ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | null;
 }
 
-const isLoopback = (host: string) => /^(localhost|127\.|\[?::1\]?$|0\.0\.0\.0)/i.test(host);
-/** 100.64.0.0/10, the range Tailscale hands out */
-const isTailscale = (ip: string) => {
-  const [a, b] = ip.split(".").map(Number);
-  return a === 100 && b >= 64 && b <= 127;
-};
-
-/**
- * Where a phone might reach this hub, best first: the address the page was opened at (unless it's
- * this computer's own loopback), then the computer's Wi-Fi/Ethernet addresses, then Tailscale.
- */
-export function pairingAddresses(origin: string | null, port: number, interfaces = os.networkInterfaces()): string[] {
-  const out: string[] = [];
-  if (origin) {
-    try {
-      const u = new URL(origin);
-      if (!isLoopback(u.hostname)) out.push(u.origin);
-    } catch {
-      // not a URL; skip it
-    }
-  }
-  const lan: string[] = [];
-  const tailnet: string[] = [];
-  for (const [name, list] of Object.entries(interfaces))
-    for (const a of list ?? []) {
-      if (a.family !== "IPv4" || a.internal || a.address.startsWith("169.254.")) continue;
-      // virtual networks for VMs and containers aren't reachable from a phone
-      if (!isTailscale(a.address) && /^(bridge|vmnet|docker|veth|br-|virbr|vEthernet)/i.test(name)) continue;
-      (isTailscale(a.address) ? tailnet : lan).push(`http://${a.address}:${port}`);
-    }
-  for (const a of [...lan, ...tailnet]) if (!out.includes(a)) out.push(a);
-  return out;
-}
+/** Shared with invites and reach settings; phone pairing keeps its address order. */
+export const pairingAddresses = reachableAddresses;
 
 /** The link a QR code carries; the phone apps open wisp://pair links. */
 export function pairingLink(p: { id: string; secret: string; addresses: string[] }): string {

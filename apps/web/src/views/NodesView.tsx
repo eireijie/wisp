@@ -1,14 +1,12 @@
-import { originReach, shareOrigin, useAccess } from "../access.ts";
-import { desktopOs, downloadsFor } from "../downloads.ts";
+import { AddDeviceDialog } from "../components/AddDevice.tsx";
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
 import type { DeviceCapabilities, DeviceRole, OwnRemoteDesktop } from "@wisp/core";
 import { api } from "../api.ts";
 import { href } from "../router.ts";
 import { useStore } from "../store.ts";
-import { useDesktopInfo } from "../desktop.ts";
 import { Toggle } from "./settings/parts.tsx";
-import { AgentAvatar, Button, CopyBlock, DeviceInstall, Empty, Field, Input, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, Empty, Menu, Pill, cx, timeAgo } from "../components/ui.tsx";
 
 export interface NodeInfo {
   id: string;
@@ -54,89 +52,10 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
   return n.lastSeen ? "This device was connected before but is offline now." : "This device hasn't connected yet.";
 }
 
-/**
- * Shown on a device that is not connected: one line, with the how-to folded away until asked for.
- * One that never connected can get a fresh connection code here, so a lost code or a failed setup
- * is never a dead end; inside the Wisp app it's one button that makes this computer that device.
- */
-export function ConnectDevice({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
-  useAccess();
-  const [open, setOpen] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const { inDesktop, info } = useDesktopInfo();
-  const line = notConnectedLine(n);
-  if (!line) return null;
-  const waiting = !n.lastSeen;
-  // the app on this computer isn't a device yet, so it can become this one
-  const canClaim = waiting && inDesktop && info !== null && !info.device;
-
-  const newCode = async () => {
-    setError("");
-    const { token } = await api<{ token: string }>("POST", `/api/nodes/${n.id}/token`);
-    return token;
-  };
-  const showCommand = async () => {
-    try {
-      setToken(await newCode());
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  const claim = async () => {
-    setBusy(true);
-    try {
-      await window.wispDesktop?.connectDevice({ token: await newCode(), name: n.name });
-      onChange();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mt-3 rounded-xl bg-hover/60 px-3 py-2.5 text-sm">
-      <div className="flex items-center gap-3">
-        <p className="flex-1 text-muted">{n.lastSeen ? "Open Wisp on this computer to bring it back." : canClaim ? "Is this that computer?" : "Start Wisp on this computer to connect it."}</p>
-        {canClaim && (
-          <Button variant="primary" disabled={busy} onClick={claim}>
-            {busy ? "Connecting…" : "Connect this computer"}
-          </Button>
-        )}
-        <button className="shrink-0 text-xs font-medium text-ink hover:underline" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Hide" : canClaim ? "Another computer?" : "How?"}
-        </button>
-      </div>
-      {error && <p className="mt-2 text-xs text-bad">{error}</p>}
-      {open && (
-        <div className="mt-3 space-y-2 text-xs">
-          <p>
-            <a className="font-medium underline" href={downloadsFor(desktopOs()).href} target="_blank" rel="noopener noreferrer">
-              Get the Wisp app
-            </a>
-            , choose to join a server, and enter:
-          </p>
-          <CopyBlock text={shareOrigin()} />
-          {originReach(shareOrigin()) !== "anywhere" && <p className="text-muted">This address only works on {originReach(shareOrigin()) === "this-computer" ? "this computer" : "this Wi-Fi"}. For a computer somewhere else, turn on Settings → Devices → Access first.</p>}
-          {waiting && <p className="text-muted">Then open Devices there and choose Connect this computer on this card.</p>}
-          {waiting &&
-            (token ? (
-              <DeviceInstall token={token} name={n.name} />
-            ) : (
-              <p className="text-muted">
-                Prefer a command?{" "}
-                <button className="font-medium text-ink underline" onClick={showCommand}>
-                  Show it
-                </button>{" "}
-                (it has a new connection code; an older one stops working).
-              </p>
-            ))}
-        </div>
-      )}
-    </div>
-  );
+/** Offline computers keep their approval; a fresh install asks to join again. */
+export function ConnectDevice({ node }: { node: NodeInfo; onChange?: () => void }) {
+  if (node.online) return null;
+  return <p className="mt-3 rounded-xl bg-hover/60 px-3 py-2.5 text-sm text-muted">{node.lastSeen ? "Open Wisp on that computer to bring it back." : "Open Wisp on that computer and pick Join my Wisp."}</p>;
 }
 
 /** The device's tile: a server that lights up and pulses while it's connected. */
@@ -194,7 +113,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
     refresh();
   };
   const remove = async (n: NodeInfo) => {
-    if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
+    if (!confirm(`Remove ${n.name}? It will need approval to join again.`)) return;
     setRemoveError(null);
     try {
       await api("DELETE", `/api/nodes/${n.id}`);
@@ -222,7 +141,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
       <div className="flex-1 overflow-y-auto">
         {nodes && nodes.length === 0 ? (
           <Empty icon={<Server />} title="Connect a device">
-            <p>A device is any computer that runs agents: a laptop, a server, a VM. It connects out to this hub, so it works behind home routers and firewalls.</p>
+            <p>Add a phone or computer to your Wisp.</p>
             <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus size={16} /> Add device
             </Button>
@@ -283,7 +202,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     )}
                   </div>
                   <DeviceAgents handles={n.agents} online={n.online} />
-                  {(n.mine || isOwner) && <ConnectDevice node={n} onChange={refresh} />}
+                  {(n.mine || isOwner) && <ConnectDevice node={n} />}
                   {n.update?.message && (
                     <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
                       {n.update.state !== "idle" && (
@@ -301,7 +220,7 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
         )}
       </div>
       {creating && (
-        <CreateNode
+        <AddDeviceDialog
           onClose={() => {
             setCreating(false);
             refresh();
@@ -364,49 +283,5 @@ export function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: 
         </span>
       )}
     </div>
-  );
-}
-
-function CreateNode({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [token, setToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <Modal title={token ? "Start the device" : "Add a device"} onClose={onClose} wide={!!token}>
-      {token ? (
-        <div className="space-y-4 text-sm">
-          <p>
-            On <b>{name}</b>, run this once. It installs Wisp if it isn't there yet and keeps the device connected.
-          </p>
-          <DeviceInstall token={token} name={name} />
-          <p className="text-muted">The token is shown only once. Then assign agents to this device from the Agents page.</p>
-          <div className="flex justify-end">
-            <Button variant="primary" onClick={onClose}>
-              Done
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <form
-          className="space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            try {
-              setToken((await api<{ token: string }>("POST", "/api/nodes", { name })).token);
-            } catch (err) {
-              setError((err as Error).message);
-            }
-          }}
-        >
-          <Field label="Device name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-laptop" required />
-          </Field>
-          {error && <p className="text-sm text-bad">{error}</p>}
-          <div className="flex justify-end">
-            <Button variant="primary">Create</Button>
-          </div>
-        </form>
-      )}
-    </Modal>
   );
 }

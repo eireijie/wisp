@@ -3,6 +3,7 @@ import { Activity, BookOpen, Radar, Ghost, Zap, Check, ChevronRight, Cpu, Eye, F
 import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@wisp/core";
 import { soulPath, soulTemplate } from "@wisp/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
+import { originReach, shareOrigin, useAccess } from "../access.ts";
 import { ApiError, api } from "../api.ts";
 import { useStore, useTeams } from "../store.ts";
 import { go, guardLeaving, href, mayLeave, type AgentTab } from "../router.ts";
@@ -1308,6 +1309,52 @@ function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] })
           <Button onClick={async () => setToken((await api<{ token: string }>("POST", `/api/agents/${agent.id}/token`)).token)}>Create connection token</Button>
         )}
       </section>
+      <RemoteMcp agent={agent} />
     </div>
+  );
+}
+
+/** The hub's remote MCP address, for Grok, ChatGPT and Claude connectors, and the apps connected as this agent. */
+function RemoteMcp({ agent }: { agent: FullAgent }) {
+  useAccess();
+  const [apps, setApps] = useState<{ id: string; name: string; approvedBy: string | null; lastUsed: string | null; createdAt: string }[]>([]);
+  const load = useCallback(() => {
+    api<typeof apps>("GET", `/api/agents/${agent.id}/apps`).then(setApps, () => {});
+  }, [agent.id]);
+  useEffect(load, [load]);
+  return (
+    <section className="space-y-3">
+      <h3 className="font-semibold flex items-center gap-2">
+        <Plug size={16} /> Connect by URL
+      </h3>
+      <p className="text-sm text-muted">Add as a custom connector in Grok, ChatGPT or Claude, then pick @{agent.handle} when you sign in.</p>
+      <CopyBlock text={`${shareOrigin()}/mcp`} />
+      {originReach(shareOrigin()) !== "anywhere" && (
+        <p className="text-xs text-muted">
+          They need an https address that works from anywhere: <a className="underline" href={href({ view: "settings", page: "access" })}>Settings → Access</a>
+        </p>
+      )}
+      {apps.length > 0 && (
+        <ul className="divide-y divide-line rounded-xl border border-line">
+          {apps.map((a) => (
+            <li key={a.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium truncate">{a.name}</span>
+                <span className="block text-xs text-muted truncate">{a.lastUsed ? `Used ${timeAgo(a.lastUsed)}` : `Added ${timeAgo(a.createdAt)}`}{a.approvedBy ? ` · ${a.approvedBy}` : ""}</span>
+              </span>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await api("DELETE", `/api/agents/${agent.id}/apps/${a.id}`);
+                  load();
+                }}
+              >
+                Disconnect
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

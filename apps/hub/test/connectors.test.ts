@@ -26,7 +26,7 @@ let general: any;
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-connectors-"));
-  const built = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;

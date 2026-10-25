@@ -1,3 +1,4 @@
+import { stableHubId } from "./discovery.ts";
 import { watchLocalDevice } from "./local-device.ts";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -7,6 +8,7 @@ import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import { REPO_ROOT, RESTART_CODE } from "@wisp/update";
 import { Vault } from "@wisp/vault";
+import { envVar } from "@wisp/core";
 import { registerApi } from "./api.ts";
 import { openDb } from "./db.ts";
 import { Hub } from "./hub.ts";
@@ -14,11 +16,14 @@ import { registerVaultGit } from "./vault-git.ts";
 import { carryOverVault, rememberVaultDir, resolveVaultLocation } from "./vault-location.ts";
 import { Store } from "./store.ts";
 import { Vaults } from "./vaults.ts";
+import { SetupCode } from "./setup-code.ts";
 
 export interface HubOptions {
   dataDir: string;
   webDir?: string;
   logger?: boolean;
+  /** what making the first account needs: by default a code saved in <data>/setup-code; false for none (tests) */
+  setupCode?: string | false;
 }
 
 /** A data folder from before the rename to Wisp holds warren.db (and maybe its -wal/-shm); take it over once. */
@@ -51,6 +56,8 @@ export async function buildHub(opts: HubOptions) {
   await vaults.openAll();
   const hub = new Hub(store, vaults);
   hubRef = hub;
+  hub.id = stableHubId(path.resolve(opts.dataDir));
+  hub.reach.cloudflare.configure(path.resolve(opts.dataDir));
   await hub.foldTeams();
   await hub.ensureBuiltinSkills(undefined, true);
   hub.routines.start();
@@ -63,7 +70,18 @@ export async function buildHub(opts: HubOptions) {
     },
   });
 
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 5 * 1024 * 1024 });
+  // invite links carry their secret in the path; keep it out of the log
+  const redact = (url: string) => url.replace(/^\/join\/[^/?#]+/, "/join/[invite]");
+  const logger = opts.logger ? { serializers: { req: (req: { method: string; url: string; hostname?: string; ip?: string }) => ({ method: req.method, url: redact(req.url), host: req.hostname, remoteAddress: req.ip }) } } : false;
+  const app = Fastify({ logger, bodyLimit: 5 * 1024 * 1024 });
+  const setupCode = new SetupCode(path.resolve(opts.dataDir), store.userCount() === 0, opts.setupCode ?? (envVar("SETUP_CODE") || undefined));
+  // the consent and approve screens can't be framed by another site and clicked through
+  app.addHook("onSend", async (_req, reply, payload) => {
+    if (!reply.hasHeader("x-frame-options")) reply.header("x-frame-options", "SAMEORIGIN");
+    const csp = reply.getHeader("content-security-policy");
+    if (!csp) reply.header("content-security-policy", "frame-ancestors 'self'");
+    return payload;
+  });
   await app.register(websocket);
   app.get("/healthz", async () => ({ ok: true }));
   registerInstallers(app);
@@ -72,6 +90,7 @@ export async function buildHub(opts: HubOptions) {
     dataDir: path.resolve(opts.dataDir),
     vault: { location, moved },
     restart: () => app.close().then(() => process.exit(RESTART_CODE)),
+    setupCode,
   });
   registerVaultGit(app, hub, { dataDir: path.resolve(opts.dataDir) });
   // the hub's own computer becomes a device once someone asks for it and there's an owner
@@ -104,7 +123,7 @@ export async function buildHub(opts: HubOptions) {
     vaults.close();
     db.close();
   });
-  return { app, hub };
+  return { app, hub, setupCode };
 }
 
 /**
@@ -123,9 +142,27 @@ function registerInstallers(app: FastifyInstance) {
   ] as const) {
     app.get(`/${file}`, async (_req, reply) => {
       let text = fs.readFileSync(path.join(REPO_ROOT, file), "utf8");
+      if (file === "install.sh") text = joinInstaller(text);
       if (repo)
         text = text.replace(pattern, file === "install.sh" ? `WISP_REPO="\${WISP_REPO-\${WARREN_REPO-${repo}}}"` : `$Repo = if (Test-Path Env:WISP_REPO) { $env:WISP_REPO } elseif (Test-Path Env:WARREN_REPO) { $env:WARREN_REPO } else { "${repo}" }`);
       return reply.type(`${type}; charset=utf-8`).header("cache-control", "no-cache").send(text);
     });
   }
+}
+
+/** Compatibility for older checkouts; the canonical installer is maintained separately. */
+export function joinInstaller(source: string): string {
+  let text = source;
+  if (!/^\s*join\)/m.test(text)) {
+    text = text.replace('while [ $# -gt 0 ]; do', 'INVITE=""\nwhile [ $# -gt 0 ]; do');
+    text = text.replace('  case "$1" in', `  case "$1" in
+    join) MODE=join; if [ -n "\${2:-}" ] && [ "\${2#--}" = "$2" ]; then INVITE="$2"; shift; fi ;;`);
+    text = text.replace('if [ "$MODE" = hub ]; then', `if [ "$MODE" = join ]; then
+  if [ -n "$INVITE" ]; then wisp join "$INVITE"; else wisp join; fi
+elif [ "$MODE" = hub ]; then`);
+  }
+  // The documented command pipes to sh; parse the actual installer with Bash on every platform.
+  let delimiter = "WISP_INSTALLER_BASH";
+  while (text.split("\n").includes(delimiter)) delimiter += "_";
+  return `#!/usr/bin/env bash\nexec bash -s -- "$@" <<'${delimiter}'\n${text}\n${delimiter}\n`;
 }

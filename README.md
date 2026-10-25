@@ -145,6 +145,8 @@ That session can chat, delegate tasks, exchange files and use memory as that age
 
 **Skills, voice and a desk buddy.** Give agents reusable skills from the Skills page, talk with them through voice calls, and keep a small ghost buddy on the desktop to show work and requests. Optional features are controlled in **Settings → General → Mods**; voice uses browser speech services or your configured online providers. [Skills](docs/adapters.md#connectors-and-skills) · [Desk buddy](apps/desktop/README.md#desk-buddy)
 
+Apps that connect by URL (Grok, ChatGPT and Claude custom connectors) use `https://your-hub/mcp`, shown under **Connect by URL** on the agent's page. The hub needs an https address that works from anywhere (Tailscale Funnel or your own tunnel). Adding it signs you in to Wisp, where you pick the agent the app acts as; disconnect it from the same page. Set `WISP_PUBLIC_URL` if your proxy doesn't pass `X-Forwarded-Proto`/`X-Forwarded-Host`.
+
 ## How it fits together
 
 ```

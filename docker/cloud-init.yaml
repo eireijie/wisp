@@ -10,7 +10,7 @@
 # __WISP_SETUP_KEY__ replaced by a random key: until the first account exists, only a request that
 # carries that key can make it, so nobody who finds the new server first can claim it. Pasted by hand
 # (for example into Hetzner's or DigitalOcean's "Cloud config" box) with the placeholder left as it
-# is, there's no key: open the address and make your account right away, as with any new hub.
+# is, there's no key: the hub makes its own setup code, in /opt/wisp/data/setup-code and its log.
 #
 # Data lives in /opt/wisp/data (back it up). The hub image is pulled again every night.
 
@@ -35,6 +35,9 @@ write_files:
         wisp:
           image: ghcr.io/${WISP_REPO}:latest
           restart: unless-stopped
+          environment:
+            # the hub checks the setup key too, not only Caddy
+            WISP_SETUP_CODE: ${WISP_SETUP_CODE:-}
           volumes:
             - ./data:/data
         caddy:
@@ -72,9 +75,10 @@ write_files:
 
       key=$(cat setup-key 2>/dev/null || true)
       guard=""
+      : > .env
       case "$key" in
         "" | __WISP_SETUP_KEY__) ;;
-        *) guard="
+        *) printf 'WISP_SETUP_CODE=%s\n' "$key" > .env; chmod 600 .env; guard="
         @claim {
           method POST
           path /api/setup
@@ -105,7 +109,7 @@ write_files:
 
       echo "https://$ip" > url
       echo "https://$sslip" >> url
-      printf '\nWisp: https://%s (also https://%s)\nData: /opt/wisp/data   Logs: cd /opt/wisp && docker compose logs\n\n' "$ip" "$sslip" > /etc/motd
+      printf '\nWisp: https://%s (also https://%s)\nData: /opt/wisp/data   Logs: cd /opt/wisp && docker compose logs\nSetup code (until the first account exists): cat /opt/wisp/data/setup-code\n\n' "$ip" "$sslip" > /etc/motd
 
       docker compose pull
       docker compose up -d

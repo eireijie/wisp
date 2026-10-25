@@ -6,20 +6,27 @@ import { Button, Field, GhostMark, Input } from "../components/ui.tsx";
 
 /** An invite link: #/join/<code>. */
 const inviteCode = () => location.hash.match(/^#\/join\/([\w-]+)/)?.[1] ?? null;
+/** The link the desktop app and installer open on a new Wisp: #/setup/<setup code>. */
+const linkedSetupCode = () => location.hash.match(/^#\/setup\/([\w-]+)/)?.[1] ?? "";
 
 export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) {
   const { resolvedMode, toggleMode } = useAppearance();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
-  const [form, setForm] = useState({ email: "", password: "", name: "", workspaceName: "" });
+  const [needsCode, setNeedsCode] = useState(false);
+  const [linkedCode] = useState(linkedSetupCode);
+  const [form, setForm] = useState({ email: "", password: "", name: "", workspaceName: "", setupCode: linkedCode });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState(inviteCode);
   const [invite, setInvite] = useState<{ workspace: string; role: string } | null>(null);
 
   useEffect(() => {
-    api<{ needsSetup: boolean }>("GET", "/api/setup")
-      .then((r) => setNeedsSetup(r.needsSetup))
-      .catch(() => setError("Can't reach the Wisp hub."));
+    api<{ needsSetup: boolean; needsCode?: boolean }>("GET", "/api/setup")
+      .then((r) => {
+        setNeedsSetup(r.needsSetup);
+        setNeedsCode(!!r.needsCode);
+      })
+      .catch(() => setError("Can't reach your Wisp."));
   }, []);
   useEffect(() => {
     if (!code) return;
@@ -35,7 +42,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
     setError(null);
     try {
       const r = needsSetup
-        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName || "Wisp" })
+        ? await api<{ token: string }>("POST", "/api/setup", { ...form, workspaceName: form.workspaceName.trim() || `${form.name.trim()}'s Wisp`, features: "simple", setupCode: form.setupCode.trim() || undefined })
         : joining
           ? await api<{ token: string }>("POST", "/api/invites/accept", { code, name: form.name, email: form.email, password: form.password })
           : await api<{ token: string }>("POST", "/api/auth/login", { email: form.email, password: form.password });
@@ -43,6 +50,9 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
         // New account: start it on this device's time zone so agents and routines don't fall back to UTC. Best-effort.
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (timezone) await api("PATCH", "/api/me", { timezone }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
+      }
+      if (needsSetup) {
+        await api("PUT", "/api/me/prefs", { experience: "simple" }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
       }
       if (needsSetup) location.hash = "#/welcome/intro";
       else if (joining) location.hash = "#/";
@@ -83,10 +93,14 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
                 <Field label="Your name">
                   <Input value={form.name} onChange={set("name")} autoComplete="name" required />
                 </Field>
-                <Field label="Organization name">
-                  <span className="block text-xs text-muted">An organization is your own Wisp: your helpers, notes and settings. Use any name, like 'Home'.</span>
-                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder="Home" />
+                <Field label="Your Wisp">
+                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder={form.name.trim() ? `${form.name.trim()}'s Wisp` : "Your Wisp"} />
                 </Field>
+                {needsCode && !linkedCode && (
+                  <Field label="Setup code" hint="On the computer Wisp runs on, run wisp setup-code.">
+                    <Input value={form.setupCode} onChange={set("setupCode")} placeholder="abcd-efgh-jkmn" autoComplete="off" autoCapitalize="none" spellCheck={false} required />
+                  </Field>
+                )}
               </>
             )}
             <Field label="Email">
@@ -97,7 +111,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
             </Field>
             {error && <p className="text-sm text-bad">{error}</p>}
             <Button variant="primary" className="w-full h-10" disabled={busy || (joining && !invite)}>
-              {needsSetup ? "Create organization" : joining ? "Join" : "Sign in"}
+              {needsSetup ? "Start Wisp" : joining ? "Join" : "Sign in"}
             </Button>
             {joining && (
               <button

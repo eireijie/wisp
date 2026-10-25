@@ -7,31 +7,23 @@
 <title>Wisp</title>
 <style>
   :root {
-    --app: #f7f7f7; --panel: #fff; --ink: #1b1b1b; --muted: #777; --faint: #a3a3a3; --line: #ebebeb;
+    --app: #fff; --panel: #fff; --ink: #1b1b1b; --muted: #777; --faint: #a3a3a3; --line: #ebebeb;
     --input: #dadada; --chip: #f1f1f1; --accent: #1f1f1f; --accent-ink: #fcfcfc; --bad: #c9372c; --ok: #16a34a;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
     color-scheme: light;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --app: #1f1f1f; --panel: #141414; --ink: #f4f4f4; --muted: #a8a8a8; --faint: #777; --line: rgb(255 255 255 / 0.09);
-      --input: rgb(255 255 255 / 0.14); --chip: rgb(255 255 255 / 0.075); --accent: #f4f4f4; --accent-ink: #141414; --bad: #ff7a6b; --ok: #34d06f;
-      --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.4);
-      color-scheme: dark;
-    }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--app); color: var(--ink);
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     display: grid; place-items: center; padding: 24px; -webkit-font-smoothing: antialiased;
   }
   main { width: 100%; max-width: 560px; }
-  header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  header svg { width: 40px; height: 40px; flex: none; }
-  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
-  header p { margin: 0; color: var(--muted); }
+  header { display: grid; justify-items: center; text-align: center; gap: 18px; margin-bottom: 32px; }
+  header svg { width: 64px; height: 76px; }
+  h1 { font-size: 28px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 8px 0 0; color: var(--muted); }
   .card {
     background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
     padding: 18px 18px 16px; margin-bottom: 12px;
@@ -82,7 +74,18 @@
   .checks .dot.wait { background: var(--faint); animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.3; } }
   .back { margin-bottom: 12px; }
-  .choice.wide { grid-column: 1 / -1; }
+  .choice.primary span { color: #d1d1d1; }
+  .other-ways { grid-column: 1 / -1; margin-top: 12px; color: var(--muted); }
+  .other-ways summary { cursor: pointer; text-align: center; font-size: 13px; }
+  .other-ways .choice { width: 100%; margin-top: 18px; }
+  .other-ways p { font-size: 13px; text-align: center; }
+  .found { display: grid; gap: 10px; margin: 16px 0; }
+  .found-row { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+  .found-row .identity { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .found-row small { display: block; color: var(--muted); }
+  .code { font-size: 56px; font-weight: 650; letter-spacing: .08em; font-variant-numeric: tabular-nums; margin: 24px 0; }
+  .waiting { text-align: center; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
   a { color: inherit; }
   .hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
   ol.steps { margin: 0 0 12px; padding-left: 20px; color: var(--muted); }
@@ -111,38 +114,42 @@
 <body>
 <main>
   <header>
-    <svg class="float" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#111"/><g transform="translate(40 30) scale(3.6)"><path fill="#f5f5f5" d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z"/><circle cx="50" cy="57" r="6" fill="#111"/><circle cx="70" cy="57" r="6" fill="#111"/></g></svg>
+    <svg class="float" viewBox="20 10 80 100" aria-hidden="true"><path fill="#1f1f1f" d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z"/><circle cx="50" cy="57" r="5" fill="white"/><circle cx="70" cy="57" r="5" fill="white"/></svg>
     <div>
       <h1 id="title">Welcome to Wisp</h1>
-      <p id="subtitle">Where you and your agents work together.</p>
+      <p id="subtitle">Wisp lives on one computer. Your other devices join it.</p>
     </div>
   </header>
 
   <div id="welcome" class="choices" hidden>
-    <button class="choice" id="pick-create">
+    <button class="choice primary" id="pick-create">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 8v4M10 10h4"/></svg>
-      <strong>Create a server</strong>
-      <span>Start a new Wisp on this computer. Others join it with its address.</span>
+      <strong>Start Wisp on this computer</strong>
+      <span>First time? Pick this one.</span>
     </button>
     <button class="choice" id="pick-join">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
-      <strong>Join a server</strong>
-      <span>Connect to a Wisp someone already runs, at home, on a VPS or over Tailscale.</span>
+      <strong>Join my Wisp</strong>
+      <span>It's already on another computer.</span>
     </button>
-    <button class="choice wide" id="pick-cloud">
+    <details class="other-ways" id="other-ways">
+      <summary>Other ways: a cloud server, Docker</summary>
+      <button class="choice" id="pick-cloud">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg>
-      <strong>Create one in your cloud account</strong>
-      <span>A server of your own at Hetzner that keeps running when this computer is off. Hetzner bills you directly, from a few euros a month.</span>
-    </button>
+      <strong>Start Wisp with Hetzner</strong>
+      <span>Your Wisp stays on in your own Hetzner account.</span>
+      </button>
+      <p>For Docker, follow the <a href="https://github.com/eireijie/wisp/blob/main/docs/deploy.md#docker" target="_blank">Docker instructions</a>.</p>
+    </details>
   </div>
 
   <div id="create" hidden>
     <button class="link back" data-back>← Back</button>
     <section class="card">
-      <h2>Create a server on this computer</h2>
-      <p>Wisp runs here and keeps going from the menu bar after you close the window. Your messages, memory and files stay on this computer. Next you'll make the first account.</p>
-      <label class="check"><input type="checkbox" id="create-device" checked /><span>Register this computer as a device<small class="device-name"></small></span></label>
-      <div class="row"><button class="primary" id="create-go">Create server</button></div>
+      <h2>Start Wisp on this computer</h2>
+      <p>Wisp keeps running here when you close the window.</p>
+      <label class="check"><input type="checkbox" id="create-device" checked /><span>Let agents work on this computer<small class="device-name"></small></span></label>
+      <div class="row"><button class="primary" id="create-go">Start Wisp</button></div>
       <p class="error" id="create-error" hidden></p>
       <pre id="log" hidden></pre>
     </section>
@@ -151,45 +158,55 @@
   <div id="join" hidden>
     <button class="link back" data-back>← Back</button>
     <section class="card">
-      <h2>Join a server</h2>
-      <p>Enter the address of the Wisp you're joining. Whoever runs it can copy it from their Wisp menu.</p>
-      <form id="join-form">
-        <div class="row" style="margin-bottom:12px">
-          <input id="url" placeholder="wisp.example.com or wisp.local:4747" autocomplete="url" spellcheck="false" autofocus />
-        </div>
-        <label class="check"><input type="checkbox" id="join-device" checked /><span>Register this computer as a device<small class="device-name"></small></span></label>
-        <ul class="checks" id="checks" hidden></ul>
+      <h2>Join my Wisp</h2>
+      <p>Find your Wisp on this Wi-Fi, or paste an invite link.</p>
+      <p id="discovery-status" role="status" aria-live="polite">Looking on this Wi-Fi…</p>
+      <div id="wisps" class="found"></div>
+      <button class="link" id="scan">Search again</button>
+      <form id="join-form" style="margin-top:24px">
+        <label class="field" for="url">Somewhere else? Paste an invite link.</label>
         <div class="row">
-          <button class="primary" type="submit" id="join-go">Test and join</button>
-          <button type="button" id="test">Test only</button>
+          <input id="url" placeholder="https://your-wisp.example/join/…" autocomplete="off" spellcheck="false" required />
+          <button class="primary" type="submit" id="join-go">Join</button>
         </div>
       </form>
-      <p class="error" id="join-error" hidden></p>
+      <p class="error" id="join-error" role="alert" hidden></p>
     </section>
   </div>
+
+  <section id="waiting" class="card waiting" hidden>
+    <h2>Approve this computer on your Wisp</h2>
+    <p id="approval-host"></p>
+    <div class="code" id="join-code" aria-label="Approval code"></div>
+    <p id="join-status" role="status" aria-live="polite">It should show the same code.</p>
+    <p class="hint" id="join-expiry"></p>
+    <p class="error" id="waiting-error" role="alert" hidden></p>
+    <button id="cancel-join">Cancel</button>
+    <button class="primary" id="join-again" hidden>Try again</button>
+  </section>
 
   <div id="cloud" hidden>
     <button class="link back" data-back>← Back</button>
     <section class="card" id="cloud-connect">
-      <h2>Create a server in your Hetzner account</h2>
-      <p>Wisp sets up a server in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account and connects you to it. The server and its bill are yours: the Wisp project never runs or pays for it.</p>
+      <h2>Start Wisp in your Hetzner account</h2>
+      <p>Wisp runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account.</p>
       <ol class="steps">
         <li>Sign in at <a href="https://console.hetzner.com" target="_blank">console.hetzner.com</a> (or sign up) and open a project.</li>
-        <li>Go to <strong>Security → API tokens</strong>, click <strong>Generate API token</strong>, and choose <strong>Read &amp; Write</strong>.</li>
+        <li>Go to <strong>Security → API keys</strong>, click <strong>Generate API key</strong>, and choose <strong>Read &amp; Write</strong>.</li>
         <li>Paste it here.</li>
       </ol>
       <form id="cloud-token-form">
         <div class="row">
-          <input id="cloud-token" type="password" placeholder="Hetzner API token" autocomplete="off" spellcheck="false" />
+          <input id="cloud-token" type="password" placeholder="Hetzner API key" autocomplete="off" spellcheck="false" />
           <button class="primary" type="submit" id="cloud-token-go">Continue</button>
         </div>
       </form>
-      <p class="hint">The token is only kept in this window while your server is created, and is never saved. Delete it in Hetzner afterwards if you like.</p>
+      <p class="hint">This key stays in this window until setup finishes.</p>
       <p class="error" id="cloud-token-error" hidden></p>
     </section>
 
     <section class="card" id="cloud-choose" hidden>
-      <h2>Choose your server</h2>
+      <h2>Choose your computer</h2>
       <label class="field">Location<select id="cloud-location"></select></label>
       <div class="plans" id="cloud-plans" role="radiogroup" aria-label="Size"></div>
       <p class="hint" id="cloud-billing"></p>
@@ -198,19 +215,19 @@
         <label class="field">Name<input id="cloud-name" autocomplete="name" required /></label>
         <label class="field">Email<input id="cloud-email" type="email" autocomplete="email" required /></label>
         <label class="field">Password<input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters" /></label>
-        <label class="check"><input type="checkbox" id="cloud-device" checked /><span>Register this computer as a device<small class="device-name"></small></span></label>
-        <div class="row"><button class="primary" type="submit" id="cloud-go">Create server</button></div>
+        <label class="check"><input type="checkbox" id="cloud-device" checked /><span>Let agents work on this computer<small class="device-name"></small></span></label>
+        <div class="row"><button class="primary" type="submit" id="cloud-go">Start Wisp</button></div>
       </form>
       <p class="error" id="cloud-error" hidden></p>
     </section>
 
     <section class="card" id="cloud-progress" hidden>
-      <h2 id="cloud-progress-title">Creating your server…</h2>
+      <h2 id="cloud-progress-title">Getting your Wisp ready…</h2>
       <p>This usually takes 3 to 5 minutes.</p>
       <ul class="checks" id="cloud-checks"></ul>
       <p class="error" id="cloud-fail" hidden></p>
       <div class="row" id="cloud-fail-actions" hidden>
-        <button class="primary" id="cloud-delete">Delete the server</button>
+        <button class="primary" id="cloud-delete">Delete the cloud computer</button>
         <button id="cloud-wait">Keep waiting</button>
         <button id="cloud-keep">Keep it</button>
       </div>
@@ -220,7 +237,7 @@
 
   <section id="starting" class="card center" hidden>
     <div class="spinner"></div>
-    <h2 id="starting-title">Starting your server…</h2>
+    <h2 id="starting-title">Getting ready…</h2>
     <p>The first start can take a minute.</p>
   </section>
 
@@ -229,7 +246,7 @@
     <p id="unreachable-detail"></p>
     <div class="row">
       <button class="primary" id="retry">Try again</button>
-      <button id="switch">Create or join another</button>
+      <button id="switch">Start or join another Wisp</button>
     </div>
   </section>
 </main>
@@ -238,25 +255,16 @@
   const $ = (id) => document.getElementById(id);
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
   const setup = window.wispSetup;
-  const SCREENS = ["welcome", "create", "join", "cloud", "starting", "unreachable"];
+  const SCREENS = ["welcome", "create", "join", "cloud", "waiting", "starting", "unreachable"];
   const show = (id) => SCREENS.forEach((s) => ($(s).hidden = s !== id));
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
   setup.check().then((c) => {
-    document.querySelectorAll(".device-name").forEach((el) => (el.textContent = `${c.deviceName} shows up in Devices, and agents can run here. You can change this later from the menu bar.`));
-    $("create-device").checked = $("join-device").checked = $("cloud-device").checked = c.device !== false;
-    if (c.hubUrl && !$("url").value) $("url").value = c.hubUrl.replace(/^https?:\/\//, "");
+    document.querySelectorAll(".device-name").forEach((el) => (el.textContent = `${c.deviceName} appears in Devices.`));
+    $("create-device").checked = $("cloud-device").checked = c.device !== false;
     if (state.step === "create" && c.problem && !state.problem) err("create-error", c.problem);
   });
 
-  function checks(list, pending) {
-    const ul = $("checks");
-    ul.hidden = !list.length && !pending;
-    ul.replaceChildren(
-      ...list.map((c) => li(c.ok ? "ok" : "bad", c.label)),
-      ...(pending ? [li("wait", pending)] : []),
-    );
-  }
   function li(kind, text) {
     const el = document.createElement("li");
     const dot = document.createElement("span");
@@ -267,26 +275,123 @@
     return el;
   }
 
-  async function test(join) {
-    const url = $("url").value.trim();
-    if (!url) return $("url").focus();
-    $("join-go").disabled = $("test").disabled = $("url").disabled = true;
+  let joinGeneration = 0;
+  let pollTimer = null;
+  let scanGeneration = 0;
+  let requesting = false;
+  let expiresAt = 0;
+
+  function stopJoin() {
+    joinGeneration++;
+    scanGeneration++;
+    clearTimeout(pollTimer);
+    requesting = false;
+    setup.cancelJoin();
+  }
+
+  async function scan() {
+    const generation = ++scanGeneration;
+    $("scan").disabled = true;
+    $("discovery-status").textContent = "Looking on this Wi-Fi…";
+    $("wisps").replaceChildren();
+    try {
+      const result = await setup.discover();
+      if (generation !== scanGeneration) return;
+      $("discovery-status").textContent = result.wisps?.length ? "Found on this Wi-Fi" : result.error || "No Wisps found; ask for an invite link from your Wisp.";
+      $("wisps").replaceChildren(...(result.wisps || []).map((wisp) => {
+        const row = document.createElement("div");
+        row.className = "found-row";
+        const identity = document.createElement("div");
+        identity.className = "identity";
+        const name = document.createElement("strong");
+        name.textContent = wisp.name;
+        const host = document.createElement("small");
+        host.textContent = wisp.host;
+        identity.append(name, host);
+        const button = document.createElement("button");
+        button.className = "primary";
+        button.textContent = "Join";
+        button.onclick = () => requestJoin(wisp.url, wisp.host);
+        row.append(identity, button);
+        return row;
+      }));
+    } catch {
+      if (generation === scanGeneration) $("discovery-status").textContent = "Couldn't search this Wi-Fi; paste an invite link.";
+    } finally { if (generation === scanGeneration) $("scan").disabled = false; }
+  }
+
+  function goJoin() {
+    stopJoin();
+    $("title").textContent = "Join my Wisp";
+    $("subtitle").textContent = "Your other computer is waiting for you.";
+    $("join-go").disabled = $("url").disabled = false;
     err("join-error", "");
-    checks([], "Testing the connection…");
-    const r = join ? await setup.join(url, { device: $("join-device").checked }) : await setup.test(url);
-    checks(r.checks || []);
-    $("join-go").disabled = $("test").disabled = $("url").disabled = false;
-    if (!r.ok) return err("join-error", r.error);
-    if (r.url) $("url").value = r.url;
-    if (join) {
-      $("starting-title").textContent = `Joining ${new URL(r.url).host}…`;
-      show("starting");
+    show("join");
+    scan();
+  }
+
+  async function requestJoin(input, host) {
+    if (requesting) return;
+    requesting = true;
+    const generation = ++joinGeneration;
+    scanGeneration++;
+    $("scan").disabled = false;
+    $("join-go").textContent = "Asking…";
+    $("join-go").disabled = $("url").disabled = true;
+    err("join-error", "");
+    try {
+      const r = await setup.requestJoin(input);
+      if (generation !== joinGeneration) return;
+      if (!r?.ok) throw new Error(r?.error || "Couldn't ask to join; try again.");
+      expiresAt = Date.parse(r.expiresAt);
+      $("join-code").textContent = `${r.code.slice(0, 3)} ${r.code.slice(3)}`;
+      $("approval-host").textContent = `Open Wisp on ${host || r.host} and approve this computer.`;
+      $("join-status").textContent = "It should show the same code.";
+      $("join-expiry").textContent = "This code lasts 10 minutes.";
+      $("join-again").hidden = true;
+      $("cancel-join").textContent = "Cancel";
+      err("waiting-error", "");
+      show("waiting");
+      pollTimer = setTimeout(() => pollJoin(generation), 2000);
+    } catch (error) {
+      if (generation === joinGeneration) err("join-error", error.message);
+    } finally {
+      if (generation === joinGeneration) { requesting = false; $("join-go").textContent = "Join"; $("join-go").disabled = $("url").disabled = false; }
     }
   }
 
+  function finishJoin(status) {
+    $("join-status").textContent = status === "denied" ? "This computer wasn't approved." : "This code has expired.";
+    $("join-expiry").textContent = "Ask to join again for a new code.";
+    $("join-again").hidden = false;
+    $("cancel-join").textContent = "Back";
+    err("waiting-error", "");
+  }
+
+  async function pollJoin(generation) {
+    if (generation !== joinGeneration) return;
+    if (Date.now() >= expiresAt) return finishJoin("expired");
+    try {
+      const r = await setup.pollJoin();
+      if (generation !== joinGeneration) return;
+      if (!r?.ok) throw new Error(r?.error);
+      err("waiting-error", "");
+      if (r.status === "approved") {
+        $("starting-title").textContent = "Opening your Wisp…";
+        return show("starting");
+      }
+      if (r.status === "denied" || r.status === "expired") return finishJoin(r.status);
+    } catch {
+      if (generation !== joinGeneration) return;
+      err("waiting-error", "Couldn't check approval; trying again…");
+    }
+    pollTimer = setTimeout(() => pollJoin(generation), 2000);
+  }
+
   function goWelcome() {
+    stopJoin();
     $("title").textContent = "Welcome to Wisp";
-    $("subtitle").textContent = "Where you and your agents work together. Create a server, or join one.";
+    $("subtitle").textContent = "Wisp lives on one computer. Your other devices join it.";
     show("welcome");
   }
 
@@ -304,19 +409,24 @@
     if (state.log) { $("log").hidden = false; $("log").textContent = state.log; }
   } else goWelcome();
 
-  $("pick-create").onclick = () => show("create");
-  $("pick-join").onclick = () => { show("join"); $("url").focus(); };
+  $("pick-create").onclick = () => startWisp();
+  $("pick-join").onclick = goJoin;
+  $("scan").onclick = scan;
+  $("cancel-join").onclick = goJoin;
+  $("join-again").onclick = goJoin;
+  window.addEventListener("beforeunload", stopJoin);
   document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = goWelcome));
   $("retry").onclick = () => { show("starting"); setup.retry(); };
   $("switch").onclick = goWelcome;
-  $("create-go").onclick = async () => {
+  async function startWisp() {
     err("create-error", "");
-    $("starting-title").textContent = "Starting your server…";
+    $("starting-title").textContent = "Getting ready…";
     show("starting");
     const r = await setup.create({ device: $("create-device").checked });
     if (r && !r.ok) { show("create"); err("create-error", r.error); }
   };
-  $("join-form").onsubmit = (e) => { e.preventDefault(); test(true); };
+  $("create-go").onclick = startWisp;
+  $("join-form").onsubmit = (e) => { e.preventDefault(); requestJoin($("url").value.trim()); };
 
   // ------------------------------------------------ create one in your cloud account
   // The Hetzner token lives only in this variable, and goes when the window leaves this page.
@@ -328,7 +438,7 @@
   const cloudCard = (id) => ["cloud-connect", "cloud-choose", "cloud-progress"].forEach((c) => ($(c).hidden = c !== id));
   const money = (n) => new Intl.NumberFormat(undefined, { style: "currency", currency: offer.currency }).format(n);
   const STEPS = [
-    ["create", "Creating the server in your Hetzner account"],
+    ["create", "Getting your Hetzner computer ready"],
     ["boot", "Starting it up"],
     ["https", "Installing Wisp and getting an HTTPS certificate"],
     ["account", "Making your account"],
@@ -351,7 +461,7 @@
     $("cloud-token-go").disabled = false;
     $("cloud-token-go").textContent = "Continue";
     if (!r.ok) return err("cloud-token-error", r.error);
-    if (!r.plans.length && resumeId == null && deleteId == null) return err("cloud-token-error", "Hetzner has no servers available for this project right now. Try again later.");
+    if (!r.plans.length && resumeId == null && deleteId == null) return err("cloud-token-error", "Hetzner has no computers available right now.");
     cloudToken = token;
     $("cloud-token").value = "";
     if (deleteId != null) {
@@ -400,8 +510,8 @@
     const p = chosen();
     if (resumeId != null) { $("cloud-go").textContent = "Keep waiting"; return; }
     if (!p) return;
-    $("cloud-go").textContent = `Create server for ${money(p.monthly)}/month`;
-    $("cloud-billing").textContent = `Hetzner's price, including the IPv4 address (${money(p.ipv4)}). They bill your account by the hour, up to this much a month, until you delete the server in their console. 4 GB runs Wisp and a couple of agent computers; more memory runs more at once.`;
+    $("cloud-go").textContent = `Start Wisp for ${money(p.monthly)}/month`;
+    $("cloud-billing").textContent = `Hetzner bills up to ${money(p.monthly)} a month, including the IPv4 address (${money(p.ipv4)}), until you delete this computer.`;
   }
 
   $("cloud-form").onsubmit = (e) => {
@@ -415,7 +525,7 @@
     err("cloud-error", "");
     failed = null;
     $("cloud-fail").hidden = $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
-    $("cloud-progress-title").textContent = "Creating your server…";
+    $("cloud-progress-title").textContent = "Getting your Wisp ready…";
     cloudCard("cloud-progress");
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = true));
     progress(resume == null ? "create" : "boot");
@@ -428,7 +538,7 @@
     }
     document.querySelectorAll("[data-back]").forEach((b) => (b.hidden = false));
     progress(current, true);
-    $("cloud-progress-title").textContent = "Your server isn't ready";
+    $("cloud-progress-title").textContent = "Your Wisp isn't ready";
     err("cloud-fail", r.error);
     if (!r.server) {
       // nothing was created: back to choosing, with the reason
@@ -442,7 +552,7 @@
     failed = server;
     $("cloud-fail-actions").hidden = false;
     $("cloud-fail-hint").hidden = false;
-    $("cloud-fail-hint").textContent = `It's ${server.name} (${server.ip || "no address yet"}) in your Hetzner console, and Hetzner bills for it until it's deleted.` + (server.ip ? ` If it comes up later, join it at https://${server.ip}.` : "");
+    $("cloud-fail-hint").textContent = `Hetzner bills for ${server.name} until you delete it in their console.`;
   }
 
   let current = "create";
@@ -463,7 +573,7 @@
     failed = null;
     resumeId = deleteId = null;
     $("cloud-fail-actions").hidden = $("cloud-fail-hint").hidden = true;
-    $("cloud-progress-title").textContent = "Server deleted";
+    $("cloud-progress-title").textContent = "Cloud computer deleted";
     err("cloud-fail", "");
     $("cloud-checks").replaceChildren(li("ok", "Deleted from your Hetzner account. Nothing more is billed for it."));
   }
@@ -478,10 +588,9 @@
   if (state.step === "cloud" && state.server) {
     show("cloud");
     cloudCard("cloud-progress");
-    $("cloud-progress-title").textContent = "Your server isn't ready";
+    $("cloud-progress-title").textContent = "Your Wisp isn't ready";
     showCloudFailure(state.server);
   }
-  $("test").onclick = () => test(false);
 </script>
 </body>
 </html>

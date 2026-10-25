@@ -163,7 +163,7 @@ beforeAll(async () => {
   await fs.mkdir(path.join(home, ".claude", "agents"), { recursive: true });
   await fs.writeFile(path.join(home, ".claude", "agents", "reviewer.md"), "---\nname: reviewer\ndescription: Reviews code\nmodel: opus\n---\nYou review pull requests carefully.");
 
-  const built = await buildHub({ dataDir: path.join(dir, "hub") });
+  const built = await buildHub({ dataDir: path.join(dir, "hub"), setupCode: false });
   hub = built.hub;
   hub.orgoWs = `ws://127.0.0.1:${(websockify.address() as net.AddressInfo).port}`;
   hub.fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {

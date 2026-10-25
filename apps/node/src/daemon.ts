@@ -28,6 +28,8 @@ export interface NodeConfig {
   name: string;
   /** waiting to become a device of the hub on this same computer (`--local`), until it hands over a token */
   local?: boolean;
+  /** the joined Wisp stable id, to find it again on the Wi-Fi when its address changes */
+  hubId?: string;
   dir: string; // state + agent working directories
   /** per-harness extras passed to adapters */
   harnessOptions?: Record<string, Record<string, string>>;
@@ -107,6 +109,9 @@ export class NodeDaemon {
   private replaced: number[] = [];
   /** called once the hub turns this device's token down for good (the device was removed, say) */
   onRejected?: () => void;
+  /** asked after a few failed connections: the new address of the Wisp, if it moved */
+  relocate?: () => Promise<string | null>;
+  private failures = 0;
 
   constructor(
     private cfg: NodeConfig,
@@ -262,6 +267,7 @@ export class NodeDaemon {
     this.ws = ws;
     ws.on("open", () => {
       this.backoff = 1000;
+      this.failures = 0;
     });
     ws.on("message", (raw, isBinary) => {
       if (isBinary) {
@@ -298,6 +304,15 @@ export class NodeDaemon {
         }
       }
       this.log(`disconnected (${code}${reason.length ? ` ${reason}` : ""}); retrying in ${Math.round(this.backoff / 1000)}s`);
+      if (++this.failures % 3 === 0 && this.relocate) {
+        void this.relocate().then((url) => {
+          if (!url || this.stopped) return;
+          this.log(`your Wisp moved to ${url}; connecting there`);
+          this.cfg.hub = url;
+          this.api = new WispClient({ url, token: this.cfg.token });
+          this.backoff = 1000;
+        }).catch(() => {});
+      }
       setTimeout(() => this.connect(), this.backoff);
       this.backoff = Math.min(this.backoff * 2, 30_000);
     });

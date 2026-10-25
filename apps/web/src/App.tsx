@@ -16,6 +16,8 @@ import { NodesView } from "./views/NodesView.tsx";
 import { DevicePage } from "./views/DevicePage.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
+import { JoinApproval } from "./components/JoinApproval.tsx";
+import { HelpPopup } from "./components/HelpPopup.tsx";
 import { WelcomeView } from "./views/WelcomeView.tsx";
 import { AboutView } from "./views/AboutView.tsx";
 import { ComputersView } from "./views/ComputersView.tsx";
@@ -29,6 +31,7 @@ import { Loader, UserAvatar, cx } from "./components/ui.tsx";
 import { setupProgress, useDismissed, useOnboarding } from "./onboarding.ts";
 import { useFeatures } from "./features.ts";
 import { BuddyView } from "./views/BuddyView.tsx";
+import { AuthorizeView } from "./views/AuthorizeView.tsx";
 import { useDesktopAgents } from "./desktop.ts";
 import { useHubUpdated } from "./hubUpdate.ts";
 
@@ -48,6 +51,7 @@ export function App() {
         }}
       />
     );
+  if (route.view === "authorize") return <AuthorizeView requestId={route.requestId} />;
   return <Workspace />;
 }
 
@@ -175,6 +179,8 @@ function Workspace() {
   const dialogs = (
     <>
       <CommandPalette />
+      <JoinApproval />
+      <HelpPopup />
       {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
       {channelBrowser && <ChannelBrowser sectionId={channelBrowser.sectionId} onClose={() => useStore.setState({ channelBrowser: null })} />}
     </>

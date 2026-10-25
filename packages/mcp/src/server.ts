@@ -13,7 +13,7 @@ const json = (v: unknown) => text(JSON.stringify(v, null, 2));
  * The Wisp MCP server: gives any MCP-capable harness (Claude Code, Codex,
  * Kimi, Hermes, OpenClaw, ...) chat, task, memory-vault and file tools.
  */
-export async function createWispMcp(client: WispClient) {
+export async function createWispMcp(client: WispClient, opts: { localFiles?: boolean } = {}) {
   const me = await client.me();
   if (me.kind !== "agent" || !me.agent) throw new Error("wisp-mcp needs an agent token (or a node token with WISP_AGENT)");
   const self = me.agent;
@@ -44,7 +44,7 @@ export async function createWispMcp(client: WispClient) {
   const server = new McpServer(
     { name: "wisp", version: "0.0.1" },
     {
-      instructions: `You are @${self.handle} in the Wisp workspace "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
+      instructions: `You are @${self.handle} in the Wisp "${me.workspace.name}". Use these tools to talk with people and other agents, delegate work, and keep long-term memory. Your private memory folder is "me/" (${myDir}/); "shared/" is visible to every agent, and people may give you access to other folders. Search memory before answering questions about past work, and write down durable facts, decisions and results. Before saving anything, read your memory skill (me/skills/memory/SKILL.md) and follow it: search first and update rather than duplicate, one idea per note, link related notes with [[wikilinks]], never save secrets. Facts about a person (a preference, a plan, something they did, a small detail) go in memory_remember. To hand a note to another agent, share it with memory_share.${startup ? `\n\n${startup}` : ""}`,
     },
   );
 
@@ -506,29 +506,32 @@ export async function createWispMcp(client: WispClient) {
     }),
   );
 
-  server.registerTool(
-    "file_upload",
-    { description: "Upload a local file to Wisp so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
-    safe(async ({ local_path, channel }) => {
-      const data = await fs.readFile(local_path);
-      const ch = channel ? await resolveChannel(channel) : undefined;
-      const f = await client.uploadFile(path.basename(local_path), data, guessMime(local_path), ch?.id);
-      return text(`Uploaded ${f.name} as ${f.id} (${f.size} bytes).`);
-    }),
-  );
+  // the remote endpoint runs on the hub, whose files aren't the caller's
+  if (opts.localFiles !== false) {
+    server.registerTool(
+      "file_upload",
+      { description: "Upload a local file to Wisp so other agents and people can get it. Returns a file id to attach to messages or tasks.", inputSchema: { local_path: z.string(), channel: z.string().optional() } },
+      safe(async ({ local_path, channel }) => {
+        const data = await fs.readFile(local_path);
+        const ch = channel ? await resolveChannel(channel) : undefined;
+        const f = await client.uploadFile(path.basename(local_path), data, guessMime(local_path), ch?.id);
+        return text(`Uploaded ${f.name} as ${f.id} (${f.size} bytes).`);
+      }),
+    );
 
-  server.registerTool(
-    "file_download",
-    { description: "Download a Wisp file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
-    safe(async ({ file_id, dest_dir }) => {
-      const f = await client.downloadFile(file_id);
-      const dir = dest_dir ?? process.cwd();
-      await fs.mkdir(dir, { recursive: true });
-      const dest = path.join(dir, path.basename(f.name));
-      await fs.writeFile(dest, f.data);
-      return text(`Saved to ${dest}.`);
-    }),
-  );
+    server.registerTool(
+      "file_download",
+      { description: "Download a Wisp file by id into a local directory.", inputSchema: { file_id: z.string(), dest_dir: z.string().optional() } },
+      safe(async ({ file_id, dest_dir }) => {
+        const f = await client.downloadFile(file_id);
+        const dir = dest_dir ?? process.cwd();
+        await fs.mkdir(dir, { recursive: true });
+        const dest = path.join(dir, path.basename(f.name));
+        await fs.writeFile(dest, f.data);
+        return text(`Saved to ${dest}.`);
+      }),
+    );
+  }
 
   return server;
 }

@@ -24,12 +24,22 @@ export interface AccessInfo {
   tailscale: TailscaleInfo;
   download: string;
   hubPlatform: string;
+  /** Optional until Cloudflare reach support is installed. */
+  cloudflare?: {
+    state: "missing" | "stopped" | "starting" | "running" | "error";
+    url: string | null;
+    error: string | null;
+  };
 }
 
 
 /** The page is already open at an address other computers can use over https (a cloud hub, a domain, Tailscale). */
 export function onPublicAddress(loc: Pick<Location, "protocol" | "hostname"> | undefined = typeof location === "undefined" ? undefined : location): boolean {
-  return !!loc && loc.protocol === "https:" && !isLocalOnlyHost(loc.hostname);
+  if (!loc || loc.protocol !== "https:" || isLocalOnlyHost(loc.hostname)) return false;
+  const host = loc.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host.endsWith(".local") || host.endsWith(".localhost")) return false;
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(host)) return false;
+  return !host.includes(":") || !/^(fc|fd|fe[89ab])/i.test(host);
 }
 
 export const useAccessStore = create<{ info: AccessInfo | null; failed: boolean; refresh: (fresh?: boolean) => Promise<AccessInfo | null>; act: (action: string) => Promise<AccessInfo> }>((set) => ({
@@ -82,6 +92,22 @@ export function originReach(origin: string): "anywhere" | "network" | "this-comp
   } catch {
     return "network";
   }
+}
+
+/**
+ * Who can open a link to this Wisp: anyone, only devices on the same Tailscale account
+ * (a .ts.net address without Funnel), or only devices on this Wi-Fi.
+ */
+export function linkReach(url: string | null | undefined, info: AccessInfo | null): "anywhere" | "tailscale" | "wifi" {
+  let u: URL;
+  try {
+    u = new URL(url ?? "");
+  } catch {
+    return "wifi";
+  }
+  // a cloud server's plain-http public IP still works from anywhere
+  if (!onPublicAddress({ protocol: "https:", hostname: u.hostname })) return "wifi";
+  return u.hostname.endsWith(".ts.net") && !info?.tailscale.funnel ? "tailscale" : "anywhere";
 }
 
 const SKIP_KEY = "wisp.access.skipped";

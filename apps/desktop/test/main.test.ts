@@ -34,6 +34,7 @@ function fixture(pending = false, saved: Record<string, any> = {}, migrationDone
   }
   const cfg: Record<string, any> = { hub: "https://old", token: "old-token", name: "device" };
   const engine = {
+    localSetupCode: vi.fn(() => null as string | null),
     Child: class {
       state = "starting";
       log = "/desktop-test/device.log";
@@ -83,7 +84,7 @@ function fixture(pending = false, saved: Record<string, any> = {}, migrationDone
       return require(name);
     },
   });
-  return { main: module.exports, app, updater, cloud, buddy, engine, handlers, fetch, loadFile, showNotification, showMessageBox, ready: () => ready(), server, windows, executeJavaScript,
+  return { main: module.exports, cfg, app, updater, cloud, buddy, engine, handlers, fetch, loadFile, showNotification, showMessageBox, ready: () => ready(), server, windows, executeJavaScript,
     savedConfig: () => JSON.parse(writeFileSync.mock.calls.at(-1)![1]),
     setupEvent: () => {
       const window = windows.at(-1)!;
@@ -105,6 +106,65 @@ describe("desktop update shutdown", () => {
     f.app.emit("before-quit", event);
     expect(f.updater.stop).toHaveBeenCalledOnce();
     expect(f.buddy.destroy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("desktop approval IPC", () => {
+  it("saves the approved computer credential and restarts the existing device service", async () => {
+    const f = fixture();
+    f.main.init();
+    f.engine.restartService.mockResolvedValue(true);
+    const event = f.setupEvent();
+    f.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ requestId: "request", secret: "join-secret", code: "482913", expiresAt: new Date(Date.now() + 600000).toISOString() }) });
+    const request = await f.handlers.get("setup:request-join")!(event, "http://192.168.1.2:4747/join/invite");
+    expect(request).toMatchObject({ ok: true, code: "482913" });
+    expect(JSON.stringify(request)).not.toContain("join-secret");
+    f.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "approved", nodeId: "approved-device", nodeToken: "approved-token", hubUrl: "http://localhost:4747", workspaceName: "My Wisp" }) });
+    const result = await f.handlers.get("setup:poll-join")!(event);
+    expect(result).toEqual({ ok: true, status: "approved" });
+    expect(f.cfg).toMatchObject({ hub: "http://192.168.1.2:4747", token: "approved-token", nodeId: "approved-device" });
+    expect(f.main.config).toMatchObject({ mode: "remote", hubUrl: "http://192.168.1.2:4747", device: true });
+    expect(f.engine.restartService).toHaveBeenCalledWith("node");
+    expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://192.168.1.2:4747/");
+    expect(f.fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(result)).not.toContain("approved-token");
+  });
+
+  it.each(["setup:discover", "setup:request-join", "setup:poll-join", "setup:cancel-join"])("rejects %s from a web page", async (channel) => {
+    const f = fixture();
+    f.main.init();
+    const window = f.windows[0];
+    expect(await f.handlers.get(channel)!({ sender: window.webContents, senderFrame: window.webContents.mainFrame }, "http://home:4747")).toBeNull();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("starts the app-managed device with the approved credential when no service exists", async () => {
+    const f = fixture();
+    f.main.init();
+    f.engine.serviceRunning.mockResolvedValue(false);
+    const event = f.setupEvent();
+    f.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ requestId: "r", secret: "s", code: "012345", expiresAt: new Date(Date.now() + 600000).toISOString() }) });
+    await f.handlers.get("setup:request-join")!(event, "http://home:4747");
+    f.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ status: "approved", nodeId: "n", nodeToken: "t" }) });
+    expect(await f.handlers.get("setup:poll-join")!(event)).toEqual({ ok: true, status: "approved" });
+    expect(f.main.device.start).toHaveBeenCalledWith("node", "/runtime", ["node", "start"], { WISP_EXIT_IF_REJECTED: "1" });
+    expect(f.cfg).toMatchObject({ hub: "http://home:4747", token: "t", nodeId: "n" });
+    expect(f.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens web onboarding when Start Wisp finishes", async () => {
+    const f = fixture();
+    f.main.init();
+    expect(await f.handlers.get("setup:create")!(f.setupEvent())).toEqual({ ok: true });
+    await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://localhost:4747/#/welcome/intro"));
+  });
+
+  it("opens a new Wisp's setup link, so making the account doesn't ask for its code", async () => {
+    const f = fixture();
+    f.engine.localSetupCode.mockReturnValue("k7qm-29xd-hp4c");
+    f.main.init();
+    expect(await f.handlers.get("setup:create")!(f.setupEvent())).toEqual({ ok: true });
+    await vi.waitFor(() => expect(f.windows[0].loadURL).toHaveBeenCalledWith("http://localhost:4747/#/setup/k7qm-29xd-hp4c"));
   });
 });
 

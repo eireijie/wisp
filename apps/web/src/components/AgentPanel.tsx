@@ -398,7 +398,7 @@ function ComputerCard({ agent, computer: c }: { agent: Agent; computer: Computer
  * The computer, big. Click the screen to take control; it's yours (blue ring) until you hand it
  * back, leave it alone for a while, or the agent needs it after you've stopped using it.
  */
-function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; computer: ComputerInfo; onClose: () => void }) {
+export function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Agent; computer: ComputerInfo; onClose: () => void }) {
   const me = useStore((s) => s.me);
   const state = useComputerState(c);
   const [error, setError] = useState<string | null>(null);

@@ -939,12 +939,14 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
   // the DM's own agent already lives in the pill above: no ghost or name on its messages
   const home = !!agent && agent.id === solo;
   const pinned = useStore((s) => !!s.channels.find((c) => c.id === m.channelId)?.pinnedIds.includes(m.id));
+  // like Messages: what you wrote sits on the right in your own color, with no name or picture
+  const mine = useStore((s) => m.author.kind === "user" && m.author.id === s.me?.user.id);
 
   return (
     <div
       ref={row}
       data-message-id={m.id}
-      className={cx("group relative px-3 md:px-5 flex gap-3 hover:bg-hover/70", grouped ? "py-0.5" : "pt-2.5 pb-0.5", touched && "bg-hover/70")}
+      className={cx("group relative px-3 md:px-5 flex gap-3", grouped ? "py-0.5" : "pt-2.5 pb-0.5")}
       onClick={(e) => {
         // phones have no hover: a tap on the message shows its actions (buttons and links in it still do their own thing)
         if (!window.matchMedia("(hover: none)").matches) return;
@@ -952,7 +954,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
         setTouched((t) => !t);
       }}
     >
-      <div className="w-9 shrink-0 pt-0.5">
+      {mine ? null : <div className="w-9 shrink-0 pt-0.5">
         {grouped || home ? (
           <span className="hidden group-hover:block text-[10px] text-faint text-right leading-6">{time}</span>
         ) : agent ? (
@@ -962,9 +964,14 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
         ) : (
           <UserAvatar name={name} size={36} />
         )}
-      </div>
-      <div className="min-w-0 flex-1">
-        {!grouped && !home && (
+      </div>}
+      <div className={cx("min-w-0 flex-1", mine && "flex flex-col items-end pl-10 md:pl-16")}>
+        {mine && pinned && !grouped && (
+          <span className="text-[11px] text-muted inline-flex items-center gap-0.5 mb-0.5">
+            <Pin size={11} /> Pinned
+          </span>
+        )}
+        {!grouped && !home && !mine && (
           <div className="flex items-baseline gap-2">
             {/* agents sign their messages in their own color */}
             <span className={cx("font-semibold text-[14.5px]", agent && "agent-ink")} style={agent ? agentVar(agent) : undefined}>
@@ -988,7 +995,7 @@ function MessageItem({ m, grouped, replies, onReplies, inThread, working = [] }:
         ) : editing ? (
           <EditBox m={m} onDone={() => setEditing(false)} />
         ) : (
-          html && !m.parts.some((p) => p.type === "change") && <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: m.editedAt ? withEditedMark(html, clockTime(m.editedAt, clock)) : html }} />
+          html && !m.parts.some((p) => p.type === "change") && <div className={cx("prose-w text-[15px] bubble", mine ? "me" : "them")} title={mine ? time : undefined} dangerouslySetInnerHTML={{ __html: m.editedAt ? withEditedMark(html, clockTime(m.editedAt, clock)) : html }} />
         )}
         {cards.map((c) => (
           <a key={c.url} href={c.url} target="_blank" rel="noreferrer" className="mt-1.5 flex max-w-sm items-center gap-3 rounded-xl border border-line bg-panel px-3 py-2 hover:bg-hover">
@@ -1315,7 +1322,7 @@ function StreamingItem({ run }: { run: LiveRun }) {
           {!home && <span className="font-semibold text-[14.5px]">{agent?.name ?? "Agent"}</span>}
           <span className="text-xs text-faint">{run.text ? "writing…" : "working…"}</span>
         </div>
-        {html && <div className="prose-w text-[15px] opacity-70" dangerouslySetInnerHTML={{ __html: html }} />}
+        {html && <div className="prose-w text-[15px] bubble them opacity-70" dangerouslySetInnerHTML={{ __html: html }} />}
         {run.usedComputer && computerId && <ComputerPart computerId={computerId} />}
       </div>
     </div>

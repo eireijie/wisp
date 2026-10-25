@@ -60,11 +60,16 @@ export async function uploadFile(file: File, channelId?: string) {
   });
 }
 
+const INLINE_TYPE = /^(image\/(png|jpeg|gif|webp|avif|bmp)|text\/(plain|csv|markdown)|video\/(mp4|webm|ogg|quicktime)|audio\/(mpeg|mp4|ogg|wav|webm|aac|flac|x-m4a)|application\/pdf)$/;
+
 /** Files are fetched with the auth header, then shown via object URLs. */
 export async function fileUrl(id: string): Promise<string> {
   const res = await fetch(`/api/files/${id}`, { headers: { authorization: `Bearer ${getToken()}` } });
   if (!res.ok) throw new ApiError("file unavailable", res.status);
-  return URL.createObjectURL(await res.blob());
+  // An object URL opens on Wisp's own origin, so only plain media keeps its type; anything else
+  // (an uploaded HTML, SVG or XML file) becomes plain bytes that can't run as Wisp.
+  const blob = await res.blob();
+  return URL.createObjectURL(INLINE_TYPE.test(blob.type) ? blob : new Blob([blob], { type: "application/octet-stream" }));
 }
 
 const eventListeners = new Set<(event: ClientEvent) => void>();

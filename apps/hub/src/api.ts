@@ -49,13 +49,16 @@ import type { MoveResult, VaultLocation } from "./vault-location.ts";
 import { registerConnectorApi } from "./api-connectors.ts";
 import { registerBackgroundApi } from "./api-background.ts";
 import { registerLeadApi, workspaceLead } from "./lead.ts";
+import { registerJoinApi } from "./join.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { registerReachApi } from "./api-reach.ts";
+import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
 import { agentDefaults } from "./agent-defaults.ts";
 import { spawnRight } from "./spawn.ts";
 import { workspaceFeatures } from "./features.ts";
+import type { SetupCode } from "./setup-code.ts";
 import { VM_SIZES, computerDefaults } from "./policy.ts";
 
 export interface Caller {
@@ -137,6 +140,9 @@ export function limitParam(raw: unknown, fallback: number, max: number): number 
   return Number.isFinite(n) && n >= 1 ? Math.min(n, max) : fallback;
 }
 
+/** Uploaded files the browser may show itself; anything else downloads as plain bytes. */
+export const INLINE_FILE = /^(image\/(png|jpeg|gif|webp|avif|bmp)|text\/(plain|csv|markdown)|video\/(mp4|webm|ogg|quicktime)|audio\/(mpeg|mp4|ogg|wav|webm|aac|flac|x-m4a)|application\/pdf)$/;
+
 export interface RegisterOptions {
   filesDir: string;
   dataDir: string;
@@ -144,6 +150,8 @@ export interface RegisterOptions {
   vault: { location: VaultLocation; moved: MoveResult | null };
   /** stop the hub so whatever keeps it running starts it again */
   restart: () => void;
+  /** what making the first account needs */
+  setupCode?: SetupCode;
 }
 
 export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOptions) {
@@ -334,33 +342,50 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
 
   // --- setup & auth -----------------------------------------------------------
 
-  app.get("/api/setup", async () => ({ needsSetup: store.userCount() === 0 }));
+  app.get("/api/setup", async () => ({ needsSetup: store.userCount() === 0, needsCode: store.userCount() === 0 && !!opts.setupCode?.required }));
 
   app.post("/api/setup", async (req, reply) => {
     if (store.userCount() > 0) return reply.code(409).send({ error: "already set up" });
     const body = parse(
-      z.object({ email: z.string().email(), name: z.string().min(1), password: z.string().min(8), workspaceName: z.string().min(1).default("Wisp"), features: FEATURE_PRESET.default("simple") }),
+      z.object({ email: z.string().email().max(320), name: z.string().min(1).max(200), password: z.string().min(8).max(1000), workspaceName: z.string().min(1).max(80).default("Your Wisp"), features: FEATURE_PRESET.default("simple"), setupCode: z.string().max(200).optional() }),
       req.body,
       reply,
     );
     if (!body) return;
+    // a cloud server's app sends its key as a header (docker/cloud-init.yaml)
+    const attempt = body.setupCode ?? req.headers["x-wisp-setup-code"] ?? req.headers["x-wisp-setup-key"] ?? req.headers["x-warren-setup-key"];
+    if (opts.setupCode && !opts.setupCode.matches(attempt))
+      return reply.code(403).send({ error: attempt ? "That setup code isn't right. Check it on the computer Wisp runs on." : "Enter the setup code from the computer Wisp runs on." });
     const user = store.createUser(body.email, body.name, hashPassword(body.password));
     // the first organization keeps the vault the hub opened at startup
+    opts.setupCode?.used();
     const ws = await createOrganization(hub, user, body.workspaceName, body.features);
     return { token: issueToken(db, "session", user.id, ws.id, deviceLabel(req.headers["user-agent"])), user, workspace: ws };
   });
 
-  // Slow down password guessing: at most 10 failed logins per IP+email per 15 minutes.
+  // Slow down password guessing: at most 10 failed logins per IP+email per 15 minutes. The list of
+  // recent failures is capped, so strangers making up emails can't grow it without end.
   const failures = new Map<string, number[]>();
+  const FAILURE_WINDOW_MS = 15 * 60_000;
+  const MAX_FAILURE_KEYS = 5000;
+  const noteFailure = (key: string, recent: number[]) => {
+    failures.delete(key);
+    if (failures.size >= MAX_FAILURE_KEYS) {
+      for (const [k, times] of failures) if (Date.now() - times[times.length - 1] >= FAILURE_WINDOW_MS) failures.delete(k);
+      // still full: forget the oldest (a Map keeps insertion order)
+      while (failures.size >= MAX_FAILURE_KEYS) failures.delete(failures.keys().next().value!);
+    }
+    failures.set(key, [...recent, Date.now()]);
+  };
   app.post("/api/auth/login", async (req, reply) => {
-    const body = parse(z.object({ email: z.string(), password: z.string() }), req.body, reply);
+    const body = parse(z.object({ email: z.string().max(320), password: z.string().max(1000) }), req.body, reply);
     if (!body) return;
     const key = `${req.ip}|${body.email.toLowerCase()}`;
-    const recent = (failures.get(key) ?? []).filter((t) => Date.now() - t < 15 * 60_000);
+    const recent = (failures.get(key) ?? []).filter((t) => Date.now() - t < FAILURE_WINDOW_MS);
     if (recent.length >= 10) return reply.code(429).send({ error: "too many attempts, try again in a few minutes" });
     const u = store.userByEmail(body.email);
     if (!u || !verifyPassword(body.password, u.password_hash)) {
-      failures.set(key, [...recent, Date.now()]);
+      noteFailure(key, recent);
       return reply.code(401).send({ error: "wrong email or password" });
     }
     failures.delete(key);
@@ -2013,8 +2038,14 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const f = store.file((req.params as { id: string }).id);
     if (!f || f.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "file not found" });
     if (f.channelId && !channelVisible(c, f.channelId)) return reply.code(404).send({ error: "file not found" });
-    const inline = /^(image|text|video|audio)\/|^application\/pdf$/.test(f.mime) && !/svg|html/.test(f.mime);
-    reply.header("content-type", f.mime).header("content-disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`).header("x-content-type-options", "nosniff");
+    // The uploader chose this type: only plain media and PDFs show in the browser, and nothing an
+    // upload holds may run as part of Wisp's page (text/xml, for one, can carry a script).
+    const inline = INLINE_FILE.test(f.mime);
+    reply
+      .header("content-type", inline ? f.mime : "application/octet-stream")
+      .header("content-disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(f.name)}`)
+      .header("x-content-type-options", "nosniff");
+    if (f.mime !== "application/pdf") reply.header("content-security-policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox; frame-ancestors 'self'");
     return reply.send(fs.createReadStream(path.join(opts.filesDir, f.sha256.slice(0, 2), f.sha256)));
   });
 
@@ -2027,8 +2058,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerBackgroundApi(app, hub, { need, parse, requesterOf });
   registerLeadApi(app, hub, { need, parse });
   registerUpdateApi(app, hub, { need });
+  registerJoinApi(app, hub, { need, parse });
   registerPairingApi(app, hub, { need, parse });
   registerReachApi(app, hub, { need, parse });
+  registerRemoteMcp(app, hub, { need, parse, deviceOwnerOf });
 
   // --- websockets -------------------------------------------------------------
 

@@ -110,6 +110,22 @@ function runtime(saved) {
   return { node: node.bin, version: node.version, wispDir, bundled: false, env: {} };
 }
 
+/**
+ * The setup code a new Wisp on this computer saved in <data>/setup-code (apps/hub/src/setup-code.ts),
+ * wherever this computer's hub keeps its data: the app's own copy, a source folder, or a service's.
+ */
+function localSetupCode(saved) {
+  const found = runtime(saved);
+  const dirs = [envVar("DATA_DIR", process.env), found.env?.WISP_DATA_DIR, found.wispDir && path.join(found.wispDir, "data"), ...serviceWisp().map((d) => d && path.join(d, "data"))];
+  for (const dir of dirs.filter(Boolean)) {
+    try {
+      const code = fs.readFileSync(path.join(dir, "setup-code"), "utf8").trim();
+      if (/^[\w-]{8,200}$/.test(code)) return code;
+    } catch {}
+  }
+  return null;
+}
+
 /** Whether `wisp service install` already keeps this running (then the app leaves it alone). */
 function serviceRunning(kind) {
   // a service reads ~/.wisp; with another WISP_NODE_DIR, it isn't this app's device
@@ -448,4 +464,4 @@ class Child {
   }
 }
 
-module.exports = { Child, findNode, findWisp, isWisp, runtime, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };
+module.exports = { Child, findNode, findWisp, isWisp, runtime, localSetupCode, hubUp, deviceConnected, deviceLogConnected, testHub, restartService, candidates, lanAddresses, serviceRunning, readNodeConfig, writeNodeConfig, NODE_CONFIG };

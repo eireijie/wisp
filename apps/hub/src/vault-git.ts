@@ -262,6 +262,13 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
   }
 
   const raw = { parseAs: "buffer" as const, bodyLimit: 100 * 1024 * 1024 };
+  // a push or fetch body can be large, so a request without a working sync token is turned away
+  // before any of it is read
+  const signedIn = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (who(req)) return;
+    reply.header("www-authenticate", 'Basic realm="Wisp memory"');
+    return denied(reply, 401, "Sign in with a sync token from Wisp: Settings, Memory.");
+  };
   app.addContentTypeParser(/^application\/x-git-.*-request$/, raw, (_req, body, done) => done(null, body));
 
   const send = async (reply: FastifyReply, req: FastifyRequest, r: Reply & { kill(): void }) => {
@@ -292,7 +299,7 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
     );
   });
 
-  app.post(`${GIT_PATH}/git-upload-pack`, async (req, reply) => {
+  app.post(`${GIT_PATH}/git-upload-pack`, { onRequest: signedIn }, async (req, reply) => {
     const person = await gate(req, reply);
     if (!person) return;
     return send(
@@ -312,11 +319,17 @@ export function registerVaultGit(app: FastifyInstance, hub: Hub, opts: { dataDir
     );
   });
 
-  app.post(`${GIT_PATH}/git-receive-pack`, async (req, reply) => {
+  app.post(`${GIT_PATH}/git-receive-pack`, { onRequest: signedIn }, async (req, reply) => {
     const person = await gate(req, reply, false);
     if (!person) return;
     let body = req.body as Buffer;
-    if (req.headers["content-encoding"] === "gzip") body = zlib.gunzipSync(body);
+    if (req.headers["content-encoding"] === "gzip") {
+      try {
+        body = zlib.gunzipSync(body, { maxOutputLength: raw.bodyLimit });
+      } catch {
+        return denied(reply, 413, "That push is too big. Push fewer changes at a time.");
+      }
+    }
     const { commands, caps } = readPackets(body);
     const vault = hub.vault(person.workspaceId);
     const branch = await vault.branch();

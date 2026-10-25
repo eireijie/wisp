@@ -61,7 +61,7 @@ let clone: string;
 beforeAll(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-sync-"));
   delete process.env.WISP_VAULT_DIR;
-  const built = await buildHub({ dataDir: path.join(tmp, "data") });
+  const built = await buildHub({ dataDir: path.join(tmp, "data"), setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;

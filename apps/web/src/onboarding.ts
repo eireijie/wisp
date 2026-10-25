@@ -20,20 +20,28 @@ export interface OnboardingState {
 }
 
 /** The setup's screens, in order. */
-export const STEPS = ["anywhere", "device", "role", "agent", "harness", "hello"] as const;
+export const STEPS = ["ready", "agent", "anywhere", "devices"] as const;
 export type StepId = (typeof STEPS)[number];
+export type SetupChoices = Partial<Record<StepId, boolean>>;
+const useSetupRevision = create<{ revision: number }>(() => ({ revision: 0 }));
+const setupKey = (workspaceId: string) => `wisp.setup.v2.${workspaceId}`;
 
-export function stepsDone(s: OnboardingState | null): Record<StepId, boolean> {
-  const agent = !!s?.agents.length;
+export function savedSetup(workspaceId: string): SetupChoices {
+  try { return JSON.parse(localStorage.getItem(setupKey(workspaceId)) ?? "{}") ?? {}; } catch { return {}; }
+}
+
+export function completeSetupStep(workspaceId: string, step: StepId) {
+  try { localStorage.setItem(setupKey(workspaceId), JSON.stringify({ ...savedSetup(workspaceId), [step]: true })); } catch {}
+  useSetupRevision.setState((s) => ({ revision: s.revision + 1 }));
+}
+
+/** Visiting a step never completes it; explicit skips count as a choice. */
+export function stepsDone(s: OnboardingState | null, choices: SetupChoices = {}): Record<StepId, boolean> {
   return {
-    // Tailscale first, so every device and phone added next can reach Wisp from anywhere
-    anywhere: !!s?.reachable || onPublicAddress() || accessSkipped(),
-    device: !!s?.devices.some((d) => d.online),
-    role: !!s?.devices.some((d) => d.role),
-    agent,
-    // an agent is made with its harness
-    harness: agent,
-    hello: !!s?.firstReply,
+    ready: !!choices.ready,
+    agent: !!choices.agent || !!s?.agents.length,
+    anywhere: !!choices.anywhere || !!s?.reachable || onPublicAddress() || accessSkipped(),
+    devices: !!choices.devices,
   };
 }
 
@@ -77,7 +85,7 @@ const useOnboardingStore = create<{ state: OnboardingState | null; error: string
       (state) => set({ state, error: null }),
       (e: { status?: number; message: string }) =>
         // a 404 means the browser has a newer app than the hub is running
-        set({ error: e.status === 404 ? "This hub is running an older version than the app. Restart Wisp on the computer it runs on (or run: wisp update), then reload this page." : `Couldn't check your progress: ${e.message}` }),
+        set({ error: e.status === 404 ? "Restart Wisp on the computer it lives on, then reload this page." : `Couldn't check your progress: ${e.message}` }),
     ),
 }));
 
@@ -88,6 +96,8 @@ const useOnboardingStore = create<{ state: OnboardingState | null; error: string
  */
 export function useOnboarding(pollMs?: number) {
   const { state, error, refresh } = useOnboardingStore();
+  const workspaceId = useStore((s) => s.me?.workspace.id) ?? "";
+  useSetupRevision((s) => s.revision);
   const agents = useStore((s) => s.agents);
   const messages = useStore((s) => s.messages);
 
@@ -101,17 +111,15 @@ export function useOnboarding(pollMs?: number) {
     return () => clearInterval(t);
   }, [refresh, pollMs]);
 
-  return { state, error, refresh, done: stepsDone(state) };
+  return { state, error, refresh, done: stepsDone(state, savedSetup(workspaceId)) };
 }
 
 /** Each setup step as a plain next thing to do, for "Continue setup" and Help. */
 export const NEXT_STEP: Record<StepId, string> = {
-  anywhere: "Set up Wisp to work from anywhere",
-  device: "Connect a computer to Wisp",
-  role: "Choose what that computer does for helpers",
-  agent: "Make your first helper",
-  harness: "Choose the AI your helper uses",
-  hello: "Say hello to your helper",
+  ready: "Get your Wisp ready",
+  agent: "Make your first agent",
+  anywhere: "Use Wisp away from home",
+  devices: "Add your phone and other computers",
 };
 
 /** The first setup step that hasn't happened yet, or null when setup is done. */

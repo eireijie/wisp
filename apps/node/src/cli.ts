@@ -6,71 +6,54 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
-import { HARNESSES } from "@wisp/core";
-import { deviceAdapters } from "@wisp/adapters";
-import { ComputerHost, detectEngine } from "./computers/index.ts";
-import { ensureImage } from "./computers/docker.ts";
-import { listening, remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
 import { REMOTE_APPS, formatRustdeskId } from "@wisp/core";
+import { deviceAdapters } from "@wisp/adapters";
+import { detectEngine } from "./computers/index.ts";
+import { ensureImage } from "./computers/docker.ts";
+import { remoteDesktopSupport, setUpRemoteDesktop } from "./computers/remote-desktop.ts";
 import { detectRemoteApps } from "./remote-apps.ts";
 import { rustdeskId, rustdeskInstalled, setUpRustdesk } from "./rustdesk.ts";
 import { codeProblem, hashCode, type CodeKind } from "./screen-lock.ts";
-import { discoverAgents } from "./discover.ts";
 import { installService, isService, serviceStatus, servicePort, uninstallService, type ServiceKind } from "./service.ts";
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
 import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@wisp/update";
 
 import { migrateHome } from "./migrate-home.ts";
 import { migrateServices } from "./migrate-services.ts";
+import { findMovedWisp, joinTarget, joinWisp } from "./join.ts";
+import { doctor } from "./doctor.ts";
+import { Reach } from "../../hub/src/reach.ts";
 
-const HELP = `wisp — run a Wisp hub, or connect this device to one
+const HELP = `wisp — start Wisp on this computer, or join your Wisp
 
 Usage:
+  wisp join [invite-link] [--name NAME] [--dir DIR] [--no-service]
+      Join my Wisp: find it on this Wi-Fi, then approve this computer where Wisp lives.
+  wisp doctor
+      Check Wisp, this computer, agent apps, VM engine and Away from home.
   wisp hub start
-      Run the hub (the workspace and web app) in this terminal, on PORT (default 4747) with
-      its data in WISP_DATA_DIR (default ~/.wisp/data).
+      Start Wisp on this computer (default http://localhost:4747).
+  wisp setup-code
+      Show the code (and link) that makes the first account on a new Wisp.
   wisp service install hub
   wisp service install node [--hub URL --token TOKEN | --local] [--name NAME]
-      Keep the hub or this device running, started at login (macOS LaunchAgent, systemd on
-      Linux, a task at sign-in on Windows). Uses this terminal's PATH so agents' CLIs are found.
-      --local makes this computer a device of the hub running on it, once its first account
-      exists: no token needed (the installer does this).
+      Start Wisp or this computer's connection again when you log in.
   wisp service uninstall hub|node
   wisp service status
   wisp setup [--yes]
-      Get this device ready to give agents their own computers (VMs): checks the harnesses,
-      offers to install a VM engine (Apple's container on a Mac with Apple silicon), and gets
-      the VM image so the first VM starts in seconds. Asks before installing anything.
+      Get agent computers ready; asks before installing a VM engine.
   wisp node start [--hub URL --token TOKEN] [--name NAME] [--dir DIR] [--allow-full-access]
-      Connect this device as a node. Hub URL and token are saved to DIR/node.json,
-      so later runs only need \`wisp node start\`. Create the token in Wisp → Devices.
-      --allow-full-access lets agents set to "Full access" run without a sandbox here (saved).
-  wisp node screen on|off
-      Let the person who connected this device see and use its own screen from Wisp, and
-      let agents that run on this device use it. Off by default; it can only be turned on here. Turning it
-      on asks for a code (a 6-digit PIN or a password) that's needed to open the screen from
-      Wisp, and offers Remote Desktop.
-  wisp node screen code [off]
-      Pick a new code for this screen (or remove it). Only here, never from Wisp.
-  wisp node screen remote [off]
-      Set up Remote Desktop: a VNC server for this screen that only listens on this device, for
-      smooth live view (Linux with X11, and Windows). \`off\` goes back to screenshots.
+      Connect with saved settings; the older --hub and --token flags still work.
+  wisp node screen on|off|code|remote [off]
+      Control screen sharing and its code on this computer.
   wisp node rustdesk [off]
-      Set up RustDesk, to reach this computer from anywhere (the Remote desktop mod):
-      installs it (asking first) and shows its ID on this device's page, for you only.
-      You set its password in RustDesk; Wisp never sees it. \`off\` hides the ID again.
+      Set up RustDesk to reach this computer from anywhere; its ID shows on this device's page.
   wisp node pause | wisp node resume
-      Stop everything Wisp does on this device right away (agent runs, computer use, live
-      views) until you resume. Works while \`wisp node start\` is running.
+      Pause or resume agents on this computer.
   wisp migrate [--json]
-      Migrate an existing Warren home and services to Wisp. Safe to repeat.
-  wisp doctor
-      Check which agent harnesses are installed here, whether agents can use this
-      device's screen or run VMs on it, and which existing agents Wisp can import.
+      Move an existing Warren home and services to Wisp. Safe to repeat.
   wisp update [--check]
-      Get the latest Wisp from GitHub: pull, install what changed, rebuild the web app
-      on a hub, then restart the hub and device running from this folder (a device waits
-      for its agents to finish). --check only shows what's new.
+      Update Wisp and restart after agents finish; --check only shows what is new.
 
 Settings in DIR/node.json (all optional):
   "harnesses": { "qwen": { "args": ["--experimental-acp"] },
@@ -90,6 +73,7 @@ const { values, positionals } = parseArgs({
     dir: { type: "string" },
     "allow-full-access": { type: "boolean" },
     local: { type: "boolean" },
+    "no-service": { type: "boolean" },
     check: { type: "boolean" },
     json: { type: "boolean" },
     yes: { type: "boolean", short: "y" },
@@ -105,6 +89,9 @@ const configFile = path.join(dir, "node.json");
 /** `node start` exits with this once the hub turns its token down, when $WISP_EXIT_IF_REJECTED asks it to (the desktop app does) */
 const REJECTED_CODE = 78;
 const [cmd, sub] = positionals;
+function isInviteAddress(raw: string): boolean {
+  try { return !!joinTarget(raw).invite; } catch { return false; }
+}
 
 if (values.help || !cmd) {
   console.log(HELP);
@@ -112,51 +99,47 @@ if (values.help || !cmd) {
   const services = migrateServices({ home: os.homedir(), log: (line) => migrationLines.push(line) });
   if (values.json) console.log(JSON.stringify({ home: migration, services, messages: migrationLines }));
   else console.log(services.length ? migrationLines.slice(migration.moved ? 1 : 0).join("\n") : "No old services to migrate.");
+} else if (cmd === "join") {
+  try {
+    await joinWisp({ dir, address: sub ?? values.hub, name: values.name, service: !values["no-service"] });
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exitCode = 1;
+  }
 } else if (cmd === "doctor") {
-  const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
-  console.log("Harnesses");
-  for (const a of Object.values(deviceAdapters(saved.harnesses))) {
-    let version = "not found";
-    try {
-      // through the shell on Windows, where npm installs harnesses as .cmd shims
-      version = execFileSync(a.binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000, shell: process.platform === "win32" }).trim().split("\n")[0];
-    } catch {}
-    const how = HARNESSES.find((h) => h.id === a.id)?.protocol === "native" ? "" : " (ACP)";
-    console.log(`  ${(a.label + how).padEnd(20)} ${a.binary.padEnd(14)} ${version}`);
-  }
-  const caps = await new ComputerHost({ dir, vmEngine: saved.vmEngine }).capabilities();
-  console.log("\nComputers");
-  const shared = saved.shareScreen && !saved.noScreen;
-  console.log(`  This screen  ${!caps.screen.ok ? "no" : shared ? "on (only you and agents that run here can use it)" : "off (turn on with `wisp node screen on`)"}: ${caps.screen.detail}`);
-  if (caps.screen.ok && shared) {
-    console.log(`               ${saved.screenCode ? `opened with a ${saved.screenCode.kind === "pin" ? "PIN" : "password"}` : "no code: your Wisp sign-in alone opens it (`wisp node screen code`)"}`);
-    const rd = remoteDesktopSupport();
-    console.log(`               Remote Desktop ${saved.remoteDesktop ? `on (${saved.remoteDesktop.server}${(await listening(saved.remoteDesktop.port)) ? "" : ", not answering right now"})` : rd.ok ? "off (`wisp node screen remote`)" : `unavailable: ${rd.detail}`}`);
-  }
-  console.log(`  VMs          ${caps.vm.ok ? "yes" : "no"}: ${caps.vm.detail}`);
-  const others = await detectRemoteApps();
-  if (others.length) console.log(`  Also here    ${others.map((a) => REMOTE_APPS[a].label).join(", ")} (pick it under Remote desktop on this device's page)`);
-  console.log(`  RustDesk     ${saved.rustdesk ? `on, ID ${formatRustdeskId(saved.rustdesk.id)}` : (await rustdeskInstalled()) ? "installed, not shown in Wisp (`wisp node rustdesk`)" : "not set up (`wisp node rustdesk`)"}`);
-  const found = discoverAgents();
-  console.log("\nExisting agents Wisp can import");
-  if (!found.length) console.log("  none found");
-  for (const a of found) console.log(`  ${a.name} (${a.harness}) ${a.path}`);
+  if (!(await doctor(dir))) process.exitCode = 1;
+  await remoteDesktopDoctor();
 } else if (cmd === "setup") {
   await setup(values.yes ?? false);
+} else if (cmd === "setup-code") {
+  if (!printSetupLink()) console.log("This Wisp already has an owner, so it doesn't need a setup code.");
 } else if (cmd === "service") {
   await service(sub, positionals[2]);
 } else if (cmd === "node" && sub === "start") {
   migrateServices({ home: os.homedir(), log: console.log });
+  if (values.hub && isInviteAddress(values.hub)) {
+    await joinWisp({ dir, address: values.hub, name: values.name, service: false });
+    values.hub = undefined;
+    values.token = undefined;
+  }
   let cfg = saveNodeConfig();
   const kept = underKeeper();
   // two daemons with one token would take turns replacing each other on the hub
-  const service = envVar("SERVICE") ? null : serviceStatus("node", dir);
+  // the installed service uses the default folder, so a device kept in another folder (--dir) is a different device
+  const service = envVar("SERVICE") || dir !== path.join(os.homedir(), ".wisp") ? null : serviceStatus("node", dir);
   if (service?.running && !isService(service)) {
-    console.error(`This device is already connected by its service (${service.name}), so there's nothing to start. To run it in this terminal instead: wisp service uninstall node`);
+    console.error(`This computer is already connected to your Wisp in the background, so there's nothing to start. To run it in this terminal instead: wisp service uninstall node`);
     process.exit(1);
   }
   if (cfg.local && !cfg.token) cfg = await waitForLocalHub(cfg);
   const daemon = new NodeDaemon(cfg);
+  const { hubId, nodeId } = cfg as NodeConfig & { nodeId?: string };
+  if (hubId && nodeId)
+    daemon.relocate = async () => {
+      const url = await findMovedWisp({ hubId, nodeId, token: cfg.token }, cfg.hub);
+      if (url) fs.writeFileSync(configFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(configFile, "utf8")), hub: url }, null, 2), { mode: 0o600 });
+      return url;
+    };
   // the desktop app asks for this, so it can add this computer again instead of leaving a dead device running
   if (envVar("EXIT_IF_REJECTED")) daemon.onRejected = () => process.exit(REJECTED_CODE);
   daemon.start();
@@ -335,6 +318,20 @@ async function screen(what: string | undefined, arg: string | undefined) {
 }
 
 /** `wisp node rustdesk [off]`: set RustDesk up here and show its ID in Wisp, or stop showing it. */
+/** `wisp doctor`'s Remote desktop lines (the mod): what else reaches this computer from anywhere. */
+async function remoteDesktopDoctor() {
+  let saved: Partial<NodeConfig> = {};
+  try { saved = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {}; } catch {}
+  const lines: string[] = [];
+  if (saved.rustdesk) lines.push(`RustDesk on, ID ${formatRustdeskId(saved.rustdesk.id)}`);
+  else if (await rustdeskInstalled().catch(() => false)) lines.push("RustDesk installed, not shown in Wisp (`wisp node rustdesk`)");
+  const others = await detectRemoteApps().catch(() => []);
+  if (others.length) lines.push(`Also here: ${others.map((a) => REMOTE_APPS[a].label).join(", ")} (pick it under Remote desktop on this device's page)`);
+  if (!lines.length) return;
+  console.log("\nRemote desktop");
+  for (const line of lines) console.log(`  ${line}`);
+}
+
 async function rustdesk(what: string | undefined) {
   const saved: Partial<NodeConfig> = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, "utf8")) : {};
   const save = () => {
@@ -390,7 +387,7 @@ function saveNodeConfig(): NodeConfig {
     return { ...cfg, local: true };
   }
   if (!cfg.hub || !cfg.token) {
-    console.error("Missing --hub and --token. Get them in Wisp → Devices → Add device.");
+    console.error("Run wisp join to connect this computer to your Wisp.");
     process.exit(1);
   }
   try {
@@ -410,6 +407,16 @@ function hubDataDir(): string {
   return path.resolve(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? path.join(migration.dir, "data"));
 }
 
+/** A new Wisp's setup link (apps/hub/src/setup-code.ts), when nobody has made the first account yet. */
+function printSetupLink(): boolean {
+  let code = "";
+  try { code = fs.readFileSync(path.join(hubDataDir(), "setup-code"), "utf8").trim(); } catch {}
+  if (!code) return false;
+  console.log(`Make your account at http://localhost:${process.env.PORT ?? "4747"}/#/setup/${code}`);
+  console.log(`(setup code: ${code})`);
+  return true;
+}
+
 /**
  * `--local`: ask the hub on this computer to make it a device, then wait (as long as it takes,
  * since the first account is made in the browser) for it to hand over the connection.
@@ -421,7 +428,7 @@ async function waitForLocalHub(cfg: NodeConfig): Promise<NodeConfig> {
   if (!fs.existsSync(grant)) {
     fs.mkdirSync(data, { recursive: true });
     fs.writeFileSync(request, JSON.stringify({ name: values.name ?? cfg.name }), { mode: 0o600 });
-    console.log("[wisp] waiting for the hub on this computer: this computer becomes a device once you've made your account in the browser");
+    console.log("◌ Waiting for you to finish getting ready in Wisp…");
   }
   while (!fs.existsSync(grant)) await new Promise((r) => setTimeout(r, 2000));
   const got = JSON.parse(fs.readFileSync(grant, "utf8")) as { hub: string; token: string; name: string };
@@ -441,7 +448,7 @@ async function service(action: string | undefined, kind: string | undefined) {
     for (const k of kind ? [kind as ServiceKind] : kinds) {
       const s = serviceStatus(k, dir);
       states.push({ kind: k, ...s, ...(k === "hub" ? { port: servicePort(k, dir) } : {}) });
-      if (!values.json) console.log(`${k.padEnd(5)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
+      if (!values.json) console.log(`${(k === "hub" ? "Wisp" : "This computer").padEnd(13)} ${s.running ? "running" : s.installed ? "installed, not running" : "not installed"}${s.installed ? ` (${s.name}, log: ${s.log})` : ""}`);
     }
     if (values.json) console.log(JSON.stringify(states));
     return;
@@ -454,6 +461,20 @@ async function service(action: string | undefined, kind: string | undefined) {
   if (action === "uninstall") {
     const s = uninstallService(k, dir);
     console.log(`Removed ${s.name}. Wisp's data and settings are untouched.`);
+    // Tailscale keeps serving the address on its own; left on, it would send visitors to whatever
+    // uses this port next
+    if (k === "hub") {
+      const reach = new Reach(Number(process.env.PORT ?? 4747));
+      const t = await reach.tailscale(true).catch(() => null);
+      if (t?.serving) {
+        const after = await reach.act("unserve").catch(() => null);
+        console.log(after && !after.serving ? "Turned off Wisp's Tailscale address." : "Turn off Wisp's Tailscale address yourself: tailscale funnel --https=443 off && tailscale serve --https=443 off");
+      }
+    }
+    return;
+  }
+  if (k === "node" && values.hub && isInviteAddress(values.hub)) {
+    await joinWisp({ dir, address: values.hub, name: values.name });
     return;
   }
   const cfg = k === "node" ? saveNodeConfig() : undefined;
@@ -472,7 +493,7 @@ async function service(action: string | undefined, kind: string | undefined) {
     console.error((e as Error).message);
     process.exit(1);
   }
-  console.log(`Installed ${s.name}: it starts at login and restarts if it stops. Log: ${s.log}`);
+  console.log(`✓ ${k === "hub" ? "Started Wisp" : "Started this computer's connection"} (starts again when you log in)`);
   // wait for it to come up, so problems show here instead of in a log nobody reads
   const deadline = Date.now() + 30_000;
   const port = servicePort(k, dir);
@@ -480,7 +501,10 @@ async function service(action: string | undefined, kind: string | undefined) {
     await new Promise((r) => setTimeout(r, 1000));
     if (k === "hub") {
       const ok = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok, () => false);
-      if (ok) return console.log(`The hub is up at http://localhost:${port}`);
+      if (ok) {
+        console.log(`✓ Wisp is running at http://localhost:${port}`);
+        return void printSetupLink();
+      }
     } else if (cfg?.local && !cfg.token) {
       return console.log("This computer becomes a device as soon as you've made your account in the browser.");
     } else if (fs.existsSync(s.log)) {

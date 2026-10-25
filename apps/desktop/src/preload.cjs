@@ -30,8 +30,10 @@ if (location.protocol === "file:")
   contextBridge.exposeInMainWorld("wispSetup", {
     check: () => ipcRenderer.invoke("setup:check"),
     create: (opts) => ipcRenderer.invoke("setup:create", opts),
-    test: (url) => ipcRenderer.invoke("setup:test", url),
-    join: (url, opts) => ipcRenderer.invoke("setup:join", url, opts),
+    discover: () => ipcRenderer.invoke("setup:discover"),
+    requestJoin: (input) => ipcRenderer.invoke("setup:request-join", input),
+    pollJoin: () => ipcRenderer.invoke("setup:poll-join"),
+    cancelJoin: () => ipcRenderer.invoke("setup:cancel-join"),
     retry: () => ipcRenderer.invoke("setup:retry"),
     cloudPlans: (token) => ipcRenderer.invoke("setup:cloud-plans", token),
     cloudCreate: (token, choice) => ipcRenderer.invoke("setup:cloud-create", token, choice),

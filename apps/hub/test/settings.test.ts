@@ -41,7 +41,7 @@ async function browserSocket(token: string) {
 
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-settings-"));
-  const built = await buildHub({ dataDir: dir });
+  const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
@@ -59,8 +59,8 @@ describe("your settings", () => {
     const me = (await api("PATCH", "/api/me", { preferredName: "Alex", timezone: "America/New_York" })).data;
     expect(me).toMatchObject({ name: "Alex Morgan", preferredName: "Alex", timezone: "America/New_York" });
     expect((await api("PATCH", "/api/me", { timezone: "Mars/Olympus" })).status).toBe(400);
-    expect((await api("PUT", "/api/me/prefs", { sendWith: "mod-enter", clock: "24h" })).data).toEqual({ sendWith: "mod-enter", clock: "24h" });
-    expect((await api("GET", "/api/me")).data.prefs).toEqual({ sendWith: "mod-enter", clock: "24h" });
+    expect((await api("PUT", "/api/me/prefs", { sendWith: "mod-enter", clock: "24h" })).data).toEqual({ sendWith: "mod-enter", clock: "24h", experience: "simple" });
+    expect((await api("GET", "/api/me")).data.prefs).toEqual({ sendWith: "mod-enter", clock: "24h", experience: "simple" });
 
     const agent = (await api("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "custom" })).data;
     const general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general");

@@ -4,6 +4,11 @@
 // effect the same way everywhere.
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+// Scheduled tasks can inherit an older PATH; keep the selected runtime's npm available.
+const runtimeBin = path.dirname(process.execPath);
+process.env.PATH = [runtimeBin, ...(process.env.PATH ?? "").split(path.delimiter).filter((dir) => dir !== runtimeBin)].join(path.delimiter);
 
 /** Keep in sync with RESTART_CODE in packages/update. */
 const RESTART_CODE = 75;

@@ -10,7 +10,7 @@ async function api(method: "GET" | "POST" | "PUT" | "PATCH", url: string, body?:
 }
 beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-voice-"));
-  built = await buildHub({ dataDir: dir });
+  built = await buildHub({ dataDir: dir, setupCode: false });
   owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Me", password: "password123", features: "everything", workspaceName: "Lab" }, "")).json().token;
   await api("POST", "/api/members", { email: "second@example.com", name: "Second", password: "password123", role: "member" });
   second = (await api("POST", "/api/auth/login", { email: "second@example.com", password: "password123" }, "")).json().token;
