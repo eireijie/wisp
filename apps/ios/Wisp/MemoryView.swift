@@ -1,16 +1,21 @@
 import SwiftUI
 
-struct MemoryView: View {
+struct MemoryFolderView: View {
   @Environment(Store.self) private var store
   var folder = ""
+  /** "agent:<id>" while an owner views memory as that agent */
+  var viewAs: String?
+  @State private var asNotes: [MemoryNote]?
+  @State private var created: MemoryNote?
   @State private var query = ""
   @State private var hits: [MemoryNote] = []
   @State private var creating = false
   @State private var action = FormAction()
   private var prefix: String { folder.isEmpty ? "" : folder + "/" }
-  private var children: [MemoryNote] { store.notes.filter { $0.path.hasPrefix(prefix) && !$0.path.dropFirst(prefix.count).contains("/") } }
+  private var allNotes: [MemoryNote] { viewAs == nil ? store.notes : asNotes ?? [] }
+  private var children: [MemoryNote] { allNotes.filter { $0.path.hasPrefix(prefix) && !$0.path.dropFirst(prefix.count).contains("/") } }
   private var folders: [String] {
-    Array(Set(store.notes.filter { $0.path.hasPrefix(prefix) }.compactMap { note in
+    Array(Set(allNotes.filter { $0.path.hasPrefix(prefix) }.compactMap { note in
       let rest = String(note.path.dropFirst(prefix.count))
       return rest.contains("/") ? rest.components(separatedBy: "/").first : nil
     })).sorted()
@@ -20,12 +25,12 @@ struct MemoryView: View {
       InlineError(error: action.error)
       if query.isEmpty {
         ForEach(folders, id: \.self) { name in
-          NavigationLink { MemoryView(folder: prefix + name) } label: { Label(folderName(name), systemImage: "folder") }.accessibilityIdentifier("memory-folder")
+          NavigationLink { MemoryFolderView(folder: prefix + name, viewAs: viewAs) } label: { Label(folderName(name), systemImage: "folder") }.accessibilityIdentifier("memory-folder")
         }
         ForEach(children) { note in noteLink(note) }
-        if store.notes.isEmpty { Text("Your shared memory").font(.headline); Text("Write, read and fix notes right here.").foregroundStyle(.secondary) }
+        if allNotes.isEmpty { Text("Your shared memory").font(.headline); Text("Write, read and fix notes right here.").foregroundStyle(.secondary) }
       } else {
-        ForEach(hits) { note in noteLink(note) }
+        ForEach(hits.filter { hit in viewAs == nil || allNotes.contains { $0.path == hit.path } }) { note in noteLink(note) }
         if hits.isEmpty { Text("No matches.").foregroundStyle(.secondary) }
       }
       if !folder.isEmpty { NavigationLink("Who can see and edit what") { MemoryAccessView(path: folder) } }
@@ -35,10 +40,11 @@ struct MemoryView: View {
     .toolbar {
       ToolbarItemGroup(placement: .primaryAction) {
         Button("Refresh", systemImage: "arrow.clockwise") { action.run { try await store.connection().post("/api/vault/sync", Empty()); try await store.refreshNotes() } }.disabled(action.busy)
-        if store.canManage { Button("New note", systemImage: "square.and.pencil") { creating = true } }
+        if store.canManage && viewAs == nil { Button("New note", systemImage: "square.and.pencil") { creating = true } }
       }
     }
-    .sheet(isPresented: $creating) { NoteEditor(folder: folder.isEmpty ? "people/\(store.me?.id ?? "")" : folder) }
+    .sheet(isPresented: $creating) { NewNoteSheet(folder: folder.isEmpty ? "people/\(store.me?.id ?? "")" : folder) { created = MemoryNote(path: $0) } }
+    .navigationDestination(item: $created) { NoteView(path: $0.path) }
     .task(id: store.memoryVersion) { await load() }
     .refreshable { await load() }
     .task(id: query) {
@@ -60,7 +66,11 @@ struct MemoryView: View {
     if folder == "people" { return store.members.first { $0.id == name }?.name ?? name }
     return ["shared": "Shared", "agents": "Agents", "groups": "Groups", "teams": "Teams", "people": "People"][name] ?? name
   }
-  private func load() async { do { try await store.refreshNotes() } catch { action.error = error.localizedDescription } }
+  private func load() async {
+    do {
+      if let viewAs { asNotes = try await store.vaultNotes(as: viewAs) } else { try await store.refreshNotes() }
+    } catch { action.error = error.localizedDescription }
+  }
 }
 
 struct NoteView: View {
@@ -74,6 +84,7 @@ struct NoteView: View {
   @State private var removingNote = false
   @State private var unavailable = false
   @State private var destination: MemoryNote?
+  @State private var graph: GraphData?
   @State private var action = FormAction()
   private var wikiLinks: [String] {
     guard let text = note?.content, let regex = try? NSRegularExpression(pattern: "\\[\\[([^\\]]+)\\]\\]") else { return [] }
@@ -84,7 +95,11 @@ struct NoteView: View {
   var body: some View {
     List {
       if let note {
+        NoteProperties(note: note, from: path, kind: graph?.nodes.first { $0.id == path }?.graphKind) { target in
+          action.run { destination = MemoryNote(path: try await store.resolveNote(target, from: path)) }
+        }
         Section { NoteMarkdown(text: note.content ?? "") }
+        ConnectedNotes(path: path, graph: graph)
         if !wikiLinks.isEmpty {
           Section("Linked notes") {
             ForEach(Array(Set(wikiLinks)).sorted(), id: \.self) { link in
@@ -102,6 +117,7 @@ struct NoteView: View {
         }
         Section {
           if let author = note.editedBy { Text("Edited by \(author)").font(.caption).foregroundStyle(.secondary) }
+          NavigationLink("Who wrote what") { NoteBlameView(path: path) }
           NavigationLink("History") { NoteHistoryView(path: path) }
           NavigationLink("Who can see and edit what") { MemoryAccessView(path: path) }
           if note.editable {
@@ -136,6 +152,7 @@ struct NoteView: View {
         else { action.error = error.localizedDescription }
       }
     }
+    .task(id: store.memoryVersion) { graph = try? await store.vaultGraph() }
     .sheet(isPresented: $editing) { NoteEditor(note: note) }
     .sheet(isPresented: $moving) { MoveNoteView(path: path) { moved in note = nil; unavailable = false; action.error = nil; path = moved } }
     .navigationDestination(item: $destination) { NoteView(path: $0.path) }

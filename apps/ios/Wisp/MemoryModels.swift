@@ -12,6 +12,7 @@ struct MemoryNote: Decodable, Identifiable, Hashable {
   var editedBy: String?
   var editedAt: String?
   var snippet: String?
+  var frontmatter: [String: FrontValue]?
   var id: String { path }
   var name: String { title ?? (path as NSString).lastPathComponent }
   var editable: Bool { access == "edit" || access == "manage" }
