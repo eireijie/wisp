@@ -12,6 +12,8 @@ struct ThreadRef: Hashable {
 struct ChannelView: View {
   @Environment(Store.self) private var store
   var channel: Channel
+  /** text to start the message with (a request to try a skill) */
+  var draft = ""
   @State private var error: String?
   @State private var loadingEarlier = false
   @State private var calling = false
@@ -76,7 +78,7 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count) { text, files in
+          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft) { text, files in
             try await store.send(text, in: channel.id, files: files)
           }
         }
@@ -331,6 +333,8 @@ struct Composer: View {
   var thread: String? = nil
   /** changes when the conversation moves on, so the context ring catches up */
   var refresh = 0
+  /** what the message starts with, instead of the saved draft (a request to try a skill) */
+  var draft = ""
   var send: (String, [String]) async throws -> Void
   @State private var text = ""
   @State private var selection: TextSelection?
@@ -459,7 +463,10 @@ struct Composer: View {
       await slash.load(store, agents: slashHere)
     }
     .task(id: slashHere.map(\.id)) { if slashQuery != nil { await slash.load(store, agents: slashHere) } }
-    .onAppear { if text.isEmpty, let draftKey { text = ComposerDrafts.load(draftKey) } }
+    .onAppear {
+      guard text.isEmpty else { return }
+      if !draft.isEmpty { text = draft } else if let draftKey { text = ComposerDrafts.load(draftKey) }
+    }
     .onChange(of: text) { _, new in if let draftKey { ComposerDrafts.save(new, key: draftKey) } }
     .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
     .onChange(of: photos) { _, items in

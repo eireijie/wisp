@@ -27,8 +27,7 @@ struct YouView: View {
         Section {
           NavigationLink { MemoryView() } label: { YouRow("Memory", "Notes you and your helpers share", "book.fill", .purple) }.accessibilityIdentifier("you-memory")
           NavigationLink { AboutYouView() } label: { YouRow("About you", "What helpers should know about you", "brain", .pink) }.accessibilityIdentifier("you-about")
-          NavigationLink { ConnectorsView() } label: { YouRow("Connected apps", "Gmail, Slack and other apps helpers can use", "powerplug.fill", .orange) }.accessibilityIdentifier("you-connectors")
-          NavigationLink { SkillsView() } label: { YouRow("Skills", "Things helpers know how to do", "wand.and.stars", .yellow) }.accessibilityIdentifier("you-skills")
+          NavigationLink { MarketplaceView() } label: { YouRow("Marketplace", "Apps and skills for your helpers", "bag.fill", .orange) }.accessibilityIdentifier("you-marketplace")
           NavigationLink { DevicesView() } label: { YouRow("Devices", "Computers running Wisp", "server.rack", .gray) }.accessibilityIdentifier("you-devices")
         }
         Section {

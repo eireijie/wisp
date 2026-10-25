@@ -14,6 +14,7 @@ struct ConnectorEditor: View {
   @Environment(\.openURL) private var openURL
   var existing: AppConnector?
   var entry: AppConnector?
+  var presetEnv: [String: String] = [:]
   var onSignInError: (String) -> Void = { _ in }
   @State private var kind = "mcp-stdio"
   @State private var name = ""
@@ -80,6 +81,7 @@ struct ConnectorEditor: View {
       headers = (source?.headers ?? [:]).sorted { $0.key < $1.key }.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
       rows = (entry?.fields ?? []).map { ConnectorValue(key: $0.key, value: "", saved: existing?.env?[$0.key], field: $0) }
       for (key, value) in existing?.env ?? [:] where !rows.contains(where: { $0.key == key }) { rows.append(ConnectorValue(key: key, value: "", saved: value)) }
+      for (key, value) in presetEnv where !rows.contains(where: { $0.key == key }) { rows.append(ConnectorValue(key: key, value: value)) }
       agents = Set(existing?.agentIds ?? [])
       if existing == nil, store.agents.count == 1, let agent = store.agents.first, supported(agent) { agents = [agent.id] }
     }
