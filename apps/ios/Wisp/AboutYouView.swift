@@ -26,7 +26,8 @@ struct AboutYouView: View {
       InlineError(error: action.error)
       let items = (profile?.items ?? []).filter { $0.kind == category }.sorted { $0.pinned == true && $1.pinned != true }
       if items.isEmpty { Text("No \(Self.kinds.first { $0.0 == category }?.1.lowercased() ?? "notes") yet").foregroundStyle(.secondary) }
-      ForEach(items) { item in
+      if category == "did" { JournalDays(items: items) }
+      else { ForEach(items) { item in
         Section {
           Text(item.text).textSelection(.enabled)
           if let due = item.due, let date = Wire.date(due) { Text("Due \(date, format: .dateTime.year().month().day())").font(.caption) }
@@ -48,7 +49,7 @@ struct AboutYouView: View {
             }
           }
         }
-      }
+      } }
     }
     .sectionScreen(user == "me" ? "About you" : "About \(profile?.person.name ?? "…")", id: "about")
     .toolbar { if profile?.editable == true { Button("Remember this", systemImage: "plus") { adding = true } } }
