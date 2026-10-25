@@ -53,12 +53,14 @@ struct ChannelView: View {
             thread: ThreadRef(channelId: channel.id, rootId: m.id), working: inThreads.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
           .id(m.id)
         }
+        ForEach(store.streaming(in: channel.id, thread: nil)) { StreamingRow(run: $0) }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
       .padding(.bottom, 8)
     }
     .defaultScrollAnchor(.bottom)
     .onChange(of: list.last?.id) { Bottom.follow(proxy) }
+    .onChange(of: store.liveLength) { Bottom.follow(proxy) }
     // a lazy stack measures tall rows (a long reply) only as they're laid out, so the first scroll
     // to the end can land past it and show nothing; settle on the real end once layout is done
     .task(id: list.last?.id) {
@@ -73,7 +75,7 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder, channelId: channel.id) { text, files in
+          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count) { text, files in
             try await store.send(text, in: channel.id, files: files)
           }
         }
@@ -208,11 +210,13 @@ struct ThreadView: View {
             thread: ThreadRef(channelId: ref.channelId, rootId: m.id, from: ref.rootId),
             working: below.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
         }
+        ForEach(store.streaming(in: ref.channelId, thread: ref.rootId)) { StreamingRow(run: $0) }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
     }
     .defaultScrollAnchor(.bottom)
     .onChange(of: replies.last?.id) { Bottom.follow(proxy) }
+    .onChange(of: store.liveLength) { Bottom.follow(proxy) }
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
@@ -221,7 +225,7 @@ struct ThreadView: View {
       } else {
         VStack(spacing: 6) {
           if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch, thread: ref.rootId) }
-          Composer(placeholder: "Reply", channelId: ref.channelId) { text, files in try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files) }
+          Composer(placeholder: "Reply", channelId: ref.channelId, thread: ref.rootId, refresh: replies.count) { text, files in try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files) }
         }
       }
     }
@@ -312,6 +316,10 @@ struct Composer: View {
   var placeholder: String
   /** where attachments are shared, so only people who can see the conversation can open them */
   var channelId: String?
+  /** the thread it replies in, which keeps its own saved draft */
+  var thread: String? = nil
+  /** changes when the conversation moves on, so the context ring catches up */
+  var refresh = 0
   var send: (String, [String]) async throws -> Void
   @State private var text = ""
   @State private var selection: TextSelection?
@@ -322,6 +330,7 @@ struct Composer: View {
   @State private var pickingPhotos = false
   @State private var pickingFiles = false
   @State private var photos: [PhotosPickerItem] = []
+  @State private var slash = SlashMenuModel()
   @FocusState private var focused: Bool
 
   private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty }
@@ -337,8 +346,30 @@ struct Composer: View {
     focused ? ComposerMentions.suggestions(text, caret: caret, agents: store.agents, people: store.members.filter { $0.id != store.me?.id }) : []
   }
 
+  private var channel: Channel? { channelId.flatMap { id in store.channels.first { $0.id == id } } }
+  private var chatAgent: Agent? { channel.flatMap { store.dmAgent($0) } }
+  private var draftKey: String? { channelId.map { ComposerDrafts.key(channel: $0, thread: thread) } }
+  private var slashQuery: SlashQuery.Parsed? {
+    focused && channel != nil ? SlashQuery.parse(String(text.prefix(caret))) : nil
+  }
+  private var slashHere: [Agent] {
+    SlashMenu.agentsHere(isDm: chatAgent != nil, dmAgent: chatAgent, agents: store.agents, members: slash.members, handle: slashQuery?.handle)
+  }
+
   var body: some View {
     VStack(spacing: 4) {
+      if let q = slashQuery {
+        let here = slashHere
+        let groups = SlashMenu.groups(here: here, lists: slash.lists, only: slash.only, query: q.query)
+        if !groups.isEmpty || here.contains(where: { slash.lists[$0.id] == nil }) {
+          SlashMenuView(here: here, groups: groups, loading: here.contains { slash.lists[$0.id] == nil }, only: $slash.only) { command, agent in
+            let done = SlashMenu.replacing(text, caret: caret, with: SlashMenu.text(for: command, agent: agent, isDm: chatAgent != nil))
+            text = done.text
+            selection = TextSelection(insertionPoint: text.index(text.startIndex, offsetBy: done.caret))
+            focused = true
+          }
+        }
+      }
       if !suggestions.isEmpty {
         VStack(spacing: 0) {
           ForEach(suggestions) { suggestion in
@@ -369,6 +400,7 @@ struct Composer: View {
       }
       if let error { Text(error).font(.caption).foregroundStyle(.red) }
       VStack(alignment: .leading, spacing: 0) {
+        if let agent = chatAgent, let channelId { ChatControls(agent: agent, channelId: channelId, thread: thread, refresh: refresh) }
         if !files.isEmpty || uploading > 0 { attachments }
         HStack(alignment: .bottom, spacing: 6) {
           Menu {
@@ -410,6 +442,14 @@ struct Composer: View {
     .padding(.horizontal, 12)
     .padding(.bottom, 6)
     .padding(.top, 4)
+    .task(id: slashQuery != nil) {
+      guard slashQuery != nil, let channelId else { return }
+      if chatAgent == nil { await slash.loadMembers(store, channelId: channelId) }
+      await slash.load(store, agents: slashHere)
+    }
+    .task(id: slashHere.map(\.id)) { if slashQuery != nil { await slash.load(store, agents: slashHere) } }
+    .onAppear { if text.isEmpty, let draftKey { text = ComposerDrafts.load(draftKey) } }
+    .onChange(of: text) { _, new in if let draftKey { ComposerDrafts.save(new, key: draftKey) } }
     .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
     .onChange(of: photos) { _, items in
       guard !items.isEmpty else { return }

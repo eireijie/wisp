@@ -85,6 +85,8 @@ final class Store {
   /** the run each working agent is on, so it can be stopped */
   var activityRun: [String: String] = [:]
   var activitySince: [String: Date] = [:]
+  /** replies being written right now, by run, until the posted message replaces them */
+  var liveRuns: [String: LiveRun] = [:]
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
@@ -634,7 +636,7 @@ final class Store {
   private struct DiscussionEvent: Decodable { struct D: Decodable { var id: String }; var discussion: D }
   private struct StatusEvent: Decodable { var agentId: String; var status: Agent.Status }
   private struct RunEvent: Decodable {
-    struct E: Decodable { var type: String; var text: String?; var name: String? }
+    struct E: Decodable { var type: String; var text: String?; var name: String?; var message: String? }
     var runId: String?
     var agentId: String
     var channelId: String
@@ -656,6 +658,7 @@ final class Store {
     case "ready":
       connected = true
       retry = 0
+      liveRuns = [:]
       // the first connect follows a full load; only a reconnect has events to catch up on
       if connectedOnce { Task { await refreshAfterReconnect() } }
       else {
@@ -670,6 +673,7 @@ final class Store {
       guard let e = try? d.decode(MessageEvent.self, from: data) else { return }
       insert(e.message)
       if e.message.author.kind == .agent {
+        clearLive(agent: e.message.author.id, channel: e.message.channelId)
         activity[e.message.author.id] = nil
         activityChannel[e.message.author.id] = nil
         activityThread[e.message.author.id] = nil
@@ -699,6 +703,7 @@ final class Store {
       }
       agents[i].status = e.status
       if e.status != .busy {
+        clearLive(agent: e.agentId)
         activity[e.agentId] = nil
         activityChannel[e.agentId] = nil
         activityThread[e.agentId] = nil
@@ -718,6 +723,9 @@ final class Store {
         activityRun[e.agentId] = run
         activitySteps[e.agentId] = []
         activitySince[e.agentId] = Date()
+      }
+      if let run = e.runId {
+        applyLive(runId: run, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text ?? e.event.message)
       }
       switch e.event.type {
       case "status":
