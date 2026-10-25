@@ -4,13 +4,20 @@ import SwiftUI
 struct ComputersView: View {
   @Environment(Store.self) private var store
   @State private var path: [String] = []
+  @State private var adding = false
 
   var body: some View {
     NavigationStack(path: $path) {
       ScrollView {
         if store.computers.isEmpty {
-          ContentUnavailableView("No computers yet", systemImage: "desktopcomputer", description: Text("Give an agent a computer from Wisp on your computer: a VM on one of your devices, or an Orgo cloud computer."))
-            .padding(.top, 80)
+          ContentUnavailableView {
+            Label("No computers yet", systemImage: "desktopcomputer")
+          } description: {
+            Text("Give an agent a computer: a VM on one of your devices, your own screen, or an Orgo cloud computer.")
+          } actions: {
+            Button("Add computer") { adding = true }.primaryButton()
+          }
+          .padding(.top, 80)
         }
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
           ForEach(store.computers) { c in
@@ -40,6 +47,12 @@ struct ComputersView: View {
         .padding(16)
       }
       .navigationTitle("Computers")
+      .toolbar {
+        ToolbarItem(placement: .primaryAction) {
+          Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Add computer")
+        }
+      }
+      .sheet(isPresented: $adding) { AddComputerView { path = [$0.id] } }
       .refreshable { await store.refreshComputers() }
       .navigationDestination(for: String.self) { ComputerDetail(computerId: $0) }
     }
@@ -131,6 +144,22 @@ struct ComputerDetail: View {
   @State private var needCode = false
   @State private var codeError: String?
   @State private var codeTry = 0
+  /** the menu's sheets and questions */
+  @Environment(\.dismiss) private var dismiss
+  @State private var showDetails = false
+  @State private var showFiles = false
+  @State private var showClipboard = false
+  @State private var renaming = false
+  @State private var newName = ""
+  @State private var removing = false
+  @State private var sharing: SharedFile?
+  @State private var handingBack = false
+  @State private var handBackNote = ""
+  /** teaching a task: choosing who learns it, recording, naming it, and where to look afterwards */
+  @State private var pickingTeacher = false
+  @State private var teach: TeachSession?
+  @State private var savingLesson = false
+  @State private var lessonAgent: Agent?
 
   var body: some View {
     if store.canViewComputers, let c = computer {
@@ -149,6 +178,8 @@ struct ComputerDetail: View {
             .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color.orange.opacity(0.14)))
           }
 
+          if let teach { TeachBar(session: teach, cancel: { stopTeaching(c) }, done: { savingLesson = true }) }
+
           screen(c)
             .overlay(alignment: .bottom) {
               if let note {
@@ -159,7 +190,7 @@ struct ComputerDetail: View {
           if inControl { controls(c) }
 
           if c.status == "ready" {
-            controlButton(c)
+            if teach == nil { controlButton(c) }
           } else {
             HStack { ComputerStatus(computer: c); Spacer() }
           }
@@ -171,9 +202,40 @@ struct ComputerDetail: View {
       }
       .navigationTitle(c.name)
       .navigationBarTitleDisplayMode(.inline)
-      .toolbar { ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) } }
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) }
+        ToolbarItem(placement: .topBarTrailing) { moreMenu(c) }
+      }
       .toolbar(.hidden, for: .tabBar)
       .task(id: "\(c.status) \(c.code ?? "") \(codeTry) \(store.session)") { await stream(c) }
+      .task { if store.nodes.isEmpty { try? await store.refreshNodes() } }
+      .onDisappear { if let c = computer, teach != nil { stopTeaching(c) } }
+      .sheet(isPresented: $showDetails) { ComputerDetailsView(computerId: c.id) }
+      .sheet(isPresented: $showFiles) { ComputerFilesView(computerId: c.id) }
+      .sheet(isPresented: $showClipboard) { ComputerClipboardView(computerId: c.id) }
+      .sheet(item: $sharing) { ShareSheet(items: [$0.url]).ignoresSafeArea() }
+      .sheet(isPresented: $pickingTeacher) { TeachAgentPicker(computer: c) { startTeaching(c, with: $0) } }
+      .sheet(isPresented: $savingLesson) {
+        if let teach { TeachSaveSheet(session: teach, computer: c) { lessonSaved(c, teach.agent) } }
+      }
+      .sheet(item: $lessonAgent) { a in NavigationStack { RoutinesView(agent: a).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { lessonAgent = nil } } } } }
+      .alert("Rename computer", isPresented: $renaming) {
+        TextField("Name", text: $newName)
+        Button("Cancel", role: .cancel) {}
+        Button("Save") { rename(c) }
+      }
+      .alert("Hand back", isPresented: $handingBack) {
+        TextField("What you did (optional)", text: $handBackNote)
+        Button("Cancel", role: .cancel) {}
+        Button("Hand back") { handBack(c, note: handBackNote) }
+      } message: {
+        Text("\(store.agent(c.help?.agentId ?? "")?.name ?? "The agent") picks up from here. Tell it what you did, if you like.")
+      }
+      .confirmationDialog("Remove \(c.name)?", isPresented: $removing, titleVisibility: .visible) {
+        Button(c.kind == "device" ? "Stop sharing this screen" : "Delete computer", role: .destructive) { remove(c) }
+      } message: {
+        Text(ComputerRights.removeWarning(c))
+      }
     } else if store.canViewComputers {
       ContentUnavailableView("Computer not found", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
     }
@@ -227,6 +289,7 @@ struct ComputerDetail: View {
           Section("Clipboard") {
             Button("Paste from iPhone", systemImage: "doc.on.clipboard") { pasteFromPhone(c) }
             Button("Copy to iPhone", systemImage: "iphone.and.arrow.forward") { copyToPhone(c) }
+            Button("Send text or open a link…", systemImage: "link") { showClipboard = true }
           }
         } label: {
           Image(systemName: "ellipsis").font(.title3.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
@@ -247,6 +310,111 @@ struct ComputerDetail: View {
     .accessibilityLabel(label)
   }
 
+  // MARK: the menu
+
+  private func canRemove(_ c: Computer) -> Bool {
+    ComputerRights.canRemove(c, userId: store.me?.id, role: store.role, nodes: store.nodes)
+  }
+
+  @ViewBuilder private func moreMenu(_ c: Computer) -> some View {
+    Menu {
+      Button("Details", systemImage: "info.circle") { showDetails = true }
+      if c.canTransfer {
+        Button("Files", systemImage: "folder") { showFiles = true }
+        Button("Clipboard", systemImage: "doc.on.clipboard") { showClipboard = true }
+      }
+      if store.features.teach, c.canTransfer, c.status == "ready", teach == nil, c.controller == nil || inControl {
+        Button("Teach a task", systemImage: "record.circle") { pickingTeacher = true }
+      }
+      Divider()
+      if c.canTransfer, c.status == "ready" {
+        Button("Save a screenshot", systemImage: "camera") { screenshot(c) }
+      }
+      Button("Rename", systemImage: "pencil") { newName = c.name; renaming = true }
+      if c.kind != "device" {
+        let stopped = c.status == "stopped"
+        Button(stopped ? "Start" : "Stop", systemImage: stopped ? "play" : "power") { setRunning(c, stopped) }
+      }
+      if canRemove(c) {
+        Divider()
+        Button(c.kind == "device" ? "Stop sharing this screen" : "Delete computer", systemImage: "trash", role: .destructive) { removing = true }
+      }
+    } label: {
+      Image(systemName: "ellipsis.circle")
+    }
+    .accessibilityLabel("More")
+  }
+
+  private func screenshot(_ c: Computer) {
+    Task {
+      do { sharing = SharedFile(url: try await store.screenshotFile(c)) } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+    }
+  }
+
+  private func rename(_ c: Computer) {
+    let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, name != c.name else { return }
+    Task {
+      do { try await store.renameComputer(c, to: name); error = nil } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+    }
+  }
+
+  private func setRunning(_ c: Computer, _ running: Bool) {
+    Task {
+      do { try await store.setComputerRunning(c, running); error = nil } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+    }
+  }
+
+  private func remove(_ c: Computer) {
+    Task {
+      do {
+        try await store.removeComputer(c)
+        dismiss()
+      } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+    }
+  }
+
+  private func handBack(_ c: Computer, note: String?) {
+    busy = true
+    keyboard = false
+    Task {
+      do { try await store.handBack(c, note: note); error = nil } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+      busy = false
+    }
+  }
+
+  // MARK: teaching
+
+  /** Teaching needs control, so take it first if you don't have it. */
+  private func startTeaching(_ c: Computer, with agent: Agent) {
+    busy = true
+    Task {
+      do {
+        if !inControl { try await store.control(c, take: true) }
+        teach = TeachSession(agent: agent)
+        error = nil
+      } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+      busy = false
+    }
+  }
+
+  /** Cancel: forget what was recorded and give the computer back. */
+  private func stopTeaching(_ c: Computer) {
+    teach = nil
+    savingLesson = false
+    keyboard = false
+    Task { try? await store.handBack(c, note: nil) }
+  }
+
+  private func lessonSaved(_ c: Computer, _ agent: Agent) {
+    teach = nil
+    keyboard = false
+    Task {
+      try? await store.handBack(c, note: nil)
+      if store.features.routines { lessonAgent = agent } else { flash("Saved. \(agent.name) is learning it") }
+    }
+  }
+
   private func flash(_ text: String) {
     withAnimation { note = text }
     Task {
@@ -261,7 +429,9 @@ struct ComputerDetail: View {
     Task {
       do {
         try await store.setClipboard(c, text)
-        try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable(await store.pasteKeys(c))])
+        let paste = await store.pasteKeys(c)
+        teach?.record(store, c, kind: "key", keys: paste)
+        try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable(paste)])
         flash("Pasted from iPhone")
       } catch { self.error = error.localizedDescription }
     }
@@ -317,10 +487,11 @@ struct ComputerDetail: View {
 
   @ViewBuilder private func controlButton(_ c: Computer) -> some View {
     let button = Button {
+      if inControl && c.help != nil { handBackNote = ""; handingBack = true; return }
+      if inControl { return handBack(c, note: nil) }
       busy = true
       Task {
-        do { try await store.control(c, take: !inControl) } catch { self.error = error.localizedDescription }
-        if !inControl { keyboard = false }
+        do { try await store.control(c, take: true) } catch { self.error = error.localizedDescription }
         busy = false
       }
     } label: {
@@ -447,6 +618,7 @@ struct ComputerDetail: View {
     let x = (pt.x - ox) / fit.width * CGFloat(f.width), y = (pt.y - oy) / fit.height * CGFloat(f.height)
     guard x >= 0, y >= 0, x <= CGFloat(f.width), y <= CGFloat(f.height) else { return }
     lastTap = pt
+    teach?.record(store, c, kind: "click", frame: f, x: Int(x.rounded()), y: Int(y.rounded()))
     UIImpactFeedbackGenerator(style: .light).impactOccurred()
     perform(c, ["action": AnyEncodable("click"), "x": AnyEncodable(Double(x)), "y": AnyEncodable(Double(y)), "space": AnyEncodable(["width": f.width, "height": f.height])])
     Task {
@@ -462,18 +634,28 @@ struct ComputerDetail: View {
     Task {
       defer { sendingTyping = false }
       do {
-        if !text.isEmpty { try await store.act(c, ["action": AnyEncodable("type"), "text": AnyEncodable(text)]) }
+        if !text.isEmpty {
+          teach?.record(store, c, kind: "type", text: text)
+          try await store.act(c, ["action": AnyEncodable("type"), "text": AnyEncodable(text)])
+        }
         typing = ""
-        if enter { try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable("Enter")]) }
+        if enter {
+          teach?.record(store, c, kind: "key", frame: frame, keys: "Enter")
+          try await store.act(c, ["action": AnyEncodable("key"), "keys": AnyEncodable("Enter")])
+        }
         error = nil
       } catch { self.error = error.localizedDescription }
     }
   }
 
-  private func key(_ c: Computer, _ k: String) { perform(c, ["action": AnyEncodable("key"), "keys": AnyEncodable(k)]) }
+  private func key(_ c: Computer, _ k: String) {
+    teach?.record(store, c, kind: "key", frame: frame, keys: k)
+    perform(c, ["action": AnyEncodable("key"), "keys": AnyEncodable(k)])
+  }
 
   private func scroll(_ c: Computer, _ dir: String) {
     guard let f = frame else { return }
+    teach?.record(store, c, kind: "scroll", x: f.width / 2, y: f.height / 2, direction: dir)
     perform(c, ["action": AnyEncodable("scroll"), "x": AnyEncodable(f.width / 2), "y": AnyEncodable(f.height / 2), "direction": AnyEncodable(dir), "amount": AnyEncodable(3)])
   }
 
