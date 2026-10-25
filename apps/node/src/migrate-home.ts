@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 export interface HomeMigrationOptions {
   home: string;
@@ -92,6 +93,18 @@ export function migrateHome({ home, from = ".warren", to = ".wisp", log = () => 
     log(`Wisp could not finish migrating ${source}: ${(err as Error).message}; using ${moved ? destination : source}`);
     return { moved, dir: moved ? destination : source };
   }
+}
+
+/** The checkout this file lives in (apps/node/src → repo root). */
+export const checkoutDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+/** Hubs from before the rename kept their data in <checkout>/data. Keep using it until <home>/data holds a database. */
+export function defaultHubDataDir(homeDir: string, checkout = checkoutDir, log: (line: string) => void = () => {}, io: typeof fs = fs): string {
+  const hasDb = (dir: string) => ["wisp.db", "warren.db"].some((name) => io.existsSync(path.join(dir, name)));
+  const fresh = path.join(homeDir, "data"), old = path.join(checkout, "data");
+  if (hasDb(fresh) || !hasDb(old)) return fresh;
+  log(`Wisp is using the data folder from before the rename (${old})`);
+  return old;
 }
 
 /** Linux system installs use the same migration, but can retain the old directory if unwritable. */

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { migrateHome, migrateDataDir } from "../src/migrate-home.ts";
+import { migrateHome, migrateDataDir, defaultHubDataDir } from "../src/migrate-home.ts";
 import { migrateServices, rewriteService, type ServiceRunner } from "../src/migrate-services.ts";
 import { existingComputer } from "../src/computers/docker.ts";
 import type { exec } from "../src/computers/driver.ts";
@@ -79,6 +79,23 @@ describe("home migration", () => {
     Object.defineProperty(io, "lstatSync", { value: (p: string) => p === "/var/lib/warren" ? { isDirectory: () => true, isSymbolicLink: () => false } : undefined });
     io.renameSync = () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); };
     expect(migrateDataDir("/var/lib/wisp", () => {}, io)).toBe("/var/lib/warren");
+  });
+});
+
+describe("hub data folder after the rename", () => {
+  const checkout = () => path.join(home, "checkout");
+  it("keeps using <checkout>/data when the old hub kept its database there", () => {
+    write("checkout/data/warren.db", "");
+    expect(defaultHubDataDir(path.join(home, ".wisp"), checkout())).toBe(path.join(checkout(), "data"));
+  });
+  it("prefers the new data folder once it has a database", () => {
+    write("checkout/data/warren.db", "");
+    write(".wisp/data/wisp.db", "");
+    expect(defaultHubDataDir(path.join(home, ".wisp"), checkout())).toBe(path.join(home, ".wisp", "data"));
+  });
+  it("uses the new data folder for a fresh install", () => {
+    fs.mkdirSync(path.join(checkout(), "data"), { recursive: true });
+    expect(defaultHubDataDir(path.join(home, ".wisp"), checkout())).toBe(path.join(home, ".wisp", "data"));
   });
 });
 

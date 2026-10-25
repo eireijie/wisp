@@ -18,7 +18,7 @@ import { installService, isService, serviceStatus, servicePort, uninstallService
 import { NodeDaemon, normalizeHubUrl, type NodeConfig } from "./daemon.ts";
 import { REPO_ROOT, RESTART_CODE, checkForUpdate, runUpdate, underKeeper, version, watchForUpdates } from "@wisp/update";
 
-import { migrateHome } from "./migrate-home.ts";
+import { migrateHome, defaultHubDataDir } from "./migrate-home.ts";
 import { migrateServices } from "./migrate-services.ts";
 import { findMovedWisp, joinTarget, joinWisp } from "./join.ts";
 import { doctor } from "./doctor.ts";
@@ -404,7 +404,7 @@ function saveNodeConfig(): NodeConfig {
 
 /** Where the hub on this computer keeps its data (the same default as the hub itself). */
 function hubDataDir(): string {
-  return path.resolve(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? path.join(migration.dir, "data"));
+  return path.resolve(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? defaultHubDataDir(migration.dir));
 }
 
 /** A new Wisp's setup link (apps/hub/src/setup-code.ts), when nobody has made the first account yet. */

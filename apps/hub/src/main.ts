@@ -1,5 +1,5 @@
 import os from "node:os";
-import { migrateHome, migrateDataDir } from "../../node/src/migrate-home.ts";
+import { migrateHome, migrateDataDir, defaultHubDataDir } from "../../node/src/migrate-home.ts";
 import { envVar } from "@wisp/core";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,7 @@ import { buildHub } from "./app.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const home = migrateHome({ home: os.homedir(), log: console.log });
-const dataDir = path.resolve(migrateDataDir(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? path.join(home.dir, "data"), console.log));
+const dataDir = path.resolve(migrateDataDir(envVar("DATA_DIR") ?? envVar("DEFAULT_DATA_DIR") ?? defaultHubDataDir(home.dir, undefined, console.log), console.log));
 const webDir = path.resolve(envVar("WEB_DIR") ?? path.join(here, "../../web/dist"));
 const port = Number(process.env.PORT ?? 4747);
 const host = process.env.HOST ?? "0.0.0.0";
