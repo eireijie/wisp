@@ -752,7 +752,16 @@ describe("what people can reach", () => {
     expect(other.status).toBe(400);
   });
 
+  it("refuses a draft by an agent that won't answer the person, instead of waiting for it forever", async () => {
+    const quiet = (await api("POST", "/api/agents", { handle: "quiet", name: "Quiet", harness: "custom" })).data;
+    await api("PATCH", `/api/agents/${quiet.id}`, { settings: { respondTo: "me" } });
+    const r = await api("POST", "/api/team-drafts", { description: "Do a thing", agentId: quiet.id }, alice);
+    expect(r.status).toBe(409);
+    expect(r.data.error).toMatch(/only answers some people/);
+  });
+
   it("a draft is only for people who can see the chat it was asked in, and the brief leaves out private teams", async () => {
+    await api("PATCH", `/api/agents/${agents.pixel.id}`, { settings: { respondTo: "anyone" } });
     const started = (await api<TeamDraft>("POST", "/api/team-drafts", { description: "Pixel does a thing", agentId: agents.pixel.id }, alice)).data;
     expect(hub.store.task(started.id)!.brief).toMatch(/alice-only/);
     await finish("pixel", started.id, JSON.stringify({ name: "Thing", steps: [{ id: "s1", title: "Do it", agent: "pixel" }, { id: "s2", kind: "handoff", title: "Tell", team: "alice-only", inputs: ["s1"] }] }));

@@ -164,6 +164,9 @@ export function registerTeamDraftApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const all = store.agents(c.workspaceId);
     const agent = body.agentId ? store.agent(body.agentId) : (workspaceLead(store, c.workspaceId) ?? all[0]);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: all.length ? "agent not found" : "Add an agent first: an agent draws the flowchart." });
+    // an agent that won't wake for this person would leave the draft "working" for good
+    const why = hub.whyNotAllowed(agent, c.actor.id) ?? (hub.answers(agent, c.actor.id) ? null : `@${agent.handle} only answers some people, so it can't draw this for you. Pick another agent`);
+    if (why) return reply.code(409).send({ error: why });
     if (!hub.flows.delegate) return reply.code(503).send({ error: "not ready yet" });
     const teams = store.channels(c.workspaceId).filter((x) => x.kind === "channel" && !x.archivedAt && sees(c, x.id)).map((x) => x.name);
     const dm = store.dmChannel(c.workspaceId, c.actor.id, agent.id);
