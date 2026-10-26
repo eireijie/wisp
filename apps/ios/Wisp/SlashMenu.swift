@@ -122,7 +122,7 @@ final class SlashMenuModel {
   }
 }
 
-/** The "/" menu above the message bar: each agent's commands grouped under it, with a row to pick just one agent. */
+/** The "/" menu above the message bar: chips to pick one agent, then each command with what it does. */
 struct SlashMenuView: View {
   var here: [Agent]
   var groups: [SlashGroup]
@@ -130,39 +130,43 @@ struct SlashMenuView: View {
   @Binding var only: String?
   var onPick: (AgentCommand, Agent) -> Void
 
+  /** with everyone's commands showing, one every agent has (/context, /model) is listed once */
+  private var rows: [(agent: Agent, command: AgentCommand)] {
+    let all = groups.flatMap { g in g.items.map { (agent: g.agent, command: $0) } }
+    guard only == nil, here.count > 1 else { return all }
+    var seen = Set<String>()
+    return all.filter { seen.insert($0.command.name).inserted }
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       if here.count > 1 { agentRow }
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
-          if groups.isEmpty && loading { Text("Loading…").font(.subheadline).foregroundStyle(.secondary).padding(12) }
-          ForEach(groups) { g in
-            Text("\(g.agent.name) · \(Self.harnessName(g.agent.harness))")
-              .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-              .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            ForEach(g.items) { c in
-              Button { onPick(c, g.agent) } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                  VStack(alignment: .leading, spacing: 1) {
-                    (Text("/\(c.name)").fontWeight(.medium) + Text(c.hint.map { " \($0)" } ?? "").foregroundStyle(.secondary))
-                      .font(.subheadline).lineLimit(1)
-                    if let d = c.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                  }
-                  Spacer(minLength: 0)
-                  Text(c.kindLabel).font(.caption2).foregroundStyle(.tertiary)
+          if groups.isEmpty && loading { Text("Loading…").font(.subheadline).foregroundStyle(Palette.muted).padding(12) }
+          ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            Button { onPick(row.command, row.agent) } label: {
+              HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                  (Text("/\(row.command.name)").fontWeight(.semibold) + Text(row.command.hint.map { " \($0)" } ?? "").foregroundStyle(Palette.muted))
+                    .font(.system(size: 16)).lineLimit(1)
+                  if let d = row.command.description, !d.isEmpty { Text(d).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1) }
                 }
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .contentShape(Rectangle())
+                Spacer(minLength: 0)
+                if only == nil && here.count > 1 && !(rows.count < groups.flatMap(\.items).count) { Text(row.agent.name).font(.caption2).foregroundStyle(Palette.faint) }
               }
-              .buttonStyle(.plain)
-              .accessibilityLabel("/\(c.name), \(g.agent.name)")
+              .padding(.horizontal, 16).padding(.vertical, 8)
+              .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("/\(row.command.name), \(row.agent.name)")
           }
         }
+        .padding(.vertical, 4)
       }
-      .frame(maxHeight: 240)
+      .frame(maxHeight: 260)
     }
-    .glass(18)
+    .glass(Corner.card)
     .accessibilityIdentifier("slash-menu")
   }
 
@@ -170,28 +174,25 @@ struct SlashMenuView: View {
     harness.replacingOccurrences(of: "-", with: " ").capitalized
   }
 
+  private func chip(_ title: String, _ on: Bool, _ tap: @escaping () -> Void) -> some View {
+    Button(action: tap) {
+      Text(title).font(.system(size: 13, weight: .medium))
+        .foregroundStyle(on ? Palette.ground : Palette.muted)
+        .padding(.horizontal, 14).frame(height: 32)
+        .background(Capsule().fill(on ? Palette.text : Palette.control))
+        .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: on ? 0 : 1))
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(on ? .isSelected : [])
+  }
+
   private var agentRow: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 6) {
-        Button { only = nil } label: {
-          Text("All").font(.caption.weight(.semibold)).padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Capsule().fill(only == nil ? Color(.tertiarySystemFill) : .clear))
-        }.buttonStyle(.plain)
-        ForEach(here) { a in
-          Button { only = only == a.id ? nil : a.id } label: {
-            HStack(spacing: 4) {
-              AgentAvatar(agent: a, size: 20, showStatus: false)
-              Text(a.name).font(.caption.weight(.semibold))
-            }
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Capsule().fill(only == a.id ? Color(.tertiarySystemFill) : .clear))
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Only \(a.name)")
-          .accessibilityAddTraits(only == a.id ? .isSelected : [])
-        }
+        chip("All agents", only == nil) { only = nil }
+        ForEach(here) { a in chip(a.name, only == a.id) { only = only == a.id ? nil : a.id } }
       }
-      .padding(.horizontal, 8).padding(.vertical, 6)
+      .padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 4)
     }
   }
 }

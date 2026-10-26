@@ -55,7 +55,7 @@ export const NOTIFY: Record<ChannelNotify, { label: string; body: string }> = {
 };
 
 /** "Who answers messages without an @mention?": one agent, or nobody (only @mentioned agents). */
-function AnswerSelect({ agents, value, onChange, disabled }: { agents: Agent[]; value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+export function AnswerSelect({ agents, value, onChange, disabled }: { agents: Agent[]; value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} disabled={disabled} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm" aria-label="Who answers messages without an @mention">
       <option value="">Nobody: only agents someone @mentions</option>
@@ -414,7 +414,7 @@ export function landingChannel(channels: ChannelInfo[]) {
 }
 
 /** Back to #general (after leaving or deleting the channel you were in). */
-function toGeneral() {
+export function toGeneral() {
   go({ view: "chat", channelId: landingChannel(useStore.getState().channels)?.id ?? null, threadId: null });
 }
 
@@ -486,7 +486,7 @@ export function ChannelSettings({ channel: initial, tab: initialTab = "about", o
   );
 }
 
-function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
+export function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
   const sections = useStore((s) => s.sections);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [name, setName] = useState(channel.name);
@@ -726,7 +726,7 @@ export function useTeamWork(channelId: string): Record<string, string> {
 }
 
 /** A channel's team chart: who leads, who hands work to whom. Saving it adds everyone on it to the channel. */
-function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onClose }: { channel: ChannelInfo; team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean; onCreateAgent: (roleId?: string) => void; onClose: () => void }) {
+export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onClose }: { channel: ChannelInfo; team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean; onCreateAgent: (roleId?: string) => void; onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const working = useTeamWork(channel.id);
@@ -890,7 +890,7 @@ function TeamMore({ team, onChange, canManage }: { team: ChannelTeam; onChange: 
 }
 
 /** How agents behave here: who answers un-@mentioned messages, where they reply, and notes they all follow. */
-function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
+export function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [rules, setRules] = useState<AgentRules>(channel.settings);
@@ -965,7 +965,7 @@ interface PinRow {
 }
 
 /** The messages pinned in a channel, newest pin first, each one a way back to where it was said. */
-function ChannelPins({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
+export function ChannelPins({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
   const names = useNames();
   const canPin = useStore((s) => s.me?.role !== "guest") && !channel.archivedAt;
   const [pins, setPins] = useState<PinRow[] | null>(null);

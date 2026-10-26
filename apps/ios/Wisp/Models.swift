@@ -240,7 +240,8 @@ struct Reaction: Codable, Hashable {
 }
 
 enum MessagePart: Codable, Hashable {
-  case toolCall(name: String)
+  /** a tool the agent used: its name, one line of what it did ("Read main.ts"), and what it saved to memory when that's what it was */
+  case toolCall(name: String, line: String = "", remembered: Remembered? = nil)
   case file(fileId: String, name: String)
   case status(String)
   case notice(String)
@@ -254,13 +255,24 @@ enum MessagePart: Codable, Hashable {
   case context(ContextUsage?)
   case other(String)
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage }
+  /** what an agent saved about someone during a reply (the "Remembered" chip): the kind of note, its words, and the note it went to */
+  struct Remembered: Codable, Hashable {
+    var kind: String
+    var text: String
+    var path: String?
+  }
+
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
     let type = (try? c.decode(String.self, forKey: .type)) ?? ""
     switch type {
-    case "tool_call": self = .toolCall(name: (try? c.decode(String.self, forKey: .name)) ?? "tool")
+    case "tool_call":
+      let name = (try? c.decode(String.self, forKey: .name)) ?? "tool"
+      let input = (try? c.decode([String: LooseValue].self, forKey: .input)) ?? [:]
+      let output = (try? c.decode(LooseValue.self, forKey: .output))?.text ?? ""
+      self = .toolCall(name: name, line: ToolLine.of(name, input: input), remembered: ToolLine.remembered(name, input: input, output: output))
     case "file": self = .file(fileId: (try? c.decode(String.self, forKey: .fileId)) ?? "", name: (try? c.decode(String.self, forKey: .name)) ?? "file")
     case "status": self = .status((try? c.decode(String.self, forKey: .text)) ?? "")
     case "notice": self = .notice((try? c.decode(String.self, forKey: .text)) ?? "")
@@ -278,6 +290,30 @@ enum MessagePart: Codable, Hashable {
   func encode(to encoder: Encoder) throws {} // never sent back to the hub
 }
 
+/** The message a reply answers: who said it and a few of their words (ReplyQuote in packages/core/src/types.ts). */
+struct ReplyQuote: Codable, Hashable {
+  var id: String
+  var author: Actor
+  var snippet: String
+  var deleted: Bool?
+}
+
+/** A JSON value read loosely, for the parts of a tool call the app only shows as words. */
+enum LooseValue: Decodable, Hashable {
+  case string(String), number(Double), bool(Bool), null, other
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.singleValueContainer()
+    if let s = try? c.decode(String.self) { self = .string(s) }
+    else if let n = try? c.decode(Double.self) { self = .number(n) }
+    else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+    else if c.decodeNil() { self = .null }
+    else { self = .other }
+  }
+
+  var text: String? { if case .string(let s) = self { s } else { nil } }
+}
+
 struct Message: Codable, Identifiable, Hashable {
   var id: String
   var channelId: String
@@ -286,6 +322,9 @@ struct Message: Codable, Identifiable, Hashable {
   var body: String
   var parts: [MessagePart]
   var reactions: [Reaction]?
+  /** set when this replies to another message in the same chat: a quote, not a thread */
+  var replyToId: String?
+  var replyTo: ReplyQuote?
   var createdAt: String
   /** set when its author changed the text */
   var editedAt: String?

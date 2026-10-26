@@ -819,11 +819,12 @@ describe("agent settings", () => {
 });
 
 describe("workspace features", () => {
-  it("reacts 👀 for the agent when it picks up a message", async () => {
+  it("doesn't react 👀 when an agent picks up a message (the working bubble says it)", async () => {
     const ch = (await api("POST", "/api/channels", { name: "eyes" })).data.id;
     const sent = (await api("POST", `/api/channels/${ch}/messages`, { body: "@nova ping" })).data;
-    const m = await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${ch}/messages`)).data.messages.find((x) => x.id === sent.id && x.reactions?.length));
-    expect(m.reactions).toEqual([{ emoji: "👀", actors: [{ kind: "agent", id: nova.id }] }]);
+    await new Promise((r) => setTimeout(r, 300));
+    const m = (await api<{ messages: Message[] }>("GET", `/api/channels/${ch}/messages`)).data.messages.find((x) => x.id === sent.id);
+    expect(m?.reactions ?? []).toEqual([]);
   });
 
   it("toggles reactions and rejects non-emoji", async () => {

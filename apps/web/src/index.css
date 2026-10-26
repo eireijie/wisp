@@ -307,6 +307,8 @@ body {
 :root[data-mode="dark"] .circle { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08); }
 .circle:hover { background: color-mix(in oklab, var(--control) 88%, var(--ink)); }
 @media (max-width: 767px) { .circle { width: 52px; height: 52px; } }
+.circle-lg { width: 42px; height: 42px; }
+@media (max-width: 767px) { .circle-lg { width: 56px; height: 56px; } }
 .circle-sm { width: 36px; height: 36px; }
 @media (max-width: 767px) { .circle-sm { width: 44px; height: 44px; } }
 
@@ -353,14 +355,28 @@ body {
 /* chat bubbles, like Messages: yours blue on the right, everyone else's grey on the left */
 :root { --bubble-me: #0a84ff; --bubble-me-ink: #ffffff; --bubble-them: oklch(0.93 calc(var(--gc) * 1.25) var(--gh)); }
 :root[data-mode="dark"] { --bubble-them: #26262a; }
-.bubble { padding: 0.45em 0.8em; border-radius: 1.15rem; width: fit-content; max-width: min(36rem, 100%); }
+.bubble { padding: 0.6em 1em; border-radius: 1.5rem; width: fit-content; max-width: min(36rem, 100%); line-height: 1.4; }
 .bubble.them { background: var(--bubble-them); color: var(--ink); }
 .bubble.me { background: var(--bubble-me); color: var(--bubble-me-ink); margin-left: auto; }
 .bubble.me a, .bubble.me .wikilink { color: inherit; background: none; }
 .bubble.me code, .bubble.me pre { background: rgb(0 0 0 / 0.18); }
-.bubble.me .mention, .bubble.me .mention.user, .bubble.me .mention.agent { background: rgb(255 255 255 / 0.22); color: inherit; }
+.bubble.me .mention, .bubble.me .mention.user, .bubble.me .mention.agent,
+:root .bubble.me .prose-w .mention.agent, :root[data-mode="dark"] .bubble.me .prose-w .mention.agent { background: rgb(255 255 255 / 0.22); color: inherit; }
 .bubble.me blockquote { color: inherit; opacity: 0.85; border-color: rgb(255 255 255 / 0.4); }
 .bubble.them pre, .bubble.them code { background: var(--panel); }
+/* the quoted message above a reply, inside its bubble */
+.bubble .quote { display: block; text-align: left; border-left: 2px solid currentColor; padding-left: 0.6rem; margin-bottom: 0.35rem; font-size: 0.8125rem; line-height: 1.3; opacity: 0.8; cursor: pointer; }
+.bubble.them .quote { border-color: var(--faint); }
+.bubble.me .quote { border-color: rgb(255 255 255 / 0.6); }
+/* three pulsing dots: an agent is working */
+@keyframes dot-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.work-dots { display: inline-flex; gap: 4px; }
+.work-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot-pulse 1.2s infinite; }
+.work-dots i:nth-child(2) { animation-delay: 0.2s; }
+.work-dots i:nth-child(3) { animation-delay: 0.4s; }
+@media (prefers-reduced-motion: reduce) { .work-dots i { animation: none; opacity: 0.7; } }
+/* touch: no text selection or callout while a long-press opens a message's actions */
+@media (hover: none) { .msg-press { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }
 
 /* inline links are underlined (Paperclip's "Create one") in the readable mint */
 :is(p, li) a.text-accent {

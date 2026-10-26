@@ -278,7 +278,7 @@ struct StatusLine: View {
 }
 
 /** A centered confirmation: a dimmed page and a card with a title, a line, a main button and Cancel. */
-struct ConfirmCard: ViewModifier {
+struct SettingsConfirmCard: ViewModifier {
   @Binding var isPresented: Bool
   var title: String
   var message: String
@@ -313,7 +313,7 @@ struct ConfirmCard: ViewModifier {
 
 extension View {
   func confirmCard(_ isPresented: Binding<Bool>, title: String, message: String, confirm: String, destructive: Bool = true, action: @escaping () -> Void) -> some View {
-    modifier(ConfirmCard(isPresented: isPresented, title: title, message: message, confirm: confirm, destructive: destructive, action: action))
+    modifier(SettingsConfirmCard(isPresented: isPresented, title: title, message: message, confirm: confirm, destructive: destructive, action: action))
   }
 }
 

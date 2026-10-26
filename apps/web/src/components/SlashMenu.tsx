@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { LayoutList } from "lucide-react";
 import type { Agent, AgentCommand } from "@wisp/core";
 import { api } from "../api.ts";
 import type { ChannelInfo } from "../store.ts";
 import type { ChannelMember } from "./Channels.tsx";
-import { AgentAvatar, harnessLabel, agentVar, cx } from "./ui.tsx";
+import { agentVar, cx } from "./ui.tsx";
 
 /**
  * The "/" menu, like Discord's: type "/" at the start of a message and every agent here shows
@@ -80,11 +79,18 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
 
   useEffect(() => setPick(0), [query?.query, only]);
 
+  const matches = (c: AgentCommand) => c.name.toLowerCase().includes(query?.query ?? "");
+  const rank = (c: AgentCommand) => Number(!c.name.toLowerCase().startsWith(query?.query ?? ""));
   const groups = here
     .filter((a) => !only || a.id === only)
-    .map((agent) => ({ agent, items: (lists[agent.id] ?? []).filter((c) => c.name.toLowerCase().includes(query?.query ?? "")).sort((x, y) => Number(!x.name.toLowerCase().startsWith(query?.query ?? "")) - Number(!y.name.toLowerCase().startsWith(query?.query ?? ""))) }))
+    .map((agent) => ({ agent, items: (lists[agent.id] ?? []).filter(matches).sort((x, y) => rank(x) - rank(y)) }))
     .filter((g) => g.items.length);
-  const flat: SlashItem[] = groups.flatMap((g) => g.items.map((command) => ({ agent: g.agent, command })));
+  // with everyone's commands showing, a command they all share (/context, /model) is listed once
+  const merged = !only && here.length > 1;
+  const rows: SlashItem[] = merged
+    ? [...new Map(groups.flatMap((g) => g.items.map((command) => [command.name, { agent: g.agent, command }] as const)).reverse()).values()].reverse().sort((x, y) => rank(x.command) - rank(y.command))
+    : groups.flatMap((g) => g.items.map((command) => ({ agent: g.agent, command })));
+  const flat = rows;
   const current = flat.length ? flat[((pick % flat.length) + flat.length) % flat.length] : undefined;
 
   /** What the message box should say after picking. */
@@ -97,64 +103,58 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
     move: (by: number) => setPick((p) => p + by),
     textFor,
     render: (onPick: (item: SlashItem) => void) => (
-      <div className="glass absolute bottom-full mb-2 left-0 right-0 max-w-xl rounded-2xl z-10 flex overflow-hidden" style={{ maxHeight: "min(22rem, 50vh)" }}>
+      <div className="glass absolute bottom-full mb-2 left-0 right-0 max-w-xl rounded-3xl z-10 flex flex-col overflow-hidden" style={{ maxHeight: "min(24rem, 55vh)" }}>
         {here.length > 1 && (
-          <div className="shrink-0 w-14 flex flex-col items-center gap-1.5 py-2 border-r border-line overflow-y-auto">
-            <RailButton label="All agents" active={!only} onClick={() => setOnly(null)}>
-              <LayoutList size={18} />
-            </RailButton>
+          <div className="shrink-0 flex items-center gap-1.5 overflow-x-auto px-3 pt-3 pb-1.5" role="group" aria-label="Whose commands">
+            <Chip label="All agents" active={!only} onClick={() => setOnly(null)} />
             {here.map((a) => (
-              <RailButton key={a.id} label={a.name} active={only === a.id} onClick={() => setOnly(only === a.id ? null : a.id)}>
-                <AgentAvatar agent={a} size={26} interactive={false} />
-              </RailButton>
+              <Chip key={a.id} label={a.name} active={only === a.id} onClick={() => setOnly(only === a.id ? null : a.id)} />
             ))}
           </div>
         )}
-        <div role="listbox" aria-label="Commands" className="flex-1 min-w-0 overflow-y-auto p-1">
+        <div role="listbox" aria-label="Commands" className="flex-1 min-h-0 overflow-y-auto p-1.5">
           {!flat.length && <div className="px-3 py-2.5 text-sm text-muted">Loading…</div>}
-          {groups.map((g) => (
-            <div key={g.agent.id}>
-              <div className="px-2.5 pt-2 pb-1 text-xs text-muted flex items-center gap-1.5" style={agentVar(g.agent)}>
-                <span className="font-semibold agent-ink">{g.agent.name}</span>
-                <span>{harnessLabel(g.agent.harness)}</span>
-              </div>
-              {g.items.map((c) => {
-                const selected = current?.agent.id === g.agent.id && current.command.name === c.name;
-                return (
-                  <button
-                    key={c.name}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    ref={(el) => {
-                      if (selected) el?.scrollIntoView({ block: "nearest" });
-                    }}
-                    onMouseDown={(e) => (e.preventDefault(), onPick({ agent: g.agent, command: c }))}
-                    className={cx("w-full px-2.5 py-1.5 rounded-xl flex items-center gap-3 text-left", selected && "bg-hover")}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium truncate">
-                        /{c.name}
-                        {c.hint && <span className="ml-1.5 font-normal text-muted">{c.hint}</span>}
-                      </span>
-                      {c.description && <span className="block text-xs text-muted truncate">{c.description}</span>}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-faint">{KIND_LABEL[c.kind]}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {rows.map(({ agent, command: c }) => {
+            const selected = current?.agent.id === agent.id && current.command.name === c.name;
+            return (
+              <button
+                key={`${agent.id}:${c.name}`}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                ref={(el) => {
+                  if (selected) el?.scrollIntoView({ block: "nearest" });
+                }}
+                onMouseDown={(e) => (e.preventDefault(), onPick({ agent, command: c }))}
+                className={cx("w-full px-3 py-2 min-h-12 rounded-2xl flex items-center gap-3 text-left", selected && "bg-hover")}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold truncate">
+                    /{c.name}
+                    {c.hint && <span className="ml-1.5 font-normal text-muted">{c.hint}</span>}
+                  </span>
+                  {c.description && <span className="block text-[13px] text-muted truncate">{c.description}</span>}
+                </span>
+                {!merged && here.length > 1 ? (
+                  <span className="shrink-0 text-[11px] text-faint" style={agentVar(agent)}>
+                    {agent.name}
+                  </span>
+                ) : c.kind === "skill" || c.kind === "wisp-skill" ? (
+                  <span className="shrink-0 text-[11px] text-faint">{KIND_LABEL[c.kind]}</span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       </div>
     ),
   };
 }
 
-function RailButton({ label, active, onClick, children }: { label: string; active: boolean; onClick: () => void; children: React.ReactNode }) {
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <button type="button" title={label} aria-label={label} aria-pressed={active} onMouseDown={(e) => (e.preventDefault(), onClick())} className={cx("size-10 shrink-0 rounded-xl grid place-items-center text-muted hover:bg-hover", active && "bg-hover ring-1 ring-line text-ink")}>
-      {children}
+    <button type="button" aria-pressed={active} onMouseDown={(e) => (e.preventDefault(), onClick())} className={cx("h-8 shrink-0 rounded-full px-3.5 text-[13px] font-medium", active ? "bg-accent text-accent-ink" : "border border-control-line bg-control text-muted hover:text-ink")}>
+      {label}
     </button>
   );
 }

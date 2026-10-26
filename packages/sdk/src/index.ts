@@ -61,8 +61,8 @@ export class WispClient {
     if (opts.limit) q.set("limit", String(opts.limit));
     return this.request<{ messages: Message[] }>("GET", `/api/channels/${channelId}/messages?${q}`);
   }
-  send(channelId: string, body: string, opts: { threadId?: string; fileIds?: string[] } = {}) {
-    return this.request<Message>("POST", `/api/channels/${channelId}/messages`, { body, threadId: opts.threadId, fileIds: opts.fileIds ?? [] });
+  send(channelId: string, body: string, opts: { threadId?: string; replyToId?: string; fileIds?: string[] } = {}) {
+    return this.request<Message>("POST", `/api/channels/${channelId}/messages`, { body, threadId: opts.threadId, replyToId: opts.replyToId, fileIds: opts.fileIds ?? [] });
   }
   react(messageId: string, emoji: string, on?: boolean) {
     return this.request("POST", `/api/messages/${messageId}/reactions`, { emoji, on });

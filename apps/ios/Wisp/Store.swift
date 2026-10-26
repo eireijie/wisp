@@ -95,6 +95,8 @@ final class Store {
   var activitySince: [String: Date] = [:]
   /** replies being written right now, by run, until the posted message replaces them */
   var liveRuns: [String: LiveRun] = [:]
+  /** the message each composer is replying to, by conversation (ComposerDrafts.key) */
+  var replying: [String: ReplyTarget] = [:]
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
@@ -397,9 +399,9 @@ final class Store {
 
   // MARK: actions
 
-  func send(_ text: String, in channelId: String, thread: String? = nil, files: [String] = []) async throws {
-    struct Body: Encodable { var body: String; var threadId: String?; var fileIds: [String] }
-    let m: Message = try await fetch { try await $0.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread, fileIds: files)) }
+  func send(_ text: String, in channelId: String, thread: String? = nil, files: [String] = [], replyTo: String? = nil) async throws {
+    struct Body: Encodable { var body: String; var threadId: String?; var fileIds: [String]; var replyToId: String? }
+    let m: Message = try await fetch { try await $0.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread, fileIds: files, replyToId: replyTo)) }
     insert(m)
     askForNotificationsIfDue()
   }
@@ -753,7 +755,7 @@ final class Store {
         activitySince[e.agentId] = Date()
       }
       if let run = e.runId {
-        applyLive(runId: run, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text ?? e.event.message)
+        applyLive(runId: run, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text ?? e.event.message, tool: e.event.name, file: e.event.file)
       }
       switch e.event.type {
       case "status":
