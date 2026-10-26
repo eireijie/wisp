@@ -59,7 +59,7 @@ struct RootView: View {
           }
           Button("Cancel", role: .cancel) { store.pendingPair = nil }
         } message: {
-          Text("This phone is signed in to \(store.workspace?.name ?? "a Wisp") already.")
+          Text("You're signed in to \(store.workspace?.name ?? "a Wisp"). Pairing signs you out of it first.")
         }
     }
   }

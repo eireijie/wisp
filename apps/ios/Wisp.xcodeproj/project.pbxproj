@@ -52,6 +52,7 @@
 		411781DC4F866F1C2A69B5B0 /* PairView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6670705395F3A73A945D023D /* PairView.swift */; };
 		4246091BCCA66B56DE6A90F0 /* PolicyExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32B45723036C054C38F417B9 /* PolicyExtras.swift */; };
 		43D124A9961309E02247B344 /* TeamFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9545B3875A9D4688931488C9 /* TeamFlow.swift */; };
+		45CEFDD8D372D3F2B2603C01 /* AuthKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8705FA995A7628FF5AF3D1 /* AuthKit.swift */; };
 		469DB50C861F204DDAA65B7A /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EE0761442FD2C9974413E82 /* SettingsModels.swift */; };
 		4BA8ABB4B75FBFCD97127ECC /* Store+Automation.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCC05A4664C6C41221FACEA /* Store+Automation.swift */; };
 		4C57B32426FE74DBE8568A75 /* AgentConnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D4CB1F04385382FB9DBCAD5 /* AgentConnect.swift */; };
@@ -263,6 +264,7 @@
 		6AD9B6C4EA00C366FB1F74B3 /* WispUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WispUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B354F723E94EA8F0E7984F4 /* SpeechEngines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechEngines.swift; sourceTree = "<group>"; };
 		6B83D69459DB4E1D5F8EEA01 /* VoiceTryOut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTryOut.swift; sourceTree = "<group>"; };
+		6B8705FA995A7628FF5AF3D1 /* AuthKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthKit.swift; sourceTree = "<group>"; };
 		6BC4854A79A478F6695E6F5D /* AgentPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPage.swift; sourceTree = "<group>"; };
 		6CE2F599395D7001BDD26F9F /* NoteMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteMarkdown.swift; sourceTree = "<group>"; };
 		6FCBCD43FC3685F4608B272B /* GhostAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostAnimation.swift; sourceTree = "<group>"; };
@@ -458,6 +460,7 @@
 				7D958988B1ED63DCC56FDE20 /* API.swift */,
 				9FD6DE3A8E6EC9FB4A81DD72 /* AppModels.swift */,
 				099181E9B8BFE6F3475C5D36 /* Assets.xcassets */,
+				6B8705FA995A7628FF5AF3D1 /* AuthKit.swift */,
 				AD61D165F59F3B30C5351782 /* AutomationModels.swift */,
 				56F8FF8A38701C1F31FD17C1 /* BackgroundView.swift */,
 				86CEE8B1E7302EAD0EC060E1 /* Banners.swift */,
@@ -767,6 +770,7 @@
 				CDF9CCEBF9982AC677C24CD0 /* AgentVoicePicker.swift in Sources */,
 				D817B25643F45C35D1866EE4 /* AgentsView.swift in Sources */,
 				C3996E4891C45ABFF60EEACC /* AppModels.swift in Sources */,
+				45CEFDD8D372D3F2B2603C01 /* AuthKit.swift in Sources */,
 				D383F851D4CADE1CAB4D6F08 /* AutomationModels.swift in Sources */,
 				9130A34CE308490EA5D3B70B /* BackgroundView.swift in Sources */,
 				C44AD430DE0DA634747C5549 /* Banners.swift in Sources */,

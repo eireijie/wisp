@@ -39,24 +39,38 @@ struct JoinApprovalSheet: View {
   @State private var action = FormAction()
 
   var body: some View {
-    VStack(spacing: 22) {
-      Image(systemName: "desktopcomputer").font(.system(size: 34)).foregroundStyle(.secondary).padding(.top, 28)
-      Text("\(request.name) wants to join").font(.title2.weight(.semibold)).multilineTextAlignment(.center)
-      VStack(spacing: 8) {
-        Text("It should show the same code").font(.subheadline).foregroundStyle(.secondary)
-        Text(request.displayCode).font(.system(size: 40, weight: .semibold, design: .monospaced)).monospacedDigit().accessibilityIdentifier("join-code")
-      }.frame(maxWidth: .infinity).padding(.vertical, 22).card()
-      InlineError(error: action.error)
-      Spacer(minLength: 0)
-      VStack(spacing: 10) {
-        Button { decide(true) } label: { Text("Approve").frame(maxWidth: .infinity) }.primaryButton().disabled(action.busy).accessibilityIdentifier("join-approve")
-        HStack(spacing: 10) {
-          Button { later() } label: { Text("Later").frame(maxWidth: .infinity) }.secondaryButton()
-          Button(role: .destructive) { decide(false) } label: { Text("Deny").frame(maxWidth: .infinity) }.secondaryButton().disabled(action.busy)
-        }
+    VStack(spacing: 0) {
+      HStack {
+        CircleButton(symbol: "xmark", label: "Later") { later() }
+          .accessibilityIdentifier("join-later")
+        Spacer()
       }
-    }.padding(20).presentationDetents([.medium, .large])
-      .interactiveDismissDisabled(action.busy)
+      VStack(spacing: 14) {
+        Text("\(request.name) wants to join")
+          .font(.system(size: 28, weight: .bold))
+          .foregroundStyle(Palette.text)
+          .multilineTextAlignment(.center)
+        Text("It should show the same code.")
+          .font(.system(size: 16))
+          .foregroundStyle(Palette.muted)
+        CodeCard(code: request.displayCode).padding(.top, 6).accessibilityIdentifier("join-code")
+        InlineError(error: action.error)
+      }
+      .padding(.top, 36)
+      .padding(.horizontal, 6)
+      Spacer(minLength: 16)
+      VStack(spacing: 6) {
+        AuthButton(title: "Approve", id: "join-approve") { decide(true) }.disabled(action.busy)
+        AuthLinkButton(title: "Deny") { decide(false) }.disabled(action.busy)
+      }
+    }
+    .padding(.horizontal, 22)
+    .padding(.top, 18)
+    .padding(.bottom, 18)
+    .background(Palette.sheet.ignoresSafeArea())
+    .presentationDetents([.medium, .large])
+    .presentationCornerRadius(Corner.sheet)
+    .interactiveDismissDisabled(action.busy)
   }
 
   private func decide(_ approve: Bool) {
