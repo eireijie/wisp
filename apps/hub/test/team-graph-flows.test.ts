@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -193,6 +193,10 @@ describe("repeat until approved", () => {
 
 describe("ask me", () => {
   it("keeps the Inbox card but sends no notification when 'Tell me on my phone' is off", async () => {
+    const me = (await api("GET", "/api/me")).data;
+    await api("POST", "/api/me/push", { token: "ab".repeat(32) });
+    const sent: unknown[] = [];
+    const spy = vi.spyOn(hub.apns as any, "sendTo").mockImplementation(async (_ws: string, _user: string, payload: unknown) => void sent.push(payload));
     for (const [name, notifyPhone] of [["quiet", false], ["loud", true]] as const) {
       const ch = await channel(name, [step("build", "forge"), step("approve", null, { kind: "ask", action: "Approve", inputs: ["build"], notifyPhone })]);
       await say(ch);
@@ -200,7 +204,10 @@ describe("ask me", () => {
       const card = (await pending()).find((a) => a.channelId === ch.id)!;
       expect(card).toBeTruthy();
       expect(hub.flows.silentApproval(card)).toBe(!notifyPhone);
+      // the phone push itself is what's skipped
+      expect(sent.some((p: any) => p?.wisp?.approvalId === card.id)).toBe(notifyPhone);
     }
+    spy.mockRestore();
     expect(hub.flows.silentApproval({ flow: null })).toBe(false);
   });
 
