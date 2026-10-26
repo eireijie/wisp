@@ -522,6 +522,16 @@ describe("saving a flow chart", () => {
     expect(await bad([step("a", "atlas"), step("c", "sol", { kind: "branch", inputs: ["a"], ifTrue: "a" })])).toMatch(/checks for/);
   });
 
+  it("refuses a hand-off to the team being saved", async () => {
+    const ch = await channel("self-hand", [step("a", "atlas")]);
+    const r = await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: team([step("a", "atlas"), step("h", null, { kind: "handoff", inputs: ["a"], handoffTo: ch.id })]) } });
+    expect(r.status).toBe(400);
+    expect(r.data.error).toMatch(/can't hand work to itself/);
+    // the agent tool (team-steps) has no hand-off step kind, so the REST save is the only way in
+    const ok = await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: team([step("a", "atlas")]) } });
+    expect(ok.status).toBe(200);
+  });
+
   it("refuses an agent from another workspace", async () => {
     const r = await api("POST", "/api/channels", { name: "alien", settings: { team: team([{ ...step("a", null), agentId: "agent_nobody" }]) } });
     expect(r.status).toBe(400);
