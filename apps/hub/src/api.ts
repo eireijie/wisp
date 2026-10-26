@@ -487,8 +487,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const reads = c.actor.kind === "user" ? store.readState(c.actor.id, ids) : {};
     const prefs = c.actor.kind === "user" ? store.channelPrefs(c.actor.id) : {};
     const pins = store.pinnedIds(ids);
+    const lasts = store.lastMessages(ids);
     return list.map((ch) => ({
       ...ch,
+      last: lasts[ch.id] ?? null,
       joined: store.isMember(ch.id, c.actor),
       memberCount: counts[ch.id] ?? 0,
       unread: reads[ch.id]?.unread ?? 0,
@@ -591,9 +593,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply, { member: true });
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
-    if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
+    if (!ch) return reply.code(404).send({ error: "channel not found" });
     const body = parse(z.object({ name: CHANNEL_NAME, topic: z.string().max(250), sectionId: z.string().nullable(), private: z.boolean(), settings: CHANNEL_SETTINGS }).partial(), req.body, reply);
     if (!body) return;
+    // a chat with an agent can only be filed in a section (the chats list's Move to section); nothing else about it changes
+    if (ch.kind !== "channel" && (Object.keys(body).some((k) => k !== "sectionId") || !store.isMember(ch.id, c.actor))) return reply.code(404).send({ error: "channel not found" });
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.name && body.name !== ch.name && store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.name && body.name !== ch.name && ch.name === "general") return reply.code(409).send({ error: "#general can't be renamed: everyone in the workspace lands there" });
