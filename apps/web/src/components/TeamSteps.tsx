@@ -52,6 +52,10 @@ const KIND_LABEL: Record<TeamStepKind, string> = {
   do: "Does it",
   review: "Reviews",
   hand_out: "Hands out",
+  ask: "Asks you",
+  handoff: "Hands to a team",
+  branch: "Decides",
+  custom: "Does it",
 };
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 7)}`;
 

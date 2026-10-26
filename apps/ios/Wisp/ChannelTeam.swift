@@ -135,6 +135,12 @@ extension ChannelTeam {
       if let a = r.agentId, !agentIds.contains(a) { r.agentId = nil }
       return r
     }
+    // and a step whose agent is gone
+    team.steps = steps?.map { s in
+      var s = s
+      if let a = s.agentId, !agentIds.contains(a) { s.agentId = nil }
+      return s
+    }
     return team
   }
 

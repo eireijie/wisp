@@ -169,6 +169,13 @@
 		F92D40A9720BB8B679E17638 /* SlashMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2632BC4EC9A6BE9A47CF253 /* SlashMenu.swift */; };
 		FC4BD30A7B72C9E378E3110F /* RoutinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC2FCB9F7AE76653D636446 /* RoutinesView.swift */; };
 		FF2719700DD40803510ECC3A /* ChatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F404713829EFFB1F5C48A5F2 /* ChatsView.swift */; };
+		A4C123B1612DD272D1371C17 /* TeamTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149D439536B3216FDAEEB975 /* TeamTemplates.swift */; };
+		729FAE923D5A4FD12AABFE22 /* TeamTemplateData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F219E9CB0EB53F16947CCF2 /* TeamTemplateData.swift */; };
+		5EC84D8DBC74254770F58904 /* TeamStepSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA41ECCCC3FC1626E53A130 /* TeamStepSheets.swift */; };
+		43B026C48BBF33FEFF9243A8 /* TeamCreate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F506B40928B5B7A767C76FB0 /* TeamCreate.swift */; };
+		08F86BEBB2737F6A6F0FB23C /* TeamEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F5DA2CEC255404E4FB44003 /* TeamEdit.swift */; };
+		4D6608697A8D41BED440E504 /* TeamRuns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54F31AF3176813E02EA68EF7 /* TeamRuns.swift */; };
+		CC6577428C2F6D6BC64E5A22 /* TeamBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC180D6B2E6E1B465E55130 /* TeamBuilderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -356,6 +363,13 @@
 		FDCBD96D24910314C1CB1A02 /* MarketplaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketplaceModels.swift; sourceTree = "<group>"; };
 		FEC2ED05951DBF2A63B3C6BD /* AboutYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutYouView.swift; sourceTree = "<group>"; };
 		FEC85BDF3987C0A606B9EF70 /* NoteExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteExtras.swift; sourceTree = "<group>"; };
+		149D439536B3216FDAEEB975 /* TeamTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamTemplates.swift; sourceTree = "<group>"; };
+		8F219E9CB0EB53F16947CCF2 /* TeamTemplateData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamTemplateData.swift; sourceTree = "<group>"; };
+		DBA41ECCCC3FC1626E53A130 /* TeamStepSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamStepSheets.swift; sourceTree = "<group>"; };
+		F506B40928B5B7A767C76FB0 /* TeamCreate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamCreate.swift; sourceTree = "<group>"; };
+		6F5DA2CEC255404E4FB44003 /* TeamEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamEdit.swift; sourceTree = "<group>"; };
+		54F31AF3176813E02EA68EF7 /* TeamRuns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamRuns.swift; sourceTree = "<group>"; };
+		FAC180D6B2E6E1B465E55130 /* TeamBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamBuilderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -381,6 +395,7 @@
 			children = (
 				319B722B6061812CB14EC65C /* DeclutterTests.swift */,
 				932469D8CAB9F684943B59BC /* NavigationTests.swift */,
+				FAC180D6B2E6E1B465E55130 /* TeamBuilderTests.swift */,
 				E0F13136D461AD498D61F32D /* TourTests.swift */,
 				5F516ECDEDEFFAAF329815CE /* TypingTests.swift */,
 				41695E30B704F40F152EACC5 /* Fixtures */,
@@ -564,6 +579,12 @@
 				4F4DD2429D560AEBE395752E /* TeachView.swift */,
 				9545B3875A9D4688931488C9 /* TeamFlow.swift */,
 				226324AE3FD8DCF66F55AAB0 /* TeamSteps.swift */,
+				54F31AF3176813E02EA68EF7 /* TeamRuns.swift */,
+				6F5DA2CEC255404E4FB44003 /* TeamEdit.swift */,
+				F506B40928B5B7A767C76FB0 /* TeamCreate.swift */,
+				DBA41ECCCC3FC1626E53A130 /* TeamStepSheets.swift */,
+				8F219E9CB0EB53F16947CCF2 /* TeamTemplateData.swift */,
+				149D439536B3216FDAEEB975 /* TeamTemplates.swift */,
 				F30C639F06B8FEA499245122 /* ThemeSettings.swift */,
 				73695F1B697075837BCC929A /* UpdateModels.swift */,
 				C29554D6B79741CC8A0EE987 /* UpdatesView.swift */,
@@ -739,6 +760,7 @@
 			files = (
 				02F9F73E5B75A04B113C1998 /* DeclutterTests.swift in Sources */,
 				94AF08753C30B59CA25D3470 /* NavigationTests.swift in Sources */,
+				CC6577428C2F6D6BC64E5A22 /* TeamBuilderTests.swift in Sources */,
 				C9A98BC855CE598FC0EEE260 /* TourTests.swift in Sources */,
 				A7B1671C4D17D891692080D8 /* TypingTests.swift in Sources */,
 			);
@@ -872,6 +894,12 @@
 				A63C50ACFD9F3266FD90A55B /* TeachView.swift in Sources */,
 				43D124A9961309E02247B344 /* TeamFlow.swift in Sources */,
 				193EACB2D2F272805C9A78ED /* TeamSteps.swift in Sources */,
+				4D6608697A8D41BED440E504 /* TeamRuns.swift in Sources */,
+				08F86BEBB2737F6A6F0FB23C /* TeamEdit.swift in Sources */,
+				43B026C48BBF33FEFF9243A8 /* TeamCreate.swift in Sources */,
+				5EC84D8DBC74254770F58904 /* TeamStepSheets.swift in Sources */,
+				729FAE923D5A4FD12AABFE22 /* TeamTemplateData.swift in Sources */,
+				A4C123B1612DD272D1371C17 /* TeamTemplates.swift in Sources */,
 				DBEA60376A1178360EE18EDB /* ThemeSettings.swift in Sources */,
 				9FB64377769AB257EB7A97EA /* UpdateModels.swift in Sources */,
 				D5C05D3862514E8EF5E5F61E /* UpdatesView.swift in Sources */,
