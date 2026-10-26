@@ -6,7 +6,8 @@ import { api } from "../api.ts";
 import { useStore, useTeams, usePrefs, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { openDm } from "../openDm.ts";
-import { AgentAvatar, Menu, cx, clockTime } from "./ui.tsx";
+import { AgentAvatar, Menu, PopBadge, cx, clockTime } from "./ui.tsx";
+import { useSheetBackdrop } from "../motion.ts";
 import { ChannelSettings, SectionDialog, leaveChannel, setChannelPrefs } from "./Channels.tsx";
 import { activityPhrase } from "./agentActivity.ts";
 import { cleanPreview } from "./CommandPalette.tsx";
@@ -193,7 +194,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
         <SearchField page={page} value={q} onChange={setQ} />
       </div>
 
-      <div className={cx("flex-1 min-h-0 overflow-y-auto", page ? "px-[18px] pt-1 pb-28" : "pb-4 -mx-1 px-1")}>
+      <div data-stagger className={cx("flex-1 min-h-0 overflow-y-auto", page ? "px-[18px] pt-1 pb-28" : "pb-4 -mx-1 px-1")}>
         {rows(plain)}
         {sections.map((s) => {
           const list = shown.filter((c) => c.sectionId === s.id);
@@ -296,7 +297,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
         <span className="flex items-center justify-between gap-2">
           <span className={cx("truncate", "text-[13px]", preview.working ? "text-ok" : "text-muted")}>{preview.text}</span>
           {chat.unread > 0 && chat.muted && <span aria-label="Unread" className="shrink-0 size-2 rounded-full bg-faint" />}
-          {chat.unread > 0 && !chat.muted && <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{chat.unread > 99 ? "99+" : chat.unread}</span>}
+          {chat.unread > 0 && !chat.muted && <PopBadge count={chat.unread} label={chat.unread > 99 ? "99+" : String(chat.unread)} className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums" />}
         </span>
       </span>
     </>
@@ -414,8 +415,8 @@ function ContextMenu({ at, onClose, title, back, children }: { at: { x: number; 
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
   return createPortal(
-    <div className="fixed inset-0 z-[90] bg-black/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onContextMenu={(e) => (e.preventDefault(), onClose())} onTouchStart={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="menu" style={pos} className="glass w-72 max-w-[calc(100vw-24px)] rounded-xl p-1.5">
+    <div className="m-scrim fixed inset-0 z-[90] bg-black/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onContextMenu={(e) => (e.preventDefault(), onClose())} onTouchStart={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={ref} role="menu" style={pos} className="m-menu glass w-72 max-w-[calc(100vw-24px)] rounded-xl p-1.5" >
         <div className="flex items-center gap-2 px-3.5 py-2.5 text-body">
           {back && (
             <button onClick={back} className="-ml-1 mr-1 size-7 grid place-items-center rounded-full text-muted hover:bg-hover" aria-label="Back">
@@ -443,9 +444,10 @@ export function NewChatPicker({ onClose }: { onClose: () => void }) {
       void openDm(agents[0].id);
     }
   }, [agents, onClose]);
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="New chat" className="w-full sm:max-w-sm bg-panel border border-line rounded-t-[16px] sm:rounded-xl shadow-panel max-h-[80vh] overflow-y-auto safe-bottom p-2">
+  useSheetBackdrop();
+  return createPortal(
+    <div className="m-scrim fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label="New chat" className="m-dialog w-full sm:max-w-sm bg-panel border border-line rounded-t-[16px] sm:rounded-xl shadow-panel max-h-[80vh] overflow-y-auto safe-bottom p-2">
         <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
           <h2 className="t-title">New chat</h2>
           <button onClick={onClose} aria-label="Close" className="circle circle-sm">
@@ -476,6 +478,7 @@ export function NewChatPicker({ onClose }: { onClose: () => void }) {
           </button>
         ))}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -369,7 +369,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
           className={cx("relative h-6 w-11 shrink-0 rounded-full transition-colors", locked ? "bg-hover" : "bg-accent")}
           aria-label={`Let @${agent.handle} refine its own personality`}
         >
-          <span className={cx("absolute top-0.5 size-5 rounded-full bg-white shadow transition-all", locked ? "left-0.5" : "left-[22px]")} />
+          <span className={cx("m-knob absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow", !locked && "translate-x-5")} />
         </button>
         <div className="flex-1 min-w-0 text-sm">
           <div className="font-medium flex items-center gap-1.5">
@@ -706,7 +706,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             onClick={() => setForm({ ...form, fast: !form.fast })}
             className={cx("relative h-5 w-9 rounded-full transition-colors", form.fast && selected?.fast ? "bg-accent" : "bg-chip")}
           >
-            <span className={cx("absolute top-0.5 size-4 rounded-full bg-white shadow transition-all", form.fast && selected?.fast ? "left-[18px]" : "left-0.5")} />
+            <span className={cx("m-knob absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow", form.fast && selected?.fast && "translate-x-4")} />
           </button>
           <Zap size={14} className={cx(form.fast && selected?.fast && "text-accent-text fill-accent")} /> Fast mode
         </label>

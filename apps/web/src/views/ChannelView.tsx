@@ -22,6 +22,7 @@ import { ActivityPill, runActivity, stopRuns } from "../components/ActivityPill.
 import { RightPane } from "../components/RightPane.tsx";
 import { workKind, workSummary } from "../components/agentActivity.ts";
 import { ActionSheet, ActionToolbar, DeleteMessageDialog, EditMessageDialog, useLongPress, useMessageActionList } from "../components/MessageActions.tsx";
+import { useChangedSinceMount, useFreshIds } from "../motion.ts";
 import { NotifyDialog, TeamInfo, type InfoTab } from "../components/TeamInfo.tsx";
 import { useFeature } from "../features.ts";
 import { useDevices } from "../devices.ts";
@@ -647,6 +648,8 @@ const CardAuthor = createContext<{ agentId: string; channelId: string; threadId:
 
 /** In a DM the agent lives in the pill at the top, so its messages don't repeat its ghost and name. */
 const SoloAgent = createContext<string | null>(null);
+/** Messages that just arrived in the open list: they rise or pop in once (motion.ts useFreshIds). */
+const FreshMessages = createContext<ReadonlySet<string>>(new Set());
 
 /** Shared paging, retry and search positioning for a channel or thread. */
 function useMessageHistory(channelId: string, threadId: string | undefined, messageId: string | undefined, ref: RefObject<HTMLDivElement | null>, messages: Message[] | undefined) {
@@ -704,6 +707,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
   const me = useStore((s) => s.me);
   const ref = useRef<HTMLDivElement>(null);
   const history = useMessageHistory(channel.id, undefined, messageId, ref, messages);
+  const fresh = useFreshIds(channel.id, messages);
   const dividerRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [newSince, setNewSince] = useState(0);
@@ -746,6 +750,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
 
   const empty = !messages.some((m) => m.author.id !== "system");
   return (
+    <FreshMessages.Provider value={fresh}>
     <div className="relative flex-1 min-h-0">
       <div
         ref={ref}
@@ -794,6 +799,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
         </button>
       )}
     </div>
+    </FreshMessages.Provider>
   );
 }
 
@@ -959,6 +965,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
   const name = agent ? agent.name : (names.member(m.author.id)?.name ?? "Someone");
   const time = clockTime(m.createdAt, clock);
   const solo = useContext(SoloAgent);
+  const arrived = useContext(FreshMessages).has(m.id);
   // the DM's own agent already lives in the pill above: no ghost or name on its messages
   const home = !!agent && agent.id === solo;
   const pinned = useStore((s) => !!s.channels.find((c) => c.id === m.channelId)?.pinnedIds.includes(m.id));
@@ -1013,7 +1020,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
           <div className="bubble them text-body text-muted italic">This message was deleted.</div>
         ) : (
           showBubble && (
-            <div className={cx("bubble text-[15px] md:text-[15px]", mine ? "me" : "them")} title={time}>
+            <div className={cx("bubble text-[15px] md:text-[15px]", mine ? "me" : "them", arrived && (mine ? "m-bubble-me" : "m-bubble-them"))} title={time}>
               {quote && (
                 <button
                   type="button"
@@ -1248,7 +1255,7 @@ function StreamingItem({ run }: { run: LiveRun }) {
       <div className="min-w-0 flex flex-col items-start gap-[3px] max-w-[84%] md:max-w-[36rem]">
         {!home && <div className="px-3.5 pb-0.5 text-[12px] text-muted">{agent?.name ?? "Agent"}</div>}
         {html && <div className="bubble them text-[15px] md:text-[15px]"><div className="prose-w" dangerouslySetInnerHTML={{ __html: html }} /></div>}
-        <div role="status" aria-live="polite" aria-label={`${agent?.name ?? "Agent"} is working: ${workLine(run, agents)}`} className="bubble them inline-flex items-center gap-2.5 !py-3">
+        <div role="status" aria-live="polite" aria-label={`${agent?.name ?? "Agent"} is working: ${workLine(run, agents)}`} className="m-work bubble them inline-flex items-center gap-2.5 !py-3">
           <span className="work-dots" aria-hidden>
             <i />
             <i />
@@ -1273,6 +1280,7 @@ function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: str
   const loadThread = useStore((s) => s.loadThread);
   const ref = useRef<HTMLDivElement>(null);
   const history = useMessageHistory(channelId, rootId, messageId, ref, replies);
+  const fresh = useFreshIds(rootId, replies);
   const streaming = Object.values(live).filter((r) => r.channelId === channelId && r.threadId === rootId);
   const below = Object.values(live).filter((r) => r.channelId === channelId && r.threadPath.includes(rootId));
 
@@ -1305,6 +1313,7 @@ function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: str
           {history.error ? "" : replies ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}` : "Loading…"}
           <span className="h-px flex-1 bg-line" />
         </div>
+        <FreshMessages.Provider value={fresh}>
         {replies?.map((m, i) => {
           const stamp = needsStamp(replies[i - 1], m);
           const next = replies[i + 1];
@@ -1316,6 +1325,7 @@ function ThreadPanel({ channelId, rootId, agentId, messageId }: { channelId: str
             </div>
           );
         })}
+        </FreshMessages.Provider>
         {streaming.map((r) => (
           <StreamingItem key={r.runId} run={r} />
         ))}
@@ -1799,6 +1809,8 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
 
   const hasContent = !!text.trim() || files.length > 0 || uploading > 0;
   const showCall = !!onCall && !hasContent && !threadId;
+  // the send / mic / call button pops in when what you've typed swaps it (not when the composer first opens)
+  const swapped = useChangedSinceMount(hasContent);
   return (
     // @container: the toolbar fits itself to the composer's own width (a DM next to an open thread is narrow on a wide screen)
     <div className="shrink-0 px-3 md:px-5 pb-3 pt-1 safe-bottom @container w-full max-w-3xl mx-auto flex flex-col">
@@ -1940,12 +1952,12 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             </span>
           )}
           {(!hasContent || dictation.on) && dictation.supported && (
-            <button type="button" onClick={dictation.toggle} aria-label={dictation.on ? "Stop dictating" : "Dictate"} aria-pressed={dictation.on} title="Dictate" className={cx("size-10 md:size-9 shrink-0 self-center rounded-full grid place-items-center", dictation.on ? "bg-bad/15 text-bad" : "text-muted hover:text-ink")}>
+            <button type="button" onClick={dictation.toggle} aria-label={dictation.on ? "Stop dictating" : "Dictate"} aria-pressed={dictation.on} title="Dictate" className={cx("size-10 md:size-9 shrink-0 self-center rounded-full grid place-items-center", swapped && "m-swap", dictation.on ? "bg-bad/15 text-bad" : "text-muted hover:text-ink")}>
               <Mic size={20} />
             </button>
           )}
           {showCall && (
-            <button type="button" onClick={onCall} aria-label={`Call ${dmAgent?.name ?? "agent"}`} title="Call" className="h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent text-accent-ink grid place-items-center md:hidden">
+            <button type="button" onClick={onCall} aria-label={`Call ${dmAgent?.name ?? "agent"}`} title="Call" className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent text-accent-ink grid place-items-center md:hidden", swapped && "m-swap")}>
               <AudioLines size={22} />
             </button>
           )}
@@ -1953,7 +1965,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             <button
               onClick={send}
               disabled={!!uploading || sending || (!text.trim() && !files.length)}
-              className="h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
+              className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors", swapped && "m-swap")}
               aria-label="Send"
             >
               <ArrowUp size={19} strokeWidth={2.5} />

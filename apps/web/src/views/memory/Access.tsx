@@ -267,7 +267,7 @@ function RuleEditor({
             <span className="block text-xs text-muted">Loads at startup</span>
           </span>
           <button role="switch" aria-checked={startup} disabled={!canChange} onClick={() => setStartup(!startup)} className={cx("w-[52px] h-8 rounded-full p-1 transition-colors shrink-0", startup ? "bg-info" : "bg-chip")}>
-            <span className={cx("block size-6 rounded-full bg-white shadow transition-transform", startup && "translate-x-5")} />
+            <span className={cx("m-knob block size-6 rounded-full bg-white shadow", startup && "translate-x-5")} />
           </button>
         </div>
       )}

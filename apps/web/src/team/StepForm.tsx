@@ -307,7 +307,7 @@ export function Toggle({ label, on, onChange, note }: { label: string; on: boole
       <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className="flex w-full items-center justify-between gap-3 py-1 text-left text-body">
         {label}
         <span className={cx("relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors", on ? "bg-ok" : "bg-input")}>
-          <span className={cx("absolute top-[3px] size-5 rounded-full bg-white shadow transition-all", on ? "left-[21px]" : "left-[3px]")} />
+          <span className={cx("m-knob absolute top-[3px] left-[3px] size-5 rounded-full bg-white shadow", on && "translate-x-[18px]")} />
         </span>
       </button>
     </FieldBox>
