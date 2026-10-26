@@ -16,7 +16,7 @@ import { MoreOptions } from "../components/MoreOptions.tsx";
 import { CopyBlock, Field, Input, cx } from "../components/ui.tsx";
 import type { HarnessesResponse } from "./settings/harnesses.tsx";
 import { freeHandle } from "./CreateAgent.tsx";
-import { needsSignIn } from "./needs-sign-in.ts";
+import { signInFor } from "./needs-sign-in.ts";
 
 export const SETUP_LABELS: Record<StepId, string> = { ready: "Getting ready", agent: "Make your first agent", anywhere: "Away from home", devices: "Add your devices" };
 
@@ -313,7 +313,7 @@ function AgentStep({ devices, answer, onNext }: { devices: DeviceInfo[] | null; 
   const pick = (id: string) => {
     setHarness(id);
     setError(null);
-    const s = needsSignIn(settings, id);
+    const s = signInFor(settings, id);
     if (s && device?.mine) setSigningIn(s);
   };
   const create = async () => {
@@ -327,7 +327,7 @@ function AgentStep({ devices, answer, onNext }: { devices: DeviceInfo[] | null; 
       if (agent.settings.runIn !== "computer") {
         // read what the device says now: an AI that was just installed isn't in the list from before
         const fresh = await loadSettings().catch(() => undefined);
-        const s = needsSignIn(fresh ?? settings, selected);
+        const s = signInFor(fresh ?? settings, selected);
         if (s && device.mine) setSigningIn(s);
       }
     } catch (e) {

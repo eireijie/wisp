@@ -196,7 +196,7 @@ describe("ask me", () => {
     const me = (await api("GET", "/api/me")).data;
     await api("POST", "/api/me/push", { token: "ab".repeat(32) });
     const sent: unknown[] = [];
-    const spy = vi.spyOn(hub.apns as any, "sendTo").mockImplementation(async (_ws: string, _user: string, payload: unknown) => void sent.push(payload));
+    const spy = vi.spyOn(hub.apns as any, "sendTo").mockImplementation((async (...args: unknown[]) => void sent.push(args[2])) as never);
     for (const [name, notifyPhone] of [["quiet", false], ["loud", true]] as const) {
       const ch = await channel(name, [step("build", "forge"), step("approve", null, { kind: "ask", action: "Approve", inputs: ["build"], notifyPhone })]);
       await say(ch);

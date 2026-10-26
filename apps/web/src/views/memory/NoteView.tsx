@@ -275,6 +275,45 @@ export function NoteView({
     <HistoryList history={history} viewing={viewing} canEdit={canEdit} onView={async (c, current) => (current ? setViewing(null) : setViewing({ commit: c, content: (await api<{ content: string }>("GET", `/api/vault/at?path=${encodeURIComponent(path)}&rev=${c.hash}`)).content }))} onRestore={restore} />
   );
 
+  const dialogs = (
+    <>
+      {dialog === "rename" && (
+        <RenameDialog
+          path={path}
+          onClose={() => setDialog(null)}
+          onDone={(to) => {
+            setDialog(null);
+            onChanged();
+            go({ view: "vault", path: to });
+          }}
+        />
+      )}
+      {dialog === "move" && (
+        <MoveDialog
+          path={path}
+          folders={folders}
+          onClose={() => setDialog(null)}
+          onDone={(to) => {
+            setDialog(null);
+            onChanged();
+            go({ view: "vault", path: to });
+          }}
+        />
+      )}
+      {dialog === "delete" && (
+        <DeleteDialog
+          path={path}
+          onClose={() => setDialog(null)}
+          onDone={() => {
+            setDialog(null);
+            onChanged();
+            go({ view: "vault", path: path.split("/").slice(0, -1).join("/") || null });
+          }}
+        />
+      )}
+    </>
+  );
+
   // phones: History is a page of its own, with "Who wrote what" beside it
   if (phone && historyOpen) {
     return (
@@ -284,7 +323,14 @@ export function NoteView({
           <Segmented mode={mode} setMode={setMode} labels={["History", "Who wrote what"]} />
           <p className="mt-3 px-1 text-[13px] text-muted">{baseName(path)}</p>
           <div className="mt-2">{mode === "authors" ? <Blame blocks={blame} /> : historyList}</div>
+          {viewing && mode !== "authors" && (
+            <div className="mt-4">
+              <div className="rounded-2xl bg-info/15 px-4 py-2.5 text-sm">Viewing the version from {new Date(viewing.commit.date).toLocaleString()} by {whoIs(viewing.commit.author, agents, members).name}</div>
+              <div onClick={onClick} className="prose-w mt-3 text-[16px] leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+            </div>
+          )}
         </div>
+        {dialogs}
       </div>
     );
   }
@@ -422,40 +468,7 @@ export function NoteView({
           <div className="pointer-events-auto flex gap-2">{actions}</div>
         </div>
       )}
-      {dialog === "rename" && (
-        <RenameDialog
-          path={path}
-          onClose={() => setDialog(null)}
-          onDone={(to) => {
-            setDialog(null);
-            onChanged();
-            go({ view: "vault", path: to });
-          }}
-        />
-      )}
-      {dialog === "move" && (
-        <MoveDialog
-          path={path}
-          folders={folders}
-          onClose={() => setDialog(null)}
-          onDone={(to) => {
-            setDialog(null);
-            onChanged();
-            go({ view: "vault", path: to });
-          }}
-        />
-      )}
-      {dialog === "delete" && (
-        <DeleteDialog
-          path={path}
-          onClose={() => setDialog(null)}
-          onDone={() => {
-            setDialog(null);
-            onChanged();
-            go({ view: "vault", path: path.split("/").slice(0, -1).join("/") || null });
-          }}
-        />
-      )}
+      {dialogs}
     </div>
   );
 }
