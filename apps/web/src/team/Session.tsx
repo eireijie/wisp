@@ -25,9 +25,10 @@ export function TeamEditSession({ channel, onClose }: { channel: ChannelInfo; on
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      const what = escapeAction({ ...latest.current, nested: !!document.querySelector('[data-team-builder] [aria-modal="true"]') });
+      if (what === "defer") return;
       e.stopImmediatePropagation();
       e.preventDefault();
-      const what = escapeAction(latest.current);
       if (what === "keep-editing") setDiscarding(false);
       else if (what === "ask") setDiscarding(true);
       else latest.current.onClose();

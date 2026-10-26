@@ -167,7 +167,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
 
   return createPortal(
     <CreateAgentContext.Provider value={(done) => setNewAgent(() => done)}>
-    <div role="dialog" aria-label={`How ${name} works`} className="fixed inset-0 z-50 flex flex-col bg-panel text-ink md:left-[84px]">
+    <div role="dialog" data-team-builder aria-label={`How ${name} works`} className="fixed inset-0 z-50 flex flex-col bg-panel text-ink md:left-[84px]">
       <header className="flex h-[72px] shrink-0 items-center gap-3 px-4 md:px-6">
         <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
           <button type="button" onClick={onBack} aria-label="Back" className="circle circle-sm shrink-0">
