@@ -9,7 +9,7 @@ struct ChangeAuthor {
 
   @MainActor static func of(_ author: String, store: Store) -> ChangeAuthor {
     if author.hasPrefix("@"), let agent = store.agents.first(where: { "@\($0.handle)" == author }) {
-      return ChangeAuthor(name: agent.name, kind: store.simple ? "helper" : "agent", agent: agent)
+      return ChangeAuthor(name: agent.name, kind: "agent", agent: agent)
     }
     if author == "Edited in Obsidian" { return ChangeAuthor(name: "Obsidian", kind: "on disk", symbol: "pencil.line") }
     if author == "Wisp" || author == "Warren" { return ChangeAuthor(name: "Wisp", symbol: "sparkle") }

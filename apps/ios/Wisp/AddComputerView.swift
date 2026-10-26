@@ -20,8 +20,8 @@ struct AddComputerView: View {
   private var mine: [AgentNode] { store.nodes.filter { $0.mine == true } }
   private var choices: [AgentNode] { kind == .device ? mine : usable }
   private var device: AgentNode? { choices.first { $0.id == nodeId } }
-  /** Simple mode keeps Orgo and the size under "More options". */
-  private var showAll: Bool { !store.simple || more }
+  /** Orgo and the size sit under "More options". */
+  private var showAll: Bool { more }
 
   var body: some View {
     NavigationStack {
@@ -74,7 +74,7 @@ struct AddComputerView: View {
           }
         }
 
-        if store.simple, !more {
+        if !more {
           Section {
             Button("More options (size, cloud computer)") { more = true }
           }

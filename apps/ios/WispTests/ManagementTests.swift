@@ -305,7 +305,6 @@ final class ManagementTests: XCTestCase {
   func testManagementScreensRender() async throws {
     let store = try makeStore()
     try await store.refreshManagement()
-    store.simple = true
     var general = store.channels[0]
     general.id = "general"; general.name = "general"; general.starred = false; general.sectionId = nil; general.private = false
     var muted = general

@@ -149,7 +149,7 @@ struct ChatControls: View {
   }
 
   private func detail(_ info: AgentContextInfo) -> String {
-    let on = store.simple ? "" : info.model.map { " on \($0)" } ?? ""
+    let on = info.model.map { " on \($0)" } ?? ""
     if let used = info.contextUsed {
       return "\(used.formatted())\(info.contextWindow.map { " of \($0.formatted())" } ?? "") tokens used in this conversation\(on)."
     }

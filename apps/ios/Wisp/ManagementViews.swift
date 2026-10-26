@@ -32,14 +32,13 @@ extension View {
   }
 }
 
+/** The rarely used knobs, behind a disclosure so everyone gets the same plain screen. */
 struct TechnicalDetails<Content: View>: View {
-  @Environment(Store.self) private var store
-  var title = "Technical details"
+  var title = "More options"
   @ViewBuilder var content: () -> Content
 
   var body: some View {
-    if store.simple { DisclosureGroup(title, content: content) }
-    else { content() }
+    DisclosureGroup(title, content: content)
   }
 }
 
@@ -48,7 +47,7 @@ struct SectionPicker: View {
   @Binding var selection: String
   var body: some View {
     Picker("Section", selection: $selection) {
-      Text("Channels (no section)").tag("")
+      Text("No section").tag("")
       ForEach(store.sections) { Text($0.title).tag($0.id) }
     }
   }

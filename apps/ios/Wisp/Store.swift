@@ -47,7 +47,9 @@ final class Store {
   var changes: [Change]?
   /** computers waiting for an owner to let them join (see Store+Settings) */
   var joinRequests: [JoinRequest] = []
-  var simple = false
+  /** the hub was updated since this app connected to it (see Store+Updates) */
+  var hubUpdated = false
+  @ObservationIgnored var hubCommit: String?
   /** the optional features this organization has on (all on when the hub doesn't say) */
   var features: Features = .everything
   /** every organization you belong to, for the switcher at the top of Chats */
@@ -230,6 +232,7 @@ final class Store {
 
   private func clearData() {
     connectedOnce = false
+    hubUpdated = false; hubCommit = nil
     me = nil
     workspace = nil
     features = .everything; orgs = []; agentDefaults = nil
@@ -260,7 +263,6 @@ final class Store {
       self.me = me.user
       self.role = me.role ?? "member"
       self.prefs = me.prefs
-      self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
       self.features = me.features ?? .everything
       async let ch: [Channel] = api.get("/api/channels")
@@ -610,7 +612,6 @@ final class Store {
       let me: Me = try await fetch { try await $0.get("/api/me") }
       self.me = me.user
       prefs = me.prefs
-      simple = me.prefs?.experience == "simple"
       role = me.role ?? "member"
       features = me.features ?? .everything
       syncError = nil
@@ -685,10 +686,11 @@ final class Store {
       retry = 0
       liveRuns = [:]
       // the first connect follows a full load; only a reconnect has events to catch up on
-      if connectedOnce { Task { await refreshAfterReconnect() } }
+      if connectedOnce { Task { await refreshAfterReconnect(); await checkHubUpdated() } }
       else {
         connectedOnce = true
         Task {
+          await checkHubUpdated()
           do { try await refreshAgents(); try await refreshManagement() } catch { recordSyncError(error) }
           await refreshChannels()
           await refreshOpen()

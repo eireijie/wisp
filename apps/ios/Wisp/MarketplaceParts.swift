@@ -24,7 +24,7 @@ struct TryItSection: View {
           Text("Start a chat with this request ready. Add your own details, then send.").font(.footnote).foregroundStyle(.secondary)
           Text(text).textSelection(.enabled)
           if holders.count > 1 {
-            Picker(store.simple ? "Helper" : "Agent", selection: Binding(get: { helper.id }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }
+            Picker("Agent", selection: Binding(get: { helper.id }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }
           }
           Button("Open chat with \(helper.name)", systemImage: "bubble.left") {
             action.run { target = ChatTarget(channel: try await store.dm(with: helper), draft: text) }

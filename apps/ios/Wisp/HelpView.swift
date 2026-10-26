@@ -23,7 +23,7 @@ struct HelpView: View {
     ("Memory", "Notes Wisp keeps about you and your work, so helpers don't need to be told twice. You can read and fix them."),
     ("Skill", "Something a helper has learned how to do, like a recipe it can follow again."),
     ("Routine", "A job a helper does on its own, on a schedule or when something happens."),
-    ("Team", "A group of helpers that work on something together. Each channel has its own, in the channel's Team tab."),
+    ("Team", "A group of helpers that work on something together. Each team has its own, in the team's details."),
     ("Connected app", "A service you link to Wisp, like Gmail, so helpers can use it for you."),
     ("Connection code (token)", "A one-time code that links a computer to this Wisp. It's shown once when you add a device."),
     ("AI tokens", "How AI services measure and charge for work: more text, more tokens."),
@@ -51,14 +51,6 @@ struct HelpView: View {
           }.padding(.vertical, 2).accessibilityElement(children: .combine)
         }
       }
-      Section {
-        Text("**Simple** shows the everyday parts first, with advanced options a tap away. **Advanced** shows everything, including teams, harness details, VM sizes, tokens and raw files.")
-          .font(.subheadline).foregroundStyle(.secondary)
-        LabeledContent("You're using", value: store.simple ? "Simple" : "Advanced")
-        Button("Switch to \(store.simple ? "Advanced" : "Simple")") {
-          action.run { try await store.savePrefs(["experience": AnyEncodable(store.simple ? "advanced" : "simple")]) }
-        }.disabled(action.busy)
-      } header: { Text("Simple or Advanced") }
       Section {
         Text("Something broken or confusing? Tell us what you were trying to do, what you expected, and what happened instead. Leave out passwords and private details.")
           .font(.subheadline).foregroundStyle(.secondary)

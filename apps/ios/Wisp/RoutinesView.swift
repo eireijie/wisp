@@ -63,7 +63,7 @@ struct RoutineEditor: View {
   @State private var enabled = true
   @State private var loaded = false
   @State private var action = FormAction()
-  private var guided: Bool { store.simple && routine == nil }
+  private var guided: Bool { false }
   var body: some View {
     EditorSheet(title: routine == nil ? "New routine for \(agent.name)" : "Edit routine", action: action, valid: loaded && (guided ? !result.trimmed.isEmpty : !name.trimmed.isEmpty) && name.count <= 80 && steps.count <= 50_000 && (schedule.isEmpty || schedule.split(separator: " ").count == 5), save: {
       action.run {

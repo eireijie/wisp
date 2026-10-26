@@ -79,8 +79,8 @@ enum ShelfLogic {
       headers: Dictionary(uniqueKeysWithValues: headers.map { ($0, "{{\(envName($0))}}") }), fields: fields)
   }
 
-  static func summary(_ item: ShelfItem, simple: Bool) -> ConnectSummary {
-    let who = simple ? "helpers" : "agents"
+  static func summary(_ item: ShelfItem) -> ConnectSummary {
+    let who = "agents"
     let host = item.url.flatMap { URL(string: $0)?.host }
     return ConnectSummary(
       can: "Your \(who) will be able to use \(item.name): read and act on what it allows.",

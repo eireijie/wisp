@@ -169,10 +169,10 @@ struct MemoryHome: View {
               NavigationLink { MemoryGraphScreen(browse: browse, initialKind: kind) } label: {
                 HStack(spacing: 6) {
                   Circle().fill(kind.color(dark: scheme == .dark)).frame(width: 9, height: 9)
-                  Text(kind.label(simple: store.simple)).fontWeight(.medium)
+                  Text(kind.label).fontWeight(.medium)
                   Text("\(graph.count(of: kind))").foregroundStyle(.secondary)
                 }.font(.subheadline).padding(.horizontal, 12).padding(.vertical, 8).background(Capsule().fill(Color(.tertiarySystemFill)))
-              }.buttonStyle(.plain).accessibilityLabel("\(kind.label(simple: store.simple)), \(graph.count(of: kind)). See in the graph")
+              }.buttonStyle(.plain).accessibilityLabel("\(kind.label), \(graph.count(of: kind)). See in the graph")
             }
           }
         }.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -186,7 +186,7 @@ struct MemoryHome: View {
       if browse.changes == nil { ProgressView() }
       else if recent.isEmpty {
         VStack(alignment: .leading, spacing: 6) {
-          Text("Nothing written yet. Notes you and your \(store.simple ? "helpers" : "agents") write show up here.").foregroundStyle(.secondary)
+          Text("Nothing written yet. Notes you and your agents write show up here.").foregroundStyle(.secondary)
           if store.canManage && browse.viewAs == nil { Button("Write the first note", systemImage: "square.and.pencil") { creating = true }.buttonStyle(.borderless) }
         }
       } else {

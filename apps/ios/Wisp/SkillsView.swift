@@ -26,7 +26,7 @@ struct SkillDetail: View {
       if let installed { TryItSection(skill: installed) }
       Section { TechnicalDetails(title: "Full instructions") { NoteMarkdown(text: current.content ?? "") } }
       if store.canManage {
-        Section(store.simple ? "Helpers with this skill" : "Agents with this skill") {
+        Section("Agents with this skill") {
           ForEach(store.agents) { agent in
             Toggle(agent.name, isOn: Binding(get: { installed?.agentIds?.contains(agent.id) == true }, set: { on in
               action.run {
@@ -64,7 +64,7 @@ struct SkillEditor: View {
   @State private var tags = ""
   @State private var agents: Set<String> = []
   @State private var action = FormAction()
-  private var guided: Bool { store.simple && skill == nil }
+  private var guided: Bool { false }
   var body: some View {
     EditorSheet(title: skill == nil ? "Create a skill" : "Edit skill", action: action, valid: !name.trimmed.isEmpty && name.count <= 60 && (guided ? !what.trimmed.isEmpty : !content.trimmed.isEmpty) && description.count <= 500 && content.count <= 100_000, save: {
       action.run {

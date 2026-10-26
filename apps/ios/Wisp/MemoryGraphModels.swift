@@ -4,12 +4,11 @@ import CoreGraphics
 /** The folder kinds the graph colors by, like the web's. */
 enum GraphKind: String, CaseIterable, Hashable {
   case shared, people, agents, teams, groups, other, ghost
-  /** Simple mode says "helpers", not "agents". */
-  func label(simple: Bool) -> String {
+  var label: String {
     switch self {
     case .shared: "Shared"
     case .people: "People"
-    case .agents: simple ? "Helpers" : "Agents"
+    case .agents: "Agents"
     case .teams: "Teams"
     case .groups: "Groups"
     case .other: "Your folders"

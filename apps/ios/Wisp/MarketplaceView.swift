@@ -138,7 +138,7 @@ struct MarketplaceView: View {
       if store.canManage {
         Menu("Make your own", systemImage: "plus") {
           Button("Create a skill", systemImage: "wand.and.stars") { creating = true }
-          if !store.simple { Button("Add your own app", systemImage: "powerplug") { addingOwn = true } }
+          Button("Add your own app", systemImage: "powerplug") { addingOwn = true }
         }
       }
     }
@@ -153,7 +153,7 @@ struct MarketplaceView: View {
       ])
     }
     .navigationDestination(item: $settingUp) { target in
-      ConnectorCatalogDetail(entry: ShelfLogic.connector(target.nodeId, target.item), summary: ShelfLogic.summary(target.item, simple: store.simple), presetEnv: target.item.env ?? [:])
+      ConnectorCatalogDetail(entry: ShelfLogic.connector(target.nodeId, target.item), summary: ShelfLogic.summary(target.item), presetEnv: target.item.env ?? [:])
     }
     .task { if !started { started = true; section = start }; await loadAll() }
     .task(id: query) { await searchRegistry() }
@@ -213,11 +213,11 @@ struct MarketplaceView: View {
     if c.needsSignIn { return "Needs sign-in" }
     if c.auth?.signedIn == true { return "Signed in" }
     let n = c.agentIds?.count ?? 0
-    return n == 0 ? "No one yet" : "\(n) \(store.simple ? "helper" : "agent")\(n == 1 ? "" : "s")"
+    return n == 0 ? "No one yet" : "\(n) agent\(n == 1 ? "" : "s")"
   }
   private func helpers(_ s: HelperSkill) -> String {
     let n = s.agentIds?.count ?? 0
-    return n == 0 ? "no one yet" : "\(n) \(store.simple ? "helper" : "agent")\(n == 1 ? "" : "s")"
+    return n == 0 ? "no one yet" : "\(n) agent\(n == 1 ? "" : "s")"
   }
 
   // MARK: rows

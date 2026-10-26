@@ -247,7 +247,7 @@ final class WorkspaceTests: XCTestCase {
     try await store.saveProfile(["name": AnyEncodable("Sam"), "preferredName": .null])
     XCTAssertEqual(store.me?.timezone, "UTC"); XCTAssertTrue(try body("PATCH", "/api/me")["preferredName"] is NSNull)
     reply("PUT", "/api/me/prefs", ##"{"experience":"simple","clock":"auto","sendWith":"enter","toolCalls":"collapsed"}"##)
-    try await store.savePrefs(["experience": AnyEncodable("simple")]); XCTAssertTrue(store.simple)
+    try await store.savePrefs(["experience": AnyEncodable("simple")]); XCTAssertEqual(store.prefs?.experience, "simple")
     XCTAssertEqual(try body("PUT", "/api/me/prefs")["experience"] as? String, "simple")
     reply("PATCH", "/api/workspace", ##"{"id":"w1","name":"Studio"}"##)
     try await store.renameWorkspace("Studio"); XCTAssertEqual(store.workspace?.name, "Studio")

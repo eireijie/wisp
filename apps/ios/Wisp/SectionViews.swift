@@ -29,7 +29,7 @@ struct AgentSelection: View {
   @Binding var selected: Set<String>
   var allowed: (Agent) -> Bool = { _ in true }
   var body: some View {
-    Section(store.simple ? "Which helpers have it" : "Which agents have it") {
+    Section("Which agents have it") {
       ForEach(store.agents) { agent in
         Toggle(agent.name, isOn: Binding(get: { selected.contains(agent.id) }, set: { on in
           if on { selected.insert(agent.id) } else { selected.remove(agent.id) }

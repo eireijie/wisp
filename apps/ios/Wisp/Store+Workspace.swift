@@ -73,7 +73,6 @@ extension Store {
   func savePrefs(_ fields: Fields) async throws {
     let data = try await fetch { try await $0.put("/api/me/prefs", fields) }
     prefs = try Wire.decoder.decode(Me.Prefs.self, from: data)
-    simple = prefs?.experience == "simple"
   }
   func refreshSessions() async throws { sessions = try await fetch { try await $0.get("/api/me/sessions") } }
   func signOutOthers() async throws {

@@ -74,7 +74,7 @@ struct AgentPage: View {
               Spacer()
               if let date = run.createdAt.flatMap(Wire.date) { Text(date, style: .relative).font(.caption).foregroundStyle(.secondary) }
             }
-            if let channel = run.channelName { Text("#\(channel)").font(.caption).foregroundStyle(.secondary) }
+            if let channel = run.channelName { Text(channel).font(.caption).foregroundStyle(.secondary) }
             if let trigger = run.trigger { Text(trigger).font(.subheadline) }
             if let error = run.hint ?? run.error, !error.isEmpty { Text(error).font(.footnote).foregroundStyle(.red) }
           }
@@ -235,10 +235,8 @@ struct AgentEditor: View {
 
   private var modelFields: some View {
     Section {
-      if store.simple {
-        Text(model.isEmpty && effort.isEmpty && !fast ? "Automatic (recommended)" : "Custom: \(model.isEmpty ? "your own settings" : model)").font(.headline)
-        Text("Wisp lets \(HarnessChoice.label(current.harness)) pick the model and effort. That's right for most people.").font(.footnote).foregroundStyle(.secondary)
-      }
+      Text(model.isEmpty && effort.isEmpty && !fast ? "Automatic (recommended)" : "Custom: \(model.isEmpty ? "your own settings" : model)").font(.headline)
+      Text("Wisp lets \(HarnessChoice.label(current.harness)) pick the model and effort. That's right for most people.").font(.footnote).foregroundStyle(.secondary)
       TechnicalDetails {
         Picker("Model", selection: $model) {
           Text("Harness default").tag("")

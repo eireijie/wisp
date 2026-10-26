@@ -246,7 +246,7 @@ struct MemoryGraphScreen: View {
           } label: {
             HStack(spacing: 6) {
               Circle().fill(on ? kind.color(dark: scheme == .dark) : Color.secondary.opacity(0.4)).frame(width: 8, height: 8)
-              Text(kind.label(simple: store.simple)).strikethrough(!on)
+              Text(kind.label).strikethrough(!on)
               Text("\(graph.count(of: kind))").foregroundStyle(.secondary)
             }
             .font(.footnote.weight(.medium)).padding(.horizontal, 10).padding(.vertical, 6)
@@ -309,7 +309,7 @@ struct MemoryGraphScreen: View {
         Circle().fill(node.graphKind.color(dark: scheme == .dark)).frame(width: 10, height: 10).padding(.top, 5)
         VStack(alignment: .leading, spacing: 2) {
           Text(node.title).font(.headline).lineLimit(2)
-          Text((node.path.map { store.placeName($0) } ?? "\(GraphKind.ghost.label(simple: store.simple)): other notes link to it") + (node.type.map { " · \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+          Text((node.path.map { store.placeName($0) } ?? "\(GraphKind.ghost.label): other notes link to it") + (node.type.map { " · \($0)" } ?? "")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
         Spacer(minLength: 0)
         Button { picked = nil } label: { Image(systemName: "xmark").font(.footnote.weight(.semibold)) }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Close")

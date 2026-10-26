@@ -24,7 +24,6 @@ struct NativeSettingsView: View {
           NavigationLink("Agent defaults") { AgentDefaultsView() }.accessibilityIdentifier("settings-agent-defaults")
           NavigationLink("Agents") { AgentPolicyView() }
           NavigationLink("Computers") { ComputerSettingsView() }
-          if !store.simple { advanced }
         }
         NavigationLink("Devices") { DevicesSettingsView() }.accessibilityIdentifier("settings-devices")
         if store.isOwner { NavigationLink("Access") { AccessView() }.accessibilityIdentifier("settings-access") }
@@ -33,7 +32,8 @@ struct NativeSettingsView: View {
         NavigationLink("Updates & about") { UpdatesView() }
         NavigationLink("Approvals") { InboxView() }
       }
-      if store.simple && store.canManage { Section("Advanced") { advanced } }
+      // rarely used knobs sit behind one row for everyone
+      if store.canManage { Section { DisclosureGroup("More options") { advanced } }.accessibilityIdentifier("settings-more-options") }
       Section { Text("Wisp · Free and open source (Apache-2.0)").font(.footnote).foregroundStyle(.secondary) }
     }.sectionScreen("Settings", id: "settings")
   }
@@ -49,7 +49,6 @@ struct PreferencesView: View {
   @State private var action = FormAction()
   var body: some View {
     Form {
-      Section("How much to show") { ExperiencePicker(); Text("Simple keeps the advanced parts behind Advanced so the everyday ones stand out. You can switch any time.").font(.footnote) }
       Section("Messages") {
         preference("Sending a message", key: "sendWith", value: store.prefs?.sendWith ?? "enter", options: [("enter", "Enter"), ("mod-enter", "⌘ + Enter")])
         preference("Clock", key: "clock", value: store.prefs?.clock ?? "auto", options: [("auto", "Automatic"), ("12h", "12-hour"), ("24h", "24-hour")])

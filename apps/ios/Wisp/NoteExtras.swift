@@ -29,10 +29,9 @@ struct NewNoteSheet: View {
       Section("Where to keep it") {
         Picker("Where to keep it", selection: $selection) {
           ForEach(choices) { Text($0.label).tag($0.folder) }
-          if !store.simple { Text("Other folder…").tag(otherTag) }
-          else if selection == otherTag { Text(store.friendlyFolder(other) ?? other).tag(otherTag) }
+          Text("Other folder…").tag(otherTag)
         }
-        if selection == otherTag && !store.simple {
+        if selection == otherTag {
           TextField("Folder path", text: $other).textInputAutocapitalization(.never).autocorrectionDisabled()
           Text("Type a new name to make a folder.").font(.caption).foregroundStyle(.secondary)
         }

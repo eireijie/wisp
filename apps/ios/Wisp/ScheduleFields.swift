@@ -33,12 +33,11 @@ struct ScheduleFields: View {
   var body: some View {
     Section {
       Picker("How often", selection: $preset) {
-        ForEach(presets.filter { $0.0 != "custom" || !store.simple || preset == "custom" }, id: \.0) { Text($0.0 == "custom" && store.simple ? "Custom schedule" : $0.1).tag($0.0) }
+        ForEach(presets, id: \.0) { Text($0.1).tag($0.0) }
       }
       if preset == "weekly" { Picker("Day", selection: $day) { ForEach(0..<7) { Text(Calendar.current.weekdaySymbols[$0]).tag($0) } } }
       if ["daily", "weekdays", "weekly"].contains(preset) { DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute) }
-      if preset == "custom" && (!store.simple || startedCustom) { customInput }
-      if store.simple && !startedCustom { TechnicalDetails(title: "Custom schedule") { customInput } }
+      if preset == "custom" { customInput }
     } header: { Text("Schedule") } footer: {
       Text(schedule.isEmpty ? "Run it from here, or ask the helper in chat." : "\(describeCron(schedule)), in \(timezone).")
     }

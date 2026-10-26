@@ -28,7 +28,7 @@ struct TasksView: View {
         Picker("Show tasks for", selection: $who) {
           Text("Everyone").tag("")
           ForEach(store.agents) { Text($0.name).tag($0.id) }
-          if !store.simple { ForEach(store.teams) { Text("Team \($0.name)").tag("team:\($0.id)") } }
+          ForEach(store.teams) { Text("Team \($0.name)").tag("team:\($0.id)") }
         }
         Toggle("Only what I asked for", isOn: $mine)
       }
@@ -163,7 +163,7 @@ struct NewTaskView: View {
       Picker("Who takes it?", selection: $to) {
         Text("Let \(store.agent(store.taskLead ?? "")?.name ?? "the lead") plan it").tag("auto")
         ForEach(store.agents) { Text($0.name).tag($0.id) }
-        if !store.simple { ForEach(store.teams.filter { $0.leadId != nil }) { Text("Team \($0.name)").tag("team:\($0.name)") } }
+        ForEach(store.teams.filter { $0.leadId != nil }) { Text("Team \($0.name)").tag("team:\($0.name)") }
       }
       if let agent = store.agent(to), agent.status == .offline { Text("\(agent.name) is offline; it starts when its device connects.").font(.footnote) }
       Section {

@@ -18,10 +18,10 @@ struct AgentDoing: Equatable {
 
 /** Plain logic behind the Inbox sections (the web's DashboardView and useWaitingOnYou). */
 extension Store {
-  func chatName(_ c: Channel) -> String { c.isDM ? dmAgent(c)?.name ?? "Direct message" : "#\(c.name)" }
+  func chatName(_ c: Channel) -> String { c.isDM ? dmAgent(c)?.name ?? "Direct message" : c.name }
   private func channelLabel(_ id: String?) -> String? {
     guard let id, let c = channels.first(where: { $0.id == id }) else { return nil }
-    return c.isDM ? "in a DM" : "in #\(c.name)"
+    return c.isDM ? "in a DM" : "in \(c.name)"
   }
 
   /** One line per busy agent, from the most specific source: its task, then the chat step it's on. */
@@ -73,16 +73,9 @@ struct InboxSections: View {
   var open: (InboxTarget) -> Void
 
   private var isGuest: Bool { store.role == "guest" }
-  private var activeAgents: [Agent] { store.agentsByActivity.filter { store.doing($0) != nil || $0.status == .busy } }
 
   var body: some View {
     if !isGuest { ReadinessSection(open: open) }
-
-    if store.simple, !activeAgents.isEmpty {
-      Section("What agents are doing") {
-        ForEach(activeAgents) { agentRow($0) }
-      }
-    }
 
     let unread = store.unreadChats
     if !unread.isEmpty {
@@ -93,23 +86,23 @@ struct InboxSections: View {
       }
     }
 
-    if store.simple, isGuest, store.recentChats.isEmpty {
+    if isGuest, store.recentChats.isEmpty {
       Section { Text("Conversations you're invited to show up here.").foregroundStyle(.secondary) }
     }
 
-    if store.simple, unread.isEmpty, !store.recentChats.isEmpty {
+    if unread.isEmpty, !store.recentChats.isEmpty {
       Section("Recent conversations") {
         ForEach(store.recentChats) { c in Button { open(.chat(c)) } label: { chatRow(c, trailing: nil) } }
       }
     }
 
-    if store.simple, !isGuest, store.features.tasks, !store.tasksToCheck.isEmpty {
+    if !isGuest, store.features.tasks, !store.tasksToCheck.isEmpty {
       Section("Tasks to check") {
         ForEach(store.tasksToCheck) { taskRow($0, showAgent: false) }
       }
     }
 
-    if !store.simple { advanced }
+    advanced
   }
 
   // MARK: Advanced
@@ -132,7 +125,7 @@ struct InboxSections: View {
             HStack(spacing: 10) {
               Image(systemName: "person.3").foregroundStyle(.secondary).frame(width: 28)
               VStack(alignment: .leading, spacing: 2) {
-                Text("#\(t.name)").foregroundStyle(.primary)
+                Text(t.name).foregroundStyle(.primary)
                 Text("\(members.count) \(members.count == 1 ? "agent" : "agents") · \(active ? "working" : "quiet")").font(.caption).foregroundStyle(.secondary)
               }
               Spacer()
@@ -194,7 +187,7 @@ struct InboxSections: View {
   private func chatRow(_ c: Channel, trailing: String?) -> some View {
     HStack(spacing: 12) {
       if c.isDM, let a = store.dmAgent(c) { AgentAvatar(agent: a, size: 32, showStatus: false) }
-      else { Image(systemName: c.private == true ? "lock" : "number").foregroundStyle(.secondary).frame(width: 32) }
+      else { Image(systemName: c.private == true ? "lock" : "person.2").foregroundStyle(.secondary).frame(width: 32) }
       Text(store.chatName(c)).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
       Spacer()
       if let trailing { Text(trailing).font(.caption.weight(.semibold)).foregroundStyle(.secondary) }
@@ -254,7 +247,7 @@ struct ReadinessSection: View {
           fixButton(bad, agent)
         }.padding(.vertical, 4).buttonStyle(.borderless)
       }
-    } else if store.simple, let agent {
+    } else if let agent {
       Section {
         VStack(alignment: .leading, spacing: 10) {
           Text("Try asking \(agent.name)…").font(.headline)
