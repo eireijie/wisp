@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageSquare, PanelRight, Square } from "lucide-react";
+import { MessageSquare, PanelRight, Square, X } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type LiveRun } from "../store.ts";
 import { describeTool } from "./AgentCards.tsx";
 import { AgentAvatar, cx } from "./ui.tsx";
-import { activityPhrase, minutesSince, runStartedAt } from "./agentActivity.ts";
+import { activityPhrase, minutesSince, runStartedAt, workKind } from "./agentActivity.ts";
+import { useDevices, type DeviceInfo } from "../devices.ts";
 
 /** What one live run is doing, in plain words: "searching memory", or "asking Chief" for a hand-off. */
 export function runActivity(run: LiveRun, agents: Agent[]): string {
@@ -16,6 +17,17 @@ export function runActivity(run: LiveRun, agents: Agent[]): string {
   }
   return activityPhrase(run.last?.name, !!run.text);
 }
+
+/** "Editing files: notes/release.md", "Reading main.ts", or just "Thinking". */
+function workDetail(run: LiveRun, agents: Agent[]): string {
+  const base = runActivity(run, agents).replace(/^./, (c) => c.toUpperCase());
+  const inp = (run.last?.input ?? {}) as Record<string, unknown>;
+  const path = [inp.file_path, inp.path, inp.filename, inp.file].find((v) => typeof v === "string") as string | undefined;
+  const kind = run.last ? workKind(run.last.name) : null;
+  return path && (kind === "edit" || kind === "read") ? `${base}: ${path.split("/").slice(-2).join("/")}` : base;
+}
+
+const nodeName = (nodeId: string | null | undefined, devices: DeviceInfo[] | null) => (nodeId ? devices?.find((d) => d.id === nodeId)?.name : undefined);
 
 /** Stop every run an agent has going here. */
 export function stopRuns(runs: LiveRun[]) {
@@ -47,6 +59,7 @@ function useThreadTitles(runs: LiveRun[]): Record<string, string> {
 
 export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: { runs: LiveRun[]; onDetails: (agentId: string) => void; onThread?: (threadId: string) => void; hereThread?: string | null }) {
   const agents = useStore((s) => s.agents);
+  const devices = useDevices(15_000);
   const titles = useThreadTitles(runs);
   const [open, setOpen] = useState(false);
   const [, tick] = useState(0);
@@ -106,68 +119,86 @@ export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: {
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={summary}
-        className="max-w-full h-8 pl-1.5 pr-3 rounded-full border border-line bg-panel shadow-panel inline-flex items-center gap-2 text-[13px] hover:bg-hover"
+        className="glass max-w-full h-10 pl-2 pr-4 rounded-full inline-flex items-center gap-2.5 text-[14px] hover:bg-hover"
       >
         <span className="flex shrink-0">
           {working.slice(0, 2).map((w, i) => (
-            <span key={w.agentId} className={cx("rounded-full ring-2 ring-panel bg-panel", i > 0 && "-ml-2")}>
-              <AgentAvatar agent={w.agent} size={20} live interactive={false} />
+            <span key={w.agentId} className={cx("rounded-full ring-2 ring-control bg-control", i > 0 && "-ml-2")}>
+              <AgentAvatar agent={w.agent} size={24} live interactive={false} />
             </span>
           ))}
           {working.length > 2 && <span className="-ml-2 size-5 rounded-full ring-2 ring-panel bg-chip text-[10px] font-semibold text-muted grid place-items-center">+{working.length - 2}</span>}
         </span>
-        <span className="size-1.5 shrink-0 rounded-full bg-ok animate-pulse" aria-hidden />
+        <span className="work-dots scale-75" aria-hidden>
+          <i />
+          <i />
+          <i />
+        </span>
         <span className="truncate">
           <span className="font-semibold">{firstName}</span> is {runActivity(first.run, agents)}
         </span>
         {rest && <span className="shrink-0 text-muted">· {rest}</span>}
       </button>
       {open && (
-        <div role="dialog" aria-label="Agents working here" className="glass absolute bottom-full left-0 mb-2 z-50 w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5">
-          {working.map((w) => (
-            <div key={w.agentId} className="flex items-start gap-3 rounded-xl px-2.5 py-2">
-              <AgentAvatar agent={w.agent} size={32} live />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold truncate">{w.agent?.name ?? "Agent"}</div>
-                <div className="text-xs text-muted">
-                  {runActivity(w.run, agents).replace(/^./, (c) => c.toUpperCase())} · {minutesSince(Math.min(...w.runs.map((r) => runStartedAt(r.runId))))}
-                </div>
-                {/* where: which thread (or the channel itself) */}
-                {w.run.threadId && w.run.threadId !== hereThread && (
-                  <div className="text-xs text-muted truncate">
-                    in {w.run.threadPath.length ? "a sub-thread of " : ""}“{titles[w.run.threadPath[0] ?? w.run.threadId]}”
+        <div className="max-md:fixed max-md:inset-0 max-md:z-50 max-md:flex max-md:items-end max-md:bg-black/50 max-md:p-3 md:contents" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
+          <div role="dialog" aria-label="Working here" className="glass md:absolute md:bottom-full md:left-0 md:mb-2 z-50 w-full md:w-96 md:max-w-[calc(100vw-1.5rem)] rounded-[30px] p-2 pb-3">
+            <div className="flex items-center px-3 pt-2 pb-1">
+              <span className="flex-1 text-[17px] font-semibold">Working here</span>
+              <button type="button" onClick={() => setOpen(false)} className="size-9 rounded-full grid place-items-center text-muted hover:bg-hover" aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            {working.map((w) => (
+              <div key={w.agentId} className="flex items-center gap-3 rounded-2xl px-3 py-2.5">
+                <AgentAvatar agent={w.agent} size={36} live />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold truncate">{w.agent?.name ?? "Agent"}</div>
+                  <div className="text-[13px] text-muted truncate">{workDetail(w.run, agents)}</div>
+                  <div className="text-xs text-faint truncate">
+                    {nodeName(w.agent?.nodeId, devices) ? `On ${nodeName(w.agent?.nodeId, devices)} · ` : ""}
+                    {minutesSince(Math.min(...w.runs.map((r) => runStartedAt(r.runId))))}
+                    {/* where: which thread (or the channel itself) */}
+                    {w.run.threadId && w.run.threadId !== hereThread ? ` · in ${w.run.threadPath.length ? "a sub-thread of " : ""}“${titles[w.run.threadPath[0] ?? w.run.threadId]}”` : ""}
                   </div>
-                )}
-                <div className="mt-1.5 flex items-center gap-1">
-                  {onThread && w.run.threadId && w.run.threadId !== hereThread && (
+                  <div className="mt-1 flex items-center gap-1">
+                    {onThread && w.run.threadId && w.run.threadId !== hereThread && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false);
+                          onThread(w.run.threadId!);
+                        }}
+                        className="h-7 px-2.5 rounded-full bg-chip hover:bg-hover text-xs font-medium inline-flex items-center gap-1.5"
+                      >
+                        <MessageSquare size={13} /> Open thread
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
                         setOpen(false);
-                        onThread(w.run.threadId!);
+                        onDetails(w.agentId);
                       }}
-                      className="h-7 px-2.5 rounded-lg bg-chip hover:bg-hover text-xs font-medium inline-flex items-center gap-1.5"
+                      className="h-7 px-2.5 rounded-full bg-chip hover:bg-hover text-xs font-medium inline-flex items-center gap-1.5"
                     >
-                      <MessageSquare size={13} /> Open thread
+                      <PanelRight size={13} /> Open details
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpen(false);
-                      onDetails(w.agentId);
-                    }}
-                    className="h-7 px-2.5 rounded-lg bg-chip hover:bg-hover text-xs font-medium inline-flex items-center gap-1.5"
-                  >
-                    <PanelRight size={13} /> Open details
-                  </button>
-                  <button type="button" onClick={() => void stopRuns(w.runs)} className="h-7 px-2.5 rounded-lg text-xs font-medium text-muted hover:text-bad hover:bg-hover inline-flex items-center gap-1.5" title={`Stop ${w.agent?.name ?? "it"}`}>
-                    <Square size={11} /> Stop
-                  </button>
+                  </div>
                 </div>
+                <button type="button" onClick={() => void stopRuns(w.runs)} className="h-9 shrink-0 px-3.5 rounded-full border border-control-line bg-control text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-hover" title={`Stop ${w.agent?.name ?? "it"}`}>
+                  <Square size={11} fill="currentColor" /> Stop
+                </button>
               </div>
-            </div>
-          ))}
+            ))}
+            {working.length > 1 && (
+              <div className="px-3 pt-1">
+                <button type="button" onClick={() => void stopRuns(working.flatMap((w) => w.runs))} className="h-11 w-full rounded-full bg-bad text-[15px] font-semibold text-white inline-flex items-center justify-center gap-2">
+                  <Square size={12} fill="currentColor" /> Stop all
+                </button>
+              </div>
+            )}
+            <p className="px-4 pt-2 text-xs text-muted">Stopping ends what it is doing right now. It keeps the chat.</p>
+          </div>
         </div>
       )}
     </div>

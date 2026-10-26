@@ -506,6 +506,8 @@ function applyReactions(s: State, messageId: string, reactions: Reaction[]): Par
 function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
   if (ev.type === "text") return { ...r, text: r.text + ev.text };
   if (ev.type === "tool_call") return { ...r, tools: [...r.tools, ev.name], last: { name: ev.name, input: ev.input }, usedComputer: r.usedComputer || /computer_/.test(ev.name) };
+  // "started" only opens the live run (the working bubble shows it); it isn't a line of the reply
+  if (ev.type === "status" && ev.text === "started") return r;
   // The existing streaming view renders text; give non-text events their own lines.
   let text: string;
   if (ev.type === "status" || ev.type === "notice") text = ev.text;

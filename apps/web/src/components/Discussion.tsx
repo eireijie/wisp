@@ -5,6 +5,7 @@ import { api } from "../api.ts";
 import { useStore, type DiscussionInfo } from "../store.ts";
 import { go } from "../router.ts";
 import { AgentAvatar, Pill } from "./ui.tsx";
+import { ChatCard } from "./AgentCards.tsx";
 
 const STATUS: Record<Discussion["status"], { label: string; tone: "info" | "accent" | "ok" | "neutral" }> = {
   running: { label: "in progress", tone: "info" },
@@ -31,21 +32,21 @@ export function DiscussionCard({ id }: { id: string }) {
   const who = d.status === "summarizing" ? [d.moderatorId] : d.participants;
 
   return (
-    <div className="mt-2 max-w-xl rounded-xl border border-line bg-bg p-3 text-sm">
-      <div className="flex items-center gap-2">
-        <MessagesSquare size={15} className="text-accent-text shrink-0" />
-        <span className="font-medium truncate flex-1">{d.topic}</span>
-        <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>
+    <ChatCard icon={<MessagesSquare size={13} />} label="Discussion">
+      <div className="mt-2 flex items-start gap-2">
+        <span className="min-w-0 flex-1 text-[15px] font-semibold leading-snug">{d.status === "done" ? `Decided: ${d.topic}` : live ? `Talking it through with ${who.map((a) => agents.find((x) => x.id === a)?.name ?? "someone").join(" and ")}…` : d.topic}</span>
+        {d.status !== "running" && <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>}
       </div>
       {live && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted">{phase}:</span>
+          <span className="text-[13px] text-muted">{phase}</span>
           {who.map((a) => {
             const agent = agents.find((x) => x.id === a);
             const s = state(a);
             return (
-              <span key={a} className="inline-flex items-center gap-1 rounded-full bg-hover pl-0.5 pr-2 h-6 text-xs" title={s === "running" ? "answering" : s === "queued" ? "waiting for its device" : s ?? ""}>
-                <AgentAvatar agent={agent} size={20} badge={false} />@{agent?.handle}
+              <span key={a} className="inline-flex items-center gap-1 rounded-full bg-chip pl-0.5 pr-2 h-6 text-xs" title={s === "running" ? "answering" : s === "queued" ? "waiting for its device" : s ?? ""}>
+                <AgentAvatar agent={agent} size={20} badge={false} />
+                {agent?.name}
                 {s === "done" ? <Check size={12} className="text-ok" /> : s === "running" ? <Loader2 size={12} className="animate-spin text-info" /> : s === "queued" ? <Clock size={12} className="text-warn" /> : s ? <X size={12} className="text-muted" /> : null}
               </span>
             );
@@ -59,7 +60,7 @@ export function DiscussionCard({ id }: { id: string }) {
                 await load(d.id);
                 setStopping(false);
               }}
-              className="ml-auto inline-flex items-center gap-1 rounded-md px-2 h-6 text-xs text-muted hover:text-bad hover:bg-hover"
+              className="ml-auto inline-flex items-center gap-1 rounded-full px-2.5 h-7 text-xs text-muted hover:text-bad hover:bg-hover"
             >
               <Square size={11} /> Stop
             </button>
@@ -67,10 +68,10 @@ export function DiscussionCard({ id }: { id: string }) {
         </div>
       )}
       {d.decisionPath && (
-        <button onClick={() => go({ view: "vault", path: d.decisionPath })} className="mt-2 inline-flex items-center gap-1.5 text-accent-text hover:underline text-sm">
-          <BookOpen size={14} /> Read the decision
+        <button onClick={() => go({ view: "vault", path: d.decisionPath })} className="mt-2.5 h-10 rounded-full border border-control-line bg-control px-4 text-sm font-semibold inline-flex items-center gap-1.5">
+          Read the decision <BookOpen size={14} />
         </button>
       )}
-    </div>
+    </ChatCard>
   );
 }

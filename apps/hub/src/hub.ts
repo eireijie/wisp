@@ -762,8 +762,6 @@ export class Hub {
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
     if (run.kind === "background") this.background.started(run);
     else this.dropWaitingNotice(run, agent);
-    // like a teammate saying "on it": the agent marks the message it picked up
-    if (run.kind !== "background") this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
     // working again, so an earlier "needs you on my computer" no longer stands
     if (agent.computerId) this.computers.dropHelp(agent.computerId, agent.id);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
