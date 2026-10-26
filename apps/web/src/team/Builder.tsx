@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useOverlay } from "../overlays.ts";
+import { builderCovered } from "./escape.ts";
 import { AlertCircle, ChevronDown, ChevronLeft, Loader2, MoreHorizontal, Plus, Workflow, X } from "lucide-react";
 import { stepOrder, type ChannelTeam, type TeamTemplate } from "@wisp/core";
 import { api } from "../api.ts";
@@ -52,6 +54,8 @@ const iconKind = (k: AddKind) => (k === "agent" ? "do" : k === "handOut" ? "hand
  */
 export function TeamBuilder({ team, onChange, name, channelId, saving = false, error = null, doneLabel = "Save", onBack, onDone }: BuilderProps) {
   const phone = useIsPhone();
+  const overlayId = useRef(Symbol("builder")).current;
+  useOverlay(overlayId, "builder");
   const agents = useStore((s) => s.agents);
   const [tab, setTab] = useState<Tab>("canvas");
   const [sel, setSel] = useState<string | null>(null);
@@ -112,7 +116,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e) => {
     if (phone || tab !== "canvas") return;
-    if (!isStepDeleteKey(e, sel && stepById(team, sel) ? sel : null, !!document.querySelector('[aria-modal="true"]'))) return;
+    if (!isStepDeleteKey(e, sel && stepById(team, sel) ? sel : null, builderCovered())) return;
     e.preventDefault();
     askRemove(sel!);
   };

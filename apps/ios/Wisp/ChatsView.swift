@@ -589,6 +589,7 @@ struct NewChatSheet: View {
 /** The blue count on a chat or tab with new messages. */
 struct UnreadBadge: View {
   var count: Int
+  @ReduceMotion private var reduceMotion
   var body: some View {
     if count > 0 {
       Text(count > 99 ? "99+" : "\(count)")
@@ -598,7 +599,7 @@ struct UnreadBadge: View {
         .frame(minWidth: 20, minHeight: 20)
         .background(Capsule().fill(Palette.blue))
         .badgePop(count)
-        .transition(.scale(scale: 0.4).combined(with: .opacity))
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
     }
   }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { isTopOverlay, toBody, useOverlay } from "../overlays.ts";
 import { Activity, BookOpen, Check, MessageSquare, ChevronRight, Square, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, Radar, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
 import { harnessLabel, type Agent } from "@wisp/core";
 import { soulPath } from "@wisp/core/src/soul.ts";
@@ -426,16 +427,18 @@ export function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Age
     if (mine) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
     onClose();
   };
+  const overlayId = useRef(Symbol("screen")).current;
+  useOverlay(overlayId, "screen");
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      // while in control, Escape belongs to the remote computer
-      if (e.key === "Escape" && !mine) close();
+      // while in control, Escape belongs to the remote computer; a dialog over the screen takes it first
+      if (e.key === "Escape" && !mine && isTopOverlay(overlayId)) close();
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   });
 
-  return (
+  return toBody(
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col p-3 md:p-5 safe-top safe-bottom" role="dialog" aria-modal="true" aria-label={`${c.name}'s screen`}>
       <div className="shrink-0 relative flex items-center gap-2 pb-3 min-h-11 text-white">
         <AgentAvatar agent={agent} size={26} live />
@@ -478,6 +481,6 @@ export function ComputerFullscreen({ agent, computer: c, onClose }: { agent: Age
         ) : null}
       </div>
       {error && <p className="shrink-0 mt-1 text-center text-sm text-bad">{error}</p>}
-    </div>
+    </div>,
   );
 }

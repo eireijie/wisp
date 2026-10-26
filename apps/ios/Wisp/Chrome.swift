@@ -247,7 +247,7 @@ extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
 struct WorkingDots: View {
   var color: Color = Palette.green
   @State private var on = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   var body: some View {
     HStack(spacing: 3) {

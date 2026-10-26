@@ -11,7 +11,7 @@ struct AppBanners: View {
   @State private var dismissedUpdate = false
   /** a sheet or full-screen page is up: the banners belong to the main screens, so they stay out of its way */
   @State private var covered = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   private var slide: AnyTransition { reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity) }
 
   var body: some View {

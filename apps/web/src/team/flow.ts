@@ -232,7 +232,9 @@ export function stepNeedsConfirm(team: ChannelTeam, id: string): boolean {
   const s = stepById(team, id);
   if (!s) return false;
   const g = stepGraph(stepsOf(team));
-  return !!(s.prompt ?? "").trim() || (g.ins.get(id) ?? []).length > 0 || (g.outs.get(id) ?? []).length > 0 || (g.back.get(id) ?? []).length > 0;
+  // anything the person filled in counts, not just the prompt
+  const typed = [s.prompt, s.show, s.condition, s.handoffTo, s.reviewBy, s.sendBackTo, s.ifTrue, s.ifFalse].some((v) => !!(v ?? "").trim()) || !!s.rule || !!s.handTo?.length;
+  return typed || (g.ins.get(id) ?? []).length > 0 || (g.outs.get(id) ?? []).length > 0 || (g.back.get(id) ?? []).length > 0;
 }
 
 /** Whether a key press should delete the picked step: Delete or Backspace, not while typing, not with a dialog open. */
@@ -243,6 +245,9 @@ export function isStepDeleteKey(e: { key: string; metaKey?: boolean; ctrlKey?: b
   const t = e.target as { tagName?: string; isContentEditable?: boolean } | null;
   const tag = (t?.tagName ?? "").toUpperCase();
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return false;
+  // a menu, list or switch has the focus: Delete belongs to it, not to the picked step
+  const c = (e.target as { closest?: (s: string) => unknown } | null)?.closest;
+  if (typeof c === "function" && (e.target as Element).closest('[role="menu"],[role="listbox"],[role="combobox"],[role="switch"],summary')) return false;
   return true;
 }
 

@@ -32,11 +32,11 @@ button.rounded-full,
 a.rounded-full,
 .circle,
 .m-press {
-  transition: transform 300ms var(--pop), background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out, opacity 160ms ease-out;
+  transition: transform 300ms var(--pop), scale 300ms var(--pop), rotate 300ms var(--pop), translate 300ms var(--pop), background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out, opacity 160ms ease-out;
 }
 :is(button.rounded-full, a.rounded-full, .circle, .m-press):active:not(:disabled):not([aria-disabled="true"]) {
   transform: scale(0.94);
-  transition-duration: 90ms, 160ms, 160ms, 160ms, 160ms;
+  transition-duration: 90ms, 90ms, 90ms, 90ms, 160ms, 160ms, 160ms, 160ms;
 }
 
 /* ---------- the sliding selection indicator (rail on desktops, tab bar on phones) ---------- */

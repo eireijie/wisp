@@ -295,8 +295,8 @@ function Workspace() {
             {phone ? (
               // phones: the page, and over it the open chat. The page shifts back 96px and dims as the chat slides in
               <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden">
-                <div ref={baseRef} data-open={chatLayer} inert={chatLayer} className={cx("m-under absolute inset-0 flex flex-col", showTabs && "[&_.overflow-y-auto]:pb-28")}>
-                  {chatLayer ? <ChatsPage route={route} /> : page}
+                <div ref={baseRef} data-open={chatOpen} inert={chatOpen} className={cx("m-under absolute inset-0 flex flex-col", showTabs && "[&_.overflow-y-auto]:pb-28")}>
+                  {chatOpen ? <ChatsPage route={route} /> : page}
                 </div>
                 <div className="m-dim" data-open={chatOpen} aria-hidden />
                 {chatLayer && heldChat.current && (
@@ -309,7 +309,7 @@ function Workspace() {
               page
             )}
           </main>
-          {showTabs && <TabBar route={route} away={chatLayer} />}
+          {showTabs && <TabBar route={route} away={chatOpen} />}
         </div>
       </div>
       {dialogs}

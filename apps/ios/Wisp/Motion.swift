@@ -20,6 +20,14 @@ enum Motion {
   static func pick(_ animation: Animation, _ reduceMotion: Bool) -> Animation { reduceMotion ? reduced : animation }
 }
 
+/** Whether motion is off: iOS's Reduce Motion or Wisp's own setting (Settings > Appearance). Read it as `@ReduceMotion private var reduceMotion`. */
+@MainActor @propertyWrapper
+struct ReduceMotion: DynamicProperty {
+  @Environment(\.accessibilityReduceMotion) private var system
+  @AppStorage(ThemeSettings.motionKey, store: WispPreferences.standard) private var app = false
+  var wrappedValue: Bool { system || app }
+}
+
 /** Scales on press (0.94 for circles and pills, 0.98 for rows) and springs back (Pop); with Reduce Motion it only dims. */
 struct PressStyle: ButtonStyle {
   var scale: CGFloat = 0.94
@@ -40,7 +48,7 @@ extension ButtonStyle where Self == PressStyle {
 private struct PressFeedback: ViewModifier {
   var pressed: Bool
   var scale: CGFloat
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   func body(content: Content) -> some View {
     content
       .scaleEffect(pressed && !reduceMotion ? scale : 1)
@@ -80,7 +88,7 @@ struct StaggeredStack<Content: View>: View {
 private struct PressScale: ViewModifier {
   var pressed: Bool
   var scale: CGFloat
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   func body(content: Content) -> some View {
     content.scaleEffect(pressed && !reduceMotion ? scale : 1).animation(pressed ? Motion.press : Motion.pop, value: pressed)
   }
@@ -88,7 +96,7 @@ private struct PressScale: ViewModifier {
 
 private struct RowEntrance: ViewModifier {
   var index: Int
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   @State private var shown = false
 
   func body(content: Content) -> some View {
@@ -117,7 +125,7 @@ extension View {
 
 private struct Arrival: ViewModifier {
   var mine: Bool
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   func body(content: Content) -> some View {
     content.transition(reduceMotion ? .opacity : .asymmetric(
@@ -129,7 +137,7 @@ private struct Arrival: ViewModifier {
 }
 
 private struct WorkingArrival: ViewModifier {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   func body(content: Content) -> some View {
     content.transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
   }
@@ -138,7 +146,7 @@ private struct WorkingArrival: ViewModifier {
 private struct MessageArrivals<V: Equatable>: ViewModifier {
   var value: V
   var settled: Bool
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   func body(content: Content) -> some View {
     content.animation(settled ? (reduceMotion ? Motion.reduced : Motion.pop) : nil, value: value)
@@ -149,7 +157,7 @@ private struct MessageArrivals<V: Equatable>: ViewModifier {
 
 private struct BadgePop: ViewModifier {
   var value: Int
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   @State private var scale: CGFloat = 1
 
   func body(content: Content) -> some View {
@@ -175,7 +183,7 @@ extension View {
 private struct TabEntrance: ViewModifier {
   var mine: MainTab
   var current: MainTab
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   /** -1 or 1 while the pane is arriving (the side it comes from), 0 once settled */
   @State private var from: CGFloat = 0
 

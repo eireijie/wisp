@@ -79,6 +79,28 @@ export function StepCanvas({
   const [drag, setDrag] = useState<{ id: string; pos: Pt } | null>(null);
   const [menu, setMenu] = useState<{ at: AddAt; title: string; pos: Pt } | null>(null);
   const [ctx, setCtx] = useState<{ id: string; pos: Pt } | null>(null);
+  // an open menu closes on Escape (the builder's own Escape steps aside for open menus) and on a click anywhere outside it
+  const menuOpen = !!(menu || ctx);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMenu(null);
+      setCtx(null);
+    };
+    const away = (e: Event) => {
+      if (!(e.target as HTMLElement | null)?.closest?.('[role="menu"]')) {
+        setMenu(null);
+        setCtx(null);
+      }
+    };
+    window.addEventListener("keydown", esc);
+    window.addEventListener("pointerdown", away);
+    return () => {
+      window.removeEventListener("keydown", esc);
+      window.removeEventListener("pointerdown", away);
+    };
+  }, [menuOpen]);
   const pointers = useRef(new Map<number, Pt>());
   const gesture = useRef<{ kind: "pan"; start: Pt; view: typeof view } | { kind: "move"; id: string; start: Pt; from: Pt; moved: boolean } | { kind: "pinch"; dist: number; mid: Pt; view: typeof view } | null>(null);
 
@@ -408,11 +430,11 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey, onDel
       tabIndex={0}
       aria-pressed={selected}
       aria-label={`Step ${n}, ${titleOf(step)}${problem ? `. ${problem}` : ""}`}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onKey())}
+      onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onKey())}
       className={cx("group absolute cursor-grab rounded-xl border text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring", dragging && "cursor-grabbing shadow-panel", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card", selected && "border-ink/60 ring-2 ring-ink/25")}
       style={{ left: at.x, top: at.y, width: BOX_W, height: BOX_H }}
     >
-      <button type="button" data-ui aria-label={`Delete step ${n}`} title="Delete step" onClick={onDelete} className={cx("absolute -right-2.5 -top-2.5 z-[1] grid size-7 place-items-center rounded-full border border-control-line bg-control text-bad shadow-panel hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100", selected ? "opacity-100" : "opacity-0")}>
+      <button type="button" data-ui aria-label={`Delete step ${n}`} title="Delete step" onClick={onDelete} className={cx("absolute -right-2.5 -top-2.5 z-[1] grid size-7 place-items-center rounded-full border border-control-line bg-control text-bad shadow-panel hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100", selected ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto focus-visible:pointer-events-auto")}>
         <Trash2 size={14} />
       </button>
       <div className="flex items-start gap-2 px-3.5 pt-3">

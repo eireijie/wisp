@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { escapeAction } from "./escape.ts";
+import { builderCovered, escapeAction } from "./escape.ts";
 import { createPortal } from "react-dom";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -25,7 +25,7 @@ export function TeamEditSession({ channel, onClose }: { channel: ChannelInfo; on
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const what = escapeAction({ ...latest.current, nested: !!document.querySelector('[data-team-builder] [aria-modal="true"]') });
+      const what = escapeAction({ ...latest.current, nested: builderCovered() });
       if (what === "defer") return;
       e.stopImmediatePropagation();
       e.preventDefault();

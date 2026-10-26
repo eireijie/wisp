@@ -207,7 +207,7 @@ struct CallGhost: View {
   var facts: CallFacts
   var size: CGFloat
   var ring: CGFloat
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   @State private var breathe = false
   @State private var spin = false
   @State private var bob = false

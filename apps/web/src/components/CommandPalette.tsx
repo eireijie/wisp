@@ -10,6 +10,7 @@ import { NewOrgDialog } from "./OrgSwitcher.tsx";
 import { startNewAgent } from "./ChatList.tsx";
 import { chatsTarget } from "./Rail.tsx";
 import { AgentAvatar, cx, harnessLabel } from "./ui.tsx";
+import { isTopOverlay, toBody, useOverlay } from "../overlays.ts";
 
 interface Results {
   channels: Channel[];
@@ -271,8 +272,11 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
     return out;
   }, [q, results, channels, agents, members, teams, guest, features, onNewOrg]);
 
+  const id = useRef(Symbol("palette")).current;
+  useOverlay(id, "palette");
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // a dialog opened over the palette (New organization) answers Escape itself
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && isTopOverlay(id) && onClose();
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onClose]);
@@ -290,7 +294,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
   };
 
   let lastGroup = "";
-  return (
+  return toBody(
     <div className="m-palette-scrim fixed inset-0 z-50 bg-panel md:bg-black/45 md:flex md:items-start md:justify-center md:p-3 md:pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div role="dialog" aria-modal="true" aria-label="Search everything" className="m-palette-card h-full md:h-auto w-full md:max-w-[620px] flex flex-col overflow-hidden bg-panel md:bg-card md:rounded-xl md:border md:border-control-line md:shadow-[0_24px_60px_rgb(0_0_0/0.5)] safe-top">
         <div className="flex items-center gap-3 px-[18px] md:px-4 pt-3 md:pt-0 pb-2 md:pb-0 md:h-[60px] md:border-b md:border-line">
@@ -359,6 +363,6 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
           <span>↵ Open</span>
         </div>
       </div>
-    </div>
+    </div>,
   );
 }

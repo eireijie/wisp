@@ -26,7 +26,7 @@ struct ChannelView: View {
   /** the first batch of messages has settled: from here a new message animates in */
   @State private var settled = false
   @Environment(\.dismiss) private var dismiss
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
 
@@ -132,14 +132,13 @@ struct ChannelView: View {
       }
     }
     .task(id: channel.id) {
+      settled = false
       store.openChannel = channel.id
       do { try await store.loadMessages(channel.id) } catch { self.error = error.localizedDescription }
       store.markRead(channel.id)
-    }
-    .task(id: store.messages[channel.id] != nil) {
-      guard store.messages[channel.id] != nil else { return }
-      try? await Task.sleep(for: .milliseconds(600))
-      settled = true
+      // from here a new message is live; the history the fetch brought in (cached or not) never pops
+      try? await Task.sleep(for: .milliseconds(300))
+      if !Task.isCancelled { settled = true }
     }
     .onDisappear {
       if store.openChannel == channel.id { store.openChannel = nil }
@@ -362,11 +361,11 @@ struct ThreadView: View {
     .toolbar(.hidden, for: .navigationBar)
     .background(Palette.ground.ignoresSafeArea())
     .safeAreaInset(edge: .top, spacing: 0) { chrome }
-    .task(id: ref) { await load() }
-    .task(id: store.threads[ref.rootId] != nil) {
-      guard store.threads[ref.rootId] != nil else { return }
-      try? await Task.sleep(for: .milliseconds(600))
-      settled = true
+    .task(id: ref) {
+      settled = false
+      await load()
+      try? await Task.sleep(for: .milliseconds(300))
+      if !Task.isCancelled { settled = true }
     }
     .onAppear { store.openThreads[ref.rootId] = ref.channelId }
     .onDisappear { store.openThreads[ref.rootId] = nil }
@@ -604,7 +603,7 @@ struct Composer: View {
   @State private var photos: [PhotosPickerItem] = []
   @State private var slash = SlashMenuModel()
   @FocusState private var focused: Bool
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   struct Pending: Identifiable, Equatable { var id = UUID(); var name: String }
 
@@ -683,7 +682,7 @@ struct Composer: View {
             }
             .buttonStyle(.press)
             .padding(.bottom, 8)
-            .transition(.scale.combined(with: .opacity))
+            .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
             .accessibilityLabel(dictation.active ? "Stop dictating" : "Dictate")
           }
           if !empty || sending || onCall == nil {
@@ -699,7 +698,7 @@ struct Composer: View {
             .opacity(blocked ? 0.3 : 1)
             .animation(.snappy, value: blocked)
             .padding(.bottom, 6).padding(.trailing, 6)
-            .transition(.scale.combined(with: .opacity))
+            .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
             .accessibilityLabel("Send").accessibilityIdentifier("composer-send")
           } else if let onCall {
             Button(action: onCall) {
@@ -711,7 +710,7 @@ struct Composer: View {
             }
             .buttonStyle(.press)
             .padding(.bottom, 6).padding(.trailing, 6)
-            .transition(.scale.combined(with: .opacity))
+            .transition(reduceMotion ? .opacity : .scale.combined(with: .opacity))
             .accessibilityLabel(callLabel).accessibilityIdentifier("composer-call")
           }
         }

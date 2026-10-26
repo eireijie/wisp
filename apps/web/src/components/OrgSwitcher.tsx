@@ -28,7 +28,7 @@ const ROLE = { owner: "Owner", member: "Member", guest: "Guest" } as const;
  * join one with an invite link or code. Shown as a popover beside the rail on desktops and as a
  * sheet on phones.
  */
-export function OrgList({ onDone }: { onDone: () => void }) {
+export function OrgList({ onDone, onNewOrg }: { onDone: () => void; onNewOrg?: () => void }) {
   const me = useStore((s) => s.me)!;
   const { orgs } = useOrgs();
   const [busy, setBusy] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export function OrgList({ onDone }: { onDone: () => void }) {
         );
       })}
       <div className="h-px bg-line mx-2 my-1.5" />
-      <button role="menuitem" onClick={() => setNewOrg(true)} className={row}>
+      <button role="menuitem" onClick={() => (onNewOrg ? onNewOrg() : setNewOrg(true))} className={row}>
         <Plus size={20} strokeWidth={1.7} className="text-muted" />
         <span className="flex-1">New organization</span>
       </button>
@@ -110,10 +110,23 @@ export function OrgList({ onDone }: { onDone: () => void }) {
 
 /** The popover version, for the Wisp ghost at the top of the desktop rail. */
 export function OrgSwitcher({ trigger }: { trigger: (open: boolean, toggle: () => void) => ReactNode }) {
+  // The dialog lives beside the popover, not in it: it is portaled to <body>, so a click in it would count as outside the popover and close it.
+  const [newOrg, setNewOrg] = useState(false);
   return (
-    <Popover up={false} className="w-[22rem] max-w-[calc(100vw-1rem)] !rounded-xl" trigger={trigger}>
-      {(close) => <OrgList onDone={close} />}
-    </Popover>
+    <>
+      <Popover up={false} className="w-[22rem] max-w-[calc(100vw-1rem)] !rounded-xl" trigger={trigger}>
+        {(close) => (
+          <OrgList
+            onDone={close}
+            onNewOrg={() => {
+              close();
+              setNewOrg(true);
+            }}
+          />
+        )}
+      </Popover>
+      {newOrg && <NewOrgDialog onClose={() => setNewOrg(false)} />}
+    </>
   );
 }
 

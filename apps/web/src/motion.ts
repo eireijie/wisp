@@ -69,19 +69,18 @@ export function useBounce(ref: RefObject<HTMLElement | null>, active: boolean) {
  */
 export function usePresence(open: boolean, ms: number) {
   const [lingering, setLingering] = useState(false);
-  const wasOpen = useRef(open);
-  useLayoutEffect(() => {
-    if (open) {
-      wasOpen.current = true;
-      setLingering(false);
-      return;
-    }
-    if (!wasOpen.current) return;
-    wasOpen.current = false;
-    setLingering(true);
+  // Flip `lingering` during the render that closes, not in an effect after it: otherwise that one render
+  // unmounts the content and the effect mounts it again, resetting its scroll and state before the exit.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    setLingering(!open);
+  }
+  useEffect(() => {
+    if (open || !lingering) return;
     const t = setTimeout(() => setLingering(false), motionReduced() ? 120 : ms);
     return () => clearTimeout(t);
-  }, [open, ms]);
+  }, [open, lingering, ms]);
   return { mounted: open || lingering, closing: !open && lingering };
 }
 

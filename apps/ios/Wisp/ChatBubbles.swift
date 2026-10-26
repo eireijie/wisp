@@ -94,7 +94,7 @@ struct TimeDivider: View {
 /** Three dots that pulse while something works. */
 struct PulseDots: View {
   @State private var on = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   var body: some View {
     HStack(spacing: 4) {
