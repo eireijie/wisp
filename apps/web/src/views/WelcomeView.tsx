@@ -16,6 +16,7 @@ import { MoreOptions } from "../components/MoreOptions.tsx";
 import { CopyBlock, Field, Input, cx } from "../components/ui.tsx";
 import type { HarnessesResponse } from "./settings/harnesses.tsx";
 import { freeHandle } from "./CreateAgent.tsx";
+import { needsSignIn } from "./needs-sign-in.ts";
 
 export const SETUP_LABELS: Record<StepId, string> = { ready: "Getting ready", agent: "Make your first agent", anywhere: "Away from home", devices: "Add your devices" };
 
@@ -283,6 +284,7 @@ function AgentStep({ devices, answer, onNext }: { devices: DeviceInfo[] | null; 
     if (!device) return;
     const data = await api<HarnessesResponse>("GET", `/api/nodes/${device.id}/harness-settings`);
     setSettings(data.harnesses);
+    return data.harnesses;
   };
   useEffect(() => {
     setSettings([]);
@@ -311,8 +313,8 @@ function AgentStep({ devices, answer, onNext }: { devices: DeviceInfo[] | null; 
   const pick = (id: string) => {
     setHarness(id);
     setError(null);
-    const s = settings.find((s) => s.harness === id);
-    if (s && account(s)?.signedIn === false && device?.mine) setSigningIn(s);
+    const s = needsSignIn(settings, id);
+    if (s && device?.mine) setSigningIn(s);
   };
   const create = async () => {
     if (!device) return;
@@ -323,9 +325,10 @@ function AgentStep({ devices, answer, onNext }: { devices: DeviceInfo[] | null; 
       setCreated(agent);
       await Promise.allSettled([useStore.getState().refreshAgents(), useStore.getState().refreshComputers()]);
       if (agent.settings.runIn !== "computer") {
-        await loadSettings().catch(() => {});
-        const s = settings.find((s) => s.harness === selected);
-        if (s && account(s)?.signedIn === false && device.mine) setSigningIn(s);
+        // read what the device says now: an AI that was just installed isn't in the list from before
+        const fresh = await loadSettings().catch(() => undefined);
+        const s = needsSignIn(fresh ?? settings, selected);
+        if (s && device.mine) setSigningIn(s);
       }
     } catch (e) {
       setError(unavailable(e, "Agent setup"));
