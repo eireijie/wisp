@@ -232,8 +232,8 @@ describe("organizations", () => {
   it("lists the organizations you're in, and switches between them", async () => {
     const list = (await api<any[]>("GET", "/api/orgs", undefined, secondToken)).data;
     expect(list).toEqual([
-      { id: firstOrg, name: "Home", role: "owner", members: 2, agents: expect.any(Number), current: false, unread: expect.any(Boolean) },
-      { id: second.id, name: "Side project", role: "owner", members: 1, agents: 0, current: true, unread: false },
+      { id: firstOrg, name: "Home", role: "owner", members: 2, agents: expect.any(Number), current: false, unread: expect.any(Boolean), canDelete: false },
+      { id: second.id, name: "Side project", role: "owner", members: 1, agents: 0, current: true, unread: false, canDelete: true },
     ]);
     const back = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, secondToken)).data.token;
     expect((await api("GET", "/api/me", undefined, back)).data.workspace.id).toBe(firstOrg);
@@ -284,6 +284,53 @@ describe("organizations", () => {
       ["Home", "member"],
       ["Side project", "member"],
     ]);
+  });
+
+  it("lets an owner delete an organization, with its agents, channels and memory", async () => {
+    const t = await login("me@example.com");
+    const made = (await api("POST", "/api/orgs", { name: "Throwaway" }, t)).data;
+    const tok = made.token;
+    const a = (await api("POST", "/api/agents", { handle: "temp", name: "Temp", harness: "custom" }, tok)).data;
+    await api("PUT", "/api/vault/note", { path: "shared/gone.md", content: "bye" }, tok);
+    const folder = path.join(dir, "orgs", made.org.id);
+    await expect(fs.stat(folder)).resolves.toBeTruthy();
+
+    // members can't, the name has to match, and the first organization stays
+    await api("PUT", "/api/features", { invite: true }, tok);
+    const inv = (await api("POST", "/api/invites", { role: "member" }, tok)).data;
+    const sam = (await api("POST", "/api/invites/join", { code: inv.code }, await login("sam@example.com"))).data.token;
+    expect(sam).toBeTruthy();
+    expect((await api("DELETE", `/api/orgs/${made.org.id}`, { name: "Throwaway" }, sam)).status).toBe(403);
+    expect((await api("DELETE", `/api/orgs/${made.org.id}`, { name: "throw" }, tok)).status).toBe(400);
+    const home = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, await login("me@example.com"))).data.token;
+    expect((await api("DELETE", `/api/orgs/${firstOrg}`, { name: "Home" }, home)).status).toBe(409);
+
+    const r = await api("DELETE", `/api/orgs/${made.org.id}`, { name: "Throwaway" }, tok);
+    expect(r.status).toBe(200);
+    // the sign-in that was in it moved somewhere else; the other member's ended
+    expect((await api("GET", "/api/me", undefined, r.data.token)).data.workspace.id).not.toBe(made.org.id);
+    expect((await api("GET", "/api/me", undefined, tok)).status).toBe(401);
+    expect((await api("GET", "/api/me", undefined, sam)).status).toBe(401);
+    expect((await api<any[]>("GET", "/api/orgs", undefined, r.data.token)).data.map((o) => o.id)).not.toContain(made.org.id);
+    expect(hub.store.agent(a.id)).toBeUndefined();
+    await expect(fs.stat(folder)).rejects.toThrow();
+    // deleting another organization than the one you're in keeps your sign-in
+    const other = (await api("POST", "/api/orgs", { name: "Other" }, r.data.token)).data;
+    const back = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, other.token)).data.token;
+    const r2 = await api("DELETE", `/api/orgs/${other.org.id}`, { name: "Other" }, back);
+    expect(r2.data).toEqual({ ok: true });
+    expect((await api("GET", "/api/me", undefined, back)).status).toBe(200);
+  });
+
+  it("won't delete your only organization", async () => {
+    const t = await login("me@example.com");
+    const solo = (await api("POST", "/api/members", { email: "solo@example.com", name: "Solo", password: "password123" }, (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, t)).data.token)).data;
+    expect(solo.id).toBeTruthy();
+    const s = await login("solo@example.com");
+    const own = (await api("POST", "/api/orgs", { name: "Solo's" }, s)).data;
+    // leave Home so Solo's is the only one
+    hub.store.removeMember(firstOrg, solo.id);
+    expect((await api("DELETE", `/api/orgs/${own.org.id}`, { name: "Solo's" }, own.token)).status).toBe(409);
   });
 
   it("opens every organization's memory again after a restart", async () => {

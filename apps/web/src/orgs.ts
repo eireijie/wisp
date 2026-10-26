@@ -10,6 +10,8 @@ export interface Org {
   current: boolean;
   /** something new there since you last looked (best effort) */
   unread: boolean;
+  /** you own it, it isn't the first organization on this Wisp, and you're in another one */
+  canDelete?: boolean;
 }
 
 /** Every organization you're in. A hub without organizations answers 404: then it's just this one, and null comes back. */
@@ -42,6 +44,15 @@ export async function createOrg(name: string, features?: "simple" | "everything"
 export async function switchOrg(id: string): Promise<void> {
   const r = await api<{ token: string }>("POST", `/api/orgs/${encodeURIComponent(id)}/switch`);
   enter(r.token);
+}
+
+/**
+ * Delete an organization for good; `name` must match it. If you were in it, the hub moved your
+ * sign-in to another of your organizations and the app opens there.
+ */
+export async function deleteOrg(id: string, name: string): Promise<void> {
+  const r = await api<{ ok: true; token?: string }>("DELETE", `/api/orgs/${encodeURIComponent(id)}`, { name });
+  if (r.token) enter(r.token);
 }
 
 /** The invite code from a pasted link (…#/join/<code>, …/join/<code>, ?code=<code>) or a bare code. */

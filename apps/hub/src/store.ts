@@ -134,6 +134,19 @@ export class Store {
     return this.db.prepare("SELECT id, name, created_at AS createdAt FROM workspaces WHERE id = ?").get(wsId) as { id: string; name: string; createdAt: string } | undefined;
   }
 
+  /** Delete an organization; nearly everything in it goes with it (ON DELETE CASCADE). */
+  deleteWorkspace(wsId: string) {
+    this.db.transaction(() => {
+      // these aren't tied to the organization by a foreign key
+      this.db.prepare("DELETE FROM tokens WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM vault_tokens WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM oauth_grants WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM changes WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM push_devices WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM workspaces WHERE id = ?").run(wsId);
+    })();
+  }
+
   firstWorkspace() {
     return this.db.prepare("SELECT id, name, created_at AS createdAt FROM workspaces ORDER BY created_at LIMIT 1").get() as
       | { id: string; name: string; createdAt: string }

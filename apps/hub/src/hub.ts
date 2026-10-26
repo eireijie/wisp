@@ -196,6 +196,16 @@ export class Hub {
     }
   }
 
+  /** Drop every browser and device connection to an organization (it was deleted). */
+  disconnectWorkspace(workspaceId: string) {
+    for (const c of this.clients) {
+      if (c.workspaceId !== workspaceId) continue;
+      this.clients.delete(c);
+      c.socket.close(4401, "organization deleted");
+    }
+    for (const n of this.store.nodes(workspaceId)) this.disconnectNode(n.id);
+  }
+
   /** Stop sending events to sign-ins whose tokens were revoked. */
   disconnectRevokedSessions(userId?: string) {
     const session = this.store.db.prepare("SELECT 1 FROM tokens WHERE kind = 'session' AND hash = ?");

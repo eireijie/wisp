@@ -82,6 +82,8 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
       agents: count("SELECT COUNT(*) AS n FROM agents WHERE workspace_id = ?", w.id),
       current: w.id === c.workspaceId,
       unread: hasUnread(w.id, c.actor.id),
+      // the same rules DELETE /api/orgs/:id checks
+      canDelete: w.role === "owner" && rows.length > 1 && !hub.vaults.isPrimary(w.id),
     }));
   });
 
@@ -101,6 +103,37 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     const wsId = (req.params as { id: string }).id;
     if (!store.role(wsId, c.actor.id)) return reply.code(403).send({ error: "you're not in that organization" });
     return { token: moveSession(req, c.actor.id, wsId) };
+  });
+
+  /**
+   * An owner deletes an organization: its agents, channels, devices, computers and memory. The
+   * first organization holds the hub's original memory, and everyone needs somewhere to land, so
+   * those two can't be deleted. If you were in it, your sign-in moves to another of yours.
+   */
+  app.delete("/api/orgs/:id", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const wsId = (req.params as { id: string }).id;
+    const body = parse(z.object({ name: z.string() }), req.body ?? {}, reply);
+    if (!body) return;
+    const ws = store.workspace(wsId);
+    if (!ws || !store.role(wsId, c.actor.id)) return reply.code(404).send({ error: "organization not found" });
+    if (store.role(wsId, c.actor.id) !== "owner") return reply.code(403).send({ error: "only an owner can delete this organization" });
+    if (body.name.trim() !== ws.name) return reply.code(400).send({ error: "type the organization's name to delete it" });
+    if (hub.vaults.isPrimary(wsId)) return reply.code(409).send({ error: "this is the first organization on this Wisp, so it can't be deleted" });
+    const next = db
+      .prepare("SELECT w.id FROM memberships m JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ? AND w.id != ? ORDER BY w.created_at LIMIT 1")
+      .get(c.actor.id, wsId) as { id: string } | undefined;
+    if (!next) return reply.code(409).send({ error: "this is your only organization; make or join another one first" });
+
+    for (const a of store.agents(wsId)) for (const r of store.activeRuns(a.id)) hub.cancelRun(r.id);
+    for (const comp of store.computers(wsId)) await hub.computers.remove(comp);
+    // a sign-in that was here moves with you; everyone else's ends with it
+    const token = c.workspaceId === wsId ? moveSession(req, c.actor.id, next.id) : undefined;
+    hub.disconnectWorkspace(wsId);
+    store.deleteWorkspace(wsId);
+    await hub.vaults.remove(wsId);
+    return { ok: true, ...(token ? { token } : {}) };
   });
 
   /** Someone already signed in joins another organization with its invite link. */

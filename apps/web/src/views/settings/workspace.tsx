@@ -5,6 +5,7 @@ import { api, getToken } from "../../api.ts";
 import { useStore, useTeams } from "../../store.ts";
 import { href } from "../../router.ts";
 import { originReach, shareOrigin, useAccess } from "../../access.ts";
+import { deleteOrg, listOrgs, type Org } from "../../orgs.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, Toggle, useSavedFlash } from "./parts.tsx";
@@ -52,7 +53,71 @@ export function GeneralPage() {
       <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through warren-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
         <CopyBlock text={shareOrigin(access)} />
       </Section>
+      {isOwner && <DeleteOrgSection />}
     </>
+  );
+}
+
+function DeleteOrgSection() {
+  const [orgs, setOrgs] = useState<Org[] | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    listOrgs().then(setOrgs);
+  }, []);
+  const current = orgs?.find((o) => o.current);
+  // a hub without organizations, or still loading
+  if (!orgs || !current) return null;
+  return (
+    <Section title="Delete organization" description="Removes its agents, channels, messages, devices, computers and memory for everyone in it. This can't be undone.">
+      {current.canDelete ? (
+        <Button variant="danger" onClick={() => setOpen(true)}>
+          <Trash2 size={14} /> Delete {current.name}
+        </Button>
+      ) : (
+        <p className="text-sm text-muted">{orgs.length > 1 ? "This is the first organization on this Wisp, so it can't be deleted." : "This is your only organization. Make or join another one before deleting it."}</p>
+      )}
+      {open && <DeleteOrg org={current} onClose={() => setOpen(false)} />}
+    </Section>
+  );
+}
+
+function DeleteOrg({ org, onClose }: { org: Org; onClose: () => void }) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal title={`Delete ${org.name}?`} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            await deleteOrg(org.id, typed);
+          } catch (err) {
+            setError((err as Error).message);
+            setBusy(false);
+          }
+        }}
+      >
+        <p className="text-sm text-muted">
+          {org.agents} agent{org.agents === 1 ? "" : "s"}, every channel and all of its memory are deleted, and {org.members > 1 ? `the ${org.members - 1} other ${org.members === 2 ? "person" : "people"} in it lose access` : "nobody else is affected"}. You'll move to another organization.
+        </p>
+        <Field label={`Type ${org.name} to confirm`}>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
+        </Field>
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="danger" disabled={busy || typed.trim() !== org.name}>
+            {busy ? "Deleting…" : "Delete organization"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
