@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Archive, ArchiveRestore, Bell, Check, ChevronRight, Gauge, LogOut, Pin, Plus, Trash2, Workflow, X } from "lucide-react";
+import { Archive, ArchiveRestore, Bell, Check, ChevronRight, Gauge, LogOut, Pencil, Pin, Plus, Trash2, Workflow, X } from "lucide-react";
 import { hasSteps, type AccessLevel, type Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { go } from "../router.ts";
@@ -10,6 +10,8 @@ import { MoreOptions } from "./MoreOptions.tsx";
 import { RightPane } from "./RightPane.tsx";
 import { AgentAvatar, Modal, StatusDot, cx } from "./ui.tsx";
 import { prettyModel, effortName } from "./EffortSlider.tsx";
+import { HowLines, useFlowLines } from "../team/How.tsx";
+import { TeamEditSession } from "../team/Session.tsx";
 
 export type InfoTab = "about" | "agents" | "members" | "pins";
 const TABS: { id: InfoTab; label: string }[] = [
@@ -199,6 +201,8 @@ function About({ channel, members, canManage, onSettings, onDialog }: { channel:
   const leads = (team?.nodes ?? []).filter((n) => n.lead).map((n) => names.agent(n.agentId)).filter((a): a is Agent => !!a);
   const others = (team?.nodes ?? []).filter((n) => !n.lead).map((n) => names.agent(n.agentId)).filter((a): a is Agent => !!a);
   const answerer = channel.settings.defaultAgentId ? names.agent(channel.settings.defaultAgentId) : undefined;
+  const [building, setBuilding] = useState(false);
+  const lines = useFlowLines(team ?? { nodes: [], edges: [] });
   const works = team?.nodes.length
     ? `${leads.length ? `${leads.map((a) => a.name).join(" and ")} ${leads.length > 1 ? "lead" : "leads"}.` : ""}${others.length ? ` ${others.map((a) => a.name).join(", ")} ${hasSteps(team) ? "do the steps" : "help"}.` : ""}`.trim()
     : "Nobody is on the team yet";
@@ -234,7 +238,15 @@ function About({ channel, members, canManage, onSettings, onDialog }: { channel:
         ) : (
           <Row title="Topic" value={channel.topic || (canManage ? "Add a topic" : "No topic")} onClick={canManage ? () => setEditing(true) : undefined} />
         )}
-        <Row icon={<Workflow size={18} />} title="How the team works" value={works || "Open the team"} onClick={() => onSettings("team")} />
+        <div aria-label="How the team works" className="px-4 py-3">
+          <div className="flex items-center gap-2 text-[15px] font-medium">
+            <Workflow size={18} className="text-muted" aria-hidden /> How the team works
+          </div>
+          <div className="mt-2.5">
+            {hasSteps(team) ? <HowLines lines={lines} plain /> : <p className="text-[13px] text-muted">{works}</p>}
+          </div>
+        </div>
+        {canManage && !channel.archivedAt && <Row icon={<Pencil size={18} />} title={hasSteps(team) ? "Edit how it works" : "Set up how it works"} onClick={() => setBuilding(true)} />}
         <Row title="Notifications" value={NOTIFY[channel.notify].label} onClick={() => onDialog("notify")} />
         <Row title="Answers without an @mention" value={team?.nodes.length ? (leads.map((a) => a.name).join(" and ") || "The team") : (answerer?.name ?? "Nobody (@mention an agent)")} onClick={canManage && !team?.nodes.length && !channel.archivedAt ? () => onDialog("answers") : undefined} />
       </Group>
@@ -245,6 +257,7 @@ function About({ channel, members, canManage, onSettings, onDialog }: { channel:
         </div>
       </MoreOptions>
       {members === null && <span className="sr-only">Loading members</span>}
+      {building && <TeamEditSession channel={channel} onClose={() => setBuilding(false)} />}
     </section>
   );
 }

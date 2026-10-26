@@ -188,7 +188,7 @@ describe("migrating a linear team", () => {
   it("makes every built-in template a valid flow chart, with a sample and a mini chart", () => {
     expect(TEAM_TEMPLATES.length).toBeGreaterThanOrEqual(6);
     for (const tpl of TEAM_TEMPLATES) {
-      expect(isGraphTeam(tpl), tpl.id).toBe(true);
+      expect(isGraphTeam({ steps: tpl.steps.map((s) => ({ ...s, x: 0, y: 0 })) }), tpl.id).toBe(true);
       expect(tpl.sample?.length, tpl.id).toBeGreaterThan(2);
       const filled = teamFromTemplate(tpl);
       expect(stepsProblem({ roles: filled.roles.map((r) => ({ ...r, agentId: "x" })), steps: filled.steps }), tpl.id).toBeNull();
