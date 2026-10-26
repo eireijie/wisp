@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
-import { Brain, Check, ChevronLeft, ExternalLink, Pencil, Pin, PinOff, RotateCcw, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Brain, Check, ChevronLeft, ExternalLink, MoreHorizontal, Pencil, Pin, PinOff, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href } from "../router.ts";
-import { Button, Empty, IconButton, Input, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { Empty, Input, Menu, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { Cards, Overline, PhoneBar, pill, pillDanger, pillPrimary, useIsPhone } from "./memory/parts.tsx";
 
 type Kind = "preference" | "plan" | "did" | "detail";
 
@@ -40,7 +41,7 @@ const TABS: { kind: Kind; label: string; add: string; empty: string }[] = [
  * What agents have learned about a person. Every agent reads this before it works, and the
  * person can correct, pin or remove anything.
  */
-export function AboutView({ onBack }: { onBack?: () => void }) {
+export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?: boolean }) {
   const me = useStore((s) => s.me)!;
   const members = useStore((s) => s.members);
   const [userId, setUserId] = useState(me.user.id);
@@ -85,57 +86,76 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
   const isMe = userId === me.user.id;
   const canEdit = profile ? profile.level === "edit" || profile.level === "manage" : false;
 
+  const phone = useIsPhone();
+  const addRef = useRef<HTMLInputElement>(null);
+  const subtitle = isMe ? "What your helpers should know about you. Agents add these as you talk with them." : `What helpers should know about ${profile?.person.name ?? "them"}.`;
+  const owner = me.role === "owner" && members.length > 1;
+  const who = owner && (
+    <label className="inline-flex items-center gap-2 h-11 px-4 rounded-full border border-control-line bg-control text-sm font-semibold">
+      Whose memory:
+      <select value={userId} onChange={(e) => setUserId(e.target.value)} className="bg-transparent outline-none font-semibold" aria-label="Whose memory">
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.id === me.user.id ? "You" : m.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const sorted = [...items].sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(a.status === "done" || a.status === "dropped") - Number(b.status === "done" || b.status === "dropped"));
+  const list = (xs: Item[]) => (
+    <Cards>
+      {xs.map((i) => (
+        <ItemRow key={i.path} item={i} canEdit={canEdit} phone={phone} onSave={(body) => remember({ kind: i.kind, replaces: i.path, ...body })} onForget={() => forget(i)} />
+      ))}
+    </Cards>
+  );
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        {onBack && (
-          <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
-            <ChevronLeft size={22} />
+      {phone ? (
+        <PhoneBar title={isMe ? "About you" : `About ${profile?.person.name ?? "…"}`} onBack={onBack} trailing={canEdit ? (
+          <button className="circle" aria-label="Add something" onClick={() => addRef.current?.focus()}>
+            <Plus size={20} />
           </button>
-        )}
-        <Brain size={17} className="text-accent-text" />
-        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h1>
-        {me.role === "owner" && members.length > 1 && (
-          <select value={userId} onChange={(e) => setUserId(e.target.value)} className="h-8 rounded-lg border border-line bg-panel px-2 text-sm" aria-label="Whose memory">
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.id === me.user.id ? "You" : m.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </header>
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl px-4 md:px-6 py-5 space-y-5">
-          <p className="text-base font-medium text-ink">{isMe ? "What helpers should know about you" : `What helpers should know about ${profile?.person.name ?? "them"}`}</p>
-          <p className="text-sm text-muted">
-            What agents have learned about {isMe ? "you" : profile?.person.name}. Every agent reads this before it works, so you don't have to repeat yourself. Fix or delete anything; it applies from the next message.{" "}
-            {profile && (
-              <a className="text-accent-text hover:underline" href="#/vault">
-                It's plain notes in Memory, in the folder with {isMe ? "your" : "their"} name.
-              </a>
-            )}
-          </p>
-
-          <p className="text-sm text-muted">
-            How Wisp itself behaves (like which key sends a message) is in{" "}
-            <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "preferences" })}>
-              Settings → App behavior
-            </a>
-            . Your name and time zone are in{" "}
-            <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "profile" })}>
-              Profile
-            </a>
-            . Everything here is saved as notes in{" "}
-            <a className="text-accent-text hover:underline" href={href({ view: "vault", path: null })}>
-              Memory
-            </a>
-            .
-          </p>
+        ) : undefined} />
+      ) : !embedded ? (
+        <header className="shrink-0 h-[72px] px-6 flex items-center gap-2">
+          {onBack && (
+            <button className="circle circle-sm" onClick={onBack} aria-label="Back">
+              <ChevronLeft size={20} />
+            </button>
+          )}
+          <span className="flex-1 text-[14px] text-muted">Memory</span>
+        </header>
+      ) : (
+        <div className="shrink-0 h-[72px] px-6 flex items-center text-[14px] font-semibold">Memory</div>
+      )}
+      <div className="flex-1 overflow-y-auto px-4 md:px-10 pb-28">
+        <div className="mx-auto max-w-[720px]">
+          {!phone && (
+            <div className="mt-2 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-[34px] font-bold tracking-tight">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h2>
+                <p className="mt-1 text-sm text-muted">{subtitle}</p>
+              </div>
+            </div>
+          )}
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] -mx-4 px-4 md:mx-0 md:px-0 flex-1" role="tablist">
+              {TABS.map((t) => (
+                <button key={t.kind} role="tab" aria-selected={tab === t.kind} onClick={() => { setTab(t.kind); setAddKind(t.kind); }} className={cx("h-10 px-4 rounded-full text-[14px] font-medium whitespace-nowrap shrink-0", tab === t.kind ? "bg-accent text-accent-ink" : "bg-card text-ink/85 hover:bg-hover")}>
+                  {t.label}
+                  <span className="ml-1.5 opacity-60 tabular-nums">{profile?.items.filter((i) => i.kind === t.kind && (t.kind !== "plan" || i.status === "active")).length ?? ""}</span>
+                </button>
+              ))}
+            </div>
+            {!phone && who}
+          </div>
+          {phone && who && <div className="mt-3">{who}</div>}
 
           {canEdit && (
             <form
-              className="flex flex-wrap gap-2"
+              className="mt-4 rounded-3xl bg-card p-3 flex flex-wrap items-center gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!draft.trim()) return;
@@ -145,67 +165,76 @@ export function AboutView({ onBack }: { onBack?: () => void }) {
                 }
               }}
             >
-              <Input
-                className="flex-1 min-w-48"
+              <input
+                ref={addRef}
+                className="flex-1 min-w-48 h-10 bg-transparent px-2 text-[15px] outline-none placeholder:text-faint"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder={isMe ? "What would you like your helper to remember? e.g. I like short answers with an example" : TABS.find((t) => t.kind === addKind)!.add}
+                placeholder={isMe ? "What would you like your helper to remember?" : TABS.find((t) => t.kind === addKind)!.add}
                 aria-label="What would you like your helper to remember?"
               />
-              <select
-                value={addKind}
-                onChange={(e) => setAddKind(e.target.value as Kind)}
-                aria-label="Category"
-                className="h-9 rounded-lg border border-line bg-panel px-2 text-sm"
-              >
+              <select value={addKind} onChange={(e) => setAddKind(e.target.value as Kind)} aria-label="Category" className="h-9 rounded-full bg-chip px-3 text-[13px] font-medium outline-none">
                 {TABS.map((t) => (
                   <option key={t.kind} value={t.kind}>
                     {t.label}
                   </option>
                 ))}
               </select>
-              {addKind === "plan" && <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-40" aria-label="Due date" />}
-              <Button variant="primary" disabled={!draft.trim()}>
-                Remember this
-              </Button>
+              {addKind === "plan" && <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="h-9 rounded-full bg-chip px-3 text-[13px] outline-none" aria-label="Due date" />}
+              <button className={pillPrimary} disabled={!draft.trim()}>
+                Add
+              </button>
             </form>
           )}
-
-          <div className="flex gap-1 overflow-x-auto" role="tablist">
-            {TABS.map((t) => (
-              <button
-                key={t.kind}
-                role="tab"
-                aria-selected={tab === t.kind}
-                onClick={() => { setTab(t.kind); setAddKind(t.kind); }}
-                className={cx("h-8 px-3 rounded-lg text-sm whitespace-nowrap", tab === t.kind ? "bg-hover text-ink font-medium" : "text-muted hover:text-ink")}
-              >
-                {t.label}
-                <span className="ml-1.5 text-faint tabular-nums">{profile?.items.filter((i) => i.kind === t.kind && (t.kind !== "plan" || i.status === "active")).length ?? ""}</span>
-              </button>
-            ))}
-          </div>
-
-          {error && <p className="text-sm text-bad">{error}</p>}
+          {error && <p className="mt-3 text-sm text-bad">{error}</p>}
 
           {!profile ? (
-            <p className="text-sm text-muted">Loading…</p>
+            <p className="mt-6 text-sm text-muted px-1">Loading…</p>
           ) : items.length === 0 ? (
-            <Empty icon={<Brain />} title={`No ${current.label.toLowerCase()} yet`}>
-              <p>{current.empty}</p>
-              <p>Agents add these as you talk with them, and you can add your own above.</p>
-            </Empty>
+            <div className="mt-6">
+              <Empty icon={<Brain />} title={`No ${current.label.toLowerCase()} yet`}>
+                <p>{current.empty}</p>
+                <p>Agents add these as you talk with them, and you can add your own above.</p>
+              </Empty>
+            </div>
           ) : tab === "did" ? (
             <Journal items={items} />
+          ) : tab === "plan" ? (
+            <>
+              {sorted.some((i) => i.status !== "done" && i.status !== "dropped") && (
+                <>
+                  <Overline>Coming up</Overline>
+                  {list(sorted.filter((i) => i.status !== "done" && i.status !== "dropped"))}
+                </>
+              )}
+              {sorted.some((i) => i.status === "done" || i.status === "dropped") && (
+                <>
+                  <Overline>Done</Overline>
+                  {list(sorted.filter((i) => i.status === "done" || i.status === "dropped"))}
+                </>
+              )}
+            </>
           ) : (
-            <div className="rounded-xl border border-line divide-y divide-line">
-              {[...items]
-                .sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(a.status === "done" || a.status === "dropped") - Number(b.status === "done" || b.status === "dropped"))
-                .map((i) => (
-                  <ItemRow key={i.path} item={i} canEdit={canEdit} onSave={(body) => remember({ kind: i.kind, replaces: i.path, ...body })} onForget={() => forget(i)} />
-                ))}
-            </div>
+            <>
+              <Overline>{current.label}</Overline>
+              {list(sorted)}
+            </>
           )}
+          <p className="mt-4 px-1 text-xs text-muted leading-relaxed">
+            Every helper reads this before it works, so you don't have to repeat yourself. Edit or delete anything that is wrong; it applies from the next message. It's saved as plain notes in{" "}
+            <a className="text-accent-text underline underline-offset-2" href={href({ view: "vault", path: null })}>
+              Memory
+            </a>
+            . How Wisp itself behaves is in{" "}
+            <a className="text-accent-text underline underline-offset-2" href={href({ view: "settings", page: "preferences" })}>
+              Settings
+            </a>
+            , and your name and time zone are in{" "}
+            <a className="text-accent-text underline underline-offset-2" href={href({ view: "settings", page: "profile" })}>
+              Profile
+            </a>
+            .
+          </p>
         </div>
       </div>
     </div>
@@ -235,51 +264,75 @@ function Origin({ item }: { item: Item }) {
   );
 }
 
-function ItemRow({ item, canEdit, onSave, onForget }: { item: Item; canEdit: boolean; onSave: (body: object) => Promise<boolean>; onForget: () => void }) {
+function ItemRow({ item, canEdit, phone, onSave, onForget }: { item: Item; canEdit: boolean; phone: boolean; onSave: (body: object) => Promise<boolean>; onForget: () => void }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.text);
   const [due, setDue] = useState(item.due ?? "");
   const closed = item.status === "done" || item.status === "dropped";
   return (
-    <div className="px-4 py-3">
+    <div className="px-4 py-3.5">
       {editing ? (
         <div className="space-y-2">
           <Textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
           {item.kind === "plan" && <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-44" aria-label="Due date" />}
           <div className="flex gap-2">
-            <Button className="h-8" variant="primary" onClick={async () => (await onSave({ text, ...(item.kind === "plan" ? { due: due || null } : {}) })) && setEditing(false)}>
+            <button className={cx(pillPrimary, "h-9")} onClick={async () => (await onSave({ text, ...(item.kind === "plan" ? { due: due || null } : {}) })) && setEditing(false)}>
               Save
-            </Button>
-            <Button className="h-8" variant="ghost" onClick={() => (setEditing(false), setText(item.text))}>
+            </button>
+            <button className={cx(pill, "h-9")} onClick={() => (setEditing(false), setText(item.text))}>
               Cancel
-            </Button>
+            </button>
           </div>
         </div>
       ) : (
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className={cx("text-[15px]", closed && "line-through text-muted")}>{item.text}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <div className={cx("text-[16px] font-medium", closed && "line-through text-muted")}>{item.text}</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
               {item.pinned && (
                 <Pill tone="accent">
                   <Pin size={10} /> pinned
                 </Pill>
               )}
-              {item.kind === "plan" && <Pill tone={item.status === "active" ? "info" : "neutral"}>{item.status ?? "active"}</Pill>}
+              {item.kind === "plan" && item.status && item.status !== "active" && <Pill tone="neutral">{item.status}</Pill>}
               {item.due && <Pill tone="warn">due {item.due}</Pill>}
               <Origin item={item} />
             </div>
           </div>
-          {canEdit && (
-            <div className="flex shrink-0 items-center">
-              {item.kind === "plan" && (
-                <IconButton onClick={() => onSave({ status: closed ? "active" : "done" })} icon={closed ? <RotateCcw size={15} /> : <Check size={15} />} label={closed ? "Reopen" : "Mark done"} />
-              )}
-              <IconButton onClick={() => onSave({ pinned: !item.pinned })} icon={item.pinned ? <PinOff size={15} /> : <Pin size={15} />} label={item.pinned ? "Unpin" : "Pin"} title={item.pinned ? "Unpin" : "Pin: always loaded first"} />
-              <IconButton onClick={() => setEditing(true)} icon={<Pencil size={15} />} label="Edit" />
-              <IconButton onClick={onForget} icon={<Trash2 size={15} />} label="Delete" tone="danger" />
-            </div>
-          )}
+          {canEdit &&
+            (phone ? (
+              <Menu
+                align="right"
+                trigger={(_o, toggle) => (
+                  <button onClick={toggle} className="size-10 grid place-items-center text-muted" aria-label="More for this item">
+                    <MoreHorizontal size={20} />
+                  </button>
+                )}
+                items={[
+                  ...(item.kind === "plan" ? [{ label: closed ? "Reopen" : "Mark done", icon: closed ? <RotateCcw size={16} /> : <Check size={16} />, onSelect: () => onSave({ status: closed ? "active" : "done" }) }] : []),
+                  { label: item.pinned ? "Unpin" : "Pin", icon: item.pinned ? <PinOff size={16} /> : <Pin size={16} />, onSelect: () => onSave({ pinned: !item.pinned }) },
+                  { label: "Edit", icon: <Pencil size={16} />, onSelect: () => setEditing(true) },
+                  { label: "Delete", icon: <Trash2 size={16} />, danger: true, onSelect: onForget },
+                ]}
+              />
+            ) : (
+              <div className="flex shrink-0 items-center gap-2">
+                {item.kind === "plan" && (
+                  <button className={cx(pill, "h-9 px-3.5")} onClick={() => onSave({ status: closed ? "active" : "done" })}>
+                    {closed ? "Reopen" : "Mark done"}
+                  </button>
+                )}
+                <button className="size-9 grid place-items-center rounded-full text-muted hover:bg-hover" onClick={() => onSave({ pinned: !item.pinned })} aria-label={item.pinned ? "Unpin" : "Pin"} title={item.pinned ? "Unpin" : "Pin: always loaded first"}>
+                  {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}
+                </button>
+                <button className={cx(pill, "h-9 px-3.5")} onClick={() => setEditing(true)}>
+                  Edit
+                </button>
+                <button className="h-9 px-3.5 rounded-full border border-control-line bg-control text-[14px] font-medium text-bad hover:bg-hover" onClick={onForget}>
+                  Delete
+                </button>
+              </div>
+            ))}
         </div>
       )}
     </div>
@@ -290,25 +343,28 @@ function ItemRow({ item, canEdit, onSave, onForget }: { item: Item; canEdit: boo
 function Journal({ items }: { items: Item[] }) {
   const days = [...new Set(items.map((i) => i.date ?? ""))].sort().reverse();
   return (
-    <div className="space-y-4">
+    <div>
       {days.map((d) => {
         const entries = items.filter((i) => (i.date ?? "") === d);
         return (
           <div key={d}>
-            <div className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-muted">
+            <Overline
+              action={
+                <a href={`#/vault/${entries[0].path}`} className="inline-flex items-center gap-1 normal-case tracking-normal text-[13px] font-medium text-accent-text">
+                  Edit day <ExternalLink size={11} />
+                </a>
+              }
+            >
               {d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "Undated"}
-              <a href={`#/vault/${entries[0].path}`} className="ml-auto inline-flex items-center gap-1 normal-case font-normal text-accent-text hover:underline">
-                Edit day <ExternalLink size={11} />
-              </a>
-            </div>
-            <div className="rounded-xl border border-line divide-y divide-line">
+            </Overline>
+            <Cards>
               {entries.map((i, n) => (
-                <div key={n} className="px-4 py-2.5">
-                  <div className="text-[15px]">{i.text}</div>
+                <div key={n} className="px-4 py-3">
+                  <div className="text-[16px]">{i.text}</div>
                   {i.by && <div className="text-xs text-muted">by {i.by}</div>}
                 </div>
               ))}
-            </div>
+            </Cards>
           </div>
         );
       })}

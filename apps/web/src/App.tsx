@@ -198,7 +198,7 @@ function Workspace() {
     }
   })();
   // conversations use the whole screen on phones; everything else keeps the tab bar
-  const showTabs = phone && !(route.view === "chat" && route.channelId);
+  const showTabs = phone && !(route.view === "chat" && route.channelId) && route.view !== "vault";
   // on larger screens Settings takes the whole window: its own list replaces the rail
   const fullSettings = !phone && route.view === "settings";
   const dialogs = (

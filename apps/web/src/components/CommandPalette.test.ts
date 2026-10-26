@@ -38,7 +38,7 @@ const cases = [
     const element = (CommandPalette() as any).props.children[0];
     return () => element.type(element.props);
   }, result: (name: string) => ({ channels: [], agents: [], messages: [], notes: [{ path: name, title: name, snippet: name }] }) },
-  { name: "vault", queryIndex: 1, resultIndex: 2, component: () => () => VaultView({ path: null }), result: (name: string) => [{ path: name, title: name, snippet: name }] },
+  { name: "vault", queryIndex: 3, resultIndex: 4, component: () => () => VaultView({ path: null }), result: (name: string) => [{ path: name, title: name, snippet: name }] },
   { name: "marketplace", queryIndex: 0, resultIndex: 5, component: () => () => MarketplaceView({ section: "apps" }), result: (name: string) => ({ entries: [{ id: name, name }] }) },
 ];
 

@@ -7,6 +7,7 @@ import { GRAPH_KINDS, MemoryGraph, kindColor, kindLabel, type GraphData, type Gr
 export function MemoryGraphView({
   graph,
   initialKind,
+  initialSelect,
   where,
   onOpen,
   onWrite,
@@ -14,6 +15,8 @@ export function MemoryGraphView({
   graph: GraphData | null;
   /** start with only this folder kind showing (from a tile on the Memory home) */
   initialKind?: GraphKind | null;
+  /** open with this note picked (from the Graph button on a note) */
+  initialSelect?: string | null;
   /** where a note lives, in words ("Shared", "@atlas", "Sam") */
   where: (path: string) => string;
   onOpen: (path: string) => void;
@@ -23,8 +26,8 @@ export function MemoryGraphView({
   const [hidden, setHidden] = useState<Set<GraphKind>>(() => (initialKind ? new Set(GRAPH_KINDS.filter((k) => k !== initialKind)) : new Set()));
   const [tag, setTag] = useState("");
   const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState<GraphNode | null>(null);
-  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
+  const [picked, setPicked] = useState<GraphNode | null>(() => (initialSelect ? (graph?.nodes.find((n) => n.id === initialSelect) ?? null) : null));
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(() => (initialSelect ? { id: initialSelect, n: Date.now() } : null));
   const zoom = useRef<((how: "in" | "out" | "fit") => void) | null>(null);
 
   const counts = useMemo(() => {
@@ -74,7 +77,7 @@ export function MemoryGraphView({
   return (
     <div className="h-full flex flex-col min-h-0">
       {/* search and filters */}
-      <div className="shrink-0 px-3 md:px-5 pt-3 pb-2 flex flex-col gap-2 md:flex-row md:items-center border-b border-line">
+      <div className="shrink-0 px-4 md:px-6 pt-3 pb-3 flex flex-col gap-2 md:flex-row md:items-center">
         <div className="relative md:w-72">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <input
@@ -86,7 +89,7 @@ export function MemoryGraphView({
             }}
             placeholder="Find a note in the graph…"
             aria-label="Find a note in the graph"
-            className="h-9 w-full rounded-full border border-input bg-panel pl-9 pr-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30"
+            className="h-11 w-full rounded-full border border-control-line bg-control pl-9 pr-3 text-sm outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30"
           />
           {matches.length > 0 && (
             <div className="absolute z-10 mt-1 w-full rounded-2xl border border-line bg-panel shadow-panel py-1 overflow-hidden" role="listbox">
@@ -108,7 +111,7 @@ export function MemoryGraphView({
                 key={k}
                 onClick={() => toggle(k)}
                 aria-pressed={on}
-                className={cx("shrink-0 inline-flex items-center gap-1.5 h-7 rounded-full px-2.5 text-xs font-medium border transition-colors", on ? "border-line bg-panel text-ink" : "border-transparent bg-transparent text-faint line-through")}
+                className={cx("shrink-0 inline-flex items-center gap-1.5 h-9 rounded-full px-3.5 text-[13px] font-medium transition-colors", on ? "bg-accent text-accent-ink" : "bg-card text-faint line-through")}
               >
                 <span className={cx("size-2 rounded-full", k === "ghost" && "ring-1 ring-inset ring-current bg-transparent!")} style={{ background: on ? kindColor(k) : "var(--faint)", color: kindColor(k) }} />
                 {kindLabel(k)}
@@ -117,7 +120,7 @@ export function MemoryGraphView({
             );
           })}
           {tags.length > 0 && (
-            <select value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Only notes with this tag" className="shrink-0 h-7 rounded-full border border-line bg-panel px-2.5 text-xs text-ink">
+            <select value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Only notes with this tag" className="shrink-0 h-9 rounded-full bg-card px-3.5 text-[13px] text-ink outline-none">
               <option value="">All tags</option>
               {tags.map(([t, c]) => (
                 <option key={t} value={t}>
@@ -152,7 +155,7 @@ export function MemoryGraphView({
 
         {/* the picked note */}
         {picked && (
-          <div className="absolute left-3 bottom-3 right-16 md:right-auto md:w-80 rounded-2xl border border-line bg-panel/95 backdrop-blur shadow-panel p-3.5">
+          <div className="absolute left-3 bottom-3 right-16 md:right-auto md:w-80 rounded-3xl glass p-4">
             <div className="flex items-start gap-2">
               <span className="mt-1.5 size-2.5 rounded-full shrink-0" style={{ background: kindColor(picked.kind) }} />
               <div className="flex-1 min-w-0">
@@ -172,13 +175,13 @@ export function MemoryGraphView({
                 Linked with {linked} {linked === 1 ? "note" : "notes"}
               </span>
               {picked.path ? (
-                <Button variant="primary" className="h-8" onClick={() => open(picked)}>
-                  Open
+                <Button variant="primary" className="h-9" onClick={() => open(picked)}>
+                  Open note
                 </Button>
               ) : (
                 onWrite && (
-                  <Button variant="primary" className="h-8" onClick={() => onWrite(picked.title)}>
-                    Write it
+                  <Button variant="primary" className="h-9" onClick={() => onWrite(picked.title)}>
+                    Write note from here
                   </Button>
                 )
               )}
@@ -195,15 +198,15 @@ export function MemoryGraphView({
               {types.has("reference") && <Legend shape="rounded-full bg-transparent! ring-[1.5px] ring-inset ring-muted">Reference</Legend>}
             </div>
           )}
-          <div className="flex flex-col rounded-xl border border-line bg-panel shadow-panel overflow-hidden">
-            <button onClick={() => zoom.current?.("in")} className="size-9 grid place-items-center hover:bg-hover text-muted hover:text-ink" aria-label="Zoom in" title="Zoom in">
-              <Plus size={16} />
+          <div className="flex flex-col gap-2">
+            <button onClick={() => zoom.current?.("in")} className="circle" aria-label="Zoom in" title="Zoom in">
+              <Plus size={18} />
             </button>
-            <button onClick={() => zoom.current?.("out")} className="size-9 grid place-items-center hover:bg-hover text-muted hover:text-ink border-y border-line" aria-label="Zoom out" title="Zoom out">
-              <Minus size={16} />
+            <button onClick={() => zoom.current?.("out")} className="circle" aria-label="Zoom out" title="Zoom out">
+              <Minus size={18} />
             </button>
-            <button onClick={() => zoom.current?.("fit")} className="size-9 grid place-items-center hover:bg-hover text-muted hover:text-ink" aria-label="Show everything" title="Show everything">
-              <Maximize2 size={14} />
+            <button onClick={() => zoom.current?.("fit")} className="circle" aria-label="Show everything" title="Show everything">
+              <Maximize2 size={16} />
             </button>
           </div>
         </div>
