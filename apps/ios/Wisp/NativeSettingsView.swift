@@ -37,6 +37,7 @@ struct NativeSettingsView: View {
           NavigationLink { MemoryView() } label: { RowLabel(title: "Memory") }.accessibilityIdentifier("settings-memory")
           NavigationLink { MemoryStorageView() } label: { RowLabel(title: "Memory storage") }.accessibilityIdentifier("settings-memory-storage")
           NavigationLink { HarnessesView() } label: { RowLabel(title: "AI tool settings") }.accessibilityIdentifier("settings-harnesses")
+          NavigationLink { LoginsView() } label: { RowLabel(title: "Logins") }.accessibilityIdentifier("settings-logins")
           NavigationLink { AgentRuntimesView() } label: { RowLabel(title: "Agent runtimes") }.accessibilityIdentifier("settings-runtimes")
         }
       }

@@ -193,7 +193,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
 
   const body = (id: SettingsPage) =>
     id === "apps" ? (
-      <MarketplaceView section="installed" />
+      <MarketplaceView section="installed" embedded />
     ) : (
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className={cx("max-w-[640px] pb-16", fullWindow ? "mx-auto px-8 py-9" : "p-4")}>{PAGES[id]()}</div>
@@ -231,7 +231,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
         </header>
       )}
       {current === "apps" ? (
-        <MarketplaceView section="installed" onBack={() => go({ view: "settings", page: null })} />
+        <MarketplaceView section="installed" embedded onBack={() => go({ view: "settings", page: null })} />
       ) : current ? (
         body(current)
       ) : (

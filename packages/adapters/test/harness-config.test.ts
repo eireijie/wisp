@@ -241,6 +241,22 @@ describe("Codex settings", () => {
     );
   });
 
+  it("reads and changes the reasoning effort, and only Codex has one", async () => {
+    expect((await readHarnessSettings("codex", { home })).effort).toBe("high");
+    const after = await changeHarnessSettings("codex", [{ op: "effort", effort: "low" }], { home });
+    expect(after.effort).toBe("low");
+    expect(read(".codex/config.toml")).toContain('model_reasoning_effort = "low" # keep');
+    expect(read(".codex/config.toml")).toContain('notify = ["/bin/notify", "turn-ended"]');
+    // no key yet: it is added; the model beside it stays
+    write(".codex/config.toml", 'model = "gpt-6-astra"\n');
+    const added = await changeHarnessSettings("codex", [{ op: "effort", effort: "medium" }, { op: "model", model: "gpt-6.1-sol" }], { home });
+    expect([added.effort, added.model]).toEqual(["medium", "gpt-6.1-sol"]);
+    write(".claude/settings.json", "{}\n");
+    expect((await readHarnessSettings("claude-code", { home })).effort).toBeUndefined();
+    await expect(changeHarnessSettings("claude-code", [{ op: "effort", effort: "low" }], { home })).rejects.toThrow(/no reasoning effort/);
+    await expect(changeHarnessSettings("codex", [{ op: "effort", effort: "low\nevil" }], { home })).rejects.toThrow();
+  });
+
   it("changes the model in a config Codex's app wrote (service tier, notify array, project tables)", async () => {
     write(
       ".codex/config.toml",
