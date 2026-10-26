@@ -85,6 +85,7 @@ struct PairView: View {
           .font(.footnote)
           .foregroundStyle(Palette.faint)
           .multilineTextAlignment(.center)
+          .padding(.bottom, 120)
       }
     } bottom: {
       AuthButton(title: "Scan QR code", symbol: "qrcode.viewfinder", id: "pair-scan") { scanning = true }
