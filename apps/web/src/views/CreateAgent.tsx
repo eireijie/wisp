@@ -214,14 +214,14 @@ export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "
  * somewhere come in through the link at the bottom.
  */
 /** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. `nodeId`: start on this device. */
-export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void; nodeId?: string }) {
+export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringIn }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void; nodeId?: string; bringIn?: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
   const me = useStore((s) => s.me);
   const people = useStore((s) => s.members);
   const inviteOn = useFeature("invite");
-  const [view, setView] = useState<View>("form");
+  const [view, setView] = useState<View>(bringIn ? "external" : "form");
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const body = bodyRef.current;
