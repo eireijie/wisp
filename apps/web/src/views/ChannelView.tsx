@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { FlowStrip } from "../components/TeamSteps.tsx";
-import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Wrench, Pin, PinOff, Square, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, Users, X } from "lucide-react";
+import { Archive, Bell, BellOff, BellRing, Bot, Workflow, Wrench, Pin, PinOff, Square, SquareTerminal, Star, UserPlus, ArrowDown, Mic, Monitor, Phone, AtSign, Brain, Check, ChevronDown, RotateCcw, Zap, ChevronLeft, ChevronRight, CircleDot, Eye, Plus, Shield, ShieldAlert, Copy, FileText, Pencil, Trash2, GitPullRequest, Hash, Loader2, MessageSquare, MoreHorizontal, Paperclip, Settings2, Smile, SmilePlus, ArrowUp, AudioLines, Users, X } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type HarnessCatalog, type Message, type MessagePart, type Reaction } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -45,6 +45,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const names = useNames();
   const voice = useFeature("voice");
   const [calling, setCalling] = useState(!!route.call);
+  const [callSlot, setCallSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
 
@@ -139,7 +140,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
               <Monitor size={18} />
             </button>
           )}
-          {dmAgent && voice && <button onClick={() => setCalling(true)} className="size-9 rounded-full hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={18} /></button>}
+          {dmAgent && voice && !calling && <button onClick={() => setCalling(true)} className="circle circle-sm hidden md:inline-flex" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}><Phone size={17} /></button>}
           {channel.kind === "channel" && (
             <div className="flex items-center gap-1.5 shrink-0">
               <TeamButton channel={channel} onClick={() => setSettings("team")} />
@@ -156,10 +157,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             </div>
           )}
         </header>
+        <div ref={setCallSlot} />
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
           <MessageList messageId={!route.threadId ? route.messageId : undefined} channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "members" })} />
         </SoloAgent.Provider>
-        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} onDetails={openAgent} />}
+        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} onCall={dmAgent && voice && !calling ? () => setCalling(true) : undefined} callLabel={dmAgent ? `Call ${dmAgent.name}` : undefined} placeholder={dmAgent ? `Message ${dmAgent.name}` : `Message #${channel.name}`} onDetails={openAgent} />}
       </div>
       {route.threadId && <ThreadPanel key={route.threadId} messageId={route.messageId} channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
       {sideAgent && side?.kind === "agent" && (
@@ -186,7 +188,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
           </div>
         </RightPane>
       )}
-      {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
+      {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} barSlot={callSlot} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
       {settings && <ChannelSettings key={settings} channel={channel} tab={settings} onClose={() => setSettings(null)} />}
     </div>
   );
@@ -1490,7 +1492,7 @@ function useComposerDraft(channelId: string, threadId?: string) {
   return [draft, update, get] as const;
 }
 
-export function Composer({ channelId, threadId, agentId, placeholder, onDetails }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void }) {
+export function Composer({ channelId, threadId, agentId, placeholder, onDetails, onCall, callLabel }: { channelId: string; threadId?: string; agentId?: string; placeholder: string; onDetails?: (agentId: string) => void; onCall?: () => void; callLabel?: string }) {
   const { sendWith } = usePrefs();
   const agents = useStore((s) => s.agents);
   const canEdit = useStore((s) => s.me?.role !== "guest");
@@ -1775,10 +1777,16 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails 
             </>
           )}
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => (attach(e.target.files), (e.target.value = ""))} />
+          {/* phones: while the field is empty the send button is the voice button, like the iPhone app's */}
+          {onCall && !text.trim() && !files.length && (
+            <button onClick={onCall} className="ml-1 size-9 shrink-0 rounded-full bg-ink text-panel grid place-items-center md:hidden" aria-label={callLabel ?? "Start a voice call"} title={callLabel ?? "Start a voice call"}>
+              <AudioLines size={18} />
+            </button>
+          )}
           <button
             onClick={send}
             disabled={!!uploading || sending || (!text.trim() && !files.length)}
-            className="ml-1 size-9 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors"
+            className={cx("ml-1 size-9 shrink-0 rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors", onCall && !text.trim() && !files.length && "max-md:hidden")}
             aria-label="Send"
           >
             <ArrowUp size={17} strokeWidth={2.5} />
