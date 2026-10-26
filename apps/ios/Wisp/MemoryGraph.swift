@@ -172,6 +172,9 @@ struct MemoryGraphScreen: View {
   @Environment(Store.self) private var store
   var browse: MemoryBrowse
   var initialKind: GraphKind?
+  /** a note (its path) to select and center on when the graph opens */
+  var focus: String? = nil
+  @State private var focused = false
   @State private var hidden: Set<GraphKind> = []
   @State private var tag = ""
   @State private var query = ""
@@ -187,11 +190,19 @@ struct MemoryGraphScreen: View {
   private var types: Set<String> { Set((browse.graph?.nodes ?? []).compactMap(\.type)) }
 
   var body: some View {
-    Group {
+    MemoryScreen(title: "Graph", id: "memory-graph", scrolls: false) {
       if let graph = browse.graph {
         VStack(spacing: 0) {
+          MemorySearchField(prompt: "Find a note", text: $query, id: "graph-find").padding(.horizontal, 18).padding(.top, 6)
+          if !query.trimmed.isEmpty {
+            CardGroup {
+              ForEach(matches) { node in
+                Button { pick(node) } label: { RowLabel(title: node.title, chevron: false) { Image(systemName: node.isGhost ? "circle.dashed" : "doc.text").font(.system(size: 17)).foregroundStyle(Palette.muted) } }.buttonStyle(.plain)
+              }
+              if matches.isEmpty { Text("No notes match.").foregroundStyle(Palette.muted).padding(18) }
+            }.padding(.horizontal, 18).padding(.top, 8)
+          }
           filters(graph)
-          Divider()
           ZStack {
             if shown.nodes.isEmpty {
               Text(graph.nodes.isEmpty ? "No notes yet." : "Nothing matches these filters.").foregroundStyle(.secondary).padding()
@@ -212,12 +223,9 @@ struct MemoryGraphScreen: View {
         ContentUnavailableView("The graph isn't available", systemImage: "point.3.connected.trianglepath.dotted", description: Text(browse.error ?? "Try again in a moment."))
       }
     }
-    .sectionScreen("Graph", id: "memory-graph")
-    .searchable(text: $query, prompt: "Find a note in the graph…")
-    .searchSuggestions {
-      ForEach(matches) { node in
-        Button { pick(node) } label: { Label(node.title, systemImage: node.isGhost ? "circle.dashed" : "doc.text") }
-      }
+    .task { if browse.graph == nil { await browse.reload(store) } }
+    .onChange(of: browse.positions.count) { _, count in
+      if count > 0, let focus, !focused, let node = browse.graph?.nodes.first(where: { $0.id == focus }) { focused = true; picked = node; if let p = browse.positions[node.id] { camera = camera.centered(on: p) } }
     }
     .onAppear { if let initialKind, !started, hidden.isEmpty { hidden = Set(GraphKind.allCases.filter { $0 != initialKind }) } }
     .onChange(of: hidden) { _, _ in picked = nil; fit() }
@@ -249,8 +257,8 @@ struct MemoryGraphScreen: View {
               Text(kind.label).strikethrough(!on)
               Text("\(graph.count(of: kind))").foregroundStyle(.secondary)
             }
-            .font(.footnote.weight(.medium)).padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Capsule().fill(Color(.secondarySystemBackground)))
+            .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 14).frame(height: 40)
+            .background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
             .opacity(on ? 1 : 0.6)
           }
           .buttonStyle(.plain).accessibilityAddTraits(on ? .isSelected : [])
@@ -262,7 +270,7 @@ struct MemoryGraphScreen: View {
               ForEach(graph.tagCounts, id: \.0) { Text("#\($0.0) (\($0.1))").tag($0.0) }
             }
           } label: {
-            Label(tag.isEmpty ? "All tags" : "#\(tag)", systemImage: "number").font(.footnote.weight(.medium)).padding(.horizontal, 10).padding(.vertical, 6).background(Capsule().fill(Color(.secondarySystemBackground)))
+            Label(tag.isEmpty ? "All tags" : "#\(tag)", systemImage: "number").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 14).frame(height: 40).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
           }
         }
       }.padding(.horizontal, 16).padding(.vertical, 8)
@@ -317,8 +325,8 @@ struct MemoryGraphScreen: View {
       HStack {
         Label("Linked with \(linked) \(linked == 1 ? "note" : "notes")", systemImage: "point.3.connected.trianglepath.dotted").font(.caption).foregroundStyle(.secondary)
         Spacer()
-        if let path = node.path { Button("Open") { opened = MemoryNote(path: path) }.secondaryButton().accessibilityIdentifier("graph-open-note") }
-        else if browse.viewAs == nil && store.canManage { Button("Write it") { writing = node.title }.secondaryButton() }
+        if let path = node.path { Button("Open note") { opened = MemoryNote(path: path) }.secondaryButton().accessibilityIdentifier("graph-open-note") }
+        else if browse.viewAs == nil && store.canManage { Button("Write note from here") { writing = node.title }.secondaryButton() }
       }
     }
     .padding(12).frame(maxWidth: 320, alignment: .leading).glass(18)
