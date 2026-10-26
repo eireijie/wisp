@@ -99,7 +99,7 @@ struct MainTabs: View {
       switch route {
       case .chat: tab = .chats
       case .approval: tab = .inbox
-      case .computer: if store.canViewComputers { tab = .computers } else { store.route = nil }
+      case .computer, .device: if store.canViewComputers { tab = .computers } else { store.route = nil }
       case nil: break
       }
     }

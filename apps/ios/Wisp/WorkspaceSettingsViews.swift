@@ -62,8 +62,10 @@ struct AgentPolicyView: View {
   }
 }
 
+/** Settings → Agent computers: what new VMs are like, when control comes back, Orgo, and what new agents get (comp-AgentDefaults). */
 struct ComputerSettingsView: View {
   @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
   @State private var settings: ComputerDefaults?
   @State private var size = "medium"
   @State private var idle = 10
@@ -71,24 +73,73 @@ struct ComputerSettingsView: View {
   @State private var saved = false
   @State private var action = FormAction()
   var body: some View {
-    Form {
-      Section("Defaults") {
-        Picker("Size of new VMs", selection: $size) { Text("Small: 1 CPU, 2 GB").tag("small"); Text("Medium: 2 CPUs, 4 GB").tag("medium"); Text("Large: 4 CPUs, 8 GB").tag("large") }
-        Stepper("Give control back after \(idle) minutes", value: $idle, in: 1...240)
-        if store.isOwner { Button("Save") { save(["vmSize": AnyEncodable(size), "controlIdleMinutes": AnyEncodable(idle)]) } }
-      }.disabled(!store.isOwner || settings == nil || action.busy)
-      Section("Orgo cloud computers") {
-        Text(settings?.orgo.configured == true ? "Connected \(settings?.orgo.hint ?? "")" : "Not connected")
-        if store.isOwner {
-          SecureField("Orgo API key", text: $key)
-          Button("Save key") { save(["orgoApiKey": AnyEncodable(key)]); key = "" }.disabled(key.isEmpty || action.busy)
-          if settings?.orgo.configured == true { Button("Disconnect", role: .destructive) { save(["orgoApiKey": .null]) }.disabled(action.busy) }
-        }
+    VStack(spacing: 0) {
+      TopBar {
+        CircleButton(symbol: "chevron.left", label: "Back") { dismiss() }
+      } center: {
+        NamePill(title: "Agent computers") { EmptyView() }
+      } trailing: { Color.clear.frame(width: 52, height: 52) }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          CardGroup {
+            HStack {
+              Text("Size of new VMs").font(.system(size: 17)).foregroundStyle(Palette.text)
+              Spacer()
+              Picker("Size of new VMs", selection: $size) { Text("Small").tag("small"); Text("Medium").tag("medium"); Text("Large").tag("large") }.pickerStyle(.menu).tint(Palette.faint)
+            }.padding(.horizontal, 18).frame(minHeight: 54)
+            Stepper(value: $idle, in: 1...240) {
+              HStack {
+                Text("Give control back after").font(.system(size: 17)).foregroundStyle(Palette.text)
+                Spacer()
+                Text("\(idle) min").font(.system(size: 17)).foregroundStyle(Palette.faint)
+              }
+            }.padding(.horizontal, 18).frame(minHeight: 54)
+          }.disabled(!store.isOwner || settings == nil || action.busy)
+          CardCaption("Small: 1 CPU, 2 GB. Medium: 2 CPUs, 4 GB. Large: 4 CPUs, 8 GB. You can still pick per VM.")
+          if store.isOwner {
+            Button { save(["vmSize": AnyEncodable(size), "controlIdleMinutes": AnyEncodable(idle)]) } label: { Text("Save").frame(maxWidth: .infinity) }
+              .primaryButton().disabled(settings == nil || action.busy)
+          }
+
+          CardCaption("Orgo cloud computers")
+          CardGroup {
+            HStack {
+              Text("Orgo API key").font(.system(size: 17)).foregroundStyle(Palette.text)
+              Spacer()
+              Text(settings?.orgo.configured == true ? "Saved \(settings?.orgo.hint ?? "")" : "Not connected").font(.system(size: 17)).foregroundStyle(Palette.faint)
+            }.padding(.horizontal, 18).frame(minHeight: 54)
+            if store.isOwner {
+              SecureField("Orgo API key", text: $key).padding(.horizontal, 18).frame(minHeight: 54)
+            }
+          }
+          if store.isOwner {
+            HStack(spacing: 10) {
+              Button { save(["orgoApiKey": AnyEncodable(key)]); key = "" } label: { Text("Save key").frame(maxWidth: .infinity) }
+                .secondaryButton().disabled(key.isEmpty || action.busy)
+              if settings?.orgo.configured == true {
+                Button(role: .destructive) { save(["orgoApiKey": .null]) } label: { Text("Disconnect").frame(maxWidth: .infinity) }
+                  .secondaryButton().disabled(action.busy)
+              }
+            }
+          }
+
+          if store.canManage {
+            CardCaption("New agents get")
+            CardGroup {
+              NavigationLink { AgentDefaultsView() } label: {
+                RowLabel(title: "AI tool, model and computer", value: store.agentDefaults?.model ?? "Each harness")
+              }
+            }
+          }
+          if saved { Text("Saved.").font(.footnote).foregroundStyle(Palette.green).padding(.horizontal, 4) }
+          InlineError(error: action.error)
+        }.padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 30)
       }
-      if saved { Text("Saved.").foregroundStyle(.green) }
-      InlineError(error: action.error)
-    }.navigationTitle("Computers")
-      .task { do { settings = try await store.connection().get("/api/settings/computers"); size = settings?.defaults.vmSize ?? "medium"; idle = settings?.defaults.controlIdleMinutes ?? 10 } catch { action.error = error.localizedDescription } }
+    }
+    .background(Palette.sheet.ignoresSafeArea())
+    .toolbar(.hidden, for: .navigationBar)
+    .accessibilityIdentifier("screen-agent-computers")
+    .task { do { settings = try await store.connection().get("/api/settings/computers"); size = settings?.defaults.vmSize ?? "medium"; idle = settings?.defaults.controlIdleMinutes ?? 10 } catch { action.error = error.localizedDescription } }
   }
   private func save(_ body: Fields) {
     action.run { let data = try await store.connection().put("/api/settings/computers", body); settings = try Wire.decoder.decode(ComputerDefaults.self, from: data); saved = true }

@@ -76,7 +76,7 @@ struct HelpView: View {
       if let next {
         LabeledContent("Next", value: next.title)
         if next.id == "agent", store.canManage { Button("Make a helper") { addingAgent = true } }
-        if next.id == "device" { NavigationLink("See devices") { DevicesView() } }
+        if next.id == "device" { Button("See computers") { store.route = .device(id: nil) } }
       } else {
         Text("Setup is done. You're ready to go.").foregroundStyle(.secondary)
       }
@@ -121,7 +121,7 @@ struct ReadinessCheckRow: View {
     case .makeHelper: if store.canManage { Button("Fix this", action: makeHelper).buttonStyle(.borderless) }
     case .chooseDevice(let id), .chooseModel(let id):
       if let a = store.agent(id) { NavigationLink("Fix this") { AgentPage(agent: a) } }
-    case .devices: NavigationLink("Fix this") { DevicesView() }
+    case .devices: Button("Fix this") { store.route = .device(id: nil) }.buttonStyle(.borderless)
     case nil: EmptyView()
     }
   }

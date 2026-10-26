@@ -8,6 +8,8 @@ enum Route: Equatable {
   case chat(channelId: String, threadId: String?)
   case approval(id: String)
   case computer(id: String)
+  /** the Computers tab, on a device's page (or just the tab) */
+  case device(id: String?)
 
   /** From the `wisp` part of a push the hub sent (see apps/hub/src/apns.ts). */
   init?(_ info: [AnyHashable: Any]) {

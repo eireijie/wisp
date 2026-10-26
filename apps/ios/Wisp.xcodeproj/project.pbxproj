@@ -40,6 +40,7 @@
 		2C670391254A25E0DC67D591 /* AccountSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0D3448A0F6A28E4EC719069 /* AccountSettingsView.swift */; };
 		2CD320BC0EF764581A5019A5 /* ConnectorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 654382AAB9DF39C4245B9E80 /* ConnectorsView.swift */; };
 		3063A2C6564667C3C5723CD8 /* Drafts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB9C98D436D0BC7D55B9C4A2 /* Drafts.swift */; };
+		33D215C361A12B328123FFEB /* ComputersHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AACD0D0282A54528C27469B /* ComputersHome.swift */; };
 		349C1C01AB5C8FB91F30734B /* WorkspaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B742B5A3A9809BE05B689AE /* WorkspaceTests.swift */; };
 		34ED7453B3D3AE58399FC434 /* ComputerDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900F5E317489613B43DD1CE8 /* ComputerDetails.swift */; };
 		370536961D0A16E0D579F8E6 /* Store+Management.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6BB72F2C5812E58FABC3B18 /* Store+Management.swift */; };
@@ -62,10 +63,10 @@
 		530EEE876E35E34EE391C216 /* Store+Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AAB244B72E06949B68EF8F3 /* Store+Settings.swift */; };
 		54CA2C7F59F09DB98682DFD7 /* ChatCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ECC38BC098F4F329AC9AF25 /* ChatCards.swift */; };
 		574103FA1858E0C80FD0D969 /* AgentComputerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481E171E84A0C9E6CF428E40 /* AgentComputerView.swift */; };
+		5A1254CC9F6C4E909FC69BE7 /* AddDeviceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84583FBFBDA6B693F6E2F96 /* AddDeviceSheet.swift */; };
 		5A41C7C089B42A4C0E635B5A /* MemoryGraphModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A863FA85F1AC578F79064890 /* MemoryGraphModels.swift */; };
 		5ADBCB149572D684C4ABC6A6 /* GhostColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69BC5265E54B97E7FA844E8A /* GhostColors.swift */; };
 		5DAD91DFBEAA033EBA561C64 /* HarnessesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1D51751030EE7377F89DAB2 /* HarnessesView.swift */; };
-		5DDC99C28F863D2533DBF760 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E0F365873A73411991CA323 /* DevicesView.swift */; };
 		63D81B5BDA5BE5326B0E6A9D /* Store+Voice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E045924FC78AA7A1EFA19CD /* Store+Voice.swift */; };
 		642CBD3F3C74DCDD00148E33 /* Reactions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45D211BCCC35BCFA888FE89 /* Reactions.swift */; };
 		6436D2F04967B0C95FD18320 /* Store+Updates.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23B13FCFBF5BD8507569364 /* Store+Updates.swift */; };
@@ -165,6 +166,7 @@
 		E34243C09482DC3FE93983AB /* AgentPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80241FA7EA8D6B9C6F811539 /* AgentPermissions.swift */; };
 		E904871712B489BE33EF1A36 /* Store+Apps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39D09F091D36482B5219EC47 /* Store+Apps.swift */; };
 		EE7A2A6D3F4FFAEC65C0689F /* MemoryStorageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F99A7581839946D00DED4AE9 /* MemoryStorageView.swift */; };
+		EEF288865DAEBA2FB9A51CF3 /* ComputerSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 427014BD7056144AB66EB153 /* ComputerSheets.swift */; };
 		F63E45F22611AB754B66052E /* OrgSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDC9272C1D8F0DE89742E656 /* OrgSwitcher.swift */; };
 		F92D40A9720BB8B679E17638 /* SlashMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2632BC4EC9A6BE9A47CF253 /* SlashMenu.swift */; };
 		FC4BD30A7B72C9E378E3110F /* RoutinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC2FCB9F7AE76653D636446 /* RoutinesView.swift */; };
@@ -195,6 +197,7 @@
 		0604F79F6F442F088E05BC87 /* LookEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LookEditor.swift; sourceTree = "<group>"; };
 		09717DBE3F3278D2FA1D84B3 /* Dictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dictation.swift; sourceTree = "<group>"; };
 		099181E9B8BFE6F3475C5D36 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		0AACD0D0282A54528C27469B /* ComputersHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputersHome.swift; sourceTree = "<group>"; };
 		0D4CB1F04385382FB9DBCAD5 /* AgentConnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentConnect.swift; sourceTree = "<group>"; };
 		0D8D3CC83099F451EA17D379 /* VoiceCallTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCallTests.swift; sourceTree = "<group>"; };
 		0EA47825041EA545E5176D37 /* SectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionViews.swift; sourceTree = "<group>"; };
@@ -203,7 +206,6 @@
 		19955D942C3879FC9817E27F /* SkillCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = SkillCatalog.json; sourceTree = "<group>"; };
 		1AD2B73C37B70216B60325FD /* AddComputerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddComputerView.swift; sourceTree = "<group>"; };
 		1C016387D643C647AABE68DC /* WispApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WispApp.swift; sourceTree = "<group>"; };
-		1E0F365873A73411991CA323 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		204148D37CA4CB9C3DE26179 /* Store+Marketplace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Store+Marketplace.swift"; sourceTree = "<group>"; };
 		217D5A678FB609ADC4F1767D /* MemoryActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryActivity.swift; sourceTree = "<group>"; };
 		224F7401EC7035A883A600F5 /* GhostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostTests.swift; sourceTree = "<group>"; };
@@ -233,6 +235,7 @@
 		3D823D728828FA63840BCC68 /* GhostArms.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostArms.swift; sourceTree = "<group>"; };
 		3F088B0BCCD4390877FD3A3E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		41BCAD4992B5F304108572B0 /* AgentParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentParityTests.swift; sourceTree = "<group>"; };
+		427014BD7056144AB66EB153 /* ComputerSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerSheets.swift; sourceTree = "<group>"; };
 		436D2142FE91CCAE42633EE1 /* MemoryAccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryAccessView.swift; sourceTree = "<group>"; };
 		461B0D858BB1689720B5B994 /* OrgFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgFeatureTests.swift; sourceTree = "<group>"; };
 		461CA50681B82AD94C6D39B1 /* ComputerFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerFiles.swift; sourceTree = "<group>"; };
@@ -338,6 +341,7 @@
 		E0F13136D461AD498D61F32D /* TourTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourTests.swift; sourceTree = "<group>"; };
 		E108367527963F579D2382A3 /* AgentExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentExtras.swift; sourceTree = "<group>"; };
 		E1D51751030EE7377F89DAB2 /* HarnessesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessesView.swift; sourceTree = "<group>"; };
+		E84583FBFBDA6B693F6E2F96 /* AddDeviceSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDeviceSheet.swift; sourceTree = "<group>"; };
 		E99B78EB30B5D4ED5B202EA3 /* GuideText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideText.swift; sourceTree = "<group>"; };
 		EBB418A8F49B248665A5C4F9 /* TeamFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamFlowTests.swift; sourceTree = "<group>"; };
 		EDD06FD3402B1D464C9874D8 /* hub.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = hub.py; sourceTree = "<group>"; };
@@ -445,6 +449,7 @@
 				3D084F9A24EE26A7FC3C86CD /* ActivityPill.swift */,
 				A72772F0E88F1096280F7FC1 /* AddAgent.swift */,
 				1AD2B73C37B70216B60325FD /* AddComputerView.swift */,
+				E84583FBFBDA6B693F6E2F96 /* AddDeviceSheet.swift */,
 				24BCCCB707880917B7BC0EBF /* AgentCatalog.swift */,
 				481E171E84A0C9E6CF428E40 /* AgentComputerView.swift */,
 				0D4CB1F04385382FB9DBCAD5 /* AgentConnect.swift */,
@@ -476,13 +481,14 @@
 				900F5E317489613B43DD1CE8 /* ComputerDetails.swift */,
 				461CA50681B82AD94C6D39B1 /* ComputerFiles.swift */,
 				5131367D83E5BC81A010C36E /* ComputerModels.swift */,
+				427014BD7056144AB66EB153 /* ComputerSheets.swift */,
+				0AACD0D0282A54528C27469B /* ComputersHome.swift */,
 				2C9071C4320A35A0FDC51A99 /* ComputersView.swift */,
 				2325426E118CD3C955594E73 /* ConnectorEditor.swift */,
 				654382AAB9DF39C4245B9E80 /* ConnectorsView.swift */,
 				7A0CFDB169FADE44B94EEBB4 /* DeviceModels.swift */,
 				31FE034218B762F85462162E /* DevicePage.swift */,
 				2F87480CA3DA4BDAF852D823 /* DeviceShelf.swift */,
-				1E0F365873A73411991CA323 /* DevicesView.swift */,
 				09717DBE3F3278D2FA1D84B3 /* Dictation.swift */,
 				DB9C98D436D0BC7D55B9C4A2 /* Drafts.swift */,
 				A260F3F047A78D04689948CB /* FeatureModels.swift */,
@@ -756,6 +762,7 @@
 				B97593F3053FF0D5B4C67F51 /* ActivityPill.swift in Sources */,
 				DFF28834A9888B42F288D749 /* AddAgent.swift in Sources */,
 				0AB8552644A2892F535D7AF9 /* AddComputerView.swift in Sources */,
+				5A1254CC9F6C4E909FC69BE7 /* AddDeviceSheet.swift in Sources */,
 				DB2EE100B915EDC44D1D0E89 /* AgentCatalog.swift in Sources */,
 				574103FA1858E0C80FD0D969 /* AgentComputerView.swift in Sources */,
 				4C57B32426FE74DBE8568A75 /* AgentConnect.swift in Sources */,
@@ -785,13 +792,14 @@
 				34ED7453B3D3AE58399FC434 /* ComputerDetails.swift in Sources */,
 				CA50664C6137F0E6143F29DB /* ComputerFiles.swift in Sources */,
 				753938B1519013630F184EAA /* ComputerModels.swift in Sources */,
+				EEF288865DAEBA2FB9A51CF3 /* ComputerSheets.swift in Sources */,
+				33D215C361A12B328123FFEB /* ComputersHome.swift in Sources */,
 				2230943BBC123845170BBFE3 /* ComputersView.swift in Sources */,
 				2895D8EE60D60AB7138458BE /* ConnectorEditor.swift in Sources */,
 				2CD320BC0EF764581A5019A5 /* ConnectorsView.swift in Sources */,
 				1CC8E57BE0B665F6F28F862E /* DeviceModels.swift in Sources */,
 				939D38F30338506142343FFA /* DevicePage.swift in Sources */,
 				94C64C1A8579301623464C1E /* DeviceShelf.swift in Sources */,
-				5DDC99C28F863D2533DBF760 /* DevicesView.swift in Sources */,
 				034908EDCBB88BD606C88EC2 /* Dictation.swift in Sources */,
 				3063A2C6564667C3C5723CD8 /* Drafts.swift in Sources */,
 				AC53674BF3019E22B2D2CB28 /* FeatureModels.swift in Sources */,

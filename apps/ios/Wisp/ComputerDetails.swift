@@ -56,6 +56,7 @@ struct ComputerDetailsView: View {
           }
         }
       }
+      .groundBackground()
       .navigationTitle("Details")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

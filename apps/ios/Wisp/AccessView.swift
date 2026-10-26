@@ -145,37 +145,19 @@ struct AccessView: View {
   }
 }
 
-/** Settings → Devices: your devices, away-from-home status, and the apps (ChatGPT, Grok, Claude) connected to agents. */
+/** Settings → Away from home and apps: away-from-home status, and the apps (ChatGPT, Grok, Claude) connected to agents. Devices are on the Computers tab. */
 struct DevicesSettingsView: View {
   @Environment(Store.self) private var store
   @Environment(\.openURL) private var openURL
   @State private var info: ReachInfo?
   @State private var clients: [McpClient]?
   @State private var removing: McpClient?
-  @State private var adding = false
   @State private var hint: String?
   @State private var hintURL: URL?
   @State private var action = FormAction()
 
   var body: some View {
     List {
-      Section("Devices") {
-        if store.nodes.isEmpty { Text("Add your phone or another computer to your Wisp.").foregroundStyle(.secondary) }
-        ForEach(store.nodes) { node in
-          NavigationLink { DeviceDetail(node: node) } label: {
-            HStack {
-              Image(systemName: "desktopcomputer")
-              VStack(alignment: .leading) {
-                Text(node.name)
-                Text(node.paused == true ? "Paused" : node.online ? "Connected" : "Offline").font(.caption).foregroundStyle(node.online ? .green : .secondary)
-              }
-              Spacer()
-              Text(node.mine == true ? "Yours" : node.ownerName ?? "").font(.caption).foregroundStyle(.secondary)
-            }
-          }
-        }
-        if store.isOwner { Button("Add a device", systemImage: "plus") { adding = true } }
-      }
       Section("Away from home") {
         if store.isOwner {
           NavigationLink { AccessView() } label: { LabeledContent("Away from home", value: info?.summary ?? "") }
@@ -186,8 +168,7 @@ struct DevicesSettingsView: View {
       if store.isOwner { apps }
       if let hint { Section { Text(hint).font(.footnote); if let hintURL { Button("Open Tailscale") { openURL(hintURL) } } } }
       InlineError(error: action.error)
-    }.sectionScreen("Devices", id: "devices-settings")
-      .sheet(isPresented: $adding) { AddDeviceView() }
+    }.sectionScreen("Away from home and apps", id: "devices-settings")
       .task { try? await store.refreshNodes(); await watch() }
       .confirmationDialog("Disconnect \(removing?.name ?? "this app")? It stops reaching your agents.", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
         Button("Disconnect", role: .destructive) {

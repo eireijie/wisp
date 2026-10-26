@@ -97,9 +97,9 @@ struct SettingsSheet: View {
       }
       Button { orgs = true } label: { RowLabel(title: "Organization", value: store.workspace?.name) }
         .buttonStyle(.plain).accessibilityIdentifier("you-organizations")
-      NavigationLink { DevicesView() } label: {
-        RowLabel(title: "Computers and devices", value: online > 0 ? "\(online) online" : nil)
-      }.accessibilityIdentifier("you-devices")
+      Button { dismiss(); store.route = .device(id: nil) } label: {
+        RowLabel(title: "Computers", value: online > 0 ? "\(online) online" : nil)
+      }.buttonStyle(.plain).accessibilityIdentifier("you-devices")
       NavigationLink { MarketplaceView() } label: { RowLabel(title: "Connect apps", subtitle: "Tools and skills for your agents") }
         .accessibilityIdentifier("you-marketplace")
       NavigationLink { MemoryView() } label: { RowLabel(title: "Memory", subtitle: "Notes you and your agents share") }

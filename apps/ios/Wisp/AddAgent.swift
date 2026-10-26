@@ -7,6 +7,8 @@ import SwiftUI
 struct AddAgent: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
+  /** start on this device (from its page) */
+  var nodeId: String? = nil
   var onCreated: (Agent) -> Void
 
   // every new agent starts white with a face and outfit of its own, picked once (typing its name doesn't change it)
@@ -92,7 +94,7 @@ struct AddAgent: View {
         try? await store.refreshConnectors()
         harness = store.agentDefaults?.harness ?? "claude-code"
         model = store.agentDefaults?.model ?? ""
-        if store.agentDefaults?.computer != "none", let node = store.agentDefaults?.nodeId ?? firstNode { computer = "vm:\(node)" }
+        if store.agentDefaults?.computer != "none", let node = nodeId ?? store.agentDefaults?.nodeId ?? firstNode { computer = "vm:\(node)" }
       }
       .onChange(of: handle) { _, value in handle = ManagementText.handle(value) }
       .sheet(isPresented: $editingLook) {

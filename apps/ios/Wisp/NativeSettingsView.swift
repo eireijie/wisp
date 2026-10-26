@@ -23,9 +23,9 @@ struct NativeSettingsView: View {
         if store.canManage {
           NavigationLink("Agent defaults") { AgentDefaultsView() }.accessibilityIdentifier("settings-agent-defaults")
           NavigationLink("Agents") { AgentPolicyView() }
-          NavigationLink("Computers") { ComputerSettingsView() }
+          NavigationLink("Agent computers") { ComputerSettingsView() }
         }
-        NavigationLink("Devices") { DevicesSettingsView() }.accessibilityIdentifier("settings-devices")
+        NavigationLink("Away from home and apps") { DevicesSettingsView() }.accessibilityIdentifier("settings-devices")
         if store.isOwner { NavigationLink("Access") { AccessView() }.accessibilityIdentifier("settings-access") }
         NavigationLink("Memory storage") { MemoryStorageView() }
         NavigationLink("Data & export") { DataExportView() }

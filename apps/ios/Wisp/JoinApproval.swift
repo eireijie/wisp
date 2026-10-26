@@ -39,63 +39,35 @@ struct JoinApprovalSheet: View {
   @State private var action = FormAction()
 
   var body: some View {
-    VStack(spacing: 22) {
-      Image(systemName: "desktopcomputer").font(.system(size: 34)).foregroundStyle(.secondary).padding(.top, 28)
-      Text("\(request.name) wants to join").font(.title2.weight(.semibold)).multilineTextAlignment(.center)
-      VStack(spacing: 8) {
-        Text("It should show the same code").font(.subheadline).foregroundStyle(.secondary)
-        Text(request.displayCode).font(.system(size: 40, weight: .semibold, design: .monospaced)).monospacedDigit().accessibilityIdentifier("join-code")
-      }.frame(maxWidth: .infinity).padding(.vertical, 22).card()
+    VStack(spacing: 18) {
+      Image(systemName: "desktopcomputer").font(.system(size: 30)).foregroundStyle(Palette.muted).padding(.top, 30)
+      Text("New device wants to join").font(.system(size: 22, weight: .bold)).foregroundStyle(Palette.text).multilineTextAlignment(.center)
+      Text("\(request.name) asked to join \(store.workspace?.name ?? "your Wisp"). It should show the same code:")
+        .font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
+      Text(request.displayCode).font(.system(size: 40, weight: .semibold, design: .monospaced)).monospacedDigit().foregroundStyle(Palette.text)
+        .frame(maxWidth: .infinity).padding(.vertical, 22)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+        .accessibilityIdentifier("join-code")
+      Text("Only approve a device you set up yourself.").font(.system(size: 13)).foregroundStyle(Palette.faint)
       InlineError(error: action.error)
       Spacer(minLength: 0)
       VStack(spacing: 10) {
-        Button { decide(true) } label: { Text("Approve").frame(maxWidth: .infinity) }.primaryButton().disabled(action.busy).accessibilityIdentifier("join-approve")
         HStack(spacing: 10) {
-          Button { later() } label: { Text("Later").frame(maxWidth: .infinity) }.secondaryButton()
-          Button(role: .destructive) { decide(false) } label: { Text("Deny").frame(maxWidth: .infinity) }.secondaryButton().disabled(action.busy)
+          Button(role: .destructive) { decide(false) } label: { Text("Deny").frame(maxWidth: .infinity) }.secondaryButton().disabled(action.busy).accessibilityIdentifier("join-deny")
+          Button { decide(true) } label: { Text("Approve").frame(maxWidth: .infinity) }.primaryButton().disabled(action.busy).accessibilityIdentifier("join-approve")
         }
+        Button("Later") { later() }.font(.system(size: 15)).foregroundStyle(Palette.muted)
       }
-    }.padding(20).presentationDetents([.medium, .large])
-      .interactiveDismissDisabled(action.busy)
+    }
+    .padding(.horizontal, 20).padding(.bottom, 16)
+    .background(Palette.sheet.ignoresSafeArea())
+    .presentationBackground(Palette.sheet)
+    .presentationCornerRadius(Corner.sheet)
+    .presentationDetents([.medium, .large])
+    .interactiveDismissDisabled(action.busy)
   }
 
   private func decide(_ approve: Bool) {
     action.run { try await store.decideJoin(request, approve: approve) }
   }
-}
-
-/** A link a new computer pastes into Join my Wisp, then approve it here. */
-struct JoinInviteView: View {
-  @Environment(Store.self) private var store
-  @State private var invite: JoinInvite?
-  @State private var action = FormAction()
-  private var expired: Bool { invite.flatMap { Wire.date($0.expiresAt) }.map { $0 <= Date() } ?? false }
-
-  var body: some View {
-    Form {
-      Section("On the other computer") {
-        Label("Get Wisp on it from the Wisp website.", systemImage: "1.circle")
-        Label("Pick Join my Wisp.", systemImage: "2.circle")
-        Label("Paste this link. On this Wi-Fi it can also find you by itself.", systemImage: "3.circle")
-        Label("Approve it here when this phone asks.", systemImage: "4.circle")
-      }
-      Section("Join link") {
-        if let invite, !expired {
-          Text(invite.url).font(.footnote.monospaced()).textSelection(.enabled)
-          ShareLink("Share link", item: invite.url)
-          Button("Copy link") { UIPasteboard.general.string = invite.url }
-          if let date = Wire.date(invite.expiresAt) { Text("Works once, until \(date, format: .dateTime.month().day().hour().minute()).").font(.footnote).foregroundStyle(.secondary) }
-        }
-        if action.busy { HStack { ProgressView(); Text("Making a join link…") } }
-        if !action.busy && (invite == nil || expired) { Button(expired ? "Make a new link" : "Try again", action: make) }
-        InlineError(error: action.error)
-      }
-      if let url = invite.flatMap({ URL(string: $0.url) }), !["https"].contains(url.scheme ?? "") {
-        Section { Text("This link only works on the same Wi-Fi. To add a computer somewhere else, turn on Away from home in Settings, then make a new link.").font(.footnote) }
-      }
-    }.navigationTitle("Join with a link")
-      .task { if store.isOwner && invite == nil { make() } }
-  }
-
-  private func make() { action.run { invite = try await store.makeJoinInvite() } }
 }
