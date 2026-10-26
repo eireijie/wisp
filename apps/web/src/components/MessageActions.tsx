@@ -38,7 +38,7 @@ export function useMessageActionList(m: Message, opts: { onReply: () => void; on
 export function ActionToolbar({ actions, side, onDone }: { actions: MessageAction[]; side: "left" | "right"; onDone?: () => void }) {
   if (!actions.length) return null;
   return (
-    <div role="toolbar" aria-label="Message actions" className={cx("absolute -top-4 z-10 hidden group-hover:flex group-focus-within:flex items-center rounded-xl border border-control-line bg-control shadow-panel p-0.5", side === "right" ? "right-4 md:right-5" : "left-12 md:left-14")}>
+    <div role="toolbar" aria-label="Message actions" data-side={side} className={cx("m-toolbar absolute -top-4 z-10 items-center rounded-xl border border-control-line bg-control shadow-panel p-0.5", side === "right" ? "right-4 md:right-5" : "left-12 md:left-14")}>
       {actions.map((a) => (
         <button
           key={a.id}
@@ -65,9 +65,9 @@ export function ActionSheet({ actions, preview, onClose }: { actions: MessageAct
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end gap-3 bg-black/55 p-4 pb-8 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()} role="presentation">
+    <div className="m-scrim fixed inset-0 z-50 flex flex-col justify-end gap-3 bg-black/55 p-4 pb-8 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()} role="presentation">
       <div className="max-h-[40vh] overflow-hidden pointer-events-none flex flex-col">{preview}</div>
-      <div role="menu" aria-label="Message actions" className="glass rounded-3xl p-1.5">
+      <div role="menu" aria-label="Message actions" className="m-dialog glass rounded-3xl p-1.5">
         {actions.map((a) => (
           <button
             key={a.id}

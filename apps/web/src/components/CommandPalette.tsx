@@ -291,8 +291,8 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
 
   let lastGroup = "";
   return (
-    <div className="fixed inset-0 z-50 bg-panel md:bg-black/45 md:flex md:items-start md:justify-center md:p-3 md:pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Search everything" className="h-full md:h-auto w-full md:max-w-[620px] flex flex-col overflow-hidden bg-panel md:bg-card md:rounded-xl md:border md:border-control-line md:shadow-[0_24px_60px_rgb(0_0_0/0.5)] safe-top">
+    <div className="m-palette-scrim fixed inset-0 z-50 bg-panel md:bg-black/45 md:flex md:items-start md:justify-center md:p-3 md:pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label="Search everything" className="m-palette-card h-full md:h-auto w-full md:max-w-[620px] flex flex-col overflow-hidden bg-panel md:bg-card md:rounded-xl md:border md:border-control-line md:shadow-[0_24px_60px_rgb(0_0_0/0.5)] safe-top">
         <div className="flex items-center gap-3 px-[18px] md:px-4 pt-3 md:pt-0 pb-2 md:pb-0 md:h-[60px] md:border-b md:border-line">
           <label className="flex-1 min-w-0 flex items-center gap-2.5 h-[46px] md:h-auto rounded-full bg-card md:bg-transparent px-4 md:px-0 text-faint">
             <Search size={18} strokeWidth={2} className="shrink-0" />

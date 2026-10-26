@@ -209,7 +209,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[820px] px-[18px] md:px-7 pt-2 pb-28 md:pb-10 flex flex-col gap-3">
+        <div data-stagger className="mx-auto max-w-[820px] px-[18px] md:px-7 pt-2 pb-28 md:pb-10 flex flex-col gap-3">
           {tab === "done" ? (
             <DoneTab approvals={Object.values(approvals)} tasks={tasks} />
           ) : (

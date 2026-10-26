@@ -84,7 +84,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
             )}
           </div>
 
-          <div className="space-y-3">
+          <div data-stagger className="space-y-3">
             {shown.map((a) => {
               const st = state(a);
               const readiness = agentReadiness(a, devices);

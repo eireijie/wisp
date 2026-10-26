@@ -124,7 +124,7 @@ export function TrustPill({ t }: { t: TrustLabel }) {
 export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (on: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={cx("relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors disabled:opacity-40", on ? "bg-[#0a84ff]" : "bg-ink/20")}>
-      <span className={cx("absolute top-0.5 size-[27px] rounded-full bg-white shadow transition-[left]", on ? "left-[22px]" : "left-0.5")} />
+      <span className={cx("m-knob absolute top-0.5 left-0.5 size-[27px] rounded-full bg-white shadow", on && "translate-x-5")} />
     </button>
   );
 }
