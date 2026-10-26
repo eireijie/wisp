@@ -250,7 +250,7 @@ function DmMore({ agent, channelId, onDetails, onComputer, onCall }: { agent: Ag
           { label: `About ${agent.name}`, icon: <Info size={17} />, onSelect: onDetails },
           ...(agent.computerId ? [{ label: `${agent.name}'s computer`, icon: <Monitor size={17} />, onSelect: onComputer }] : []),
           ...(onCall ? [{ label: `Call ${agent.name}`, icon: <Phone size={17} />, onSelect: onCall }] : []),
-          ...(ctx ? [{ label: "Model and effort", icon: <Zap size={17} />, onSelect: () => setDialog("model") }, { label: "What it can do", icon: <Shield size={17} />, onSelect: () => setDialog("access") }, { label: "Context window", icon: <AudioLines size={17} />, onSelect: () => setDialog("context") }] : []),
+          ...(ctx ? [...(canEdit ? [{ label: "Model and effort", icon: <Zap size={17} />, onSelect: () => setDialog("model") }] : []), { label: "What it can do", icon: <Shield size={17} />, onSelect: () => setDialog("access") }, { label: "Context window", icon: <AudioLines size={17} />, onSelect: () => setDialog("context") }] : []),
         ]}
       />
       {dialog === "model" && ctx && (
@@ -1586,11 +1586,13 @@ function startReply(m: Message, name: string, threadId?: string) {
 const fileSize = (n?: number) => (n === undefined ? "" : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
 
 /** Speech to text in the message box, where the browser can do it. */
-function useDictation(onText: (text: string) => void) {
+function useDictation(onText: (text: string) => void, resetKey = "") {
   const [on, setOn] = useState(false);
   const rec = useRef<{ stop: () => void } | null>(null);
   const Ctor = typeof window !== "undefined" ? ((window as unknown as Record<string, unknown>).SpeechRecognition ?? (window as unknown as Record<string, unknown>).webkitSpeechRecognition) : undefined;
   useEffect(() => () => rec.current?.stop(), []);
+  // a new conversation never inherits a listening microphone
+  useEffect(() => { rec.current?.stop(); }, [resetKey]);
   const toggle = () => {
     if (on) return rec.current?.stop();
     if (!Ctor) return;
@@ -1635,7 +1637,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
   const working = Object.values(live).filter((r) => r.channelId === channelId && (!threadId || r.threadId === threadId || r.threadPath.includes(threadId)));
   const channel = useStore((s) => s.channels.find((c) => c.id === channelId));
   const leads = channel?.kind === "channel" ? (channel.settings.team?.nodes ?? []).filter((n) => n.lead).map((n) => agents.find((a) => a.id === n.agentId)).filter((a): a is Agent => !!a) : [];
-  const dictation = useDictation((t) => t && setText(`${getDraft().text}${getDraft().text && !/\s$/.test(getDraft().text) ? " " : ""}${t}`));
+  const dictation = useDictation((t) => t && setText(`${getDraft().text}${getDraft().text && !/\s$/.test(getDraft().text) ? " " : ""}${t}`), `${channelId}/${threadId ?? ""}`);
 
   // a quiet line about where this will land: no mention in a channel, or an offline agent that was asked
   const mentioned = text.trim() ? parseMentions(text).map((h) => agents.find((a) => a.handle === h)).filter((a): a is Agent => !!a) : [];
@@ -1937,7 +1939,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
               <ModelControl agent={dmAgent} ctx={ctx} catalog={catalog} canEdit={canEdit} />
             </span>
           )}
-          {!hasContent && dictation.supported && (
+          {(!hasContent || dictation.on) && dictation.supported && (
             <button type="button" onClick={dictation.toggle} aria-label={dictation.on ? "Stop dictating" : "Dictate"} aria-pressed={dictation.on} title="Dictate" className={cx("size-10 md:size-9 shrink-0 self-center rounded-full grid place-items-center", dictation.on ? "bg-bad/15 text-bad" : "text-muted hover:text-ink")}>
               <Mic size={20} />
             </button>

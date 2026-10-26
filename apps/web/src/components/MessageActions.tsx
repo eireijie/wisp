@@ -155,8 +155,11 @@ export function EditMessageDialog({ m, onClose }: { m: Message; onClose: () => v
   const [text, setText] = useState(m.body);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // a message that carries a file may lose its caption
+  const canSave = !!text.trim() || m.parts.some((p) => p.type === "file");
   const save = async () => {
     if (text === m.body) return onClose();
+    if (!canSave) return;
     setBusy(true);
     try {
       await api("PATCH", `/api/messages/${m.id}`, { body: text });
@@ -189,7 +192,7 @@ export function EditMessageDialog({ m, onClose }: { m: Message; onClose: () => v
         <button onClick={onClose} disabled={busy} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-semibold">
           Cancel
         </button>
-        <button onClick={() => void save()} disabled={busy || !text.trim()} className="h-11 rounded-full bg-accent px-5 text-[15px] font-semibold text-accent-ink disabled:opacity-50">
+        <button onClick={() => void save()} disabled={busy || !canSave} className="h-11 rounded-full bg-accent px-5 text-[15px] font-semibold text-accent-ink disabled:opacity-50">
           Save
         </button>
       </div>

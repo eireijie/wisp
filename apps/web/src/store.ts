@@ -375,21 +375,29 @@ export const useStore = create<State>((set, get) => ({
       }
     } else if (e.type === "message_updated") {
       const m = e.message;
-      const patch = (list: Message[]) => (list.some((x) => x.id === m.id) ? list.map((x) => (x.id === m.id ? m : x)) : list);
+      // an edit also reaches the quotes of this message and the Chats preview when it is the latest
+      const requote = (x: Message): Message => (x.replyTo?.id === m.id && m.body ? { ...x, replyTo: { ...x.replyTo, snippet: m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body } } : x);
+      const patch = (list: Message[]) => list.map((x) => (x.id === m.id ? m : requote(x)));
       set((s) => ({
         messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [k, patch(v)])),
         threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, patch(v)])),
         roots: s.roots[m.id] ? { ...s.roots, [m.id]: m } : s.roots,
+        channels: s.channels.map((c) => (c.id === m.channelId && !m.threadId && c.last?.at === m.createdAt ? { ...c, last: { ...c.last, body: m.body.slice(0, 400) } } : c)),
       }));
     } else if (e.type === "message_removed") {
       const drop = (list: Message[] | undefined) => list?.filter((m) => m.id !== e.messageId);
+      // quotes of the removed message say so, and the Chats preview moves on if it showed this one
+      const unquote = (x: Message): Message => (x.replyTo?.id === e.messageId ? { ...x, replyTo: { ...x.replyTo, snippet: "", deleted: true } } : x);
+      const gone = (get().messages[e.channelId] ?? []).find((m) => m.id === e.messageId);
+      const wasPreview = !e.threadId && get().channels.some((c) => c.id === e.channelId && c.last && (!gone || c.last.at === gone.createdAt));
       set((s) => ({
         roots: Object.fromEntries(Object.entries(s.roots).filter(([id]) => id !== e.messageId)),
         removedRoots: { ...s.removedRoots, [e.messageId]: true },
-        messages: s.messages[e.channelId] ? { ...s.messages, [e.channelId]: drop(s.messages[e.channelId])! } : s.messages,
-        threads: e.threadId && s.threads[e.threadId] ? { ...s.threads, [e.threadId]: drop(s.threads[e.threadId])! } : s.threads,
+        messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [k, (k === e.channelId ? drop(v)! : v).map(unquote)])),
+        threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, (k === e.threadId ? drop(v)! : v).map(unquote)])),
         replyCounts: e.threadId && s.replyCounts[e.threadId] ? { ...s.replyCounts, [e.threadId]: Math.max(0, s.replyCounts[e.threadId] - 1) } : s.replyCounts,
       }));
+      if (wasPreview) get().refreshChannels().catch(() => {});
     } else if (e.type === "reactions") {
       set((s) => applyReactions(s, e.messageId, e.reactions));
     } else if (e.type === "channels_changed") {

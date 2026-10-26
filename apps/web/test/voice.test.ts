@@ -254,6 +254,10 @@ describe("live call state", () => {
     expect(call.state.phase).toBe("speaking");
     call.event(reply("done", "It exports one function. And it is small.\n\nMore."));
     await vi.advanceTimersByTimeAsync(0);
+    // the first sentence is still playing: the rest waits instead of cutting it off
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    speaker.cancel(); // the first sentence finishes on its own
+    await vi.advanceTimersByTimeAsync(0);
     expect(speaker.speak).toHaveBeenLastCalledWith("And it is small.", expect.any(Function));
     call.stop();
   });

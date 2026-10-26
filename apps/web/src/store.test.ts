@@ -187,3 +187,25 @@ describe("cached thread roots", () => {
     expect(useStore.getState().removedRoots.root).toBe(true);
   });
 });
+
+describe("edited and removed messages elsewhere on screen", () => {
+  const quoting = (id: string, of: string) => ({ ...message(id), replyTo: { id: of, author: { kind: "user", id: "u" }, snippet: "old" } } as Message);
+
+  it("marks quotes of a removed message as deleted and refreshes the Chats preview", () => {
+    const target = message("target");
+    vi.mocked(api).mockResolvedValue([]);
+    useStore.setState({ messages: { channel: [target, quoting("q", "target")] }, channels: [{ id: "channel", unread: 0, last: { at: target.createdAt, body: "target" } } as never] });
+    useStore.getState().handle({ type: "message_removed", channelId: "channel", threadId: null, messageId: "target" }, false);
+    expect(useStore.getState().messages.channel).toHaveLength(1);
+    expect(useStore.getState().messages.channel![0].replyTo).toMatchObject({ snippet: "", deleted: true });
+    expect(api).toHaveBeenCalledWith("GET", "/api/channels");
+  });
+
+  it("carries an edit into quotes and the Chats preview", () => {
+    const target = message("target");
+    useStore.setState({ messages: { channel: [target, quoting("q", "target")] }, channels: [{ id: "channel", unread: 0, last: { at: target.createdAt, body: "target" } } as never] });
+    useStore.getState().handle({ type: "message_updated", message: { ...target, body: "fixed" } }, false);
+    expect(useStore.getState().messages.channel![1].replyTo?.snippet).toBe("fixed");
+    expect(useStore.getState().channels[0].last?.body).toBe("fixed");
+  });
+});

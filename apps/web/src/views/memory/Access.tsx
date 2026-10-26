@@ -17,7 +17,7 @@ export function AccessRulesDialog({ onClose }: { onClose: () => void }) {
   const members = useStore((s) => s.members);
   const isOwner = useStore((s) => s.me?.role === "owner");
   const [rules, setRules] = useState<AccessRule[] | null>(null);
-  const [editing, setEditing] = useState<{ subject: Subject | null; rule: AccessRule | null } | null>(null);
+  const [editing, setEditing] = useState<{ subject: Subject | null; rule: AccessRule | null; adding?: boolean } | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => api<AccessRule[]>("GET", "/api/access/rules").then(setRules, (e) => setError(e.message)), []);
@@ -59,12 +59,15 @@ export function AccessRulesDialog({ onClose }: { onClose: () => void }) {
   if (editing)
     return (
       <RuleEditor
+        // a different rule (or the new-rule form) is a fresh form, not an edit of the last one
+        key={editing.rule?.id ?? (editing.adding ? "new" : "list")}
         subject={editing.subject}
         rule={editing.rule}
+        adding={!!editing.adding}
         rules={editing.subject ? rulesFor(editing.subject) : []}
         folders={folders}
         canChange={isOwner}
-        onPickRule={(r) => setEditing({ ...editing, rule: r })}
+        onPickRule={(r) => setEditing({ ...editing, rule: r, adding: !r })}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
@@ -120,6 +123,7 @@ function GroupMark() {
 function RuleEditor({
   subject,
   rule,
+  adding,
   rules,
   folders,
   canChange,
@@ -129,6 +133,7 @@ function RuleEditor({
 }: {
   subject: Subject | null;
   rule: AccessRule | null;
+  adding: boolean;
   rules: AccessRule[];
   folders: string[];
   canChange: boolean;
@@ -145,7 +150,7 @@ function RuleEditor({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // a subject with several rules: choose which one to change first
-  const listing = !!subject && rules.length > 1 && !rule;
+  const listing = !!subject && rules.length > 1 && !rule && !adding;
   const derived: Subject = useMemo(() => {
     if (who === "all_agents" || who === "members" || who === "guests") return { kind: who };
     if (who.startsWith("agent:")) return { kind: "agent", id: who.slice(6) };

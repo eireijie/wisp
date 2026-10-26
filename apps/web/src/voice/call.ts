@@ -121,6 +121,7 @@ export class VoiceCall {
     this.spokenAt = Date.now();
     this.update({ speaking: false, speechLevel: 0 });
   }
+  private earlySpeech?: Promise<void>;
   private async say(text: string) {
     if (this.stopped || !text || !this.state.ready) return;
     this.interrupt();
@@ -134,10 +135,18 @@ export class VoiceCall {
     }
   }
   /** Speak a finished reply, skipping the part already said while it streamed. */
-  private sayReply(text: string) {
+  private async sayReply(text: string) {
     const early = this.early; this.early = "";
     const rest = early && text.startsWith(early) ? text.slice(early.length).trim() : text;
-    if (rest) void this.say(rest);
+    if (!rest) return;
+    // let the early sentence finish, unless the person talked over it or hung up meanwhile
+    const earlySpeech = this.earlySpeech; this.earlySpeech = undefined;
+    if (early && earlySpeech) {
+      const speech = this.speech;
+      await earlySpeech;
+      if (speech !== this.speech) return;
+    }
+    void this.say(rest);
   }
   private timers() {
     clearTimeout(this.filler); clearTimeout(this.long);
@@ -206,7 +215,7 @@ export class VoiceCall {
         const excerpt = spokenReply(this.streamed);
         // Talk as soon as the first sentence is whole instead of waiting for the full reply.
         const first = this.early ? "" : excerpt.match(/^.{8,}?[.!?]+(?=\s)/)?.[0] ?? "";
-        if (first && !this.state.talking && !this.state.speaking) { this.early = first; void this.say(first); }
+        if (first && !this.state.talking && !this.state.speaking) { this.early = first; this.earlySpeech = this.say(first); }
         else if (!this.state.speaking) this.update({ agentCaption: excerpt, activity: "" });
       }
     }

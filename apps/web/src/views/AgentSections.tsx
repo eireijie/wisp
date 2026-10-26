@@ -98,7 +98,7 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
   const model = [agent.model ? prettyModel(agent.model) : "Automatic", agent.settings.effort ? effortName(agent.settings.effort) : null].filter(Boolean).join(" · ");
   const computerValue = computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : device ? device.name : "None yet";
   const on = routines?.filter((r) => r.enabled).length ?? 0;
-  const mine = skills?.filter((s) => s.agentIds.includes(agent.id) || s.agentIds.length === 0).length ?? 0;
+  const mine = skills?.filter((s) => s.agentIds.includes(agent.id)).length ?? 0;
   const dm = channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agent.id}`));
   const respond = agent.settings.respondTo ?? "anyone";
   return (
@@ -244,13 +244,12 @@ function SwitchList<T extends { id: string; name: string; agentIds: string[] }>(
   const [local, setLocal] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   if (!items) return <p className="text-sm text-muted">Loading…</p>;
-  const everyone = (i: T) => i.agentIds.length === 0;
-  const isOn = (i: T) => local[i.id] ?? (everyone(i) || i.agentIds.includes(agent.id));
+  // an empty list means no agent has it yet, not every agent
+  const isOn = (i: T) => local[i.id] ?? i.agentIds.includes(agent.id);
   const flip = async (i: T, on: boolean) => {
     setError(null);
     setLocal((l) => ({ ...l, [i.id]: on }));
     try {
-      // an item that's on for everyone has no list yet: name every other agent first would change its meaning, so only allow turning on picked ones
       await api(on ? "PUT" : "DELETE", `/api/${kind}/${i.id}/agents/${agent.id}`);
     } catch (e) {
       setLocal((l) => ({ ...l, [i.id]: !on }));
@@ -267,9 +266,9 @@ function SwitchList<T extends { id: string; name: string; agentIds: string[] }>(
             <div key={i.id} className="flex items-center gap-3.5 min-h-14 px-[18px] py-2">
               <span className="flex-1 min-w-0">
                 <span className="block text-[17px] truncate">{i.name}</span>
-                <span className="block text-sm text-muted truncate">{everyone(i) ? "On for every agent" : body(i)}</span>
+                <span className="block text-sm text-muted truncate">{body(i)}</span>
               </span>
-              <Toggle label={`${i.name} for ${agent.name}`} on={isOn(i)} disabled={everyone(i)} onChange={(v) => void flip(i, v)} />
+              <Toggle label={`${i.name} for ${agent.name}`} on={isOn(i)} onChange={(v) => void flip(i, v)} />
             </div>
           ))}
         </RowCard>

@@ -25,6 +25,7 @@ export function AboutPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [news, setNews] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const check = async () => {
     setChecking(true);
     try {
@@ -58,6 +59,7 @@ export function AboutPage() {
   const update = async () => {
     setError(null);
     setConfirm(false);
+    setDismissed(false);
     try {
       const r = await api<{ update: UpdateInfo["update"] }>("POST", "/api/updates/hub");
       setInfo((i) => i && { ...i, update: r.update });
@@ -81,7 +83,7 @@ export function AboutPage() {
         </div>
       </div>
     );
-  if (u?.state === "failed")
+  if (u?.state === "failed" && !dismissed)
     return (
       <div className="min-h-[60vh] grid place-items-center text-center">
         <div className="max-w-sm space-y-4">
@@ -94,7 +96,7 @@ export function AboutPage() {
                 Try again
               </Button>
             )}
-            <Button onClick={check}>Back to About</Button>
+            <Button onClick={() => setDismissed(true)}>Back to About</Button>
           </div>
         </div>
       </div>
@@ -157,6 +159,16 @@ export function AboutPage() {
             </div>
           )}
         </Card>
+        {u?.state === "failed" && (
+          <p className="mt-2 px-1 text-sm text-bad">
+            The last update didn't finish: {u.message}{" "}
+            {isOwner && (
+              <button className="underline" onClick={update}>
+                Try again
+              </button>
+            )}
+          </p>
+        )}
         {u?.state === "idle" && u.message && <p className="mt-2 px-1 text-sm text-muted">{u.message}</p>}
         {error && <p className="mt-2 px-1 text-sm text-bad">{error}</p>}
       </Section>

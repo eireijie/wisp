@@ -242,6 +242,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
     const actions = [
       create("chat", <MessageSquare size={15} />, "New chat", () => useStore.setState({ newChatOpen: true }), "talk message direct"),
       ...(!guest ? [create("agent", <Plus size={15} />, "New agent", startNewAgent, "add create helper")] : []),
+      create("browse-teams", <Users size={15} />, "Browse teams", () => useStore.setState({ channelBrowser: { sectionId: null } }), "find join public archived teams channels"),
       ...(!guest ? [create("team", <Users size={15} />, "New team", () => useStore.setState({ channelBrowser: { sectionId: null, create: true } }), "add create browse teams channels group")] : []),
       ...(!guest && features.tasks ? [create("task", <SquarePen size={15} />, "New task", () => useStore.setState({ newTaskOpen: true }), "create assign work")] : []),
       create("org", <Building2 size={15} />, "New organization", onNewOrg, "create workspace"),
