@@ -500,8 +500,8 @@ struct CallBar: View {
       HStack(spacing: 10) {
         CallGhost(agent: live, state: state, facts: facts, size: 30, ring: 46)
         VStack(alignment: .leading, spacing: 2) {
-          title(facts).font(.system(size: 15, weight: .semibold).monospacedDigit()).foregroundStyle(Palette.text).lineLimit(1)
-          if !facts.activity.isEmpty { Text(facts.activity).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1) }
+          title(facts).font(.system(size: 15, weight: .semibold).monospacedDigit()).foregroundStyle(Palette.text).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+          if !facts.activity.isEmpty { Text(facts.activity).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(2).fixedSize(horizontal: false, vertical: true) }
         }
         Spacer(minLength: 0)
         barButton("gearshape", "Call settings", "call-bar-settings") { call.settingsOpen = true; call.expanded = true }
