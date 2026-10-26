@@ -21,7 +21,7 @@ final class AgentDraft {
   var template: String?
   let computerDraft = AgentComputerDraft()
 
-  func finalHandle() -> String { handle.isEmpty ? ManagementText.handle(name) : handle }
+  func finalHandle() -> String { handle.isEmpty ? ManagementText.handle(name) : ManagementText.handle(handle) }
 }
 
 /** Starting points for a new agent: a job in a few words, and the instructions that go with it. */
@@ -62,7 +62,7 @@ struct AddAgent: View {
 
   private var handleTaken: Bool { store.agents.contains { $0.handle == draft.finalHandle() } }
   private var valid: Bool {
-    !draft.name.trimmed.isEmpty && draft.name.count <= 80 && draft.does.count <= 200 &&
+    !draft.name.trimmed.isEmpty && draft.name.count <= 80 && draft.does.count <= 60 &&
     draft.finalHandle().range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !handleTaken &&
     draft.instructions.count <= 20000 && draft.model.count <= 200
   }
@@ -223,7 +223,7 @@ struct AddAgent: View {
       let d = draft
       let external = self.external
       var settings: Fields = ["appearance": AnyEncodable(d.look.resolved), "respondTo": AnyEncodable(askWho ? d.respondTo : "me")]
-      if !d.does.trimmed.isEmpty { settings["description"] = AnyEncodable(d.does.trimmed) }
+      if !d.does.trimmed.isEmpty { settings["role"] = AnyEncodable(String(d.does.trimmed.prefix(60))) }
       if askWho && d.respondTo == "people" { settings["respondPeople"] = AnyEncodable(Array(d.respondPeople).sorted()) }
       var fields: Fields = [
         "name": AnyEncodable(d.name.trimmed), "handle": AnyEncodable(d.finalHandle()), "instructions": AnyEncodable(d.instructions),
@@ -324,7 +324,7 @@ private struct NewAgentMore: View {
 
   var body: some View {
     AgentFrame(title: "More options", subtitle: "New agent") {
-      FieldCard(label: "Handle", text: Binding(get: { draft.handle.isEmpty ? "" : "@" + draft.handle }, set: { draft.handle = ManagementText.handle($0.replacingOccurrences(of: "@", with: "")) }),
+      FieldCard(label: "Handle", text: Binding(get: { draft.handle.isEmpty ? "" : "@" + draft.handle }, set: { draft.handle = ManagementText.typingHandle($0.replacingOccurrences(of: "@", with: "")) }),
                 prompt: "@" + (ManagementText.handle(draft.name).isEmpty ? "handle" : ManagementText.handle(draft.name)), lowercase: true)
       CardCaption("Letters a to z. Teammates type this to mention it.")
       CardGroup {

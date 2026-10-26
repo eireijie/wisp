@@ -61,7 +61,7 @@ struct AddStepSheet: View {
       }
     }
     .background(Palette.sheet.ignoresSafeArea())
-    .onAppear { anchor = request.after ?? steps.last?.id }
+    .onAppear { anchor = request.between ? nil : (request.after ?? steps.last?.id) }
   }
 
   private var kinds: [AddKind] {
@@ -156,8 +156,10 @@ private struct TextRow: View {
   var placeholder: String
   @Binding var text: String
   var id: String
+  /** what the hub accepts */
+  var limit = 200
   var body: some View {
-    TextField(placeholder, text: $text, axis: .vertical)
+    TextField(placeholder, text: Binding(get: { text }, set: { text = String($0.prefix(limit)) }), axis: .vertical)
       .font(.system(size: 17)).foregroundStyle(Palette.text)
       .padding(.horizontal, 18).frame(minHeight: 56)
       .accessibilityIdentifier(id)
@@ -168,8 +170,9 @@ private struct BigText: View {
   var placeholder: String
   @Binding var text: String
   var id: String
+  var limit = 8000
   var body: some View {
-    TextField(placeholder, text: $text, axis: .vertical)
+    TextField(placeholder, text: Binding(get: { text }, set: { text = String($0.prefix(limit)) }), axis: .vertical)
       .lineLimit(4...14)
       .font(.system(size: 17)).foregroundStyle(Palette.text)
       .padding(18).frame(minHeight: 120, alignment: .topLeading)
@@ -226,6 +229,8 @@ struct StepEditor: View {
   @Environment(Store.self) private var store
   @Binding var team: ChannelTeam
   var stepId: String
+  /** the team's own channel, once it exists (a team can't hand work to itself) */
+  var channelId: String? = nil
   var close: () -> Void
   @State private var confirmDelete = false
 
@@ -339,7 +344,7 @@ struct StepEditor: View {
 
   @ViewBuilder private func askStep(_ step: ChannelTeam.Step) -> some View {
     Field(title: "Title") { TextRow(placeholder: "e.g. Approve before it ships", text: title, id: "step-title") }
-    Field(title: "What you see") { BigText(placeholder: "What should you see with the question?", text: text(\.show), id: "step-show") }
+    Field(title: "What you see") { BigText(placeholder: "What should you see with the question?", text: text(\.show), id: "step-show", limit: 2000) }
     inputsField(step, title: "Shows the result of")
     Field(title: "If you ask for changes") {
       StepMenu(team: team, candidates: earlier, selection: optional(\.sendBackTo), none: "Nowhere: it stops", id: "step-sendback")
@@ -354,12 +359,14 @@ struct StepEditor: View {
   // MARK: hand off
 
   @ViewBuilder private func handoffStep(_ step: ChannelTeam.Step) -> some View {
-    let teams = store.channels.filter { !$0.isDM && $0.archivedAt == nil && $0.settings?.team?.hasSteps != nil }
+    // not this team itself: the hub can't hand work to the team that is running it
+    let teams = store.channels.filter { $0.kind == "channel" && $0.archivedAt == nil && $0.id != channelId }
+    let target = teams.first { $0.id == step.handoffTo }
     Field(title: "Title") { TextRow(placeholder: "e.g. Tell support", text: title, id: "step-title") }
     Field(title: "Hand off to", note: teams.isEmpty ? "There are no other teams yet." : nil) {
       CardGroupInline {
         ForEach(teams) { t in
-          Button { team = team.updating(stepId) { $0.handoffTo = t.id } } label: {
+          Button { team = team.updating(stepId) { $0.handoffTo = t.id; if t.settings?.team?.hasSteps != true { $0.waitForReply = false } } } label: {
             HStack(spacing: 12) {
               Image(systemName: "person.2").font(.system(size: 17)).foregroundStyle(Palette.muted).frame(width: 28)
               Text(t.name).font(.system(size: 17)).foregroundStyle(Palette.text)
@@ -374,10 +381,13 @@ struct StepEditor: View {
       }
     }
     Field(title: "What it does") { BigText(placeholder: "Tell them what to do with it.", text: text(\.prompt), id: "step-prompt") }
-    Field(title: "Wait for their answer", note: step.waitForReply == true ? "The next step gets what they send back." : nil) {
-      Toggle("Wait for their answer", isOn: bind(\.waitForReply, false).wrapped(false))
-        .font(.system(size: 17)).padding(.horizontal, 18).frame(minHeight: 56)
-        .accessibilityIdentifier("step-wait")
+    // only a team with steps starts its own request that can be waited on; a plain team takes the work and that's all
+    if target == nil || target?.settings?.team?.hasSteps == true {
+      Field(title: "Wait for their answer", note: step.waitForReply == true ? "The next step gets what they send back." : nil) {
+        Toggle("Wait for their answer", isOn: bind(\.waitForReply, false).wrapped(false))
+          .font(.system(size: 17)).padding(.horizontal, 18).frame(minHeight: 56)
+          .accessibilityIdentifier("step-wait")
+      }
     }
     inputsField(step, title: "Hands over the result of")
     whenField(step)
@@ -410,9 +420,9 @@ struct StepEditor: View {
             Spacer()
           }
           .padding(.horizontal, 18)
-          TextRow(placeholder: "the words to look for", text: Binding(get: { rule.value }, set: { setRule(value: $0) }), id: "step-rule-value")
+          TextRow(placeholder: "the words to look for", text: Binding(get: { rule.value }, set: { setRule(value: $0) }), id: "step-rule-value", limit: 500)
         } else {
-          TextRow(placeholder: "e.g. every test passed", text: text(\.condition), id: "step-condition")
+          TextRow(placeholder: "e.g. every test passed", text: text(\.condition), id: "step-condition", limit: 500)
         }
       }
     }
@@ -531,7 +541,7 @@ struct StepEditor: View {
   }
 
   private func roleBinding(_ id: String, _ key: WritableKeyPath<ChannelTeam.Role, String>) -> Binding<String> {
-    Binding(get: { team.role(id)?[keyPath: key] ?? "" }, set: { v in setRole(id) { $0[keyPath: key] = v } })
+    Binding(get: { team.role(id)?[keyPath: key] ?? "" }, set: { v in setRole(id) { $0[keyPath: key] = String(v.prefix(key == \.name ? 60 : 4000)) } })
   }
 
   private func setRole(_ id: String, _ change: (inout ChannelTeam.Role) -> Void) {

@@ -89,9 +89,7 @@ struct AgentModelPage: View {
 
   /** Saves the model, and the effort and fast mode it supports (the others are dropped). */
   @MainActor static func save(_ agent: Agent, model: String, effort: String, fast: Bool, models: AgentModels?, store: Store) async throws {
-    var fields: Fields = ["model": .nullable(model)]
-    if let settings = models?.settings(model: model, effort: effort, fast: fast) { fields["settings"] = AnyEncodable(settings) }
-    try await store.updateAgent(agent.id, fields)
+    _ = try await store.updateAgent(agent.id, AgentModels.modelFields(models, model: model, effort: effort, fast: fast))
   }
 }
 

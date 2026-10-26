@@ -13,7 +13,7 @@ struct TeamEditSession: View {
 
   var body: some View {
     NavigationStack {
-      TeamBuilder(team: $team, name: channel.name, channelId: channel.id, saving: action.busy, error: action.error,
+      TeamBuilder(team: $team, name: channel.name, channelId: channel.id, canSaveTemplate: original.hasSteps && team == original, saving: action.busy, error: action.error,
         onBack: { if team == original { dismiss() } else { discarding = true } }, onDone: save)
     }
     .presentationBackground(Palette.ground)

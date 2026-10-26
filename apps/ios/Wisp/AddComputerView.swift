@@ -21,6 +21,8 @@ struct AddComputerView: View {
   @State private var orgoConfigured: Bool?
   @State private var busy = false
   @State private var error: String?
+  /** made already, when giving it to the agent failed (so trying again doesn't make another) */
+  @State private var made: Computer?
   @State private var more = false
 
   private var usable: [AgentNode] { ComputerAdd.usable(store.nodes) }
@@ -185,9 +187,21 @@ struct AddComputerView: View {
     Task {
       defer { busy = false }
       do {
-        let c = try await store.addComputer(request)
+        let c: Computer
+        if let made { c = made } else { c = try await store.addComputer(request); made = c }
         // the agent it was made for gets to use it
-        if !agentId.isEmpty { try? await store.updateAgent(agentId, ["computerId": AnyEncodable(c.id)]); await store.refreshComputers() }
+        if !agentId.isEmpty {
+          do {
+            _ = try await store.updateAgent(agentId, ["computerId": AnyEncodable(c.id)])
+          } catch {
+            // the computer exists; say the agent didn't get it, and stay so the person can see why
+            await store.refreshComputers()
+            let who = store.agent(agentId)?.name ?? "the agent"
+            self.error = "Created \(c.name), but couldn't give it to \(who): \(error.localizedDescription)"
+            return
+          }
+          await store.refreshComputers()
+        }
         dismiss()
         onCreated(c)
       } catch { self.error = error.localizedDescription }

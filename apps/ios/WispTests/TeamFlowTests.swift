@@ -365,4 +365,60 @@ final class TeamFlowTests: XCTestCase {
     XCTAssertTrue(t.steps.allSatisfy { $0.agentId == nil && $0.x == 0 })
     XCTAssertEqual(t.steps.map(\.id), ["plan", "research", "build", "approve"])
   }
+
+  // MARK: if/else arms (round 2)
+
+  private func branchTeam() -> ChannelTeam {
+    var q = step("q", kind: .branch, inputs: ["s"]); q.ifTrue = "x"; q.ifFalse = "end"; q.condition = "ok?"
+    return team([step("s", nexts: ["q"]), q, step("x", inputs: ["q"], nexts: ["c"]), step("c", inputs: ["x"]), step("end", inputs: ["q"])])
+  }
+
+  func testPlusBetweenRowsKeepsAnIfElseArm() {
+    var t = branchTeam()
+    t = t.insertingBetween(.init(id: "new", kind: .do, action: "New", agentId: "nova"), from: ["q"], to: ["x"])
+    XCTAssertEqual(t.step("q")?.ifTrue, "new")
+    XCTAssertEqual(t.step("q")?.ifFalse, "end")
+    XCTAssertEqual(t.step("new")?.nexts, ["x"])
+    assertConsistent(t)
+  }
+
+  func testDeletingAnIfElseTargetPassesTheArmOn() {
+    let t = branchTeam().removingStep("x")
+    XCTAssertEqual(t.step("q")?.ifTrue, "c")
+    XCTAssertEqual(t.step("c")?.inputs, ["q"])
+    XCTAssertNil(t.stepsProblem)
+    assertConsistent(t)
+  }
+
+  func testMovingAnIfElseTargetLeavesNoPlainArrowOutOfTheBranch() {
+    let t = branchTeam().moving("x", after: "end")
+    XCTAssertEqual(t.step("q")?.ifTrue, "x")
+    XCTAssertEqual(t.step("q")?.nexts?.sorted(), ["end", "x"])
+    XCTAssertEqual(t.step("x")?.inputs?.sorted(), ["end", "q"])
+    assertConsistent(t)
+  }
+
+  func testAPlainArrowOutOfAnIfElseFillsAnEmptyArm() {
+    var q = step("q", kind: .branch); q.ifTrue = "a"
+    var t = team([q, step("a", inputs: ["q"]), step("b")])
+    t = t.connecting("q", "b")
+    XCTAssertEqual(t.step("q")?.ifFalse, "b")
+    t = t.connecting("q", "q")
+    XCTAssertEqual(t.step("q")?.ifTrue, "a")
+  }
+
+  func testPlusAboveAJoinGoesThroughEveryInput() {
+    // A and B run together, C follows A, D joins B and C
+    var t = team([step("a", nexts: ["c"]), step("b", nexts: ["d"]), step("c", inputs: ["a"], nexts: ["d"]), step("d", inputs: ["b", "c"])])
+    t = t.insertingBetween(.init(id: "x", kind: .do, action: "X", agentId: "nova"), from: ["c"], to: ["d"])
+    XCTAssertEqual(t.step("x")?.inputs?.sorted(), ["b", "c"])
+    XCTAssertEqual(t.step("d")?.inputs, ["x"])
+    assertConsistent(t)
+  }
+
+  func testStepsAddedOnThePhoneGetADistinctPlaceOnTheChart() {
+    let t = team([step("a", nexts: ["b"]), step("b", inputs: ["a"])]).withChart
+    let spots = Set((t.steps ?? []).map { "\($0.x),\($0.y)" })
+    XCTAssertEqual(spots.count, 2)
+  }
 }

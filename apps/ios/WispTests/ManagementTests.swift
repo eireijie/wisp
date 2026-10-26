@@ -277,6 +277,7 @@ final class ManagementTests: XCTestCase {
     XCTAssertTrue((withCatalog["settings"] as? [String: Any])?["effort"] is NSNull || (withCatalog["settings"] as? [String: Any])?["effort"] as? String == "")
     let without = try json(AgentModels.modelFields(nil, model: "", effort: "", fast: false))
     XCTAssertNotNil(without["settings"])
+    XCTAssertEqual((without["settings"] as? [String: Any])?["fast"] as? Bool, false)
   }
 
   func testSlowHarnessRequestsKeepDefaultTimeoutForOtherCalls() async throws {

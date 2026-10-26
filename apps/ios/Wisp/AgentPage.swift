@@ -118,7 +118,7 @@ struct AgentPage: View {
         .accessibilityAction { if store.canManage { editingLook = true } }
       Text(current.name).font(.system(size: 26, weight: .bold)).foregroundStyle(Palette.text).accessibilityAddTraits(.isHeader)
       Text("@\(current.handle) · \(HarnessChoice.label(current.harness))").font(.system(size: 15)).foregroundStyle(Palette.faint)
-      if let description = current.settings?.description ?? current.settings?.roleNotes, !description.isEmpty {
+      if let description = current.settings?.role ?? current.settings?.roleNotes, !description.isEmpty {
         Text(description).font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineLimit(3).padding(.horizontal, 18)
       }
       HStack(spacing: 10) {

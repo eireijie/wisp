@@ -162,7 +162,7 @@ final class AgentProfileTests: XCTestCase {
     for template in AgentTemplate.all {
       XCTAssertFalse(template.does.isEmpty)
       XCTAssertTrue(template.instructions.contains("## "))
-      XCTAssertLessThanOrEqual(template.does.count, 200)
+      XCTAssertLessThanOrEqual(template.does.count, 60)
     }
   }
 

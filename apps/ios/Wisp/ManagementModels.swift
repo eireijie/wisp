@@ -66,7 +66,7 @@ struct AgentModels: Decodable {
   static func modelFields(_ models: AgentModels?, model: String, effort: String, fast: Bool) -> Fields {
     var fields: Fields = ["model": .nullable(model)]
     if let settings = models?.settings(model: model, effort: effort, fast: fast) { fields["settings"] = AnyEncodable(settings) }
-    else if model.isEmpty && effort.isEmpty { fields["settings"] = AnyEncodable(["effort": AnyEncodable.nullable("")]) }
+    else if model.isEmpty && effort.isEmpty { fields["settings"] = AnyEncodable(["effort": AnyEncodable.nullable(""), "fast": AnyEncodable(fast)]) }
     return fields
   }
 }
@@ -115,6 +115,12 @@ enum ManagementText {
     String(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "[^a-z0-9_-]+", with: "-", options: .regularExpression)
       .trimmingCharacters(in: CharacterSet(charactersIn: "-")).prefix(80))
+  }
+
+  /** What a handle field keeps while typing: a trailing dash stays so `release-bot` can be typed. */
+  static func typingHandle(_ text: String) -> String {
+    String(text.lowercased().replacingOccurrences(of: "[^a-z0-9-]+", with: "-", options: .regularExpression)
+      .replacingOccurrences(of: "^[^a-z]+", with: "", options: .regularExpression).prefix(32))
   }
 
   static func handle(_ text: String) -> String {

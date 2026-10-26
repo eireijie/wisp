@@ -58,6 +58,8 @@ struct TeamBuilder: View {
   var name: String
   /** the team's channel once it exists (to save it as a template) */
   var channelId: String? = nil
+  /** the template saves the team as the hub has it, so not while there are changes that aren't saved */
+  var canSaveTemplate = true
   var saving = false
   /** what the hub said when saving didn't work */
   var error: String? = nil
@@ -71,6 +73,7 @@ struct TeamBuilder: View {
   @State private var naming = false
   @State private var templateName = ""
   @State private var action = FormAction()
+  @State private var savedTemplate = false
 
   private var steps: [ChannelTeam.Step] { team.steps ?? [] }
   private var problems: [String] { team.stepsProblems }
@@ -79,14 +82,14 @@ struct TeamBuilder: View {
     ZStack {
       Palette.ground.ignoresSafeArea()
       VStack(spacing: 0) {
-        topBar
+        topBar.managementAlert(action)
         if steps.isEmpty { emptyState } else if tab == .steps { canvas } else { TeamHowList(team: team) { tab = .steps } }
       }
       if saving { SavingOverlay() }
     }
     .navigationBarHidden(true)
     .sheet(item: $editing) { ref in
-      StepEditor(team: $team, stepId: ref.id) { editing = nil }
+      StepEditor(team: $team, stepId: ref.id, channelId: channelId) { editing = nil }
         .presentationDetents([.large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
     }
     .sheet(item: $adding) { request in
@@ -109,7 +112,8 @@ struct TeamBuilder: View {
       Button("Save") {
         let clean = String(templateName.trimmingCharacters(in: .whitespaces).prefix(60))
         guard let channelId, !clean.isEmpty else { return }
-        action.run { try await store.saveTeamTemplate(channelId: channelId, name: clean) }
+        savedTemplate = false
+        action.run { try await store.saveTeamTemplate(channelId: channelId, name: clean); savedTemplate = true }
       }
       Button("Cancel", role: .cancel) {}
     } message: { Text("Anyone here can start a team from it. Who does each step is left out.") }
@@ -134,13 +138,13 @@ struct TeamBuilder: View {
           .disabled(saving)
       }
       HStack {
-        Text(name).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+        Text(savedTemplate ? "Saved as a template" : name).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
         Spacer()
         if !steps.isEmpty {
           Menu {
             Button("Reorder steps", systemImage: "arrow.up.arrow.down") { reordering = true }
             Button("Start from a template", systemImage: "square.grid.2x2") { templates = true }
-            if channelId != nil { Button("Save as template", systemImage: "square.and.arrow.down") { naming = true } }
+            if channelId != nil && canSaveTemplate { Button("Save as template", systemImage: "square.and.arrow.down") { naming = true } }
           } label: {
             HStack(spacing: 4) {
               Text("\(steps.count) \(steps.count == 1 ? "step" : "steps")")
@@ -245,6 +249,7 @@ struct TeamBuilder: View {
   // MARK: adding
 
   private func add(_ kind: AddKind, request: AddRequest, anchor: String?) {
+    // between two rows, "after" is the row above (the sheet's own pick only applies to "Add a step")
     let anchor = anchor ?? request.after ?? request.from.last
     let fresh = newStep(kind, anchor: anchor)
     var next = team
@@ -290,9 +295,18 @@ extension ChannelTeam {
     new.inputs = []; new.nexts = []; new.next = nil
     var team = appending(new)
     let live = to.filter { self.step($0) != nil }
-    for a in from where self.step(a) != nil {
+    // what leads into `to` is what goes through the new step (not just the row drawn above it, which can miss a join's other inputs)
+    var sources = from
+    if !live.isEmpty && !from.isEmpty {
+      sources = []
+      for b in live { for i in self.step(b)?.inputIds ?? [] where !sources.contains(i) { sources.append(i) } }
+    }
+    for a in sources {
+      guard let src = self.step(a) else { continue }
+      // an if/else's Yes and No live on the step, so cutting its arrow clears them: they go to the new step instead
+      let arms = live.flatMap { Array(src.arms(to: $0)) }
       for b in live { team = team.disconnecting(a, b) }
-      team = team.connecting(a, new.id)
+      team = team.connecting(a, new.id, arms: arms)
     }
     for b in live { team = team.connecting(new.id, b) }
     return team

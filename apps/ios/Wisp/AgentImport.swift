@@ -118,8 +118,9 @@ private struct ImportDetails: View {
   @State private var action = FormAction()
 
   private var node: AgentNode? { store.nodes.first { $0.id == pick.device.id } }
-  private var taken: Bool { store.agents.contains { $0.handle == handle } }
-  private var valid: Bool { handle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !taken }
+  private var finalHandle: String { ManagementText.handle(handle) }
+  private var taken: Bool { store.agents.contains { $0.handle == finalHandle } }
+  private var valid: Bool { finalHandle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !taken }
 
   var body: some View {
     AgentFrame(title: "Bring in", subtitle: pick.found.name) {
@@ -129,7 +130,7 @@ private struct ImportDetails: View {
         RowLabel(title: "Found on", value: pick.device.name, chevron: false)
       }
       if !pick.found.summary.isEmpty { CardCaption(pick.found.summary) }
-      FieldCard(label: "Handle", text: Binding(get: { handle.isEmpty ? "" : "@" + handle }, set: { handle = ManagementText.handle($0.replacingOccurrences(of: "@", with: "")) }), prompt: "@handle", lowercase: true)
+      FieldCard(label: "Handle", text: Binding(get: { handle.isEmpty ? "" : "@" + handle }, set: { handle = ManagementText.typingHandle($0.replacingOccurrences(of: "@", with: "")) }), prompt: "@handle", lowercase: true)
       if taken { AgentError(text: "@\(handle) is taken.") }
       CardCaption("Its soul, instructions and notes are copied into Wisp's memory. \(pick.found.path)")
       CardCaption("Computer")
@@ -158,7 +159,7 @@ private struct ImportDetails: View {
     action.run {
       let computerId = try await choice.resolve(nodeId: pick.device.id, agentName: pick.found.name, store: store)
       var fields: Fields = [
-        "nodeId": AnyEncodable(pick.device.id), "key": AnyEncodable(pick.found.key), "handle": AnyEncodable(handle),
+        "nodeId": AnyEncodable(pick.device.id), "key": AnyEncodable(pick.found.key), "handle": AnyEncodable(finalHandle),
         "computerId": computerId.map { AnyEncodable($0) } ?? .null, "headless": AnyEncodable(choice == .headless),
       ]
       if choice.vmOnDevice(pick.device.id, computers: store.computers) || computerId.map({ id in store.computers.contains { $0.id == id && $0.kind == "vm" && $0.nodeId == pick.device.id } }) == true,

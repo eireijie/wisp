@@ -17,10 +17,11 @@ struct AgentEditSheet: View {
   @State private var action = FormAction()
 
   private var current: Agent { store.agent(agent.id) ?? agent }
-  private var handleTaken: Bool { store.agents.contains { $0.handle == handle && $0.id != current.id } }
-  private var handleValid: Bool { handle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil }
+  private var finalHandle: String { ManagementText.handle(handle) }
+  private var handleTaken: Bool { store.agents.contains { $0.handle == finalHandle && $0.id != current.id } }
+  private var handleValid: Bool { finalHandle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil }
   private var valid: Bool { !name.trimmed.isEmpty && name.count <= 80 && handleValid && !handleTaken }
-  private var changed: Bool { name.trimmed != current.name || handle != current.handle }
+  private var changed: Bool { name.trimmed != current.name || finalHandle != current.handle }
 
   var body: some View {
     NavigationStack {
@@ -30,8 +31,8 @@ struct AgentEditSheet: View {
           SmallPill(title: "Edit look", symbol: "paintpalette", id: "edit-look") { editingLook = true }
         }.frame(maxWidth: .infinity).padding(.vertical, 4)
         FieldCard(label: "Display name", text: $name, prompt: current.name)
-        FieldCard(label: "Handle", text: Binding(get: { handle.isEmpty ? "" : "@" + handle }, set: { handle = ManagementText.handle($0.replacingOccurrences(of: "@", with: "")) }), prompt: "@handle", lowercase: true)
-        if handleTaken { AgentError(text: "@\(handle) is taken. Pick another.") }
+        FieldCard(label: "Handle", text: Binding(get: { handle.isEmpty ? "" : "@" + handle }, set: { handle = ManagementText.typingHandle($0.replacingOccurrences(of: "@", with: "")) }), prompt: "@handle", lowercase: true)
+        if handleTaken { AgentError(text: "@\(finalHandle) is taken. Pick another.") }
         else if !handle.isEmpty && !handleValid { AgentError(text: "Start with a letter a to z. Use letters, numbers and dashes.") }
         else { CardCaption("Letters a to z. Teammates type this to mention it.") }
         CardGroup {
@@ -49,9 +50,8 @@ struct AgentEditSheet: View {
         }
         AgentError(text: action.error)
         PillButton(title: "Save", busy: action.busy, id: "edit-save") { save() }
-          .disabled(!valid || action.busy)
+          .disabled(!valid || action.busy || !store.canManage)
       }
-      .disabled(!store.canManage)
       .sheet(isPresented: $editingLook) { LookEditor(agent: current) }
       .sheet(isPresented: $voiceSheet) { AgentVoiceSheet(agent: current) }
     }
@@ -82,7 +82,7 @@ struct AgentEditSheet: View {
     action.run {
       var fields: Fields = [:]
       if name.trimmed != current.name { fields["name"] = AnyEncodable(name.trimmed) }
-      if handle != current.handle { fields["handle"] = AnyEncodable(handle) }
+      if finalHandle != current.handle { fields["handle"] = AnyEncodable(finalHandle) }
       if !fields.isEmpty { _ = try await store.updateAgent(current.id, fields) }
       dismiss()
     }
@@ -191,14 +191,18 @@ struct AgentInstructionsPage: View {
 
   var body: some View {
     AgentFrame(title: "Instructions", subtitle: current.name) {
-      FieldCard(label: "Role", text: $role, prompt: "Release manager")
-      FieldCard(label: "What the role covers", text: $roleNotes, prompt: "What it is in charge of", lines: 2...8)
-      FlowLayout(spacing: 8) {
-        ForEach(AgentEditText.snippets, id: \.self) { snippet in
-          AgentChip(title: snippet, symbol: "plus") { text = AgentEditText.insert(snippet, into: text) }
+      // only the fields are disabled, so a guest can still go back
+      Group {
+        FieldCard(label: "Role", text: $role, prompt: "Release manager")
+        FieldCard(label: "What the role covers", text: $roleNotes, prompt: "What it is in charge of", lines: 2...8)
+        FlowLayout(spacing: 8) {
+          ForEach(AgentEditText.snippets, id: \.self) { snippet in
+            AgentChip(title: snippet, symbol: "plus") { text = AgentEditText.insert(snippet, into: text) }
+          }
         }
+        FieldCard(label: "Instructions", text: $text, prompt: "What should it do, and how?", lines: 6...30)
       }
-      FieldCard(label: "Instructions", text: $text, prompt: "What should it do, and how?", lines: 6...30)
+      .disabled(!store.canManage)
       CardCaption("@\(current.handle)'s job: what it's responsible for, how it should work, and who to hand things to. Sent with every request.")
       AgentError(text: action.error)
       PillButton(title: "Save", busy: action.busy, id: "instructions-save") {
@@ -211,9 +215,8 @@ struct AgentInstructionsPage: View {
           _ = try await store.updateAgent(current.id, fields)
           dismiss()
         }
-      }.disabled(action.busy || text.count > 20000 || role.count > 80)
+      }.disabled(!store.canManage || action.busy || text.count > 20000 || role.count > 60)
     }
-    .disabled(!store.canManage)
     .onAppear {
       guard !loaded else { return }
       role = current.settings?.role ?? ""; roleNotes = current.settings?.roleNotes ?? ""; text = current.instructions ?? ""; loaded = true
