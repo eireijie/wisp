@@ -221,6 +221,22 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
             <ChevronLeft size={16} strokeWidth={2.4} aria-hidden /> Back to app
           </a>
           {list}
+          {/* the pages that aren't on the rail */}
+          <nav className="space-y-px border-t border-line pt-3" aria-label="Go to">
+            {[
+              { label: "Memory", to: href({ view: "vault", path: null }), show: true },
+              { label: "Marketplace", to: href({ view: "marketplace" }), show: true },
+              { label: "Tasks", to: href({ view: "tasks" }), show: features.tasks },
+              { label: "About you", to: href({ view: "about" }), show: true },
+              { label: "Help", to: href({ view: "help" }), show: true },
+            ]
+              .filter((l) => l.show)
+              .map((l) => (
+                <a key={l.label} href={l.to} className="flex items-center h-[34px] px-2.5 rounded-lg text-sm font-medium text-ink/80 hover:text-ink hover:bg-side-hover">
+                  {l.label}
+                </a>
+              ))}
+          </nav>
         </aside>
         <main className="flex-1 min-w-0 flex flex-col bg-panel rounded-3xl border border-line shadow-panel overflow-hidden" aria-label={label ? `${label} settings` : "Settings"}>
           {body(current!)}

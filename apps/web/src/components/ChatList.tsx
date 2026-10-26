@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { BellOff, Check, ChevronDown, Pin, Plus, Search, Users, X } from "lucide-react";
+import { BellOff, Check, ChevronDown, FolderPlus, Ghost, MessageSquarePlus, Pin, Plus, Search, Users, X } from "lucide-react";
 import type { Agent, Section } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, useTeams, usePrefs, type ChannelInfo } from "../store.ts";
@@ -74,7 +74,7 @@ export function ChatAvatar({ chat, size }: { chat: Pick<Chat, "kind" | "agent" |
         <AgentAvatar agent={members[0]} size={small} interactive={false} />
       </span>
       {members[1] && (
-        <span className="absolute right-0 bottom-0 rounded-full" style={{ filter: "drop-shadow(0 0 0 var(--panel))" }}>
+        <span className="absolute right-0 bottom-0 rounded-full" style={{ filter: "drop-shadow(1.5px 0 0 var(--panel)) drop-shadow(-1.5px 0 0 var(--panel)) drop-shadow(0 1.5px 0 var(--panel)) drop-shadow(0 -1.5px 0 var(--panel))" }}>
           <AgentAvatar agent={members[1]} size={small} interactive={false} />
         </span>
       )}
@@ -166,10 +166,10 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
         </button>
       )}
       items={[
-        { label: "New chat", icon: <Plus size={18} strokeWidth={1.8} />, onSelect: () => useStore.setState({ newChatOpen: true }) },
-        ...(!isGuest ? [{ label: "New agent", icon: <Plus size={18} strokeWidth={1.8} />, onSelect: startNewAgent }] : []),
+        { label: "New chat", icon: <MessageSquarePlus size={18} strokeWidth={1.8} />, onSelect: () => useStore.setState({ newChatOpen: true }) },
+        ...(!isGuest ? [{ label: "New agent", icon: <Ghost size={18} strokeWidth={1.8} />, onSelect: startNewAgent }] : []),
         ...(!isGuest ? [{ label: "New team", icon: <Users size={18} strokeWidth={1.8} />, onSelect: () => useStore.setState({ channelBrowser: { sectionId: null, create: true } }) }] : []),
-        ...(!isGuest ? [{ label: "New section", icon: <ChevronDown size={18} strokeWidth={1.8} />, onSelect: () => setEditing("new") }] : []),
+        ...(!isGuest ? [{ label: "New section", icon: <FolderPlus size={18} strokeWidth={1.8} />, onSelect: () => setEditing("new") }] : []),
       ]}
     />
   );

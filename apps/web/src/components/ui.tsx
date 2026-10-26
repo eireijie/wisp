@@ -322,7 +322,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
       })}
       {open &&
         createPortal(
-          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="glass z-[100] min-w-48 rounded-2xl p-1.5">
+          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="glass z-[100] min-w-56 rounded-[22px] p-1.5">
             {items.map((it, i) =>
               it === "divider" ? (
                 <div key={i} className="-mx-1 my-1 h-px bg-line" />
@@ -334,9 +334,9 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
                     setOpen(false);
                     it.onSelect();
                   }}
-                  className={cx("w-full px-2.5 py-1.5 min-h-9 rounded-xl flex items-start gap-2 text-sm text-left hover:bg-hover", it.danger && "text-bad")}
+                  className={cx("w-full px-3 py-2 min-h-11 rounded-xl flex items-center gap-3 text-[15px] text-left hover:bg-hover", it.danger && "text-bad")}
                 >
-                  {it.icon && <span className="shrink-0 mt-0.5">{it.icon}</span>}
+                  {it.icon && <span className={cx("shrink-0", !it.danger && "text-muted")}>{it.icon}</span>}
                   <span className="min-w-0 break-words">{it.label}</span>
                 </button>
               ),

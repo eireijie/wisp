@@ -145,8 +145,13 @@ export function CommandPalette() {
         location.hash = target;
       }
     };
+    const close = () => useStore.getState().paletteOpen && setOpen(false);
     window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
+    window.addEventListener("hashchange", close);
+    return () => {
+      window.removeEventListener("keydown", k);
+      window.removeEventListener("hashchange", close);
+    };
   }, [setOpen]);
 
   const [newOrg, setNewOrg] = useState(false);
@@ -266,6 +271,11 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
     return out;
   }, [q, results, channels, agents, members, teams, guest, features, onNewOrg]);
 
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
   useEffect(() => {
     setSel(0);
   }, [rows.length, q]);

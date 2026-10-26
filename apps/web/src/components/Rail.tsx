@@ -33,7 +33,7 @@ export function UserAvatarButton({ size = 44, desktop }: { size?: number; deskto
   const { orgs } = useOrgs();
   const elsewhere = orgs.some((o) => o.unread && !o.current && o.id !== me.workspace.id);
   return (
-    <a href={desktop ? href({ view: "settings", page: null }) : href({ view: "you" })} aria-label="You and settings" title="You and settings" className="circle relative font-semibold text-[#c7c7cc]" style={{ width: size, height: size, fontSize: size * 0.3 }}>
+    <a href={desktop ? href({ view: "settings", page: null }) : href({ view: "you" })} aria-label="You and settings" title="You and settings" className="circle relative font-semibold text-ink/85" style={{ width: size, height: size, fontSize: size * 0.3 }}>
       {initialsOf(me.user.name)}
       {elsewhere && <span className="absolute right-0 bottom-0 size-3 rounded-full bg-badge border-2 border-app" aria-label="New messages in another organization" />}
     </a>
