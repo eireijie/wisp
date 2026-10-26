@@ -88,7 +88,7 @@ struct MemoryHome: View {
         Button("Obsidian and storage", systemImage: "arrow.triangle.2.circlepath") { route = .storage }
       }
     }) {
-      Text("What your team remembers").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text).padding(.horizontal, 4)
+      Text("What your team remembers").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 4)
       if let agent = viewingAgent { ViewingBanner(agent: agent) { browse.viewAs = nil } }
       InlineError(error: action.error).padding(.horizontal, 4)
       MemorySearchField(prompt: "Search every note…", text: $query, id: "memory-search")
@@ -145,9 +145,9 @@ struct MemoryHome: View {
       ForEach(shownHits) { note in
         NavigationLink { NoteView(path: note.path) } label: {
           VStack(alignment: .leading, spacing: 3) {
-            Text(note.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
-            Text(store.placeName(note.path)).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
-            if let snippet = note.snippet { Text(plain(snippet)).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(2) }
+            Text(note.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+            Text(store.placeName(note.path)).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
+            if let snippet = note.snippet { Text(plain(snippet)).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(2) }
           }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 12).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("note-row")
       }
@@ -201,9 +201,10 @@ struct MemoryHome: View {
               GraphCanvas(graph: graph, positions: browse.positions, camera: $camera, selected: nil, interactive: false, onSize: { camera = GraphCamera.fit(browse.positions.values.map { $0 }, in: $0, pad: 16) })
                 .id(browse.positions.count)
             } else { ProgressView() }
-          }.frame(height: 170).frame(maxWidth: .infinity).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+          }.frame(height: 170).frame(maxWidth: .infinity).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
           Text("See how every note links together").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.muted)
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       }.buttonStyle(.plain).accessibilityIdentifier("memory-graph-link")
       let hubs = graph.mostLinked()
       if !hubs.isEmpty {
@@ -236,11 +237,11 @@ struct ViewingBanner: View {
       AgentAvatar(agent: agent, size: 28, showStatus: false)
       Text("Viewing as @\(agent.handle). Only the notes it can read are listed.").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color(light: 0x0B3D8F, dark: 0xDCE9FF)).fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 4)
-      Button(action: stop) { Text("Stop").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 18).frame(height: 40).background(Capsule().fill(Palette.text)) }
+      Button(action: stop) { Text("Stop").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 18).frame(height: 40).background(Capsule().fill(Palette.text)) }
         .buttonStyle(.plain).accessibilityIdentifier("memory-view-as-stop")
     }
     .padding(.horizontal, 14).padding(.vertical, 10)
-    .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(light: 0xDCE9FF, dark: 0x1F3A66)))
+    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(light: 0xDCE9FF, dark: 0x1F3A66)))
   }
 }
 
@@ -258,7 +259,7 @@ struct ViewAsSheet: View {
       SheetHeader(title: "View memory as") { dismiss() }
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          Text("See memory the way an agent does. Only the notes it can read are listed.").font(.system(size: 16)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+          Text("See memory the way an agent does. Only the notes it can read are listed.").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
           SectionCaption("Helper")
           CardGroup {
             Button { pick = "" } label: {
@@ -267,7 +268,7 @@ struct ViewAsSheet: View {
             }.buttonStyle(.plain).foregroundStyle(Palette.text)
             ForEach(store.agents) { agent in
               Button { pick = "agent:\(agent.id)" } label: {
-                HStack(spacing: 12) { AgentAvatar(agent: agent, size: 40, showStatus: false); Text(agent.name).font(.system(size: 17)); Spacer(); RadioMark(on: pick == "agent:\(agent.id)") }
+                HStack(spacing: 12) { AgentAvatar(agent: agent, size: 40, showStatus: false); Text(agent.name).font(.system(size: 15)); Spacer(); RadioMark(on: pick == "agent:\(agent.id)") }
                   .padding(.horizontal, 18).frame(minHeight: 62).contentShape(Rectangle())
               }.buttonStyle(.plain).foregroundStyle(Palette.text).accessibilityIdentifier("view-as-\(agent.handle)")
             }
@@ -275,10 +276,11 @@ struct ViewAsSheet: View {
           if let agent = store.agents.first(where: { "agent:\($0.id)" == pick }) {
             SectionCaption("Result")
             VStack(alignment: .leading, spacing: 6) {
-              if let readable { Text("\(agent.name) can read \(readable) of \(store.notes.count) notes").font(.system(size: 17, weight: .bold)).foregroundStyle(Palette.text) }
+              if let readable { Text("\(agent.name) can read \(readable) of \(store.notes.count) notes").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.text) }
               else { ProgressView() }
               Text("The notes it can't read stay hidden while you look.").font(.system(size: 15)).foregroundStyle(Palette.muted)
             }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           }
         }.padding(.horizontal, 18).padding(.top, 6)
       }

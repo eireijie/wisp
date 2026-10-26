@@ -39,7 +39,7 @@ function Rounds({ value, onChange, note }: { value: number; onChange: (n: number
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1">
           <span className="block text-xs text-muted">Most rounds</span>
-          <span className="block text-[15px] tabular-nums">
+          <span className="block text-body tabular-nums">
             {value} {value === 1 ? "round" : "rounds"}
           </span>
         </span>
@@ -207,18 +207,18 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
                     ))}
                   </select>
                 </label>
-                <input aria-label="The words to look for" value={step.rule.value} onChange={(e) => setRule({ value: e.target.value })} placeholder="the words to look for" className="block w-full bg-transparent text-[15px] outline-none placeholder:text-faint" />
+                <input aria-label="The words to look for" value={step.rule.value} onChange={(e) => setRule({ value: e.target.value })} placeholder="the words to look for" className="block w-full bg-transparent text-body outline-none placeholder:text-faint" />
               </div>
             ) : (
-              <input aria-label="What it checks" value={step.condition ?? ""} onChange={(e) => set({ condition: e.target.value })} placeholder="e.g. every test passed" maxLength={300} className="mt-2 block w-full bg-transparent text-[15px] outline-none placeholder:text-faint" />
+              <input aria-label="What it checks" value={step.condition ?? ""} onChange={(e) => set({ condition: e.target.value })} placeholder="e.g. every test passed" maxLength={300} className="mt-2 block w-full bg-transparent text-body outline-none placeholder:text-faint" />
             )}
           </FieldBox>
           {!step.rule && <AgentField label="Decided by" value={agentValue} onChange={(agentId) => set({ agentId })} note="An agent reads the result and answers yes or no." />}
-          <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+          <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
             {([true, false] as const).map((yes) => (
               <label key={String(yes)} className="relative flex items-center gap-3 px-4 py-2.5">
-                <span className="w-9 text-[15px] font-semibold">{yes ? "Yes" : "No"}</span>
-                <span className="min-w-0 flex-1 truncate text-[15px]">{stepText(yes ? step.ifTrue : step.ifFalse, "The end")}</span>
+                <span className="w-9 text-body font-medium">{yes ? "Yes" : "No"}</span>
+                <span className="min-w-0 flex-1 truncate text-body">{stepText(yes ? step.ifTrue : step.ifFalse, "The end")}</span>
                 <select aria-label={yes ? "If yes, go to" : "If no, go to"} value={(yes ? step.ifTrue : step.ifFalse) ?? "__end"} onChange={(e) => setBranch(yes, e.target.value === "__end" ? null : e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
                   <option value="__end">The end</option>
                   {others.map((s) => (
@@ -241,7 +241,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
           <TextBox label="What it does" value={step.prompt ?? ""} onChange={(v) => set({ prompt: v })} placeholder="Split the work into pieces and say who gets each one." rows={4} maxLength={4000} />
           <div className="space-y-1.5">
             <span className="block px-2 text-xs text-muted">Pieces go to</span>
-            <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+            <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
               {(team.roles ?? []).map((r) => {
                 const on = (step.handTo ?? []).includes(r.id);
                 const a = agents.find((x) => x.id === r.agentId);
@@ -251,7 +251,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
                       <button type="button" role="checkbox" aria-checked={on} aria-label={`${r.name}, ${on ? "on" : "off"}`} onClick={() => set({ handTo: on ? (step.handTo ?? []).filter((x) => x !== r.id) : [...(step.handTo ?? []), r.id] })} className={cx("grid size-[22px] shrink-0 place-items-center rounded-full", on ? "bg-info text-white" : "border border-input")}>
                         {on && <Check size={13} strokeWidth={3} />}
                       </button>
-                      <input aria-label="Role name" value={r.name} onChange={(e) => setRole(r.id, { name: e.target.value })} maxLength={60} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none" />
+                      <input aria-label="Role name" value={r.name} onChange={(e) => setRole(r.id, { name: e.target.value })} maxLength={60} className="min-w-0 flex-1 bg-transparent text-body outline-none" />
                       <label className="relative inline-flex items-center gap-1.5 text-[13px] text-muted">
                         {a ? <AgentAvatar agent={a} size={22} interactive={false} /> : null}
                         <span className={cx(!a && "text-bad")}>{a?.name ?? "Pick an agent"}</span>
@@ -270,7 +270,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
                   </div>
                 );
               })}
-              <button type="button" onClick={addRole} className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-[15px] hover:bg-hover">
+              <button type="button" onClick={addRole} className="flex w-full items-center gap-2 px-3.5 py-3 text-left text-body hover:bg-hover">
                 <Plus size={16} aria-hidden /> Add a role
               </button>
             </div>
@@ -291,7 +291,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
             options={(Object.keys(KIND_NAME) as TeamStepKind[]).map((k) => ({ value: k, label: KIND_NAME[k] }))}
             onPick={(k) => onChange(retype(team, stepId, k as TeamStepKind, agents))}
           />
-          <button type="button" onClick={onDelete} className="flex h-12 w-full items-center justify-center gap-2 rounded-[18px] border border-line bg-card text-[15px] text-bad hover:bg-hover">
+          <button type="button" onClick={onDelete} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-card text-body text-bad hover:bg-hover">
             <Trash2 size={16} aria-hidden /> Delete step
           </button>
           <p className="px-2 text-xs text-faint">What led to it will lead to what came after it.</p>
@@ -304,7 +304,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
 export function Toggle({ label, on, onChange, note }: { label: string; on: boolean; onChange: (on: boolean) => void; note?: string }) {
   return (
     <FieldBox note={note}>
-      <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className="flex w-full items-center justify-between gap-3 py-1 text-left text-[15px]">
+      <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className="flex w-full items-center justify-between gap-3 py-1 text-left text-body">
         {label}
         <span className={cx("relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors", on ? "bg-ok" : "bg-input")}>
           <span className={cx("absolute top-[3px] size-5 rounded-full bg-white shadow transition-all", on ? "left-[21px]" : "left-[3px]")} />
@@ -319,9 +319,9 @@ function HandoffTeams({ value, onPick, except, channels }: { value: string | nul
   return (
     <div className="space-y-1.5">
       <span className="block px-2 text-xs text-muted">Hand off to</span>
-      <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+      <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
         {teams.map((t) => (
-          <button key={t.id} type="button" role="radio" aria-checked={value === t.id} onClick={() => onPick(t.id)} className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-[15px] hover:bg-hover">
+          <button key={t.id} type="button" role="radio" aria-checked={value === t.id} onClick={() => onPick(t.id)} className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-body hover:bg-hover">
             <span className="min-w-0 flex-1 truncate">{t.name}</span>
             {value === t.id && <Check size={16} className="text-info" aria-hidden />}
           </button>

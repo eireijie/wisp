@@ -292,7 +292,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
   let lastGroup = "";
   return (
     <div className="fixed inset-0 z-50 bg-panel md:bg-black/45 md:flex md:items-start md:justify-center md:p-3 md:pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Search everything" className="h-full md:h-auto w-full md:max-w-[620px] flex flex-col overflow-hidden bg-panel md:bg-card md:rounded-[24px] md:border md:border-control-line md:shadow-[0_24px_60px_rgb(0_0_0/0.5)] safe-top">
+      <div role="dialog" aria-modal="true" aria-label="Search everything" className="h-full md:h-auto w-full md:max-w-[620px] flex flex-col overflow-hidden bg-panel md:bg-card md:rounded-xl md:border md:border-control-line md:shadow-[0_24px_60px_rgb(0_0_0/0.5)] safe-top">
         <div className="flex items-center gap-3 px-[18px] md:px-4 pt-3 md:pt-0 pb-2 md:pb-0 md:h-[60px] md:border-b md:border-line">
           <label className="flex-1 min-w-0 flex items-center gap-2.5 h-[46px] md:h-auto rounded-full bg-card md:bg-transparent px-4 md:px-0 text-faint">
             <Search size={18} strokeWidth={2} className="shrink-0" />
@@ -306,7 +306,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search or create…"
-              className="flex-1 min-w-0 bg-transparent outline-none text-base md:text-[16px] md:h-14 text-ink placeholder:text-faint"
+              className="flex-1 min-w-0 bg-transparent outline-none text-base md:text-[14px] md:h-14 text-ink placeholder:text-faint"
               onKeyDown={(e) => {
                 if (e.key === "Escape") onClose();
                 if (e.key === "ArrowDown") (e.preventDefault(), setSel((s) => Math.min(s + 1, rows.length - 1)));
@@ -327,7 +327,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
             return (
               <div key={r.key} role="presentation">
                 {header && (
-                  <div role="presentation" className="px-3 pt-3.5 pb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">
+                  <div role="presentation" className="px-3 pt-3.5 pb-1.5 text-xs font-medium uppercase tracking-wide text-faint">
                     {header}
                   </div>
                 )}
@@ -340,7 +340,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
                   data-index={i}
                   onMouseMove={() => setSel(i)}
                   onClick={() => choose(r)}
-                  className={cx("w-full px-3 flex items-center gap-3 text-[15px] text-left rounded-xl", r.sub ? "py-2 min-h-[52px]" : "min-h-11", i === sel && "bg-hover")}
+                  className={cx("w-full px-3 flex items-center gap-3 text-body text-left rounded-xl", r.sub ? "py-2 min-h-[52px]" : "min-h-11", i === sel && "bg-hover")}
                 >
                   <span className="text-muted shrink-0 grid place-items-center w-5">{r.icon}</span>
                   <span className="min-w-0 flex-1">

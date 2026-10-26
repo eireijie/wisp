@@ -148,7 +148,7 @@ struct AccessView: View {
       ToggleRow(title: "Talk to your agents from their apps", isOn: Binding(get: { origin != nil }, set: { on in toggle(on) }), id: "access-apps").disabled(action.busy || info == nil)
       if let origin {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Remote address").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text("Remote address").font(.system(size: 13)).foregroundStyle(Palette.faint)
           Text("\(origin)/mcp").font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 12)
         Button { UIPasteboard.general.string = "\(origin)/mcp" } label: { RowLabel(title: "Copy address", chevron: false) }.buttonStyle(.plain)
@@ -162,8 +162,8 @@ struct AccessView: View {
         ForEach(clients) { client in
           HStack {
             VStack(alignment: .leading, spacing: 2) {
-              Text(client.name).font(.system(size: 17)).foregroundStyle(Palette.text)
-              if let agent = client.agentName { Text("acts as \(agent)").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+              Text(client.name).font(.system(size: 15)).foregroundStyle(Palette.text)
+              if let agent = client.agentName { Text("acts as \(agent)").font(.system(size: 13)).foregroundStyle(Palette.faint) }
             }
             Spacer()
             Button("Disconnect") { removing = client }.buttonStyle(.pill(.secondary, small: true)).disabled(action.busy)

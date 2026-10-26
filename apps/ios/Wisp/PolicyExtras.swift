@@ -83,7 +83,7 @@ struct AddMemoryRuleView: View {
       CardHint("A folder covers everything inside it. Leave empty for the whole vault.")
       CardGroup {
         HStack {
-          Text("Who").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("Who").font(.system(size: 15)).foregroundStyle(Palette.text)
           Spacer(minLength: 8)
           Picker("Who", selection: $who) {
             Section("Agents") {

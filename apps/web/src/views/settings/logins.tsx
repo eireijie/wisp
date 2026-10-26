@@ -63,7 +63,7 @@ export function LoginsPage() {
                     {isOwner && <Add onClick={disconnect}>Disconnect</Add>}
                   </>
                 ) : isOwner ? (
-                  <Prim className="h-[38px] px-[18px] text-[15px]" onClick={() => setConnecting(true)}>
+                  <Prim className="h-[38px] px-[18px] text-body" onClick={() => setConnecting(true)}>
                     Connect
                   </Prim>
                 ) : undefined
@@ -113,7 +113,7 @@ export function LoginsPage() {
                           <Globe size={19} strokeWidth={1.7} />
                         </Tile>
                         <span className="min-w-0">
-                          <span className="block truncate text-[17px] font-medium">{l.site}</span>
+                          <span className="block truncate text-body font-medium">{l.site}</span>
                           <span className="block truncate text-sm text-faint md:hidden">{l.username || l.title}</span>
                         </span>
                       </span>
@@ -191,7 +191,7 @@ function ConnectOnePassword({ onClose, onDone }: { onClose: () => void; onDone: 
             if (token.trim()) void connect();
           }}
         >
-          <p className="px-1 text-[15px] leading-snug text-ink/90">Wisp asks 1Password for one login at a time, only after you approve it in Inbox. Nothing is saved in Wisp.</p>
+          <p className="px-1 text-body leading-snug text-ink/90">Wisp asks 1Password for one login at a time, only after you approve it in Inbox. Nothing is saved in Wisp.</p>
           <div className="space-y-1.5">
             <label htmlFor="op-token" className="block px-1 text-[13px] tracking-wide text-faint">
               Service account token

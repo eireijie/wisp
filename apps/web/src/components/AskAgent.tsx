@@ -31,7 +31,7 @@ export function AskAgent({ placeholder, className }: { placeholder: string; clas
           e.preventDefault();
           void send();
         }}
-        className="flex items-center gap-2 min-h-14 rounded-full border border-line bg-panel pl-2 pr-1.5 py-1.5 shadow-[var(--shadow)]"
+        className="flex items-center gap-2 min-h-12 rounded-full border border-line bg-panel pl-2 pr-1.5 py-1.5 shadow-[var(--shadow)]"
       >
         {agents.length > 1 ? (
           <label className="relative shrink-0 size-10 grid place-items-center rounded-full hover:bg-hover cursor-pointer" title={`Ask ${agent.name}`}>
@@ -49,7 +49,7 @@ export function AskAgent({ placeholder, className }: { placeholder: string; clas
             <AgentAvatar agent={agent} size={26} badge={false} />
           </span>
         )}
-        <input aria-label={`Ask ${agent.name}`} className="flex-1 min-w-0 bg-transparent outline-none text-[15px] placeholder:text-muted" placeholder={placeholder.replace("{name}", agent.name)} value={text} onChange={(e) => setText(e.target.value)} />
+        <input aria-label={`Ask ${agent.name}`} className="flex-1 min-w-0 bg-transparent outline-none text-body placeholder:text-muted" placeholder={placeholder.replace("{name}", agent.name)} value={text} onChange={(e) => setText(e.target.value)} />
         <button type="submit" aria-label="Send" disabled={!text.trim()} className={cx("shrink-0 size-10 rounded-full grid place-items-center bg-accent text-accent-ink disabled:opacity-40")}>
           <ArrowUp size={18} />
         </button>

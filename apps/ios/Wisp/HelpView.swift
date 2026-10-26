@@ -38,14 +38,14 @@ struct HelpView: View {
       CardLabel("Finish setup")
       VStack(alignment: .leading, spacing: 12) {
         HStack {
-          Text(next == nil ? "Setup is done" : "\(done) of \(steps.count)").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(next == nil ? "Setup is done" : "\(done) of \(steps.count)").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
           Spacer()
         }
         ProgressView(value: Double(done), total: Double(steps.count)).tint(Palette.green)
         ForEach(steps, id: \.id) { step in
           HStack(spacing: 10) {
             Image(systemName: step.done ? "checkmark.circle.fill" : "circle").foregroundStyle(step.done ? Palette.green : Palette.faint)
-            Text(step.title).font(.system(size: 16)).foregroundStyle(step.done ? Palette.muted : Palette.text)
+            Text(step.title).font(.system(size: 15)).foregroundStyle(step.done ? Palette.muted : Palette.text)
             Spacer(minLength: 0)
           }.accessibilityElement(children: .combine)
         }
@@ -57,6 +57,7 @@ struct HelpView: View {
       }
       .padding(18).frame(maxWidth: .infinity, alignment: .leading)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       CardLabel("My agent isn't answering")
       CardGroup {
         ForEach(Readiness.checks(agents: store.agents, devices: devices)) { ReadinessCheckRow(check: $0, store: store, makeHelper: { addingAgent = true }) }
@@ -100,7 +101,7 @@ struct HelpWordsView: View {
       CardGroup {
         ForEach(HelpView.glossary, id: \.term) { item in
           VStack(alignment: .leading, spacing: 4) {
-            Text(item.term).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+            Text(item.term).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
             Text(item.meaning).font(.system(size: 15)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
           }
           .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 14)
@@ -120,10 +121,10 @@ struct ReadinessCheckRow: View {
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(check.label).font(.system(size: 17)).foregroundStyle(check.status == .unknown ? Palette.muted : Palette.text)
+        Text(check.label).font(.system(size: 15)).foregroundStyle(check.status == .unknown ? Palette.muted : Palette.text)
         Text(check.status == .ok ? "Fine" : check.status == .bad ? "Needs fixing" : "Can't tell yet")
-          .font(.system(size: 14)).foregroundStyle(check.status == .ok ? Palette.green : check.status == .bad ? Palette.red : Palette.faint)
-        if check.status == .bad, let fix = check.fix { Text(fix).font(.system(size: 14)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
+          .font(.system(size: 13)).foregroundStyle(check.status == .ok ? Palette.green : check.status == .bad ? Palette.red : Palette.faint)
+        if check.status == .bad, let fix = check.fix { Text(fix).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
       }
       Spacer(minLength: 8)
       if check.status == .bad { fixLink }

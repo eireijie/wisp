@@ -61,10 +61,10 @@ export function OrgList({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const row = "w-full flex items-center gap-3 min-h-11 px-3.5 rounded-xl text-left text-[15px] hover:bg-hover";
+  const row = "w-full flex items-center gap-3 min-h-11 px-3.5 rounded-xl text-left text-body hover:bg-hover";
   return (
     <div role="menu" aria-label="Switch organization" className="py-1.5">
-      <div className="px-3.5 pt-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">Organizations</div>
+      <div className="px-3.5 pt-1 pb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Organizations</div>
       {list.map((o) => {
         const isCurrent = o.current || o.id === me.workspace.id;
         return (
@@ -74,7 +74,7 @@ export function OrgList({ onDone }: { onDone: () => void }) {
               {o.unread && !isCurrent && <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-badge ring-2 ring-panel" aria-label="New messages" />}
             </span>
             <span className="flex-1 min-w-0">
-              <span className="block font-semibold truncate">{o.name}</span>
+              <span className="block font-medium truncate">{o.name}</span>
               <span className="block text-xs text-faint truncate">{busy === o.id ? "Switching…" : ROLE[o.role]}</span>
             </span>
             {isCurrent && <Check size={18} strokeWidth={2.2} className="shrink-0 text-badge" aria-label="Current" />}
@@ -98,7 +98,7 @@ export function OrgList({ onDone }: { onDone: () => void }) {
         }}
       >
         <input value={code} onChange={(e) => setCode(e.target.value)} aria-label="Invite link or code" placeholder="https://…/#/join/…" className="flex-1 min-w-0 h-10 rounded-full bg-chip px-4 text-sm outline-none placeholder:text-faint border border-control-line focus:border-ring" />
-        <button disabled={!code.trim() || joining} className="h-10 px-5 rounded-full bg-accent text-accent-ink text-sm font-semibold disabled:opacity-50">
+        <button disabled={!code.trim() || joining} className="h-10 px-5 rounded-full bg-accent text-accent-ink text-sm font-medium disabled:opacity-50">
           {joining ? "Joining…" : "Join"}
         </button>
       </form>
@@ -111,7 +111,7 @@ export function OrgList({ onDone }: { onDone: () => void }) {
 /** The popover version, for the Wisp ghost at the top of the desktop rail. */
 export function OrgSwitcher({ trigger }: { trigger: (open: boolean, toggle: () => void) => ReactNode }) {
   return (
-    <Popover up={false} className="w-[22rem] max-w-[calc(100vw-1rem)] !rounded-[20px]" trigger={trigger}>
+    <Popover up={false} className="w-[22rem] max-w-[calc(100vw-1rem)] !rounded-xl" trigger={trigger}>
       {(close) => <OrgList onDone={close} />}
     </Popover>
   );

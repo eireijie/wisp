@@ -6,8 +6,8 @@ import { cx } from "../../components/ui.tsx";
 export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="mb-6">
-      <h2 className="text-[28px] leading-tight font-bold tracking-tight">{title}</h2>
-      {children && <p className="mt-1.5 text-[15px] leading-snug text-muted max-w-xl">{children}</p>}
+      <h2 className="t-title">{title}</h2>
+      {children && <p className="mt-1.5 text-body leading-snug text-muted max-w-xl">{children}</p>}
     </div>
   );
 }
@@ -30,7 +30,7 @@ export function Section({ title, description, action, children }: { title: strin
 
 /** Rows in a bordered card. */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx("rounded-[20px] bg-card border border-line divide-y divide-line overflow-hidden", className)}>{children}</div>;
+  return <div className={cx("rounded-xl bg-card border border-line divide-y divide-line overflow-hidden", className)}>{children}</div>;
 }
 
 /** One setting: what it is on the left, the control on the right (stacked on phones). */
@@ -38,7 +38,7 @@ export function Row({ label, hint, children, className }: { label: ReactNode; hi
   return (
     <div className={cx("px-[18px] py-2.5 min-h-[54px] md:min-h-[52px] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6", className)}>
       <div className="min-w-0 flex-1">
-        <div className="text-[15px]">{label}</div>
+        <div className="text-body">{label}</div>
         {hint && <div className="mt-0.5 text-[13px] leading-snug text-faint">{hint}</div>}
       </div>
       {children !== undefined && <div className="shrink-0 flex items-center gap-2">{children}</div>}
@@ -65,7 +65,7 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
 /** Pick one of a few options, inline. */
 export function Segmented<T extends string>({ value, options, onChange, label, disabled }: { value: T; options: [T, ReactNode][]; onChange: (v: T) => void; label: string; disabled?: boolean }) {
   return (
-    <div className="inline-flex rounded-[14px] border border-control-line p-[3px] bg-control" role="radiogroup" aria-label={label}>
+    <div className="inline-flex rounded-full border border-control-line p-[3px] bg-control" role="radiogroup" aria-label={label}>
       {options.map(([v, text]) => (
         <button
           key={v}
@@ -74,7 +74,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, d
           aria-checked={value === v}
           disabled={disabled}
           onClick={() => onChange(v)}
-          className={cx("h-[34px] px-3.5 rounded-[11px] text-sm inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50", value === v ? "bg-ink/15 text-ink font-semibold" : "text-muted hover:text-ink")}
+          className={cx("h-[34px] px-3.5 rounded-full text-sm inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50", value === v ? "bg-ink/15 text-ink font-medium" : "text-muted hover:text-ink")}
         >
           {text}
         </button>

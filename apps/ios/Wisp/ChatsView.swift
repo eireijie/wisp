@@ -151,7 +151,7 @@ struct ChatsView: View {
       HStack(spacing: 10) {
         Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.faint)
         TextField("Search chats", text: $search)
-          .font(.system(size: 16)).foregroundStyle(Palette.text)
+          .font(.system(size: 15)).foregroundStyle(Palette.text)
           .focused($searchFocused)
           .submitLabel(.search)
           .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -165,7 +165,7 @@ struct ChatsView: View {
       .background(Capsule().fill(Palette.field))
       if searchMode {
         Button("Cancel") { search = ""; searchFocused = false }
-          .font(.system(size: 17)).foregroundStyle(Palette.text).buttonStyle(.plain)
+          .font(.system(size: 15)).foregroundStyle(Palette.text).buttonStyle(.plain)
       }
     }
     .padding(.horizontal, 18).padding(.top, searchMode ? 12 : 0).padding(.bottom, 4)
@@ -364,14 +364,14 @@ struct ChatRow: View {
 
   var body: some View {
     Button(action: open) {
-      HStack(spacing: 14) {
+      HStack(spacing: 12) {
         avatar
         VStack(alignment: .leading, spacing: 4) {
           HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(entry.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+            Text(entry.name).font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).lineLimit(1)
             Spacer(minLength: 8)
             if entry.pinned { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).accessibilityLabel("Pinned") }
-            if let at = entry.lastAt { Text(ChatList.timeText(at)).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+            if let at = entry.lastAt { Text(ChatList.timeText(at)).font(.system(size: 13)).foregroundStyle(Palette.faint) }
           }
           HStack(spacing: 8) {
             subtitle
@@ -381,7 +381,7 @@ struct ChatRow: View {
           }
         }
       }
-      .padding(.vertical, 12)
+      .padding(.vertical, 4).frame(minHeight: 56)
       .opacity(muted ? 0.6 : 1)
       .contentShape(Rectangle())
     }
@@ -498,7 +498,7 @@ struct MoveToSectionSheet: View {
       SheetHeader(title: "Move to section") { dismiss() }
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          Text(channel.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 6)
+          Text(channel.name).font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).padding(.horizontal, 6)
           CardGroup {
             choice("No section", id: nil, symbol: "tray")
             ForEach(store.sections) { choice($0.title, id: $0.id, symbol: "folder") }

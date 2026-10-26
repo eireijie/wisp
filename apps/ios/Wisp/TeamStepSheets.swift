@@ -29,12 +29,12 @@ struct AddStepSheet: View {
         VStack(alignment: .leading, spacing: 14) {
           if !request.between && !empty {
             HStack {
-              Text("After").font(.system(size: 17)).foregroundStyle(Palette.muted)
+              Text("After").font(.system(size: 15)).foregroundStyle(Palette.muted)
               Menu {
                 ForEach(steps) { s in Button("\(team.number(of: s.id)). \(s.action.isEmpty ? "Untitled step" : s.action)") { anchor = s.id } }
               } label: {
                 HStack(spacing: 6) {
-                  Text(team.step(anchor).map { $0.action.isEmpty ? "Untitled step" : $0.action } ?? "").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+                  Text(team.step(anchor).map { $0.action.isEmpty ? "Untitled step" : $0.action } ?? "").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
                   Image(systemName: "chevron.up.chevron.down").font(.system(size: 12)).foregroundStyle(Palette.faint)
                 }
                 .padding(.horizontal, 14).frame(height: 44).glassPill()
@@ -122,7 +122,8 @@ private struct Field<Content: View>: View {
       content
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
-      if let note { Text(note).font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 18) }
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
+      if let note { Text(note).font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 18) }
     }
   }
 }
@@ -141,10 +142,10 @@ private struct AgentMenu: View {
       HStack(spacing: 12) {
         if let a = selection.flatMap({ store.agent($0) }) {
           AgentAvatar(agent: a, size: 30, showStatus: false)
-          Text(a.name).font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text(a.name).font(.system(size: 15)).foregroundStyle(Palette.text)
         } else {
           Image(systemName: "questionmark.circle").font(.system(size: 22)).foregroundStyle(Palette.faint).frame(width: 30, height: 30)
-          Text("Pick an agent").font(.system(size: 17)).foregroundStyle(Palette.red)
+          Text("Pick an agent").font(.system(size: 15)).foregroundStyle(Palette.red)
         }
         Spacer()
         Image(systemName: "chevron.up.chevron.down").font(.system(size: 13)).foregroundStyle(Palette.faint)
@@ -163,7 +164,7 @@ private struct TextRow: View {
   var limit = 200
   var body: some View {
     TextField(placeholder, text: Binding(get: { text }, set: { text = String($0.prefix(limit)) }), axis: .vertical)
-      .font(.system(size: 17)).foregroundStyle(Palette.text)
+      .font(.system(size: 15)).foregroundStyle(Palette.text)
       .padding(.horizontal, 18).frame(minHeight: 56)
       .accessibilityIdentifier(id)
   }
@@ -177,7 +178,7 @@ private struct BigText: View {
   var body: some View {
     TextField(placeholder, text: Binding(get: { text }, set: { text = String($0.prefix(limit)) }), axis: .vertical)
       .lineLimit(4...14)
-      .font(.system(size: 17)).foregroundStyle(Palette.text)
+      .font(.system(size: 15)).foregroundStyle(Palette.text)
       .padding(18).frame(minHeight: 120, alignment: .topLeading)
       .accessibilityIdentifier(id)
   }
@@ -196,7 +197,7 @@ private struct StepMenu: View {
       ForEach(candidates) { s in Button("Step \(team.number(of: s.id)) · \(s.action.isEmpty ? "Untitled step" : s.action)") { selection = s.id } }
     } label: {
       HStack {
-        Text(label).font(.system(size: 17)).foregroundStyle(selection == nil && none == nil ? Palette.red : Palette.text).lineLimit(1)
+        Text(label).font(.system(size: 15)).foregroundStyle(selection == nil && none == nil ? Palette.red : Palette.text).lineLimit(1)
         Spacer()
         Image(systemName: "chevron.up.chevron.down").font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
@@ -216,9 +217,9 @@ private struct RoundsRow: View {
   var body: some View {
     Stepper(value: $rounds, in: 1...ChannelTeam.maxRounds) {
       HStack {
-        Text("Most rounds").font(.system(size: 17)).foregroundStyle(Palette.text)
+        Text("Most rounds").font(.system(size: 15)).foregroundStyle(Palette.text)
         Spacer()
-        Text("\(rounds) \(rounds == 1 ? "round" : "rounds")").font(.system(size: 17)).foregroundStyle(Palette.faint)
+        Text("\(rounds) \(rounds == 1 ? "round" : "rounds")").font(.system(size: 15)).foregroundStyle(Palette.faint)
       }
     }
     .padding(.horizontal, 18).frame(minHeight: 56)
@@ -260,9 +261,10 @@ struct StepEditor: View {
             }
             Field(title: "Kind of step") { kindMenu(step) }
             Button(role: .destructive) { confirmDelete = true } label: {
-              Label("Delete step", systemImage: "trash").font(.system(size: 17)).foregroundStyle(Palette.red)
+              Label("Delete step", systemImage: "trash").font(.system(size: 15)).foregroundStyle(Palette.red)
                 .frame(maxWidth: .infinity, minHeight: 54)
                 .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("step-delete")
@@ -334,7 +336,7 @@ struct StepEditor: View {
       }
     } label: {
       HStack {
-        Text(ChannelTeam.Step.kindName(step.kind)).font(.system(size: 17)).foregroundStyle(Palette.text)
+        Text(ChannelTeam.Step.kindName(step.kind)).font(.system(size: 15)).foregroundStyle(Palette.text)
         Spacer()
         Image(systemName: "chevron.up.chevron.down").font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
@@ -384,7 +386,7 @@ struct StepEditor: View {
     }
     Field(title: "Tell me") {
       Toggle("Tell me on my phone", isOn: bind(\.notifyPhone, false).wrapped(true))
-        .font(.system(size: 17)).padding(.horizontal, 18).frame(minHeight: 56)
+        .font(.system(size: 15)).padding(.horizontal, 18).frame(minHeight: 56)
         .accessibilityIdentifier("step-notify")
     }
   }
@@ -402,7 +404,7 @@ struct StepEditor: View {
           Button { team = team.updating(stepId) { $0.handoffTo = t.id; if t.settings?.team?.hasSteps != true { $0.waitForReply = false } } } label: {
             HStack(spacing: 12) {
               Image(systemName: "person.2").font(.system(size: 17)).foregroundStyle(Palette.muted).frame(width: 28)
-              Text(t.name).font(.system(size: 17)).foregroundStyle(Palette.text)
+              Text(t.name).font(.system(size: 15)).foregroundStyle(Palette.text)
               Spacer()
               if step.handoffTo == t.id { Image(systemName: "checkmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.blue) }
             }
@@ -418,7 +420,7 @@ struct StepEditor: View {
     if target == nil || target?.settings?.team?.hasSteps == true {
       Field(title: "Wait for their answer", note: step.waitForReply == true ? "The next step gets what they send back." : nil) {
         Toggle("Wait for their answer", isOn: bind(\.waitForReply, false).wrapped(false))
-          .font(.system(size: 17)).padding(.horizontal, 18).frame(minHeight: 56)
+          .font(.system(size: 15)).padding(.horizontal, 18).frame(minHeight: 56)
           .accessibilityIdentifier("step-wait")
       }
     }
@@ -443,12 +445,12 @@ struct StepEditor: View {
         .pickerStyle(.segmented).padding(14)
         if let rule = step.rule {
           HStack {
-            Text("The result").font(.system(size: 17)).foregroundStyle(Palette.muted)
+            Text("The result").font(.system(size: 15)).foregroundStyle(Palette.muted)
             Menu {
               ForEach(ChannelTeam.Step.Rule.Op.allCases, id: \.self) { op in Button(op.label) { setRule(op: op) } }
             } label: {
               HStack(spacing: 4) { Text(rule.op.label); Image(systemName: "chevron.up.chevron.down").font(.system(size: 11)) }
-                .font(.system(size: 17)).foregroundStyle(Palette.blue).frame(minHeight: 44)
+                .font(.system(size: 15)).foregroundStyle(Palette.blue).frame(minHeight: 44)
             }
             Spacer()
           }
@@ -465,13 +467,13 @@ struct StepEditor: View {
     Field(title: "Then go to") {
       VStack(spacing: 0) {
         HStack {
-          Text("Yes").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).frame(width: 44, alignment: .leading)
+          Text("Yes").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).frame(width: 44, alignment: .leading)
           StepMenu(team: team, candidates: others, selection: branchTarget(yes: true), none: "The end", id: "step-yes")
         }
         .padding(.leading, 18)
         Rectangle().fill(Palette.separator).frame(height: 1).padding(.leading, 18)
         HStack {
-          Text("No").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).frame(width: 44, alignment: .leading)
+          Text("No").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).frame(width: 44, alignment: .leading)
           StepMenu(team: team, candidates: others, selection: branchTarget(yes: false), none: "The end", id: "step-no")
         }
         .padding(.leading, 18)
@@ -520,7 +522,7 @@ struct StepEditor: View {
           roleRow(role, step: step)
         }
         Button { addRole(to: step) } label: {
-          Label("Add a role", systemImage: "plus").font(.system(size: 17)).foregroundStyle(Palette.text).frame(maxWidth: .infinity, minHeight: 54, alignment: .leading).padding(.horizontal, 18)
+          Label("Add a role", systemImage: "plus").font(.system(size: 15)).foregroundStyle(Palette.text).frame(maxWidth: .infinity, minHeight: 54, alignment: .leading).padding(.horizontal, 18)
         }
         .buttonStyle(.plain)
       }
@@ -531,7 +533,7 @@ struct StepEditor: View {
         ForEach(team.roles ?? []) { r in Button(r.name) { team = team.updating(stepId) { $0.reviewBy = r.id } } }
       } label: {
         HStack {
-          Text(team.role(step.reviewBy)?.name ?? "Nobody").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text(team.role(step.reviewBy)?.name ?? "Nobody").font(.system(size: 15)).foregroundStyle(Palette.text)
           Spacer()
           Image(systemName: "chevron.up.chevron.down").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
@@ -556,7 +558,7 @@ struct StepEditor: View {
           Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 22)).foregroundStyle(on ? Palette.blue : Palette.faint).frame(width: 44, height: 44)
         }
         .buttonStyle(.plain).accessibilityLabel("\(role.name), \(on ? "on" : "off")")
-        TextField("Role name", text: roleBinding(role.id, \.name)).font(.system(size: 17)).foregroundStyle(Palette.text)
+        TextField("Role name", text: roleBinding(role.id, \.name)).font(.system(size: 15)).foregroundStyle(Palette.text)
         Menu {
           ForEach(store.agents) { a in Button(a.name) { setRole(role.id) { $0.agentId = a.id } } }
           if store.canManage { Divider(); Button("Create an agent…", systemImage: "plus") { creating = .role(role.id) } }
@@ -614,7 +616,7 @@ struct StepEditor: View {
               HStack(spacing: 12) {
                 Text("\(team.number(of: s.id))").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
                   .frame(width: 26, height: 26).background(Circle().fill(Palette.badge))
-                Text(s.action.isEmpty ? "Untitled step" : s.action).font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(1)
+                Text(s.action.isEmpty ? "Untitled step" : s.action).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(1)
                 Spacer()
                 Image(systemName: on ? "checkmark.circle.fill" : "circle").font(.system(size: 22)).foregroundStyle(on ? Palette.blue : Palette.faint)
               }
@@ -648,7 +650,7 @@ struct StepEditor: View {
         Button("Only if") { addGate(.branch) }
       } label: {
         HStack {
-          Text(whenText(step)).font(.system(size: 17)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
+          Text(whenText(step)).font(.system(size: 15)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
           Spacer()
           Image(systemName: "chevron.up.chevron.down").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }

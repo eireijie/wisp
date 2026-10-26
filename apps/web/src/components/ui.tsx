@@ -96,7 +96,7 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
   }, []);
   return (
     <div className={drawer ? "fixed inset-0 z-50 flex justify-end" : "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "w-full bg-panel border border-line rounded-t-3xl sm:rounded-3xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "w-full bg-panel border border-line rounded-t-[16px] sm:rounded-3xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
         {!headerless && <div className="flex items-center justify-between px-5 pt-4 pb-2">
           {typeof title === "string" ? <h2 className="text-base font-semibold">{title}</h2> : <div className="text-base font-semibold">{title}</div>}
           <button onClick={onClose} className="size-8 grid place-items-center rounded-full bg-chip hover:bg-hover text-muted" aria-label="Close">
@@ -322,7 +322,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
       })}
       {open &&
         createPortal(
-          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="glass z-[100] min-w-56 rounded-[22px] p-1.5">
+          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="glass z-[100] min-w-56 rounded-xl p-1.5">
             {items.map((it, i) =>
               it === "divider" ? (
                 <div key={i} className="-mx-1 my-1 h-px bg-line" />
@@ -334,7 +334,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
                     setOpen(false);
                     it.onSelect();
                   }}
-                  className={cx("w-full px-3 py-2 min-h-11 rounded-xl flex items-center gap-3 text-[15px] text-left hover:bg-hover", it.danger && "text-bad")}
+                  className={cx("w-full px-3 py-2 min-h-11 rounded-xl flex items-center gap-3 text-body text-left hover:bg-hover", it.danger && "text-bad")}
                 >
                   {it.icon && <span className={cx("shrink-0", !it.danger && "text-muted")}>{it.icon}</span>}
                   <span className="min-w-0 break-words">{it.label}</span>

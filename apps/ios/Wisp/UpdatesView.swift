@@ -55,8 +55,8 @@ struct UpdatesView: View {
         HStack(spacing: 12) {
           VStack(alignment: .leading, spacing: 2) {
             Text(canUpdate ? "Update available" : check?.behind == 0 ? "Up to date" : check == nil ? (checking ? "Checking…" : "Not checked yet") : "Can't update here")
-              .font(.system(size: 17)).foregroundStyle(canUpdate ? Palette.blue : check?.behind == 0 ? Palette.green : Palette.text)
-            if let reason = check?.reason { Text(reason).font(.system(size: 14)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
+              .font(.system(size: 15)).foregroundStyle(canUpdate ? Palette.blue : check?.behind == 0 ? Palette.green : Palette.text)
+            if let reason = check?.reason { Text(reason).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
           }
           Spacer(minLength: 8)
           Button(checking ? "Checking…" : "Check now") {
@@ -66,9 +66,9 @@ struct UpdatesView: View {
         }.padding(.horizontal, 18).padding(.vertical, 12).frame(minHeight: 62)
         if canUpdate, let changes = check?.changes, !changes.isEmpty {
           VStack(alignment: .leading, spacing: 8) {
-            Text("What's changed").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.faint)
-            ForEach(Array(changes.prefix(5)), id: \.self) { Text(changeText($0)).font(.system(size: 16)).foregroundStyle(Palette.text) }
-            if changes.count > 5 { Text("…and \(changes.count - 5) more").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+            Text("What's changed").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint)
+            ForEach(Array(changes.prefix(5)), id: \.self) { Text(changeText($0)).font(.system(size: 15)).foregroundStyle(Palette.text) }
+            if changes.count > 5 { Text("…and \(changes.count - 5) more").font(.system(size: 13)).foregroundStyle(Palette.faint) }
           }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 14)
         }
       }
@@ -104,7 +104,7 @@ struct WhatsNewView: View {
       } else {
         CardGroup {
           ForEach(changes, id: \.self) { line in
-            Text(changeText(line)).font(.system(size: 16)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+            Text(changeText(line)).font(.system(size: 15)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
               .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 14)
           }
         }
@@ -121,9 +121,9 @@ struct UpdatingView: View {
     VStack(spacing: 14) {
       Spacer()
       ProgressView().controlSize(.large)
-      Text("Updating Wisp").font(.system(size: 26, weight: .bold)).foregroundStyle(Palette.text)
+      Text("Updating Wisp").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
       Text("Everyone is briefly disconnected. This page reloads by itself when the hub is back.").font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
-      Text(state == "restarting" ? "Restarting the hub…" : (line ?? "Updating…")).font(.system(size: 14)).foregroundStyle(Palette.faint)
+      Text(state == "restarting" ? "Restarting the hub…" : (line ?? "Updating…")).font(.system(size: 13)).foregroundStyle(Palette.faint)
       Spacer()
     }
     .padding(.horizontal, 32).frame(maxWidth: .infinity)
@@ -143,7 +143,7 @@ struct UpdateFailedView: View {
     VStack(spacing: 14) {
       Spacer()
       Image(systemName: "exclamationmark.triangle").font(.system(size: 34)).foregroundStyle(Palette.red)
-      Text("The update didn't finish").font(.system(size: 26, weight: .bold)).foregroundStyle(Palette.text).multilineTextAlignment(.center)
+      Text("The update didn't finish").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).multilineTextAlignment(.center)
       Text("Wisp is still running the version it had. Nothing was lost. You can try again, or ask the person who runs the hub.").font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
       if let message, !message.isEmpty { Text(message).font(.system(size: 13, design: .monospaced)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading).textSelection(.enabled) }
       if canRetry { Button("Try again", action: retry).buttonStyle(.pill(.primary)).accessibilityIdentifier("update-retry") }

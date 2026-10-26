@@ -39,11 +39,12 @@ struct NewNoteSheet: View {
             MemoryFieldCard { TextField("Folder path", text: $other).textInputAutocapitalization(.never).autocorrectionDisabled().foregroundStyle(Palette.text) }
             CardCaption("Pick one or type a new name to make a folder.")
           } else {
-            Button { selection = otherTag } label: { Text("Other folder…").font(.system(size: 17)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain).padding(.horizontal, 6)
+            Button { selection = otherTag } label: { Text("Other folder…").font(.system(size: 15)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain).padding(.horizontal, 6)
           }
           SectionCaption("Note")
           TextEditor(text: $body_).scrollContentBackground(.hidden).foregroundStyle(Palette.text).frame(minHeight: 150).padding(12)
             .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
             .overlay(alignment: .topLeading) { if body_.isEmpty { Text("Write something your helpers should remember…").foregroundStyle(Palette.faint).padding(.horizontal, 17).padding(.vertical, 20).allowsHitTesting(false) } }
           InlineError(error: action.error)
         }.padding(.horizontal, 18).padding(.top, 6)

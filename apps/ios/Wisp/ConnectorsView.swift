@@ -68,7 +68,7 @@ struct ConnectResultSheet: View {
       CardGroup {
         MarketRow(symbol: "powerplug", tile: 50, title: "Sign in to \(c.name)", subtitle: "A page opens in your browser. Choose the account and allow Wisp to use \(c.name) for your helpers.")
       }
-      Text("Wisp never sees or keeps your password.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      Text("Wisp never sees or keeps your password.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       InlineError(error: action.error)
       HStack(spacing: 10) {
         Button { dismiss() } label: { Text("Not now").frame(maxWidth: .infinity) }.secondaryButton()
@@ -199,7 +199,7 @@ struct ConnectorCatalogDetail: View {
       HStack(alignment: .center, spacing: 14) {
         MarketTile(symbol: "powerplug", size: 56)
         VStack(alignment: .leading, spacing: 6) {
-          Text(entry.name).font(.system(size: 24, weight: .bold)).lineLimit(2)
+          Text(entry.name).font(.system(size: 22, weight: .semibold)).lineLimit(2)
           if let trust { TrustBadge(trust: trust) } else { MarketPill(text: "On Wisp's list", tone: .blue) }
         }
         Spacer(minLength: 0)
@@ -217,7 +217,7 @@ struct ConnectorCatalogDetail: View {
       if let docs = entry.docs, let url = URL(string: docs) { Link("Documentation", destination: url).font(.system(size: 15)).padding(.horizontal, 4) }
     }
     .bottomAction {
-      if let have { NavigationLink { ConnectorDetail(connector: have) } label: { Text("Manage").frame(maxWidth: .infinity, minHeight: 28).font(.system(size: 16, weight: .semibold)) }.primaryButton() }
+      if let have { NavigationLink { ConnectorDetail(connector: have) } label: { Text("Manage").frame(maxWidth: .infinity, minHeight: 28).font(.system(size: 15, weight: .semibold)) }.primaryButton() }
       else if store.canManage { MarketPrimaryButton(title: "Connect") { editor = ConnectorEditorTarget(entry: entry, presetEnv: presetEnv) } }
     }
     .connectFlow($editor, chat: $chat)

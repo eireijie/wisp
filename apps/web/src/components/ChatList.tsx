@@ -179,12 +179,12 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
     <nav className={cx("h-full flex flex-col min-h-0", page ? "safe-top" : "pt-[18px] px-3")} aria-label="Chats">
       {page ? (
         <div className="shrink-0 flex items-center justify-between px-[18px] pt-3 pb-2">
-          <UserAvatarButton size={52} />
+          <UserAvatarButton size={44} />
           {newMenu}
         </div>
       ) : (
         <div className="shrink-0 flex items-center justify-between px-1.5 pb-3">
-          <h1 className="text-[22px] font-bold tracking-tight">Chats</h1>
+          <h1 className="t-title">Chats</h1>
           {newMenu}
         </div>
       )}
@@ -206,7 +206,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
           );
         })}
         {needle && (
-          <button onClick={() => (useStore.setState({ paletteSeed: q }), useStore.getState().setPalette(true))} className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] text-muted hover:bg-hover">
+          <button onClick={() => (useStore.setState({ paletteSeed: q }), useStore.getState().setPalette(true))} className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-body text-muted hover:bg-hover">
             <Search size={18} strokeWidth={1.8} /> Search messages and memory for “{q.trim()}”
           </button>
         )}
@@ -223,7 +223,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
 function SearchField({ page, value, onChange }: { page: boolean; value: string; onChange: (v: string) => void }) {
   const setPalette = useStore((s) => s.setPalette);
   return (
-    <label className={cx("flex items-center gap-2.5 bg-card text-faint", page ? "h-[46px] rounded-full px-4" : "h-10 rounded-full px-3.5")}>
+    <label className={cx("flex items-center gap-2.5 bg-card text-faint", page ? "h-11 rounded-full px-4" : "h-9 rounded-full px-3")}>
       <Search size={page ? 18 : 16} strokeWidth={2} className="shrink-0" />
       <input
         value={value}
@@ -232,7 +232,7 @@ function SearchField({ page, value, onChange }: { page: boolean; value: string; 
         readOnly={page}
         placeholder={page ? "Search chats" : "Search"}
         aria-label="Search chats"
-        className={cx("flex-1 min-w-0 bg-transparent outline-none text-ink placeholder:text-faint", page ? "text-base" : "text-[15px]")}
+        className={cx("flex-1 min-w-0 bg-transparent outline-none text-ink placeholder:text-faint", "text-body")}
       />
       {!page && <kbd className="text-xs font-sans text-faint">⌘K</kbd>}
     </label>
@@ -243,14 +243,14 @@ function SectionHeader({ section, count, collapsed, onToggle, onRename, page, ca
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = useLongPress((x, y) => canEdit && setMenu({ x, y }));
   return (
-    <div className={cx("flex items-center justify-between text-faint font-semibold uppercase tracking-wide text-xs", page ? "pt-4 pb-1 px-1" : "pt-3.5 pb-1.5 px-3")} onContextMenu={(e) => canEdit && (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))} {...press}>
+    <div className={cx("flex items-center justify-between text-faint font-medium uppercase tracking-wide text-xs", page ? "pt-4 pb-1 px-1" : "pt-3.5 pb-1.5 px-3")} onContextMenu={(e) => canEdit && (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))} {...press}>
       <button onClick={onToggle} aria-expanded={!collapsed} className="flex items-center gap-1.5 min-w-0 h-7 hover:text-ink">
         <ChevronDown size={13} strokeWidth={2.4} className={cx("shrink-0 transition-transform", collapsed && "-rotate-90")} />
         <span className="truncate">{section.name}</span>
       </button>
       <span className="font-medium normal-case tracking-normal">{count}</span>
       {menu && (
-        <ContextMenu at={menu} onClose={() => setMenu(null)} title={<><span className="font-semibold text-ink">{section.name}</span><span className="block text-xs text-faint">{count} {count === 1 ? "chat" : "chats"}</span></>}>
+        <ContextMenu at={menu} onClose={() => setMenu(null)} title={<><span className="font-medium text-ink">{section.name}</span><span className="block text-xs text-faint">{count} {count === 1 ? "chat" : "chats"}</span></>}>
           {(close) => (
             <>
               <MenuItem onClick={() => (close(), onRename())}>Rename section</MenuItem>
@@ -277,30 +277,31 @@ function SectionHeader({ section, count, collapsed, onToggle, onRename, page, ca
 function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = useLongPress((x, y) => chat.channel && setMenu({ x, y }));
-  const size = page ? 48 : 40;
+  const size = page ? 32 : 28;
   const url = chat.channel ? href({ view: "chat", channelId: chat.channel.id, threadId: null }) : undefined;
   const inner = (
     <>
-      <span className="shrink-0 grid place-items-center" style={{ width: page ? 60 : 46, height: size }}>
+      <span className="shrink-0 grid place-items-center" style={{ width: page ? 44 : 32, height: size }}>
         <ChatAvatar chat={chat} size={size} />
       </span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="flex items-baseline justify-between gap-2">
-          <span className={cx("truncate", page ? "text-[17px]" : "text-[15px]", chat.unread > 0 ? "font-bold" : "font-semibold", chat.muted && "opacity-60")}>{chat.name}</span>
-          <span className="shrink-0 flex items-center gap-1.5 text-faint" style={{ fontSize: page ? 14 : 12 }}>
+          <span className={cx("truncate", page ? "text-body" : "text-body", chat.unread > 0 ? "font-semibold" : "font-medium", chat.muted && "opacity-60")}>{chat.name}</span>
+          <span className="shrink-0 flex items-center gap-1.5 text-faint" style={{ fontSize: 12 }}>
             {chat.pinned && <Pin size={11} strokeWidth={2} aria-label="Pinned" />}
             {chat.muted && <BellOff size={11} aria-label="Muted" />}
             {time}
           </span>
         </span>
         <span className="flex items-center justify-between gap-2">
-          <span className={cx("truncate", page ? "text-[15px]" : "text-[13px]", preview.working ? "text-ok" : "text-muted")}>{preview.text}</span>
-          {chat.unread > 0 && !chat.muted && <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-badge text-badge-ink text-[11px] font-semibold grid place-items-center tabular-nums">{chat.unread > 99 ? "99+" : chat.unread}</span>}
+          <span className={cx("truncate", "text-[13px]", preview.working ? "text-ok" : "text-muted")}>{preview.text}</span>
+          {chat.unread > 0 && chat.muted && <span aria-label="Unread" className="shrink-0 size-2 rounded-full bg-faint" />}
+          {chat.unread > 0 && !chat.muted && <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{chat.unread > 99 ? "99+" : chat.unread}</span>}
         </span>
       </span>
     </>
   );
-  const cls = cx("w-full flex items-center text-left transition-colors", page ? "gap-3.5 py-3 px-1 rounded-2xl min-h-[72px]" : "gap-3 px-3 py-2.5 rounded-2xl", active ? "bg-side-active" : "hover:bg-hover");
+  const cls = cx("w-full flex items-center text-left transition-colors", page ? "gap-2.5 py-2 px-2 rounded-xl min-h-[56px]" : "gap-2 px-2 py-1.5 rounded-xl min-h-[44px]", active ? "bg-side-active" : "hover:bg-hover");
   return (
     <div onContextMenu={(e) => chat.channel && (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))} {...press}>
       {url ? (
@@ -334,7 +335,7 @@ function ChatMenu({ chat, channel, at, onClose, sections, onNewSection }: { chat
   };
   if (settings) return createPortal(<ChannelSettings channel={channel} onClose={() => (setSettings(false), onClose())} />, document.body);
   return (
-    <ContextMenu at={at} onClose={onClose} title={view === "move" ? <span className="font-semibold text-ink">Move to section</span> : <span className="font-semibold text-ink">{chat.name}</span>} back={view === "move" ? () => setView("main") : undefined}>
+    <ContextMenu at={at} onClose={onClose} title={view === "move" ? <span className="font-medium text-ink">Move to section</span> : <span className="font-medium text-ink">{chat.name}</span>} back={view === "move" ? () => setView("main") : undefined}>
       {(close) =>
         view === "move" ? (
           <>
@@ -367,7 +368,7 @@ function ChatMenu({ chat, channel, at, onClose, sections, onNewSection }: { chat
 
 function MenuItem({ children, onClick, danger, check, more }: { children: ReactNode; onClick: () => void; danger?: boolean; check?: boolean; more?: boolean }) {
   return (
-    <button role="menuitem" onClick={onClick} className={cx("w-full min-h-11 px-3.5 rounded-xl flex items-center gap-3 text-left text-[15px] hover:bg-hover", danger && "text-bad")}>
+    <button role="menuitem" onClick={onClick} className={cx("w-full min-h-11 px-3.5 rounded-xl flex items-center gap-3 text-left text-body hover:bg-hover", danger && "text-bad")}>
       <span className="flex-1">{children}</span>
       {check && <Check size={17} strokeWidth={2.2} className="text-badge" />}
       {more && <ChevronDown size={15} className="-rotate-90 text-faint" />}
@@ -414,8 +415,8 @@ function ContextMenu({ at, onClose, title, back, children }: { at: { x: number; 
   }, [onClose]);
   return createPortal(
     <div className="fixed inset-0 z-[90] bg-black/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onContextMenu={(e) => (e.preventDefault(), onClose())} onTouchStart={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="menu" style={pos} className="glass w-72 max-w-[calc(100vw-24px)] rounded-[22px] p-1.5">
-        <div className="flex items-center gap-2 px-3.5 py-2.5 text-[15px]">
+      <div ref={ref} role="menu" style={pos} className="glass w-72 max-w-[calc(100vw-24px)] rounded-xl p-1.5">
+        <div className="flex items-center gap-2 px-3.5 py-2.5 text-body">
           {back && (
             <button onClick={back} className="-ml-1 mr-1 size-7 grid place-items-center rounded-full text-muted hover:bg-hover" aria-label="Back">
               <ChevronDown size={16} className="rotate-90" />
@@ -444,9 +445,9 @@ export function NewChatPicker({ onClose }: { onClose: () => void }) {
   }, [agents, onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="New chat" className="w-full sm:max-w-sm bg-panel border border-line rounded-t-[32px] sm:rounded-[28px] shadow-panel max-h-[80vh] overflow-y-auto safe-bottom p-2">
+      <div role="dialog" aria-modal="true" aria-label="New chat" className="w-full sm:max-w-sm bg-panel border border-line rounded-t-[16px] sm:rounded-xl shadow-panel max-h-[80vh] overflow-y-auto safe-bottom p-2">
         <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
-          <h2 className="text-lg font-bold">New chat</h2>
+          <h2 className="t-title">New chat</h2>
           <button onClick={onClose} aria-label="Close" className="circle circle-sm">
             <X size={16} strokeWidth={2.2} />
           </button>
@@ -471,7 +472,7 @@ export function NewChatPicker({ onClose }: { onClose: () => void }) {
             className="w-full flex items-center gap-3 px-3.5 min-h-[56px] rounded-2xl text-left hover:bg-hover"
           >
             <AgentAvatar agent={a} size={36} />
-            <span className="text-[15px] font-semibold">{a.name}</span>
+            <span className="text-body font-medium">{a.name}</span>
           </button>
         ))}
       </div>

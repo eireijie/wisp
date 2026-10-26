@@ -164,13 +164,13 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
     <nav aria-label="Settings" className="space-y-px">
       {nav.map((s) => (
         <div key={s.section}>
-          <div className="px-3 pt-4 pb-1.5 text-xs font-semibold tracking-wide text-faint uppercase">{s.section}</div>
+          <div className="px-3 pt-4 pb-1.5 text-xs font-medium tracking-wide text-faint uppercase">{s.section}</div>
           {items(s).map((it) => (
             <a
               key={it.key}
               href={it.to}
               aria-current={it.on ? "page" : undefined}
-              className={cx("flex items-center gap-2.5 h-10 px-3 rounded-xl text-sm font-medium", it.on ? "bg-control text-ink font-semibold" : "text-ink/80 hover:text-ink hover:bg-side-hover")}
+              className={cx("flex items-center gap-2.5 h-10 px-3 rounded-xl text-sm font-medium", it.on ? "bg-control text-ink font-medium" : "text-ink/80 hover:text-ink hover:bg-side-hover")}
             >
               <span className="shrink-0 opacity-80">{it.icon}</span>
               <span className="truncate">{it.label}</span>
@@ -186,16 +186,16 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
           <h2 className="px-4 pb-1.5 text-[13px] font-semibold text-faint">{s.section}</h2>
           <div className="rounded-3xl bg-card overflow-hidden">
             {items(s).map((it) => (
-              <a key={it.key} href={it.to} className="flex items-center gap-3.5 px-4 min-h-14 border-b border-line last:border-0 hover:bg-hover">
+              <a key={it.key} href={it.to} className="flex items-center gap-3.5 px-4 min-h-12 border-b border-line last:border-0 hover:bg-hover">
                 <span className="size-5 shrink-0 grid place-items-center text-muted">{it.icon}</span>
-                <span className="flex-1 text-[17px]">{it.label}</span>
+                <span className="flex-1 text-body">{it.label}</span>
                 <ChevronRight size={16} className="text-faint" />
               </a>
             ))}
           </div>
         </section>
       ))}
-      <SignOutButton icon className="w-full h-12 rounded-full bg-card text-bad text-[15px] font-medium inline-flex items-center justify-center gap-2" />
+      <SignOutButton icon className="w-full h-12 rounded-full bg-card text-bad text-body font-medium inline-flex items-center justify-center gap-2" />
     </nav>
   );
 
@@ -213,7 +213,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
       <div className="flex-1 min-w-0 flex">
         <aside className="w-[268px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-7 safe-top flex flex-col">
           <div className="px-3 pb-1.5">
-            <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+            <h1 className="t-title">Settings</h1>
             <div className="mt-0.5 text-[13px] text-faint truncate">{who}</div>
           </div>
           {list}
@@ -235,7 +235,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
               <ChevronLeft size={22} aria-hidden />
             </button>
           )}
-          <h1 className="text-xl font-bold tracking-tight truncate">{label ?? "Settings"}</h1>
+          <h1 className="t-title truncate">{label ?? "Settings"}</h1>
         </header>
       )}
       {current === "apps" ? (

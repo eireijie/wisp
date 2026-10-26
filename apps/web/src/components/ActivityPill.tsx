@@ -127,7 +127,7 @@ export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: {
               <AgentAvatar agent={w.agent} size={24} live interactive={false} />
             </span>
           ))}
-          {working.length > 2 && <span className="-ml-2 size-5 rounded-full ring-2 ring-panel bg-chip text-[10px] font-semibold text-muted grid place-items-center">+{working.length - 2}</span>}
+          {working.length > 2 && <span className="-ml-2 size-5 rounded-full ring-2 ring-panel bg-chip text-[10px] font-medium text-muted grid place-items-center">+{working.length - 2}</span>}
         </span>
         <span className="work-dots scale-75" aria-hidden>
           <i />
@@ -135,15 +135,15 @@ export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: {
           <i />
         </span>
         <span className="truncate">
-          <span className="font-semibold">{firstName}</span> is {runActivity(first.run, agents)}
+          <span className="font-medium">{firstName}</span> is {runActivity(first.run, agents)}
         </span>
         {rest && <span className="shrink-0 text-muted">· {rest}</span>}
       </button>
       {open && (
         <div className="max-md:fixed max-md:inset-0 max-md:z-50 max-md:flex max-md:items-end max-md:bg-black/50 max-md:p-3 md:contents" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
-          <div role="dialog" aria-label="Working here" className="glass md:absolute md:bottom-full md:left-0 md:mb-2 z-50 w-full md:w-96 md:max-w-[calc(100vw-1.5rem)] rounded-[30px] p-2 pb-3">
+          <div role="dialog" aria-label="Working here" className="glass md:absolute md:bottom-full md:left-0 md:mb-2 z-50 w-full md:w-96 md:max-w-[calc(100vw-1.5rem)] rounded-xl p-2 pb-3">
             <div className="flex items-center px-3 pt-2 pb-1">
-              <span className="flex-1 text-[17px] font-semibold">Working here</span>
+              <span className="flex-1 text-body font-medium">Working here</span>
               <button type="button" onClick={() => setOpen(false)} className="size-9 rounded-full grid place-items-center text-muted hover:bg-hover" aria-label="Close">
                 <X size={18} />
               </button>
@@ -152,7 +152,7 @@ export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: {
               <div key={w.agentId} className="flex items-center gap-3 rounded-2xl px-3 py-2.5">
                 <AgentAvatar agent={w.agent} size={36} live />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[15px] font-semibold truncate">{w.agent?.name ?? "Agent"}</div>
+                  <div className="text-body font-medium truncate">{w.agent?.name ?? "Agent"}</div>
                   <div className="text-[13px] text-muted truncate">{workDetail(w.run, agents)}</div>
                   <div className="text-xs text-faint truncate">
                     {nodeName(w.agent?.nodeId, devices) ? `On ${nodeName(w.agent?.nodeId, devices)} · ` : ""}
@@ -185,14 +185,14 @@ export function ActivityPill({ runs, onDetails, onThread, hereThread = null }: {
                     </button>
                   </div>
                 </div>
-                <button type="button" onClick={() => void stopRuns(w.runs)} className="h-9 shrink-0 px-3.5 rounded-full border border-control-line bg-control text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-hover" title={`Stop ${w.agent?.name ?? "it"}`}>
+                <button type="button" onClick={() => void stopRuns(w.runs)} className="h-9 shrink-0 px-3.5 rounded-full border border-control-line bg-control text-[13px] font-medium inline-flex items-center gap-1.5 hover:bg-hover" title={`Stop ${w.agent?.name ?? "it"}`}>
                   <Square size={11} fill="currentColor" /> Stop
                 </button>
               </div>
             ))}
             {working.length > 1 && (
               <div className="px-3 pt-1">
-                <button type="button" onClick={() => void stopRuns(working.flatMap((w) => w.runs))} className="h-11 w-full rounded-full bg-bad text-[15px] font-semibold text-white inline-flex items-center justify-center gap-2">
+                <button type="button" onClick={() => void stopRuns(working.flatMap((w) => w.runs))} className="h-11 w-full rounded-full bg-bad text-body font-medium text-white inline-flex items-center justify-center gap-2">
                   <Square size={12} fill="currentColor" /> Stop all
                 </button>
               </div>

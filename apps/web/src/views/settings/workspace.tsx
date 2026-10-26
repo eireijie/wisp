@@ -42,8 +42,8 @@ export function GeneralPage() {
       >
         <Card>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
-            <span className="text-[15px] w-40 shrink-0">Organization name</span>
-            <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Organization name" />
+            <span className="text-body w-40 shrink-0">Organization name</span>
+            <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-body disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Organization name" />
           </label>
           <Row label="Hub address" hint="Devices connect here, and so do agents running elsewhere through wisp-mcp. Access gives it an address that works from anywhere.">
             <span className="text-sm text-muted break-all max-w-[240px] text-right">{shareOrigin(access).replace(/^https?:\/\//, "")}</span>

@@ -228,8 +228,8 @@ struct ArchivedBar: View {
     HStack(spacing: 12) {
       Image(systemName: "archivebox").font(.system(size: 18)).foregroundStyle(Palette.muted)
       VStack(alignment: .leading, spacing: 1) {
-        Text("This team is archived").font(.system(size: 16, weight: .semibold))
-        Text("Nobody can post. Notes stay.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+        Text("This team is archived").font(.system(size: 15, weight: .semibold))
+        Text("Nobody can post. Notes stay.").font(.system(size: 13)).foregroundStyle(Palette.muted)
       }
       Spacer(minLength: 8)
       if store.canManage {
@@ -241,6 +241,7 @@ struct ArchivedBar: View {
     }
     .padding(16)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .padding(.horizontal, 18)
     .padding(.bottom, 8)
   }
@@ -363,17 +364,17 @@ struct ThreadView: View {
         HStack(spacing: 10) {
           if let agent { AgentAvatar(agent: agent, size: 30, showStatus: false) }
           VStack(alignment: .leading, spacing: 0) {
-            Text("Handed to \(agent?.name ?? "an agent")").font(.system(size: 16, weight: .semibold)).lineLimit(1)
+            Text("Handed to \(agent?.name ?? "an agent")").font(.system(size: 15, weight: .semibold)).lineLimit(1)
             Text(store.taskState(t)).font(.system(size: 12)).foregroundStyle(store.taskState(t) == "Working" ? Palette.green : Palette.muted)
           }
         }
-        .padding(.leading, 14).padding(.trailing, 20).frame(height: 52).glassPill()
+        .padding(.leading, 14).padding(.trailing, 20).frame(height: 44).glassPill()
       } else {
         VStack(spacing: 0) {
-          Text(parent == nil ? "Thread" : "Sub-thread").font(.system(size: 16, weight: .semibold))
+          Text(parent == nil ? "Thread" : "Sub-thread").font(.system(size: 15, weight: .semibold))
           if let channel { Text(store.title(of: channel)).font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(1) }
         }
-        .padding(.horizontal, 24).frame(height: 52).glassPill()
+        .padding(.horizontal, 24).frame(height: 44).glassPill()
       }
     } trailing: {
       if handoffTask != nil, let agent = handoffAgent, agent.status == .busy, store.role != "guest" {
@@ -448,6 +449,7 @@ struct ThreadRoot: View {
     .padding(16)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .padding(.horizontal, 16)
     .padding(.top, 4)
   }
@@ -464,8 +466,8 @@ struct HandoffBrief: View {
     let from = task.flatMap { t in t.from.flatMap { $0.kind == .agent ? store.agent($0.id)?.name : nil } }
     let to = task.flatMap { store.agent($0.toAgentId ?? "") }?.name
     ChatCardShell(symbol: "arrow.left.arrow.right", label: "\(from ?? "Someone") handed this to \(to ?? "an agent")") {
-      Text(task?.title ?? message.body).font(.system(size: 16, weight: .semibold))
-      if let task, !task.brief.isEmpty { Text(task.brief).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(4) }
+      Text(task?.title ?? message.body).font(.system(size: 15, weight: .semibold))
+      if let task, !task.brief.isEmpty { Text(task.brief).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(4) }
       HStack(spacing: 8) {
         if let task { Text(store.taskState(task)).font(.system(size: 12, weight: .semibold)).padding(.horizontal, 9).padding(.vertical, 3).background(Capsule().fill(Palette.control)) }
         Text("Started \(message.date.formatted(date: .omitted, time: .shortened))").font(.system(size: 13)).foregroundStyle(Palette.muted)
@@ -499,18 +501,18 @@ struct EmptyChannel: View {
         AgentAvatar(agent: a, size: 72, showStatus: false, interactive: true)
         Text(a.name).font(.system(size: 20, weight: .semibold))
         Text("This is the start of your conversation with @\(a.handle). Ask it anything, or hand it a task.")
-          .font(.system(size: 16)).foregroundStyle(Palette.muted)
+          .font(.system(size: 15)).foregroundStyle(Palette.muted)
         HStack(spacing: 6) {
           GlowDot(color: a.status == .offline ? .gray : Palette.online)
           Text(a.status == .offline ? "Offline" : "Ready\(store.nodes.first { $0.id == a.nodeId }.map { " on \($0.name)" } ?? "")")
         }
-        .font(.system(size: 14)).foregroundStyle(Palette.muted)
+        .font(.system(size: 13)).foregroundStyle(Palette.muted)
       } else {
         let team = channel.team(agents: store.agents)
         let agents = (team?.nodes ?? []).compactMap { store.agent($0.agentId) }
         TeamGhosts(agents: agents, seed: channel.name, size: 64)
         Text(channel.name).font(.system(size: 20, weight: .semibold))
-        Text(intro(team)).font(.system(size: 16)).foregroundStyle(Palette.muted)
+        Text(intro(team)).font(.system(size: 15)).foregroundStyle(Palette.muted)
         if channel.archivedAt == nil {
           CardGroup {
             if store.canManage {
@@ -633,11 +635,11 @@ struct Composer: View {
           Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
           Button("Files", systemImage: "folder") { pickingFiles = true }
           if chatAgent == nil { Button("Mention an agent", systemImage: "at") { text += (text.isEmpty || text.hasSuffix(" ") ? "@" : " @"); focused = true } }
-        } label: { CircleLabel(symbol: "plus", size: 56, weight: .regular) }
+        } label: { CircleLabel(symbol: "plus", size: 44, weight: .regular) }
           .accessibilityLabel("Attach").accessibilityIdentifier("composer-attach")
         HStack(alignment: .bottom, spacing: 6) {
           TextField(replyTarget.map { "Reply to \($0.name)" } ?? placeholder, text: $text, selection: $selection, axis: .vertical)
-            .font(.system(size: 17))
+            .font(.system(size: 15))
             .lineLimit(1...8)
             .focused($focused)
             .padding(.vertical, 15)
@@ -651,7 +653,7 @@ struct Composer: View {
               }
             } label: {
               Image(systemName: dictation.active ? "mic.fill" : "mic")
-                .font(.system(size: 18, weight: .regular))
+                .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(dictation.active ? Palette.blue : Palette.muted)
                 .frame(width: 40, height: 40)
             }
@@ -662,7 +664,7 @@ struct Composer: View {
           if !empty || sending || onCall == nil {
             Button { submit() } label: {
               Image(systemName: sending ? "ellipsis" : "arrow.up")
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Palette.ground)
                 .frame(width: 56, height: 44)
                 .background(Capsule().fill(Palette.text))
@@ -676,7 +678,7 @@ struct Composer: View {
           } else if let onCall {
             Button(action: onCall) {
               Image(systemName: "waveform")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Palette.ground)
                 .frame(width: 56, height: 44)
                 .background(Capsule().fill(Palette.text))
@@ -686,13 +688,13 @@ struct Composer: View {
             .accessibilityLabel(callLabel).accessibilityIdentifier("composer-call")
           }
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: 44)
         .background {
           if #available(iOS 26, *) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.clear).glassEffect(.regular.interactive(), in: .rect(cornerRadius: 28, style: .continuous))
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.clear).glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24, style: .continuous))
           } else {
-            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Palette.control)
-              .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Palette.hairline))
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Palette.control)
+              .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Palette.hairline))
           }
         }
       }
@@ -753,7 +755,7 @@ struct Composer: View {
               PersonAvatar(name: suggestion.name, size: 32)
             }
             VStack(alignment: .leading, spacing: 0) {
-              Text(suggestion.name).font(.system(size: 16, weight: .medium))
+              Text(suggestion.name).font(.system(size: 15, weight: .medium))
               Text(subtitle(suggestion)).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -791,7 +793,8 @@ struct Composer: View {
       .accessibilityLabel("Cancel reply")
     }
     .padding(.leading, 14).padding(.trailing, 4).padding(.vertical, 4)
-    .background(Palette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 
   /** What's attached so far, each with a way to take it off again. */
@@ -812,7 +815,8 @@ struct Composer: View {
                 .accessibilityLabel("Remove \(f.name)")
             }
             .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 6)
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
           }
           ForEach(uploading) { p in
             HStack(spacing: 8) {
@@ -823,7 +827,8 @@ struct Composer: View {
               }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
             .accessibilityLabel("Uploading \(p.name)")
           }
         }

@@ -41,11 +41,12 @@ struct AboutYouView: View {
           }
         } label: {
           HStack {
-            Text("Whose memory").font(.system(size: 17)).foregroundStyle(Palette.faint)
+            Text("Whose memory").font(.system(size: 15)).foregroundStyle(Palette.faint)
             Spacer()
-            Text(user == "me" ? "You" : profile?.person.name ?? "…").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+            Text(user == "me" ? "You" : profile?.person.name ?? "…").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
             Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.faint)
-          }.padding(.horizontal, 18).frame(height: 54).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous)).contentShape(Rectangle())
+          }.padding(.horizontal, 18).frame(height: 54).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder)).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("about-whose")
       }
       InlineError(error: action.error)
@@ -75,11 +76,12 @@ struct AboutYouView: View {
             else { Button { due = Date() } label: { chip("calendar", "Due date", chevron: false) }.buttonStyle(.plain) }
           }
           Spacer()
-          Button { add() } label: { Text("Add").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 20).frame(height: 40).background(Capsule().fill(Palette.text)).opacity(draft.trimmed.isEmpty || action.busy ? 0.4 : 1) }
+          Button { add() } label: { Text("Add").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 20).frame(height: 40).background(Capsule().fill(Palette.text)).opacity(draft.trimmed.isEmpty || action.busy ? 0.4 : 1) }
             .buttonStyle(.plain).disabled(draft.trimmed.isEmpty || action.busy).accessibilityIdentifier("about-add-confirm")
         }
       }
     }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 
   private func chip(_ symbol: String, _ title: String, chevron: Bool) -> some View {
@@ -134,9 +136,9 @@ struct AboutYouView: View {
   private func row(_ item: MemoryItem) -> some View {
     HStack(spacing: 8) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(item.text).font(.system(size: 17)).foregroundStyle(Palette.text).strikethrough(item.status == "done").textSelection(.enabled)
+        Text(item.text).font(.system(size: 15)).foregroundStyle(Palette.text).strikethrough(item.status == "done").textSelection(.enabled)
         let sub = subtitle(item)
-        if !sub.isEmpty { Text(sub).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+        if !sub.isEmpty { Text(sub).font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
       Spacer(minLength: 4)
       Menu {

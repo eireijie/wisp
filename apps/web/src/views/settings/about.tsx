@@ -75,8 +75,8 @@ export function AboutPage() {
     return (
       <div className="min-h-[60vh] grid place-items-center text-center">
         <div className="max-w-sm space-y-3">
-          <h2 className="text-[28px] font-bold tracking-tight">Updating Wisp</h2>
-          <p className="text-[15px] text-muted">Everyone is briefly disconnected. This page reloads by itself when the hub is back.</p>
+          <h2 className="t-title">Updating Wisp</h2>
+          <p className="text-body text-muted">Everyone is briefly disconnected. This page reloads by itself when the hub is back.</p>
           <p className="text-sm text-faint" role="status">
             {restarting !== null || u?.state === "restarting" ? "Restarting the hub…" : (u?.log.at(-1) ?? "Updating…")}
           </p>
@@ -87,8 +87,8 @@ export function AboutPage() {
     return (
       <div className="min-h-[60vh] grid place-items-center text-center">
         <div className="max-w-sm space-y-4">
-          <h2 className="text-[28px] font-bold tracking-tight">The update didn't finish</h2>
-          <p className="text-[15px] text-muted">Wisp is still running the version it had. Nothing was lost. You can try again, or ask the person who runs the hub.</p>
+          <h2 className="t-title">The update didn't finish</h2>
+          <p className="text-body text-muted">Wisp is still running the version it had. Nothing was lost. You can try again, or ask the person who runs the hub.</p>
           <p className="text-sm text-bad whitespace-pre-wrap">{u.message}</p>
           <div className="flex justify-center gap-2">
             {isOwner && (
@@ -139,7 +139,7 @@ export function AboutPage() {
           </Row>
           {c?.canUpdate && c.changes.length > 0 && (
             <div className="px-[18px] py-3 space-y-1.5">
-              <div className="text-[13px] font-semibold text-faint">What's changed</div>
+              <div className="text-[13px] font-medium text-faint">What's changed</div>
               <ul className="space-y-1 text-sm">
                 {c.changes.slice(0, 8).map((line) => (
                   <li key={line} className="truncate">
@@ -198,7 +198,7 @@ export function AboutPage() {
       </Section>
       {confirm && (
         <Modal title="Update and restart the hub?" onClose={() => setConfirm(false)}>
-          <p className="text-[15px] text-muted mb-5">Everyone will briefly disconnect. Wisp comes back by itself.</p>
+          <p className="text-body text-muted mb-5">Everyone will briefly disconnect. Wisp comes back by itself.</p>
           <div className="flex flex-col gap-2">
             <Button variant="primary" className="h-12" onClick={update}>
               Update and restart

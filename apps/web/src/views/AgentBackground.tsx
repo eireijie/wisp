@@ -66,7 +66,7 @@ function Choice({ label, children }: { label: string; children: (close: () => vo
 
 function Pick({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className={cx("w-full h-10 px-3 rounded-lg flex items-center justify-between text-left text-[15px] font-semibold hover:bg-hover", on && "bg-chip")}>
+    <button type="button" onClick={onClick} className={cx("w-full h-10 px-3 rounded-lg flex items-center justify-between text-left text-body font-medium hover:bg-hover", on && "bg-chip")}>
       {children}
       {on && <Check size={15} />}
     </button>
@@ -138,7 +138,7 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
     <div className="max-w-2xl space-y-8">
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight">Background</h2>
+          <h2 className="t-title">Background</h2>
           <p className="mt-1 text-sm text-muted">{agent.name} checks in on its own while you're away and messages you when something needs you.</p>
         </div>
         {state && !state.notAllowed && (

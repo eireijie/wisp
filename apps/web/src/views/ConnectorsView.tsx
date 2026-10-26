@@ -345,7 +345,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
         )}
         <div className="flex justify-end gap-2 pt-1">
           <Sec onClick={onClose}>Cancel</Sec>
-          <Prim type="submit" className="h-11 text-[15px]" disabled={busy || !name.trim() || nameTaken || missing.length > 0 || blocked} title={blocked ? CONNECTOR_HELP : missing.length ? `Needs: ${missing.join(", ")}` : undefined}>
+          <Prim type="submit" className="h-11 text-body" disabled={busy || !name.trim() || nameTaken || missing.length > 0 || blocked} title={blocked ? CONNECTOR_HELP : missing.length ? `Needs: ${missing.join(", ")}` : undefined}>
             {saveLabel}
           </Prim>
         </div>

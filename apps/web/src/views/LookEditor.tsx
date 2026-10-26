@@ -72,14 +72,14 @@ export function LookEditor({ value: look, onChange, name, below, extra, speaking
     <div className="grid lg:grid-cols-[minmax(280px,400px)_1fr] gap-6 lg:gap-8 items-start">
       {/* preview */}
       <div className="lg:sticky lg:top-0 space-y-3">
-        <div className="rounded-[1.75rem] bg-bg border border-line h-72 sm:h-96 grid place-items-center overflow-hidden">
+        <div className="rounded-xl bg-bg border border-line h-72 sm:h-96 grid place-items-center overflow-hidden">
           <Ghost look={look} size={240} mood={mood} speakingLevel={speakingLevel} trackPointer interactive label={`${name}'s ghost, looking toward your pointer`} />
         </div>
         <div>
-          <div className="text-[13px] font-semibold text-muted mb-1.5">Preview a mood</div>
+          <div className="text-[13px] font-medium text-muted mb-1.5">Preview a mood</div>
           <div className="flex rounded-xl bg-chip p-0.5" role="radiogroup" aria-label="Preview a mood">
             {MOODS.map(([m, label]) => (
-              <button key={m} type="button" role="radio" aria-checked={mood === m} onClick={() => setMood(m)} className={cx("flex-1 h-8 rounded-[10px] text-[13px] font-semibold", mood === m ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
+              <button key={m} type="button" role="radio" aria-checked={mood === m} onClick={() => setMood(m)} className={cx("flex-1 h-8 rounded-[10px] text-[13px] font-medium", mood === m ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
                 {label}
               </button>
             ))}
@@ -122,7 +122,7 @@ export function LookEditorScreen({ initial, name, onSave, onBack, saving = false
           <ArrowLeft size={17} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight truncate">
+          <h1 tabIndex={-1} className="t-title truncate">
             {who}'s look
           </h1>
           <p className="text-sm text-muted">Everything here shows up wherever {name.trim() || "it"} appears. Move your pointer over the preview and it watches.</p>
@@ -200,7 +200,7 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2.5">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
+      <h2 className="text-body font-semibold">{title}</h2>
       {children}
     </section>
   );
@@ -217,7 +217,7 @@ function Chips<T extends string>({ title, options, value, onPick }: { title: str
             role="radio"
             aria-checked={value === v}
             onClick={() => onPick(v)}
-            className={cx("h-9 px-3.5 rounded-full border text-[13px] font-semibold transition-colors", value === v ? "bg-ink text-bg border-ink" : "bg-panel text-ink border-line hover:bg-hover")}
+            className={cx("h-9 px-3.5 rounded-full border text-[13px] font-medium transition-colors", value === v ? "bg-ink text-bg border-ink" : "bg-panel text-ink border-line hover:bg-hover")}
           >
             {LOOK_LABELS[v] ?? v}
           </button>
@@ -231,7 +231,7 @@ function SwitchRow({ name, body, on, onChange }: { name: string; body: string; o
   return (
     <div className="flex items-center gap-4 px-4 py-3">
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold">{name}</div>
+        <div className="text-sm font-medium">{name}</div>
         <div className="text-[13px] text-muted">{body}</div>
       </div>
       <Toggle on={on} onChange={onChange} label={name} />

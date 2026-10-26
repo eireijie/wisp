@@ -76,7 +76,7 @@ function TreeItem({ node, depth, ...rest }: TreeProps & { node: TreeNode; depth:
   const pad = { paddingLeft: 10 + depth * 16 };
   if (node.note)
     return (
-      <button onClick={() => onOpen(node.path)} style={pad} aria-current={node.path === active ? "page" : undefined} className={cx("w-full text-left pr-3 h-10 rounded-2xl flex items-center gap-2.5 text-[14px]", node.path === active ? "bg-card text-ink font-semibold" : "text-ink/85 hover:bg-hover")}>
+      <button onClick={() => onOpen(node.path)} style={pad} aria-current={node.path === active ? "page" : undefined} className={cx("w-full text-left pr-3 h-10 rounded-2xl flex items-center gap-2.5 text-[14px]", node.path === active ? "bg-card text-ink font-medium" : "text-ink/85 hover:bg-hover")}>
         <span className="w-3.5 shrink-0" />
         <FileText size={15} strokeWidth={1.8} className="shrink-0 text-faint" />
         <span className="truncate">{node.name}</span>
@@ -97,7 +97,7 @@ function TreeItem({ node, depth, ...rest }: TreeProps & { node: TreeNode; depth:
         >
           <ChevronRight size={14} className={cx("text-faint transition-transform shrink-0", open && "rotate-90")} />
           <Folder size={15} strokeWidth={1.8} className="text-faint shrink-0" />
-          <span className={cx("truncate", depth === 0 && "font-semibold")}>{label(node.name)}</span>
+          <span className={cx("truncate", depth === 0 && "font-medium")}>{label(node.name)}</span>
           <SharedMark path={node.path} ruled={ruled} />
         </button>
         <button onClick={() => onShare(node.path)} className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 text-muted hover:text-ink" title="Who can see this folder" aria-label={`Who can see ${label(node.name)}`}>
@@ -154,7 +154,7 @@ export function ViewAsPicker({ viewAs, onChange }: { viewAs: string | null; onCh
     >
       {(close) => (
         <div role="listbox" aria-label="View memory as">
-          <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">View memory as</div>
+          <div className="px-3 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted">View memory as</div>
           {row(!viewAs, <User size={16} className="text-muted" />, "You", () => onChange(null), close)}
           {agents.map((a) => row(viewAs === `agent:${a.id}`, <AgentAvatar agent={a} size={20} interactive={false} />, a.name, () => onChange(`agent:${a.id}`), close))}
         </div>
@@ -205,7 +205,7 @@ export function Sidebar({
   return (
     <aside className="w-[300px] shrink-0 border-r border-line flex flex-col min-h-0">
       <div className="px-5 pt-5 pb-3 flex items-center gap-3">
-        <a href="#/vault" className="flex-1 text-[26px] font-bold tracking-tight leading-none">
+        <a href="#/vault" className="t-title flex-1 leading-none">
           Memory
         </a>
         {canNew && (
@@ -255,7 +255,7 @@ export function Sidebar({
       </div>
       <nav className="border-t border-line px-3 py-3 space-y-0.5" aria-label="More in Memory">
         {links.map((l) => (
-          <button key={l.key} onClick={l.onClick} aria-current={panel === l.key ? "page" : undefined} className={cx("w-full h-10 px-3 rounded-2xl flex items-center gap-3 text-[14px] text-left", panel === l.key ? "bg-card font-semibold" : "text-ink/85 hover:bg-hover")}>
+          <button key={l.key} onClick={l.onClick} aria-current={panel === l.key ? "page" : undefined} className={cx("w-full h-10 px-3 rounded-2xl flex items-center gap-3 text-[14px] text-left", panel === l.key ? "bg-card font-medium" : "text-ink/85 hover:bg-hover")}>
             <span className="text-muted">{l.icon}</span>
             {l.label}
           </button>

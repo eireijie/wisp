@@ -60,7 +60,7 @@ struct AuthHero: View {
     VStack(spacing: 14) {
       if ghost { WispMark() }
       Text(title)
-        .font(.system(size: 30, weight: .bold))
+        .font(.system(size: 22, weight: .semibold))
         .tracking(-0.4)
         .foregroundStyle(Palette.text)
         .multilineTextAlignment(.center)
@@ -68,7 +68,7 @@ struct AuthHero: View {
         .accessibilityAddTraits(.isHeader)
       if let subtitle {
         Text(subtitle)
-          .font(.system(size: 16))
+          .font(.system(size: 15))
           .foregroundStyle(Palette.muted)
           .multilineTextAlignment(.center)
           .lineSpacing(3)
@@ -91,6 +91,7 @@ struct CodeCard: View {
       .padding(.vertical, 20)
       .padding(.horizontal, 34)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       .accessibilityLabel(code.filter { $0 != " " }.map(String.init).joined(separator: " "))
   }
 }
@@ -101,7 +102,7 @@ struct WaitingLine: View {
   var body: some View {
     HStack(spacing: 8) {
       WorkingDots(color: Palette.muted)
-      Text(text).font(.system(size: 14)).foregroundStyle(Palette.muted)
+      Text(text).font(.system(size: 13)).foregroundStyle(Palette.muted)
     }
   }
 }
@@ -152,7 +153,7 @@ struct AuthButton: View {
     Button(action: action) {
       HStack(spacing: 10) {
         if let symbol { Image(systemName: symbol).font(.system(size: 17, weight: .medium)) }
-        Text(title).font(.system(size: 17, weight: .semibold))
+        Text(title).font(.system(size: 15, weight: .semibold))
       }
       .frame(maxWidth: .infinity, minHeight: 40)
     }

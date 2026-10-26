@@ -99,7 +99,7 @@ const TONE: Record<Tone, string> = {
 /** A small status pill ("On", "Signed in", "Coming soon"). */
 export function Badge({ tone = "grey", icon, children, title }: { tone?: Tone; icon?: ReactNode; children: ReactNode; title?: string }) {
   return (
-    <span title={title} className={cx("inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold", TONE[tone])}>
+    <span title={title} className={cx("inline-flex h-6 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium", TONE[tone])}>
       {icon}
       {children}
     </span>
@@ -158,13 +158,13 @@ export function Item({ icon, title, sub, right, onClick, href, danger, disabled,
     <>
       {icon}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-        <span className={cx("truncate text-[17px] font-medium", danger && "text-bad")}>{title}</span>
+        <span className={cx("truncate text-body font-medium", danger && "text-bad")}>{title}</span>
         {sub && <span className="truncate text-sm text-faint">{sub}</span>}
         {children}
       </span>
     </>
   );
-  const cls = "flex min-h-16 w-full min-w-0 items-center gap-3.5 px-4 py-2.5 text-left";
+  const cls = "flex min-h-14 w-full min-w-0 items-center gap-3.5 px-4 py-2.5 text-left";
   // a row that goes somewhere can still hold its own button on the right, so the two are siblings
   if (!onClick && !href)
     return (
@@ -188,17 +188,17 @@ const btn = "inline-flex shrink-0 items-center justify-center gap-2 whitespace-n
 
 /** The one main action: a big filled capsule. */
 export function Prim({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx(btn, "h-[50px] rounded-full bg-accent px-6 text-base font-semibold text-accent-ink hover:bg-accent/90", className)} />;
+  return <button type="button" {...p} className={cx(btn, "h-[50px] rounded-full bg-accent px-6 text-base font-medium text-accent-ink hover:bg-accent/90", className)} />;
 }
 
 /** A secondary capsule. */
 export function Sec({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx(btn, "h-11 rounded-full border border-control-line bg-control px-[18px] text-[15px] hover:bg-hover", className)} />;
+  return <button type="button" {...p} className={cx(btn, "h-11 rounded-full border border-control-line bg-control px-[18px] text-body hover:bg-hover", className)} />;
 }
 
 /** "Add", "Install", "Bring in": the small button at the end of a row. */
 export function Add({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx(btn, "h-[38px] rounded-full bg-chip px-[18px] text-[15px] hover:bg-hover", className)} />;
+  return <button type="button" {...p} className={cx(btn, "h-[38px] rounded-full bg-chip px-[18px] text-body hover:bg-hover", className)} />;
 }
 
 /** A round glass button (the circle from the tokens), with a label for screen readers. */
@@ -262,10 +262,10 @@ export function Chip({ on, onClick, children, count }: { on?: boolean; onClick: 
  */
 export function Dlg({ title, sub, onClose, children, wide, footer }: { title: string; sub?: string; onClose: () => void; children: ReactNode; wide?: boolean; footer?: ReactNode }) {
   return (
-    <Modal title={title} headerless onClose={onClose} wide={wide} className="!rounded-t-[38px] sm:!rounded-[28px]" contentClassName="!p-0">
+    <Modal title={title} headerless onClose={onClose} wide={wide} className="!rounded-t-[16px] sm:!rounded-xl" contentClassName="!p-0">
       <div className="flex items-start gap-3 px-5 pb-3 pt-5 sm:px-6 sm:pt-6">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-xl font-semibold">{title}</h2>
+          <h2 className="t-title truncate">{title}</h2>
           {sub && <p className="mt-0.5 text-sm text-faint">{sub}</p>}
         </div>
         <Circle label="Close" onClick={onClose}>
@@ -289,5 +289,5 @@ export function Pick({ value, onChange, children, label, disabled, className }: 
 
 /** A card of information that isn't a list (an explanation, a callout). */
 export function Note({ children, tone }: { children: ReactNode; tone?: "warn" | "bad" }) {
-  return <div className={cx("rounded-3xl bg-card px-4 py-3.5 text-[15px] leading-snug text-ink/90 md:border md:border-line", tone === "warn" && "text-warn", tone === "bad" && "text-bad")}>{children}</div>;
+  return <div className={cx("rounded-3xl bg-card px-4 py-3.5 text-body leading-snug text-ink/90 md:border md:border-line", tone === "warn" && "text-warn", tone === "bad" && "text-bad")}>{children}</div>;
 }

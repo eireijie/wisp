@@ -82,7 +82,7 @@ function AddChooser({ onClose, onPick }: { onClose: () => void; onPick: (s: "dev
     <button type="button" onClick={() => onPick(to)} className="w-full text-left rounded-2xl bg-card hover:bg-hover border border-line p-4 flex items-center gap-3">
       <span className="size-10 shrink-0 rounded-xl bg-chip grid place-items-center text-ink">{icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold">{title}</span>
+        <span className="block text-body font-medium">{title}</span>
         <span className="block text-sm text-muted">{body}</span>
       </span>
       <ChevronRight size={18} className="text-faint shrink-0" />
@@ -127,7 +127,7 @@ function treeRow(key: string, to: string, icon: ReactNode, title: string, sub: s
     <a key={key} href={to} aria-current={active ? "page" : undefined} className={cx("flex items-center gap-3 rounded-2xl px-3 py-2.5 min-h-12 hover:bg-hover", nested && "ml-5", active && "bg-side-active")}>
       <span className="w-[22px] grid place-items-center text-ink">{icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold truncate">{title}</span>
+        <span className="block text-sm font-medium truncate">{title}</span>
         <span className="block text-xs text-faint truncate">{sub}</span>
       </span>
       <span className="size-2 rounded-full shrink-0" style={{ background: dot(tone) }} />
@@ -158,7 +158,7 @@ export function ComputerTree() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-6 pb-4 space-y-1">
       <div className="flex items-center justify-between px-2 pb-3">
-        <a href={href({ view: "computers", computerId: null })} className="text-2xl font-bold tracking-tight">
+        <a href={href({ view: "computers", computerId: null })} className="t-title">
           Computers
         </a>
         {me?.role !== "guest" && <AddCircle onClick={add.start} />}
@@ -196,7 +196,7 @@ function ComputerCard({ computer: c, agents }: { computer: ComputerInfo; agents:
       <div className="px-3.5 py-3 space-y-1">
         <div className="flex items-center gap-2">
           {own ? <Lock size={16} className="text-muted shrink-0" /> : on[0] ? <AgentAvatar agent={on[0]} size={22} badge={false} /> : <Monitor size={16} className="text-muted shrink-0" />}
-          <span className="font-semibold text-sm truncate flex-1">{own ? "Your screen" : c.name}</span>
+          <span className="font-medium text-sm truncate flex-1">{own ? "Your screen" : c.name}</span>
           {state.working ? <WorkingBadge /> : <Pill tone={own && state.label === "Ready" ? "neutral" : state.tone}>{own && state.label === "Ready" ? "Shared" : state.label}</Pill>}
         </div>
         <p className="text-[13px] text-muted truncate">{c.help ? <span className="text-accent-text font-medium">Needs you: {c.help.request}</span> : c.activity && state.working ? c.activity.text : own ? "Agents ask before using it" : on.length ? on.map((a) => a.name).join(", ") : "No agents yet"}</p>
@@ -253,7 +253,7 @@ export function ComputersHome() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1120px] mx-auto px-4 md:px-7 pt-6 md:pt-8 pb-8 space-y-5">
           <header className="flex items-center gap-3.5 safe-top">
-            <h1 className="text-[28px] font-bold tracking-tight">Computers</h1>
+            <h1 className="t-title">Computers</h1>
             <span className="text-sm text-faint flex-1">{devices ? `${count.online} of ${count.total} online` : ""}</span>
             <Button variant="primary" onClick={add.start} className="h-[42px] px-[18px]">
               <Plus size={16} strokeWidth={2.2} /> Add
@@ -268,7 +268,7 @@ export function ComputersHome() {
             <div className="rounded-3xl bg-card border border-line p-4 flex flex-wrap items-center gap-3" role="status">
               {asker ? <AgentAvatar agent={asker} size={32} badge={false} /> : <Hand size={20} className="text-muted" />}
               <div className="min-w-0 flex-1 basis-44">
-                <div className="text-sm font-semibold">{asker?.name ?? "An agent"} needs you on this computer</div>
+                <div className="text-sm font-medium">{asker?.name ?? "An agent"} needs you on this computer</div>
                 <div className="text-sm text-muted">{asking.help!.request}</div>
               </div>
               <Button variant="primary" onClick={() => go({ view: "computers", computerId: asking.id })}>
@@ -282,7 +282,7 @@ export function ComputersHome() {
           {empty && (
             <div className="rounded-3xl bg-card p-8 text-center space-y-3">
               <Monitor className="mx-auto text-muted" size={28} />
-              <h2 className="text-lg font-semibold">Give your agents a computer</h2>
+              <h2 className="t-title">Give your agents a computer</h2>
               <p className="text-sm text-muted max-w-md mx-auto">Agents work on computers the way you do: they open apps and websites, sign in once, and keep their files. You can watch them work and take control anytime.</p>
               <Button variant="primary" onClick={add.start}>
                 <Plus size={16} /> Add
@@ -315,7 +315,7 @@ export function ComputersHome() {
                     <Smartphone size={20} strokeWidth={1.8} />
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block font-semibold text-base">Phones</span>
+                    <span className="block font-medium text-base">Phones</span>
                     <span className="block text-[13px] text-faint">{phones} paired · get notifications</span>
                   </span>
                   <Pill tone="ok">Paired</Pill>
@@ -347,7 +347,7 @@ function DeviceGroupCard({ device: n, list, agents, isOwner, actions }: { device
             <Laptop size={20} strokeWidth={1.8} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-base truncate">{n.name}</span>
+            <span className="block font-medium text-base truncate">{n.name}</span>
             <span className="block text-[13px] text-faint truncate">
               {[n.capabilities ? osName(n.capabilities.platform) : null, !n.mine && n.ownerName ? `${n.ownerName}'s` : null, n.online ? (count ? `runs ${count} agent${count === 1 ? "" : "s"}` : "no agents yet") : n.lastSeen ? `last seen ${timeAgo(n.lastSeen)}` : "never connected"].filter(Boolean).join(" · ")}
             </span>

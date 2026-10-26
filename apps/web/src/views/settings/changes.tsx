@@ -13,7 +13,7 @@ export function AskAndChanges() {
       <AskAgent placeholder="Ask {name} to change anything" />
       {recent.length > 0 && (
         <section className="space-y-1">
-          <h3 className="text-[15px] font-extrabold text-muted">Recently changed</h3>
+          <h3 className="text-body font-semibold text-muted">Recently changed</h3>
           {recent.map((c) => {
             const agent = agents.find((a) => a.id === c.agentId);
             return (

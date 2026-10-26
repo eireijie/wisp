@@ -40,10 +40,10 @@ export function ModsPage() {
   const card = (k: FeatureKey, control: ReactNode) => (
     <div key={k} className="rounded-2xl border border-line p-4 flex flex-col gap-2.5">
       <div className="flex items-center gap-2.5">
-        <span className="size-9 shrink-0 rounded-[11px] bg-chip text-ink/80 grid place-items-center" aria-hidden>
+        <span className="size-9 shrink-0 rounded-lg bg-chip text-ink/80 grid place-items-center" aria-hidden>
           {ICONS[k]}
         </span>
-        <span className="flex-1 min-w-0 text-[15px] font-bold">{FEATURE_INFO[k].name}</span>
+        <span className="flex-1 min-w-0 text-body font-medium">{FEATURE_INFO[k].name}</span>
         {control}
       </div>
       <p className="text-sm leading-snug text-ink/75">{FEATURE_INFO[k].description}</p>
@@ -52,11 +52,11 @@ export function ModsPage() {
 
   return (
     <div className="space-y-8">
-      <h2 className="text-2xl font-extrabold">Mods</h2>
+      <h2 className="t-title">Mods</h2>
       {isOwner ? <AskAgent placeholder={`Ask {name}, like "turn on voice calls"`} /> : <p className="text-sm text-muted">Only owners can turn mods on or off.</p>}
       {on.length > 0 && (
         <section className="space-y-2.5" aria-labelledby="mods-on">
-          <h3 id="mods-on" className="text-[15px] font-extrabold text-muted">
+          <h3 id="mods-on" className="text-body font-semibold text-muted">
             On
           </h3>
           <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(250px,1fr))]">{on.map((k) => card(k, <Switch on label={FEATURE_INFO[k].name} disabled={!isOwner} onChange={(v) => save({ [k]: v })} />))}</div>
@@ -64,7 +64,7 @@ export function ModsPage() {
       )}
       {off.length > 0 && (
         <section className="space-y-2.5" aria-labelledby="mods-more">
-          <h3 id="mods-more" className="text-[15px] font-extrabold text-muted">
+          <h3 id="mods-more" className="text-body font-semibold text-muted">
             More mods
           </h3>
           <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(250px,1fr))]">

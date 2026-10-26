@@ -95,8 +95,8 @@ struct VoiceTryOutView: View {
         VStack(alignment: .leading, spacing: 10) {
           HStack {
             VStack(alignment: .leading, spacing: 2) {
-              Text("Microphone").font(.system(size: 17)).foregroundStyle(Palette.text)
-              Text("Say something and watch the level move").font(.system(size: 14)).foregroundStyle(Palette.faint)
+              Text("Microphone").font(.system(size: 15)).foregroundStyle(Palette.text)
+              Text("Say something and watch the level move").font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer(minLength: 8)
           }
@@ -107,8 +107,8 @@ struct VoiceTryOutView: View {
         }.padding(.horizontal, 18).padding(.vertical, 14)
         VStack(alignment: .leading, spacing: 10) {
           VStack(alignment: .leading, spacing: 2) {
-            Text("Speaker").font(.system(size: 17)).foregroundStyle(Palette.text)
-            Text("Plays a short sentence").font(.system(size: 14)).foregroundStyle(Palette.faint)
+            Text("Speaker").font(.system(size: 15)).foregroundStyle(Palette.text)
+            Text("Plays a short sentence").font(.system(size: 13)).foregroundStyle(Palette.faint)
           }
           Button(model.speakerTesting ? "Playing…" : "Test speaker") { Task { await model.testSpeaker(engine: speak, hub: VoiceHub(api: { try store.connection() })) } }
             .buttonStyle(.pill(.secondary)).disabled(model.speakerTesting).accessibilityIdentifier("voice-test-speaker")
@@ -132,6 +132,6 @@ struct VoiceTryOutView: View {
   }
 
   @ViewBuilder private func outcome(_ result: VoiceTryOutModel.Outcome?) -> some View {
-    if let result { Text(result.text).font(.system(size: 14)).foregroundStyle(result.ok ? Palette.green : Palette.red).accessibilityAddTraits(.updatesFrequently) }
+    if let result { Text(result.text).font(.system(size: 13)).foregroundStyle(result.ok ? Palette.green : Palette.red).accessibilityAddTraits(.updatesFrequently) }
   }
 }

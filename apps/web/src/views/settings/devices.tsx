@@ -45,7 +45,7 @@ export function DevicesPage() {
   return (
     <>
       <header className="mb-7 flex items-center justify-between gap-4">
-        <h2 className="text-xl font-semibold tracking-tight">Devices</h2>
+        <h2 className="t-title">Devices</h2>
         {allowed && (
           <Button onClick={() => setAdding(true)}>
             <Plus size={15} />

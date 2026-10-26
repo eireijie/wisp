@@ -28,6 +28,14 @@ extension Store {
 
 enum BubbleSide { case mine, theirs }
 
+/** A bubble: 16pt corners with a 4pt tail corner (bottom right when it is yours, bottom left otherwise). */
+struct BubbleShape: Shape {
+  var mine: Bool
+  func path(in rect: CGRect) -> Path {
+    UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: mine ? 16 : 4, bottomTrailingRadius: mine ? 4 : 16, topTrailingRadius: 16, style: .continuous).path(in: rect)
+  }
+}
+
 /** A message's rounded bubble: Wisp blue with white words when it's yours, grey otherwise. */
 struct Bubble<Content: View>: View {
   var side: BubbleSide
@@ -35,11 +43,11 @@ struct Bubble<Content: View>: View {
 
   var body: some View {
     content
-      .padding(.horizontal, 16)
-      .padding(.vertical, 11)
+      .padding(.horizontal, 13)
+      .padding(.vertical, 9)
       .foregroundStyle(side == .mine ? Color.white : Palette.text)
       .tint(side == .mine ? Color.white : Palette.blue)
-      .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(side == .mine ? Palette.blue : Palette.bubble))
+      .background(BubbleShape(mine: side == .mine).fill(side == .mine ? Palette.blue : Palette.bubble))
   }
 }
 
@@ -76,7 +84,7 @@ struct TimeDivider: View {
   var date: Date
   var body: some View {
     Text(ChatFormat.stamp(date))
-      .font(.system(size: 14))
+      .font(.system(size: 13))
       .foregroundStyle(Palette.faint)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 12)
@@ -129,7 +137,7 @@ struct WorkingBubble: View {
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 13)
-    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Palette.bubble))
+    .background(BubbleShape(mine: false).fill(Palette.bubble))
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(label)
   }
@@ -146,7 +154,7 @@ struct StreamingRow: View {
 
   var body: some View {
     HStack(alignment: .bottom, spacing: 8) {
-      if !home { AgentAvatar(agent: store.agent(run.agentId), size: 30, showStatus: false).frame(width: 30) }
+      if !home { AgentAvatar(agent: store.agent(run.agentId), size: 24, showStatus: false).frame(width: 24) }
       VStack(alignment: .leading, spacing: 3) {
         if !home { Text(store.agent(run.agentId)?.name ?? "Agent").font(.system(size: 12)).foregroundStyle(Palette.faint).padding(.leading, 14) }
         if !run.text.isEmpty { Bubble(side: .theirs) { MarkdownText(run.text) } }
@@ -180,7 +188,7 @@ struct HandoffRow: View {
         if replies > 0 { Text("· \(replies == 1 ? "1 reply" : "\(replies) replies")").foregroundStyle(Palette.muted) }
         if let state { Text("· \(state)").foregroundStyle(working.isEmpty ? Palette.muted : Palette.green) }
       }
-      .font(.system(size: 14))
+      .font(.system(size: 13))
       .foregroundStyle(Palette.text)
       .lineLimit(1)
       .padding(.horizontal, 14)
@@ -236,6 +244,7 @@ struct ChatCardShell<Content: View>: View {
     .padding(16)
     .frame(maxWidth: 340, alignment: .leading)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -244,7 +253,7 @@ struct CardButtonStyle: ButtonStyle {
   var prominent = false
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.system(size: 16, weight: .semibold))
+      .font(.system(size: 15, weight: .semibold))
       .foregroundStyle(prominent ? Palette.ground : Palette.text)
       .frame(maxWidth: .infinity)
       .frame(height: 44)

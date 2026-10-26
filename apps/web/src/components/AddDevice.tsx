@@ -113,7 +113,7 @@ export function AddDeviceContent() {
               </a>
             </li>
             <li className="pl-1">
-              Pick <strong className="font-semibold">Join my Wisp</strong>.
+              Pick <strong className="font-medium">Join my Wisp</strong>.
               <span className="block mt-1 text-muted">
                 On this Wi-Fi it finds you.
               </span>

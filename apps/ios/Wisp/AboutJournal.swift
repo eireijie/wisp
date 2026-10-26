@@ -30,13 +30,13 @@ struct JournalDays: View {
     } else {
       ForEach(Self.days(items), id: \.day) { day, entries in
         SectionCaption(Self.title(day), trailing: entries.first.map { first in
-          AnyView(NavigationLink { NoteView(path: first.path) } label: { Text("Edit day").font(.system(size: 14, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) })
+          AnyView(NavigationLink { NoteView(path: first.path) } label: { Text("Edit day").font(.system(size: 13, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) })
         })
         CardGroup {
           ForEach(entries) { entry in
             VStack(alignment: .leading, spacing: 2) {
-              Text(entry.text).font(.system(size: 17)).foregroundStyle(Palette.text).textSelection(.enabled)
-              if let by = entry.by { Text("by \(by)").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+              Text(entry.text).font(.system(size: 15)).foregroundStyle(Palette.text).textSelection(.enabled)
+              if let by = entry.by { Text("by \(by)").font(.system(size: 13)).foregroundStyle(Palette.faint) }
             }.padding(.horizontal, 18).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
           }
         }

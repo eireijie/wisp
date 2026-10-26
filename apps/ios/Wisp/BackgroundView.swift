@@ -103,8 +103,8 @@ struct BackgroundView: View {
         ForEach(followups) { f in
           HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-              Text(f.note).font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(2)
-              if let date = Wire.date(f.dueAt) { Text("Coming up at \(Self.at(date))").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+              Text(f.note).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(2)
+              if let date = Wire.date(f.dueAt) { Text("Coming up at \(Self.at(date))").font(.system(size: 13)).foregroundStyle(Palette.faint) }
             }
             Spacer(minLength: 8)
             if f.userId == nil || f.userId == store.me?.id || store.isOwner {
@@ -177,9 +177,9 @@ struct BackgroundView: View {
   private func menuRow<Items: View>(_ title: String, value: String, @ViewBuilder _ items: () -> Items) -> some View {
     Menu { items() } label: {
       HStack {
-        Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
+        Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
         Spacer(minLength: 8)
-        Text(value).font(.system(size: 17)).foregroundStyle(Palette.faint).lineLimit(1)
+        Text(value).font(.system(size: 15)).foregroundStyle(Palette.faint).lineLimit(1)
         Image(systemName: "chevron.up.chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.faint)
       }.padding(.horizontal, 18).frame(minHeight: 54).contentShape(Rectangle())
     }
@@ -264,10 +264,10 @@ private struct QuietPage: View {
     AgentFrame(title: "Quiet hours", subtitle: agent.name) {
       CardGroup {
         DatePicker(selection: time(start) { save(["quietStart": AnyEncodable($0)]) }, displayedComponents: .hourAndMinute) {
-          Text("From").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("From").font(.system(size: 15)).foregroundStyle(Palette.text)
         }.padding(.horizontal, 18).frame(minHeight: 54)
         DatePicker(selection: time(end) { save(["quietEnd": AnyEncodable($0)]) }, displayedComponents: .hourAndMinute) {
-          Text("To").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("To").font(.system(size: 15)).foregroundStyle(Palette.text)
         }.padding(.horizontal, 18).frame(minHeight: 54)
         ChoiceRow(title: "No quiet hours", selected: start == end) { save(["quietEnd": AnyEncodable(start)]) }
       }

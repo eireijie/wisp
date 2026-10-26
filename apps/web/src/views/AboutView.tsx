@@ -91,9 +91,9 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
   const subtitle = isMe ? "What your helpers should know about you. Agents add these as you talk with them." : `What helpers should know about ${profile?.person.name ?? "them"}.`;
   const owner = me.role === "owner" && members.length > 1;
   const who = owner && (
-    <label className="inline-flex items-center gap-2 h-11 px-4 rounded-full border border-control-line bg-control text-sm font-semibold">
+    <label className="inline-flex items-center gap-2 h-11 px-4 rounded-full border border-control-line bg-control text-sm font-medium">
       Whose memory:
-      <select value={userId} onChange={(e) => setUserId(e.target.value)} className="bg-transparent outline-none font-semibold" aria-label="Whose memory">
+      <select value={userId} onChange={(e) => setUserId(e.target.value)} className="bg-transparent outline-none font-medium" aria-label="Whose memory">
         {members.map((m) => (
           <option key={m.id} value={m.id}>
             {m.id === me.user.id ? "You" : m.name}
@@ -128,14 +128,14 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
           <span className="flex-1 text-[14px] text-muted">Memory</span>
         </header>
       ) : (
-        <div className="shrink-0 h-[72px] px-6 flex items-center text-[14px] font-semibold">Memory</div>
+        <div className="shrink-0 h-[72px] px-6 flex items-center text-[14px] font-medium">Memory</div>
       )}
       <div className="flex-1 overflow-y-auto px-4 md:px-10 pb-28">
         <div className="mx-auto max-w-[720px]">
           {!phone && (
             <div className="mt-2 flex items-start gap-3">
               <div className="flex-1 min-w-0">
-                <h2 className="text-[34px] font-bold tracking-tight">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h2>
+                <h2 className="t-title">{isMe ? "About you" : `About ${profile?.person.name ?? "…"}`}</h2>
                 <p className="mt-1 text-sm text-muted">{subtitle}</p>
               </div>
             </div>
@@ -167,7 +167,7 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
             >
               <input
                 ref={addRef}
-                className="flex-1 min-w-48 h-10 bg-transparent px-2 text-[15px] outline-none placeholder:text-faint"
+                className="flex-1 min-w-48 h-10 bg-transparent px-2 text-body outline-none placeholder:text-faint"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={isMe ? "What would you like your helper to remember?" : TABS.find((t) => t.kind === addKind)!.add}
@@ -287,7 +287,7 @@ function ItemRow({ item, canEdit, phone, onSave, onForget }: { item: Item; canEd
       ) : (
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className={cx("text-[16px] font-medium", closed && "line-through text-muted")}>{item.text}</div>
+            <div className={cx("text-body font-medium", closed && "line-through text-muted")}>{item.text}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
               {item.pinned && (
                 <Pill tone="accent">
@@ -360,7 +360,7 @@ function Journal({ items }: { items: Item[] }) {
             <Cards>
               {entries.map((i, n) => (
                 <div key={n} className="px-4 py-3">
-                  <div className="text-[16px]">{i.text}</div>
+                  <div className="text-body">{i.text}</div>
                   {i.by && <div className="text-xs text-muted">by {i.by}</div>}
                 </div>
               ))}

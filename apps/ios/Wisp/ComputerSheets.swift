@@ -14,9 +14,9 @@ struct ChipFace: View {
     }
     .foregroundStyle(Palette.text)
     .frame(maxWidth: .infinity, minHeight: 62)
-    .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Palette.control))
-    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Palette.hairline))
-    .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
+    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
   }
 }
 
@@ -48,7 +48,7 @@ struct ScreenCodeSheet: View {
           if isPin { pin } else { password }
           Button { help.toggle() } label: { Label("Where do I find my screen code?", systemImage: "questionmark.circle").font(.system(size: 15)) }
             .buttonStyle(.plain).foregroundStyle(Palette.muted)
-          if help { Text("At \(deviceName), run wisp node screen code to pick a new one.").font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.center) }
+          if help { Text("At \(deviceName), run wisp node screen code to pick a new one.").font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.center) }
         }.padding(.horizontal, 24).padding(.bottom, 24)
       }
     }
@@ -129,6 +129,7 @@ struct HandBackSheet: View {
         CardCaption("What you did (optional)")
         TextField("Signed in to the dashboard", text: $note, axis: .vertical).lineLimit(2...5)
           .padding(14).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           .accessibilityIdentifier("hand-back-note")
         Button { onHandBack(note); dismiss() } label: { Text("Hand back").frame(maxWidth: .infinity) }.primaryButton().accessibilityIdentifier("hand-back-go")
         Button { dismiss() } label: { Text("Keep control").frame(maxWidth: .infinity) }.secondaryButton()

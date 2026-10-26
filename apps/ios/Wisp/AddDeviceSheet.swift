@@ -68,16 +68,16 @@ private struct PhonePairing: View {
       if let qr {
         Image(uiImage: qr).interpolation(.none).resizable().scaledToFit()
           .frame(width: 210, height: 210).padding(12)
-          .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color.white))
+          .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white))
           .accessibilityLabel("QR code to scan with the Wisp app on your phone")
       } else if action.busy { ProgressView().frame(height: 210) }
       switch pairing?.state {
       case "claimed", "approved":
         VStack(spacing: 8) {
-          Text(pairing?.state == "approved" ? "Phone added" : "Check the code").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(pairing?.state == "approved" ? "Phone added" : "Check the code").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
           if let code = pairing?.code { Text(code).font(.system(size: 36, weight: .semibold, design: .monospaced)).foregroundStyle(Palette.text).tracking(4).accessibilityIdentifier("pair-code") }
           if pairing?.state == "claimed" {
-            Text("Make sure these digits match on your phone, then confirm.").font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
+            Text("Make sure these digits match on your phone, then confirm.").font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
             HStack(spacing: 10) {
               Button(role: .destructive) { cancel() } label: { Text("Not mine").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
               Button { confirm() } label: { Text("It matches").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large)
@@ -85,8 +85,9 @@ private struct PhonePairing: View {
           }
         }
         .frame(maxWidth: .infinity).padding(16).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       case "expired", "rejected":
-        Text(pairing?.state == "expired" ? "The code expired." : "Pairing was cancelled.").font(.system(size: 14)).foregroundStyle(Palette.faint)
+        Text(pairing?.state == "expired" ? "The code expired." : "Pairing was cancelled.").font(.system(size: 13)).foregroundStyle(Palette.faint)
         Button { start() } label: { Text("Start again").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
       default:
         Text("Open Wisp on your phone, tap Scan QR code and point it here.").font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
@@ -181,9 +182,10 @@ private struct ComputerJoin: View {
           }
           .padding(14).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         }
       } else {
-        Text("Ask your Wisp's owner for a join link.").font(.system(size: 14)).foregroundStyle(Palette.faint)
+        Text("Ask your Wisp's owner for a join link.").font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
       if store.canManage { command }
     }
@@ -192,9 +194,9 @@ private struct ComputerJoin: View {
 
   private func step(_ n: Int, _ text: String) -> some View {
     HStack(spacing: 12) {
-      Text("\(n)").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.muted)
+      Text("\(n)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
         .frame(width: 28, height: 28).background(Circle().fill(Palette.control)).overlay(Circle().strokeBorder(Palette.hairline))
-      Text(text).font(.system(size: 16)).foregroundStyle(Palette.text)
+      Text(text).font(.system(size: 15)).foregroundStyle(Palette.text)
       Spacer(minLength: 0)
     }.padding(.horizontal, 18).frame(minHeight: 54)
   }
@@ -206,17 +208,17 @@ private struct ComputerJoin: View {
     DisclosureGroup(isExpanded: $more) {
       VStack(alignment: .leading, spacing: 10) {
         if let token, let hub = store.api?.base.absoluteString {
-          Text("On \(name), run this once. It installs Wisp if it isn't there yet and keeps the device connected.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Text("On \(name), run this once. It installs Wisp if it isn't there yet and keeps the device connected.").font(.system(size: 13)).foregroundStyle(Palette.muted)
           ForEach(Self.commands(hub: hub, token: token, name: name), id: \.0) { title, command in
             VStack(alignment: .leading, spacing: 6) {
               Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint)
               Text(command).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
-              ShareLink("Share instructions", item: command).font(.system(size: 14))
+              ShareLink("Share instructions", item: command).font(.system(size: 13))
             }
           }
         } else {
           TextField("Device name", text: $name)
-            .padding(.horizontal, 14).frame(height: 46).background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.field))
+            .padding(.horizontal, 14).frame(height: 46).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.field))
           Button { tokenAction.run { token = try await store.addDevice(name.trimmed) } } label: { Text("Add a device").frame(maxWidth: .infinity) }
             .secondaryButton().controlSize(.large).disabled(tokenAction.busy || name.trimmed.isEmpty || name.count > 80)
         }

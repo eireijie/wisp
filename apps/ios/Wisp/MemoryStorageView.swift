@@ -29,9 +29,10 @@ struct MemoryStorageView: View {
       if store.isOwner, let storage {
         SectionCaption("Where memory is kept")
         VStack(alignment: .leading, spacing: 4) {
-          Text("Folder on this computer").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text("Folder on this computer").font(.system(size: 13)).foregroundStyle(Palette.faint)
           Text(storage.path ?? "").font(.system(size: 16, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
         }.padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         if fixed { CardCaption("Set by WISP_VAULT_DIR where Wisp runs, so it can only be changed there.") }
         else {
           HStack(spacing: 10) {
@@ -48,8 +49,8 @@ struct MemoryStorageView: View {
         if storage.pendingRestart == true {
           VStack(alignment: .leading, spacing: 10) {
             Text("Wisp will use \(storage.nextPath ?? "the new folder") after it restarts. Nothing changes until then.").font(.system(size: 15)).foregroundStyle(Palette.text)
-            if storage.restartable == true { Button { restarting = true } label: { Text("Restart Wisp now").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 20).frame(height: 44).background(Capsule().fill(Palette.text)) }.buttonStyle(.plain) }
-            else { Text("Stop Wisp and start it again on the computer to switch.").font(.system(size: 14)).foregroundStyle(Palette.muted) }
+            if storage.restartable == true { Button { restarting = true } label: { Text("Restart Wisp now").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 20).frame(height: 44).background(Capsule().fill(Palette.text)) }.buttonStyle(.plain) }
+            else { Text("Stop Wisp and start it again on the computer to switch.").font(.system(size: 13)).foregroundStyle(Palette.muted) }
           }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(light: 0xDCE9FF, dark: 0x1F3A66)))
         }
         if let previous = storage.previous { CardCaption("Your earlier memory is still in \(previous). Wisp never deletes it.") }
@@ -76,7 +77,7 @@ struct MemoryStorageView: View {
 
   private func pill(_ title: String, _ run: @escaping () -> Void) -> some View {
     Button(action: run) {
-      Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).multilineTextAlignment(.center).frame(maxWidth: .infinity).frame(minHeight: 52).padding(.horizontal, 8)
+      Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).multilineTextAlignment(.center).frame(maxWidth: .infinity).frame(minHeight: 52).padding(.horizontal, 8)
         .background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
     }.buttonStyle(.plain)
   }
@@ -104,8 +105,8 @@ struct ObsidianSyncView: View {
       CardGroup {
         HStack {
           VStack(alignment: .leading, spacing: 2) {
-            Text("Branch").font(.system(size: 14)).foregroundStyle(Palette.faint)
-            Text(storage?.sync?.branch ?? "main").font(.system(size: 17, weight: .bold)).foregroundStyle(Palette.text)
+            Text("Branch").font(.system(size: 13)).foregroundStyle(Palette.faint)
+            Text(storage?.sync?.branch ?? "main").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.text)
           }
           Spacer()
           if let root = storage?.path, let url = ObsidianLink.url(root: root) {
@@ -129,16 +130,17 @@ struct ObsidianSyncView: View {
           TextField("Token name", text: $label).foregroundStyle(Palette.text).padding(.horizontal, 18).frame(height: 52)
             .background(Palette.card, in: Capsule()).overlay(Capsule().strokeBorder(Palette.hairline)).accessibilityIdentifier("token-name")
           Button { action.run { token = try await store.createMemoryToken(label).token; label = ""; copied = false } } label: {
-            Text("Create token").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 18).frame(height: 52).background(Capsule().fill(Palette.text)).opacity(action.busy || label.count > 60 ? 0.4 : 1)
+            Text("Create token").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 18).frame(height: 52).background(Capsule().fill(Palette.text)).opacity(action.busy || label.count > 60 ? 0.4 : 1)
           }.buttonStyle(.plain).disabled(action.busy || label.count > 60).accessibilityIdentifier("create-token")
         }
         if let token {
           VStack(alignment: .leading, spacing: 8) {
-            Text("Copy this token now. It is shown once.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+            Text("Copy this token now. It is shown once.").font(.system(size: 13)).foregroundStyle(Palette.muted)
             Text(token).font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
             Button { UIPasteboard.general.string = token; copied = true } label: { Label(copied ? "Copied" : "Copy token", systemImage: "doc.on.doc").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text) }.buttonStyle(.plain)
             Button { UIPasteboard.general.string = cloneCommand(token); copied = true } label: { Label("Copy the git clone command", systemImage: "terminal").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text) }.buttonStyle(.plain)
           }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         }
       }
       if let tokens = storage?.tokens, !tokens.isEmpty {
@@ -147,8 +149,8 @@ struct ObsidianSyncView: View {
           ForEach(tokens) { item in
             HStack(spacing: 10) {
               VStack(alignment: .leading, spacing: 2) {
-                Text(item.label ?? "Obsidian").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
-                Text(item.createdAt.flatMap { Wire.date($0) }.map { "Created \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? "").font(.system(size: 14)).foregroundStyle(Palette.faint)
+                Text(item.label ?? "Obsidian").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+                Text(item.createdAt.flatMap { Wire.date($0) }.map { "Created \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? "").font(.system(size: 13)).foregroundStyle(Palette.faint)
               }
               Spacer()
               Button { revoking = item } label: { Text("Revoke").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.red).padding(.horizontal, 14).frame(height: 38).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline)) }.buttonStyle(.plain)
@@ -168,8 +170,8 @@ struct ObsidianSyncView: View {
     HStack(spacing: 14) {
       Text("\(n)").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.text).frame(width: 30, height: 30).background(Circle().fill(Palette.control))
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
-        Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint)
+        Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
       Spacer(minLength: 0)
     }.padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)

@@ -1,17 +1,16 @@
 import SwiftUI
 
 /**
- * Wisp's look on the phone: dark first with matching light colors, the system font, 24pt rounded
- * cards, glass circle buttons and pill buttons. Liquid Glass floats over content on iOS 26 and
+ * Wisp's look on the phone: dark first with matching light colors, the system font, 12pt cards, glass circle buttons and pill buttons. Liquid Glass floats over content on iOS 26 and
  * later (frosted material before). The colors come from the approved design (Palette below).
  */
 enum Corner {
   /** cards, screens, sheets */
-  static let card: CGFloat = 24
+  static let card: CGFloat = 12
   /** small chips (a team chart's cards) */
-  static let tile: CGFloat = 14
-  /** sheets keep a big rounded top */
-  static let sheet: CGFloat = 38
+  static let tile: CGFloat = 10
+  /** sheets: a modest rounded top */
+  static let sheet: CGFloat = 16
 }
 
 extension Color {
@@ -35,7 +34,7 @@ enum Palette {
   /** sheets and settings pages */
   static let sheet = Color(light: 0xF7F7FA, dark: 0x1C1C1F)
   /** grouped rows and tiles */
-  static let card = Color(light: 0xFFFFFF, dark: 0x26262A)
+  static let card = Color(light: 0xFFFFFF, dark: 0x1E1E21)
   /** glass circle buttons, pills, the tab bar */
   static let control = Color(light: 0xFFFFFF, dark: 0x2A2A2E)
   /** search fields */
@@ -45,8 +44,10 @@ enum Palette {
   static let text = Color(light: 0x111113, dark: 0xF2F2F4)
   static let muted = Color(light: 0x5F5F68, dark: 0xA1A1AA)
   static let faint = Color(light: 0x7C7C86, dark: 0x8E8E96)
-  static let separator = Color(light: 0x000000, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.07)
+  static let separator = Color(light: 0x000000, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.08)
   static let hairline = Color(light: 0x000000, lightAlpha: 0.09, dark: 0xFFFFFF, darkAlpha: 0.10)
+  /** the 1px edge on cards and panels */
+  static let cardBorder = Color(light: 0x000000, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.08)
   static let blue = Color(hex: 0x0A84FF)
   /** text that says an agent is working */
   static let green = Color(light: 0x1E9E52, dark: 0x5BD68A)
@@ -56,9 +57,10 @@ enum Palette {
 }
 
 extension View {
-  /** A content card: a soft, rounded surface. */
+  /** A content card: a sharp-cornered surface with a 1px border. */
   func card(_ radius: CGFloat = Corner.card, padding: CGFloat = 16) -> some View {
     self.padding(padding).background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Palette.card))
+      .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 
   /** Liquid Glass in a rounded rectangle, for controls floating over content. */

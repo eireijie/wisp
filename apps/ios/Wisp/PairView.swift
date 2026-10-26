@@ -168,19 +168,20 @@ struct PairView: View {
         CircleButton(symbol: "xmark", label: "Close") { pasting = false }
         Spacer()
       }
-      Text("Paste a pairing link").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text).padding(.top, 18)
+      Text("Paste a pairing link").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.top, 18)
       Text("In Wisp on your computer: Settings → Mobile → Start pairing → Copy pairing link. Then paste it here.")
-        .font(.system(size: 16)).foregroundStyle(Palette.muted).lineSpacing(3).padding(.top, 8)
+        .font(.system(size: 15)).foregroundStyle(Palette.muted).lineSpacing(3).padding(.top, 8)
       VStack(alignment: .leading, spacing: 7) {
         Text("Pairing link").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.muted).padding(.leading, 6)
         TextField(text: $pasted, prompt: Text(verbatim: "wisp://pair?…")) { Text("Pairing link") }
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .keyboardType(.URL)
-          .font(.system(size: 17))
+          .font(.system(size: 15))
           .padding(.horizontal, 18)
           .frame(height: 56)
-          .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+          .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
           .accessibilityIdentifier("pair-link-field")
       }
       .padding(.top, 22)

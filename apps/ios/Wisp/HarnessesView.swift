@@ -33,7 +33,7 @@ struct HarnessesView: View {
         MarketNote(text: "No devices of yours yet. Connect one from Devices.")
       } else {
         deviceCard
-        Text("A harness is the program an agent thinks with. Sign in once and every agent that uses it is ready.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+        Text("A harness is the program an agent thinks with. Sign in once and every agent that uses it is ready.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
         if let device, !device.online {
           MarketNote(text: "\(device.name) is offline. Its harness settings show up when it's back.")
         } else if let error {
@@ -209,7 +209,7 @@ private struct HarnessDetailView: View {
         }
         if settings.hasEffort {
           VStack(alignment: .leading, spacing: 10) {
-            Text("Reasoning effort").font(.system(size: 17, weight: .medium))
+            Text("Reasoning effort").font(.system(size: 15, weight: .medium))
             SegPicker(options: efforts.map { ($0, $0.prefix(1).uppercased() + $0.dropFirst()) }, selection: Binding(get: { settings.effort ?? "" }, set: { new in
               var next = settings; next.effort = new
               change("effort", [HarnessChange(op: "effort", effort: new)], optimistic: next)
@@ -230,7 +230,7 @@ private struct HarnessDetailView: View {
     return VStack(alignment: .leading, spacing: 8) {
       MarketLabel("Apps")
       if wisp.isEmpty && settings.apps.isEmpty {
-        Text("None yet.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+        Text("None yet.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
       } else {
         CardGroup {
           if !ids.isEmpty {
@@ -249,7 +249,7 @@ private struct HarnessDetailView: View {
     VStack(alignment: .leading, spacing: 8) {
       MarketLabel("Plugins and skills")
       if settings.plugins.isEmpty && settings.skills.isEmpty {
-        Text("None yet.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+        Text("None yet.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
       } else {
         CardGroup {
           ForEach(settings.plugins) { plugin in itemRow(plugin, note: "Plugin", kind: "plugin") }
@@ -263,8 +263,8 @@ private struct HarnessDetailView: View {
     HStack(spacing: 14) {
       MarketTile(symbol: kind == "app" ? "powerplug" : kind == "plugin" ? "puzzlepiece" : "wand.and.stars")
       VStack(alignment: .leading, spacing: 2) {
-        Text(item.name).font(.system(size: 17, weight: .medium)).lineLimit(1)
-        Text(note).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
+        Text(item.name).font(.system(size: 15, weight: .medium)).lineLimit(1)
+        Text(note).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
       }
       Spacer(minLength: 8)
       if let share { Button { share() } label: { Label("Share", systemImage: "square.and.arrow.up").font(.system(size: 13)).foregroundStyle(Palette.muted) }.buttonStyle(.plain) }
@@ -474,7 +474,7 @@ private struct HarnessSignInSheet: View {
       if let manual {
         MarketNote(text: "\(label) signs in on its own screen. On \(device.name), run:")
         Text(manual).font(.system(size: 13, design: .monospaced)).textSelection(.enabled).padding(14).frame(maxWidth: .infinity, alignment: .leading)
-          .background(Palette.control, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+          .background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         Button("Copy command") { UIPasteboard.general.string = manual }.secondaryButton()
       }
       if login?.status == "running" { steps }
@@ -502,7 +502,7 @@ private struct HarnessSignInSheet: View {
   private func step(_ n: Int, _ title: String, @ViewBuilder _ detail: () -> some View = { EmptyView() }, @ViewBuilder trailing: () -> some View = { EmptyView() }) -> some View {
     HStack(alignment: .top, spacing: 14) {
       Text("\(n)").font(.system(size: 15, weight: .semibold)).frame(width: 32, height: 32).background(Circle().fill(MarketColor.chip))
-      VStack(alignment: .leading, spacing: 8) { Text(title).font(.system(size: 17, weight: .medium)); detail() }
+      VStack(alignment: .leading, spacing: 8) { Text(title).font(.system(size: 15, weight: .medium)); detail() }
       Spacer(minLength: 8)
       trailing()
     }.padding(.horizontal, 16).padding(.vertical, 14)
@@ -513,7 +513,7 @@ private struct HarnessSignInSheet: View {
       if let url = login?.url.flatMap(URL.init(string:)) {
         step(1, "Open the sign-in page", trailing: { AddButton(title: "Open") { openURL(url) } })
       } else {
-        step(1, "Open the sign-in page", { HStack { ProgressView(); Text("Starting \(label)'s sign-in on \(device.name)…").font(.system(size: 14)).foregroundStyle(Palette.muted) } })
+        step(1, "Open the sign-in page", { HStack { ProgressView(); Text("Starting \(label)'s sign-in on \(device.name)…").font(.system(size: 13)).foregroundStyle(Palette.muted) } })
       }
       if let value = login?.code {
         step(2, "Enter this code there", { Text(value).font(.system(size: 22, weight: .semibold, design: .monospaced)).textSelection(.enabled) }, trailing: {
@@ -523,7 +523,7 @@ private struct HarnessSignInSheet: View {
         step(2, "Paste the code the page gives you", { MarketField(label: nil, placeholder: "Paste it here", text: $code, plain: true) })
       }
     }
-    Text("Wisp passes the code to \(label) on \(device.name). Your password stays with the harness.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+    Text("Wisp passes the code to \(label) on \(device.name). Your password stays with the harness.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
     HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Waiting for you to finish signing in").font(.footnote).foregroundStyle(Palette.muted) }.padding(.horizontal, 4)
   }
 
@@ -625,11 +625,11 @@ private struct InstallHarnessSheet: View {
           }
         }
       }
-      Text("Wisp installs it on that computer and asks you before it runs anything. Others use their own installer there.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      Text("Wisp installs it on that computer and asks you before it runs anything. Others use their own installer there.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       if action.busy { HStack { ProgressView(); Text("Working on the device…").font(.footnote).foregroundStyle(Palette.muted) } }
       if let output { Text(output).font(.caption).textSelection(.enabled).padding(.horizontal, 4) }
       InlineError(error: action.error)
-      Button { action.run { try await store.refreshDevice(nodeId) } } label: { Label("Refresh", systemImage: "arrow.clockwise").font(.system(size: 14)).foregroundStyle(Palette.muted) }.buttonStyle(.plain).padding(.horizontal, 4).disabled(node?.online != true || action.busy)
+      Button { action.run { try await store.refreshDevice(nodeId) } } label: { Label("Refresh", systemImage: "arrow.clockwise").font(.system(size: 13)).foregroundStyle(Palette.muted) }.buttonStyle(.plain).padding(.horizontal, 4).disabled(node?.online != true || action.busy)
     }
     .confirmationDialog("Install this harness on \(node?.name ?? "the device")?", isPresented: Binding(get: { installing != nil }, set: { if !$0 { installing = nil } }), titleVisibility: .visible) {
       Button("Install") { if let harness = installing { action.run { output = try await store.installHarness(harness, node: nodeId) } } }

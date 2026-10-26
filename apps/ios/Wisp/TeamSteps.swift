@@ -162,7 +162,7 @@ struct TeamBuilder: View {
 
   private func tabButton(_ title: String, _ value: Tab) -> some View {
     Button { withAnimation(.snappy(duration: 0.2)) { tab = value } } label: {
-      Text(title).font(.system(size: 17, weight: .semibold))
+      Text(title).font(.system(size: 15, weight: .semibold))
         .foregroundStyle(tab == value ? Palette.text : Palette.muted)
         .padding(.horizontal, 18).frame(height: 44)
         .background { if tab == value { Capsule().fill(Palette.badge) } }
@@ -181,14 +181,14 @@ struct TeamBuilder: View {
       Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 34)).foregroundStyle(Palette.faint)
       Text("No steps yet").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
       Text("A step is an agent doing one thing. Add more and join them up.")
-        .font(.system(size: 16)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).padding(.horizontal, 40)
+        .font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).padding(.horizontal, 40)
       Button { adding = AddRequest(from: [], to: [], after: nil, between: false) } label: {
         Label("Add a step", systemImage: "plus").frame(maxWidth: .infinity)
       }
       .primaryButton().padding(.horizontal, 40).padding(.top, 8)
       .accessibilityIdentifier("builder-add-first")
       Button("Or start from a template") { templates = true }
-        .font(.system(size: 16)).foregroundStyle(Palette.muted).frame(minHeight: 44)
+        .font(.system(size: 15)).foregroundStyle(Palette.muted).frame(minHeight: 44)
         .accessibilityIdentifier("builder-templates")
       Spacer(); Spacer()
     }
@@ -233,14 +233,14 @@ struct TeamBuilder: View {
   private var problemBanner: some View {
     VStack(alignment: .leading, spacing: 6) {
       Label(error != nil ? "Couldn't save" : "\(problems.count) \(problems.count == 1 ? "thing" : "things") to fix", systemImage: "exclamationmark.circle")
-        .font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.red)
+        .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.red)
       ForEach(error.map { [$0] } ?? problems, id: \.self) { p in
         Text(p).font(.system(size: 15)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(16)
-    .background(Palette.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .background(Palette.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     .padding(.horizontal, 18)
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("builder-problems")
@@ -395,7 +395,7 @@ private struct StepCard: View {
             Text("\(number)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
               .frame(width: 24, height: 24).background(Circle().fill(Palette.badge))
             if let mark = step.kindMark {
-              Label(mark.text, systemImage: mark.symbol).labelStyle(CompactLabel()).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(1)
+              Label(mark.text, systemImage: mark.symbol).labelStyle(CompactLabel()).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
             }
             Spacer(minLength: 0)
             if !wide {
@@ -431,6 +431,7 @@ private struct StepCard: View {
       .padding(.horizontal, 16).padding(.vertical, 14)
       .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       .overlay { if problem != nil { RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.red.opacity(0.6), lineWidth: 1.5) } }
       .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
@@ -514,7 +515,7 @@ struct TeamHowList: View {
         Text("Made from your steps").font(.system(size: 15)).foregroundStyle(Palette.muted)
         ForEach(lines) { line in TeamHowLine(team: team, line: line) }
         Text("This is written from the chart. Change a step and it changes here.")
-          .font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.top, 4)
+          .font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.top, 4)
         HStack(spacing: 12) {
           Button {
             UIPasteboard.general.string = lines.map { "\($0.n). \($0.text)" }.joined(separator: "\n")
@@ -548,7 +549,7 @@ struct TeamHowLine: View {
       (Text(line.together ? "At the same time, " : "").foregroundColor(Palette.muted)
         + Text(line.together ? line.who : FlowWords.capitalized(line.who)).bold().foregroundColor(Palette.text)
         + Text(" \(line.rest).").foregroundColor(Palette.muted))
-        .font(.system(size: 17)).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+        .font(.system(size: 15)).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
       Spacer(minLength: 0)
     }
     .accessibilityElement(children: .combine)
@@ -597,8 +598,8 @@ struct ReorderSteps: View {
               Text("\(team.number(of: id))").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
                 .frame(width: 26, height: 26).background(Circle().fill(Palette.badge))
               VStack(alignment: .leading, spacing: 2) {
-                Text(step.action.isEmpty ? "Untitled step" : step.action).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
-                Text(step.kindMark?.text ?? team.agentId(of: step).flatMap { store.agent($0)?.name } ?? "").font(.system(size: 14)).foregroundStyle(Palette.muted)
+                Text(step.action.isEmpty ? "Untitled step" : step.action).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+                Text(step.kindMark?.text ?? team.agentId(of: step).flatMap { store.agent($0)?.name } ?? "").font(.system(size: 13)).foregroundStyle(Palette.muted)
               }
               Spacer()
             }
@@ -633,10 +634,11 @@ struct SavingOverlay: View {
       Color.black.opacity(0.35).ignoresSafeArea()
       VStack(spacing: 10) {
         ProgressView()
-        Text("Saving").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
-        Text("Telling the team how it works").font(.system(size: 14)).foregroundStyle(Palette.muted)
+        Text("Saving").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+        Text("Telling the team how it works").font(.system(size: 13)).foregroundStyle(Palette.muted)
       }
       .padding(28).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     }
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("saving-overlay")

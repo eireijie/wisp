@@ -122,7 +122,7 @@ struct MarketplaceView: View {
 
   var body: some View {
     MarketScreen(title: installedPage ? "Connect apps" : "Marketplace", screenId: "marketplace", onBack: installedPage && start != .installed ? { section = .all } : nil, trailing: {
-      if installedPage { Text("\(store.connectors.count) connected").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+      if installedPage { Text("\(store.connectors.count) connected").font(.system(size: 13)).foregroundStyle(Palette.faint) }
       else {
         Button { section = .installed } label: {
           Text("\(store.connectors.count) connected").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).padding(.horizontal, 16).frame(height: 44).glassPill()
@@ -230,7 +230,7 @@ struct MarketplaceView: View {
       CardGroup { ForEach(own) { connectorRow($0) } }
     }
     MarketLabel("Skills")
-    if store.skills.isEmpty { Text("No skills yet.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4) }
+    if store.skills.isEmpty { Text("No skills yet.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4) }
     else {
       CardGroup {
         ForEach(skills) { s in
@@ -270,9 +270,9 @@ struct MarketplaceView: View {
 
   private func shelfHeader(_ title: String, to target: MarketSection) -> some View {
     HStack {
-      Text(title).font(.system(size: 14)).foregroundStyle(Palette.faint)
+      Text(title).font(.system(size: 13)).foregroundStyle(Palette.faint)
       Spacer()
-      Button("View all") { section = target }.font(.system(size: 14)).foregroundStyle(Palette.muted)
+      Button("View all") { section = target }.font(.system(size: 13)).foregroundStyle(Palette.muted)
     }.padding(.horizontal, 4).padding(.top, 6)
   }
 
@@ -280,7 +280,7 @@ struct MarketplaceView: View {
     if registry == nil && list.isEmpty {
       ProgressView().frame(maxWidth: .infinity)
     } else if list.isEmpty {
-      Text(needle.isEmpty ? "No apps here yet." : "No apps match \"\(needle)\".").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+      Text(needle.isEmpty ? "No apps here yet." : "No apps match \"\(needle)\".").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
     }
     VStack(spacing: 0) {
       ForEach(Array(list.prefix(limit ?? list.count))) { a in
@@ -299,7 +299,7 @@ struct MarketplaceView: View {
     if skillList == nil && list.isEmpty {
       ProgressView().frame(maxWidth: .infinity)
     } else if list.isEmpty {
-      Text(needle.isEmpty ? "No skills here yet." : "No skills match \"\(needle)\".").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+      Text(needle.isEmpty ? "No skills here yet." : "No skills match \"\(needle)\".").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
     }
     VStack(spacing: 0) {
       ForEach(Array(list.prefix(limit ?? list.count))) { s in

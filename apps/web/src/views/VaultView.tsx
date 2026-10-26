@@ -317,14 +317,14 @@ function ViewAsDialog({ viewAs, total, visible, hiddenNames, onClose, onPick }: 
       <p className="text-[14px] text-muted">See memory the way a helper does. Only the notes it can read are listed.</p>
       <Overline>Helper</Overline>
       <Cards>
-        <button onClick={() => setSel(null)} className="w-full min-h-14 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
-          <span className="flex-1 text-[16px]">You</span>
+        <button onClick={() => setSel(null)} className="w-full min-h-12 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
+          <span className="flex-1 text-body">You</span>
           <Radio on={!sel} />
         </button>
         {agents.map((a) => (
-          <button key={a.id} onClick={() => setSel(`agent:${a.id}`)} className="w-full min-h-14 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
+          <button key={a.id} onClick={() => setSel(`agent:${a.id}`)} className="w-full min-h-12 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
             <AgentAvatar agent={a} size={30} interactive={false} />
-            <span className="flex-1 text-[16px]">{a.name}</span>
+            <span className="flex-1 text-body">{a.name}</span>
             <Radio on={sel === `agent:${a.id}`} />
           </button>
         ))}
@@ -333,7 +333,7 @@ function ViewAsDialog({ viewAs, total, visible, hiddenNames, onClose, onPick }: 
         <>
           <Overline>Result</Overline>
           <div className="rounded-3xl bg-card px-4 py-3.5">
-            <p className="font-semibold">
+            <p className="font-medium">
               {picked.name} can read {visible} of {total} notes
             </p>
             {hiddenNames.length > 0 && <p className="mt-1 text-sm text-muted">{hiddenNames.join(" and ")} stay hidden.</p>}

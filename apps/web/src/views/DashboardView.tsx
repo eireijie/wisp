@@ -141,16 +141,16 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
     return <ChatAvatar chat={{ kind: c.kind === "dm" ? "dm" : "team", agent: agent ?? null, channel: c }} size={size} />;
   };
   const chatRow = (c: (typeof channels)[number], title: string) => (
-    <a key={c.id} href={href({ view: "chat", channelId: c.id, threadId: null })} className="flex items-center gap-3 min-h-16 px-4 py-2 hover:bg-hover min-w-0">
+    <a key={c.id} href={href({ view: "chat", channelId: c.id, threadId: null })} className="flex items-center gap-3 min-h-14 px-4 py-2 hover:bg-hover min-w-0">
       <span className="shrink-0 w-[46px] grid place-items-center">{chatAvatar(c, 40)}</span>
       <span className="min-w-0 flex-1 flex flex-col gap-0.5">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-base font-semibold">{title}</span>
+          <span className="truncate text-base font-medium">{title}</span>
           <span className="text-[13px] text-faint shrink-0">{c.last ? shortTime(Date.parse(c.last.at), prefs.clock) : ""}</span>
         </span>
         <span className="flex items-center gap-2">
           <span className="truncate text-sm text-faint flex-1">{c.last ? cleanPreview(c.last.body, 90) : "No messages yet"}</span>
-          {c.unread > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-semibold grid place-items-center tabular-nums">{c.unread}</span>}
+          {c.unread > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{c.unread}</span>}
         </span>
       </span>
     </a>
@@ -168,7 +168,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
           ["done", "Done"],
         ] as const
       ).map(([id, label]) => (
-        <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cx("h-9 md:h-8 px-3.5 rounded-full text-sm md:text-[13px] max-md:flex-1 transition-colors", tab === id ? "bg-card dark:bg-[#34343a] text-ink font-semibold" : "text-muted font-medium hover:text-ink")}>
+        <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={cx("h-9 md:h-8 px-3.5 rounded-full text-sm md:text-[13px] max-md:flex-1 transition-colors", tab === id ? "bg-card dark:bg-[#34343a] text-ink font-medium" : "text-muted font-medium hover:text-ink")}>
           {label}
         </button>
       ))}
@@ -188,7 +188,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
               <UserAvatarButton size={52} />
             </span>
           )}
-          <h1 className="text-xl md:text-[28px] font-bold tracking-tight md:flex-1 max-md:text-center">Inbox</h1>
+          <h1 className="t-title md:flex-1 max-md:text-center">Inbox</h1>
           <span className="hidden md:flex items-center gap-3">
             {switcher}
             {canNewTask && (
@@ -241,7 +241,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                           <button onClick={() => openDm(a)} className="w-full flex items-center gap-3 px-1 py-2 text-left min-w-0 rounded-2xl hover:bg-hover">
                             <AgentAvatar agent={a} size={36} live />
                             <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                              <span className="text-base font-semibold">{a.name}</span>
+                              <span className="text-base font-medium">{a.name}</span>
                               <span className="text-sm text-ok truncate">{now?.text ?? "Working"}</span>
                               {now?.where && <span className="text-[13px] text-faint truncate">{now.where}</span>}
                             </span>
@@ -308,11 +308,11 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                       return (
                         <div key={t.id}>
                           {i > 0 && <Rule />}
-                          <a href={t.channelId ? href({ view: "chat", channelId: t.channelId, threadId: t.threadId }) : href({ view: "tasks" })} className="flex items-center gap-3 min-h-16 px-4 py-2 hover:bg-hover min-w-0">
+                          <a href={t.channelId ? href({ view: "chat", channelId: t.channelId, threadId: t.threadId }) : href({ view: "tasks" })} className="flex items-center gap-3 min-h-14 px-4 py-2 hover:bg-hover min-w-0">
                             {t.status === "done" ? <CircleCheck size={26} strokeWidth={1.8} className="text-ok shrink-0" /> : t.status === "failed" ? <CircleX size={26} strokeWidth={1.8} className="text-bad shrink-0" /> : <Circle size={26} strokeWidth={1.8} className="text-faint shrink-0" />}
                             <span className="min-w-0 flex-1 flex flex-col gap-0.5">
                               <span className="flex items-baseline justify-between gap-2">
-                                <span className="truncate text-base font-semibold">{t.title}</span>
+                                <span className="truncate text-base font-medium">{t.title}</span>
                                 <span className="text-[13px] text-faint shrink-0">{timeAgo(t.updatedAt)}</span>
                               </span>
                               <span className="truncate text-sm text-faint">{sub}</span>
@@ -338,12 +338,12 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                       return (
                         <div key={t.id}>
                           {i > 0 && <Rule />}
-                          <a href={href({ view: "chat", channelId: t.channelId, threadId: null })} className="flex items-center gap-3 min-h-16 px-4 py-2 hover:bg-hover min-w-0">
+                          <a href={href({ view: "chat", channelId: t.channelId, threadId: null })} className="flex items-center gap-3 min-h-14 px-4 py-2 hover:bg-hover min-w-0">
                             <span className="shrink-0 w-[46px] grid place-items-center">
                               <ChatAvatar chat={{ kind: "team", agent: null, channel: channel ?? null }} size={40} />
                             </span>
                             <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                              <span className="truncate text-base font-semibold">{t.name}</span>
+                              <span className="truncate text-base font-medium">{t.name}</span>
                               <span className="truncate text-sm text-faint">{active ? `Working${busy ? ` · ${busy.name} is on it` : ""}` : "Quiet"}</span>
                             </span>
                           </a>
@@ -367,7 +367,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                       ] as const
                     ).map(([label, n, bad]) => (
                       <span key={label} className="flex-1 text-center flex flex-col gap-0.5">
-                        <span className={cx("text-[22px] font-bold tabular-nums", bad && "text-bad")}>{n}</span>
+                        <span className={cx("text-[22px] font-medium tabular-nums", bad && "text-bad")}>{n}</span>
                         <span className="text-xs text-faint">{label}</span>
                       </span>
                     ))}
@@ -438,8 +438,8 @@ function CaughtUp({ guest, compact }: { guest: boolean; compact: boolean }) {
         <circle cx="9.5" cy="10.5" r="1.3" fill="var(--panel)" />
         <circle cx="14.5" cy="10.5" r="1.3" fill="var(--panel)" />
       </svg>
-      <h2 className={cx("font-bold tracking-tight", compact ? "text-xl" : "text-2xl")}>All caught up</h2>
-      <p className="text-[15px] text-muted leading-snug max-w-xs">Nothing needs you right now. {guest ? "Conversations you're invited to show up here." : "When an agent wants your OK or needs you on its computer, it shows up here."}</p>
+      <h2 className={"t-title"}>All caught up</h2>
+      <p className="text-body text-muted leading-snug max-w-xs">Nothing needs you right now. {guest ? "Conversations you're invited to show up here." : "When an agent wants your OK or needs you on its computer, it shows up here."}</p>
       {!compact && <CardButton onClick={() => go({ view: "chats" })}>Open Chats</CardButton>}
     </div>
   );
@@ -471,7 +471,7 @@ function DoneTab({ approvals, tasks }: { approvals: Approval[]; tasks: TaskLite[
           {rows.map((r, i) => (
             <div key={r.key} className={cx("flex items-center gap-3 px-1 py-2.5", i > 0 && "border-t border-line")}>
               <AgentAvatar agent={r.agent} size={28} interactive={false} />
-              <span className="flex-1 min-w-0 text-[15px] leading-snug break-words">{r.text}</span>
+              <span className="flex-1 min-w-0 text-body leading-snug break-words">{r.text}</span>
               <span className="text-[13px] text-faint shrink-0">{shortTime(Date.parse(r.at), prefs.clock)}</span>
             </div>
           ))}
@@ -507,7 +507,7 @@ function ReadinessCard() {
         <div className="flex items-center gap-3">
           {agent && <AgentAvatar agent={agent} size={40} live />}
           <div className="min-w-0 flex-1">
-            <h2 id="ready-h" className="text-[17px] font-semibold leading-snug">
+            <h2 id="ready-h" className="text-body font-semibold leading-snug">
               {title}
             </h2>
             {sub && <p className="text-sm text-faint">{sub}</p>}
@@ -581,7 +581,7 @@ function AllowanceRow() {
   const [a] = useAllowance();
   if (!a) return null;
   return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-[20px] bg-panel border border-line">
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-panel border border-line">
       <span className="flex-1 flex flex-col gap-0.5">
         <span className="text-sm">Background work</span>
         <span className="text-[13px] text-faint">{a.dailyTokens ? `${allowanceText(a)} used` : allowanceText(a)}</span>

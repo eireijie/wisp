@@ -20,7 +20,7 @@ struct AppBanners: View {
           .transition(.move(edge: .top).combined(with: .opacity))
       }
       if let error = store.syncError {
-        Text(error).font(.system(size: 14)).foregroundStyle(Palette.red)
+        Text(error).font(.system(size: 13)).foregroundStyle(Palette.red)
           .multilineTextAlignment(.center).padding(.horizontal, 16).padding(.vertical, 10)
           .glass(20)
           .allowsHitTesting(false)
@@ -76,7 +76,7 @@ struct UpdatedBanner: View {
 
   var body: some View {
     HStack(spacing: 4) {
-      Text("Wisp was updated").font(.system(size: 16, weight: .medium)).foregroundStyle(Palette.text)
+      Text("Wisp was updated").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text)
       Spacer(minLength: 8)
       Button("Not now", action: notNow)
         .font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.muted)

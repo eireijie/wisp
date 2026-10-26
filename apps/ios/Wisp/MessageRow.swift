@@ -82,11 +82,11 @@ struct MessageRow: View {
       } else if !home {
         Group {
           if last {
-            if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 30, showStatus: false) }
-            else { PersonAvatar(name: store.name(of: message.author), size: 30) }
+            if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 24, showStatus: false) }
+            else { PersonAvatar(name: store.name(of: message.author), size: 24) }
           } else { Color.clear }
         }
-        .frame(width: 30, height: 30)
+        .frame(width: 24, height: 24)
       }
       column
       if !mine { Spacer(minLength: home ? 56 : 40) }
@@ -141,8 +141,8 @@ struct MessageRow: View {
         }
         if message.deletedAt != nil {
           Text("This message was deleted.").font(.system(size: 15)).italic().foregroundStyle(Palette.muted)
-            .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Palette.bubble))
+            .padding(.horizontal, 13).padding(.vertical, 9)
+            .background(BubbleShape(mine: mine).fill(Palette.bubble))
         } else if showsBubble {
           Bubble(side: mine ? .mine : .theirs) {
             VStack(alignment: .leading, spacing: 6) {
@@ -165,7 +165,7 @@ struct MessageRow: View {
                   Text(replies == 1 ? "1 reply" : "\(replies) replies")
                   Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Palette.faint)
                 }
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundStyle(Palette.text)
                 .padding(.horizontal, 12)
                 .frame(height: 34)
@@ -206,11 +206,12 @@ struct MessageRow: View {
           Text("Ran \(tools.count) tools").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.muted).padding(.horizontal, 16).padding(.vertical, 10)
           ForEach(Array(tools.enumerated()), id: \.offset) { _, t in
             Rectangle().fill(Palette.separator).frame(height: 1)
-            Text(t.line).font(.system(size: 14)).padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
+            Text(t.line).font(.system(size: 13)).padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity, alignment: .leading)
           }
         }
         .frame(maxWidth: 340)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       }
     }
   }
@@ -321,7 +322,7 @@ struct MarkdownText: View {
         Text(attributed)
       }
     }
-      .font(.body)
+      .font(.system(size: 15))
       .textSelection(.enabled)
       .fixedSize(horizontal: false, vertical: true)
   }
@@ -332,7 +333,7 @@ struct MarkdownText: View {
     opts.failurePolicy = .returnPartiallyParsedIfPossible
     var s = (try? AttributedString(markdown: source, options: opts)) ?? AttributedString(source)
     for run in s.runs where run.inlinePresentationIntent?.contains(.code) == true {
-      s[run.range].font = .body.monospaced()
+      s[run.range].font = .system(size: 15, design: .monospaced)
       s[run.range].backgroundColor = Color(.secondarySystemFill)
     }
     return s
@@ -355,13 +356,13 @@ struct ChangeCard: View {
     if let change {
       ChatCardShell(symbol: "pencil", label: "Changed") {
         ForEach(change.lines, id: \.self) { line in
-          Text(line).font(.system(size: 16, weight: .semibold))
+          Text(line).font(.system(size: 15, weight: .semibold))
             .strikethrough(change.undoneAt != nil)
             .foregroundStyle(change.undoneAt != nil ? Palette.muted : Palette.text)
         }
         HStack(spacing: 10) {
           if change.undoneAt != nil {
-            Label("Undone", systemImage: "arrow.uturn.backward").font(.system(size: 14)).foregroundStyle(Palette.muted)
+            Label("Undone", systemImage: "arrow.uturn.backward").font(.system(size: 13)).foregroundStyle(Palette.muted)
           } else {
             Button { undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward").font(.system(size: 15, weight: .semibold)).padding(.horizontal, 16).frame(height: 40) }
               .buttonStyle(.plain)
@@ -370,7 +371,7 @@ struct ChangeCard: View {
               .disabled(busy)
               .accessibilityIdentifier("undo-change")
             if let at = Wire.date(change.createdAt) {
-              Text(at, format: .dateTime.hour().minute()).font(.system(size: 14)).foregroundStyle(Palette.faint)
+              Text(at, format: .dateTime.hour().minute()).font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
           }
           if let error { Text(error).font(.caption).foregroundStyle(Palette.red) }
@@ -378,7 +379,7 @@ struct ChangeCard: View {
         .padding(.top, 2)
       }
     } else if looked && !fallback.isEmpty {
-      Text(fallback).font(.system(size: 16)).foregroundStyle(Palette.muted)
+      Text(fallback).font(.system(size: 15)).foregroundStyle(Palette.muted)
     } else {
       // a change made after the list was loaded: fetch it once
       Color.clear.frame(height: 0).task { try? await store.refreshChanges(); looked = true }
@@ -480,15 +481,15 @@ struct ApprovalBox: View {
 
   @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text(title).font(.system(size: 16, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+      Text(title).font(.system(size: 15, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
       if let login, pending {
-        Text("Your password manager signs in for it. Wisp never sees the password.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+        Text("Your password manager signs in for it. Wisp never sees the password.").font(.system(size: 13)).foregroundStyle(Palette.muted)
         HStack(spacing: 8) {
           Image(systemName: "lock").font(.system(size: 13)).foregroundStyle(Palette.muted)
           Text(login.site).lineLimit(1)
           Text(login.username ?? "").foregroundStyle(Palette.muted).lineLimit(1)
         }
-        .font(.system(size: 14))
+        .font(.system(size: 13))
         .padding(.horizontal, 12).padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.ground))
@@ -502,7 +503,7 @@ struct ApprovalBox: View {
       }
       if pending && store.role != "guest" {
         if let login, login.ownerId != store.me?.id {
-          Text("Waiting for whoever connected it: only they can let agents use their logins.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Text("Waiting for whoever connected it: only they can let agents use their logins.").font(.system(size: 13)).foregroundStyle(Palette.muted)
         } else {
           if login == nil {
             Text("Can I go ahead?").font(.system(size: 15)).foregroundStyle(Palette.muted)
@@ -510,8 +511,8 @@ struct ApprovalBox: View {
               .lineLimit(1...4)
               .font(.system(size: 15))
               .padding(.horizontal, 14).padding(.vertical, 11)
-              .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Palette.control))
-              .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.hairline))
+              .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
+              .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
               .disabled(busy)
           }
           HStack(spacing: 10) {
@@ -521,7 +522,7 @@ struct ApprovalBox: View {
           .disabled(busy)
           if login != nil {
             Button("Always allow for \(name)") { decide(true, always: true) }
-              .font(.system(size: 14)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity).disabled(busy)
+              .font(.system(size: 13)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity).disabled(busy)
           }
         }
       } else if !pending {
@@ -531,9 +532,9 @@ struct ApprovalBox: View {
           Spacer(minLength: 8)
           if let at = approval.decidedAt.flatMap(Wire.date) { Text(at, format: .dateTime.hour().minute()).foregroundStyle(Palette.faint) }
         }
-        .font(.system(size: 14))
+        .font(.system(size: 13))
         .foregroundStyle(approval.status == "approved" ? Palette.green : Palette.muted)
-        if !approval.note.isEmpty { Text("“\(approval.note)”").font(.system(size: 14)).foregroundStyle(Palette.muted) }
+        if !approval.note.isEmpty { Text("“\(approval.note)”").font(.system(size: 13)).foregroundStyle(Palette.muted) }
       }
       if let error { Text(error).font(.caption).foregroundStyle(Palette.red) }
     }
@@ -560,10 +561,10 @@ struct ComputerCard: View {
       if let request {
         let waiting = c.help != nil
         ChatCardShell(symbol: "desktopcomputer", label: waiting ? "Needs you on a computer" : "Helped on a computer", warn: waiting) {
-          Text("\(agentName ?? "It") asked for help on \(c.name)").font(.system(size: 16, weight: .semibold))
-          Text(request).font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Text("\(agentName ?? "It") asked for help on \(c.name)").font(.system(size: 15, weight: .semibold))
+          Text(request).font(.system(size: 13)).foregroundStyle(Palette.muted)
           NavigationLink { ComputerDetail(computerId: c.id) } label: {
-            Label("Open \(c.name)", systemImage: "desktopcomputer").font(.system(size: 16, weight: .semibold))
+            Label("Open \(c.name)", systemImage: "desktopcomputer").font(.system(size: 15, weight: .semibold))
               .foregroundStyle(Palette.ground).frame(maxWidth: .infinity).frame(height: 44)
               .background(Capsule().fill(Palette.text))
           }

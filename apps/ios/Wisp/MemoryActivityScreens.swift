@@ -71,8 +71,8 @@ struct MemoryActivityView: View {
         VStack(alignment: .leading, spacing: 2) {
           (Text(who.name).fontWeight(.bold).foregroundStyle(Palette.text) + Text(" \(MemoryChange.verb(line.file.change)) ").foregroundStyle(Palette.text)
             + Text(name).foregroundStyle(deleted ? Palette.muted : Color(light: 0x0A64D6, dark: 0x9EC5FF)))
-            .font(.system(size: 17)).multilineTextAlignment(.leading)
-          Text(dayTime(line.change.date, today: today)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+            .font(.system(size: 15)).multilineTextAlignment(.leading)
+          Text(dayTime(line.change.date, today: today)).font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
         Spacer(minLength: 0)
       }.padding(.horizontal, 18).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
@@ -111,7 +111,7 @@ struct NoteHistoryView: View {
   var body: some View {
     MemoryScreen(title: tab == 0 ? "History" : "Who wrote what", id: "note-history") {
       HStack(spacing: 0) { tabButton("History", 0); tabButton("Who wrote what", 1) }.padding(4).background(Capsule().fill(Palette.card))
-      Text((path as NSString).lastPathComponent).font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 6)
+      Text((path as NSString).lastPathComponent).font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 6)
       InlineError(error: action.error)
       if tab == 0 { versions } else { blame }
     }
@@ -127,7 +127,7 @@ struct NoteHistoryView: View {
 
   private func tabButton(_ title: String, _ index: Int) -> some View {
     Button { tab = index } label: {
-      Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(tab == index ? Palette.text : Palette.muted).frame(maxWidth: .infinity).frame(height: 44)
+      Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(tab == index ? Palette.text : Palette.muted).frame(maxWidth: .infinity).frame(height: 44)
         .background(Capsule().fill(tab == index ? Palette.control : Color.clear))
     }.buttonStyle(.plain).accessibilityAddTraits(tab == index ? .isSelected : []).accessibilityIdentifier(index == 0 ? "history-tab" : "blame-tab")
   }
@@ -139,9 +139,10 @@ struct NoteHistoryView: View {
     }
     CardCaption("Restoring brings back that version as a new change. Nothing is lost.")
     if let revision = previewing {
-      SectionCaption("Version from \(relative(revision.date) ?? revision.hash)", trailing: AnyView(Button("Hide") { previewing = nil }.font(.system(size: 14)).buttonStyle(.borderless)))
+      SectionCaption("Version from \(relative(revision.date) ?? revision.hash)", trailing: AnyView(Button("Hide") { previewing = nil }.font(.system(size: 13)).buttonStyle(.borderless)))
       VStack(alignment: .leading) { NoteMarkdown(text: NoteView.withoutFrontmatter(previewText)).foregroundStyle(Palette.text) }
         .padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     }
   }
 
@@ -150,8 +151,8 @@ struct NoteHistoryView: View {
     return HStack(spacing: 12) {
       AuthorAvatar(author: who, size: 40)
       VStack(alignment: .leading, spacing: 2) {
-        Text(revision.message ?? revision.hash).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(2)
-        Text([who.name, relative(revision.date)].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 14)).foregroundStyle(Palette.faint)
+        Text(revision.message ?? revision.hash).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(2)
+        Text([who.name, relative(revision.date)].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
       Spacer(minLength: 6)
       if index == 0 {
@@ -191,7 +192,8 @@ struct NoteHistoryView: View {
       }
       VStack(alignment: .leading, spacing: 0) {
         ForEach(shown) { block in blameRow(block, names) }
-      }.background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous)).clipShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      }.background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder)).clipShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
   }
 
@@ -201,7 +203,7 @@ struct NoteHistoryView: View {
     return HStack(alignment: .top, spacing: 10) {
       Rectangle().fill(color).frame(width: 3)
       HStack(spacing: 5) { AuthorAvatar(author: who, size: 18); Text(who.name).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1) }.frame(width: 84, alignment: .leading).padding(.vertical, 12)
-      Text(block.lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)).font(.system(size: 16)).foregroundStyle(Palette.text).textSelection(.enabled)
+      Text(block.lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)).font(.system(size: 15)).foregroundStyle(Palette.text).textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
     }.padding(.trailing, 14)
   }

@@ -309,7 +309,7 @@ struct CallScreen: View {
       ZStack {
         Palette.ground.ignoresSafeArea()
         VStack(spacing: 0) {
-          HStack { CallCircle(symbol: "chevron.up", label: "Shrink call into the chat", id: "call-shrink", size: 52) { call.expanded = false }; Spacer() }
+          HStack { CallCircle(symbol: "chevron.up", label: "Shrink call into the chat", id: "call-shrink", size: 44) { call.expanded = false }; Spacer() }
             .padding(.horizontal, 18).padding(.top, 8)
           hero(facts)
           if call.settingsOpen { settings.padding(.horizontal, 18).padding(.top, 18).transition(.opacity) }
@@ -332,13 +332,13 @@ struct CallScreen: View {
     return VStack(spacing: 6) {
       if connecting { Spacer(minLength: 0) }
       CallGhost(agent: live, state: state, facts: facts, size: connecting ? 150 : 96, ring: connecting ? 170 : 120)
-      Text(live.name).font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.text).padding(.top, 6)
+      Text(live.name).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.top, 6)
       if facts.offline {
         Text("\(live.name) is asleep. Wake their computer to talk.").font(.system(size: 15)).foregroundStyle(Palette.faint).multilineTextAlignment(.center).padding(.horizontal, 28)
       } else if connecting {
-        Text("Calling…").font(.system(size: 17)).foregroundStyle(Palette.faint)
+        Text("Calling…").font(.system(size: 15)).foregroundStyle(Palette.faint)
       } else {
-        timer.font(.system(size: 17).monospacedDigit()).foregroundStyle(Palette.faint)
+        timer.font(.system(size: 15).monospacedDigit()).foregroundStyle(Palette.faint)
         Text(facts.label).font(.system(size: 15))
           .foregroundStyle(facts.micTrouble ? Color.orange : facts.failed ? Palette.red : facts.phase == .listening || facts.phase == .hearing ? Palette.green : Palette.muted)
           .padding(.top, 6).accessibilityAddTraits(.updatesFrequently)
@@ -377,7 +377,7 @@ struct CallScreen: View {
         HStack(spacing: 12) {
           Image(systemName: "mic.slash").font(.system(size: 18)).foregroundStyle(Color.orange)
             .frame(width: 40, height: 40).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.15)))
-          Text("A little help with the microphone?").font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.text)
+          Text("A little help with the microphone?").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
         }
         Text("Wisp needs your microphone to hear you. Turn it on in Settings, then come back. \(live.name) will still answer in chat.").font(.system(size: 15)).foregroundStyle(Palette.muted)
         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -387,18 +387,18 @@ struct CallScreen: View {
       }
     } else if facts.failed {
       problemCard {
-        if !state.error.isEmpty { Text(state.error).font(.system(size: 14)).foregroundStyle(Palette.red) }
+        if !state.error.isEmpty { Text(state.error).font(.system(size: 13)).foregroundStyle(Palette.red) }
         Text("Check that your Wisp is reachable and that the voice you picked has its key. The conversation is still here in chat.").font(.system(size: 15)).foregroundStyle(Palette.muted)
         if store.connected { pill("Try again", primary: true, id: "call-retry") { call.retry(store: store) } }
         NavigationLink { VoiceSettingsView() } label: {
           HStack(spacing: 8) { Text("Voice settings"); Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
-            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 52).glassPill()
+            .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 52).glassPill()
         }.buttonStyle(.plain).accessibilityIdentifier("call-voice-settings")
       }
     } else if facts.paused {
       VStack(spacing: 16) {
         pill("Resume", primary: true, id: "call-resume") { call.retry(store: store) }.frame(width: 200)
-        Text("The call is on hold. \(live.name) keeps working and its full reply will be waiting in chat.").font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
+        Text("The call is on hold. \(live.name) keeps working and its full reply will be waiting in chat.").font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
       }.padding(.horizontal, 38).padding(.top, 28)
       Spacer(minLength: 0)
     } else {
@@ -410,14 +410,14 @@ struct CallScreen: View {
     ScrollView {
       VStack(spacing: 22) {
         if !state.userCaption.isEmpty {
-          Text(state.userCaption).font(.system(size: 17)).foregroundStyle(Palette.faint).multilineTextAlignment(.trailing)
+          Text(state.userCaption).font(.system(size: 15)).foregroundStyle(Palette.faint).multilineTextAlignment(.trailing)
             .frame(maxWidth: .infinity, alignment: .trailing).padding(.leading, 60)
         }
         if !state.agentCaption.isEmpty {
           Text(state.agentCaption).font(.system(size: 19)).lineSpacing(3).foregroundStyle(Palette.text)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 20)
         }
-        if !state.error.isEmpty { Text(state.error).font(.system(size: 14)).foregroundStyle(Palette.red).frame(maxWidth: .infinity, alignment: .leading) }
+        if !state.error.isEmpty { Text(state.error).font(.system(size: 13)).foregroundStyle(Palette.red).frame(maxWidth: .infinity, alignment: .leading) }
         if state.longWork { Text("Feel free to hang up. Watch for the done glow or a notification.").font(.system(size: 13)).foregroundStyle(Palette.faint).frame(maxWidth: .infinity) }
       }
       .padding(.horizontal, 28).padding(.vertical, 16)
@@ -437,7 +437,7 @@ struct CallScreen: View {
 
   private func pill(_ title: String, primary: Bool = false, id: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
-      Text(title).font(.system(size: 16, weight: .semibold))
+      Text(title).font(.system(size: 15, weight: .semibold))
         .foregroundStyle(primary ? Palette.ground : Palette.text)
         .frame(maxWidth: .infinity).frame(height: 52)
         .background { if primary { Capsule().fill(Palette.text) } }

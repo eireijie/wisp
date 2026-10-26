@@ -246,8 +246,8 @@ struct ConnectionsSettingsView: View {
         ForEach(items) { c in
           HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-              Text(store.agent(c.agentId)?.name ?? "A removed agent").font(.system(size: 17)).foregroundStyle(Palette.text)
-              Text(detail(c, kindName: name(c))).font(.system(size: 14)).foregroundStyle(Palette.faint)
+              Text(store.agent(c.agentId)?.name ?? "A removed agent").font(.system(size: 15)).foregroundStyle(Palette.text)
+              Text(detail(c, kindName: name(c))).font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer(minLength: 8)
             if store.canManage { Button("Disconnect") { removing = c }.buttonStyle(.pill(.secondary, small: true)) }

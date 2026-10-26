@@ -83,7 +83,7 @@ export function TasksView({ onBack }: { onBack?: () => void }) {
             <ChevronRight size={22} strokeWidth={2} className="rotate-180" />
           </button>
         )}
-        <h1 className="text-xl md:text-[28px] font-bold tracking-tight flex-1 truncate max-md:text-center">Tasks</h1>
+        <h1 className="t-title flex-1 truncate max-md:text-center">Tasks</h1>
         {lead && (
           <a href={href({ view: "settings", page: "agents" })} className="hidden lg:flex items-center gap-1.5 text-xs text-muted hover:text-ink" title="The lead takes every task nobody assigned">
             <Crown size={13} /> Lead <AgentAvatar agent={lead} size={18} /> <span className="text-ink">{lead.name}</span>
@@ -115,7 +115,7 @@ function NoAgents() {
   };
   return (
     <div className="mx-auto max-w-xl px-4 py-12 md:py-16 text-center space-y-3">
-      <h2 className="text-lg font-semibold">Add an agent to hand work to</h2>
+      <h2 className="t-title">Add an agent to hand work to</h2>
       <p className="text-sm text-muted">Tasks are how you give agents work and follow it from the plan to the pieces to done. Add an agent first.</p>
       <div className="flex justify-center gap-2">
         <CardButton tone="primary" onClick={() => to({ view: "agents", agentId: null })}>
@@ -306,7 +306,7 @@ function Board({ leadId }: { leadId: string | null }) {
             <div className="flex gap-3.5 items-start">
               {columns.map((c) => (
                 <section key={c.title} className="flex-1 min-w-0 flex flex-col gap-2.5" aria-label={c.title}>
-                  <div className="flex justify-between px-1 text-[13px] font-semibold text-muted">
+                  <div className="flex justify-between px-1 text-[13px] font-medium text-muted">
                     <h2>{c.title}</h2>
                     <span className="font-medium text-faint">{c.list.length}</span>
                   </div>
@@ -325,7 +325,7 @@ function Board({ leadId }: { leadId: string | null }) {
         </>
       )}
       {phone && selected && (
-        <Modal title={selected.title} headerless onClose={() => setSelectedId(null)} className="!rounded-t-[38px] sm:!rounded-[38px]" contentClassName="!px-0 !pb-0">
+        <Modal title={selected.title} headerless onClose={() => setSelectedId(null)} className="!rounded-t-[16px] sm:!rounded-xl" contentClassName="!px-0 !pb-0">
           <div className="px-[18px] pt-4 pb-8">
             <TaskDetail key={selected.id} task={selected} ctx={ctx} onSelect={setSelectedId} onClose={() => setSelectedId(null)} sheet />
           </div>
@@ -350,10 +350,10 @@ function TaskRowItem({ task: t, ctx, onOpen }: { task: TaskRow; ctx: Ctx; onOpen
   const agent = ctx.agents.find((a) => a.id === t.toAgentId);
   const state = ctx.stateOf(t);
   return (
-    <button onClick={onOpen} className="w-full flex items-center gap-3 min-h-[68px] px-4 py-3 text-left hover:bg-hover min-w-0">
+    <button onClick={onOpen} className="w-full flex items-center gap-3 min-h-14 px-4 py-3 text-left hover:bg-hover min-w-0">
       <AgentAvatar agent={agent} size={32} interactive={false} />
       <span className="min-w-0 flex-1 flex flex-col gap-[5px]">
-        <span className="truncate text-base font-semibold">{t.title}</span>
+        <span className="truncate text-base font-medium">{t.title}</span>
         <span className="flex items-center gap-2 min-w-0">
           <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
           <span className="text-[13px] text-faint truncate">{agent?.name ?? "an agent"}</span>
@@ -371,8 +371,8 @@ function TaskCardItem({ task: t, ctx, selected, onOpen }: { task: TaskRow; ctx: 
   const subs = ctx.children.get(t.id) ?? [];
   const done = subs.filter((s) => s.status === "done").length;
   return (
-    <button onClick={onOpen} aria-pressed={selected} className={cx("text-left rounded-[18px] bg-card border px-3.5 py-3 flex flex-col gap-2 w-full transition-colors hover:bg-hover", selected ? "border-badge/70" : "border-line")}>
-      <span className="text-sm font-semibold leading-snug break-words">{t.title}</span>
+    <button onClick={onOpen} aria-pressed={selected} className={cx("text-left rounded-xl bg-card border px-3.5 py-3 flex flex-col gap-2 w-full transition-colors hover:bg-hover", selected ? "border-badge/70" : "border-line")}>
+      <span className="text-sm font-medium leading-snug break-words">{t.title}</span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <AgentAvatar agent={agent} size={22} interactive={false} />
         <span className="text-xs text-faint flex-1 min-w-12 truncate">{agent?.name ?? "an agent"}</span>
@@ -438,7 +438,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
   const field = (k: string, v: ReactNode) => (
     <div className={rowCls}>
       <span className="w-[78px] shrink-0 text-sm text-faint">{k}</span>
-      <span className="flex-1 min-w-0 flex items-center gap-2 text-[15px]">{v}</span>
+      <span className="flex-1 min-w-0 flex items-center gap-2 text-body">{v}</span>
     </div>
   );
 
@@ -461,7 +461,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
         )}
         {!sheet && (
           <div className="flex-1 min-w-0 flex flex-col gap-2">
-            <h2 className="text-[22px] font-bold leading-tight break-words">{t.title}</h2>
+            <h2 className="t-title break-words">{t.title}</h2>
             <span className="flex items-center gap-2.5 flex-wrap">
               <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
               <span className="text-[13px] text-faint">
@@ -473,7 +473,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
       </div>
       {sheet && (
         <div className="flex flex-col gap-2">
-          <h2 className="text-2xl font-bold leading-tight break-words">{t.title}</h2>
+          <h2 className="t-title break-words">{t.title}</h2>
           <span className="flex items-center gap-2.5 flex-wrap">
             <StateChip tone={STATE[state].tone}>{ctx.stateLabel(t)}</StateChip>
             <span className="text-sm text-faint">
@@ -535,7 +535,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
                     ))}
                   </span>
                 )}
-                <span className={cx("text-[15px] leading-snug", state === "working" ? "text-ok" : "text-warn")}>{doing}</span>
+                <span className={cx("text-body leading-snug", state === "working" ? "text-ok" : "text-warn")}>{doing}</span>
               </span>
             )}
             {t.brief && t.brief !== t.title && <span className="text-sm leading-snug text-ink/80 whitespace-pre-wrap break-words">{t.brief}</span>}
@@ -574,7 +574,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
                   {i > 0 && <Rule />}
                   <button onClick={() => onSelect(s.id)} className="w-full flex items-center gap-3 min-h-[52px] py-2 pr-4 text-left hover:bg-hover" style={{ paddingLeft: 16 + depth * 20 }}>
                     {iconFor(ss, 22)}
-                    <span className="flex-1 min-w-0 text-[15px] leading-snug">
+                    <span className="flex-1 min-w-0 text-body leading-snug">
                       {s.reviewOf && <span className="text-muted">Review · </span>}
                       {s.title}
                       {sa && <span className="text-faint"> · {sa.name}</span>}
@@ -706,7 +706,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
         {selected && <CircleCheck size={22} strokeWidth={2} className="text-badge shrink-0" />}
       </button>
     ) : (
-      <button type="button" onClick={onClick} aria-pressed={selected} className={cx("inline-flex items-center gap-2 h-10 rounded-full px-4 text-sm font-semibold border", selected ? "bg-chip border-badge" : "bg-chip/60 border-line hover:bg-hover")}>
+      <button type="button" onClick={onClick} aria-pressed={selected} className={cx("inline-flex items-center gap-2 h-10 rounded-full px-4 text-sm font-medium border", selected ? "bg-chip border-badge" : "bg-chip/60 border-line hover:bg-hover")}>
         {icon}
         {text}
         {aside}
@@ -718,7 +718,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
   ) : !lead ? null : (
     <>
       <div className={phone ? "flex flex-col gap-3" : "flex flex-col gap-2"}>
-        <div className="px-1.5 text-[13px] font-semibold text-faint">Who takes it?</div>
+        <div className="px-1.5 text-[13px] font-medium text-faint">Who takes it?</div>
         {phone ? (
           <GroupCard>
             {choice(to === "auto", () => setTo("auto"), <AgentAvatar agent={lead} size={28} interactive={false} />, `Let ${lead.name} plan it`, <Sparkles size={15} className="text-muted shrink-0" />)}
@@ -771,19 +771,19 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
 
   if (phone) {
     return (
-      <Modal title="New task" headerless onClose={onClose} className="!rounded-t-[38px]" contentClassName="!px-0 !pb-0">
+      <Modal title="New task" headerless onClose={onClose} className="!rounded-t-[16px]" contentClassName="!px-0 !pb-0">
         <form className="px-[18px] pt-4 pb-8 flex flex-col gap-3.5" onSubmit={submit}>
           <div className="flex items-center justify-between gap-3">
             <button type="button" onClick={onClose} className="circle" aria-label="Close">
               <X size={20} strokeWidth={2} />
             </button>
-            <h2 className="text-lg font-bold">New task</h2>
+            <h2 className="t-title">New task</h2>
             <CardButton tone="primary" type="submit" disabled={busy || !title.trim()} className="h-11">
               {busy ? <Loader2 size={16} className="animate-spin" /> : "Hand off"}
             </CardButton>
           </div>
           <GroupCard className="py-1">
-            <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="w-full h-[54px] bg-transparent px-[18px] text-[17px] font-semibold outline-none placeholder:text-faint" />
+            <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="w-full h-[54px] bg-transparent px-[18px] text-body font-medium outline-none placeholder:text-faint" />
             <Rule />
             <textarea aria-label="Details" placeholder="Details" value={brief} onChange={(e) => setBrief(e.target.value)} className="w-full h-[110px] resize-none bg-transparent px-[18px] py-3.5 text-base outline-none placeholder:text-faint" />
           </GroupCard>
@@ -798,15 +798,15 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form role="dialog" aria-modal="true" aria-label="New task" onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), onClose())} className="w-[540px] max-w-full max-h-[92vh] overflow-y-auto rounded-[28px] bg-card border border-control-line shadow-panel p-6 flex flex-col gap-3.5">
+      <form role="dialog" aria-modal="true" aria-label="New task" onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), onClose())} className="w-[540px] max-w-full max-h-[92vh] overflow-y-auto rounded-xl bg-card border border-control-line shadow-panel p-6 flex flex-col gap-3.5">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">New task</h2>
+          <h2 className="t-title">New task</h2>
           <button type="button" onClick={onClose} className="circle" aria-label="Close">
             <X size={20} strokeWidth={2} />
           </button>
         </div>
-        <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="h-12 rounded-2xl border border-control-line bg-panel px-4 text-base font-semibold outline-none placeholder:text-faint focus:border-ring" />
-        <textarea aria-label="Details" placeholder="Details" value={brief} onChange={(e) => setBrief(e.target.value)} className="h-24 resize-none rounded-2xl border border-control-line bg-panel px-4 py-3 text-[15px] outline-none placeholder:text-faint focus:border-ring" />
+        <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="h-12 rounded-2xl border border-control-line bg-panel px-4 text-base font-medium outline-none placeholder:text-faint focus:border-ring" />
+        <textarea aria-label="Details" placeholder="Details" value={brief} onChange={(e) => setBrief(e.target.value)} className="h-24 resize-none rounded-2xl border border-control-line bg-panel px-4 py-3 text-body outline-none placeholder:text-faint focus:border-ring" />
         {who}
         {attach}
         <div className="flex items-center gap-2.5">

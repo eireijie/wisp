@@ -41,8 +41,8 @@ struct AgentComputerView: View {
           HStack(spacing: 12) {
             rowIcon("laptopcomputer")
             VStack(alignment: .leading, spacing: 2) {
-              Text("Another computer…").font(.system(size: 17)).foregroundStyle(Palette.text)
-              Text(place == .other ? (computer?.name ?? "Pick from your devices") : "Pick from your devices").font(.system(size: 14)).foregroundStyle(Palette.faint)
+              Text("Another computer…").font(.system(size: 15)).foregroundStyle(Palette.text)
+              Text(place == .other ? (computer?.name ?? "Pick from your devices") : "Pick from your devices").font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer(minLength: 8)
             if place == .other { Radio(on: true) } else { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
@@ -115,8 +115,8 @@ struct AgentComputerView: View {
       CardGroup {
         HStack(spacing: 12) {
           VStack(alignment: .leading, spacing: 2) {
-            Text("\(label) account").font(.system(size: 17)).foregroundStyle(Palette.text)
-            Text(harness.signedIn == true ? "Signed in on its computer" : harness.signedIn == false ? "Not signed in yet" : "Unknown").font(.system(size: 14)).foregroundStyle(Palette.faint)
+            Text("\(label) account").font(.system(size: 15)).foregroundStyle(Palette.text)
+            Text(harness.signedIn == true ? "Signed in on its computer" : harness.signedIn == false ? "Not signed in yet" : "Unknown").font(.system(size: 13)).foregroundStyle(Palette.faint)
           }
           Spacer(minLength: 8)
           Text(harness.signedIn == true ? "Signed in" : harness.signedIn == false ? "Not signed in" : "Unknown")

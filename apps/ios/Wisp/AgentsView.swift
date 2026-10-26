@@ -26,7 +26,7 @@ struct AgentsView: View {
         }
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
-            Text("Agents").font(.system(size: 32, weight: .bold)).foregroundStyle(Palette.text)
+            Text("Agents").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
               .padding(.horizontal, 4).padding(.top, 8).padding(.bottom, 14)
               .accessibilityAddTraits(.isHeader)
             if store.agents.isEmpty {
@@ -90,13 +90,14 @@ struct AgentTile: View {
       VStack(spacing: 6) {
         GhostView(look: agent.settings?.appearance, seed: agent.handle, size: 76, mood: store.mood(for: agent))
           .frame(width: 76, height: 76)
-        Text(agent.name).font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1).padding(.top, 6)
+        Text(agent.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1).padding(.top, 6)
         Text(harnessLabel).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
         status.padding(.top, 4)
       }
       .frame(maxWidth: .infinity, minHeight: 196)
       .padding(.horizontal, 14).padding(.vertical, 16)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
     .buttonStyle(.plain)

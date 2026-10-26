@@ -163,17 +163,18 @@ struct ChatToolSheet: View {
     VStack(alignment: .leading, spacing: 10) {
       if let f = info?.fraction {
         HStack {
-          Text(ContextCard.words(f)).font(.system(size: 17, weight: .semibold))
+          Text(ContextCard.words(f)).font(.system(size: 15, weight: .semibold))
           Spacer()
           Text("\(Int((f * 100).rounded()))%").font(.system(size: 15)).monospacedDigit().foregroundStyle(ContextRing.color(f))
         }
         ProgressView(value: f).tint(ContextRing.color(f))
       }
       Text(info?.summary ?? "Loading…").font(.system(size: 15)).foregroundStyle(Palette.muted)
-      Text("Older messages are summarized as it fills up. Start a new chat to begin fresh; its memory carries over.").font(.system(size: 14)).foregroundStyle(Palette.faint)
+      Text("Older messages are summarized as it fills up. Start a new chat to begin fresh; its memory carries over.").font(.system(size: 13)).foregroundStyle(Palette.faint)
     }
     .padding(16)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }

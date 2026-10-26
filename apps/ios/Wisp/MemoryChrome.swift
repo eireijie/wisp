@@ -8,7 +8,7 @@ import SwiftUI
 struct MemoryPill: View {
   var title: String
   var body: some View {
-    Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
       .padding(.horizontal, 20).frame(height: 52).glassPill().contentShape(Capsule())
       .accessibilityAddTraits(.isHeader)
   }
@@ -74,7 +74,7 @@ struct PillAction: View {
     Button(action: action) {
       HStack(spacing: 8) {
         if let symbol { Image(systemName: symbol).font(.system(size: 17, weight: .semibold)) }
-        Text(title).font(.system(size: 17, weight: .semibold))
+        Text(title).font(.system(size: 15, weight: .semibold))
       }
       .foregroundStyle(Palette.sheet)
       .padding(.horizontal, 30).frame(height: 54).background(Capsule().fill(Palette.text)).opacity(enabled ? 1 : 0.4)
@@ -93,7 +93,7 @@ struct GlassPillButton: View {
     Button(action: action) {
       HStack(spacing: 8) {
         Image(systemName: symbol).font(.system(size: 15, weight: .medium))
-        Text(title).font(.system(size: 17, weight: .semibold))
+        Text(title).font(.system(size: 15, weight: .semibold))
       }
       .foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 54).glassPill().contentShape(Capsule())
     }
@@ -140,6 +140,7 @@ struct MemoryFieldCard<Content: View>: View {
   var body: some View {
     content.padding(.horizontal, 18).padding(.vertical, 16).frame(maxWidth: .infinity, alignment: .leading)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -163,7 +164,7 @@ struct TagChip: View {
       if tint == nil { Text("#").foregroundStyle(Palette.faint) }
       Text(text).foregroundStyle(tint ?? Palette.text)
     }
-    .font(.system(size: 14, weight: .semibold)).padding(.horizontal, 12).frame(height: 32)
+    .font(.system(size: 13, weight: .semibold)).padding(.horizontal, 12).frame(height: 32)
     .background(Capsule().fill(tint.map { $0.opacity(0.18) } ?? Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
   }
 }
@@ -199,19 +200,19 @@ struct ConfirmCard: View {
       VStack(alignment: .leading, spacing: 14) {
         Image(systemName: symbol).font(.system(size: 20, weight: .medium)).foregroundStyle(Palette.red)
           .frame(width: 48, height: 48).background(Circle().fill(Palette.red.opacity(0.18)))
-        Text(title).font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.text)
-        Text(message).font(.system(size: 16)).foregroundStyle(Palette.muted)
+        Text(title).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(message).font(.system(size: 15)).foregroundStyle(Palette.muted)
         Button(action: onConfirm) {
-          Text(confirm).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 52)
+          Text(confirm).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 52)
             .background(Capsule().fill(Palette.red)).opacity(busy ? 0.5 : 1)
         }.buttonStyle(.plain).disabled(busy).accessibilityIdentifier("confirm-destructive")
         Button(action: onCancel) {
-          Text(cancel).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 52)
+          Text(cancel).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 52)
             .background(Capsule().fill(Palette.control))
         }.buttonStyle(.plain)
       }
-      .padding(24).frame(maxWidth: 360).background(Palette.card, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
-      .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).strokeBorder(Palette.hairline))
+      .padding(24).frame(maxWidth: 360).background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
       .padding(.horizontal, 24)
     }
   }

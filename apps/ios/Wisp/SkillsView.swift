@@ -30,7 +30,7 @@ struct SkillDetail: View {
       HStack(alignment: .center, spacing: 14) {
         MarketTile(symbol: MarketText.skillSymbol((current.slug ?? "") + " " + current.name), size: 56)
         VStack(alignment: .leading, spacing: 6) {
-          Text(current.name).font(.system(size: 24, weight: .bold)).lineLimit(3)
+          Text(current.name).font(.system(size: 22, weight: .semibold)).lineLimit(3)
           if let installed { MarketPill(text: MarketText.origin(installed), tone: installed.source == "catalog" ? .green : .grey) }
           else { MarketPill(text: "Made by Wisp", tone: .green, symbol: "checkmark.seal") }
         }
@@ -44,9 +44,9 @@ struct SkillDetail: View {
         MarketLabel("What it needs")
         CardGroup { MarketRow(symbol: "wand.and.stars", title: plain.needs) }
         MarketLabel("Example")
-        Text(plain.example).font(.system(size: 16)).textSelection(.enabled).padding(16).frame(maxWidth: .infinity, alignment: .leading)
-          .background(Palette.control, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-          .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.hairline))
+        Text(plain.example).font(.system(size: 15)).textSelection(.enabled).padding(16).frame(maxWidth: .infinity, alignment: .leading)
+          .background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
       }
       if store.canManage, installed != nil {
         MarketLabel("Helpers with this skill")
@@ -64,15 +64,16 @@ struct SkillDetail: View {
         }
       }
       Button { withAnimation { showInstructions.toggle() } } label: {
-        Label("Read the full instructions", systemImage: showInstructions ? "chevron.down" : "chevron.right").font(.system(size: 14)).foregroundStyle(Palette.muted)
+        Label("Read the full instructions", systemImage: showInstructions ? "chevron.down" : "chevron.right").font(.system(size: 13)).foregroundStyle(Palette.muted)
       }.padding(.horizontal, 4)
-      if showInstructions { NoteMarkdown(text: current.content ?? "").padding(16).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous)) }
+      if showInstructions { NoteMarkdown(text: current.content ?? "").padding(16).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder)) }
       InlineError(error: action.error)
     }
     .bottomAction {
       HStack(spacing: 10) {
         Button { trying = true } label: { Label("Try it", systemImage: "paperplane").frame(maxWidth: .infinity, minHeight: 28) }.secondaryButton().controlSize(.large)
-        if installed == nil && store.canManage { Button { installing = true } label: { Text("Install").font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
+        if installed == nil && store.canManage { Button { installing = true } label: { Text("Install").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
       }
     }
     .sheet(isPresented: $editing) { SkillEditor(skill: current, onShare: { sharing = true }) }
@@ -105,7 +106,7 @@ struct StoreSkillDetail: View {
       HStack(alignment: .center, spacing: 14) {
         MarketTile(symbol: MarketText.skillSymbol(skill.id + " " + skill.name), size: 56)
         VStack(alignment: .leading, spacing: 6) {
-          Text(skill.name).font(.system(size: 24, weight: .bold)).lineLimit(3)
+          Text(skill.name).font(.system(size: 22, weight: .semibold)).lineLimit(3)
           HStack(spacing: 6) {
             MarketPill(text: "From \(skill.source.label)")
             MarketPill(text: skill.license.label, tone: skill.license.open ? .grey : .warn)
@@ -115,13 +116,14 @@ struct StoreSkillDetail: View {
       }
       MarketLabel("What it does")
       Text(skill.description).font(.system(size: 15)).foregroundStyle(Palette.text.opacity(0.9)).padding(.horizontal, 4)
-      if let url = URL(string: skill.url) { Link(destination: url) { Label("Source", systemImage: "arrow.up.right.square").font(.system(size: 14)) }.padding(.horizontal, 4) }
+      if let url = URL(string: skill.url) { Link(destination: url) { Label("Source", systemImage: "arrow.up.right.square").font(.system(size: 13)) }.padding(.horizontal, 4) }
       if !skill.license.open { MarketNote(text: "Its license doesn't allow copying it, so read it where it lives: \(skill.source.label)'s repo.") }
       if let instructions, !instructions.isEmpty {
         Button { withAnimation { showInstructions.toggle() } } label: {
-          Label("Read the full instructions", systemImage: showInstructions ? "chevron.down" : "chevron.right").font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Label("Read the full instructions", systemImage: showInstructions ? "chevron.down" : "chevron.right").font(.system(size: 13)).foregroundStyle(Palette.muted)
         }.padding(.horizontal, 4)
-        if showInstructions { NoteMarkdown(text: instructions).padding(16).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous)) }
+        if showInstructions { NoteMarkdown(text: instructions).padding(16).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder)) }
       } else if !loaded && skill.license.open {
         ProgressView().frame(maxWidth: .infinity)
       }
@@ -129,7 +131,7 @@ struct StoreSkillDetail: View {
     .bottomAction {
       HStack(spacing: 10) {
         Button { trying = true } label: { Label("Try it", systemImage: "paperplane").frame(maxWidth: .infinity, minHeight: 28) }.secondaryButton().controlSize(.large)
-        if store.canManage && skill.license.open { Button { adding = true } label: { Text("Install").font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
+        if store.canManage && skill.license.open { Button { adding = true } label: { Text("Install").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 28) }.primaryButton() }
       }
     }
     .sheet(isPresented: $adding) { SkillInstallSheet(title: "Add \(skill.name)", request: ["storeId": AnyEncodable(skill.id)]) }
@@ -157,19 +159,19 @@ private struct TagsField: View {
       HStack(spacing: 8) {
         ForEach(tags, id: \.self) { tag in
           HStack(spacing: 6) {
-            Text(tag).font(.system(size: 14, weight: .medium))
+            Text(tag).font(.system(size: 13, weight: .medium))
             Button { tags.removeAll { $0 == tag } } label: { Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted) }.buttonStyle(.plain).accessibilityLabel("Remove \(tag)")
           }
           .padding(.leading, 16).padding(.trailing, 12).frame(height: 36)
           .background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
         }
         if adding {
-          TextField("New tag", text: $text).font(.system(size: 14)).textInputAutocapitalization(.never).autocorrectionDisabled().focused($focused).onSubmit(commit)
+          TextField("New tag", text: $text).font(.system(size: 13)).textInputAutocapitalization(.never).autocorrectionDisabled().focused($focused).onSubmit(commit)
             .padding(.horizontal, 14).frame(width: 130, height: 36).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
             .onAppear { focused = true }
         } else {
           Button { adding = true } label: {
-            Label("Add", systemImage: "plus").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.text.opacity(0.8))
+            Label("Add", systemImage: "plus").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.text.opacity(0.8))
               .padding(.horizontal, 16).frame(height: 36).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
           }.buttonStyle(.plain)
         }
@@ -218,18 +220,18 @@ struct SkillEditor: View {
       MarketLabel("Tags")
       TagsField(tags: $tags)
       if guided && !direct {
-        Button { direct = true } label: { Label("Edit the instructions directly", systemImage: "chevron.right").font(.system(size: 14)).foregroundStyle(Palette.muted) }.padding(.horizontal, 4)
+        Button { direct = true } label: { Label("Edit the instructions directly", systemImage: "chevron.right").font(.system(size: 13)).foregroundStyle(Palette.muted) }.padding(.horizontal, 4)
       } else {
         HStack {
           MarketLabel("Full instructions")
           SegPicker(options: [(false, "Write"), (true, "Preview")], selection: $preview).frame(width: 190)
         }
         if preview {
-          NoteMarkdown(text: finalContent).padding(16).frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading).background(Palette.control, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+          NoteMarkdown(text: finalContent).padding(16).frame(maxWidth: .infinity, minHeight: 160, alignment: .topLeading).background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         } else {
           MarketField(label: nil, placeholder: "# What this skill does", text: guided ? Binding(get: { finalContent }, set: { raw = $0 }) : $content, mono: true, lines: 8...25)
           if guided { Text(raw == nil ? "Made from your answers above. If you change this text, this text is what gets saved." : "You edited this text, so the answers above no longer change it.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4) }
-          if guided, raw != nil { Button("Use my answers again") { raw = nil }.font(.system(size: 14)).padding(.horizontal, 4) }
+          if guided, raw != nil { Button("Use my answers again") { raw = nil }.font(.system(size: 13)).padding(.horizontal, 4) }
         }
       }
       MarketLabel("Which helpers have it")

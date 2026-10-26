@@ -54,7 +54,7 @@ struct OrgSwitcherSheet: View {
     HStack(spacing: 12) {
       Image(systemName: "building.2").font(.system(size: 20)).foregroundStyle(Palette.muted).frame(width: 26)
       VStack(alignment: .leading, spacing: 2) {
-        Text(org.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(org.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
         Text(org.role?.capitalized ?? org.subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
       Spacer()
@@ -82,7 +82,7 @@ struct OrgSwitcherSheet: View {
       Button {
         action.run { try await store.joinOrg(link); dismiss() }
       } label: {
-        Text("Join").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.ground).frame(maxWidth: .infinity).frame(height: 50)
+        Text("Join").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ground).frame(maxWidth: .infinity).frame(height: 50)
           .background(Capsule().fill(Palette.text))
       }
       .buttonStyle(.plain)
@@ -91,6 +91,7 @@ struct OrgSwitcherSheet: View {
     }
     .padding(.horizontal, 16).padding(.vertical, 14)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .transition(.opacity)
   }
 }

@@ -29,8 +29,8 @@ struct SoulHistory: View {
                   SoulVersion(agent: agent, revision: revision, canRestore: canRestore) { onRestore($0); dismiss() }
                 } label: {
                   VStack(alignment: .leading, spacing: 2) {
-                    Text(when(revision)).font(.system(size: 17)).foregroundStyle(Palette.text)
-                    Text(who(revision)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+                    Text(when(revision)).font(.system(size: 15)).foregroundStyle(Palette.text)
+                    Text(who(revision)).font(.system(size: 13)).foregroundStyle(Palette.faint)
                   }
                   .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
@@ -38,7 +38,7 @@ struct SoulHistory: View {
                   Text("Current").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.green)
                 } else if canRestore {
                   Button { restore(revision) } label: {
-                    Text(restoring == revision.hash ? "…" : "Restore").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.text)
+                    Text(restoring == revision.hash ? "…" : "Restore").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.text)
                       .padding(.horizontal, 14).frame(height: 32).background(Capsule().fill(Color(light: 0xE3E3EA, dark: 0x2E2E32)))
                   }.buttonStyle(.plain).disabled(restoring != nil).accessibilityIdentifier("history-restore")
                 }

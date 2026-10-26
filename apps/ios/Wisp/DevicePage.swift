@@ -101,7 +101,7 @@ struct DeviceDetail: View {
       HStack(spacing: 12) {
         GroupIcon(symbol: "desktopcomputer", dim: !n.online)
         VStack(alignment: .leading, spacing: 2) {
-          Text(n.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(n.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
           Text(subtitle(n)).font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
         Spacer(minLength: 6)
@@ -149,9 +149,9 @@ struct DeviceDetail: View {
       HStack(spacing: 12) {
         if n.isUpdating { ProgressView() } else { Image(systemName: "exclamationmark.triangle").foregroundStyle(Palette.red) }
         VStack(alignment: .leading, spacing: 2) {
-          Text(n.isUpdating ? "Updating Wisp on \(n.name)" : "Update failed").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(n.isUpdating ? "Updating Wisp on \(n.name)" : "Update failed").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
           Text(n.update?.message.flatMap { $0.isEmpty ? nil : $0 } ?? "Getting the latest Wisp and restarting it. Agents on this device pause for a moment, then pick up where they left off.")
-            .font(.system(size: 14)).foregroundStyle(Palette.muted)
+            .font(.system(size: 13)).foregroundStyle(Palette.muted)
         }
       }
     }.listRowBackground(Palette.card).accessibilityIdentifier("device-updating")
@@ -168,7 +168,7 @@ struct DeviceDetail: View {
         } label: {
           HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-              Text(title).font(.system(size: 16)).foregroundStyle(Palette.text)
+              Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
               Text(detail).font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer(minLength: 6)
@@ -178,7 +178,7 @@ struct DeviceDetail: View {
       }
       Toggle(isOn: Binding(get: { n.shared == true }, set: { on in action.run { try await store.updateNode(n.id, ["shared": AnyEncodable(on)]) } })) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("Share with the organization").font(.system(size: 16)).foregroundStyle(Palette.text)
+          Text("Share with the organization").font(.system(size: 15)).foregroundStyle(Palette.text)
           Text("Let others in \(store.workspace?.name ?? "the organization") add agents and VMs here").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
       }.tint(Palette.blue).disabled(!editable || action.busy).accessibilityIdentifier("device-shared")
@@ -225,7 +225,7 @@ private struct AgentLabel: View {
     HStack(spacing: 10) {
       AgentAvatar(agent: agent, size: 28, showStatus: false)
       VStack(alignment: .leading, spacing: 1) {
-        Text(agent.name).font(.system(size: 16)).foregroundStyle(Palette.text)
+        Text(agent.name).font(.system(size: 15)).foregroundStyle(Palette.text)
         if agent.status == .busy { Text("Working").font(.system(size: 12)).foregroundStyle(Palette.green) }
       }
     }
@@ -370,7 +370,7 @@ private struct HarnessesSection: View {
         HStack {
           Text(HarnessChoice.label(h.id)).foregroundStyle(Palette.text)
           Spacer()
-          Text(h.version.map { "Installed · \($0)" } ?? "Installed").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text(h.version.map { "Installed · \($0)" } ?? "Installed").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
       }
       if have.isEmpty { Text("Nothing found yet. Refresh once the device is online.").foregroundStyle(Palette.muted) }
