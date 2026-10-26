@@ -302,7 +302,7 @@ body {
 .circle-lg { width: 38px; height: 38px; }
 @media (max-width: 767px) { .circle-lg { width: 44px; height: 44px; } }
 .circle-sm { width: 32px; height: 32px; }
-@media (max-width: 767px) { .circle-sm { width: 40px; height: 40px; } }
+@media (max-width: 767px) { .circle-sm { width: 44px; height: 44px; } }
 
 /* Rendered markdown in messages and the vault preview */
 .prose-w {
@@ -633,11 +633,17 @@ body {
   @media (min-width: 768px) { font-size: 20px; }
 }
 /* body text is 15px on phones and 14px on desktops */
-@media (min-width: 768px) {
-  .text-\[15px\]:not([class*="md:text-"]):not([class*="lg:text-"]) { font-size: 14px; }
+@utility text-body {
+  font-size: 15px;
+  @media (min-width: 768px) { font-size: 14px; }
 }
 @media (min-width: 768px) {
   .bubble { border-radius: 14px; }
   .bubble.me { border-bottom-right-radius: 4px; }
   .bubble.them { border-bottom-left-radius: 4px; }
+}
+
+/* iOS Safari zooms into fields under 16px, so phone fields stay at 16px */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]), textarea, select { font-size: 16px; }
 }

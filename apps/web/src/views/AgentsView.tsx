@@ -70,7 +70,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
             <h1 className="t-title flex-1">Agents</h1>
             <label className="hidden md:flex items-center gap-2 h-10 w-56 rounded-full bg-card px-3.5 text-faint">
               <Search size={16} strokeWidth={2} className="shrink-0" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search agents" className="flex-1 min-w-0 bg-transparent outline-none text-[15px] text-ink placeholder:text-faint" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search agents" className="flex-1 min-w-0 bg-transparent outline-none text-body text-ink placeholder:text-faint" />
             </label>
             {canEdit && (
               <button onClick={() => setBringing(true)} className="hidden md:inline-flex h-10 px-4 items-center rounded-full bg-control border border-control-line text-sm font-medium hover:bg-hover">
@@ -93,7 +93,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                   <a href={href({ view: "agents", agentId: a.id, tab: "overview" })} className="flex items-center gap-4 min-w-0 flex-1 after:absolute after:inset-0 after:rounded-3xl">
                     <AgentAvatar agent={a} size={56} live />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-medium truncate">{a.name}</span>
+                      <span className="block text-body font-medium truncate">{a.name}</span>
                       <span className="block text-sm text-muted truncate">{line(a)}</span>
                       <span className={cx("block text-sm truncate", st.working ? "text-ok" : "text-faint")}>{st.text}</span>
                       {!readiness.ready && (
@@ -123,7 +123,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
             )}
             {canEdit && (
               <button onClick={() => setBringing(true)} className="md:hidden w-full rounded-3xl bg-card p-4 min-h-14 text-left">
-                <span className="block text-[15px] font-medium">Bring an agent in</span>
+                <span className="block text-body font-medium">Bring an agent in</span>
                 <span className="block text-sm text-muted">Import one, or invite an outside agent</span>
               </button>
             )}

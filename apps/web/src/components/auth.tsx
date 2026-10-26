@@ -54,7 +54,7 @@ export function AuthField({ label, hint, children }: { label?: string; hint?: Re
 }
 
 export function AuthInput({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx("h-12 w-full rounded-xl border border-line bg-card px-[18px] text-[15px] text-ink outline-none placeholder:text-faint focus:border-ring", className)} />;
+  return <input {...p} className={cx("h-12 w-full rounded-xl border border-line bg-card px-[18px] text-body text-ink outline-none placeholder:text-faint focus:border-ring", className)} />;
 }
 
 /** The big pill: filled (primary) or a raised control (secondary). */
@@ -63,7 +63,7 @@ export function AuthButton({ variant = "primary", className, ...p }: ButtonHTMLA
     <button
       {...p}
       className={cx(
-        "h-12 w-full inline-flex items-center justify-center gap-2.5 rounded-full px-[22px] text-[15px] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
+        "h-12 w-full inline-flex items-center justify-center gap-2.5 rounded-full px-[22px] text-body font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
         variant === "primary" ? "bg-accent text-accent-ink hover:bg-accent/90" : "bg-control border border-control-line text-ink hover:bg-hover",
         className,
       )}
@@ -73,7 +73,7 @@ export function AuthButton({ variant = "primary", className, ...p }: ButtonHTMLA
 
 /** A quiet text link under the buttons. */
 export function AuthLink({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx("min-h-11 px-3 text-[15px] font-medium text-info hover:underline", className)} />;
+  return <button type="button" {...p} className={cx("min-h-11 px-3 text-body font-medium text-info hover:underline", className)} />;
 }
 
 /** A plain error line under the fields. */

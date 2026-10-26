@@ -340,7 +340,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
                   data-index={i}
                   onMouseMove={() => setSel(i)}
                   onClick={() => choose(r)}
-                  className={cx("w-full px-3 flex items-center gap-3 text-[15px] text-left rounded-xl", r.sub ? "py-2 min-h-[52px]" : "min-h-11", i === sel && "bg-hover")}
+                  className={cx("w-full px-3 flex items-center gap-3 text-body text-left rounded-xl", r.sub ? "py-2 min-h-[52px]" : "min-h-11", i === sel && "bg-hover")}
                 >
                   <span className="text-muted shrink-0 grid place-items-center w-5">{r.icon}</span>
                   <span className="min-w-0 flex-1">

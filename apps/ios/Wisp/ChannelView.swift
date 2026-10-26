@@ -688,7 +688,7 @@ struct Composer: View {
             .accessibilityLabel(callLabel).accessibilityIdentifier("composer-call")
           }
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: 44)
         .background {
           if #available(iOS 26, *) {
             RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.clear).glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24, style: .continuous))

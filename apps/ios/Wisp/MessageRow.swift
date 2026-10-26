@@ -82,11 +82,11 @@ struct MessageRow: View {
       } else if !home {
         Group {
           if last {
-            if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 30, showStatus: false) }
-            else { PersonAvatar(name: store.name(of: message.author), size: 30) }
+            if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 24, showStatus: false) }
+            else { PersonAvatar(name: store.name(of: message.author), size: 24) }
           } else { Color.clear }
         }
-        .frame(width: 30, height: 30)
+        .frame(width: 24, height: 24)
       }
       column
       if !mine { Spacer(minLength: home ? 56 : 40) }
@@ -142,7 +142,7 @@ struct MessageRow: View {
         if message.deletedAt != nil {
           Text("This message was deleted.").font(.system(size: 15)).italic().foregroundStyle(Palette.muted)
             .padding(.horizontal, 13).padding(.vertical, 9)
-            .background(BubbleShape(mine: false).fill(Palette.bubble))
+            .background(BubbleShape(mine: mine).fill(Palette.bubble))
         } else if showsBubble {
           Bubble(side: mine ? .mine : .theirs) {
             VStack(alignment: .leading, spacing: 6) {
@@ -322,7 +322,7 @@ struct MarkdownText: View {
         Text(attributed)
       }
     }
-      .font(.body)
+      .font(.system(size: 15))
       .textSelection(.enabled)
       .fixedSize(horizontal: false, vertical: true)
   }
@@ -333,7 +333,7 @@ struct MarkdownText: View {
     opts.failurePolicy = .returnPartiallyParsedIfPossible
     var s = (try? AttributedString(markdown: source, options: opts)) ?? AttributedString(source)
     for run in s.runs where run.inlinePresentationIntent?.contains(.code) == true {
-      s[run.range].font = .body.monospaced()
+      s[run.range].font = .system(size: 15, design: .monospaced)
       s[run.range].backgroundColor = Color(.secondarySystemFill)
     }
     return s

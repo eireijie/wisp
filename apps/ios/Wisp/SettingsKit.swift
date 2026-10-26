@@ -104,7 +104,7 @@ struct FieldRow: View {
       .accessibilityLabel(title)
       .accessibilityIdentifier(id ?? "")
     }
-    .padding(.horizontal, 18).frame(minHeight: subtitle == nil ? 54 : 62)
+    .padding(.horizontal, 14).frame(minHeight: subtitle == nil ? 48 : 56)
   }
 }
 
@@ -123,7 +123,7 @@ struct ToggleRow: View {
       }
     }
     .tint(Palette.blue)
-    .padding(.horizontal, 18).frame(minHeight: subtitle == nil ? 54 : 62)
+    .padding(.horizontal, 14).frame(minHeight: subtitle == nil ? 48 : 56)
     .accessibilityIdentifier(id ?? "")
   }
 }
@@ -154,7 +154,7 @@ struct OptionRow: View {
         Spacer(minLength: 8)
         if selected { Image(systemName: "checkmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.blue) }
       }
-      .padding(.horizontal, 18).frame(minHeight: subtitle == nil ? 54 : 62).contentShape(Rectangle())
+      .padding(.horizontal, 14).frame(minHeight: subtitle == nil ? 48 : 56).contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityAddTraits(selected ? .isSelected : [])

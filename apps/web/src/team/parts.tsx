@@ -64,9 +64,9 @@ export function TextBox({ label, value, onChange, placeholder, rows, maxLength, 
   return (
     <FieldBox label={label}>
       {rows ? (
-        <textarea id={id} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} maxLength={maxLength} className="mt-0.5 block w-full resize-none bg-transparent text-[15px] leading-snug outline-none placeholder:text-faint" />
+        <textarea id={id} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} maxLength={maxLength} className="mt-0.5 block w-full resize-none bg-transparent text-body leading-snug outline-none placeholder:text-faint" />
       ) : (
-        <input id={id} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} className="mt-0.5 block w-full bg-transparent text-[15px] outline-none placeholder:text-faint" />
+        <input id={id} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} className="mt-0.5 block w-full bg-transparent text-body outline-none placeholder:text-faint" />
       )}
     </FieldBox>
   );
@@ -96,7 +96,7 @@ export function PickBox({
       {lead}
       <span className="min-w-0 flex-1">
         <span className="block text-xs text-muted">{label}</span>
-        <span className={cx("block truncate text-[15px]", invalid && "text-bad")}>{shown}</span>
+        <span className={cx("block truncate text-body", invalid && "text-bad")}>{shown}</span>
       </span>
       <ChevronDown size={15} className="shrink-0 text-faint" aria-hidden />
       <select aria-label={label} value="" onChange={(e) => e.target.value && onPick(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">

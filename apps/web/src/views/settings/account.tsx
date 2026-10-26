@@ -62,12 +62,12 @@ export function ProfilePage() {
     }
   };
 
-  const inline = "h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] placeholder:text-faint";
+  const inline = "h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-body placeholder:text-faint";
   const roleName = me.role === "owner" ? "Owner" : me.role === "guest" ? "Guest" : "Member";
   return (
     <>
       <PageHeader title="Profile" />
-      {me.role === "guest" && <p className="mb-6 rounded-xl bg-card border border-line px-[18px] py-3.5 text-[15px] leading-snug text-muted">You're a guest in {me.workspace.name}. You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.</p>}
+      {me.role === "guest" && <p className="mb-6 rounded-xl bg-card border border-line px-[18px] py-3.5 text-body leading-snug text-muted">You're a guest in {me.workspace.name}. You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.</p>}
       <form onSubmit={save} className="space-y-4">
         <div className="flex items-center gap-4 mb-2">
           <UserAvatar name={f.name || me.user.name} size={64} />
@@ -80,12 +80,12 @@ export function ProfilePage() {
         </div>
         <Card>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
-            <span className="text-[15px] w-32 shrink-0">Full name</span>
+            <span className="text-body w-32 shrink-0">Full name</span>
             <input className={inline} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={80} aria-label="Full name" />
           </label>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
             <span className="w-32 shrink-0">
-              <span className="block text-[15px]">Preferred name</span>
+              <span className="block text-body">Preferred name</span>
               <span className="block text-[13px] text-faint">What agents call you</span>
             </span>
             <input className={inline} value={f.preferredName} onChange={(e) => setF({ ...f, preferredName: e.target.value })} placeholder={me.user.name.split(" ")[0]} maxLength={40} aria-label="Preferred name" />
@@ -93,12 +93,12 @@ export function ProfilePage() {
         </Card>
         <Card>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
-            <span className="text-[15px] w-32 shrink-0">Email</span>
+            <span className="text-body w-32 shrink-0">Email</span>
             <input className={inline} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required aria-label="Email" />
           </label>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
-            <span className="text-[15px] w-32 shrink-0">Time zone</span>
-            <select value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} aria-label="Time zone" className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] text-muted">
+            <span className="text-body w-32 shrink-0">Time zone</span>
+            <select value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} aria-label="Time zone" className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-body text-muted">
               <option value="">Not set (agents see UTC)</option>
               {(ZONES.length ? ZONES : [HERE]).map((z) => (
                 <option key={z} value={z}>

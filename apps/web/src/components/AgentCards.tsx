@@ -22,11 +22,11 @@ export function ComputerPart({ computerId, request, agentName }: { computerId: s
   const waiting = !!computer.help;
   return (
     <ChatCard icon={<Monitor size={13} />} label={waiting ? "Needs you on a computer" : "Helped on a computer"} tone={waiting ? "warn" : "muted"}>
-      <div className="mt-2 text-[15px] font-medium leading-snug">
+      <div className="mt-2 text-body font-medium leading-snug">
         {agentName ?? "It"} asked for help on {computer.name}
       </div>
       <p className="mt-1 text-sm text-muted">{request}</p>
-      <a href={href({ view: "computers", computerId: computer.id })} className="mt-2.5 h-11 w-full rounded-full bg-accent px-5 text-[15px] font-medium text-accent-ink inline-flex items-center justify-center gap-2">
+      <a href={href({ view: "computers", computerId: computer.id })} className="mt-2.5 h-11 w-full rounded-full bg-accent px-5 text-body font-medium text-accent-ink inline-flex items-center justify-center gap-2">
         <Monitor size={16} /> Open {computer.name}
       </a>
     </ChatCard>
@@ -58,7 +58,7 @@ function Decided({ ok, text, at }: { ok: boolean; text: string; at?: string | nu
   );
 }
 
-const CARD_BUTTON = "h-11 rounded-full px-5 text-[15px] font-medium disabled:opacity-50";
+const CARD_BUTTON = "h-11 rounded-full px-5 text-body font-medium disabled:opacity-50";
 
 /** "Can I go ahead?" with Approve / Not now, and the outcome once someone decides. */
 export function ApprovalCard({ id }: { id: string }) {
@@ -89,7 +89,7 @@ export function ApprovalCard({ id }: { id: string }) {
   const pending = approval.status === "pending";
   return (
     <ChatCard icon={<LockKeyhole size={13} />} label="Asking for your OK" ariaLabel="Approval request">
-      <div className="mt-2 text-[15px] font-medium leading-snug">{approval.summary}</div>
+      <div className="mt-2 text-body font-medium leading-snug">{approval.summary}</div>
       {approval.details && <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-code px-3 py-2 font-mono text-[13px] max-h-40 overflow-y-auto">{approval.details}</pre>}
       {pending ? (
         me?.role !== "guest" && (
@@ -145,7 +145,7 @@ function LoginApprovalCard({ approval }: { approval: Approval }) {
   };
   return (
     <ChatCard icon={<LockKeyhole size={13} />} label="Login request" ariaLabel="Login request">
-      <div className="mt-2 text-[15px] font-medium leading-snug">{pending ? `${name} wants to use your ${login.title} login` : `${name} used your ${login.title} login`}</div>
+      <div className="mt-2 text-body font-medium leading-snug">{pending ? `${name} wants to use your ${login.title} login` : `${name} used your ${login.title} login`}</div>
       {pending && (
         <>
           <p className="mt-1 text-sm text-muted">Your password manager signs in for it. Wisp never sees the password.</p>
@@ -198,7 +198,7 @@ export function RoutineChip({ id }: { id: string }) {
     <a href={href({ view: "agents", agentId: routine.agentId, tab: "routines" })} className="block">
       <ChatCard icon={<ListChecks size={13} />} label="Routine" className="hover:bg-hover">
         <div className="mt-2 flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-[15px] font-medium">{routine.name}</span>
+          <span className="min-w-0 flex-1 truncate text-body font-medium">{routine.name}</span>
           {routine.status === "learning" && <Pill tone="info">Learning</Pill>}
         </div>
         {routine.schedule && (
@@ -269,7 +269,7 @@ export function ChangeCard({ id, fallback }: { id: string; fallback: string }) {
   return (
     <ChatCard icon={<Pencil size={13} />} label="Changed">
       {change.lines.map((l) => (
-        <div key={l} className={cx("mt-2 text-[15px] font-medium leading-snug", change.undoneAt && "text-muted line-through")}>
+        <div key={l} className={cx("mt-2 text-body font-medium leading-snug", change.undoneAt && "text-muted line-through")}>
           {l}
         </div>
       ))}

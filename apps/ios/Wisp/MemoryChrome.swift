@@ -213,7 +213,6 @@ struct ConfirmCard: View {
       }
       .padding(24).frame(maxWidth: 360).background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
-      .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
       .padding(.horizontal, 24)
     }
   }

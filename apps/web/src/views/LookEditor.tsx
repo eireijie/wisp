@@ -200,7 +200,7 @@ export function LookPanel({ agent, onDirty, active }: { agent: Agent; onDirty: (
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2.5">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
+      <h2 className="text-body font-semibold">{title}</h2>
       {children}
     </section>
   );

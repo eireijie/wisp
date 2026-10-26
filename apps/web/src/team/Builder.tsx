@@ -118,7 +118,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   const anchor = sel && stepById(team, sel) ? sel : last;
   const banner = (problems.lines.length > 0 || error) && steps.length > 0 && (
     <div role="alert" aria-label="Problems" className="w-full rounded-xl bg-bad/15 p-4 text-left">
-      <div className="flex items-center gap-2 text-[15px] font-medium text-bad">
+      <div className="flex items-center gap-2 text-body font-medium text-bad">
         <AlertCircle size={17} aria-hidden />
         {error ? "Couldn't save" : `${problems.lines.length} ${problems.lines.length === 1 ? "thing" : "things"} to fix`}
       </div>
@@ -157,7 +157,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   );
 
   const saveButton = (
-    <Button type="button" variant="primary" onClick={onDone} disabled={!ready || saving} title={!ready ? (problems.lines[0] ?? "Add a step first") : undefined} className="h-[42px] px-5 text-[15px]">
+    <Button type="button" variant="primary" onClick={onDone} disabled={!ready || saving} title={!ready ? (problems.lines[0] ?? "Add a step first") : undefined} className="h-[42px] px-5 text-body">
       {saving ? "Saving" : doneLabel}
     </Button>
   );
@@ -177,7 +177,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             <>
               <TeamGhosts agentIds={teamAgentIds(team)} seed={name} size={34} />
               <div className="min-w-0">
-                <div className="truncate text-[15px] font-medium leading-tight">{name}</div>
+                <div className="truncate text-body font-medium leading-tight">{name}</div>
                 <div className="text-[13px] text-muted">How the team works</div>
               </div>
             </>
@@ -198,12 +198,12 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
 
       {phone && (
         <div className="flex shrink-0 items-center justify-between px-7 pb-1">
-          <span className="truncate text-[15px] text-muted">{name}</span>
+          <span className="truncate text-body text-muted">{name}</span>
           {steps.length > 0 && (
             <Menu
               align="right"
               trigger={(isOpen, toggle) => (
-                <button type="button" onClick={toggle} aria-expanded={isOpen} aria-haspopup="menu" className="inline-flex min-h-11 items-center gap-1 text-[15px] text-muted">
+                <button type="button" onClick={toggle} aria-expanded={isOpen} aria-haspopup="menu" className="inline-flex min-h-11 items-center gap-1 text-body text-muted">
                   {steps.length} {steps.length === 1 ? "step" : "steps"} <ChevronDown size={13} />
                 </button>
               )}
@@ -261,7 +261,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             </div>
             <aside aria-label={selected ? "Step" : "Step panel"} className="flex w-[360px] shrink-0 flex-col border-l border-line bg-panel">
               <div className="flex h-[60px] shrink-0 items-center justify-between px-5">
-                <h2 className="text-[15px] font-semibold">{selected ? stepHeading(team, selected) : steps.length ? "No step picked" : "No steps yet"}</h2>
+                <h2 className="text-body font-semibold">{selected ? stepHeading(team, selected) : steps.length ? "No step picked" : "No steps yet"}</h2>
                 {selected && (
                   <button type="button" onClick={() => setSel(null)} aria-label="Close" className="circle circle-sm">
                     <X size={16} />
@@ -279,7 +279,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             <div className="flex w-[300px] items-center gap-3 rounded-3xl border border-line bg-card p-5 shadow-panel">
               <Loader2 size={22} className="animate-spin text-muted" />
               <div>
-                <div className="text-[15px] font-medium">Saving</div>
+                <div className="text-body font-medium">Saving</div>
                 <div className="text-sm text-muted">Telling the team how it works</div>
               </div>
             </div>
@@ -327,7 +327,7 @@ function EmptyState({ onAdd, onTemplates }: { onAdd: () => void; onTemplates: ()
           <Workflow size={40} strokeWidth={1.5} />
         </span>
         <h2 className="t-title">Add your first step</h2>
-        <p className="text-[15px] text-muted">A step is an agent doing one thing. Add more and join them up.</p>
+        <p className="text-body text-muted">A step is an agent doing one thing. Add more and join them up.</p>
         <div className="mt-2 flex flex-wrap justify-center gap-2.5">
           <Button type="button" variant="primary" onClick={onAdd} className="h-[42px] px-5">
             <Plus size={16} /> Add a step
@@ -360,7 +360,7 @@ function SaveTemplate({ channelId, onClose }: { channelId: string; onClose: () =
           }
         }}
       >
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" maxLength={60} aria-label="Template name" autoFocus className="h-11 w-full rounded-2xl border border-input bg-transparent px-3.5 text-[15px] outline-none focus:border-ring" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" maxLength={60} aria-label="Template name" autoFocus className="h-11 w-full rounded-2xl border border-input bg-transparent px-3.5 text-body outline-none focus:border-ring" />
         <p className="text-xs text-muted">Anyone here can start a team from it. Who does each step is left out. It saves the steps as they are in the team now, not changes you haven't saved yet.</p>
         {state !== "idle" && state !== "saving" && <p className="text-sm text-bad">{state}</p>}
         <div className="flex justify-end gap-2">

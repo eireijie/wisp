@@ -206,7 +206,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
           );
         })}
         {needle && (
-          <button onClick={() => (useStore.setState({ paletteSeed: q }), useStore.getState().setPalette(true))} className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-[15px] text-muted hover:bg-hover">
+          <button onClick={() => (useStore.setState({ paletteSeed: q }), useStore.getState().setPalette(true))} className="w-full flex items-center gap-3 rounded-2xl px-3 py-3 text-left text-body text-muted hover:bg-hover">
             <Search size={18} strokeWidth={1.8} /> Search messages and memory for “{q.trim()}”
           </button>
         )}
@@ -232,7 +232,7 @@ function SearchField({ page, value, onChange }: { page: boolean; value: string; 
         readOnly={page}
         placeholder={page ? "Search chats" : "Search"}
         aria-label="Search chats"
-        className={cx("flex-1 min-w-0 bg-transparent outline-none text-ink placeholder:text-faint", "text-[15px]")}
+        className={cx("flex-1 min-w-0 bg-transparent outline-none text-ink placeholder:text-faint", "text-body")}
       />
       {!page && <kbd className="text-xs font-sans text-faint">⌘K</kbd>}
     </label>
@@ -286,7 +286,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
       </span>
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="flex items-baseline justify-between gap-2">
-          <span className={cx("truncate", page ? "text-[15px]" : "text-[15px]", chat.unread > 0 ? "font-medium" : "font-medium", chat.muted && "opacity-60")}>{chat.name}</span>
+          <span className={cx("truncate", page ? "text-body" : "text-body", chat.unread > 0 ? "font-semibold" : "font-medium", chat.muted && "opacity-60")}>{chat.name}</span>
           <span className="shrink-0 flex items-center gap-1.5 text-faint" style={{ fontSize: 12 }}>
             {chat.pinned && <Pin size={11} strokeWidth={2} aria-label="Pinned" />}
             {chat.muted && <BellOff size={11} aria-label="Muted" />}
@@ -295,6 +295,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
         </span>
         <span className="flex items-center justify-between gap-2">
           <span className={cx("truncate", "text-[13px]", preview.working ? "text-ok" : "text-muted")}>{preview.text}</span>
+          {chat.unread > 0 && chat.muted && <span aria-label="Unread" className="shrink-0 size-2 rounded-full bg-faint" />}
           {chat.unread > 0 && !chat.muted && <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{chat.unread > 99 ? "99+" : chat.unread}</span>}
         </span>
       </span>
@@ -367,7 +368,7 @@ function ChatMenu({ chat, channel, at, onClose, sections, onNewSection }: { chat
 
 function MenuItem({ children, onClick, danger, check, more }: { children: ReactNode; onClick: () => void; danger?: boolean; check?: boolean; more?: boolean }) {
   return (
-    <button role="menuitem" onClick={onClick} className={cx("w-full min-h-11 px-3.5 rounded-xl flex items-center gap-3 text-left text-[15px] hover:bg-hover", danger && "text-bad")}>
+    <button role="menuitem" onClick={onClick} className={cx("w-full min-h-11 px-3.5 rounded-xl flex items-center gap-3 text-left text-body hover:bg-hover", danger && "text-bad")}>
       <span className="flex-1">{children}</span>
       {check && <Check size={17} strokeWidth={2.2} className="text-badge" />}
       {more && <ChevronDown size={15} className="-rotate-90 text-faint" />}
@@ -415,7 +416,7 @@ function ContextMenu({ at, onClose, title, back, children }: { at: { x: number; 
   return createPortal(
     <div className="fixed inset-0 z-[90] bg-black/40" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onContextMenu={(e) => (e.preventDefault(), onClose())} onTouchStart={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} role="menu" style={pos} className="glass w-72 max-w-[calc(100vw-24px)] rounded-xl p-1.5">
-        <div className="flex items-center gap-2 px-3.5 py-2.5 text-[15px]">
+        <div className="flex items-center gap-2 px-3.5 py-2.5 text-body">
           {back && (
             <button onClick={back} className="-ml-1 mr-1 size-7 grid place-items-center rounded-full text-muted hover:bg-hover" aria-label="Back">
               <ChevronDown size={16} className="rotate-90" />
@@ -471,7 +472,7 @@ export function NewChatPicker({ onClose }: { onClose: () => void }) {
             className="w-full flex items-center gap-3 px-3.5 min-h-[56px] rounded-2xl text-left hover:bg-hover"
           >
             <AgentAvatar agent={a} size={36} />
-            <span className="text-[15px] font-medium">{a.name}</span>
+            <span className="text-body font-medium">{a.name}</span>
           </button>
         ))}
       </div>

@@ -39,7 +39,7 @@ export function FolderChoice({ value, onChange, folders, current, hints = true }
           <button key={c.value} type="button" onClick={() => (setOther(false), onChange(c.value))} aria-pressed={value === c.value && !other} className="w-full min-h-12 px-4 py-2 flex items-center gap-3 text-left hover:bg-hover/60">
             <Folder size={19} strokeWidth={1.7} className="text-muted shrink-0" />
             <span className="flex-1 min-w-0">
-              <span className="block text-[15px] truncate">{c.label}</span>
+              <span className="block text-body truncate">{c.label}</span>
               {current === c.value ? <span className="block text-xs text-muted">Current folder</span> : hints && c.hint ? <span className="block text-xs text-muted">{c.hint}</span> : null}
             </span>
             <Radio on={value === c.value && !other} />
@@ -50,7 +50,7 @@ export function FolderChoice({ value, onChange, folders, current, hints = true }
       {other ? (
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="shared/ideas" aria-label="Folder path" className={cx(field, "mt-2")} autoFocus />
       ) : (
-        <button type="button" onClick={() => setOther(true)} className="mt-2 px-1 text-[15px] font-medium text-accent-text underline underline-offset-2">
+        <button type="button" onClick={() => setOther(true)} className="mt-2 px-1 text-body font-medium text-accent-text underline underline-offset-2">
           Other folder…
         </button>
       )}
@@ -103,7 +103,7 @@ export function NewNoteDialog({ initial, initialName = "", folders, onClose, onC
         <Overline>Where to keep it</Overline>
         <FolderChoice value={dir} onChange={setDir} folders={folders} />
         <Overline>Note</Overline>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write something your helpers should remember…" aria-label="Note" rows={5} className="w-full rounded-3xl border border-control-line bg-control px-4 py-3 text-[15px] outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30 resize-none" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write something your helpers should remember…" aria-label="Note" rows={5} className="w-full rounded-3xl border border-control-line bg-control px-4 py-3 text-body outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30 resize-none" />
         {error && <p className="mt-3 text-sm text-bad">{error}</p>}
       </form>
     </MemoryDialog>

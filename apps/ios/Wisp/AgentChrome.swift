@@ -92,8 +92,8 @@ struct ChoiceRow<Leading: View>: View {
         Spacer(minLength: 8)
         Radio(on: selected)
       }
-      .padding(.horizontal, 18).padding(.vertical, 8)
-      .frame(minHeight: 60)
+      .padding(.horizontal, 14).padding(.vertical, 8)
+      .frame(minHeight: 56)
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -140,8 +140,8 @@ struct SwitchRow: View {
       }
     }
     .tint(Palette.blue)
-    .padding(.horizontal, 18).padding(.vertical, 8)
-    .frame(minHeight: 60)
+    .padding(.horizontal, 14).padding(.vertical, 8)
+    .frame(minHeight: 56)
     .accessibilityIdentifier(id)
   }
 }

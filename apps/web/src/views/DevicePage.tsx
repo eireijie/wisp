@@ -99,7 +99,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
                 <button disabled={busyUpdate} onClick={update} className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-hover disabled:opacity-50">
                   <Download size={18} className="text-muted shrink-0" />
                   <span className="flex-1">
-                    <span className="block text-[15px] font-medium">{busyUpdate ? "Updating…" : "Update Wisp"}</span>
+                    <span className="block text-body font-medium">{busyUpdate ? "Updating…" : "Update Wisp"}</span>
                     <span className="block text-xs text-faint">Get the latest Wisp on this device and restart it</span>
                   </span>
                 </button>
@@ -107,7 +107,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
               <button onClick={remove} className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-hover text-bad">
                 <Trash2 size={18} className="shrink-0" />
                 <span className="flex-1">
-                  <span className="block text-[15px] font-medium">Remove device</span>
+                  <span className="block text-body font-medium">Remove device</span>
                   <span className="block text-xs text-faint">Its token stops working.</span>
                 </span>
               </button>
@@ -139,7 +139,7 @@ function RoleSection({ node: n, onChange }: { node: NodeInfo; onChange: () => vo
   };
   return (
     <section className="rounded-3xl bg-card p-4 space-y-3">
-      <h2 className="font-semibold text-[15px]">What this device does for agents</h2>
+      <h2 className="font-semibold text-body">What this device does for agents</h2>
       <div role="radiogroup" aria-label={`What ${n.name} does for agents`} className="space-y-2">
         {ROLE_ROWS.map((r) => {
           const on = n.role === r.id;
@@ -180,7 +180,7 @@ function OfflineHelp({ node: n, onChanged }: { node: NodeInfo; onChanged: () => 
   return (
     <section className="rounded-3xl bg-card p-4 space-y-3">
       <div>
-        <h2 className="font-semibold text-[15px]">{n.name} is offline</h2>
+        <h2 className="font-semibold text-body">{n.name} is offline</h2>
         <p className="text-sm text-muted">{connectionLine(n, timeAgo)}. Agents on it are paused until it is back.</p>
       </div>
       <h3 className="text-xs font-semibold text-faint">To bring it back</h3>
@@ -204,7 +204,7 @@ function UpdateStatus({ node: n }: { node: NodeInfo }) {
   const failed = n.update?.state === "failed";
   return (
     <section className="rounded-3xl bg-card p-4 space-y-1.5" role="status">
-      <h2 className="font-semibold text-[15px] flex items-center gap-2">
+      <h2 className="font-semibold text-body flex items-center gap-2">
         {!failed && <Loader2 size={15} className="animate-spin text-muted" />}
         {failed ? "Update failed" : `Updating Wisp on ${n.name}`}
       </h2>
@@ -244,7 +244,7 @@ function Harnesses({ node: n }: { node: NodeInfo }) {
   return (
     <section className="rounded-3xl bg-card overflow-hidden">
       <div className="px-4 pt-4 pb-1 flex items-center gap-2">
-        <h2 className="font-semibold text-[15px] flex-1">Agent harnesses</h2>
+        <h2 className="font-semibold text-body flex-1">Agent harnesses</h2>
         <Button variant="ghost" onClick={refresh} disabled={checking || !n.online}>
           <RefreshCw size={14} className={cx(checking && "animate-spin")} /> Refresh
         </Button>

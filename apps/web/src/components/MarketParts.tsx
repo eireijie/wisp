@@ -158,7 +158,7 @@ export function Item({ icon, title, sub, right, onClick, href, danger, disabled,
     <>
       {icon}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-        <span className={cx("truncate text-[15px] font-medium", danger && "text-bad")}>{title}</span>
+        <span className={cx("truncate text-body font-medium", danger && "text-bad")}>{title}</span>
         {sub && <span className="truncate text-sm text-faint">{sub}</span>}
         {children}
       </span>
@@ -193,12 +193,12 @@ export function Prim({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement
 
 /** A secondary capsule. */
 export function Sec({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx(btn, "h-11 rounded-full border border-control-line bg-control px-[18px] text-[15px] hover:bg-hover", className)} />;
+  return <button type="button" {...p} className={cx(btn, "h-11 rounded-full border border-control-line bg-control px-[18px] text-body hover:bg-hover", className)} />;
 }
 
 /** "Add", "Install", "Bring in": the small button at the end of a row. */
 export function Add({ className, ...p }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...p} className={cx(btn, "h-[38px] rounded-full bg-chip px-[18px] text-[15px] hover:bg-hover", className)} />;
+  return <button type="button" {...p} className={cx(btn, "h-[38px] rounded-full bg-chip px-[18px] text-body hover:bg-hover", className)} />;
 }
 
 /** A round glass button (the circle from the tokens), with a label for screen readers. */
@@ -289,5 +289,5 @@ export function Pick({ value, onChange, children, label, disabled, className }: 
 
 /** A card of information that isn't a list (an explanation, a callout). */
 export function Note({ children, tone }: { children: ReactNode; tone?: "warn" | "bad" }) {
-  return <div className={cx("rounded-3xl bg-card px-4 py-3.5 text-[15px] leading-snug text-ink/90 md:border md:border-line", tone === "warn" && "text-warn", tone === "bad" && "text-bad")}>{children}</div>;
+  return <div className={cx("rounded-3xl bg-card px-4 py-3.5 text-body leading-snug text-ink/90 md:border md:border-line", tone === "warn" && "text-warn", tone === "bad" && "text-bad")}>{children}</div>;
 }

@@ -25,7 +25,7 @@ export const isNotePath = (p: string) => /\.md$/i.test(p);
 export const pill = "inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-full border border-control-line bg-control text-sm font-medium text-ink whitespace-nowrap transition-colors hover:bg-hover disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40";
 export const pillPrimary = "inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-full bg-accent text-accent-ink text-sm font-medium whitespace-nowrap transition-colors hover:bg-accent/90 disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40";
 export const pillDanger = "inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-full bg-bad text-white text-sm font-medium whitespace-nowrap transition-colors hover:opacity-90 disabled:opacity-50 outline-none";
-export const field = "h-11 w-full rounded-2xl border border-control-line bg-control px-4 text-[15px] text-ink outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30";
+export const field = "h-11 w-full rounded-2xl border border-control-line bg-control px-4 text-body text-ink outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30";
 
 /** The little uppercase label above a group of cards. */
 export function Overline({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -66,7 +66,7 @@ export function PhoneBar({ title, onBack, trailing, close }: { title: string; on
         <span className="size-[52px]" />
       )}
       <h1 className="flex-1 min-w-0 flex justify-center">
-        <span className="truncate max-w-full h-11 px-5 inline-flex items-center rounded-full border border-control-line bg-control text-[15px] font-medium">{title}</span>
+        <span className="truncate max-w-full h-11 px-5 inline-flex items-center rounded-full border border-control-line bg-control text-body font-medium">{title}</span>
       </h1>
       {trailing ?? <span className="size-[52px]" />}
     </header>
@@ -96,7 +96,7 @@ export function ConfirmCard({ icon, title, children, action, keep = "Keep it", o
       <div className="pt-6">
         <span className="size-12 rounded-2xl bg-bad/15 text-bad grid place-items-center">{icon}</span>
         <h2 className="t-title mt-4">{title}</h2>
-        <div className="mt-2 text-[15px] text-muted leading-relaxed">{children}</div>
+        <div className="mt-2 text-body text-muted leading-relaxed">{children}</div>
         <div className="mt-5 space-y-2.5">
           <button onClick={onAction} disabled={busy} className={cx(pillDanger, "w-full h-12")}>
             {action}

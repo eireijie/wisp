@@ -56,7 +56,7 @@ function Row({ title, value, onClick, icon, danger, disabled, trailing = true }:
     <>
       {icon && <span className={cx("shrink-0", danger ? "text-bad" : "text-muted")}>{icon}</span>}
       <span className="min-w-0 flex-1 text-left">
-        <span className={cx("block text-[15px]", danger ? "text-bad" : "font-medium")}>{title}</span>
+        <span className={cx("block text-body", danger ? "text-bad" : "font-medium")}>{title}</span>
         {value && <span className="block truncate text-[13px] text-muted">{value}</span>}
       </span>
       {onClick && trailing && <ChevronRight size={16} className="shrink-0 text-faint" />}
@@ -101,7 +101,7 @@ export function TeamInfo({ channel, tab, onTab, onClose, onSettings }: { channel
       <header className="h-[4.5rem] shrink-0 px-4 flex items-center gap-3 border-b border-line safe-top">
         <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={36} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-medium leading-tight">{channel.name}</div>
+          <div className="truncate text-body font-medium leading-tight">{channel.name}</div>
           <div className="truncate text-[13px] text-muted">{teamCount(channel, members)}</div>
         </div>
         <button onClick={onClose} className="circle circle-sm" aria-label="Close">
@@ -239,7 +239,7 @@ function About({ channel, members, canManage, onSettings, onDialog }: { channel:
           <Row title="Topic" value={channel.topic || (canManage ? "Add a topic" : "No topic")} onClick={canManage ? () => setEditing(true) : undefined} />
         )}
         <div aria-label="How the team works" className="px-4 py-3">
-          <div className="flex items-center gap-2 text-[15px] font-medium">
+          <div className="flex items-center gap-2 text-body font-medium">
             <Workflow size={18} className="text-muted" aria-hidden /> How the team works
           </div>
           <div className="mt-2.5">
@@ -278,7 +278,7 @@ function Agents({ channel, members, canManage, onSettings }: { channel: ChannelI
             <button key={m.id} onClick={() => go({ view: "agents", agentId: m.id, tab: "overview" })} className="flex w-full items-center gap-3 px-4 py-2.5 min-h-[56px] text-left hover:bg-hover">
               <AgentAvatar agent={agent} size={32} interactive={false} />
               <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-medium">{m.name}</span>
+                <span className="block text-body font-medium">{m.name}</span>
                 <span className="block truncate text-[13px] text-muted">{node?.role ?? (agent?.status === "offline" ? "Offline" : "Works here")}</span>
               </span>
               {lead && <span className="shrink-0 text-[12px] font-medium text-muted">Leads</span>}
@@ -312,7 +312,7 @@ export function NotifyDialog({ channel, onClose }: { channel: ChannelInfo; onClo
             className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-hover"
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-medium">{k === "all" ? "Every message" : k === "default" ? "Just what's for me" : "Mute"}</span>
+              <span className="block text-body font-medium">{k === "all" ? "Every message" : k === "default" ? "Just what's for me" : "Mute"}</span>
               <span className="block text-[13px] text-muted">{k === "all" ? "Notify me about all of it" : k === "default" ? "Replies, @mentions and approvals" : "No notifications from this team"}</span>
             </span>
             {current === k && <Check size={17} />}
@@ -333,7 +333,7 @@ function AnswersDialog({ channel, onClose }: { channel: ChannelInfo; onClose: ()
       <p className="mb-3 text-sm text-muted">The agent that answers a message nobody @mentions. It joins the team to do it.</p>
       <AnswerSelect agents={agents} value={value} onChange={setValue} />
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={onClose} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-medium">
+        <button onClick={onClose} className="h-11 rounded-full border border-control-line bg-control px-5 text-body font-medium">
           Cancel
         </button>
         <button
@@ -349,7 +349,7 @@ function AnswersDialog({ channel, onClose }: { channel: ChannelInfo; onClose: ()
               setBusy(false);
             }
           }}
-          className="h-11 rounded-full bg-accent px-5 text-[15px] font-medium text-accent-ink disabled:opacity-50"
+          className="h-11 rounded-full bg-accent px-5 text-body font-medium text-accent-ink disabled:opacity-50"
         >
           Save
         </button>
@@ -383,8 +383,8 @@ function ContextAccessDialog({ channel, members, onClose }: { channel: ChannelIn
       <SectionTitle>How full is the conversation</SectionTitle>
       <div className="rounded-3xl bg-card p-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-[15px] font-medium">Context window</span>
-          <span className="text-[15px] font-medium tabular-nums" style={{ color }}>
+          <span className="text-body font-medium">Context window</span>
+          <span className="text-body font-medium tabular-nums" style={{ color }}>
             {pct === null ? "–" : `${pct < 1 ? "<1" : Math.round(pct)}%`}
           </span>
         </div>
@@ -409,7 +409,7 @@ function ContextAccessDialog({ channel, members, onClose }: { channel: ChannelIn
             >
               <AgentAvatar agent={agent} size={32} interactive={false} />
               <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-medium">{m.name}</span>
+                <span className="block text-body font-medium">{m.name}</span>
                 <span className="block truncate text-[13px] text-muted">{c ? `${c.model ? prettyModel(c.model) : "Automatic"}${c.effort ? ` · ${effortName(c.effort)}` : ""}` : "…"}</span>
               </span>
               <span className="shrink-0 text-[13px] text-muted">{c ? ACCESS_LABEL[c.access] : ""}</span>
@@ -444,11 +444,11 @@ function Confirm({ title, body, action, danger, onClose, onConfirm }: { title: s
               setBusy(false);
             }
           }}
-          className={cx("h-12 rounded-full px-5 text-[15px] font-medium disabled:opacity-50", danger ? "bg-bad text-white" : "bg-accent text-accent-ink")}
+          className={cx("h-12 rounded-full px-5 text-body font-medium disabled:opacity-50", danger ? "bg-bad text-white" : "bg-accent text-accent-ink")}
         >
           {action}
         </button>
-        <button onClick={onClose} className="h-12 rounded-full border border-control-line bg-control px-5 text-[15px] font-medium">
+        <button onClick={onClose} className="h-12 rounded-full border border-control-line bg-control px-5 text-body font-medium">
           Cancel
         </button>
       </div>

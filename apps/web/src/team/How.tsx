@@ -26,7 +26,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** One line: "2. At the same time, Ghosty researches the options." with the name in bold. */
 export function HowLine({ line, numbered = true, big = false, plain = false }: { line: FlowLine; numbered?: boolean; big?: boolean; plain?: boolean }) {
   return (
-    <li className={cx("flex items-start gap-3", big ? "text-[15px]" : "text-[15px]")}>
+    <li className={cx("flex items-start gap-3", big ? "text-body" : "text-body")}>
       {plain && <b className="w-5 shrink-0 text-right font-medium tabular-nums text-ink">{line.n}.</b>}
       {numbered && !plain && (
         <span className="mt-px">
@@ -139,7 +139,7 @@ export function HowPage({ team, name, onEdit, wide }: { team: ChannelTeam; name:
     <div className={cx("mx-auto w-full max-w-5xl px-6 py-8", wide && "flex gap-10")}>
       <div className="min-w-0 flex-1 space-y-5">
         <div>
-          <h2 className="">How {name} works</h2>
+          <h2 className="t-title">How {name} works</h2>
           <p className="mt-1 text-sm text-muted">Written from the canvas. Change a step and this changes too.</p>
         </div>
         <div className="rounded-3xl border border-line bg-card p-5">

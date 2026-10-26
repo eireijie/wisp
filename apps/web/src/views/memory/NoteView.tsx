@@ -326,7 +326,7 @@ export function NoteView({
           {viewing && mode !== "authors" && (
             <div className="mt-4">
               <div className="rounded-2xl bg-info/15 px-4 py-2.5 text-sm">Viewing the version from {new Date(viewing.commit.date).toLocaleString()} by {whoIs(viewing.commit.author, agents, members).name}</div>
-              <div onClick={onClick} className="prose-w mt-3 text-[15px] leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+              <div onClick={onClick} className="prose-w mt-3 text-body leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
             </div>
           )}
         </div>
@@ -500,7 +500,7 @@ function HistoryList({ history, viewing, canEdit, onView, onRestore }: { history
             <div key={c.hash} className={cx("flex items-center gap-3 px-4 py-3", on && "bg-hover")}>
               {w.avatar}
               <button onClick={() => onView(c, i === 0)} className="flex-1 min-w-0 text-left" title="See this version">
-                <span className="block truncate text-[15px] font-medium">{c.message}</span>
+                <span className="block truncate text-body font-medium">{c.message}</span>
                 <span className="block text-xs text-muted">
                   {w.name} · {timeAgo(c.date)}
                 </span>
@@ -572,8 +572,8 @@ function NoteLinks({ items, where, phone }: { items: { id: string; path: string 
         {items.map((n) => (
           <button key={n.id} disabled={!n.path} onClick={() => open(n.path)} className="w-full text-left px-4 min-h-12 flex items-center gap-3 hover:bg-hover/60">
             <Link2 size={19} strokeWidth={1.7} className="text-muted shrink-0" />
-            <span className="flex-1 truncate text-[15px]">{n.title}</span>
-            <span className="text-muted text-[15px] truncate max-w-[40%]">{sub(n)}</span>
+            <span className="flex-1 truncate text-body">{n.title}</span>
+            <span className="text-muted text-body truncate max-w-[40%]">{sub(n)}</span>
             <ChevronRight size={16} className="text-faint" />
           </button>
         ))}
@@ -688,7 +688,7 @@ function Editor({ path, draft, setDraft, saving, dirty, phone, where, onSave, on
             <button className={pill} onClick={onCancel}>
               Cancel
             </button>
-            <h1 className="flex-1 text-center text-[15px] font-semibold truncate">{baseName(path)}</h1>
+            <h1 className="flex-1 text-center text-body font-semibold truncate">{baseName(path)}</h1>
           </>
         ) : (
           <>

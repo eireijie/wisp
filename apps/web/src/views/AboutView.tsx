@@ -167,7 +167,7 @@ export function AboutView({ onBack, embedded }: { onBack?: () => void; embedded?
             >
               <input
                 ref={addRef}
-                className="flex-1 min-w-48 h-10 bg-transparent px-2 text-[15px] outline-none placeholder:text-faint"
+                className="flex-1 min-w-48 h-10 bg-transparent px-2 text-body outline-none placeholder:text-faint"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={isMe ? "What would you like your helper to remember?" : TABS.find((t) => t.kind === addKind)!.add}
@@ -287,7 +287,7 @@ function ItemRow({ item, canEdit, phone, onSave, onForget }: { item: Item; canEd
       ) : (
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className={cx("text-[15px] font-medium", closed && "line-through text-muted")}>{item.text}</div>
+            <div className={cx("text-body font-medium", closed && "line-through text-muted")}>{item.text}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
               {item.pinned && (
                 <Pill tone="accent">
@@ -360,7 +360,7 @@ function Journal({ items }: { items: Item[] }) {
             <Cards>
               {entries.map((i, n) => (
                 <div key={n} className="px-4 py-3">
-                  <div className="text-[15px]">{i.text}</div>
+                  <div className="text-body">{i.text}</div>
                   {i.by && <div className="text-xs text-muted">by {i.by}</div>}
                 </div>
               ))}

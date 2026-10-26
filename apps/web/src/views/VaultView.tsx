@@ -318,13 +318,13 @@ function ViewAsDialog({ viewAs, total, visible, hiddenNames, onClose, onPick }: 
       <Overline>Helper</Overline>
       <Cards>
         <button onClick={() => setSel(null)} className="w-full min-h-12 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
-          <span className="flex-1 text-[15px]">You</span>
+          <span className="flex-1 text-body">You</span>
           <Radio on={!sel} />
         </button>
         {agents.map((a) => (
           <button key={a.id} onClick={() => setSel(`agent:${a.id}`)} className="w-full min-h-12 px-4 flex items-center gap-3 text-left hover:bg-hover/60">
             <AgentAvatar agent={a} size={30} interactive={false} />
-            <span className="flex-1 text-[15px]">{a.name}</span>
+            <span className="flex-1 text-body">{a.name}</span>
             <Radio on={sel === `agent:${a.id}`} />
           </button>
         ))}

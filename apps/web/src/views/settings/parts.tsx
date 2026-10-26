@@ -7,7 +7,7 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
   return (
     <div className="mb-6">
       <h2 className="t-title">{title}</h2>
-      {children && <p className="mt-1.5 text-[15px] leading-snug text-muted max-w-xl">{children}</p>}
+      {children && <p className="mt-1.5 text-body leading-snug text-muted max-w-xl">{children}</p>}
     </div>
   );
 }
@@ -38,7 +38,7 @@ export function Row({ label, hint, children, className }: { label: ReactNode; hi
   return (
     <div className={cx("px-[18px] py-2.5 min-h-[54px] md:min-h-[52px] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6", className)}>
       <div className="min-w-0 flex-1">
-        <div className="text-[15px]">{label}</div>
+        <div className="text-body">{label}</div>
         {hint && <div className="mt-0.5 text-[13px] leading-snug text-faint">{hint}</div>}
       </div>
       {children !== undefined && <div className="shrink-0 flex items-center gap-2">{children}</div>}

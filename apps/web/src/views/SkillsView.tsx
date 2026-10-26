@@ -110,14 +110,14 @@ function SkillFacts({ plain }: { plain: { does: string; needs: string | null; ex
       {plain.does && (
         <section className="space-y-2">
           <Label>What it does</Label>
-          <p className="px-1 text-[15px] leading-relaxed text-ink/90">{plain.does}</p>
+          <p className="px-1 text-body leading-relaxed text-ink/90">{plain.does}</p>
         </section>
       )}
       {plain.needs && (
         <section className="space-y-2">
           <Label>What it needs</Label>
           <Panel>
-            <Item icon={<Tile size={40}><Wand2 size={20} strokeWidth={1.7} /></Tile>} title={<span className="whitespace-normal text-[15px] font-normal">{plain.needs}</span>} />
+            <Item icon={<Tile size={40}><Wand2 size={20} strokeWidth={1.7} /></Tile>} title={<span className="whitespace-normal text-body font-normal">{plain.needs}</span>} />
           </Panel>
         </section>
       )}
@@ -178,7 +178,7 @@ export function SkillDetail({ open, agents, canEdit, onInstall, onEdit, onChange
           <CatalogIcon name={entry?.icon} fallback={Wand2} size={26} />
         </Tile>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h2 className="">{name}</h2>
+          <h2 className="t-title">{name}</h2>
           <div className="flex flex-wrap items-center gap-2">
             {skill ? <Badge tone={skill.catalogId?.startsWith("device:") || skill.source === "custom" ? "grey" : "green"}>{skillOrigin(skill)}</Badge> : <Badge tone="green" icon={<BadgeCheck size={13} aria-hidden />}>Made by Wisp</Badge>}
             {skill && <span className="text-sm text-faint">{helperLine(agents, skill.agentIds)}</span>}
@@ -192,7 +192,7 @@ export function SkillDetail({ open, agents, canEdit, onInstall, onEdit, onChange
         )}
       </header>
 
-      {!plain.does && <p className="px-1 text-[15px] leading-relaxed">{description}</p>}
+      {!plain.does && <p className="px-1 text-body leading-relaxed">{description}</p>}
       <SkillFacts plain={plain} />
 
       <div className="flex flex-wrap gap-2">
@@ -257,7 +257,7 @@ export function StoreSkillDetail({ s, icon, canEdit, onAdd, onTry }: { s: StoreS
       <header className="flex items-start gap-4">
         <Tile size={56}>{icon}</Tile>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h2 className="">{s.name}</h2>
+          <h2 className="t-title">{s.name}</h2>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="grey">From {s.source.label}</Badge>
             <Badge tone={s.license.open ? "grey" : "warn"}>{s.license.label}</Badge>
@@ -269,7 +269,7 @@ export function StoreSkillDetail({ s, icon, canEdit, onAdd, onTry }: { s: StoreS
       </header>
       <section className="space-y-2">
         <Label>What it does</Label>
-        <p className="px-1 text-[15px] leading-relaxed text-ink/90">{s.description}</p>
+        <p className="px-1 text-body leading-relaxed text-ink/90">{s.description}</p>
       </section>
       {!s.license.open && (
         <Note>
@@ -350,7 +350,7 @@ export function TryDialog({ skill, agents, onClose }: { skill: { name: string; d
       )}
       <div className="flex flex-wrap justify-end gap-2">
         <Sec onClick={copy}>{copied ? <><Check size={15} /> Copied</> : "Copy request"}</Sec>
-        {helper && <Prim className="h-11 text-[15px]" onClick={chat}>Open chat with {helper.name}</Prim>}
+        {helper && <Prim className="h-11 text-body" onClick={chat}>Open chat with {helper.name}</Prim>}
       </div>
       <span role="status" className="sr-only">
         {copied ? "Copied" : ""}
@@ -551,7 +551,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
             </Sec>
           )}
           <Sec onClick={onClose}>Cancel</Sec>
-          <Prim type="submit" disabled={busy || !canSave} className="h-11 text-[15px]">
+          <Prim type="submit" disabled={busy || !canSave} className="h-11 text-body">
             Save skill
           </Prim>
         </div>
@@ -674,7 +674,7 @@ export function SkillShare({ skill, agents, canEdit, onClose, onBrought, onDevic
           <AgentPicker agents={agents} value={picked} onChange={setPicked} />
           <div className="flex justify-end gap-2">
             <Sec onClick={() => setView("home")}>Back</Sec>
-            <Prim className="h-11 text-[15px]" disabled={busy} onClick={giveCopies}>
+            <Prim className="h-11 text-body" disabled={busy} onClick={giveCopies}>
               Share
             </Prim>
           </div>
@@ -685,7 +685,7 @@ export function SkillShare({ skill, agents, canEdit, onClose, onBrought, onDevic
           <AreaBox rows={4} autoFocus value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="wisp-skill:…" aria-label="Skill link" className="font-mono text-[13px]" />
           <div className="flex justify-end gap-2">
             <Sec onClick={() => setView("home")}>Back</Sec>
-            <Prim className="h-11 text-[15px]" disabled={!pasted.trim()} onClick={() => read(readSkillLink(pasted) ?? (pasted.includes("---") || pasted.includes("#") ? readSkillFile(pasted) : null))}>
+            <Prim className="h-11 text-body" disabled={!pasted.trim()} onClick={() => read(readSkillLink(pasted) ?? (pasted.includes("---") || pasted.includes("#") ? readSkillFile(pasted) : null))}>
               Continue
             </Prim>
           </div>
@@ -699,7 +699,7 @@ export function SkillShare({ skill, agents, canEdit, onClose, onBrought, onDevic
           <p className="px-1 text-sm text-faint">It comes into your skills. Then pick which helpers have it.</p>
           <div className="flex justify-end gap-2">
             <Sec onClick={() => setView("home")}>Back</Sec>
-            <Prim className="h-11 text-[15px]" disabled={busy} onClick={bringIn}>
+            <Prim className="h-11 text-body" disabled={busy} onClick={bringIn}>
               Bring it in
             </Prim>
           </div>

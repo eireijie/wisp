@@ -129,7 +129,7 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
                 className={cx("w-full px-3 py-2 min-h-12 rounded-2xl flex items-center gap-3 text-left", selected && "bg-hover")}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-medium truncate">
+                  <span className="block text-body font-medium truncate">
                     /{c.name}
                     {c.hint && <span className="ml-1.5 font-normal text-muted">{c.hint}</span>}
                   </span>

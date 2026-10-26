@@ -188,14 +188,14 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
             {items(s).map((it) => (
               <a key={it.key} href={it.to} className="flex items-center gap-3.5 px-4 min-h-12 border-b border-line last:border-0 hover:bg-hover">
                 <span className="size-5 shrink-0 grid place-items-center text-muted">{it.icon}</span>
-                <span className="flex-1 text-[15px]">{it.label}</span>
+                <span className="flex-1 text-body">{it.label}</span>
                 <ChevronRight size={16} className="text-faint" />
               </a>
             ))}
           </div>
         </section>
       ))}
-      <SignOutButton icon className="w-full h-12 rounded-full bg-card text-bad text-[15px] font-medium inline-flex items-center justify-center gap-2" />
+      <SignOutButton icon className="w-full h-12 rounded-full bg-card text-bad text-body font-medium inline-flex items-center justify-center gap-2" />
     </nav>
   );
 
@@ -213,7 +213,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
       <div className="flex-1 min-w-0 flex">
         <aside className="w-[268px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-7 safe-top flex flex-col">
           <div className="px-3 pb-1.5">
-            <h1 className="">Settings</h1>
+            <h1 className="t-title">Settings</h1>
             <div className="mt-0.5 text-[13px] text-faint truncate">{who}</div>
           </div>
           {list}

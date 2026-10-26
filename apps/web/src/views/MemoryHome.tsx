@@ -94,7 +94,7 @@ export function MemoryHome({
             }}
             placeholder="Search every note…"
             aria-label="Search memory"
-            className="h-12 md:h-[52px] w-full rounded-full border border-control-line bg-control pl-11 pr-10 text-[15px] outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30"
+            className="h-12 md:h-[52px] w-full rounded-full border border-control-line bg-control pl-11 pr-10 text-body outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30"
           />
           {query && (
             <button className="absolute right-4 top-1/2 -translate-y-1/2 text-faint hover:text-ink" onClick={() => setQuery("")} aria-label="Clear search">
@@ -140,8 +140,8 @@ export function MemoryHome({
               {folders.map((f) => (
                 <button key={f.path} onClick={() => onFolder(f.path)} className="w-full text-left px-4 min-h-12 flex items-center gap-3 hover:bg-hover/60">
                   <Folder size={20} strokeWidth={1.7} className="text-muted shrink-0" />
-                  <span className="flex-1 truncate text-[15px]">{label(f.name)}</span>
-                  <span className="text-muted text-[15px] tabular-nums">{f.count}</span>
+                  <span className="flex-1 truncate text-body">{label(f.name)}</span>
+                  <span className="text-muted text-body tabular-nums">{f.count}</span>
                   <ChevronRight size={16} className="text-faint" />
                 </button>
               ))}
@@ -186,7 +186,7 @@ export function MemoryHome({
                     <button key={c.hash} disabled={f.change === "deleted"} onClick={() => onOpen(f.path)} className="w-full text-left rounded-3xl bg-card px-4 py-3 flex items-center gap-3 hover:bg-hover/60 transition-colors">
                       {w.avatar}
                       <span className="flex-1 min-w-0">
-                        <span className="block truncate font-medium text-[15px]">
+                        <span className="block truncate font-medium text-body">
                           {title(f.path)}
                           {c.files.length > 1 && <span className="text-faint font-normal"> +{c.files.length - 1}</span>}
                         </span>

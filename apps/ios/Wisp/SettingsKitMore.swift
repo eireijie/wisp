@@ -19,7 +19,7 @@ struct PickerRow<Value: Hashable>: View {
         .pickerStyle(.menu).tint(Palette.faint).labelsHidden()
         .accessibilityLabel(title).accessibilityIdentifier(id ?? "")
     }
-    .padding(.horizontal, 18).frame(minHeight: subtitle == nil ? 54 : 62)
+    .padding(.horizontal, 14).frame(minHeight: subtitle == nil ? 48 : 56)
   }
 }
 

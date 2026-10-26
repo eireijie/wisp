@@ -98,7 +98,7 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
           </div>
           <div className="text-center space-y-1.5">
             <h1 className="t-title">Let {info.client} act as an agent?</h1>
-            <p className="text-[15px] text-muted">Pick the agent it acts as.</p>
+            <p className="text-body text-muted">Pick the agent it acts as.</p>
           </div>
           <div className="rounded-3xl bg-card overflow-hidden divide-y divide-line" role="radiogroup">
             {agents.map((a) => (
@@ -106,7 +106,7 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
                 <input type="radio" name="agent" className="sr-only" checked={pick === a.id} onChange={() => setPick(a.id)} />
                 <AgentAvatar agent={a} size={34} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-medium truncate">{a.name}</span>
+                  <span className="block text-body font-medium truncate">{a.name}</span>
                   <span className="block text-xs text-muted truncate">@{a.handle}</span>
                 </span>
                 {pick === a.id && (
@@ -122,14 +122,14 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
                 <span className="size-[38px] rounded-xl bg-chip grid place-items-center text-ink/85" aria-hidden>
                   <Plus size={20} />
                 </span>
-                <span className="flex-1 text-[15px] font-medium">New agent</span>
+                <span className="flex-1 text-body font-medium">New agent</span>
                 {pick === NEW && (
                   <span className="size-6 rounded-full bg-badge text-badge-ink grid place-items-center" aria-hidden>
                     <Check size={14} strokeWidth={3} />
                   </span>
                 )}
               </span>
-              {pick === NEW && <AuthInput value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} className="h-12 text-[15px] rounded-2xl bg-panel" />}
+              {pick === NEW && <AuthInput value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} className="h-12 text-body rounded-2xl bg-panel" />}
             </label>
           </div>
           {error && (

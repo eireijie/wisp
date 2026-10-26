@@ -391,7 +391,7 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { s
               <span className="truncate">{mark}</span>
             </div>
           )}
-          <div className={cx("line-clamp-2 text-[15px] font-medium leading-tight", !step.action.trim() && "text-faint")}>{step.action.trim() || "Untitled step"}</div>
+          <div className={cx("line-clamp-2 text-body font-medium leading-tight", !step.action.trim() && "text-faint")}>{step.action.trim() || "Untitled step"}</div>
         </div>
       </div>
       <div className="absolute inset-x-3.5 bottom-3 flex items-center gap-1.5">

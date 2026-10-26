@@ -14,7 +14,7 @@ export function SignOutButton({ className, label = "Sign out", icon }: { classNa
       </button>
       {asking && (
         <Modal title="Sign out of Wisp?" onClose={() => setAsking(false)}>
-          <p className="text-[15px] text-muted mb-5">Your agents keep working. To come back, scan your Wisp's QR code or sign in again.</p>
+          <p className="text-body text-muted mb-5">Your agents keep working. To come back, scan your Wisp's QR code or sign in again.</p>
           <div className="flex flex-col gap-2">
             <Button
               variant="danger"

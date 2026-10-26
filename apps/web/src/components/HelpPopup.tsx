@@ -45,7 +45,7 @@ export function HelpPopup() {
             </p>
           </div>
         </div>
-        {c.help!.request && <p className="rounded-xl bg-panel p-3.5 text-[15px] leading-snug">“{c.help!.request}”</p>}
+        {c.help!.request && <p className="rounded-xl bg-panel p-3.5 text-body leading-snug">“{c.help!.request}”</p>}
         <div className="rounded-xl overflow-hidden border border-line bg-black/40 h-[120px] grid place-items-center text-sm text-faint">
           {c.online ? (
             <ScreenThumb computer={c} refreshMs={4000} className="w-full h-full object-cover" />

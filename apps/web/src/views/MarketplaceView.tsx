@@ -732,7 +732,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
         <aside className="hidden w-60 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line px-3 pb-5 pt-7 pl-5 md:flex" aria-label="Marketplace">
           <h2 className="t-title px-3 pb-3.5">Marketplace</h2>
           {nav.map((n) => (
-            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("flex h-11 items-center gap-3 rounded-2xl px-3 text-[15px]", section === n.id ? "bg-side-active font-medium text-ink" : "font-medium text-muted hover:bg-side-hover hover:text-ink")}>
+            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("flex h-11 items-center gap-3 rounded-2xl px-3 text-body", section === n.id ? "bg-side-active font-medium text-ink" : "font-medium text-muted hover:bg-side-hover hover:text-ink")}>
               <span aria-hidden className="shrink-0">{n.icon}</span>
               <span className="flex-1">{n.label}</span>
               {!!n.count && <span className="tabular-nums text-sm text-faint">{n.count}</span>}
@@ -1009,7 +1009,7 @@ function BringAll({ pending, agents, onClose, onDone, onSetUp }: { pending: Pend
       <div className="flex justify-end gap-2">
         <Sec onClick={errors.length ? onDone : onClose}>{errors.length ? "Done" : "Cancel"}</Sec>
         {ready.length > 0 && !errors.length && (
-          <Prim className="h-11 text-[15px]" disabled={busy !== null} onClick={go}>
+          <Prim className="h-11 text-body" disabled={busy !== null} onClick={go}>
             {busy !== null ? `Bringing in ${busy + 1} of ${ready.length}…` : `Bring in ${ready.length}`}
           </Prim>
         )}

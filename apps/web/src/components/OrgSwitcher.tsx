@@ -61,7 +61,7 @@ export function OrgList({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const row = "w-full flex items-center gap-3 min-h-11 px-3.5 rounded-xl text-left text-[15px] hover:bg-hover";
+  const row = "w-full flex items-center gap-3 min-h-11 px-3.5 rounded-xl text-left text-body hover:bg-hover";
   return (
     <div role="menu" aria-label="Switch organization" className="py-1.5">
       <div className="px-3.5 pt-1 pb-1.5 text-xs font-medium uppercase tracking-wide text-faint">Organizations</div>

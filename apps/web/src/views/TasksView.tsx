@@ -438,7 +438,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
   const field = (k: string, v: ReactNode) => (
     <div className={rowCls}>
       <span className="w-[78px] shrink-0 text-sm text-faint">{k}</span>
-      <span className="flex-1 min-w-0 flex items-center gap-2 text-[15px]">{v}</span>
+      <span className="flex-1 min-w-0 flex items-center gap-2 text-body">{v}</span>
     </div>
   );
 
@@ -535,7 +535,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
                     ))}
                   </span>
                 )}
-                <span className={cx("text-[15px] leading-snug", state === "working" ? "text-ok" : "text-warn")}>{doing}</span>
+                <span className={cx("text-body leading-snug", state === "working" ? "text-ok" : "text-warn")}>{doing}</span>
               </span>
             )}
             {t.brief && t.brief !== t.title && <span className="text-sm leading-snug text-ink/80 whitespace-pre-wrap break-words">{t.brief}</span>}
@@ -574,7 +574,7 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
                   {i > 0 && <Rule />}
                   <button onClick={() => onSelect(s.id)} className="w-full flex items-center gap-3 min-h-[52px] py-2 pr-4 text-left hover:bg-hover" style={{ paddingLeft: 16 + depth * 20 }}>
                     {iconFor(ss, 22)}
-                    <span className="flex-1 min-w-0 text-[15px] leading-snug">
+                    <span className="flex-1 min-w-0 text-body leading-snug">
                       {s.reviewOf && <span className="text-muted">Review · </span>}
                       {s.title}
                       {sa && <span className="text-faint"> · {sa.name}</span>}
@@ -783,7 +783,7 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
             </CardButton>
           </div>
           <GroupCard className="py-1">
-            <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="w-full h-[54px] bg-transparent px-[18px] text-[15px] font-medium outline-none placeholder:text-faint" />
+            <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="w-full h-[54px] bg-transparent px-[18px] text-body font-medium outline-none placeholder:text-faint" />
             <Rule />
             <textarea aria-label="Details" placeholder="Details" value={brief} onChange={(e) => setBrief(e.target.value)} className="w-full h-[110px] resize-none bg-transparent px-[18px] py-3.5 text-base outline-none placeholder:text-faint" />
           </GroupCard>
@@ -800,13 +800,13 @@ export function NewTask({ onClose, defaultTo }: { onClose: () => void; defaultTo
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form role="dialog" aria-modal="true" aria-label="New task" onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), onClose())} className="w-[540px] max-w-full max-h-[92vh] overflow-y-auto rounded-xl bg-card border border-control-line shadow-panel p-6 flex flex-col gap-3.5">
         <div className="flex items-center justify-between">
-          <h2 className="">New task</h2>
+          <h2 className="t-title">New task</h2>
           <button type="button" onClick={onClose} className="circle" aria-label="Close">
             <X size={20} strokeWidth={2} />
           </button>
         </div>
         <input aria-label="What needs doing?" placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus required maxLength={200} className="h-12 rounded-2xl border border-control-line bg-panel px-4 text-base font-medium outline-none placeholder:text-faint focus:border-ring" />
-        <textarea aria-label="Details" placeholder="Details" value={brief} onChange={(e) => setBrief(e.target.value)} className="h-24 resize-none rounded-2xl border border-control-line bg-panel px-4 py-3 text-[15px] outline-none placeholder:text-faint focus:border-ring" />
+        <textarea aria-label="Details" placeholder="Details" value={brief} onChange={(e) => setBrief(e.target.value)} className="h-24 resize-none rounded-2xl border border-control-line bg-panel px-4 py-3 text-body outline-none placeholder:text-faint focus:border-ring" />
         {who}
         {attach}
         <div className="flex items-center gap-2.5">

@@ -96,7 +96,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
                 </label>
                 <div className="flex items-center gap-1">
                   <Hash size={15} className="text-faint" aria-hidden />
-                  <input id="team-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="release-crew" autoCapitalize="none" autoCorrect="off" className="w-full bg-transparent text-[15px] outline-none placeholder:text-faint" />
+                  <input id="team-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="release-crew" autoCapitalize="none" autoCorrect="off" className="w-full bg-transparent text-body outline-none placeholder:text-faint" />
                 </div>
               </div>
               {id && (exists || id !== name) && <p className={cx("px-2 text-xs", exists ? "text-bad" : "text-faint")}>{exists ? `#${id} already exists.` : id}</p>}
@@ -104,7 +104,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
                 <label htmlFor="team-topic" className="block text-xs text-muted">
                   What is it for?
                 </label>
-                <textarea id="team-topic" value={topic} onChange={(e) => setTopic(e.target.value)} rows={2} maxLength={250} placeholder="Ship releases on time, checked before they go out." className="block w-full resize-none bg-transparent text-[15px] outline-none placeholder:text-faint" />
+                <textarea id="team-topic" value={topic} onChange={(e) => setTopic(e.target.value)} rows={2} maxLength={250} placeholder="Ship releases on time, checked before they go out." className="block w-full resize-none bg-transparent text-body outline-none placeholder:text-faint" />
               </div>
               <p className="px-2 text-xs text-faint">Agents on the team read this so they know what the team is for.</p>
             </div>
@@ -155,7 +155,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
           </div>
           <div>
             <h2 className="t-title">How should {id} work?</h2>
-            <p className="mt-1 text-[15px] text-muted">Pick a start. You can change every step later.</p>
+            <p className="mt-1 text-body text-muted">Pick a start. You can change every step later.</p>
           </div>
           <div className="grid gap-3.5 sm:grid-cols-3">
             {[
@@ -166,7 +166,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
               <button key={c.title} type="button" onClick={c.go} className="flex flex-col items-start gap-3.5 rounded-xl border border-line bg-card p-4 text-left hover:bg-hover">
                 <span className="grid size-[52px] place-items-center rounded-2xl bg-chip text-ink/85">{c.icon}</span>
                 <span>
-                  <span className="block text-[15px] font-medium">{c.title}</span>
+                  <span className="block text-body font-medium">{c.title}</span>
                   <span className="mt-0.5 block text-[14px] text-muted">{c.text}</span>
                 </span>
               </button>
@@ -179,7 +179,7 @@ export function NewTeamFlow({ onClose, sectionId = null, onBrowse, SectionPick, 
                 Draw who hands work to whom (a plain chart)
               </button>
             </MoreOptions>
-            <button type="button" disabled={busy} onClick={() => void create(null)} className="min-h-10 px-2 text-[15px] text-muted hover:text-ink disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={() => void create(null)} className="min-h-10 px-2 text-body text-muted hover:text-ink disabled:opacity-50">
               Skip, set it up later
             </button>
           </div>
@@ -307,7 +307,7 @@ function Describe({ slug: id, onBack, onEdit, onCreate, busy, error }: { slug: s
             <p className="mt-0.5 text-sm text-muted">One sentence is enough. You can fix the result.</p>
           </div>
           <div className="rounded-xl border border-line bg-card px-4 py-3">
-            <textarea aria-label="Describe how the team works" value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={2000} placeholder="Opus plans, GPT pokes holes until it approves, then Opus hands out the work" autoFocus className="block w-full resize-none bg-transparent text-[15px] leading-snug outline-none placeholder:text-faint" />
+            <textarea aria-label="Describe how the team works" value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={2000} placeholder="Opus plans, GPT pokes holes until it approves, then Opus hands out the work" autoFocus className="block w-full resize-none bg-transparent text-body leading-snug outline-none placeholder:text-faint" />
           </div>
           <div className="flex flex-wrap gap-2" aria-label="Try">
             {TRIES.map((t) => (
@@ -323,7 +323,7 @@ function Describe({ slug: id, onBack, onEdit, onCreate, busy, error }: { slug: s
               {builder && <AgentAvatar agent={builder} size={30} interactive={false} />}
               <span className="min-w-0 flex-1">
                 <span className="block text-xs text-muted">Built by</span>
-                <span className="block truncate text-[15px] font-medium">{builder?.name}</span>
+                <span className="block truncate text-body font-medium">{builder?.name}</span>
               </span>
               <select aria-label="Built by" value={builder?.id ?? ""} onChange={(e) => setBuilderId(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
                 {agents.map((a) => (
@@ -378,7 +378,7 @@ function Describe({ slug: id, onBack, onEdit, onCreate, busy, error }: { slug: s
             <>
               <div className="flex items-center gap-2.5">
                 {builder && <AgentAvatar agent={builder} size={28} interactive={false} />}
-                <h3 className="text-[15px] font-semibold">{builder?.name ?? "The agent"} drew this</h3>
+                <h3 className="text-body font-semibold">{builder?.name ?? "The agent"} drew this</h3>
               </div>
               <div className="rounded-3xl border border-line bg-card px-4 py-3">
                 <MiniChart steps={team.steps ?? []} />
@@ -415,7 +415,7 @@ function Review({ slug: id, topic, team, busy, error, onBack, onCreate }: { slug
           <TeamGhosts agentIds={teamAgentIds(team)} seed={id} size={56} />
           <div className="min-w-0">
             <div className="t-title truncate">{id}</div>
-            {topic && <div className="text-[15px] text-muted">{topic}</div>}
+            {topic && <div className="text-body text-muted">{topic}</div>}
           </div>
         </div>
         <section className="space-y-2" aria-label="How it works">
@@ -426,14 +426,14 @@ function Review({ slug: id, topic, team, busy, error, onBack, onCreate }: { slug
         </section>
         <button type="button" onClick={onBack} className="flex w-full items-center gap-3 rounded-3xl border border-line bg-card px-4 py-3.5 text-left hover:bg-hover">
           <Workflow size={19} className="text-muted" aria-hidden />
-          <span className="flex-1 text-[15px] font-medium">See the flowchart</span>
+          <span className="flex-1 text-body font-medium">See the flowchart</span>
           <span className="text-sm text-muted">
             {team.steps?.length ?? 0} {(team.steps?.length ?? 0) === 1 ? "step" : "steps"}
           </span>
         </button>
         {(problem || error) && (
           <div role="alert" className="rounded-xl bg-bad/15 p-4">
-            <div className="text-[15px] font-medium text-bad">{error ? "Couldn't create it" : "Something to fix first"}</div>
+            <div className="text-body font-medium text-bad">{error ? "Couldn't create it" : "Something to fix first"}</div>
             <p className="mt-0.5 text-sm">{error ?? problem}</p>
           </div>
         )}

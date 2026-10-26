@@ -262,7 +262,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
           )}
           {settings.effort !== undefined && (
             <div className="space-y-2.5 px-4 py-3.5">
-              <div className="text-[15px] font-medium">Reasoning effort</div>
+              <div className="text-body font-medium">Reasoning effort</div>
               <Seg
                 label="Reasoning effort"
                 value={settings.effort ?? ""}
@@ -333,7 +333,7 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
   const shownName = models.find((m) => m.id === value)?.label ?? value ?? "Automatic";
   return typing ? (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2 px-4 py-3">
-      <span className="text-[15px] font-medium">Default model</span>
+      <span className="text-body font-medium">Default model</span>
       <TextBox autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Model name" aria-label="Model name" className="h-10 min-w-0 flex-1" />
       <Sec type="submit" className="h-10">
         Save
@@ -505,7 +505,7 @@ function ShareSkill({ deviceId, harness, account, skill, onClose, onShared }: { 
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex justify-end gap-2">
         <Sec onClick={onClose}>Cancel</Sec>
-        <Prim className="h-11 text-[15px]" onClick={share} disabled={busy}>
+        <Prim className="h-11 text-body" onClick={share} disabled={busy}>
           {busy ? "Sharing…" : "Share"}
         </Prim>
       </div>
@@ -576,7 +576,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
       {adding && (
         <form onSubmit={add} className="flex items-center gap-2">
           <TextBox autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={`Name, like "Work ${label}"`} aria-label="Account name" className="h-11 flex-1" />
-          <Prim type="submit" className="h-11 text-[15px]" disabled={!name.trim()}>
+          <Prim type="submit" className="h-11 text-body" disabled={!name.trim()}>
             {adding === "rename" ? "Rename" : "Add"}
           </Prim>
           <Sec onClick={() => setAdding(null)}>Cancel</Sec>
@@ -669,7 +669,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
     <div className="flex items-start gap-3.5 px-4 py-3.5">
       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-chip text-sm font-medium">{n}</span>
       <div className="min-w-0 flex-1 space-y-2">
-        <div className="text-[15px] font-medium">{title}</div>
+        <div className="text-body font-medium">{title}</div>
         {body}
       </div>
       {right}
@@ -691,7 +691,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
             </Pick>
           </label>
           <div className="flex justify-end">
-            <Prim onClick={start} disabled={!provider} className="h-11 text-[15px]">
+            <Prim onClick={start} disabled={!provider} className="h-11 text-body">
               Continue
             </Prim>
           </div>
@@ -717,7 +717,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
                 </p>
               ),
               running.url ? (
-                <a href={running.url} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-control-line bg-control px-[18px] text-[15px] font-medium hover:bg-hover">
+                <a href={running.url} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-control-line bg-control px-[18px] text-body font-medium hover:bg-hover">
                   Open <ExternalLink size={14} />
                 </a>
               ) : undefined,
@@ -761,12 +761,12 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
         {running?.url && !running.code ? (
           <>
             <Sec onClick={close}>Cancel</Sec>
-            <Prim type="submit" form="harness-code" disabled={!code.trim()} className="h-11 text-[15px]">
+            <Prim type="submit" form="harness-code" disabled={!code.trim()} className="h-11 text-body">
               Send
             </Prim>
           </>
         ) : login?.status === "done" || manual ? (
-          <Prim onClick={close} className={cx("h-11 text-[15px]")}>
+          <Prim onClick={close} className={cx("h-11 text-body")}>
             Done
           </Prim>
         ) : (

@@ -46,7 +46,7 @@ function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; st
               <span className="truncate">{mark}</span>
             </div>
           )}
-          <div className="line-clamp-2 text-[15px] font-medium leading-tight">{titleOf(step)}</div>
+          <div className="line-clamp-2 text-body font-medium leading-tight">{titleOf(step)}</div>
         </div>
       </div>
       <div className="mt-3 flex items-center gap-2">
@@ -96,7 +96,7 @@ export function PhoneFlow({ team, problems, banner, onOpen, onAdd }: { team: Cha
       <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-card px-3.5 text-[14px] text-muted">
         <Flag size={14} aria-hidden /> Done
       </span>
-      <Button type="button" variant="primary" onClick={() => onAdd({ after: stepOrder(team.steps ?? []).at(-1)?.id ?? null })} className="mt-7 h-12 w-56 text-[15px]">
+      <Button type="button" variant="primary" onClick={() => onAdd({ after: stepOrder(team.steps ?? []).at(-1)?.id ?? null })} className="mt-7 h-12 w-56 text-body">
         <Plus size={16} /> Add a step
       </Button>
     </div>
@@ -112,7 +112,7 @@ export function AddStepSheet({ team, at, onPick, onClose }: { team: ChannelTeam;
     <Modal title="Add a step" onClose={onClose}>
       <div className="space-y-3">
         {!at.between && order.length > 0 && (
-          <label className="flex items-center gap-3 text-[15px] text-muted">
+          <label className="flex items-center gap-3 text-body text-muted">
             After
             <select aria-label="After" value={anchor ?? ""} onChange={(e) => setAnchor(e.target.value)} className="h-10 min-w-0 flex-1 rounded-full border border-control-line bg-control px-3 text-ink">
               {order.map((s) => (
@@ -130,7 +130,7 @@ export function AddStepSheet({ team, at, onPick, onClose }: { team: ChannelTeam;
                 <KindIcon kind={k.kind === "agent" ? "do" : k.kind === "handOut" ? "hand_out" : k.kind === "beside" ? "beside" : k.kind} size={17} />
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-medium">{k.title}</span>
+                <span className="block text-body font-medium">{k.title}</span>
                 <span className="block text-[13px] text-muted">{k.kind === "beside" ? "Runs at the same time as the step above." : k.blurb}</span>
               </span>
             </button>
@@ -150,7 +150,7 @@ export function ReorderSheet({ team, onChange, onClose }: { team: ChannelTeam; o
         {order.map((s, i) => (
           <li key={s.id} className="flex items-center gap-3 px-4 py-2.5">
             <StepNum n={i + 1} />
-            <span className="min-w-0 flex-1 truncate text-[15px]">{titleOf(s)}</span>
+            <span className="min-w-0 flex-1 truncate text-body">{titleOf(s)}</span>
             <button type="button" disabled={i === 0} aria-label={`Move ${titleOf(s)} up`} onClick={() => onChange(movingAfter(team, s.id, i >= 2 ? order[i - 2].id : null))} className="circle circle-sm disabled:opacity-30">
               <ArrowUp size={16} />
             </button>

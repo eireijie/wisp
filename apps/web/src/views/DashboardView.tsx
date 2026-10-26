@@ -439,7 +439,7 @@ function CaughtUp({ guest, compact }: { guest: boolean; compact: boolean }) {
         <circle cx="14.5" cy="10.5" r="1.3" fill="var(--panel)" />
       </svg>
       <h2 className={"t-title"}>All caught up</h2>
-      <p className="text-[15px] text-muted leading-snug max-w-xs">Nothing needs you right now. {guest ? "Conversations you're invited to show up here." : "When an agent wants your OK or needs you on its computer, it shows up here."}</p>
+      <p className="text-body text-muted leading-snug max-w-xs">Nothing needs you right now. {guest ? "Conversations you're invited to show up here." : "When an agent wants your OK or needs you on its computer, it shows up here."}</p>
       {!compact && <CardButton onClick={() => go({ view: "chats" })}>Open Chats</CardButton>}
     </div>
   );
@@ -471,7 +471,7 @@ function DoneTab({ approvals, tasks }: { approvals: Approval[]; tasks: TaskLite[
           {rows.map((r, i) => (
             <div key={r.key} className={cx("flex items-center gap-3 px-1 py-2.5", i > 0 && "border-t border-line")}>
               <AgentAvatar agent={r.agent} size={28} interactive={false} />
-              <span className="flex-1 min-w-0 text-[15px] leading-snug break-words">{r.text}</span>
+              <span className="flex-1 min-w-0 text-body leading-snug break-words">{r.text}</span>
               <span className="text-[13px] text-faint shrink-0">{shortTime(Date.parse(r.at), prefs.clock)}</span>
             </div>
           ))}
@@ -507,7 +507,7 @@ function ReadinessCard() {
         <div className="flex items-center gap-3">
           {agent && <AgentAvatar agent={agent} size={40} live />}
           <div className="min-w-0 flex-1">
-            <h2 id="ready-h" className="text-[15px] font-semibold leading-snug">
+            <h2 id="ready-h" className="text-body font-semibold leading-snug">
               {title}
             </h2>
             {sub && <p className="text-sm text-faint">{sub}</p>}

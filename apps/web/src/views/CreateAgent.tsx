@@ -413,7 +413,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
           >
             <div className="flex items-start justify-between gap-4 px-5 sm:px-7 pt-6 pb-1">
               <div>
-                <h1 tabIndex={-1} className="">
+                <h1 tabIndex={-1} className="t-title">
                   {invite ? "Invite an agent" : "New agent"}
                 </h1>
                 <p className="text-sm text-muted mt-0.5">{invite ? "Name it and pick the harness it already runs on. You'll get an invitation for its session." : "Give it a name and a job. You can change everything later."}</p>
@@ -452,7 +452,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                       value={name}
                       required
                       placeholder="e.g. Nova"
-                      className="h-11! text-[15px]!"
+                      className="h-11! text-body!"
                       onChange={(e) => {
                         setName(e.target.value);
                         if (!handleEdited) setHandle(slug(e.target.value));
@@ -463,7 +463,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                     <span className="block text-sm font-medium">
                       What it does <span className="font-normal text-muted">· Optional</span>
                     </span>
-                    <Input maxLength={60} value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Builds and ships websites" className="h-11! text-[15px]!" />
+                    <Input maxLength={60} value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Builds and ships websites" className="h-11! text-body!" />
                   </label>
                 </div>
                 {cleanName && invalidHandle && <p className="text-xs text-bad -mt-3">Include a letter from a–z so your agent can have an @handle.</p>}
@@ -805,7 +805,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
             <div className="flex items-center gap-4">
               <Ghost look={look} size={72} trackPointer />
               <div>
-                <h1 tabIndex={-1} className="">
+                <h1 tabIndex={-1} className="t-title">
                   Invite {cleanName} to Wisp
                 </h1>
                 <p className="text-sm text-muted mt-1">Add this connection to its existing session.</p>
@@ -855,7 +855,7 @@ function BackHeader({ title, body, onBack }: { title: string; body: string; onBa
         <ArrowLeft size={17} />
       </button>
       <div>
-        <h1 tabIndex={-1} className="">
+        <h1 tabIndex={-1} className="t-title">
           {title}
         </h1>
         <p className="text-sm text-muted mt-0.5">{body}</p>

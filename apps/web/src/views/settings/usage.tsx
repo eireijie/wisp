@@ -20,10 +20,10 @@ export function UsagePage() {
   const total = a.dailyTokens ?? Math.max(a.todayTokens, 1);
   return (
     <div className="space-y-9 max-w-2xl">
-      <h2 className="">Usage</h2>
+      <h2 className="t-title">Usage</h2>
 
       <section className="space-y-3.5">
-        <p className="">Agents working on their own can use up to</p>
+        <p className="text-[17px] font-medium">Agents working on their own can use up to</p>
         <div role="radiogroup" aria-label="Daily allowance" className="flex flex-wrap gap-2">
           {ALLOWANCE_LEVELS.map((l) => {
             const on = a.dailyTokens === l.tokens;
@@ -34,24 +34,24 @@ export function UsagePage() {
                 role="radio"
                 aria-checked={on}
                 onClick={() => void pick(l.tokens)}
-                className={cx("h-11 min-w-20 px-4 rounded-full border text-[15px] font-medium transition-colors", on ? "bg-accent text-accent-ink border-transparent" : "border-line hover:bg-hover")}
+                className={cx("h-11 min-w-20 px-4 rounded-full border text-body font-medium transition-colors", on ? "bg-accent text-accent-ink border-transparent" : "border-line hover:bg-hover")}
               >
                 {l.tokens ? `${l.label} · ${tokensText(l.tokens)}` : l.label}
               </button>
             );
           })}
           {a.dailyTokens !== null && !ALLOWANCE_LEVELS.some((l) => l.tokens === a.dailyTokens) && (
-            <span role="radio" aria-checked className="h-11 px-4 rounded-full bg-accent text-accent-ink text-[15px] font-medium inline-flex items-center">
+            <span role="radio" aria-checked className="h-11 px-4 rounded-full bg-accent text-accent-ink text-body font-medium inline-flex items-center">
               {tokensText(a.dailyTokens)}
             </span>
           )}
         </div>
-        <p className="">tokens a day.</p>
+        <p className="text-[17px] font-medium">tokens a day.</p>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-baseline gap-3">
-          <h3 className="flex-1 text-[15px] font-semibold">Today</h3>
+          <h3 className="flex-1 text-body font-semibold">Today</h3>
           <span className="text-sm font-medium text-muted">
             {a.estimated && "about "}
             {tokensText(a.todayTokens)}
@@ -70,7 +70,7 @@ export function UsagePage() {
             {a.agents.map((x) => {
               const agent = agents.find((g) => g.id === x.agentId);
               return (
-                <div key={x.agentId} className="flex items-center gap-3 h-12 border-b border-line text-[15px]">
+                <div key={x.agentId} className="flex items-center gap-3 h-12 border-b border-line text-body">
                   {agent && <AgentAvatar agent={agent} size={24} badge={false} />}
                   <span className="flex-1 font-medium truncate">{agent?.name ?? "An agent"}</span>
                   <span className="text-sm text-muted">

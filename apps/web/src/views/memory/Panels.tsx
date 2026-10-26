@@ -56,7 +56,7 @@ export function ActivityFeed({ onOpen, onBack, filterAuthors }: { onOpen: (p: st
       <div key={c.hash} className="px-4 py-3 flex items-start gap-3">
         {w.avatar}
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] leading-snug">
+          <p className="text-body leading-snug">
             <b>{w.name}</b>{" "}
             {c.files.slice(0, 3).map((f, i) => (
               <span key={f.path}>
@@ -148,7 +148,7 @@ export function FolderView({ path, notes, onOpen, onFolder, onNew, onBack, canNe
           {!phone && <h2 className="t-title mt-3">{name}</h2>}
           <div className="relative mt-4">
             <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-faint" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search this folder…" aria-label="Search this folder" className="h-12 w-full rounded-full border border-control-line bg-control pl-11 pr-10 text-[15px] outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search this folder…" aria-label="Search this folder" className="h-12 w-full rounded-full border border-control-line bg-control pl-11 pr-10 text-body outline-none placeholder:text-faint focus:border-ring focus:ring-3 focus:ring-ring/30" />
             {query && (
               <button className="absolute right-4 top-1/2 -translate-y-1/2 text-faint" onClick={() => setQuery("")} aria-label="Clear search">
                 <X size={15} />
@@ -177,8 +177,8 @@ export function FolderView({ path, notes, onOpen, onFolder, onNew, onBack, canNe
                     {subfolders.map((f) => (
                       <button key={f.path} onClick={() => onFolder(f.path)} className="w-full text-left px-4 min-h-12 flex items-center gap-3 hover:bg-hover/60">
                         <Folder size={20} strokeWidth={1.7} className="text-muted" />
-                        <span className="flex-1 truncate text-[15px]">{f.name}</span>
-                        <span className="text-muted text-[15px] tabular-nums">{f.count}</span>
+                        <span className="flex-1 truncate text-body">{f.name}</span>
+                        <span className="text-muted text-body tabular-nums">{f.count}</span>
                         <ChevronRight size={16} className="text-faint" />
                       </button>
                     ))}
@@ -193,7 +193,7 @@ export function FolderView({ path, notes, onOpen, onFolder, onNew, onBack, canNe
                       <button key={f.path} onClick={() => onOpen(f.path)} className="w-full text-left px-4 py-2.5 min-h-12 flex items-center gap-3 hover:bg-hover/60">
                         <FileText size={20} strokeWidth={1.7} className="text-muted" />
                         <span className="flex-1 min-w-0">
-                          <span className="block truncate text-[15px] font-medium">{f.name}</span>
+                          <span className="block truncate text-body font-medium">{f.name}</span>
                           <span className="block text-xs text-muted">{timeAgo(new Date(f.note!.updatedAt).toISOString())}</span>
                         </span>
                         <ChevronRight size={16} className="text-faint" />

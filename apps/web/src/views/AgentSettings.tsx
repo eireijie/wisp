@@ -124,7 +124,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
   const link = (id: AgentTab, label: string, icon: ReactNode) => {
     const here = active === id || (id === "computer" && device);
     return (
-      <a key={id} href={href({ view: "agents", agentId: agent.id, tab: id })} aria-current={here ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-[15px] font-medium", here ? "bg-card text-ink font-medium" : "text-ink/75 hover:text-ink hover:bg-hover")}>
+      <a key={id} href={href({ view: "agents", agentId: agent.id, tab: id })} aria-current={here ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-body font-medium", here ? "bg-card text-ink font-medium" : "text-ink/75 hover:text-ink hover:bg-hover")}>
         <span className="flex text-muted">{icon}</span>
         {label}
         {dirty[id] && <span className="ml-auto size-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
@@ -162,7 +162,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
         {active !== "overview" && (
           <>
             <div className="flex-1 min-w-0 text-center">
-              <div className="text-[15px] font-medium truncate">{title}</div>
+              <div className="text-body font-medium truncate">{title}</div>
               <div className="text-[13px] text-muted truncate">{agent.name}</div>
             </div>
             <span className="w-[52px]" aria-hidden />
@@ -173,7 +173,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
         <nav className="hidden md:flex w-[250px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-[18px] flex-col gap-0.5" aria-label="Agent sections">
           {SIDE.map((i) => link(i.id, i.label, i.icon))}
           <span className="flex-1" />
-          <a href={href({ view: "agents", agentId: agent.id, tab: "remove" })} aria-current={active === "remove" ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-[15px] font-medium text-bad hover:bg-hover", active === "remove" && "bg-card")}>
+          <a href={href({ view: "agents", agentId: agent.id, tab: "remove" })} aria-current={active === "remove" ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-body font-medium text-bad hover:bg-hover", active === "remove" && "bg-card")}>
             <Trash2 size={18} /> Remove agent
           </a>
         </nav>
@@ -184,7 +184,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
               <div className="md:hidden flex flex-col items-center gap-2.5 pt-2 pb-2">
                 <AgentAvatar agent={agent} size={150} live />
                 <h1 className="t-title">{agent.name}</h1>
-                <p className="text-[15px] text-muted">
+                <p className="text-body text-muted">
                   @{agent.handle} · {harnessLabel(agent.harness)}
                 </p>
                 <div className="flex gap-2">
@@ -403,7 +403,7 @@ function SoulPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d: 
             />
             <div className={cx("min-h-[420px] rounded-xl border border-line px-5 py-4 overflow-y-auto", view === "write" && "hidden lg:block")}>
               <div className="text-[13px] font-medium text-faint mb-2">Preview</div>
-              <div className="prose-w text-[15px]" dangerouslySetInnerHTML={{ __html: html }} />
+              <div className="prose-w text-body" dangerouslySetInnerHTML={{ __html: html }} />
             </div>
           </div>
         </>

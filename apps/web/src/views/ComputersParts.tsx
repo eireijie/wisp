@@ -82,7 +82,7 @@ function AddChooser({ onClose, onPick }: { onClose: () => void; onPick: (s: "dev
     <button type="button" onClick={() => onPick(to)} className="w-full text-left rounded-2xl bg-card hover:bg-hover border border-line p-4 flex items-center gap-3">
       <span className="size-10 shrink-0 rounded-xl bg-chip grid place-items-center text-ink">{icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-medium">{title}</span>
+        <span className="block text-body font-medium">{title}</span>
         <span className="block text-sm text-muted">{body}</span>
       </span>
       <ChevronRight size={18} className="text-faint shrink-0" />
@@ -158,7 +158,7 @@ export function ComputerTree() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-6 pb-4 space-y-1">
       <div className="flex items-center justify-between px-2 pb-3">
-        <a href={href({ view: "computers", computerId: null })} className="">
+        <a href={href({ view: "computers", computerId: null })} className="t-title">
           Computers
         </a>
         {me?.role !== "guest" && <AddCircle onClick={add.start} />}

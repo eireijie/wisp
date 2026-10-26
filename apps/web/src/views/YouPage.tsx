@@ -53,7 +53,7 @@ export function YouPage() {
       <>
         <span className="size-5 shrink-0 grid place-items-center text-muted">{icon}</span>
         <span className="flex-1 min-w-0">
-          <span className="block text-[15px]">{label}</span>
+          <span className="block text-body">{label}</span>
           {desc && <span className="block text-[13px] text-muted">{desc}</span>}
         </span>
         {hint && <span className="text-sm text-muted tabular-nums">{hint}</span>}
@@ -83,7 +83,7 @@ export function YouPage() {
               {initialsOf(me.user.name)}
             </span>
             <span className="flex-1 min-w-0">
-              <span className="block text-[15px] font-medium truncate">{me.user.name}</span>
+              <span className="block text-body font-medium truncate">{me.user.name}</span>
               <span className="block text-[13px] text-muted truncate">
                 {roleName} · {orgName}
               </span>
@@ -110,7 +110,7 @@ export function YouPage() {
                     <Bot {...ICON} />
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-[15px]">Ask before risky actions</span>
+                    <span className="block text-body">Ask before risky actions</span>
                     <span className="block text-[13px] text-muted">Shell, apps and computer use</span>
                   </span>
                   <Toggle on={askOn} onChange={setAsk} label="Ask before risky actions" disabled={!isOwner || !policy} />
@@ -140,7 +140,7 @@ export function YouPage() {
             </>,
           )}
         {card(row(<Settings {...ICON} />, "All settings", href({ view: "settings" })))}
-        <SignOutButton icon={false} className="w-full min-h-12 rounded-3xl bg-card text-bad text-[15px] font-medium" />
+        <SignOutButton icon={false} className="w-full min-h-12 rounded-3xl bg-card text-bad text-body font-medium" />
       </div>
       {orgs && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && setOrgs(false)}>

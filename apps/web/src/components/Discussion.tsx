@@ -34,7 +34,7 @@ export function DiscussionCard({ id }: { id: string }) {
   return (
     <ChatCard icon={<MessagesSquare size={13} />} label="Discussion">
       <div className="mt-2 flex items-start gap-2">
-        <span className="min-w-0 flex-1 text-[15px] font-medium leading-snug">{d.status === "done" ? `Decided: ${d.topic}` : live ? `Talking it through with ${who.map((a) => agents.find((x) => x.id === a)?.name ?? "someone").join(" and ")}…` : d.topic}</span>
+        <span className="min-w-0 flex-1 text-body font-medium leading-snug">{d.status === "done" ? `Decided: ${d.topic}` : live ? `Talking it through with ${who.map((a) => agents.find((x) => x.id === a)?.name ?? "someone").join(" and ")}…` : d.topic}</span>
         {d.status !== "running" && <Pill tone={STATUS[d.status].tone}>{STATUS[d.status].label}</Pill>}
       </div>
       {live && (

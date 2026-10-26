@@ -334,7 +334,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
                     setOpen(false);
                     it.onSelect();
                   }}
-                  className={cx("w-full px-3 py-2 min-h-11 rounded-xl flex items-center gap-3 text-[15px] text-left hover:bg-hover", it.danger && "text-bad")}
+                  className={cx("w-full px-3 py-2 min-h-11 rounded-xl flex items-center gap-3 text-body text-left hover:bg-hover", it.danger && "text-bad")}
                 >
                   {it.icon && <span className={cx("shrink-0", !it.danger && "text-muted")}>{it.icon}</span>}
                   <span className="min-w-0 break-words">{it.label}</span>

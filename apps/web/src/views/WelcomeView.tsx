@@ -94,7 +94,7 @@ function Thread({ children }: { children: ReactNode }) {
       <div className="w-full max-w-[640px] mx-auto px-[22px] pt-[18px] md:pt-10 pb-6 flex flex-col gap-2.5">
         <div className="flex items-center gap-2.5 mb-0.5 text-ink">
           <WispGhost size={34} />
-          <span className="text-[15px] font-medium text-ink/80">Wisp</span>
+          <span className="text-body font-medium text-ink/80">Wisp</span>
         </div>
         {children}
       </div>
@@ -107,7 +107,7 @@ function Actions({ children }: { children: ReactNode }) {
   return <div className="shrink-0 w-full max-w-[640px] mx-auto px-[22px] pt-2 pb-[max(2rem,env(safe-area-inset-bottom))] flex flex-col gap-2.5 items-stretch">{children}</div>;
 }
 
-const bubble = "rounded-[16px] rounded-bl-[4px] px-3 py-2 text-[15px] leading-[1.4] max-w-[84%]";
+const bubble = "rounded-[16px] rounded-bl-[4px] px-3 py-2 text-body leading-[1.4] max-w-[84%]";
 function Msg({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cx(bubble, "self-start bg-card", className)}>{children}</div>;
 }
@@ -117,7 +117,7 @@ function Me({ children }: { children: ReactNode }) {
 /** Wisp is waiting on you: three pulsing dots and what for. */
 function Waiting({ children }: { children: ReactNode }) {
   return (
-    <Msg className="flex items-center gap-2.5 text-[15px] text-muted">
+    <Msg className="flex items-center gap-2.5 text-body text-muted">
       <span className="flex gap-1" aria-hidden>
         {[0, 1, 2].map((i) => (
           <span key={i} className="size-1.5 rounded-full bg-muted animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
@@ -151,7 +151,7 @@ export function ReadyChecklist({ platform, devices }: { platform?: string; devic
   const row = (ready: boolean, text: string, detail?: string) => (
     <li className="flex items-start gap-3 py-2.5">
       <span className="mt-0.5 text-muted">{ready ? <Check size={18} /> : <Loader2 size={18} className="animate-spin" />}</span>
-      <span className="text-[15px]">
+      <span className="text-body">
         {text}
         {detail && <span className="block mt-0.5 text-xs text-muted">{detail}</span>}
       </span>
@@ -396,7 +396,7 @@ function AgentStep({ devices, answer, onNext }: { devices: DeviceInfo[] | null; 
                 type="button"
                 role="radio"
                 aria-checked={selected === h.id}
-                className={cx("rounded-2xl border px-3.5 py-3 text-[15px] text-left", selected === h.id ? "border-ink bg-card" : "border-line hover:bg-hover")}
+                className={cx("rounded-2xl border px-3.5 py-3 text-body text-left", selected === h.id ? "border-ink bg-card" : "border-line hover:bg-hover")}
                 onClick={() => pick(h.id)}
               >
                 {h.label}
@@ -453,7 +453,7 @@ export function HarnessChoice({
     <button type="button" role="radio" aria-checked={selected} onClick={onClick} className="w-full flex items-center gap-3.5 px-[18px] py-3 min-h-14 text-left hover:bg-hover">
       <span className={tile}>{icon}</span>
       <span className="flex-1 min-w-0">
-        <span className="block text-[15px] font-medium">{title}</span>
+        <span className="block text-body font-medium">{title}</span>
         <span className="block text-sm mt-0.5 text-muted">{body}</span>
       </span>
       {selected && (
@@ -552,7 +552,7 @@ function HarnessSignInChat({ device, settings, account, answer, onClose, onDone 
                 <div className="font-mono text-[34px] font-bold tracking-[0.15em]">{login.code}</div>
                 <button
                   type="button"
-                  className="h-11 px-5 rounded-full bg-control border border-control-line text-[15px] font-medium inline-flex items-center gap-2 hover:bg-hover"
+                  className="h-11 px-5 rounded-full bg-control border border-control-line text-body font-medium inline-flex items-center gap-2 hover:bg-hover"
                   onClick={() => {
                     void navigator.clipboard?.writeText(login.code!);
                     setCopied(true);
@@ -566,7 +566,7 @@ function HarnessSignInChat({ device, settings, account, answer, onClose, onDone 
             {login.url && !login.code && pasting && (
               <form onSubmit={send} className="self-stretch flex items-center gap-2">
                 <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code the page gives you" aria-label="Code from the sign-in page" className="flex-1 h-12! rounded-full! bg-card! px-4!" autoFocus />
-                <button type="submit" disabled={!code.trim()} className="h-12 px-5 rounded-full bg-accent text-accent-ink text-[15px] font-medium disabled:opacity-50">
+                <button type="submit" disabled={!code.trim()} className="h-12 px-5 rounded-full bg-accent text-accent-ink text-body font-medium disabled:opacity-50">
                   Send
                 </button>
               </form>
@@ -585,7 +585,7 @@ function HarnessSignInChat({ device, settings, account, answer, onClose, onDone 
           </AuthButton>
         )}
         {login?.status === "running" && login.url && (
-          <a href={login.url} target="_blank" rel="noreferrer" className="h-12 w-full inline-flex items-center justify-center gap-2.5 rounded-full bg-accent text-accent-ink text-[15px] font-medium hover:bg-accent/90">
+          <a href={login.url} target="_blank" rel="noreferrer" className="h-12 w-full inline-flex items-center justify-center gap-2.5 rounded-full bg-accent text-accent-ink text-body font-medium hover:bg-accent/90">
             <ExternalLink size={17} /> Open the sign-in page
           </a>
         )}
@@ -798,7 +798,7 @@ function AwayStep({ answer, onDone }: { answer?: string; onDone: (label: string)
           {answer && <Me>{answer}</Me>}
           <Me>Yes, with Cloudflare</Me>
           <Msg>Paste your Cloudflare setup code and I'll do the rest.</Msg>
-          <Msg className="text-[15px] text-muted">Needs a domain you own.</Msg>
+          <Msg className="text-body text-muted">Needs a domain you own.</Msg>
           {notes}
         </Thread>
         <Actions>
@@ -818,7 +818,7 @@ function AwayStep({ answer, onDone }: { answer?: string; onDone: (label: string)
       <Thread>
         {answer && <Me>{answer}</Me>}
         <Msg>Do you want to use Wisp away from home too?</Msg>
-        <Msg className="text-[15px] text-muted">So your phone and laptop work on any Wi-Fi or on cell data.</Msg>
+        <Msg className="text-body text-muted">So your phone and laptop work on any Wi-Fi or on cell data.</Msg>
         {notes}
       </Thread>
       <Actions>
@@ -847,7 +847,7 @@ function StatusRow({ done, icon, text, children }: { done: boolean; icon: ReactN
     <div className="flex items-center gap-3.5 px-[18px] py-3 min-h-14">
       <span className={tile}>{icon}</span>
       <span className="flex-1 min-w-0">
-        <span className="block text-[15px] font-medium">{text}</span>
+        <span className="block text-body font-medium">{text}</span>
         {children}
       </span>
       {done ? <Check size={20} className="text-ok shrink-0" aria-label="Done" /> : <Loader2 size={18} className="animate-spin text-muted shrink-0" aria-label="Waiting" />}

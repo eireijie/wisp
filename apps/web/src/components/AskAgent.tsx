@@ -49,7 +49,7 @@ export function AskAgent({ placeholder, className }: { placeholder: string; clas
             <AgentAvatar agent={agent} size={26} badge={false} />
           </span>
         )}
-        <input aria-label={`Ask ${agent.name}`} className="flex-1 min-w-0 bg-transparent outline-none text-[15px] placeholder:text-muted" placeholder={placeholder.replace("{name}", agent.name)} value={text} onChange={(e) => setText(e.target.value)} />
+        <input aria-label={`Ask ${agent.name}`} className="flex-1 min-w-0 bg-transparent outline-none text-body placeholder:text-muted" placeholder={placeholder.replace("{name}", agent.name)} value={text} onChange={(e) => setText(e.target.value)} />
         <button type="submit" aria-label="Send" disabled={!text.trim()} className={cx("shrink-0 size-10 rounded-full grid place-items-center bg-accent text-accent-ink disabled:opacity-40")}>
           <ArrowUp size={18} />
         </button>
