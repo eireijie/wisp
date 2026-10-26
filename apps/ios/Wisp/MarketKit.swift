@@ -111,8 +111,8 @@ struct MarketRow<Trailing: View>: View {
     HStack(spacing: 14) {
       if let symbol { MarketTile(symbol: symbol, size: tile) }
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(danger ? Palette.red : Palette.text).lineLimit(1)
-        if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(2).fixedSize(horizontal: false, vertical: true) }
+        Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(danger ? Palette.red : Palette.text).lineLimit(1)
+        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(2).fixedSize(horizontal: false, vertical: true) }
       }
       Spacer(minLength: 8)
       trailing
@@ -141,8 +141,8 @@ struct MarketToggleRow<Leading: View>: View {
     HStack(spacing: 14) {
       leading
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17, weight: .medium)).lineLimit(1)
-        if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(2) }
+        Text(title).font(.system(size: 15, weight: .medium)).lineLimit(1)
+        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(2) }
       }
       Spacer(minLength: 8)
       Toggle(title, isOn: $isOn).labelsHidden().tint(Palette.blue).disabled(disabled)
@@ -173,6 +173,7 @@ struct MarketNote: View {
       .padding(16)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -194,14 +195,14 @@ struct MarketField: View {
         if secure { SecureField(placeholder, text: $text) }
         else { TextField(placeholder, text: $text, axis: .vertical).lineLimit(lines) }
       }
-      .font(.system(size: 16, design: mono ? .monospaced : .default))
+      .font(.system(size: 15, design: mono ? .monospaced : .default))
       .textInputAutocapitalization(plain ? .never : nil)
       .autocorrectionDisabled(plain || mono || secure)
       .keyboardType(keyboard)
       .padding(.horizontal, 16).padding(.vertical, 14)
       .frame(minHeight: 50, alignment: .topLeading)
-      .background(Palette.control, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-      .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.hairline))
+      .background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
     }
   }
 }
@@ -214,7 +215,7 @@ struct MarketSearch: View {
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: "magnifyingglass").foregroundStyle(Palette.faint)
-      TextField(prompt, text: $text).font(.system(size: 17)).textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
+      TextField(prompt, text: $text).font(.system(size: 15)).textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
       if !text.isEmpty { Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.faint) }.buttonStyle(.plain).accessibilityLabel("Clear search") }
     }
     .padding(.horizontal, 16)
@@ -236,7 +237,7 @@ struct SegPicker<T: Hashable>: View {
         let on = option.0 == selection
         Button { selection = option.0 } label: {
           Text(option.1)
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(on ? Palette.text : Palette.muted)
             .frame(maxWidth: .infinity).frame(height: 38)
             .background(Capsule().fill(on ? MarketColor.segment : Color.clear))
@@ -267,7 +268,7 @@ struct ChipRow: View {
               Text(option)
               if let n = counts[option], n > 0 { Text("\(n)").opacity(0.7) }
             }
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(on ? Color(.systemBackground) : Palette.text.opacity(0.8))
             .padding(.horizontal, 16).frame(height: 36)
             .background(Capsule().fill(on ? Palette.text : Palette.control))
@@ -329,7 +330,7 @@ struct MarketSheet<Content: View>: View {
       HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
           Text(title).font(.system(size: 20, weight: .semibold)).lineLimit(2)
-          if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+          if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
         }.frame(maxWidth: .infinity, alignment: .leading)
         CircleButton(symbol: "xmark", label: "Close") { dismiss() }.disabled(busy)
       }
@@ -370,7 +371,7 @@ struct MarketPrimaryButton: View {
     Button(action: action) {
       HStack(spacing: 8) {
         if busy { ProgressView() }
-        Text(title).font(.system(size: 16, weight: .semibold))
+        Text(title).font(.system(size: 15, weight: .semibold))
       }.frame(maxWidth: .infinity, minHeight: 28)
     }.primaryButton().disabled(disabled || busy)
   }

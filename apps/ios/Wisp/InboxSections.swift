@@ -176,7 +176,7 @@ struct NeedHead: View {
     HStack(spacing: 12) {
       AgentAvatar(agent: agent, size: 34, showStatus: false)
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+        Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
         Text(sub).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
       }
       Spacer(minLength: 0)
@@ -246,9 +246,9 @@ struct InboxSections: View {
             HStack(spacing: 12) {
               TeamGhosts(agents: members, seed: t.name, size: 40)
               VStack(alignment: .leading, spacing: 3) {
-                Text(t.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+                Text(t.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
                 Text(busy != nil || teamBusy ? "Working\(busy.map { " · \($0.name) is on it" } ?? "")" : "Quiet")
-                  .font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
+                  .font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
               }
               Spacer(minLength: 0)
             }
@@ -269,10 +269,11 @@ struct InboxSections: View {
       }
       .padding(.vertical, 14).padding(.horizontal, 8)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       if store.tasks.isEmpty {
-        Text("No tasks yet.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
+        Text("No tasks yet.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
       } else if !store.tasks.contains(where: { $0.status == "in_progress" }) {
-        Text("No agent is on a task right now.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
+        Text("No agent is on a task right now.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
       }
       Button("Open Tasks") { open(.tasks) }.buttonStyle(CardPill(tone: .soft)).frame(maxWidth: .infinity)
         .accessibilityIdentifier("open-tasks")
@@ -281,18 +282,18 @@ struct InboxSections: View {
     if store.features.background, let a = store.allowance {
       HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("Background work").font(.system(size: 14)).foregroundStyle(Palette.text)
+          Text("Background work").font(.system(size: 13)).foregroundStyle(Palette.text)
           Text((a.dailyTokens ?? 0) > 0 ? "\(Store.allowanceText(a)) used" : Store.allowanceText(a)).font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
         Spacer()
         NavigationLink { UsageView() } label: { Text("Open usage").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(hex: 0x9EC5FF)) }
       }
       .padding(.horizontal, 16).padding(.vertical, 12)
-      .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     if store.agents.isEmpty, !isGuest {
-      Text("No agents yet. Add one from Chats and it shows up here with what it's working on.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
+      Text("No agents yet. Add one from Chats and it shows up here with what it's working on.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
     }
   }
 
@@ -313,8 +314,8 @@ struct InboxSections: View {
       HStack(spacing: 12) {
         AgentAvatar(agent: a, size: 36, showStatus: false)
         VStack(alignment: .leading, spacing: 2) {
-          Text(a.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
-          Text(now?.text ?? "Working").font(.system(size: 14)).foregroundStyle(Palette.green).lineLimit(1)
+          Text(a.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(now?.text ?? "Working").font(.system(size: 13)).foregroundStyle(Palette.green).lineLimit(1)
           if let place = now?.where { Text(place).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1) }
         }
         Spacer(minLength: 8)
@@ -336,13 +337,13 @@ struct InboxSections: View {
       }
       VStack(alignment: .leading, spacing: 3) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+          Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
           Spacer(minLength: 8)
           if let last { Text(ChatList.timeText(last.date)).font(.system(size: 13)).foregroundStyle(Palette.faint) }
         }
         HStack(spacing: 8) {
           Text(last.map { SearchText.clean($0.body, max: 90) } ?? (c.badge > 0 ? "\(c.badge) new" : "No messages yet"))
-            .font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
+            .font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
           Spacer(minLength: 0)
           if c.badge > 0 { UnreadBadge(count: c.badge) }
         }
@@ -362,11 +363,11 @@ struct InboxSections: View {
       Image(systemName: icon).font(.system(size: 24, weight: .regular)).foregroundStyle(hue).frame(width: 30)
       VStack(alignment: .leading, spacing: 3) {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-          Text(t.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+          Text(t.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
           Spacer(minLength: 8)
           if let d = t.updatedAt.flatMap(Wire.date) { Text(ChatList.timeText(d)).font(.system(size: 13)).foregroundStyle(Palette.faint) }
         }
-        Text(sub).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
+        Text(sub).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
       }
     }
     .padding(.horizontal, 16).frame(minHeight: 64).contentShape(Rectangle())
@@ -406,19 +407,20 @@ struct ReadinessSection: View {
       VStack(alignment: .leading, spacing: 12) {
         HStack(spacing: 12) {
           AgentAvatar(agent: agent, size: 40, showStatus: false)
-          Text("Try asking \(agent.name)…").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+          Text("Try asking \(agent.name)…").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
         }
         ForEach(Self.examples, id: \.self) { text in
           Button { open(.dm(agent, draft: text)) } label: {
-            Text(text).font(.system(size: 14)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
+            Text(text).font(.system(size: 13)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
               .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 10)
-              .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
           }.buttonStyle(.plain)
         }
         Button("Open chat") { open(.dm(agent)) }.buttonStyle(CardPill(tone: .soft))
       }
       .padding(18).frame(maxWidth: .infinity, alignment: .leading)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     }
   }
 
@@ -427,8 +429,8 @@ struct ReadinessSection: View {
       HStack(spacing: 12) {
         if let agent { AgentAvatar(agent: agent, size: 40, showStatus: false) }
         VStack(alignment: .leading, spacing: 2) {
-          Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
-          Text(sub).font(.system(size: 14)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true)
+          Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+          Text(sub).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true)
         }
       }
       GeometryReader { g in
@@ -443,6 +445,7 @@ struct ReadinessSection: View {
     }
     .padding(18).frame(maxWidth: .infinity, alignment: .leading)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .accessibilityElement(children: .contain)
   }
 

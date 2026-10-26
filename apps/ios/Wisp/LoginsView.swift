@@ -78,7 +78,7 @@ struct LoginsView: View {
       }
       if let source = view?.source {
         if store.isOwner {
-          Button("Disconnect \(source.label)", role: .destructive) { disconnect() }.font(.system(size: 14)).padding(.horizontal, 4)
+          Button("Disconnect \(source.label)", role: .destructive) { disconnect() }.font(.system(size: 13)).padding(.horizontal, 4)
         }
         if let problem = view?.problem {
           Text(problem).font(.footnote).foregroundStyle(Palette.red).padding(.horizontal, 4)
@@ -86,12 +86,12 @@ struct LoginsView: View {
         }
         MarketLabel("Logins agents can use")
         if view?.logins.isEmpty == true && view?.problem == nil {
-          Text("No logins in that vault yet. Add one in \(source.label) and it shows up here.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+          Text("No logins in that vault yet. Add one in \(source.label) and it shows up here.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
         } else {
           CardGroup {
             ForEach(view?.logins ?? []) { login in
               MarketRow(symbol: "globe", title: login.site, subtitle: login.username.isEmpty ? login.title : login.username) {
-                Text(login.always.isEmpty ? "Only you" : ShelfLogic.sentence(login.always.map(agentName))).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(2).multilineTextAlignment(.trailing).frame(maxWidth: 110, alignment: .trailing)
+                Text(login.always.isEmpty ? "Only you" : ShelfLogic.sentence(login.always.map(agentName))).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(2).multilineTextAlignment(.trailing).frame(maxWidth: 110, alignment: .trailing)
               }
               .contextMenu {
                 if store.isOwner { ForEach(login.always, id: \.self) { id in Button("Stop letting \(agentName(id)) use it without asking", role: .destructive) { forget(login, id) } } }
@@ -99,9 +99,9 @@ struct LoginsView: View {
             }
           }
         }
-        Text("Every use shows on that computer's activity, like “Nova used the Zendesk login”. Passwords never pass through chat, memory or logs.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+        Text("Every use shows on that computer's activity, like “Nova used the Zendesk login”. Passwords never pass through chat, memory or logs.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       } else {
-        Text("Make a vault called “Agents” and a service account that can only see it. Wisp also fills in one-time codes saved there.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+        Text("Make a vault called “Agents” and a service account that can only see it. Wisp also fills in one-time codes saved there.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
         MarketNote(text: "No password manager? That's fine. When an agent needs to sign in, its screen pops up and you sign in yourself.")
       }
       InlineError(error: action.error)
@@ -146,7 +146,7 @@ private struct ConnectOnePasswordSheet: View {
       } else {
         Text("Wisp asks 1Password for one login at a time, only after you approve it in Inbox. Nothing is saved in Wisp.").font(.system(size: 15)).foregroundStyle(Palette.text.opacity(0.9)).padding(.horizontal, 4)
         MarketField(label: "Service account token", placeholder: "ops_…", text: $token, secure: true, mono: true, plain: true)
-        Button("Where do I find this?") { if let url = URL(string: "https://developer.1password.com/docs/service-accounts/get-started/") { openURL(url) } }.font(.system(size: 14)).padding(.horizontal, 4)
+        Button("Where do I find this?") { if let url = URL(string: "https://developer.1password.com/docs/service-accounts/get-started/") { openURL(url) } }.font(.system(size: 13)).padding(.horizontal, 4)
         Text("Make a vault called “Agents” and a service account that can read only that vault, then copy its token.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
         InlineError(error: action.error)
         MarketPrimaryButton(title: "Connect", busy: action.busy, disabled: token.trimmed.isEmpty) {

@@ -254,8 +254,8 @@ struct AgentActivityPage: View {
   private func runRow(_ run: AgentRun) -> some View {
     HStack(spacing: 12) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(RunLine.title(run)).font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
-        Text(when(run)).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
+        Text(RunLine.title(run)).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
+        Text(when(run)).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
       }
       Spacer(minLength: 8)
       VStack(alignment: .trailing, spacing: 3) {
@@ -349,7 +349,7 @@ struct AgentRunPage: View {
   }
 
   private func info(_ title: String, _ value: String) -> some View {
-    HStack { Text(title).font(.system(size: 17)).foregroundStyle(Palette.text); Spacer(); Text(value).font(.system(size: 17)).foregroundStyle(Palette.faint).lineLimit(1) }
+    HStack { Text(title).font(.system(size: 15)).foregroundStyle(Palette.text); Spacer(); Text(value).font(.system(size: 15)).foregroundStyle(Palette.faint).lineLimit(1) }
       .padding(.horizontal, 18).frame(minHeight: 54)
   }
 
@@ -361,7 +361,7 @@ struct AgentRunPage: View {
         if !last { Rectangle().fill(Palette.separator).frame(width: 1).frame(minHeight: 18) }
       }
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 16)).foregroundStyle(bad ? Palette.red : Palette.text).fixedSize(horizontal: false, vertical: true)
+        Text(title).font(.system(size: 15)).foregroundStyle(bad ? Palette.red : Palette.text).fixedSize(horizontal: false, vertical: true)
         if !detail.isEmpty { Text(detail).font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }.padding(.bottom, last ? 0 : 14)
       Spacer(minLength: 0)

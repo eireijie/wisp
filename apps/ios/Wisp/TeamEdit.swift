@@ -66,13 +66,13 @@ struct TeamHowCard: View {
                 + Text(line.together ? "At the same time, " : "").foregroundColor(Palette.muted)
                 + Text(line.together ? line.who : FlowWords.capitalized(line.who)).bold().foregroundColor(Palette.text)
                 + Text(" \(line.rest).").foregroundColor(Palette.muted))
-                .font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: 15)).fixedSize(horizontal: false, vertical: true)
                 .accessibilityElement(children: .combine)
             }
           }
           .padding(18).frame(maxWidth: .infinity, alignment: .leading)
         } else {
-          Text("Nothing here yet. Draw the steps and say how each one works.").font(.system(size: 16)).foregroundStyle(Palette.muted).padding(18)
+          Text("Nothing here yet. Draw the steps and say how each one works.").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(18)
         }
         if editable {
           Rectangle().fill(Palette.separator).frame(height: 1).padding(.leading, 18)
@@ -86,6 +86,7 @@ struct TeamHowCard: View {
         }
       }
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     }
     .fullScreenCover(isPresented: $editing) { TeamEditSession(channel: current) }
   }

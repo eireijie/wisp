@@ -22,9 +22,9 @@ struct RoutinesView: View {
     }) {
       if routines.isEmpty {
         AgentCard {
-          Text("No routines yet.").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("No routines yet.").font(.system(size: 15)).foregroundStyle(Palette.text)
           Text("A routine is something \(agent.name) does on a schedule, like dinner ideas every Monday. Write the steps, or teach it by doing the task once on its computer.")
-            .font(.system(size: 14)).foregroundStyle(Palette.faint)
+            .font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
       } else {
         CardGroup {
@@ -67,10 +67,10 @@ struct RoutinesView: View {
   private func row(_ routine: Routine) -> some View {
     HStack(spacing: 12) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(routine.name).font(.system(size: 17)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
+        Text(routine.name).font(.system(size: 15)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
         Text(RoutineWords.when(routine, channel: routine.channelId.flatMap { id in store.channels.first { $0.id == id }.map { store.title(of: $0) } }))
-          .font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading)
-        if routine.enabled == false && routine.schedule != nil { Text("Only when someone runs it").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+          .font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading)
+        if routine.enabled == false && routine.schedule != nil { Text("Only when someone runs it").font(.system(size: 13)).foregroundStyle(Palette.faint) }
         else if let last = routine.lastCompletedAt.flatMap(Wire.date) { Text("Last done \(last, format: .relative(presentation: .named))").font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
       Spacer(minLength: 8)
@@ -128,7 +128,7 @@ struct RoutineEditor: View {
           }
           if draft.showsTime {
             DatePicker(selection: Binding(get: { draft.time }, set: { draft.time = $0 }), displayedComponents: .hourAndMinute) {
-              Text("Time").font(.system(size: 17)).foregroundStyle(Palette.text)
+              Text("Time").font(.system(size: 15)).foregroundStyle(Palette.text)
             }.padding(.horizontal, 18).frame(minHeight: 54)
           }
           if draft.repeatMode == .custom {
@@ -151,12 +151,13 @@ struct RoutineEditor: View {
             menuRow("Time zone", value: timezone) {
               Picker("Time zone", selection: $timezone) { ForEach(TimeZone.knownTimeZoneIdentifiers, id: \.self) { Text($0).tag($0) } }
             }.background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
             if routine != nil {
               CardGroup { SwitchRow(title: "On", isOn: $enabled) }
             }
           }.padding(.top, 8)
         }
-        .tint(Palette.muted).font(.system(size: 17)).foregroundStyle(Palette.text).padding(.horizontal, 18)
+        .tint(Palette.muted).font(.system(size: 15)).foregroundStyle(Palette.text).padding(.horizontal, 18)
         AgentError(text: action.error)
         PillButton(title: "Save routine", busy: action.busy, id: "routine-save") { save() }.disabled(!valid || action.busy)
       }
@@ -178,9 +179,9 @@ struct RoutineEditor: View {
       items()
     } label: {
       HStack {
-        Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
+        Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
         Spacer(minLength: 8)
-        Text(value).font(.system(size: 17)).foregroundStyle(Palette.faint).lineLimit(1)
+        Text(value).font(.system(size: 15)).foregroundStyle(Palette.faint).lineLimit(1)
         Image(systemName: "chevron.up.chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.faint)
       }
       .padding(.horizontal, 18).frame(minHeight: 54).contentShape(Rectangle())

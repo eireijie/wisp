@@ -22,7 +22,7 @@ struct SettingsPage<Content: View, Trailing: View>: View {
       }
       .padding(.horizontal, 18).padding(.top, 12)
       Text(title)
-        .font(.system(size: 30, weight: .bold)).tracking(-0.4)
+        .font(.system(size: 22, weight: .semibold)).tracking(-0.44)
         .foregroundStyle(Palette.text)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 22).padding(.top, 12)
@@ -54,7 +54,7 @@ struct CardLabel: View {
   var text: String
   init(_ text: String) { self.text = text }
   var body: some View {
-    Text(text).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.faint)
+    Text(text).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint)
       .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6).padding(.top, 4)
       .accessibilityAddTraits(.isHeader)
   }
@@ -65,7 +65,7 @@ struct CardHint: View {
   var text: String
   init(_ text: String) { self.text = text }
   var body: some View {
-    Text(text).font(.system(size: 14)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true)
+    Text(text).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6).padding(.top, -6)
   }
 }
@@ -89,8 +89,8 @@ struct FieldRow: View {
   var body: some View {
     HStack(spacing: 12) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
-        if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+        Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
+        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
       .frame(minWidth: 96, alignment: .leading)
       .layoutPriority(1)
@@ -98,7 +98,7 @@ struct FieldRow: View {
         if secure { SecureField("", text: $text, prompt: Text(prompt).foregroundStyle(Palette.faint)) }
         else { TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Palette.faint)) }
       }
-      .multilineTextAlignment(.trailing).font(.system(size: 17)).foregroundStyle(Palette.text)
+      .multilineTextAlignment(.trailing).font(.system(size: 15)).foregroundStyle(Palette.text)
       .keyboardType(keyboard).textContentType(contentType)
       .textInputAutocapitalization(.never).autocorrectionDisabled()
       .accessibilityLabel(title)
@@ -118,8 +118,8 @@ struct ToggleRow: View {
   var body: some View {
     Toggle(isOn: $isOn) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
-        if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+        Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
+        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
     }
     .tint(Palette.blue)
@@ -148,8 +148,8 @@ struct OptionRow: View {
     Button(action: action) {
       HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
-          Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
-          if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading) }
+          Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
+          if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading) }
         }
         Spacer(minLength: 8)
         if selected { Image(systemName: "checkmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.blue) }
@@ -201,8 +201,8 @@ struct SegmentedPicker<Value: Hashable>: View {
       }
     }
     .padding(3)
-    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.control))
-    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Palette.hairline))
+    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
     .accessibilityElement(children: .contain).accessibilityLabel(label)
   }
 }
@@ -269,10 +269,10 @@ struct StatusLine: View {
   var saved: String? = nil
   var body: some View {
     if let error {
-      Text(error).font(.system(size: 14)).foregroundStyle(Palette.red).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
+      Text(error).font(.system(size: 13)).foregroundStyle(Palette.red).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
         .accessibilityLabel("Error: \(error)")
     } else if let saved {
-      Text(saved).font(.system(size: 14)).foregroundStyle(Palette.green).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
+      Text(saved).font(.system(size: 13)).foregroundStyle(Palette.green).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
     }
   }
 }
@@ -299,8 +299,8 @@ struct SettingsConfirmCard: ViewModifier {
             Button("Cancel") { isPresented = false }.buttonStyle(.pill(.ghost)).accessibilityIdentifier("confirm-cancel")
           }
           .padding(.horizontal, 20).padding(.top, 24).padding(.bottom, 18)
-          .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Palette.control))
-          .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Palette.hairline))
+          .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
+          .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
           .padding(.horizontal, 28)
           .accessibilityElement(children: .contain).accessibilityAddTraits(.isModal)
         }

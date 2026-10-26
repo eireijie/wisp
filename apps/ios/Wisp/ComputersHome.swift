@@ -231,7 +231,7 @@ struct ComputersView: View {
         HStack(spacing: 12) {
           GroupIcon(symbol: "desktopcomputer", dim: !node.online)
           VStack(alignment: .leading, spacing: 2) {
-            Text(node.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(node.online ? Palette.text : Palette.muted).lineLimit(1)
+            Text(node.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(node.online ? Palette.text : Palette.muted).lineLimit(1)
             Text(subtitle(node)).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
           }
           Spacer(minLength: 6)
@@ -248,6 +248,7 @@ struct ComputersView: View {
       }
     }
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .clipShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
   }
 
@@ -266,7 +267,7 @@ struct ComputersView: View {
       HStack(spacing: 12) {
         GroupIcon(symbol: "cloud")
         VStack(alignment: .leading, spacing: 2) {
-          Text(cloud.count == 1 ? "Cloud computer" : "Cloud computers").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(cloud.count == 1 ? "Cloud computer" : "Cloud computers").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
           Text("Hosted for you, keeps running when your devices are off").font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
         }
         Spacer(minLength: 6)
@@ -277,6 +278,7 @@ struct ComputersView: View {
       }
     }
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .clipShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
   }
 
@@ -284,7 +286,7 @@ struct ComputersView: View {
     HStack(spacing: 12) {
       GroupIcon(symbol: "iphone")
       VStack(alignment: .leading, spacing: 2) {
-        Text(phones == 1 ? "Phone" : "Phones").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(phones == 1 ? "Phone" : "Phones").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
         Text("\(phones) paired · get\(phones == 1 ? "s" : "") notifications").font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
       Spacer(minLength: 6)
@@ -292,6 +294,7 @@ struct ComputersView: View {
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .accessibilityElement(children: .combine)
   }
 
@@ -302,8 +305,8 @@ struct ComputersView: View {
       HStack(alignment: .top, spacing: 12) {
         AgentAvatar(agent: who, size: 36, showStatus: false)
         VStack(alignment: .leading, spacing: 3) {
-          Text("\(who?.name ?? "An agent") needs you on this computer").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
-          Text(c.help?.request ?? "").font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Text("\(who?.name ?? "An agent") needs you on this computer").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(c.help?.request ?? "").font(.system(size: 13)).foregroundStyle(Palette.muted)
         }
       }
       HStack(spacing: 10) {
@@ -337,7 +340,7 @@ struct GroupIcon: View {
   var dim = false
   var body: some View {
     Image(systemName: symbol)
-      .font(.system(size: 18, weight: .regular))
+      .font(.system(size: 16, weight: .regular))
       .foregroundStyle(dim ? Palette.faint : Palette.text)
       .frame(width: 40, height: 40)
       .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))

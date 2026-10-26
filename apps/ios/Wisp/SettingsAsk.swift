@@ -20,13 +20,14 @@ struct AskAgentCard: View {
             AgentAvatar(agent: agent, size: 30, showStatus: false)
           }
           TextField("", text: $text, prompt: Text(placeholder.replacingOccurrences(of: "{name}", with: agent.name)).foregroundStyle(Palette.faint), axis: .vertical)
-            .lineLimit(1...4).submitLabel(.send).onSubmit(send).foregroundStyle(Palette.text).font(.system(size: 17))
+            .lineLimit(1...4).submitLabel(.send).onSubmit(send).foregroundStyle(Palette.text).font(.system(size: 15))
             .accessibilityIdentifier("ask-agent-field")
           Button(action: send) { Image(systemName: "arrow.up.circle.fill").font(.system(size: 28)).foregroundStyle(text.trimmed.isEmpty ? Palette.faint : Palette.blue) }
             .buttonStyle(.plain).disabled(action.busy || text.trimmed.isEmpty).accessibilityLabel("Send")
         }
         .padding(.horizontal, 18).frame(minHeight: 56)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         StatusLine(error: action.error)
       }
     }
@@ -56,8 +57,8 @@ struct RecentChangesCard: View {
               VStack(alignment: .leading, spacing: 3) {
                 let who = store.agent(change.agentId)?.name
                 Text((who.map { "\($0): " } ?? "") + change.lines.joined(separator: ", "))
-                  .font(.system(size: 16)).strikethrough(change.undoneAt != nil).foregroundStyle(change.undoneAt != nil ? Palette.faint : Palette.text)
-                if let date = Wire.date(change.createdAt) { Text(date, style: .relative).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+                  .font(.system(size: 15)).strikethrough(change.undoneAt != nil).foregroundStyle(change.undoneAt != nil ? Palette.faint : Palette.text)
+                if let date = Wire.date(change.createdAt) { Text(date, style: .relative).font(.system(size: 13)).foregroundStyle(Palette.faint) }
               }
               Spacer(minLength: 8)
               if change.undoneAt == nil {

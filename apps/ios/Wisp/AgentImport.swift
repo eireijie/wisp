@@ -46,10 +46,10 @@ struct ImportAgent: View {
     AgentFrame(title: "Import an agent") {
       if usable.allSatisfy({ ($0.discovered ?? []).isEmpty }) {
         AgentCard {
-          Text(scanning ? "Looking…" : "No saved setups found yet").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text(scanning ? "Looking…" : "No saved setups found yet").font(.system(size: 15)).foregroundStyle(Palette.text)
           Text("Wisp checks known configuration folders on your connected devices. Custom locations may not appear; it doesn't search for running processes.")
-            .font(.system(size: 14)).foregroundStyle(Palette.faint)
-          if !anyOnline && !scanning { Text("Connect a device first to find its saved agent setups.").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+            .font(.system(size: 13)).foregroundStyle(Palette.faint)
+          if !anyOnline && !scanning { Text("Connect a device first to find its saved agent setups.").font(.system(size: 13)).foregroundStyle(Palette.faint) }
         }
       }
       ForEach(usable.filter { !($0.discovered ?? []).isEmpty }) { device in
@@ -59,9 +59,9 @@ struct ImportAgent: View {
             let here = AgentImportLogic.alreadyHere(found, on: device, agents: store.agents)
             HStack(spacing: 12) {
               VStack(alignment: .leading, spacing: 2) {
-                Text(found.name).font(.system(size: 17)).foregroundStyle(Palette.text)
+                Text(found.name).font(.system(size: 15)).foregroundStyle(Palette.text)
                 Text(here ? "\(HarnessChoice.label(found.harness)) · already here" : [HarnessChoice.label(found.harness), found.summary].filter { !$0.isEmpty }.joined(separator: " · "))
-                  .font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(2)
+                  .font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(2)
               }
               Spacer(minLength: 8)
               if here {
@@ -69,7 +69,7 @@ struct ImportAgent: View {
                   .padding(.horizontal, 10).frame(height: 24).background(Capsule().fill(Palette.muted.opacity(0.16)))
               } else {
                 Button { picked = Pick(device: device, found: found) } label: {
-                  Text("Bring in").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.text)
+                  Text("Bring in").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.text)
                     .padding(.horizontal, 14).frame(height: 32).background(Capsule().fill(Color(light: 0xE3E3EA, dark: 0x2E2E32)))
                 }.buttonStyle(.plain).accessibilityIdentifier("import-bring")
               }
@@ -206,7 +206,7 @@ struct AgentInvite: View {
           }.buttonStyle(.plain)
           if existing {
             Text("After you create the invitation you get a setup to copy into that session's MCP settings. Restart the session and it joins as this agent.")
-              .font(.system(size: 14)).foregroundStyle(Palette.muted).padding(18).frame(maxWidth: .infinity, alignment: .leading)
+              .font(.system(size: 13)).foregroundStyle(Palette.muted).padding(18).frame(maxWidth: .infinity, alignment: .leading)
           }
         }
         AgentError(text: action.error)
@@ -221,8 +221,8 @@ struct AgentInvite: View {
       HStack(spacing: 14) {
         GhostView(look: look, seed: agent.handle, size: 56, animate: false).frame(width: 56, height: 56)
         VStack(alignment: .leading, spacing: 2) {
-          Text("Invite \(agent.name) to Wisp").font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.text)
-          Text("Add this connection to its existing session.").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text("Invite \(agent.name) to Wisp").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+          Text("Add this connection to its existing session.").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
       }
       ConnectionInstructions(token: token, harness: agent.harness)

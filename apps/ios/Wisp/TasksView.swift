@@ -51,7 +51,7 @@ struct TasksView: View {
           filters
           InlineError(error: action.error)
           if store.agents.isEmpty {
-            Text("Add an agent to hand work to").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).padding(.top, 24)
+            Text("Add an agent to hand work to").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).padding(.top, 24)
           } else if roots.isEmpty {
             Text("Nothing yet. Start a task and the lead plans it and hands the pieces out.").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
           }
@@ -98,7 +98,7 @@ struct TasksView: View {
         .background(Capsule().fill(Palette.field))
       }
       .accessibilityIdentifier("tasks-filter")
-      Toggle("Only what I asked for", isOn: $mine).font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
+      Toggle("Only what I asked for", isOn: $mine).font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
     }
   }
 
@@ -126,7 +126,7 @@ struct TaskRow: View {
     HStack(spacing: 12) {
       AgentAvatar(agent: agent, size: 32, showStatus: false)
       VStack(alignment: .leading, spacing: 5) {
-        Text(task.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+        Text(task.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
         HStack(spacing: 8) {
           StateChip(text: store.taskState(task))
           Text(agent?.name ?? "an agent").font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
@@ -223,10 +223,10 @@ struct TaskDetail: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 14) {
         VStack(alignment: .leading, spacing: 8) {
-          Text(t.title).font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+          Text(t.title).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
           HStack(spacing: 10) {
             StateChip(text: state)
-            Text(asked(t)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+            Text(asked(t)).font(.system(size: 13)).foregroundStyle(Palette.faint)
           }
         }
         CardGroup {
@@ -252,7 +252,7 @@ struct TaskDetail: View {
                 Text(agent.flatMap { store.doing($0) }?.text ?? "Working on it").font(.system(size: 15)).foregroundStyle(Palette.green)
               }
             }
-            if !t.brief.isEmpty, t.brief != t.title { Text(t.brief).font(.system(size: 14)).foregroundStyle(Palette.text.opacity(0.85)) }
+            if !t.brief.isEmpty, t.brief != t.title { Text(t.brief).font(.system(size: 13)).foregroundStyle(Palette.text.opacity(0.85)) }
           }
         }
         if let result = t.result, !result.isEmpty {
@@ -307,7 +307,7 @@ struct TaskDetail: View {
   private func fieldRow<V: View>(_ label: String, @ViewBuilder _ value: () -> V) -> some View {
     HStack(spacing: 12) {
       Text(label).font(.system(size: 15)).foregroundStyle(Palette.faint).frame(width: 78, alignment: .leading)
-      value().font(.system(size: 17))
+      value().font(.system(size: 15))
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 18).frame(minHeight: 54)
@@ -318,6 +318,7 @@ struct TaskDetail: View {
     VStack(alignment: .leading, spacing: 8) { body() }
       .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.vertical, 14)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 
   private func subtaskRow(_ child: WorkTask) -> some View {
@@ -326,7 +327,7 @@ struct TaskDetail: View {
     let hue = state == "Done" ? Palette.green : state == "Failed" ? Palette.red : Palette.faint
     return HStack(spacing: 12) {
       Image(systemName: icon).font(.system(size: 22, weight: .regular)).foregroundStyle(hue)
-      Text(child.title).font(.system(size: 16)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
+      Text(child.title).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
       Spacer(minLength: 8)
       StateChip(text: state)
     }
@@ -379,7 +380,7 @@ struct NewTaskView: View {
   var body: some View {
     VStack(spacing: 0) {
       ZStack {
-        Text("New task").font(.system(size: 18, weight: .bold)).foregroundStyle(Palette.text)
+        Text("New task").font(.system(size: 16, weight: .bold)).foregroundStyle(Palette.text)
         HStack {
           CircleButton(symbol: "xmark", label: "Close", id: "new-task-close") { dismiss() }
           Spacer()
@@ -393,13 +394,13 @@ struct NewTaskView: View {
       .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 8)
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          if store.agents.isEmpty { Text("Add an agent to hand work to").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text) }
+          if store.agents.isEmpty { Text("Add an agent to hand work to").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text) }
           CardGroup {
             TextField("What needs doing?", text: $title)
-              .font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+              .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
               .focused($titleFocused).padding(.horizontal, 18).frame(height: 54)
             TextField("Details", text: $brief, axis: .vertical)
-              .font(.system(size: 16)).foregroundStyle(Palette.text)
+              .font(.system(size: 15)).foregroundStyle(Palette.text)
               .lineLimit(4...10).padding(.horizontal, 18).padding(.vertical, 14).frame(minHeight: 110, alignment: .topLeading)
           }
           if let solo {
@@ -452,7 +453,7 @@ struct NewTaskView: View {
     Button { to = value } label: {
       HStack(spacing: 12) {
         leading()
-        Text(text).font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(1)
+        Text(text).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(1)
         if let aside { Image(systemName: aside).font(.system(size: 13)).foregroundStyle(Palette.muted) }
         Spacer(minLength: 8)
         if let trailing { Text(trailing).font(.system(size: 13)).foregroundStyle(Palette.faint) }

@@ -33,7 +33,7 @@ struct AgentPermissions: View {
       if access == .full {
         AgentCard {
           Label("The agent can run any command as the device's user. The device must opt in with wisp node start --allow-full-access; otherwise it runs with edit access.", systemImage: "exclamationmark.shield")
-            .font(.system(size: 14)).foregroundStyle(Palette.red)
+            .font(.system(size: 13)).foregroundStyle(Palette.red)
         }
       }
       AgentError(text: action.error)
@@ -98,12 +98,12 @@ struct AgentPermissions: View {
 
   private func ruleRow(_ rule: AgentMemoryRule) -> some View {
     VStack(alignment: .leading, spacing: 3) {
-      Text(AccessText.path(rule.path, agents: store.agents, members: store.members)).font(.system(size: 17)).foregroundStyle(Palette.text)
+      Text(AccessText.path(rule.path, agents: store.agents, members: store.members)).font(.system(size: 15)).foregroundStyle(Palette.text)
       HStack(spacing: 6) {
         Text(AccessText.level(rule.level)).foregroundStyle(rule.level == "none" ? Palette.faint : Palette.muted)
         if let via = via(rule) { Text(via).foregroundStyle(Palette.faint) }
         if rule.startup == true { Label("loads at startup", systemImage: "pin").foregroundStyle(Palette.faint) }
-      }.font(.system(size: 14))
+      }.font(.system(size: 13))
     }
     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 10)
   }

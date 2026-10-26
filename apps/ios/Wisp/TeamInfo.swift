@@ -51,7 +51,7 @@ struct TeamInfoPage: View {
         TeamGhosts(agents: (team?.nodes ?? []).compactMap { store.agent($0.agentId) }, seed: current.name, size: 40)
         VStack(alignment: .leading, spacing: 0) {
           Text(current.name).font(.system(size: 19, weight: .semibold)).lineLimit(1)
-          Text(count).font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Text(count).font(.system(size: 13)).foregroundStyle(Palette.muted)
         }
         Spacer()
         CircleButton(symbol: "xmark", label: "Close", size: 44) { dismiss() }
@@ -116,7 +116,8 @@ struct TeamInfoPage: View {
         Text(label).font(.system(size: 13, weight: .medium))
       }
       .frame(maxWidth: .infinity).frame(height: 62)
-      .background(Palette.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+      .background(Palette.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.cardBorder))
     }.buttonStyle(.plain)
   }
 
@@ -178,12 +179,12 @@ struct TeamInfoPage: View {
           HStack(spacing: 12) {
             PersonAvatar(name: p.name, size: 34)
             VStack(alignment: .leading, spacing: 0) {
-              Text(p.id == store.me?.id ? "\(p.name) (you)" : p.name).font(.system(size: 17))
-              Text(p.role?.capitalized ?? "").font(.system(size: 14)).foregroundStyle(Palette.faint)
+              Text(p.id == store.me?.id ? "\(p.name) (you)" : p.name).font(.system(size: 15))
+              Text(p.role?.capitalized ?? "").font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer()
             if store.canManage && !(current.name == "general" && p.id == store.me?.id) && p.id != store.me?.id {
-              Button("Remove", role: .destructive) { action.run { try await store.removeMember(p.actor, from: channel.id); await load() } }.font(.system(size: 14)).disabled(action.busy)
+              Button("Remove", role: .destructive) { action.run { try await store.removeMember(p.actor, from: channel.id); await load() } }.font(.system(size: 13)).disabled(action.busy)
             }
           }
           .padding(.horizontal, 18).frame(minHeight: 56)
@@ -206,20 +207,21 @@ struct TeamInfoPage: View {
         ForEach(pins) { pin in
           VStack(alignment: .leading, spacing: 8) {
             Text("\(store.name(of: pin.message.author)) · \(pin.message.date.formatted(date: .abbreviated, time: .shortened))").font(.system(size: 13)).foregroundStyle(Palette.muted)
-            Text(pin.message.body.isEmpty ? "Attachment" : pin.message.body).font(.system(size: 16)).lineLimit(4)
+            Text(pin.message.body.isEmpty ? "Attachment" : pin.message.body).font(.system(size: 15)).lineLimit(4)
             HStack(spacing: 10) {
               NavigationLink(value: ThreadRef(channelId: channel.id, rootId: pin.message.threadId ?? pin.message.id)) {
-                Text("Open thread").font(.system(size: 14, weight: .semibold)).padding(.horizontal, 14).frame(height: 36).background(Capsule().fill(Palette.control))
+                Text("Open thread").font(.system(size: 13, weight: .semibold)).padding(.horizontal, 14).frame(height: 36).background(Capsule().fill(Palette.control))
               }.buttonStyle(.plain)
               if editable {
                 Button { action.run { try await store.unpin(pin.id); await load() } } label: {
-                  Text("Unpin").font(.system(size: 14, weight: .semibold)).padding(.horizontal, 14).frame(height: 36).background(Capsule().fill(Palette.control))
+                  Text("Unpin").font(.system(size: 13, weight: .semibold)).padding(.horizontal, 14).frame(height: 36).background(Capsule().fill(Palette.control))
                 }.buttonStyle(.plain).disabled(action.busy)
               }
             }
           }
           .padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         }
       }
     }
@@ -309,15 +311,16 @@ struct ContextAccessSheet: View {
           CardCaption("How full is the conversation")
           VStack(alignment: .leading, spacing: 8) {
             HStack {
-              Text("Context window").font(.system(size: 16, weight: .semibold))
+              Text("Context window").font(.system(size: 15, weight: .semibold))
               Spacer()
-              Text(fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "–").font(.system(size: 16, weight: .semibold)).monospacedDigit().foregroundStyle(fraction.map(ContextRing.color) ?? Palette.faint)
+              Text(fraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "–").font(.system(size: 15, weight: .semibold)).monospacedDigit().foregroundStyle(fraction.map(ContextRing.color) ?? Palette.faint)
             }
             if let fraction { ProgressView(value: fraction).tint(ContextRing.color(fraction)) }
-            Text("Older messages are summarized as it fills up. Shows after each agent's first reply here.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+            Text("Older messages are summarized as it fills up. Shows after each agent's first reply here.").font(.system(size: 13)).foregroundStyle(Palette.muted)
           }
           .padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           CardCaption("What each agent can do here").padding(.top, 8)
           CardGroup {
             ForEach(agents) { m in

@@ -149,7 +149,7 @@ struct SlashMenuView: View {
               HStack(alignment: .firstTextBaseline, spacing: 10) {
                 VStack(alignment: .leading, spacing: 1) {
                   (Text("/\(row.command.name)").fontWeight(.semibold) + Text(row.command.hint.map { " \($0)" } ?? "").foregroundStyle(Palette.muted))
-                    .font(.system(size: 16)).lineLimit(1)
+                    .font(.system(size: 15)).lineLimit(1)
                   if let d = row.command.description, !d.isEmpty { Text(d).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1) }
                 }
                 Spacer(minLength: 0)

@@ -77,7 +77,7 @@ struct InboxView: View {
   private func tab(_ title: String, _ value: Mode, id: String) -> some View {
     Button { withAnimation(.snappy(duration: 0.2)) { mode = value } } label: {
       Text(title)
-        .font(.system(size: 14, weight: mode == value ? .semibold : .medium))
+        .font(.system(size: 13, weight: mode == value ? .semibold : .medium))
         .foregroundStyle(mode == value ? Palette.text : Palette.muted)
         .frame(maxWidth: .infinity).frame(height: 36)
         .background { if mode == value { Capsule().fill(Color(light: 0xFFFFFF, dark: 0x34343A)) } }
@@ -204,6 +204,7 @@ private struct InboxDone: View {
       }
       if card {
         rows.padding(.horizontal, 14).padding(.vertical, 4).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       } else {
         rows.padding(.horizontal, 4)
       }
@@ -235,10 +236,10 @@ struct ApprovalNeedCard: View {
       Text(approval.summary)
         .font(.system(size: 13, design: .monospaced)).foregroundStyle(Palette.text.opacity(0.85))
         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
       if !approval.details.isEmpty {
         Button(more ? "Hide details" : "Show details") { more.toggle() }.font(.system(size: 13)).foregroundStyle(Palette.muted).buttonStyle(.plain)
-        if more { MarkdownText(approval.details).font(.callout).padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Palette.sheet, in: RoundedRectangle(cornerRadius: 14, style: .continuous)) }
+        if more { MarkdownText(approval.details).font(.callout).padding(12).frame(maxWidth: .infinity, alignment: .leading).background(Palette.sheet, in: RoundedRectangle(cornerRadius: 12, style: .continuous)) }
       }
       CardField(placeholder: "Add a note (optional)", text: $note).disabled(busy)
       HStack(spacing: 10) {
@@ -251,6 +252,7 @@ struct ApprovalNeedCard: View {
     }
     .padding(16)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .accessibilityElement(children: .contain)
   }
 
@@ -293,6 +295,7 @@ struct LoginNeedCard: View {
     }
     .padding(16)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .accessibilityElement(children: .contain)
   }
 
@@ -319,9 +322,9 @@ struct HelpNeedCard: View {
       NeedHead(agent: agent, title: "\(agent?.name ?? "An agent") needs you on \(computer.name)",
                sub: "Asked for help on a computer" + (help?.at.flatMap(Wire.date).map { " · \($0.formatted(.relative(presentation: .named)))" } ?? ""))
       if let request = help?.request, !request.isEmpty {
-        Text("“\(request)”").font(.system(size: 14)).foregroundStyle(Palette.text.opacity(0.9))
+        Text("“\(request)”").font(.system(size: 13)).foregroundStyle(Palette.text.opacity(0.9))
           .frame(maxWidth: .infinity, alignment: .leading).padding(12)
-          .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+          .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
       }
       HStack(spacing: 10) {
         Button("Open computer", action: open).buttonStyle(CardPill(tone: .primary)).accessibilityIdentifier("open-computer")
@@ -330,6 +333,7 @@ struct HelpNeedCard: View {
     }
     .padding(16)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .accessibilityElement(children: .contain)
   }
 }

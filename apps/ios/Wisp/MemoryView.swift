@@ -134,7 +134,7 @@ struct NoteView: View {
     }) {
       if let note {
         Text(crumbs).font(.system(size: 15)).foregroundStyle(Palette.faint).padding(.horizontal, 6)
-        Text(note.name).font(.system(size: 32, weight: .bold)).foregroundStyle(Palette.text).padding(.horizontal, 6).fixedSize(horizontal: false, vertical: true)
+        Text(note.name).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 6).fixedSize(horizontal: false, vertical: true)
         if let author = note.editedBy {
           let who = displayAuthor(author, store: store)
           HStack(spacing: 8) {
@@ -143,8 +143,9 @@ struct NoteView: View {
           }.padding(.horizontal, 6)
         }
         tagRow(note)
-        VStack(alignment: .leading) { NoteMarkdown(text: Self.withoutFrontmatter(note.content ?? "")).font(.system(size: 17)).foregroundStyle(Palette.text) }
+        VStack(alignment: .leading) { NoteMarkdown(text: Self.withoutFrontmatter(note.content ?? "")).font(.system(size: 15)).foregroundStyle(Palette.text) }
           .padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         NoteProperties(note: note, from: path, kind: graph?.nodes.first { $0.id == path }?.graphKind) { target in
           action.run { destination = MemoryNote(path: try await store.resolveNote(target, from: path)) }
         }
@@ -301,7 +302,7 @@ struct NoteActionsSheet: View {
         row("Open in Obsidian", "arrow.up.right.square", .obsidian)
         if canEdit { row("Delete note", "trash", .delete, danger: true) }
       }
-      Button { dismiss() } label: { Text("Cancel").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 56).background(Capsule().fill(Palette.control)) }.buttonStyle(.plain)
+      Button { dismiss() } label: { Text("Cancel").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).frame(maxWidth: .infinity).frame(height: 56).background(Capsule().fill(Palette.control)) }.buttonStyle(.plain)
     }
     .padding(.horizontal, 12).padding(.top, 14)
     .presentationDetents([.height(canEdit ? 450 : 290)]).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
@@ -332,21 +333,22 @@ struct NoteEditor: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        Button { dismiss() } label: { Text("Cancel").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 20).frame(height: 44).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline)) }
+        Button { dismiss() } label: { Text("Cancel").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 20).frame(height: 44).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline)) }
           .buttonStyle(.plain).disabled(action.busy)
         Spacer()
-        Text((path as NSString).lastPathComponent).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+        Text((path as NSString).lastPathComponent).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
         Spacer()
-        Button(action: save) { Text(action.busy ? "Saving…" : "Save").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 22).frame(height: 44).background(Capsule().fill(Palette.text)).opacity(valid && !action.busy ? 1 : 0.4) }
+        Button(action: save) { Text(action.busy ? "Saving…" : "Save").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 22).frame(height: 44).background(Capsule().fill(Palette.text)).opacity(valid && !action.busy ? 1 : 0.4) }
           .buttonStyle(.plain).disabled(!valid || action.busy).accessibilityIdentifier("save-note")
       }.padding(.horizontal, 18).padding(.top, 16)
       ScrollView {
         VStack(alignment: .leading, spacing: 12) {
-          Text("Editing in \(place). Changes are saved as \(store.me?.preferredName ?? store.me?.name ?? "you").").font(.system(size: 14)).foregroundStyle(Palette.faint)
-          if note == nil { TextField("Path", text: $path).textInputAutocapitalization(.never).autocorrectionDisabled().padding(14).background(Palette.card, in: RoundedRectangle(cornerRadius: 16)) }
+          Text("Editing in \(place). Changes are saved as \(store.me?.preferredName ?? store.me?.name ?? "you").").font(.system(size: 13)).foregroundStyle(Palette.faint)
+          if note == nil { TextField("Path", text: $path).textInputAutocapitalization(.never).autocorrectionDisabled().padding(14).background(Palette.card, in: RoundedRectangle(cornerRadius: 12)) }
           TextEditor(text: $content).focused($focused).font(.system(size: 16, design: .monospaced)).foregroundStyle(Palette.text)
             .scrollContentBackground(.hidden).frame(minHeight: 340).padding(12)
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous)).accessibilityLabel("Note content")
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder)).accessibilityLabel("Note content")
           TechnicalDetails(title: "More options") {
             TextField("Describe the change", text: $message).textFieldStyle(.roundedBorder)
           }.foregroundStyle(Palette.muted)
@@ -444,7 +446,7 @@ struct MoveNoteView: View {
           if useOther {
             MemoryFieldCard { TextField("Folder path", text: $other).textInputAutocapitalization(.never).autocorrectionDisabled().foregroundStyle(Palette.text) }
           } else {
-            Button { useOther = true; target = "" } label: { Text("Other folder…").font(.system(size: 17)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain).padding(.horizontal, 6)
+            Button { useOther = true; target = "" } label: { Text("Other folder…").font(.system(size: 15)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain).padding(.horizontal, 6)
           }
           InlineError(error: action.error)
         }.padding(.horizontal, 18).padding(.top, 6)

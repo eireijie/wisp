@@ -63,7 +63,7 @@ struct ConnectorEditor: View {
       if !rows.isEmpty || kind == "secret" || custom {
         MarketLabel(kind == "secret" ? "Values" : (entry?.fields ?? []).isEmpty ? "Variables" : "What it needs")
         ForEach($rows) { $row in valueRow($row) }
-        Button { rows.append(ConnectorValue(key: "", value: "")) } label: { Label("Add a value", systemImage: "plus").font(.system(size: 14)).foregroundStyle(Palette.muted) }
+        Button { rows.append(ConnectorValue(key: "", value: "")) } label: { Label("Add a value", systemImage: "plus").font(.system(size: 13)).foregroundStyle(Palette.muted) }
           .padding(.horizontal, 4)
         if kind != "secret" { Text("Secrets are masked once saved. Use {{NAME}} in the command, arguments, URL or headers to fill one in.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4) }
       }

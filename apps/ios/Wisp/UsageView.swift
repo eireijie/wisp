@@ -20,15 +20,16 @@ struct UsageView: View {
         }
         VStack(alignment: .leading, spacing: 12) {
           HStack(alignment: .firstTextBaseline) {
-            Text("Today").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+            Text("Today").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
             Spacer()
             Text("\(a.estimated == true ? "about " : "")\(Allowance.text(a.todayTokens))\(a.dailyTokens.map { " of \(Allowance.text($0))" } ?? "")")
-              .font(.system(size: 14)).foregroundStyle(Palette.faint)
+              .font(.system(size: 13)).foregroundStyle(Palette.faint)
           }
           UsageBar(allowance: a)
         }
         .padding(.horizontal, 18).padding(.vertical, 16)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         if a.agents.isEmpty {
           CardHint("Nothing yet today.")
         } else {
@@ -36,10 +37,10 @@ struct UsageView: View {
             ForEach(a.agents) { use in
               HStack(spacing: 12) {
                 AgentAvatar(agent: store.agent(use.agentId), size: 28, showStatus: false)
-                Text(store.agent(use.agentId)?.name ?? "An agent").font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(1)
+                Text(store.agent(use.agentId)?.name ?? "An agent").font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(1)
                 Spacer()
-                Text("\(use.checks) \(use.checks == 1 ? "check" : "checks")").font(.system(size: 14)).foregroundStyle(Palette.faint)
-                Text(Allowance.text(use.tokens)).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).frame(minWidth: 48, alignment: .trailing)
+                Text("\(use.checks) \(use.checks == 1 ? "check" : "checks")").font(.system(size: 13)).foregroundStyle(Palette.faint)
+                Text(Allowance.text(use.tokens)).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).frame(minWidth: 48, alignment: .trailing)
               }.padding(.horizontal, 18).frame(minHeight: 54)
             }
           }

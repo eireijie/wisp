@@ -49,6 +49,7 @@ struct AgentCodeCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(16)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -106,8 +107,8 @@ struct AgentConnect: View {
           ForEach(apps) { app in
             HStack(spacing: 12) {
               VStack(alignment: .leading, spacing: 2) {
-                Text(app.name).font(.system(size: 17)).foregroundStyle(Palette.text)
-                Text(detail(app)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+                Text(app.name).font(.system(size: 15)).foregroundStyle(Palette.text)
+                Text(detail(app)).font(.system(size: 13)).foregroundStyle(Palette.faint)
               }
               Spacer(minLength: 8)
               if store.canManage {

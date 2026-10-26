@@ -128,10 +128,10 @@ struct TryItSheet: View {
     let text = MarketText.trySuggestion(name: name, description: description)
     MarketSheet(title: "Try it", subtitle: name) {
       Text(helper == nil ? "Install the skill first so a helper can use it. Meanwhile, this is a request to try." : "Start a chat with this request ready. Add your own details, then send.")
-        .font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
-      Text(text).font(.system(size: 16)).textSelection(.enabled).padding(16).frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.control, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.hairline))
+        .font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      Text(text).font(.system(size: 15)).textSelection(.enabled).padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
       if holders.count > 1 {
         Picker("Which helper?", selection: Binding(get: { helper?.id ?? "" }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }.pickerStyle(.menu)
       }
@@ -189,7 +189,7 @@ struct SkillShareSheet: View {
       case .paste: pastePage
       case .found: foundPage
       }
-      if let note { Text(note).font(.system(size: 14)).foregroundStyle(Palette.green).padding(.horizontal, 4) }
+      if let note { Text(note).font(.system(size: 13)).foregroundStyle(Palette.green).padding(.horizontal, 4) }
       InlineError(error: action.error)
     }
     .onAppear {
@@ -270,7 +270,7 @@ struct SkillShareSheet: View {
   @ViewBuilder private var foundPage: some View {
     if let found {
       CardGroup { MarketRow(symbol: "wand.and.stars", tile: 50, title: found.name, subtitle: found.description.isEmpty ? "No description" : found.description) }
-      Text("It comes into your skills. Then pick which helpers have it.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      Text("It comes into your skills. Then pick which helpers have it.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       HStack(spacing: 10) {
         Button { page = .home } label: { Text("Back").frame(maxWidth: .infinity) }.secondaryButton()
         Button {

@@ -131,7 +131,7 @@ struct AgentPersonalityPage: View {
       if preview {
         AgentCard {
           if text.trimmed.isEmpty { Text("Nothing written yet.").font(.system(size: 15)).foregroundStyle(Palette.faint) }
-          else { Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)).font(.system(size: 16)).foregroundStyle(Palette.text) }
+          else { Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)).font(.system(size: 15)).foregroundStyle(Palette.text) }
         }.frame(minHeight: 200, alignment: .topLeading)
       } else {
         FieldCard(label: "Personality, voice, values and boundaries", text: $text, lines: 9...30)

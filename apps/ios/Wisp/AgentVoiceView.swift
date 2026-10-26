@@ -103,8 +103,8 @@ struct AgentVoicePicker: View {
           Button { voice[engine] = choice.id } label: {
             HStack(spacing: 12) {
               VStack(alignment: .leading, spacing: 2) {
-                Text(choice.label).font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(1)
-                if let detail = choice.detail { Text(detail).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1) }
+                Text(choice.label).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(1)
+                if let detail = choice.detail { Text(detail).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1) }
               }
               Spacer(minLength: 8)
               Radio(on: on)

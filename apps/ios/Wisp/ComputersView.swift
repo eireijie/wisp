@@ -172,8 +172,8 @@ struct ComputerDetail: View {
       HStack(alignment: .top, spacing: 12) {
         AgentAvatar(agent: store.agent(help.agentId), size: 36, showStatus: false)
         VStack(alignment: .leading, spacing: 3) {
-          Text("\(store.agent(help.agentId)?.name ?? "An agent") needs you on this computer").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
-          Text(help.request).font(.system(size: 14)).foregroundStyle(Palette.muted)
+          Text("\(store.agent(help.agentId)?.name ?? "An agent") needs you on this computer").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(help.request).font(.system(size: 13)).foregroundStyle(Palette.muted)
         }
       }
       HStack(spacing: 10) {
@@ -193,7 +193,7 @@ struct ComputerDetail: View {
     let s = store.state(of: c)
     HStack(spacing: 10) {
       if s.working { WorkingDots(color: Palette.faint) }
-      Text(statusText(c, s)).font(.system(size: 14)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).lineLimit(2)
+      Text(statusText(c, s)).font(.system(size: 13)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).lineLimit(2)
       ComputerPill(text: s.label, tone: s.tone)
     }
     .padding(.horizontal, 4)
@@ -438,7 +438,7 @@ struct ComputerDetail: View {
 
   @ViewBuilder private func screen(_ c: Computer) -> some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(hex: 0x0D0D0F))
+      RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(hex: 0x0D0D0F))
       if let image, c.status == "ready", !needCode, imageCode == c.code {
         GeometryReader { geo in
           let fit = fitted(in: geo.size)
@@ -467,8 +467,8 @@ struct ComputerDetail: View {
       }
     }
     .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: .fit)
-    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(inControl ? Palette.blue : Palette.hairline, lineWidth: inControl ? 3 : 1))
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(inControl ? Palette.blue : Palette.hairline, lineWidth: inControl ? 3 : 1))
     .shadow(color: inControl ? Palette.blue.opacity(0.35) : .clear, radius: 14)
   }
 
@@ -483,7 +483,7 @@ struct ComputerDetail: View {
       takeControl(c)
     } label: {
       Label(inControl ? "Hand back\(who.map { " to \($0)" } ?? "")" : "Take control", systemImage: inControl ? "hand.wave" : "hand.point.up.left")
-        .font(.system(size: 17, weight: .semibold))
+        .font(.system(size: 15, weight: .semibold))
         .frame(maxWidth: .infinity, minHeight: 28)
     }
     .primaryButton()

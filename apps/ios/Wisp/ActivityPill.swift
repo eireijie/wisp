@@ -40,7 +40,7 @@ struct ActivityPill: View {
           }
           PulseDots().scaleEffect(0.7)
         }
-        .font(.system(size: 14))
+        .font(.system(size: 13))
         .foregroundStyle(Palette.text)
         .padding(.leading, 8)
         .padding(.trailing, 14)

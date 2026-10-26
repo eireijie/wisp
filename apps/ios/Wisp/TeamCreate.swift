@@ -77,20 +77,22 @@ struct NewChannel: View {
           VStack(alignment: .leading, spacing: 8) {
             Text("Name").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 18)
             TextField("Release crew", text: $model.name).textInputAutocapitalization(.never).autocorrectionDisabled()
-              .font(.system(size: 17)).padding(.horizontal, 18).frame(minHeight: 56)
+              .font(.system(size: 15)).padding(.horizontal, 18).frame(minHeight: 56)
               .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
               .accessibilityIdentifier("create-name")
             if !slug.isEmpty && (exists || slug != model.name) {
-              Text(exists ? "\(slug) already exists." : slug).font(.system(size: 14)).foregroundStyle(exists ? Palette.red : Palette.faint).padding(.horizontal, 18)
+              Text(exists ? "\(slug) already exists." : slug).font(.system(size: 13)).foregroundStyle(exists ? Palette.red : Palette.faint).padding(.horizontal, 18)
             }
           }
           VStack(alignment: .leading, spacing: 8) {
             Text("What is it for?").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 18)
             TextField("Ship releases on time, checked before they go out.", text: $model.topic, axis: .vertical).lineLimit(3...8)
-              .font(.system(size: 17)).padding(18).frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+              .font(.system(size: 15)).padding(18).frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
               .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
               .accessibilityIdentifier("create-topic")
-            Text("Agents on the team read this so they know what the team is for.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 18)
+            Text("Agents on the team read this so they know what the team is for.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 18)
           }
           moreOptions
         }
@@ -109,12 +111,13 @@ struct NewChannel: View {
     VStack(alignment: .leading, spacing: 8) {
       Button { withAnimation(.snappy) { model.more.toggle() } } label: {
         HStack {
-          Text("More options").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("More options").font(.system(size: 15)).foregroundStyle(Palette.text)
           Spacer()
           Image(systemName: model.more ? "chevron.up" : "chevron.down").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint)
         }
         .padding(.horizontal, 18).frame(minHeight: 54).contentShape(Rectangle())
         .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       }
       .buttonStyle(.plain)
       .accessibilityIdentifier("create-more")
@@ -143,8 +146,8 @@ struct NewChannel: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 22) {
           VStack(alignment: .leading, spacing: 6) {
-            Text("How should \(shownName) work?").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text)
-            Text("Pick a start. You can change every step later.").font(.system(size: 16)).foregroundStyle(Palette.muted)
+            Text("How should \(shownName) work?").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
+            Text("Pick a start. You can change every step later.").font(.system(size: 15)).foregroundStyle(Palette.muted)
           }
           .padding(.horizontal, 6)
           CardGroup {
@@ -158,7 +161,7 @@ struct NewChannel: View {
           Button {
             action.run { try await create(team: nil) }
           } label: {
-            Text("Skip, set it up later").font(.system(size: 17)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, minHeight: 50)
+            Text("Skip, set it up later").font(.system(size: 15)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, minHeight: 50)
           }
           .buttonStyle(.plain).disabled(action.busy).accessibilityIdentifier("start-skip")
           InlineError(error: action.error)
@@ -239,19 +242,20 @@ private struct DescribePage: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
           VStack(alignment: .leading, spacing: 6) {
-            Text("Describe how it works").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text)
-            Text("One sentence is enough. You can fix the result.").font(.system(size: 16)).foregroundStyle(Palette.muted)
+            Text("Describe how it works").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
+            Text("One sentence is enough. You can fix the result.").font(.system(size: 15)).foregroundStyle(Palette.muted)
           }
           TextField("Opus plans, GPT pokes holes until it approves, then Opus hands out the work", text: $model.description, axis: .vertical)
             .lineLimit(4...10).focused($focused)
-            .font(.system(size: 17)).padding(18).frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
+            .font(.system(size: 15)).padding(18).frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
             .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
             .accessibilityIdentifier("describe-field")
           VStack(alignment: .leading, spacing: 8) {
             Text("Try").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
             ForEach(tries, id: \.self) { t in
               Button { model.description = t } label: {
-                Text(t).font(.system(size: 16)).foregroundStyle(Palette.text).padding(.horizontal, 16).frame(minHeight: 44)
+                Text(t).font(.system(size: 15)).foregroundStyle(Palette.text).padding(.horizontal, 16).frame(minHeight: 44)
                   .background(Capsule().fill(Palette.card))
               }
               .buttonStyle(.plain)
@@ -261,12 +265,12 @@ private struct DescribePage: View {
             Text("Add an agent first: it draws the team.").font(.system(size: 15)).foregroundStyle(Palette.red)
           } else {
             HStack {
-              Text("Built by").font(.system(size: 17)).foregroundStyle(Palette.muted)
+              Text("Built by").font(.system(size: 15)).foregroundStyle(Palette.muted)
               Menu {
                 ForEach(store.agents) { a in Button(a.name) { model.builder = a.id } }
               } label: {
                 HStack(spacing: 8) {
-                  if let b = builder { AgentAvatar(agent: b, size: 24, showStatus: false); Text(b.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text) }
+                  if let b = builder { AgentAvatar(agent: b, size: 24, showStatus: false); Text(b.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text) }
                   Image(systemName: "chevron.up.chevron.down").font(.system(size: 12)).foregroundStyle(Palette.faint)
                 }
                 .padding(.horizontal, 14).frame(height: 44).glassPill()
@@ -307,18 +311,18 @@ private struct BuildingPage: View {
           if let builder { AgentAvatar(agent: builder, size: 84, showStatus: false) }
           ProgressView()
           Text("\(builder?.name ?? "An agent") is drawing your team").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).multilineTextAlignment(.center)
-          Text(model.description).font(.system(size: 16)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineLimit(5).padding(.horizontal, 30)
+          Text(model.description).font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineLimit(5).padding(.horizontal, 30)
         } else {
           Image(systemName: "exclamationmark.circle").font(.system(size: 34)).foregroundStyle(Palette.red)
           Text("It couldn't draw that").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
-          Text(failure ?? "").font(.system(size: 16)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).padding(.horizontal, 30)
+          Text(failure ?? "").font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).padding(.horizontal, 30)
           Button("Try again") { failure = nil; attempt += 1 }.secondaryButton().controlSize(.large)
         }
         Spacer(); Spacer()
       }
       .frame(maxWidth: .infinity)
     } bottom: {
-      Button("Cancel", action: back).font(.system(size: 17)).foregroundStyle(Palette.muted).frame(minHeight: 50).padding(.bottom, 10)
+      Button("Cancel", action: back).font(.system(size: 15)).foregroundStyle(Palette.muted).frame(minHeight: 50).padding(.bottom, 10)
         .accessibilityIdentifier("building-cancel")
     }
     .task(id: attempt) { await draw() }
@@ -362,7 +366,7 @@ private struct PreviewPage: View {
     PageFrame(title: "Preview", back: back) {
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
-          Text("Here is your team").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text).padding(.horizontal, 6)
+          Text("Here is your team").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 6)
           VStack(spacing: 10) {
             ForEach(team.orderedSteps) { s in PreviewStepRow(team: team, step: s) }
           }
@@ -372,6 +376,7 @@ private struct PreviewPage: View {
           }
           .padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           if let problem = team.stepsProblem ?? error {
             Text(problem).font(.system(size: 15)).foregroundStyle(Palette.red).padding(.horizontal, 6)
           }
@@ -402,7 +407,7 @@ struct PreviewStepRow: View {
         .frame(width: 26, height: 26).background(Circle().fill(Palette.badge))
       VStack(alignment: .leading, spacing: 3) {
         if let mark = step.kindMark { Label(mark.text, systemImage: mark.symbol).labelStyle(CompactLabel()).font(.system(size: 13)).foregroundStyle(Palette.muted) }
-        Text(step.action.isEmpty ? "Untitled step" : step.action).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(step.action.isEmpty ? "Untitled step" : step.action).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
       }
       Spacer(minLength: 8)
       if let agent = team.agentId(of: step).flatMap({ store.agent($0) }) {
@@ -416,6 +421,7 @@ struct PreviewStepRow: View {
     }
     .padding(.horizontal, 16).frame(minHeight: 62)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .accessibilityElement(children: .combine)
   }
 }
@@ -438,7 +444,7 @@ private struct ReviewPage: View {
           HStack(spacing: 14) {
             TeamGhosts(agents: agents, seed: slug, size: 56)
             VStack(alignment: .leading, spacing: 4) {
-              Text(model.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? slug : model.name.trimmingCharacters(in: .whitespacesAndNewlines)).font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.text)
+              Text(model.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? slug : model.name.trimmingCharacters(in: .whitespacesAndNewlines)).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
               if !model.topic.isEmpty { Text(model.topic).font(.system(size: 15)).foregroundStyle(Palette.muted) }
             }
           }
@@ -449,20 +455,22 @@ private struct ReviewPage: View {
           }
           .padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           Button(action: back) {
             RowLabel(title: "See the flowchart", value: "\(team.steps?.count ?? 0) steps") {
               Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 18)).foregroundStyle(Palette.muted).frame(width: 28)
             }
             .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
           }
           .buttonStyle(.plain)
           if let problem = error {
             VStack(alignment: .leading, spacing: 4) {
-              Label("Couldn't create it", systemImage: "exclamationmark.circle").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.red)
+              Label("Couldn't create it", systemImage: "exclamationmark.circle").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.red)
               Text(problem).font(.system(size: 15)).foregroundStyle(Palette.text)
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Palette.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(Palette.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityIdentifier("review-error")
           }
         }
@@ -539,13 +547,14 @@ private struct TemplatePage: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       VStack(alignment: .leading, spacing: 6) {
-        Text(template.name).font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text)
-        Text(template.blurb).font(.system(size: 16)).foregroundStyle(Palette.muted)
+        Text(template.name).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
+        Text(template.blurb).font(.system(size: 15)).foregroundStyle(Palette.muted)
       }
       Text("Who hands to whom").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
       MiniFlow(template: template)
         .padding(16).frame(maxWidth: .infinity)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       if let sample = template.sample, !sample.isEmpty {
         Text("How a request goes").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 6)
         VStack(alignment: .leading, spacing: 10) {
@@ -553,7 +562,7 @@ private struct TemplatePage: View {
         }
       }
       if own {
-        Button("Delete this template", role: .destructive, action: onDelete).font(.system(size: 16)).frame(minHeight: 44)
+        Button("Delete this template", role: .destructive, action: onDelete).font(.system(size: 15)).frame(minHeight: 44)
       }
     }
     .padding(.top, 8)
@@ -578,7 +587,7 @@ private struct MiniFlow: View {
     VStack(spacing: 4) {
       HStack(spacing: 6) {
         icon(s)
-        Text(s.action).font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
+        Text(s.action).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)
       }
       .padding(.horizontal, 12).padding(.vertical, 8)
       .background(Capsule().fill(Palette.badge))
@@ -604,9 +613,9 @@ private struct SampleBubble: View {
       if you { Spacer(minLength: 40) } else { GhostView(look: nil, seed: line.who, size: 26) }
       VStack(alignment: you ? .trailing : .leading, spacing: 3) {
         if !you { Text(line.who).font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 6) }
-        Text(line.text).font(.system(size: 16)).foregroundStyle(you ? Color.white : Palette.text)
+        Text(line.text).font(.system(size: 15)).foregroundStyle(you ? Color.white : Palette.text)
           .padding(.horizontal, 14).padding(.vertical, 10)
-          .background(you ? Palette.blue : Palette.bubble, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+          .background(you ? Palette.blue : Palette.bubble, in: BubbleShape(mine: you))
       }
       if !you { Spacer(minLength: 40) }
     }

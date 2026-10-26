@@ -47,11 +47,11 @@ struct JoinApprovalSheet: View {
       }
       VStack(spacing: 14) {
         Text("\(request.name) wants to join")
-          .font(.system(size: 28, weight: .bold))
+          .font(.system(size: 22, weight: .semibold))
           .foregroundStyle(Palette.text)
           .multilineTextAlignment(.center)
         Text("It should show the same code.")
-          .font(.system(size: 16))
+          .font(.system(size: 15))
           .foregroundStyle(Palette.muted)
         CodeCard(code: request.displayCode).padding(.top, 6).accessibilityIdentifier("join-code")
         InlineError(error: action.error)

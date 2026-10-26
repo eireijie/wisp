@@ -36,8 +36,8 @@ struct PeopleSettingsView: View {
               Image(systemName: "link").font(.system(size: 16)).foregroundStyle(Palette.muted).frame(width: 34, height: 34)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color(light: 0xE3E3EA, dark: 0x2E2E32)))
               VStack(alignment: .leading, spacing: 2) {
-                Text("Invite link for a \(invite.role)").font(.system(size: 17)).foregroundStyle(Palette.text)
-                if let value = invite.expiresAt, let date = Wire.date(value) { Text("Expires \(date.formatted(.relative(presentation: .named)))").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+                Text("Invite link for a \(invite.role)").font(.system(size: 15)).foregroundStyle(Palette.text)
+                if let value = invite.expiresAt, let date = Wire.date(value) { Text("Expires \(date.formatted(.relative(presentation: .named)))").font(.system(size: 13)).foregroundStyle(Palette.faint) }
               }
               Spacer(minLength: 8)
               Button("Revoke") { revoking = invite }.buttonStyle(.pill(.secondary, small: true)).accessibilityLabel("Revoke invite")
@@ -49,8 +49,8 @@ struct PeopleSettingsView: View {
                 Image(systemName: "desktopcomputer").font(.system(size: 16)).foregroundStyle(Palette.muted).frame(width: 34, height: 34)
                   .background(RoundedRectangle(cornerRadius: 10).fill(Color(light: 0xE3E3EA, dark: 0x2E2E32)))
                 VStack(alignment: .leading, spacing: 2) {
-                  Text("\(request.name) wants to join").font(.system(size: 17)).foregroundStyle(Palette.text)
-                  Text("It should show the code \(request.displayCode)").font(.system(size: 14)).foregroundStyle(Palette.faint)
+                  Text("\(request.name) wants to join").font(.system(size: 15)).foregroundStyle(Palette.text)
+                  Text("It should show the code \(request.displayCode)").font(.system(size: 13)).foregroundStyle(Palette.faint)
                 }
                 Spacer(minLength: 0)
               }
@@ -85,8 +85,8 @@ struct PeopleSettingsView: View {
     HStack(spacing: 12) {
       InitialsDot(name: member.name, size: 40)
       VStack(alignment: .leading, spacing: 2) {
-        Text(member.name).font(.system(size: 17)).foregroundStyle(Palette.text)
-        Text(detail).font(.system(size: 14)).foregroundStyle(Palette.faint)
+        Text(member.name).font(.system(size: 15)).foregroundStyle(Palette.text)
+        Text(detail).font(.system(size: 13)).foregroundStyle(Palette.faint)
       }
       Spacer(minLength: 8)
       if chevron { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
@@ -114,7 +114,7 @@ struct InvitePeopleView: View {
       CardHint("Member: chat, agents, tasks and memory. Guest: chat and the shared folder in memory.")
       CardGroup {
         HStack {
-          Text("Link expires").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("Link expires").font(.system(size: 15)).foregroundStyle(Palette.text)
           Spacer(minLength: 8)
           Picker("Link expires", selection: $days) {
             Text("In a day").tag(1); Text("In 3 days").tag(3); Text("In a week").tag(7); Text("In 2 weeks").tag(14); Text("In a month").tag(30)
@@ -141,6 +141,7 @@ struct InvitePeopleView: View {
         VStack(alignment: .leading, spacing: 10) {
           Text(fresh.absoluteString).font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
         HStack(spacing: 10) {
           Button(copied ? "Copied" : "Copy link") { UIPasteboard.general.url = fresh; copied = true }.buttonStyle(.pill(.secondary))
           ShareLink(item: fresh) { Text("Share").frame(maxWidth: .infinity) }.buttonStyle(.pill(.secondary))
@@ -207,7 +208,7 @@ struct ManagePersonView: View {
         InitialsDot(name: member.name, size: 56)
         VStack(alignment: .leading, spacing: 2) {
           Text(member.name).font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.text)
-          Text("\(member.role.capitalized) · \(member.email)").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text("\(member.role.capitalized) · \(member.email)").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
         Spacer(minLength: 0)
       }

@@ -111,12 +111,12 @@ struct AgentPage: View {
 
   private var header: some View {
     VStack(spacing: 8) {
-      AgentAvatar(agent: current, size: 104, showStatus: false, interactive: true)
+      AgentAvatar(agent: current, size: 72, showStatus: false, interactive: true)
         .simultaneousGesture(TapGesture().onEnded { if store.canManage { editingLook = true } })
         .accessibilityLabel("Edit \(current.name)'s look")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { if store.canManage { editingLook = true } }
-      Text(current.name).font(.system(size: 26, weight: .bold)).foregroundStyle(Palette.text).accessibilityAddTraits(.isHeader)
+      Text(current.name).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text).accessibilityAddTraits(.isHeader)
       Text("@\(current.handle) · \(HarnessChoice.label(current.harness))").font(.system(size: 15)).foregroundStyle(Palette.faint)
       if let description = current.settings?.role ?? current.settings?.roleNotes, !description.isEmpty {
         Text(description).font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineLimit(3).padding(.horizontal, 18)
@@ -140,11 +140,12 @@ struct AgentPage: View {
           try await store.setChannelPrefs(channel.id, ["notify": AnyEncodable(on ? "default" : "mute")])
         }
       })) {
-        Text("Notifications").font(.system(size: 17)).foregroundStyle(Palette.text)
+        Text("Notifications").font(.system(size: 15)).foregroundStyle(Palette.text)
       }
       .tint(Palette.blue)
       .padding(.horizontal, 18).frame(minHeight: 60)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       .disabled(action.busy)
       .accessibilityIdentifier("agent-notifications")
       CardCaption("Get told when \(current.name) finishes or needs you")

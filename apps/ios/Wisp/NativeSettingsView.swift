@@ -87,7 +87,7 @@ struct PreferencesView: View {
                   isOn: Binding(get: { tools.wrappedValue != "hidden" }, set: { tools.wrappedValue = $0 ? "collapsed" : "hidden" }), id: "show-tools")
         MoreOptionsRow {
           VStack(alignment: .leading, spacing: 10) {
-            Text("Tools agents used").font(.system(size: 17)).foregroundStyle(Palette.text)
+            Text("Tools agents used").font(.system(size: 15)).foregroundStyle(Palette.text)
             SegmentedPicker(options: [("collapsed", "Collapsed"), ("expanded", "Open"), ("hidden", "Hidden")], selection: tools, label: "Tools agents used", id: "tools")
           }.padding(.horizontal, 18).padding(.vertical, 12)
         }
@@ -196,7 +196,7 @@ struct MobileSettingsView: View {
       VStack(spacing: 14) {
         switch pairing?.state {
         case "waiting":
-          if let qr { Image(uiImage: qr).interpolation(.none).resizable().scaledToFit().frame(width: 220, height: 220).padding(10).background(Color.white, in: RoundedRectangle(cornerRadius: 18)).accessibilityLabel("QR code to scan with the Wisp app on your phone") }
+          if let qr { Image(uiImage: qr).interpolation(.none).resizable().scaledToFit().frame(width: 220, height: 220).padding(10).background(Color.white, in: RoundedRectangle(cornerRadius: 12)).accessibilityLabel("QR code to scan with the Wisp app on your phone") }
           Text("Point your camera here. It gets the app and joins.").font(.system(size: 15)).foregroundStyle(Palette.text).multilineTextAlignment(.center)
           Text("The code expires in 5 minutes.").font(.system(size: 13)).foregroundStyle(Palette.faint)
           if let hint = reachHint { Text(hint).font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.center) }
@@ -215,6 +215,7 @@ struct MobileSettingsView: View {
         }
       }
       .frame(maxWidth: .infinity).padding(20).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       StatusLine(error: action.error)
       switch pairing?.state {
       case "claimed":

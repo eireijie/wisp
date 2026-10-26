@@ -23,7 +23,7 @@ struct FileChip: View {
           .resizable()
           .scaledToFit()
           .frame(maxWidth: 260, maxHeight: 260, alignment: .leading)
-          .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       } else {
         HStack(spacing: 6) {
           if loading { ProgressView().controlSize(.mini) } else { Image(systemName: failed ? "exclamationmark.triangle" : isImage ? "photo" : "doc") }
@@ -33,7 +33,7 @@ struct FileChip: View {
         .foregroundStyle(failed ? .secondary : .primary)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.card))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.card))
       }
     }
     .buttonStyle(.plain)
@@ -65,7 +65,7 @@ struct TaskChip: View {
     if let task = store.tasks.first(where: { $0.id == taskId }) {
       Button { open = TaskRef(id: task.id) } label: {
         ChatCardShell(symbol: "checklist", label: "Task") {
-          Text(task.title).font(.system(size: 16, weight: .semibold)).multilineTextAlignment(.leading)
+          Text(task.title).font(.system(size: 15, weight: .semibold)).multilineTextAlignment(.leading)
           HStack(spacing: 8) {
             Text(store.taskState(task))
               .font(.system(size: 12, weight: .semibold))
@@ -74,7 +74,7 @@ struct TaskChip: View {
             if let agent = store.agent(task.toAgentId ?? "") {
               HStack(spacing: 5) {
                 AgentAvatar(agent: agent, size: 18, showStatus: false)
-                Text(agent.name).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(1)
+                Text(agent.name).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
               }
             }
           }
@@ -98,14 +98,14 @@ struct RoutineChip: View {
     if let routine = store.routines.first(where: { $0.id == routineId }) {
       let card = ChatCardShell(symbol: "list.bullet.clipboard", label: "Routine") {
         HStack(spacing: 8) {
-          Text(routine.name).font(.system(size: 16, weight: .semibold)).lineLimit(2)
+          Text(routine.name).font(.system(size: 15, weight: .semibold)).lineLimit(2)
           if routine.status == "learning" {
             Text("Learning").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.blue)
               .padding(.horizontal, 9).padding(.vertical, 3).background(Capsule().fill(Palette.control))
           }
         }
         if let schedule = routine.schedule {
-          Label(describeCron(schedule), systemImage: "calendar.badge.clock").font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(1)
+          Label(describeCron(schedule), systemImage: "calendar.badge.clock").font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
         }
       }
       if let agent = store.agent(routine.agentId) {
@@ -128,10 +128,10 @@ struct DiscussionCard: View {
   var body: some View {
     if let d = store.discussions[discussionId] {
       ChatCardShell(symbol: "bubble.left.and.bubble.right", label: "Discussion") {
-        Text(title(d)).font(.system(size: 16, weight: .semibold)).multilineTextAlignment(.leading)
+        Text(title(d)).font(.system(size: 15, weight: .semibold)).multilineTextAlignment(.leading)
         if d.live {
           Text(d.status == "summarizing" ? "Writing the decision" : "Round \(max(d.round, 1)) of \(d.rounds)")
-            .font(.system(size: 14)).foregroundStyle(Palette.muted)
+            .font(.system(size: 13)).foregroundStyle(Palette.muted)
           FlowRow(ids: d.status == "summarizing" ? [d.moderatorId] : d.participants, progress: d.progress ?? [])
           if store.role != "guest" {
             Button {
@@ -140,7 +140,7 @@ struct DiscussionCard: View {
                 try? await store.stopDiscussion(d.id)
                 stopping = false
               }
-            } label: { Label("Stop", systemImage: "stop.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.red) }
+            } label: { Label("Stop", systemImage: "stop.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.red) }
               .disabled(stopping)
           }
         }
@@ -225,7 +225,7 @@ struct ContextCard: View {
     let fraction = used.flatMap { u in window.map { min(1, Double(u) / Double(max($0, 1))) } }
     ChatCardShell(symbol: "gauge.with.dots.needle.33percent", label: "Context window") {
       HStack(alignment: .firstTextBaseline) {
-        Text(Self.words(fraction)).font(.system(size: 16, weight: .semibold))
+        Text(Self.words(fraction)).font(.system(size: 15, weight: .semibold))
         Spacer(minLength: 8)
         if let model = usage?.model { Text(model).font(.caption).foregroundStyle(Palette.muted).lineLimit(1) }
       }
@@ -233,7 +233,7 @@ struct ContextCard: View {
         ProgressView(value: fraction).tint(fraction > 0.85 ? .red : fraction > 0.6 ? .orange : Palette.online)
       }
       Text(used.map { "\(Self.tokens($0))\(window.map { " of \(Self.tokens($0))" } ?? "") used. Older messages are summarized when it fills up." } ?? "This shows up after its first reply here.")
-        .font(.system(size: 14)).foregroundStyle(Palette.muted)
+        .font(.system(size: 13)).foregroundStyle(Palette.muted)
       if let shrink, used != nil, store.role != "guest" {
         Button(shrink.name == "compact" ? "Compact" : "Compress") { run(shrink) }
           .buttonStyle(.plain).font(.system(size: 15, weight: .semibold))

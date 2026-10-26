@@ -140,7 +140,7 @@ struct DeviceShelfList: View {
           if d.online { Button { onRefresh(d) } label: { Label("Look again", systemImage: "arrow.clockwise").font(.system(size: 13)).foregroundStyle(Palette.muted) }.buttonStyle(.plain) }
         }
         if d.items.isEmpty {
-          Text("\(d.nodeName): Nothing found in its harnesses.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+          Text("\(d.nodeName): Nothing found in its harnesses.").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
         } else {
           CardGroup { ForEach(shown(d)) { item in ShelfRow(device: d, item: item, onBring: { onBring(d, item) }) } }
         }
@@ -182,7 +182,7 @@ struct SkillInstallSheet: View {
         }
         if store.agents.isEmpty { MarketRow(title: "No helpers yet", subtitle: "It goes to the organization, ready for the next one.") }
       }
-      Text("You can change this any time from the skill.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      Text("You can change this any time from the skill.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       InlineError(error: action.error)
       MarketPrimaryButton(title: title, busy: action.busy) {
         action.run {
@@ -216,7 +216,7 @@ struct BringAllSheet: View {
             MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } }), disabled: busy != nil) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
           }
         }
-        Text("You can give them to more helpers later. Apps that need a sign-in ask once, here in Wisp.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+        Text("You can give them to more helpers later. Apps that need a sign-in ask once, here in Wisp.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       }
       if !later.isEmpty {
         MarketLabel("Need a key")

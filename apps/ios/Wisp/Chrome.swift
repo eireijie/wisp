@@ -7,7 +7,7 @@ import SwiftUI
 /** A round glass button's face: a line icon in a circle (52pt in the design). Use it as a Button or Menu label. */
 struct CircleLabel: View {
   var symbol: String
-  var size: CGFloat = 52
+  var size: CGFloat = 44
   var weight: Font.Weight = .medium
 
   var body: some View {
@@ -44,7 +44,7 @@ extension View {
 struct CircleButton: View {
   var symbol: String
   var label: String
-  var size: CGFloat = 52
+  var size: CGFloat = 44
   var id: String? = nil
   var action: () -> Void
 
@@ -59,7 +59,7 @@ struct CircleButton: View {
 /** Your initials in a glass circle: opens settings. */
 struct ProfileCircle: View {
   @Environment(Store.self) private var store
-  var size: CGFloat = 52
+  var size: CGFloat = 44
   /** false inside a navigation bar, which already draws its buttons on glass */
   var glass = true
 
@@ -82,7 +82,7 @@ struct ProfileCircle: View {
   }
 }
 
-/** The top of a page that has no navigation bar: a circle on each side, an optional centered pill or title between. */
+/** The top of a page that has no navigation bar: a 44pt circle on each side, an optional centered pill or title between. */
 struct TopBar<Leading: View, Center: View, Trailing: View>: View {
   @ViewBuilder var leading: Leading
   @ViewBuilder var center: Center
@@ -107,10 +107,10 @@ struct NamePill<Icon: View>: View {
   var body: some View {
     HStack(spacing: 10) {
       icon
-      Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+      Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
     }
-    .padding(.leading, 14).padding(.trailing, 20)
-    .frame(height: 52)
+    .padding(.leading, 12).padding(.trailing, 18)
+    .frame(height: 44)
     .glassPill()
     .contentShape(Capsule())
   }
@@ -123,7 +123,7 @@ struct SheetHeader: View {
 
   var body: some View {
     ZStack {
-      Text(title).font(.system(size: 19, weight: .semibold)).foregroundStyle(Palette.text)
+      Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
       HStack {
         CircleButton(symbol: "xmark", label: "Close", action: close)
         Spacer()
@@ -135,7 +135,7 @@ struct SheetHeader: View {
   }
 }
 
-/** A grouped card of rows with hairlines between them, 24pt corners. */
+/** A grouped card of rows with hairlines between them, 12pt corners and a 1px border. */
 struct CardGroup<Content: View>: View {
   @ViewBuilder var content: Content
 
@@ -143,14 +143,16 @@ struct CardGroup<Content: View>: View {
     VStack(spacing: 0) {
       Group(subviews: content) { subviews in
         ForEach(subviews.indices, id: \.self) { i in
-          if i > 0 { Rectangle().fill(Palette.separator).frame(height: 1).padding(.leading, 18) }
+          if i > 0 { Rectangle().fill(Palette.separator).frame(height: 1).padding(.leading, 14) }
           subviews[i]
         }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
     .clipShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -167,15 +169,15 @@ struct RowLabel<Leading: View>: View {
     HStack(spacing: 12) {
       leading
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17)).foregroundStyle(tint)
-        if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+        Text(title).font(.system(size: 15)).foregroundStyle(tint)
+        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
       Spacer(minLength: 8)
-      if let value { Text(value).font(.system(size: 17)).foregroundStyle(Palette.faint).lineLimit(1) }
+      if let value { Text(value).font(.system(size: 15)).foregroundStyle(Palette.faint).lineLimit(1) }
       if chevron { Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
     }
-    .padding(.horizontal, 18)
-    .frame(minHeight: subtitle == nil ? 54 : 62)
+    .padding(.horizontal, 14)
+    .frame(minHeight: subtitle == nil ? 48 : 56)
     .contentShape(Rectangle())
   }
 }
@@ -191,7 +193,7 @@ struct CardCaption: View {
   var text: String
   init(_ text: String) { self.text = text }
   var body: some View {
-    Text(text).font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 18).frame(maxWidth: .infinity, alignment: .leading)
+    Text(text).font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 18).frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
@@ -201,7 +203,7 @@ struct TeamGhosts: View {
   var agents: [Agent]
   /** keeps the stand-in ghosts the same from run to run when a team has fewer than two agents */
   var seed: String
-  var size: CGFloat = 56
+  var size: CGFloat = 32
 
   var body: some View {
     let first = size * 0.71, second = size * 0.75
@@ -223,7 +225,7 @@ struct TeamGhosts: View {
 /** One agent's ghost at the size a chat row uses. */
 struct SoloGhost: View {
   var agent: Agent
-  var size: CGFloat = 56
+  var size: CGFloat = 32
   var body: some View {
     AgentAvatar(agent: agent, size: size, showStatus: false)
       .frame(width: size * 1.14, height: size, alignment: .leading)

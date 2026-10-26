@@ -83,6 +83,7 @@ struct AddComputerView: View {
             TextField(namePlaceholder, text: $name).autocorrectionDisabled()
               .padding(.horizontal, 18).frame(minHeight: 54)
               .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
               .accessibilityIdentifier("give-name")
 
             DisclosureGroup(isExpanded: $more) {
@@ -92,7 +93,7 @@ struct AddComputerView: View {
                   disabled: orgoConfigured != true)
                 if kind == .orgo {
                   TextField("Or one you already have in Orgo (its ID)", text: $existingOrgo).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .padding(.horizontal, 14).frame(height: 46).background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.field))
+                    .padding(.horizontal, 14).frame(height: 46).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.field))
                 }
                 if kind != .device, existingOrgo.trimmingCharacters(in: .whitespaces).isEmpty {
                   Picker("Size and resources", selection: $size) { ForEach(ComputerSize.allCases) { Text($0.label(for: kind)).tag($0) } }.pickerStyle(.menu)
@@ -163,7 +164,7 @@ struct AddComputerView: View {
       HStack(alignment: .top, spacing: 12) {
         Image(systemName: symbol).font(.system(size: 18)).foregroundStyle(Palette.text).frame(width: 28)
         VStack(alignment: .leading, spacing: 2) {
-          Text(title).font(.system(size: 16, weight: .medium)).foregroundStyle(Palette.text)
+          Text(title).font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text)
           Text(body).font(.footnote).foregroundStyle(Palette.faint)
           if let note { Text(note).font(.footnote).foregroundStyle(Color.orange) }
         }
@@ -172,6 +173,7 @@ struct AddComputerView: View {
       }
       .padding(14).frame(maxWidth: .infinity, alignment: .leading)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

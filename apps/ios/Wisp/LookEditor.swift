@@ -108,8 +108,8 @@ struct LookEditor: View {
                 Text(label(value)).font(.system(size: 13, weight: .medium)).foregroundStyle(selected ? Color(light: 0xFFFFFF, dark: 0x111113) : Palette.text).lineLimit(1)
               }
               .padding(.horizontal, 10).padding(.vertical, 8).frame(minWidth: 76)
-              .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(selected ? Palette.text : Palette.card))
-              .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+              .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(selected ? Palette.text : Palette.card))
+              .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(title): \(label(value))")

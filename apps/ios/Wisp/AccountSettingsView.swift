@@ -19,12 +19,13 @@ struct ProfileSettingsView: View {
       VStack(spacing: 6) {
         InitialsDot(name: store.me?.preferredName ?? store.me?.name ?? "", size: 84)
         Text(store.me?.name ?? "").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.text).padding(.top, 6)
-        Text("\(roleName) · \(store.workspace?.name ?? "Wisp")").font(.system(size: 14)).foregroundStyle(Palette.faint)
+        Text("\(roleName) · \(store.workspace?.name ?? "Wisp")").font(.system(size: 13)).foregroundStyle(Palette.faint)
       }.padding(.vertical, 4)
       if store.role == "guest" {
         Text("You're a guest in \(store.workspace?.name ?? "this organization"). You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.")
           .font(.system(size: 15)).foregroundStyle(Palette.muted).padding(16).frame(maxWidth: .infinity, alignment: .leading)
           .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       }
       CardGroup {
         FieldRow(title: "Full name", text: $name, contentType: .name, id: "profile-name")
@@ -34,7 +35,7 @@ struct ProfileSettingsView: View {
       CardGroup {
         FieldRow(title: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress, id: "profile-email")
         HStack {
-          Text("Time zone").font(.system(size: 17)).foregroundStyle(Palette.text)
+          Text("Time zone").font(.system(size: 15)).foregroundStyle(Palette.text)
           Spacer(minLength: 8)
           Picker("Time zone", selection: $timezone) {
             Text("Not set (agents see UTC)").tag("")
@@ -80,8 +81,8 @@ struct SecuritySettingsView: View {
         ForEach(store.sessions) { session in
           HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-              Text(session.current == true ? "This device" : device(session)).font(.system(size: 17)).foregroundStyle(Palette.text)
-              Text(detail(session)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+              Text(session.current == true ? "This device" : device(session)).font(.system(size: 15)).foregroundStyle(Palette.text)
+              Text(detail(session)).font(.system(size: 13)).foregroundStyle(Palette.faint)
             }
             Spacer(minLength: 8)
             if session.current != true {

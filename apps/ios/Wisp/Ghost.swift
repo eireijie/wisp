@@ -93,7 +93,7 @@ struct PersonAvatar: View {
   var size: CGFloat = 36
   var body: some View {
     Text(initials)
-      .font(.system(size: size * 0.38, weight: .semibold, design: .rounded))
+      .font(.system(size: size * 0.38, weight: .semibold))
       .foregroundStyle(Color(.systemBackground))
       .frame(width: size, height: size)
       .background(Circle().fill(Color.primary.opacity(0.85)))

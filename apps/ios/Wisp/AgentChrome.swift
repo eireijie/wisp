@@ -19,7 +19,7 @@ struct AgentFrame<Trailing: View, Content: View>: View {
     VStack(spacing: 0) {
       ZStack {
         VStack(spacing: 1) {
-          Text(title).font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+          Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
           if let subtitle, !subtitle.isEmpty { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1) }
         }
         .padding(.horizontal, 72)
@@ -86,8 +86,8 @@ struct ChoiceRow<Leading: View>: View {
       HStack(spacing: 12) {
         leading
         VStack(alignment: .leading, spacing: 2) {
-          Text(title).font(.system(size: 17)).foregroundStyle(tint).multilineTextAlignment(.leading)
-          if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading) }
+          Text(title).font(.system(size: 15)).foregroundStyle(tint).multilineTextAlignment(.leading)
+          if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading) }
         }
         Spacer(minLength: 8)
         Radio(on: selected)
@@ -135,8 +135,8 @@ struct SwitchRow: View {
   var body: some View {
     Toggle(isOn: $isOn) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
-        if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+        Text(title).font(.system(size: 15)).foregroundStyle(Palette.text)
+        if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
     }
     .tint(Palette.blue)
@@ -174,6 +174,7 @@ struct FieldCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, 18).padding(.vertical, 12)
     .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -187,7 +188,7 @@ struct PillLabel: View {
   var body: some View {
     Group {
       if busy { ProgressView().tint(kind == .primary ? Color(light: 0xFFFFFF, dark: 0x111113) : Palette.text) }
-      else { Text(title).font(.system(size: 17, weight: kind == .primary ? .semibold : .medium)) }
+      else { Text(title).font(.system(size: 15, weight: kind == .primary ? .semibold : .medium)) }
     }
     .foregroundStyle(foreground)
     .frame(maxWidth: .infinity).frame(height: 56)
@@ -233,7 +234,7 @@ struct SmallPill: View {
     Button(action: action) {
       HStack(spacing: 6) {
         if let symbol { Image(systemName: symbol).font(.system(size: 14, weight: .medium)) }
-        Text(title).font(.system(size: 16, weight: .medium))
+        Text(title).font(.system(size: 15, weight: .medium))
       }
       .foregroundStyle(Palette.text)
       .padding(.horizontal, 20).frame(height: 40)
@@ -338,6 +339,7 @@ struct AgentCard<Content: View>: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 18).padding(.vertical, 14)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
   }
 }
 
@@ -346,7 +348,7 @@ struct AgentError: View {
   var text: String?
   var body: some View {
     if let text, !text.isEmpty {
-      Text(text).font(.system(size: 14)).foregroundStyle(Palette.red).padding(.horizontal, 18)
+      Text(text).font(.system(size: 13)).foregroundStyle(Palette.red).padding(.horizontal, 18)
         .frame(maxWidth: .infinity, alignment: .leading).accessibilityLabel("Error: \(text)")
     }
   }
@@ -369,7 +371,7 @@ struct AgentConfirm: View {
       Spacer(minLength: 0)
       GhostView(look: agent.settings?.appearance, seed: agent.handle, size: 96, animate: false)
         .frame(width: 96, height: 96).accessibilityHidden(true)
-      Text(agent.name).font(.system(size: 26, weight: .bold)).foregroundStyle(Palette.text)
+      Text(agent.name).font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
       Text("@\(agent.handle) · \(HarnessChoice.label(agent.harness))").font(.system(size: 15)).foregroundStyle(Palette.faint)
       Text(title).font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.text).padding(.top, 14)
       Text(message).font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).padding(.horizontal, 12)
