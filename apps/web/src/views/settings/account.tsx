@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Bell, Check, Laptop, LogOut, Moon, Smartphone, Sun, SunMoon, Volume2 } from "lucide-react";
 import { api } from "../../api.ts";
 import { useStore, usePrefs } from "../../store.ts";
-import { href } from "../../router.ts";
 import { THEMES, useAppearance, type ModeChoice } from "../../theme.ts";
 import { currentSubscription, disablePush, enablePush, pushSupported } from "../../push.ts";
 import { androidPush, useAndroidPush } from "../../push-android.ts";
@@ -67,7 +66,7 @@ export function ProfilePage() {
   const roleName = me.role === "owner" ? "Owner" : me.role === "guest" ? "Guest" : "Member";
   return (
     <>
-      <PageHeader title="Profile">How you appear to people and agents in {me.workspace.name}.</PageHeader>
+      <PageHeader title="Profile" />
       {me.role === "guest" && <p className="mb-6 rounded-[20px] bg-card border border-line px-[18px] py-3.5 text-[15px] leading-snug text-muted">You're a guest in {me.workspace.name}. You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.</p>}
       <form onSubmit={save} className="space-y-4">
         <div className="flex items-center gap-4 mb-2">
@@ -92,7 +91,6 @@ export function ProfilePage() {
             <input className={inline} value={f.preferredName} onChange={(e) => setF({ ...f, preferredName: e.target.value })} placeholder={me.user.name.split(" ")[0]} maxLength={40} aria-label="Preferred name" />
           </label>
         </Card>
-        <p className="px-1 text-[13px] text-faint">Agents use your preferred name when they talk to you and when they remember things about you.</p>
         <Card>
           <label className="px-[18px] min-h-[54px] flex items-center gap-4">
             <span className="text-[15px] w-32 shrink-0">Email</span>
@@ -139,13 +137,6 @@ export function ProfilePage() {
           <SavedNote shown={saved} />
         </div>
       </form>
-      <p className="mt-10 text-sm text-muted">
-        What agents have learned about you lives on{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "about" })}>
-          About you
-        </a>
-        , where you can fix or delete any of it.
-      </p>
     </>
   );
 }

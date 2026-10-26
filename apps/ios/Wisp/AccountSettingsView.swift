@@ -31,7 +31,6 @@ struct ProfileSettingsView: View {
         FieldRow(title: "Full name", text: $name, contentType: .name, id: "profile-name")
         FieldRow(title: "Preferred name", subtitle: "What agents call you", text: $preferred, contentType: .nickname, id: "profile-preferred")
       }
-      CardHint("Agents use your preferred name when they talk to you.")
       CardGroup {
         FieldRow(title: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress, id: "profile-email")
         HStack {
