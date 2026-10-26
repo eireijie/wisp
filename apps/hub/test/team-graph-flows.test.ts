@@ -742,6 +742,16 @@ describe("what people can reach", () => {
     expect((await flowsOf(privateTeam.id)).length).toBe(1);
   });
 
+  it("someone who can't see a team a step already hands to can still edit the rest of the chart", async () => {
+    const steps = (prompt: string) => [step("a", "atlas", { prompt }), step("tell", null, { kind: "handoff", inputs: ["a"], handoffTo: privateTeam.id, waitForReply: true })];
+    const ch = (await api("POST", "/api/channels", { name: "keeps-handoff", settings: { team: team(steps("one")) } }, alice)).data;
+    const edit = await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: team(steps("two")) } }, bob);
+    expect(edit.status).toBe(200);
+    // pointing a different step at the private team is still refused
+    const other = await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: team([...steps("two"), step("t2", null, { kind: "handoff", inputs: ["tell"], handoffTo: privateTeam.id })]) } }, bob);
+    expect(other.status).toBe(400);
+  });
+
   it("a draft is only for people who can see the chat it was asked in, and the brief leaves out private teams", async () => {
     const started = (await api<TeamDraft>("POST", "/api/team-drafts", { description: "Pixel does a thing", agentId: agents.pixel.id }, alice)).data;
     expect(hub.store.task(started.id)!.brief).toMatch(/alice-only/);

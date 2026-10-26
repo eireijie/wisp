@@ -562,12 +562,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000), team: CHANNEL_TEAM.nullable() }).partial();
   const ours = (c: Caller, agentId: string) => store.agent(agentId)?.workspaceId === c.workspaceId;
   /** What's wrong with the settings (an agent from elsewhere, a chart that doesn't work), or null. */
-  const settingsProblem = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined): string | null => {
+  const settingsProblem = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined, current?: ChannelTeam | null): string | null => {
     if (settings?.defaultAgentId && !ours(c, settings.defaultAgentId)) return "agent not found";
     const team = settings?.team;
     if (!team) return null;
     if (team.nodes.some((n) => !ours(c, n.agentId)) || (team.reportsTo && !ours(c, team.reportsTo)) || team.roles?.some((r) => r.agentId && !ours(c, r.agentId)) || team.steps?.some((s) => s.agentId && !ours(c, s.agentId))) return "agent not found";
-    const handoff = team.steps?.find((s) => s.handoffTo && !channelVisible(c, s.handoffTo!));
+    // a hand-off someone else set up stays as it was; only new or changed ones must be to a team this person can see
+    const handoff = team.steps?.find((s) => s.handoffTo && !channelVisible(c, s.handoffTo!) && current?.steps?.find((o) => o.id === s.id)?.handoffTo !== s.handoffTo);
     if (handoff) return "a step hands work to a team that isn't here";
     return team.nodes.length || !(team.folder || team.repo) ? teamProblem(team) : null;
   };
@@ -632,7 +633,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       if (onTeam.size !== sent.size || [...sent].some((a) => !onTeam.has(a))) return reply.code(409).send({ error: "This team runs on roles and steps. Change who's on it from the channel's Team tab in the web app." });
     }
     if (body.settings?.team) body.settings.team = withChart(keepTeamExtras(body.settings.team, ch.settings.team));
-    const problem = settingsProblem(c, body.settings);
+    const problem = settingsProblem(c, body.settings, ch.settings.team);
     if (problem) return reply.code(400).send({ error: problem });
     if (body.private && !ch.private) {
       const why = protectedReason(c, ch, "made private");
