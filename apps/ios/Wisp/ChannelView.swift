@@ -352,7 +352,9 @@ struct Composer: View {
   private var blocked: Bool { empty || sending || uploading > 0 }
 
   private var caret: Int {
-    if let selection, case .selection(let range) = selection.indices {
+    // The selection is only updated after the text changes, so for a moment its index can point past the end of a shorter text
+    // (or into another string, after a send or a draft load); measuring from it would trap.
+    if let selection, case .selection(let range) = selection.indices, range.lowerBound <= text.endIndex {
       return text.distance(from: text.startIndex, to: range.lowerBound)
     }
     return text.count
