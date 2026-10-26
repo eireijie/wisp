@@ -576,7 +576,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   };
   /** A stepped team's plain chart always follows its roles, so the rest of Wisp sees who's on it. */
   const withChart = <T extends z.infer<typeof CHANNEL_TEAM>>(team: T): T => (hasSteps(team) ? { ...team, ...chartFromSteps(team, team.nodes) } : team);
-  /** Channels that can't be archived, made private or deleted: where everyone lands. */
+  /** #general stays public, so everyone in the workspace can still find it. It can be archived or deleted like any other channel. */
   const protectedReason = (_c: Caller, ch: { id: string; name: string }, what: string) => (ch.name === "general" ? `#general can't be ${what}: everyone in the workspace lands there` : null);
   /** A team that just got a memory folder gets a starter brief there. */
   const briefFor = async (c: Caller, channelName: string, folder: string | undefined) => {
@@ -673,14 +673,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     });
   }
 
-  /** Delete a channel and everything said in it (and its team). Not DMs or #general. */
+  /** Delete a channel and everything said in it (and its team). Not DMs. */
   app.delete("/api/channels/:id", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
-    const why = protectedReason(c, ch, "deleted");
-    if (why) return reply.code(409).send({ error: why });
     // stop what's going on in it first, so nothing finishes into a channel that's gone
     for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
     for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);
@@ -721,8 +719,6 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ archived: z.boolean().default(true) }), req.body ?? {}, reply);
     if (!body) return;
     if (body.archived) {
-      const why = protectedReason(c, ch, "archived");
-      if (why) return reply.code(409).send({ error: why });
       // nothing keeps working into a channel nobody's looking at
       for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
       for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);

@@ -19,7 +19,7 @@ export function ChannelIcon({ channel, size = 14, className = "text-faint" }: { 
   return channel.private ? <Lock size={size} className={className} aria-label="Private" /> : <Hash size={size} className={className} />;
 }
 
-/** #general stays public and can't be archived or deleted. */
+/** #general stays public (it can be archived or deleted like any other channel). */
 export function isProtected(channel: ChannelInfo) {
   return channel.name === "general";
 }
@@ -421,10 +421,15 @@ export interface ChannelMember {
 
 export type ChannelSettingsTab = "about" | "team" | "agents" | "members" | "pins" | "danger";
 
+/** Where to land when no channel is picked: #general, or the first open channel if #general is archived or deleted. */
+export function landingChannel(channels: ChannelInfo[]) {
+  const open = channels.filter((c) => c.kind === "channel" && !c.archivedAt);
+  return open.find((c) => c.name === "general") ?? open.find((c) => c.joined) ?? channels.find((c) => c.kind === "channel" && c.name === "general");
+}
+
 /** Back to #general (after leaving or deleting the channel you were in). */
 function toGeneral() {
-  const general = useStore.getState().channels.find((c) => c.kind === "channel" && c.name === "general");
-  go({ view: "chat", channelId: general?.id ?? null, threadId: null });
+  go({ view: "chat", channelId: landingChannel(useStore.getState().channels)?.id ?? null, threadId: null });
 }
 
 /** Leave a channel; if you were looking at it, go back to #general. */
@@ -440,7 +445,7 @@ export function ChannelSettings({ channel: initial, tab: initialTab = "about", o
   // follow the live channel, so pins and members update while the dialog is open
   const channel = useStore((s) => s.channels.find((c) => c.id === initial.id)) ?? initial;
   const canManage = role === "owner" || role === "member";
-  const canRemove = canManage && !isProtected(channel);
+  const canRemove = canManage;
   const [tab, setTab] = useState<ChannelSettingsTab>(initialTab === "danger" && !canRemove ? "about" : initialTab);
   // the team being edited lives here, so it survives a trip to the New agent dialog
   const agents = useStore((s) => s.agents);
@@ -1125,7 +1130,7 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           { label: "Agents", icon: <Bot size={14} />, onSelect: () => setSettings("agents") },
           { label: "Members", icon: <Users size={14} />, onSelect: () => setSettings("members") },
           ...(channel.joined && channel.name !== "general" ? ["divider" as const, { label: "Leave channel", icon: <LogOut size={14} />, onSelect: () => void leaveChannel(channel), danger: true }] : []),
-          ...(role !== "guest" && !isProtected(channel) && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
+          ...(role !== "guest" && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
         ]}
       />
       {/* the sidebar row only shows this button on hover (opacity-0 otherwise), which would hide the dialog too: draw it on the page */}
