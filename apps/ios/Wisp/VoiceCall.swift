@@ -16,6 +16,52 @@ struct CallState: Equatable {
   var agentCaption = ""
   var error = ""
   var longWork = false
+  /** a short line for the tool the agent is using ("Reading main.ts"), empty when it is just thinking */
+  var activity = ""
+
+  /** What the call is doing right now, for the screen to show. */
+  var phase: CallPhase {
+    if !error.isEmpty || needsMic { return .error }
+    if !ready { return muted ? .muted : .connecting }
+    if muted { return .muted }
+    if speaking { return .speaking }
+    if talking { return .hearing }
+    if waiting { return activity.isEmpty ? .thinking : .working }
+    return .listening
+  }
+}
+
+enum CallPhase: String, Equatable { case connecting, muted, listening, hearing, thinking, working, speaking, error }
+
+/** One agent run event for the call (the hub's run_event, trimmed to what a call needs). */
+struct CallRunEvent {
+  var runId: String?
+  var agentId: String
+  var channelId: String
+  var threadId: String?
+  var type: String
+  var text: String?
+  var tool: String?
+  var file: String?
+}
+
+enum CallActivity {
+  /** "Reading main.ts", "Searching the web": a short line for the tool the agent just started. */
+  static func line(tool name: String, file: String?) -> String {
+    var t = name.lowercased()
+    for prefix in ["mcp__wisp__", "mcp__warren__"] where t.hasPrefix(prefix) { t.removeFirst(prefix.count) }
+    let base = file.flatMap { $0.split(whereSeparator: { $0 == "/" }).last.map(String.init) }
+    if t.hasPrefix("computer_") || t == "computer" { return "Using its computer" }
+    if t.hasPrefix("memory_") || t.hasPrefix("vault_") { return t.contains("remember") || t.contains("write") || t.contains("append") ? "Updating memory" : "Searching memory" }
+    if ["edit", "multiedit", "write", "apply_patch", "str_replace", "notebookedit"].contains(t) { return base.map { "Editing \($0)" } ?? "Editing files" }
+    if ["read", "view", "cat", "read_file", "open_file"].contains(t) { return base.map { "Reading \($0)" } ?? "Reading files" }
+    if ["glob", "grep", "ls", "find", "list_dir"].contains(t) { return "Looking through files" }
+    if ["bash", "shell", "exec", "exec_command", "run_command", "terminal"].contains(t) { return "Running a command" }
+    if t.contains("search") { return "Searching the web" }
+    if t.contains("fetch") || t.contains("browse") || t.contains("navigate") { return "Browsing" }
+    if t.hasPrefix("task_") { return "Updating tasks" }
+    return "Working"
+  }
 }
 
 struct ListenCallbacks {
@@ -66,6 +112,10 @@ final class VoiceCallSession {
   @ObservationIgnored private var capture = 0
   @ObservationIgnored private var speech = 0
   @ObservationIgnored private var spoken = ""
+  @ObservationIgnored private var streamed = ""
+  @ObservationIgnored private var streamRun = ""
+  /** the first sentence of the reply, spoken while the agent is still working */
+  @ObservationIgnored private var early = ""
   @ObservationIgnored private var spokenAt = Date.distantPast
   @ObservationIgnored private var filler: Task<Void, Never>?
   @ObservationIgnored private var long: Task<Void, Never>?
@@ -106,6 +156,7 @@ final class VoiceCallSession {
     if stopped { return }
     var next = state
     change(&next)
+    if !next.waiting { next.activity = "" }
     if next != state { state = next }
   }
 
@@ -176,7 +227,7 @@ final class VoiceCallSession {
     filler?.cancel(); long?.cancel()
     filler = Task { [weak self, timing] in
       try? await Task.sleep(for: timing.filler)
-      guard !Task.isCancelled, let self, self.pending > 0, !self.state.talking, !self.state.speaking else { return }
+      guard !Task.isCancelled, let self, self.pending > 0, self.early.isEmpty, !self.state.talking, !self.state.speaking else { return }
       await self.say("On it…")
     }
     long = Task { [weak self, timing] in
@@ -194,7 +245,8 @@ final class VoiceCallSession {
     if text.isEmpty || stopped { return }
     interrupt()
     pending += 1
-    update { $0.userCaption = text; $0.agentCaption = ""; $0.talking = false; $0.waiting = true; $0.longWork = false; $0.error = "" }
+    streamed = ""; streamRun = ""; early = ""
+    update { $0.userCaption = text; $0.agentCaption = ""; $0.activity = ""; $0.talking = false; $0.waiting = true; $0.longWork = false; $0.error = "" }
     startTimers()
     do { try await sendText(text) }
     catch {
@@ -247,7 +299,32 @@ final class VoiceCallSession {
     if let failed = failure(newest) { interrupt(); update { $0.error = failed }; return }
     let text = VoiceText.spokenReply(newest.body)
     let line = text.isEmpty ? "I've put the details in our chat." : text
-    if state.talking { update { $0.agentCaption = line } } else { Task { await self.say(line) } }
+    if state.talking { update { $0.agentCaption = line } } else { sayReply(line) }
+  }
+
+  /** Speak a finished reply, skipping the part already said while it streamed. */
+  private func sayReply(_ text: String) {
+    let said = early; early = ""
+    let rest = !said.isEmpty && text.hasPrefix(said) ? String(text.dropFirst(said.count)).trimmingCharacters(in: .whitespacesAndNewlines) : text
+    if !rest.isEmpty { Task { await self.say(rest) } }
+  }
+
+  /** The agent's run while it happens: what tool it is using, and its first sentence as soon as it is whole. */
+  func event(_ e: CallRunEvent) {
+    if stopped || !state.ready || pending == 0 || e.agentId != agentId || e.threadId != nil { return }
+    switch e.type {
+    case "tool_call": update { $0.activity = CallActivity.line(tool: e.tool ?? "", file: e.file) }
+    case "tool_result": update { $0.activity = "" }
+    case "text":
+      if streamRun != (e.runId ?? "") { streamed = ""; streamRun = e.runId ?? "" }
+      streamed = String((streamed + (e.text ?? "")).prefix(40_000))
+      let excerpt = VoiceText.spokenReply(streamed)
+      if early.isEmpty, !state.talking, !state.speaking, let first = VoiceText.firstSentence(excerpt) {
+        early = first
+        Task { await self.say(first) }
+      } else if !state.speaking { update { $0.agentCaption = excerpt; $0.activity = "" } }
+    default: break
+    }
   }
 
   /** The connection to the hub dropped. The agent keeps working; reconnecting resumes the call. */

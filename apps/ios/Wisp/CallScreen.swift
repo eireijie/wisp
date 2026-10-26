@@ -165,6 +165,7 @@ struct CallScreen: View {
         refresh: { try? await store.loadMessages(channelId) })
       if Task.isCancelled { call.stop(); return }
       session = call
+      store.onCallRunEvent = { [weak call] in call?.event($0) }
       engine = CallEngines.engineLabel(prefs)
       if store.connected { await call.start() } else { call.disconnect() }
     } catch { loadError = error.localizedDescription }
@@ -176,6 +177,7 @@ struct CallScreen: View {
 
   private func end() {
     session?.stop(); session = nil
+    store.onCallRunEvent = nil
     CallAudio.deactivate()
     UIApplication.shared.isIdleTimerDisabled = false
   }

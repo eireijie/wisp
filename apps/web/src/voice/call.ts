@@ -1,13 +1,39 @@
 import type { ClientEvent, Message } from "@wisp/core";
 import type { ListenCallbacks, VoiceListener, VoiceSpeaker } from "./providers.ts";
+import { activityPhrase } from "../components/agentActivity.ts";
 import { isSpeechEcho, spokenReply } from "./text.ts";
+
+/** What the call is doing right now, for the screen to show. One value, never a combination. */
+export type CallPhase = "connecting" | "muted" | "listening" | "hearing" | "thinking" | "working" | "speaking" | "error";
+export function callPhase(s: Pick<CallState, "ready" | "muted" | "speaking" | "talking" | "waiting" | "error" | "needsMic" | "activity">): CallPhase {
+  if (s.error || s.needsMic) return "error";
+  if (!s.ready) return s.muted ? "muted" : "connecting";
+  if (s.muted) return "muted";
+  if (s.speaking) return "speaking";
+  if (s.talking) return "hearing";
+  if (s.waiting) return s.activity ? "working" : "thinking";
+  return "listening";
+}
+
+/** "Reading main.ts", "Searching the web": a short line for the tool the agent just started. */
+export function toolLine(name: string, input?: unknown): string {
+  const now = activityPhrase(name);
+  const text = now.charAt(0).toUpperCase() + now.slice(1);
+  const i = (input ?? {}) as Record<string, unknown>;
+  const path = typeof i.file_path === "string" ? i.file_path : typeof i.path === "string" ? i.path : "";
+  const file = path.split(/[\\/]/).filter(Boolean).at(-1);
+  if (file && /^(reading|editing) files$/.test(now)) return `${now.startsWith("r") ? "Reading" : "Editing"} ${file}`.slice(0, 80);
+  return text;
+}
 
 export interface CallState {
   ready: boolean; muted: boolean; speaking: boolean; talking: boolean; waiting: boolean;
   needsMic: boolean; startedAt: number | null;
   micLevel: number; speechLevel: number; userCaption: string; agentCaption: string; error: string; longWork: boolean;
+  /** a short line for the tool the agent is using, empty when it is just thinking */
+  activity: string; phase: CallPhase;
 }
-export const INITIAL_CALL: CallState = { ready: false, muted: false, speaking: false, talking: false, waiting: false, needsMic: false, startedAt: null, micLevel: 0, speechLevel: 0, userCaption: "", agentCaption: "", error: "", longWork: false };
+export const INITIAL_CALL: CallState = { ready: false, muted: false, speaking: false, talking: false, waiting: false, needsMic: false, startedAt: null, micLevel: 0, speechLevel: 0, userCaption: "", agentCaption: "", error: "", longWork: false, activity: "", phase: "connecting" };
 
 /** Owns one call. No browser or React dependency, so late callbacks and interruptions are testable. */
 export class VoiceCall {
@@ -18,6 +44,8 @@ export class VoiceCall {
   private capture = 0;
   private streamed = "";
   private streamRun = "";
+  /** the first sentence of the reply, spoken while the agent is still working */
+  private early = "";
   private speech = 0;
   private spoken = "";
   private spokenAt = 0;
@@ -58,7 +86,9 @@ export class VoiceCall {
   }
   private update(patch: Partial<CallState>) {
     if (this.stopped) return;
-    this.state = { ...this.state, ...patch };
+    const next = { ...this.state, ...patch };
+    if (!next.waiting && next.activity) next.activity = "";
+    this.state = { ...next, phase: callPhase(next) };
     this.options.update(this.state);
   }
   private echo(text: string) { return (this.state.speaking || Date.now() - this.spokenAt < 1200) && isSpeechEcho(text, this.spoken); }
@@ -103,9 +133,15 @@ export class VoiceCall {
       if (speech === this.speech) { this.spokenAt = Date.now(); this.update({ speaking: false, speechLevel: 0, ...(this.pending && this.streamed ? { agentCaption: spokenReply(this.streamed) } : {}) }); }
     }
   }
+  /** Speak a finished reply, skipping the part already said while it streamed. */
+  private sayReply(text: string) {
+    const early = this.early; this.early = "";
+    const rest = early && text.startsWith(early) ? text.slice(early.length).trim() : text;
+    if (rest) void this.say(rest);
+  }
   private timers() {
     clearTimeout(this.filler); clearTimeout(this.long);
-    this.filler = setTimeout(() => { if (this.pending && !this.state.talking && !this.state.speaking) void this.say("On it…"); }, 2500);
+    this.filler = setTimeout(() => { if (this.pending && !this.early && !this.state.talking && !this.state.speaking) void this.say("On it…"); }, 2500);
     this.long = setTimeout(() => {
       if (!this.pending) return;
       this.update({ longWork: true });
@@ -118,8 +154,8 @@ export class VoiceCall {
     if (!text) return;
     this.interrupt();
     this.pending++;
-    this.streamed = ""; this.streamRun = "";
-    this.update({ userCaption: text, agentCaption: "", talking: false, waiting: true, longWork: false, error: "" });
+    this.streamed = ""; this.streamRun = ""; this.early = "";
+    this.update({ userCaption: text, agentCaption: "", activity: "", talking: false, waiting: true, longWork: false, error: "" });
     this.timers();
     try { await this.options.send(text); }
     catch (e) {
@@ -153,17 +189,26 @@ export class VoiceCall {
     if (pending && newest) {
       const failed = newest.parts.find((p) => p.type === "status" && p.text.startsWith("Run failed:"));
       if (failed?.type === "status") this.update({ error: failed.text });
-      else void this.say(spokenReply(newest.body) || "I've put the details in our chat.");
+      else this.sayReply(spokenReply(newest.body) || "I've put the details in our chat.");
     }
   }
   event(e: ClientEvent) {
     if (this.stopped || !this.state.ready) return;
     if (e.type === "message" && e.message.channelId === this.options.channelId && !e.message.threadId) this.markSeen(e.message);
     if (!this.pending) return;
-    if (e.type === "run_event" && e.agentId === this.options.agentId && e.channelId === this.options.channelId && e.event.type === "text") {
-      if (this.streamRun !== e.runId) { this.streamed = ""; this.streamRun = e.runId; }
-      this.streamed = (this.streamed + e.event.text).slice(0, 40_000);
-      if (!this.state.speaking) this.update({ agentCaption: spokenReply(this.streamed) });
+    if (e.type === "run_event" && e.agentId === this.options.agentId && e.channelId === this.options.channelId && !e.threadId) {
+      const ev = e.event;
+      if (ev.type === "tool_call") this.update({ activity: toolLine(ev.name, ev.input) });
+      else if (ev.type === "tool_result") this.update({ activity: "" });
+      else if (ev.type === "text") {
+        if (this.streamRun !== e.runId) { this.streamed = ""; this.streamRun = e.runId; }
+        this.streamed = (this.streamed + ev.text).slice(0, 40_000);
+        const excerpt = spokenReply(this.streamed);
+        // Talk as soon as the first sentence is whole instead of waiting for the full reply.
+        const first = this.early ? "" : excerpt.match(/^.{8,}?[.!?]+(?=\s)/)?.[0] ?? "";
+        if (first && !this.state.talking && !this.state.speaking) { this.early = first; void this.say(first); }
+        else if (!this.state.speaking) this.update({ agentCaption: excerpt, activity: "" });
+      }
     }
     if (e.type !== "message") return;
     const m = e.message;
@@ -185,7 +230,7 @@ export class VoiceCall {
     const failed = m.parts.find((p) => p.type === "status" && p.text.startsWith("Run failed:"));
     if (failed?.type === "status") { this.interrupt(); this.update({ error: failed.text }); return; }
     const text = spokenReply(m.body) || "I've put the details in our chat.";
-    if (this.state.talking || !this.state.ready) this.update({ agentCaption: text }); else void this.say(text);
+    if (this.state.talking || !this.state.ready) this.update({ agentCaption: text }); else this.sayReply(text);
   }
   disconnect() {
     this.capture++; clearTimeout(this.filler); clearTimeout(this.long); clearTimeout(this.micHint);
