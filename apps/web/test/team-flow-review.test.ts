@@ -75,4 +75,10 @@ describe("review fixes: other", () => {
     expect(escapeAction({ discarding: false, changed: false })).toBe("leave");
     expect(escapeAction({ discarding: true, changed: true })).toBe("keep-editing");
   });
+
+  it("Escape in a dialog opened over the builder (New agent) is left to that dialog", () => {
+    expect(escapeAction({ discarding: false, changed: true, nested: true })).toBe("defer");
+    expect(escapeAction({ discarding: false, changed: false, nested: true })).toBe("defer");
+    expect(escapeAction({ discarding: true, changed: true, nested: true })).toBe("keep-editing");
+  });
 });

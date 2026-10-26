@@ -83,6 +83,9 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const k = (e: KeyboardEvent) => {
+      // dialogs can stack (a New agent dialog over a step sheet): only the one on top answers Escape and Tab
+      const stack = document.querySelectorAll('[aria-modal="true"]');
+      if (stack.length && stack[stack.length - 1] !== ref.current) return;
       if (e.key === "Escape") { e.stopPropagation(); close.current(); }
       if (e.key !== "Tab" || !ref.current) return;
       const focusable = [...ref.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], summary, [tabindex="0"]')].filter((el) => el.getClientRects().length > 0);
