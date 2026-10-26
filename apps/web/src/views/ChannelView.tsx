@@ -91,7 +91,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel?.id, setActive, loadChannel]);
 
-  if (!channel) return <Empty icon={<Hash />} title={route.channelId ? "Channel not found" : "No channels yet"} />;
+  if (!channel) return <Empty icon={<Hash />} title={route.channelId ? "Team not found" : "No teams yet"} />;
 
   const dmAgent = dmAgentId ? names.agent(dmAgentId) : undefined;
   const sideAgent = !route.threadId && side?.kind === "agent" ? names.agent(side.agentId) : undefined;
@@ -123,12 +123,12 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
                 <span className="truncate">{channel.name}</span>
                 <button
                   onClick={() => void setChannelPrefs(channel, { starred: !channel.starred })}
-                  className={cx("ml-0.5 size-6 rounded-md grid place-items-center hover:bg-hover", channel.starred ? "text-warn" : "text-faint hover:text-ink")}
-                  aria-label={channel.starred ? `Unstar #${channel.name}` : `Star #${channel.name}`}
+                  className={cx("ml-0.5 size-6 rounded-md grid place-items-center hover:bg-hover", channel.starred ? "text-ink" : "text-faint hover:text-ink")}
+                  aria-label={channel.starred ? `Unpin #${channel.name}` : `Pin #${channel.name}`}
                   aria-pressed={channel.starred}
-                  title={channel.starred ? "Starred" : "Star"}
+                  title={channel.starred ? "Pinned" : "Pin to top"}
                 >
-                  <Star size={14} fill={channel.starred ? "currentColor" : "none"} />
+                  <Pin size={14} fill={channel.starred ? "currentColor" : "none"} />
                 </button>
               </div>
               <ChannelSubtitle channel={channel} onAgents={() => setSettings(channel.settings.team?.nodes.length ? "team" : "agents")} />
@@ -150,7 +150,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
                 </button>
               )}
               <NotifyMenu channel={channel} />
-              <button onClick={() => setSettings("about")} className="size-8 rounded-lg border border-line text-muted hover:text-ink grid place-items-center" aria-label="Channel settings" title="Channel settings">
+              <button onClick={() => setSettings("about")} className="size-8 rounded-lg border border-line text-muted hover:text-ink grid place-items-center" aria-label="Team settings" title="Team settings">
                 <Settings2 size={15} />
               </button>
             </div>
@@ -853,9 +853,9 @@ function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: Chan
   const leads = (channel.settings.team?.nodes ?? []).filter((n) => n.lead).map((n) => names.agent(n.agentId)).filter((a): a is Agent => !!a);
   // Buzz-style first steps for a new channel: bring in an agent, add files, invite people
   const cards: { icon: React.ReactNode; title: string; body: string; onClick: () => void }[] = [
-    ...(canManage ? [{ icon: <Bot size={18} />, title: "Add agent", body: leads.length ? "Put another agent on the team." : answerer ? `${answerer.name} answers here. Add another.` : "Give this channel a team of agents.", onClick: onAddAgent }] : []),
+    ...(canManage ? [{ icon: <Bot size={18} />, title: "Add agent", body: leads.length ? "Put another agent on the team." : answerer ? `${answerer.name} answers here. Add another.` : "Add agents to this team.", onClick: onAddAgent }] : []),
     ...(!channel.archivedAt ? [{ icon: <Paperclip size={18} />, title: "Add files", body: "Share something to work on.", onClick: () => window.dispatchEvent(new CustomEvent(COMPOSER_ATTACH, { detail: channel.id })) }] : []),
-    ...(invite && canManage ? [{ icon: <UserPlus size={18} />, title: "Invite people", body: "Bring someone into this channel.", onClick: onMembers }] : []),
+    ...(invite && canManage ? [{ icon: <UserPlus size={18} />, title: "Invite people", body: "Bring someone into this team.", onClick: onMembers }] : []),
   ];
   return (
     <div className="px-5 pb-6 pt-2">
@@ -864,7 +864,7 @@ function ChannelIntro({ channel, empty, onAddAgent, onMembers }: { channel: Chan
       </div>
       <h2 className="mt-3 text-xl font-semibold">#{channel.name}</h2>
       <p className="text-sm text-muted">
-        {channel.topic ? `${channel.topic.replace(/[.!?]\s*$/, "")}. ` : "This is the start of the channel. "}
+        {channel.topic ? `${channel.topic.replace(/[.!?]\s*$/, "")}. ` : "This is the start of the team. "}
         {leads.length
           ? `${leads.map((a) => a.name).join(" and ")} ${leads.length > 1 ? "read every new message here, plan it together" : "reads every new message here, plans it"} and hand${leads.length > 1 ? "" : "s"} the work to the team in a thread. @mention an agent to ask it directly.`
           : answerer
@@ -1150,7 +1150,7 @@ function ActionBar({ m, onReply, onEdit, open, onDone }: { m: Message; onReply?:
         )}
         items={[
           { label: "Copy text", icon: <Copy size={14} />, onSelect: () => (navigator.clipboard?.writeText(m.body), onDone()) },
-          ...(canPin ? [{ label: pinned ? "Unpin" : "Pin to channel", icon: pinned ? <PinOff size={14} /> : <Pin size={14} />, onSelect: () => (void api(pinned ? "DELETE" : "PUT", `/api/messages/${m.id}/pin`).catch((e) => alert((e as Error).message)), onDone()) }] : []),
+          ...(canPin ? [{ label: pinned ? "Unpin" : "Pin to team", icon: pinned ? <PinOff size={14} /> : <Pin size={14} />, onSelect: () => (void api(pinned ? "DELETE" : "PUT", `/api/messages/${m.id}/pin`).catch((e) => alert((e as Error).message)), onDone()) }] : []),
           ...(mine && writable ? [{ label: "Edit", icon: <Pencil size={14} />, onSelect: () => (onDone(), onEdit()) }] : []),
           ...((mine || owner) && writable ? [{ label: "Delete", icon: <Trash2 size={14} />, danger: true, onSelect: remove }] : []),
         ]}

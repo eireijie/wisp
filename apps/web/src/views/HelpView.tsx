@@ -34,7 +34,7 @@ const GLOSSARY: [string, string, { label: string; to: string }?][] = [
   ["Memory", "Notes Wisp keeps about you and your work, so helpers don't need to be told twice. You can read and fix them."],
   ["Skill", "Something a helper has learned how to do, like a recipe it can follow again."],
   ["Routine", "A job a helper does on its own, on a schedule or when something happens."],
-  ["Team", "A group of helpers that work on something together. Each channel has its own, in the channel's Team tab."],
+  ["Team", "A group of helpers that work on something together. Each team has its own, under Team settings."],
   ["Connected app", "A service you link to Wisp, like Gmail, so helpers can use it for you."],
   ["Connection code (token)", "A one-time code that links a computer to this Wisp. It's shown once when you add a device."],
   ["AI tokens", "How AI services measure and charge for work: more text, more tokens."],
