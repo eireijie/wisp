@@ -124,7 +124,7 @@ struct ComputersView: View {
     NavigationStack(path: $path) {
       VStack(spacing: 0) {
         TopBar {
-          Button { openSettings() } label: { ProfileCircle() }.buttonStyle(.plain).accessibilityIdentifier("profile-button")
+          Button { openSettings() } label: { ProfileCircle() }.buttonStyle(.press).accessibilityIdentifier("profile-button")
         } center: {
           VStack(spacing: 1) {
             Text("Computers").font(.system(size: 20, weight: .bold)).foregroundStyle(Palette.text).accessibilityAddTraits(.isHeader)
@@ -134,7 +134,7 @@ struct ComputersView: View {
           if store.canManage { CircleButton(symbol: "plus", label: "Add", id: "computers-add") { chooser = true } }
         }
         ScrollView {
-          VStack(spacing: 14) {
+          StaggeredStack(spacing: 14) {
             if let c = asking { helpBanner(c) }
             if let loadError { Text(loadError).font(.footnote).foregroundStyle(Palette.red).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4) }
             if devices.isEmpty && store.computers.isEmpty && phones == 0 { empty }

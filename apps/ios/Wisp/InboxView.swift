@@ -30,7 +30,7 @@ struct InboxView: View {
     VStack(spacing: 0) {
       TopBar {
         Button { openSettings() } label: { ProfileCircle() }
-          .buttonStyle(.plain).accessibilityIdentifier("profile-button")
+          .buttonStyle(.press).accessibilityIdentifier("profile-button")
       } center: {
         Text("Inbox").font(.system(size: 20, weight: .bold)).foregroundStyle(Palette.text)
       } trailing: {
@@ -38,7 +38,7 @@ struct InboxView: View {
       }
       switcher
       ScrollView {
-        VStack(spacing: 12) {
+        StaggeredStack(spacing: 12) {
           if mode == .needs { needs } else { InboxDone() }
         }
         .padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 24)

@@ -18,7 +18,7 @@ struct AgentsView: View {
     NavigationStack(path: $path) {
       VStack(spacing: 0) {
         TopBar {
-          Button { openSettings() } label: { ProfileCircle() }.buttonStyle(.plain).accessibilityIdentifier("profile-button")
+          Button { openSettings() } label: { ProfileCircle() }.buttonStyle(.press).accessibilityIdentifier("profile-button")
         } center: {
           EmptyView()
         } trailing: {
@@ -39,8 +39,9 @@ struct AgentsView: View {
               }.padding(.top, 60)
             } else {
               LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                ForEach(sorted) { a in
+                ForEach(Array(sorted.enumerated()), id: \.element.id) { i, a in
                   AgentTile(agent: a, doing: store.activity[a.id], openSettings: { path.append(a) }, openChat: { path.append($0) })
+                    .rowEntrance(i)
                 }
                 if store.canManage { newAgentTile }
               }
@@ -69,7 +70,7 @@ struct AgentsView: View {
       .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.hairline, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
       .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.pressRow)
     .accessibilityLabel("New agent")
     .accessibilityIdentifier("agents-new-tile")
   }
@@ -100,7 +101,7 @@ struct AgentTile: View {
     .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.pressRow)
     .accessibilityIdentifier("agent-tile")
     .contextMenu {
       Button("Message", systemImage: "bubble.left") { action.run { openChat(try await store.dm(with: agent)) } }

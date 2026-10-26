@@ -150,6 +150,7 @@
 		B8A166605B0759951906DE94 /* Store+Tasks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629B181B6D387EAAFA58B32D /* Store+Tasks.swift */; };
 		B97593F3053FF0D5B4C67F51 /* ActivityPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D084F9A24EE26A7FC3C86CD /* ActivityPill.swift */; };
 		B9AB75FF1E32F24202932D2B /* GhostAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFCCF5969A830E61B59165C3 /* GhostAppearance.swift */; };
+		BBA2ECF524CE714536166DA5 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA8179DE73625026B3318B26 /* Motion.swift */; };
 		BC348F8AD3FB57B7377938C3 /* AgentParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BCAD4992B5F304108572B0 /* AgentParityTests.swift */; };
 		BE5DEC2FCCACB3CE46616E07 /* hub.py in Resources */ = {isa = PBXBuildFile; fileRef = EDD06FD3402B1D464C9874D8 /* hub.py */; };
 		BF78113A6C14FCB92436D14E /* AgentPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC4854A79A478F6695E6F5D /* AgentPage.swift */; };
@@ -388,6 +389,7 @@
 		D0D3448A0F6A28E4EC719069 /* AccountSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountSettingsView.swift; sourceTree = "<group>"; };
 		D1006C4E7E05CCEF6C27228E /* ChatLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatLive.swift; sourceTree = "<group>"; };
 		D8A78789E06A0D71CECBD81D /* FeaturesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeaturesView.swift; sourceTree = "<group>"; };
+		DA8179DE73625026B3318B26 /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
 		DAF6D3CE67BDA06FBCBC6AA0 /* AgentScreensTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentScreensTests.swift; sourceTree = "<group>"; };
 		DB018FC2B386F8D01F377057 /* TaskModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskModels.swift; sourceTree = "<group>"; };
 		DB9C98D436D0BC7D55B9C4A2 /* Drafts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Drafts.swift; sourceTree = "<group>"; };
@@ -609,6 +611,7 @@
 				F63DC27D29325FC666533969 /* MemoryView.swift */,
 				529E3A264685FF6C6DCFE695 /* MessageRow.swift */,
 				5E82C1A0EDF072A656171B27 /* Models.swift */,
+				DA8179DE73625026B3318B26 /* Motion.swift */,
 				B3B0C971974EB93B639D13A4 /* NativeSettingsView.swift */,
 				FEC85BDF3987C0A606B9EF70 /* NoteExtras.swift */,
 				6CE2F599395D7001BDD26F9F /* NoteMarkdown.swift */,
@@ -950,6 +953,7 @@
 				CA09638570A01741A8C6E8A9 /* MemoryView.swift in Sources */,
 				B38EC76DB4369DCFE64A440D /* MessageRow.swift in Sources */,
 				7FBC6E0DB4D7138174EE8421 /* Models.swift in Sources */,
+				BBA2ECF524CE714536166DA5 /* Motion.swift in Sources */,
 				C11460AB716439B3C07CCC94 /* NativeSettingsView.swift in Sources */,
 				E28A77EAD52F4631C48ADFB5 /* NoteExtras.swift in Sources */,
 				C95D0706942AAF17B3EBFDD9 /* NoteMarkdown.swift in Sources */,

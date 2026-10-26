@@ -259,6 +259,6 @@ struct CardButtonStyle: ButtonStyle {
       .frame(height: 44)
       .background(Capsule().fill(prominent ? Palette.text : Palette.control))
       .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: prominent ? 0 : 1))
-      .opacity(configuration.isPressed ? 0.7 : 1)
+      .pressFeedback(configuration.isPressed)
   }
 }

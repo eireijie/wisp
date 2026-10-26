@@ -50,7 +50,7 @@ struct CircleButton: View {
 
   var body: some View {
     Button(action: action) { CircleLabel(symbol: symbol, size: size) }
-      .buttonStyle(.plain)
+      .buttonStyle(.press)
       .accessibilityLabel(label)
       .accessibilityIdentifier(id ?? "")
   }

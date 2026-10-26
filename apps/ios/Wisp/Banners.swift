@@ -11,13 +11,15 @@ struct AppBanners: View {
   @State private var dismissedUpdate = false
   /** a sheet or full-screen page is up: the banners belong to the main screens, so they stay out of its way */
   @State private var covered = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  private var slide: AnyTransition { reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity) }
 
   var body: some View {
     VStack(spacing: 10) {
-      if offline && !store.connected { ReconnectingPill().transition(.move(edge: .top).combined(with: .opacity)) }
+      if offline && !store.connected { ReconnectingPill().transition(slide) }
       if store.hubUpdated && !dismissedUpdate {
         UpdatedBanner { dismissedUpdate = true } reload: { Task { await store.reloadAfterUpdate(); dismissedUpdate = false } }
-          .transition(.move(edge: .top).combined(with: .opacity))
+          .transition(slide)
       }
       if let error = store.syncError {
         Text(error).font(.system(size: 13)).foregroundStyle(Palette.red)
@@ -36,8 +38,8 @@ struct AppBanners: View {
       let now = scene?.keyWindow?.rootViewController?.presentedViewController != nil
       if now != covered { covered = now }
     }
-    .animation(.snappy, value: offline && !store.connected)
-    .animation(.snappy, value: store.hubUpdated)
+    .animation(Motion.pick(Motion.pop, reduceMotion), value: offline && !store.connected)
+    .animation(Motion.pick(Motion.pop, reduceMotion), value: store.hubUpdated)
     .task(id: store.connected) {
       if store.connected { offline = false; return }
       try? await Task.sleep(for: .seconds(2))
@@ -50,7 +52,7 @@ struct AppBanners: View {
       try? await Task.sleep(for: .seconds(6))
       if !Task.isCancelled { store.syncError = nil }
     }
-    .animation(.snappy, value: store.syncError)
+    .animation(Motion.pick(Motion.pop, reduceMotion), value: store.syncError)
     .allowsHitTesting(!covered && (offline || store.hubUpdated))
   }
 }

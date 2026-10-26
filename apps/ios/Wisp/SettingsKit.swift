@@ -228,8 +228,9 @@ struct PillButtonStyle: ButtonStyle {
       .padding(.horizontal, small ? 16 : 20)
       .background(Capsule().fill(fill))
       .overlay(Capsule().strokeBorder(stroke))
-      .opacity(enabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+      .opacity(enabled ? 1 : 0.45)
       .contentShape(Capsule())
+      .pressFeedback(configuration.isPressed)
   }
 
   private var foreground: Color {

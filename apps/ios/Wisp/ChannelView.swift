@@ -23,7 +23,10 @@ struct ChannelView: View {
   @State private var flashed: String?
   @State private var attachTrigger = 0
   @State private var tool: ChatTool?
+  /** the first batch of messages has settled: from here a new message animates in */
+  @State private var settled = false
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
 
@@ -63,11 +66,14 @@ struct ChannelView: View {
           if stamp { TimeDivider(date: m.date) }
           MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.needsStamp(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
             thread: ThreadRef(channelId: channel.id, rootId: m.id), working: inThreads.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
+            .arrival(mine: m.author == Actor(kind: .user, id: store.me?.id ?? ""))
         }
-        ForEach(store.streaming(in: channel.id, thread: nil)) { StreamingRow(run: $0) }
+        ForEach(store.streaming(in: channel.id, thread: nil)) { StreamingRow(run: $0).workingArrival() }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
       .padding(.bottom, 8)
+      .messageArrivals(list.last?.id, settled: settled)
+      .messageArrivals(store.streaming(in: channel.id, thread: nil).map(\.id), settled: settled)
     }
     .defaultScrollAnchor(.bottom)
     .onChange(of: list.last?.id) { Bottom.follow(proxy) }
@@ -104,8 +110,8 @@ struct ChannelView: View {
       VStack(spacing: 0) {
         chrome
         // a call shrunk from full screen sits under the top bar
-        if let call, !call.expanded { CallBar(call: call).transition(.move(edge: .top).combined(with: .opacity)) }
-      }.animation(.snappy, value: call?.expanded)
+        if let call, !call.expanded { CallBar(call: call).transition(reduceMotion ? .opacity : .scale(scale: 0.92, anchor: .top).combined(with: .move(edge: .top)).combined(with: .opacity)) }
+      }.animation(Motion.pick(Motion.pop, reduceMotion), value: call?.expanded)
     }
     .callLifecycle(call)
     .navigationDestination(isPresented: $showDetails) {
@@ -129,6 +135,11 @@ struct ChannelView: View {
       store.openChannel = channel.id
       do { try await store.loadMessages(channel.id) } catch { self.error = error.localizedDescription }
       store.markRead(channel.id)
+    }
+    .task(id: store.messages[channel.id] != nil) {
+      guard store.messages[channel.id] != nil else { return }
+      try? await Task.sleep(for: .milliseconds(600))
+      settled = true
     }
     .onDisappear {
       if store.openChannel == channel.id { store.openChannel = nil }
@@ -261,6 +272,8 @@ struct ThreadView: View {
   @State private var earlierFailed = false
   @State private var error: String?
   @State private var flashed: String?
+  /** the first batch of replies has settled: from here a new one animates in */
+  @State private var settled = false
 
   private var root: Message? { store.message(ref.rootId, in: ref.channelId) }
   private var replies: [Message] { store.threads[ref.rootId] ?? [] }
@@ -314,10 +327,13 @@ struct ThreadView: View {
             thread: ThreadRef(channelId: ref.channelId, rootId: m.id, from: ref.rootId),
             working: below.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) },
             composerThread: ref.rootId)
+            .arrival(mine: m.author == Actor(kind: .user, id: store.me?.id ?? ""))
         }
-        ForEach(store.streaming(in: ref.channelId, thread: ref.rootId)) { StreamingRow(run: $0) }
+        ForEach(store.streaming(in: ref.channelId, thread: ref.rootId)) { StreamingRow(run: $0).workingArrival() }
         Color.clear.frame(height: 1).id(Bottom.id)
       }
+      .messageArrivals(replies.last?.id, settled: settled)
+      .messageArrivals(store.streaming(in: ref.channelId, thread: ref.rootId).map(\.id), settled: settled)
     }
     .defaultScrollAnchor(.bottom)
     .onChange(of: replies.last?.id) { Bottom.follow(proxy) }
@@ -347,6 +363,11 @@ struct ThreadView: View {
     .background(Palette.ground.ignoresSafeArea())
     .safeAreaInset(edge: .top, spacing: 0) { chrome }
     .task(id: ref) { await load() }
+    .task(id: store.threads[ref.rootId] != nil) {
+      guard store.threads[ref.rootId] != nil else { return }
+      try? await Task.sleep(for: .milliseconds(600))
+      settled = true
+    }
     .onAppear { store.openThreads[ref.rootId] = ref.channelId }
     .onDisappear { store.openThreads[ref.rootId] = nil }
   }
@@ -483,7 +504,7 @@ struct HandoffBrief: View {
 enum Bottom {
   static let id = "bottom"
   static func follow(_ proxy: ScrollViewProxy) {
-    withAnimation(.snappy) { proxy.scrollTo(id, anchor: .bottom) }
+    withAnimation(Motion.settle) { proxy.scrollTo(id, anchor: .bottom) }
   }
 }
 
@@ -583,11 +604,14 @@ struct Composer: View {
   @State private var photos: [PhotosPickerItem] = []
   @State private var slash = SlashMenuModel()
   @FocusState private var focused: Bool
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   struct Pending: Identifiable, Equatable { var id = UUID(); var name: String }
 
   private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty }
   private var blocked: Bool { empty || sending || !uploading.isEmpty }
+  /** the send arrow shows (else the voice button) */
+  private var showsSend: Bool { !empty || sending || onCall == nil }
   private var replyTarget: ReplyTarget? { channelId.flatMap { store.replyTarget(channel: $0, thread: thread) } }
 
   private var caret: Int {
@@ -657,8 +681,9 @@ struct Composer: View {
                 .foregroundStyle(dictation.active ? Palette.blue : Palette.muted)
                 .frame(width: 40, height: 40)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.press)
             .padding(.bottom, 8)
+            .transition(.scale.combined(with: .opacity))
             .accessibilityLabel(dictation.active ? "Stop dictating" : "Dictate")
           }
           if !empty || sending || onCall == nil {
@@ -669,11 +694,12 @@ struct Composer: View {
                 .frame(width: 56, height: 44)
                 .background(Capsule().fill(Palette.text))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.press)
             .disabled(blocked)
             .opacity(blocked ? 0.3 : 1)
             .animation(.snappy, value: blocked)
             .padding(.bottom, 6).padding(.trailing, 6)
+            .transition(.scale.combined(with: .opacity))
             .accessibilityLabel("Send").accessibilityIdentifier("composer-send")
           } else if let onCall {
             Button(action: onCall) {
@@ -683,12 +709,15 @@ struct Composer: View {
                 .frame(width: 56, height: 44)
                 .background(Capsule().fill(Palette.text))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.press)
             .padding(.bottom, 6).padding(.trailing, 6)
+            .transition(.scale.combined(with: .opacity))
             .accessibilityLabel(callLabel).accessibilityIdentifier("composer-call")
           }
         }
         .frame(minHeight: 44)
+        .animation(Motion.pick(Motion.pop, reduceMotion), value: showsSend)
+        .animation(Motion.pick(Motion.pop, reduceMotion), value: dictation.active)
         .background {
           if #available(iOS 26, *) {
             RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.clear).glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24, style: .continuous))
