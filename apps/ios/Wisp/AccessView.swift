@@ -36,188 +36,138 @@ extension Store {
   }
 }
 
-/** Use Wisp from anywhere: Tailscale steps and status, or a Cloudflare tunnel. Owners only. */
+/** Settings → Access (set-Access.dc.html): use Wisp away from home with Tailscale or a Cloudflare tunnel. Owners only. */
 struct AccessView: View {
   @Environment(Store.self) private var store
   @Environment(\.openURL) private var openURL
   @State private var info: ReachInfo?
+  @State private var clients: [McpClient]?
+  @State private var removing: McpClient?
   @State private var failed = false
   @State private var choice = "tailscale"
   @State private var token = ""
   @State private var hint: String?
+  @State private var hintURL: URL?
+  @State private var turningOff = false
   @State private var action = FormAction()
 
   var body: some View {
-    List {
-      if !store.isOwner {
-        Section { Text("Your Wisp's owner can turn this on.").foregroundStyle(.secondary) }
-      }
+    SettingsPage("Access", subtitle: "Use Wisp away from home.", id: "access") {
+      if !store.isOwner { CardHint("Your Wisp's owner can turn this on.") }
       if let info {
-        Section("Away from home") {
-          LabeledContent("Status", value: info.summary)
-          if let address = info.publicUrl ?? info.cloudflare?.url { Text(address).font(.footnote.monospaced()).textSelection(.enabled) }
-          if let lan = info.lan?.first { LabeledContent("At home") { Text(lan).font(.footnote.monospaced()).textSelection(.enabled) } }
+        CardLabel("Away from home")
+        CardGroup {
+          RowLabel(title: info.awayOn ? "Reachable from anywhere" : "Only at home for now", subtitle: info.publicUrl ?? info.cloudflare?.url ?? info.lan?.first, value: info.awayOn ? "On" : "Off", chevron: false)
+          RowLabel(title: "Tailscale", subtitle: info.tailscale.state == "running" ? (info.tailscale.tailnet.map { "Signed in on \($0)" } ?? "Running") : nil, value: tailscaleStatus(info), chevron: false)
+          RowLabel(title: "Cloudflare", subtitle: info.cloudflareRunning ? nil : "Paste a setup code to use it instead", value: info.cloudflareRunning ? "Connected" : "Not set up", chevron: false)
         }
         if store.isOwner {
           if info.awayOn {
-            Section {
-              Button("Turn off", role: .destructive) { run { self.info = try await store.turnAwayOff(info); hint = "Away from home is off." } }.disabled(action.busy)
-            } footer: { Text("Devices and phones that used the away address stop reaching this Wisp until you turn it back on.") }
+            Button("Turn off") { turningOff = true }.buttonStyle(.pill(.destructive)).disabled(action.busy)
+            CardHint("At home, Wisp works on your Wi-Fi without either. Turning this off keeps it that way. Devices and phones that used the away address stop reaching this Wisp until you turn it back on.")
           } else {
             setup(info)
           }
         }
+        if store.isOwner { apps }
       } else if failed {
-        Section { Text("Away from home isn't available yet. Update Wisp on the computer it runs on.").foregroundStyle(.secondary) }
+        CardHint("Away from home isn't available yet. Update Wisp on the computer it runs on.")
       } else {
-        Section { HStack { ProgressView(); Text("Checking…").foregroundStyle(.secondary) } }
+        HStack { ProgressView(); Text("Checking…").foregroundStyle(Palette.muted) }
       }
-      if let hint { Section { Text(hint).font(.footnote) } }
-      InlineError(error: action.error)
-    }.sectionScreen("Access", id: "access")
-      .task { await watch() }
+      if let hint { CardHint(hint); if let hintURL { Button("Open Tailscale") { openURL(hintURL) }.buttonStyle(.pill(.secondary, small: true)) } }
+      StatusLine(error: action.error)
+    }
+    .task { await watch() }
+    .confirmCard($turningOff, title: "Turn off away from home?", message: "Devices and phones that used the away address stop reaching this Wisp until you turn it back on.", confirm: "Turn off") {
+      if let info { run { self.info = try await store.turnAwayOff(info); hint = "Away from home is off." } }
+    }
+    .confirmCard(Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), title: "Disconnect \(removing?.name ?? "this app")?", message: "It stops reaching your agents.", confirm: "Disconnect") {
+      if let client = removing { action.run { try await store.disconnectMcp(client.id); clients?.removeAll { $0.id == client.id } } }
+    }
+  }
+
+  private func tailscaleStatus(_ info: ReachInfo) -> String {
+    switch info.tailscale.state {
+    case "running": return info.tailscale.serving == true ? "On" : "Connected"
+    case "missing": return "Not installed"
+    case "needs-login": return "Sign in"
+    default: return "Off"
+    }
   }
 
   @ViewBuilder private func setup(_ info: ReachInfo) -> some View {
     let signedIn = info.tailscale.state == "running"
-    Section {
-      Picker("How", selection: $choice) {
-        Text("Tailscale (best)").tag("tailscale")
-        Text("Cloudflare").tag("cloudflare")
-      }.pickerStyle(.segmented)
-      if choice == "tailscale" {
-        Text(signedIn ? "Already on this \(info.computerName). Nothing to set up." : "Free. Wisp helps you install it, then sign in.").font(.footnote)
-        tailscaleSteps(info)
-        Button("Turn it on") { run { try await turnOnTailscale() } }.disabled(action.busy)
-      } else {
-        Text("Needs a domain you own. Paste the setup code Cloudflare gives you for a tunnel.").font(.footnote)
-        SecureField("Cloudflare setup code", text: $token).textContentType(.password).textInputAutocapitalization(.never).autocorrectionDisabled()
-        if let problem = info.cloudflare?.error { Text(problem).font(.footnote).foregroundStyle(.red) }
-        Button("Turn it on") {
-          run {
-            let next = try await store.startCloudflare(token: token.trimmed)
-            self.info = next; token = ""
-            hint = next.awayOn ? "Away from home is on." : "Cloudflare is connecting…"
-          }
-        }.disabled(action.busy || token.trimmed.count < 20)
-      }
-    } header: { Text("Turn it on") } footer: {
-      Text("Then anyone on your Wisp can open it from any Wi-Fi or cell data. Only people signed in can see anything.")
+    CardLabel("Turn it on")
+    SegmentedPicker(options: [("tailscale", "Tailscale (best)"), ("cloudflare", "Cloudflare")], selection: $choice, label: "How", id: "access-how")
+    if choice == "tailscale" {
+      CardHint(signedIn ? "Already on this \(info.computerName). Nothing to set up." : "Free. Wisp helps you install it, then sign in.")
+      tailscaleSteps(info)
+      Button("Turn it on") { run { try await turnOnTailscale() } }.buttonStyle(.pill(.primary)).disabled(action.busy).accessibilityIdentifier("access-on")
+    } else {
+      CardHint("Needs a domain you own. Paste the setup code Cloudflare gives you for a tunnel.")
+      CardGroup { FieldRow(title: "Setup code", text: $token, prompt: "Cloudflare setup code", secure: true, id: "access-cloudflare") }
+      if let problem = info.cloudflare?.error { StatusLine(error: problem) }
+      Button("Turn it on") {
+        run {
+          let next = try await store.startCloudflare(token: token.trimmed)
+          self.info = next; token = ""
+          hint = next.awayOn ? "Away from home is on." : "Cloudflare is connecting…"
+        }
+      }.buttonStyle(.pill(.primary)).disabled(action.busy || token.trimmed.count < 20)
     }
+    CardHint("Then anyone on your Wisp can open it from any Wi-Fi or cell data. Only people signed in can see anything.")
   }
 
   /** the steps Tailscale still needs, in plain words */
   @ViewBuilder private func tailscaleSteps(_ info: ReachInfo) -> some View {
     switch info.tailscale.state {
     case "missing":
-      Label("Install Tailscale on this \(info.computerName)", systemImage: "1.circle")
-      if let url = info.download.flatMap(URL.init(string:)) { Button("Install Tailscale") { openURL(url) } }
+      CardGroup {
+        RowLabel(title: "Install Tailscale on this \(info.computerName)", chevron: false) { Image(systemName: "1.circle").foregroundStyle(Palette.muted) }
+        if let url = info.download.flatMap(URL.init(string:)) { Button { openURL(url) } label: { RowLabel(title: "Install Tailscale") }.buttonStyle(.plain) }
+      }
     case "needs-login":
-      Label("Sign in to Tailscale", systemImage: "2.circle")
-      if let url = info.tailscale.authUrl.flatMap(URL.init(string:)) { Button("Open the Tailscale sign-in page") { openURL(url) } }
+      CardGroup {
+        RowLabel(title: "Sign in to Tailscale", chevron: false) { Image(systemName: "2.circle").foregroundStyle(Palette.muted) }
+        if let url = info.tailscale.authUrl.flatMap(URL.init(string:)) { Button { openURL(url) } label: { RowLabel(title: "Open the Tailscale sign-in page") }.buttonStyle(.plain) }
+      }
     case "stopped", "starting":
-      Label("Tailscale is \(info.tailscale.state == "starting" ? "starting" : "off"); turning it on connects it", systemImage: "2.circle")
+      CardGroup { RowLabel(title: "Tailscale is \(info.tailscale.state == "starting" ? "starting" : "off"); turning it on connects it", chevron: false) { Image(systemName: "2.circle").foregroundStyle(Palette.muted) } }
     case "error":
-      Label(info.tailscale.error ?? "Tailscale couldn't connect.", systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+      StatusLine(error: info.tailscale.error ?? "Tailscale couldn't connect.")
     default:
-      Label("Tailscale is running", systemImage: "checkmark.circle").foregroundStyle(.green)
+      CardGroup { RowLabel(title: "Tailscale is running", chevron: false) { Image(systemName: "checkmark.circle").foregroundStyle(Palette.green) } }
     }
-  }
-
-  private func turnOnTailscale() async throws {
-    let outcome = try await store.enableTailscale()
-    info = outcome.info
-    if let url = outcome.open { openURL(url) }
-    hint = outcome.ready ? "Away from home is on." : "Finish setting up Tailscale, then choose Turn it on again."
-  }
-
-  private func run(_ work: @escaping @MainActor () async throws -> Void) {
-    hint = nil
-    action.run(work)
-  }
-
-  /** the address and Tailscale status, kept fresh while this page is open */
-  private func watch() async {
-    while !Task.isCancelled {
-      do { info = try await store.reach(); failed = false } catch { if info == nil { failed = true } }
-      do { try await Task.sleep(for: .seconds(3)) } catch { return }
-    }
-  }
-}
-
-/** Settings → Devices: your devices, away-from-home status, and the apps (ChatGPT, Grok, Claude) connected to agents. */
-struct DevicesSettingsView: View {
-  @Environment(Store.self) private var store
-  @Environment(\.openURL) private var openURL
-  @State private var info: ReachInfo?
-  @State private var clients: [McpClient]?
-  @State private var removing: McpClient?
-  @State private var adding = false
-  @State private var hint: String?
-  @State private var hintURL: URL?
-  @State private var action = FormAction()
-
-  var body: some View {
-    List {
-      Section("Devices") {
-        if store.nodes.isEmpty { Text("Add your phone or another computer to your Wisp.").foregroundStyle(.secondary) }
-        ForEach(store.nodes) { node in
-          NavigationLink { DeviceDetail(node: node) } label: {
-            HStack {
-              Image(systemName: "desktopcomputer")
-              VStack(alignment: .leading) {
-                Text(node.name)
-                Text(node.paused == true ? "Paused" : node.online ? "Connected" : "Offline").font(.caption).foregroundStyle(node.online ? .green : .secondary)
-              }
-              Spacer()
-              Text(node.mine == true ? "Yours" : node.ownerName ?? "").font(.caption).foregroundStyle(.secondary)
-            }
-          }
-        }
-        if store.isOwner { Button("Add a device", systemImage: "plus") { adding = true } }
-      }
-      Section("Away from home") {
-        if store.isOwner {
-          NavigationLink { AccessView() } label: { LabeledContent("Away from home", value: info?.summary ?? "") }
-        } else {
-          LabeledContent("Away from home", value: info?.summary ?? "—")
-        }
-      }
-      if store.isOwner { apps }
-      if let hint { Section { Text(hint).font(.footnote); if let hintURL { Button("Open Tailscale") { openURL(hintURL) } } } }
-      InlineError(error: action.error)
-    }.sectionScreen("Devices", id: "devices-settings")
-      .sheet(isPresented: $adding) { AddDeviceView() }
-      .task { try? await store.refreshNodes(); await watch() }
-      .confirmationDialog("Disconnect \(removing?.name ?? "this app")? It stops reaching your agents.", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
-        Button("Disconnect", role: .destructive) {
-          if let client = removing { action.run { try await store.disconnectMcp(client.id); clients?.removeAll { $0.id == client.id } } }
-        }
-      }
   }
 
   @ViewBuilder private var apps: some View {
     let origin = info?.connectorOrigin
-    Section {
-      Toggle("Grok, ChatGPT and Claude", isOn: Binding(get: { origin != nil }, set: { on in toggle(on) })).disabled(action.busy || info == nil)
+    CardLabel("Grok, ChatGPT and Claude")
+    CardGroup {
+      ToggleRow(title: "Talk to your agents from their apps", isOn: Binding(get: { origin != nil }, set: { on in toggle(on) }), id: "access-apps").disabled(action.busy || info == nil)
       if let origin {
-        Text("\(origin)/mcp").font(.footnote.monospaced()).textSelection(.enabled)
-        Button("Copy address") { UIPasteboard.general.string = "\(origin)/mcp" }
-        Text("In Grok: Connectors, Add custom connector, paste.").font(.footnote).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Remote address").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text("\(origin)/mcp").font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 12)
+        Button { UIPasteboard.general.string = "\(origin)/mcp" } label: { RowLabel(title: "Copy address", chevron: false) }.buttonStyle(.plain)
       }
-    } header: { Text("Apps") } footer: { Text("Talk to your agents from their apps.") }
+    }
+    if origin != nil { CardHint("In Grok: Connectors, Add custom connector, paste.") }
     if let clients {
-      Section("Connected apps") {
-        if clients.isEmpty { Text("No apps connected yet.").foregroundStyle(.secondary) }
+      CardLabel("Connected apps")
+      CardGroup {
+        if clients.isEmpty { RowLabel(title: "No apps connected yet.", chevron: false) }
         ForEach(clients) { client in
           HStack {
             VStack(alignment: .leading, spacing: 2) {
-              Text(client.name)
-              if let agent = client.agentName { Text("acts as \(agent)").font(.caption).foregroundStyle(.secondary) }
+              Text(client.name).font(.system(size: 17)).foregroundStyle(Palette.text)
+              if let agent = client.agentName { Text("acts as \(agent)").font(.system(size: 14)).foregroundStyle(Palette.faint) }
             }
             Spacer()
-            Button("Disconnect", role: .destructive) { removing = client }.buttonStyle(.bordered).controlSize(.small).disabled(action.busy)
-          }
+            Button("Disconnect") { removing = client }.buttonStyle(.pill(.secondary, small: true)).disabled(action.busy)
+          }.padding(.horizontal, 18).frame(minHeight: 62)
         }
       }
     }
@@ -240,11 +190,55 @@ struct DevicesSettingsView: View {
     }
   }
 
+  private func turnOnTailscale() async throws {
+    let outcome = try await store.enableTailscale()
+    info = outcome.info
+    if let url = outcome.open { openURL(url) }
+    hint = outcome.ready ? "Away from home is on." : "Finish setting up Tailscale, then choose Turn it on again."
+  }
+
+  private func run(_ work: @escaping @MainActor () async throws -> Void) {
+    hint = nil
+    action.run(work)
+  }
+
+  /** the address, Tailscale status and connected apps, kept fresh while this page is open */
   private func watch() async {
     while !Task.isCancelled {
-      info = try? await store.reach()
+      do { info = try await store.reach(); failed = false } catch { if info == nil { failed = true } }
       if store.isOwner { clients = (try? await store.mcpClients()) ?? clients }
-      do { try await Task.sleep(for: .seconds(5)) } catch { return }
+      do { try await Task.sleep(for: .seconds(3)) } catch { return }
     }
+  }
+}
+
+/** Settings → Devices: your devices and away-from-home status. */
+struct DevicesSettingsView: View {
+  @Environment(Store.self) private var store
+  @State private var info: ReachInfo?
+  @State private var adding = false
+
+  var body: some View {
+    SettingsPage(title: "Devices", id: "devices-settings", trailing: {
+      if store.isOwner { CircleButton(symbol: "plus", label: "Add a device") { adding = true } }
+    }) {
+      CardGroup {
+        if store.nodes.isEmpty { RowLabel(title: "Add your phone or another computer to your Wisp.", chevron: false) }
+        ForEach(store.nodes) { node in
+          NavigationLink { DeviceDetail(node: node) } label: {
+            RowLabel(title: node.name, subtitle: node.paused == true ? "Paused" : node.online ? "Connected" : "Offline", value: node.mine == true ? "Yours" : node.ownerName)
+          }
+        }
+      }
+      CardGroup {
+        if store.isOwner {
+          NavigationLink { AccessView() } label: { RowLabel(title: "Away from home", value: info?.summary) }
+        } else {
+          ValueRow(title: "Away from home", value: info?.summary ?? "—")
+        }
+      }
+    }
+    .sheet(isPresented: $adding) { AddDeviceView() }
+    .task { try? await store.refreshNodes(); info = try? await store.reach() }
   }
 }

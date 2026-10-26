@@ -65,6 +65,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
       guard on("enabled", true) else { return [] }
       if case .chat(let channel, _) = route, channel == store.openChannel { return [] }
       guard on(preference, true) else { return [] }
+      // "Only when I'm away": this runs only while the app is open, so there is nothing to show
+      if on("onlyAway", false) { return [] }
       return on("sound", false) ? [.banner, .list, .sound] : [.banner, .list]
     }
   }

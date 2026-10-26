@@ -1,6 +1,6 @@
 import SwiftUI
 
-/** Where a beginner gets unstuck: setup, why a helper is quiet, plain words, and where to report problems (the web's Help page). */
+/** Where a beginner gets unstuck (set-Help.dc.html): setup, why a helper is quiet, plain words, and where to report problems. */
 struct HelpView: View {
   @Environment(Store.self) private var store
   @State private var addingAgent = false
@@ -31,56 +31,49 @@ struct HelpView: View {
 
   var body: some View {
     let devices = store.readyDevices
-    List {
-      setup
-      Section {
-        ForEach(Readiness.checks(agents: store.agents, devices: devices)) { ReadinessCheckRow(check: $0, store: store, makeHelper: { addingAgent = true }) }
-      } header: { Text("My helper isn't answering") } footer: {
-        Text("Go down this list. The first item marked “Needs fixing” is usually the reason. This updates by itself.")
-      }
-      Section {
-        ForEach(Self.examples, id: \.self) { Text($0).font(.subheadline) }
-      } header: { Text("What can Wisp do?") } footer: {
-        Text("Each of these needs a helper set up first, and some need a connected app, like Gmail. Wisp can only do what you connect it to.")
-      }
-      Section("Words you'll see") {
-        ForEach(Self.glossary, id: \.term) { item in
-          VStack(alignment: .leading, spacing: 3) {
-            Text(item.term).font(.subheadline.weight(.semibold))
-            Text(item.meaning).font(.subheadline).foregroundStyle(.secondary)
-          }.padding(.vertical, 2).accessibilityElement(children: .combine)
-        }
-      }
-      Section {
-        Text("Something broken or confusing? Tell us what you were trying to do, what you expected, and what happened instead. Leave out passwords and private details.")
-          .font(.subheadline).foregroundStyle(.secondary)
-        if let url = URL(string: "\(WispRepo.url)/issues") { Link(destination: url) { Label("Open an issue on GitHub", systemImage: "arrow.up.right.square") } }
-      } header: { Text("Report a problem") }
-    }
-    .listStyle(.insetGrouped)
-    .navigationTitle("Help")
-    .navigationBarTitleDisplayMode(.inline)
-    .task { try? await store.refreshOnboarding() }
-    .refreshable { try? await store.refreshOnboarding() }
-    .sheet(isPresented: $addingAgent) { AddAgent { _ in } }
-    .managementAlert(action)
-  }
-
-  /** The setup steps this phone can tell about, from what the hub reports. */
-  private var setup: some View {
     let steps = Self.steps(hasHelper: !store.agents.isEmpty, hasDevice: !store.nodes.isEmpty || !(store.onboarding?.devices.isEmpty ?? true), reachable: store.onboarding?.reachable)
     let done = steps.filter(\.done).count
     let next = steps.first { !$0.done }
-    return Section {
-      ProgressView(value: Double(done), total: Double(steps.count)) { Text("\(done) of \(steps.count) steps done").font(.subheadline) }
-      if let next {
-        LabeledContent("Next", value: next.title)
-        if next.id == "agent", store.canManage { Button("Make a helper") { addingAgent = true } }
-        if next.id == "device" { NavigationLink("See devices") { DevicesView() } }
-      } else {
-        Text("Setup is done. You're ready to go.").foregroundStyle(.secondary)
+    SettingsPage("Help", id: "help") {
+      CardLabel("Finish setup")
+      VStack(alignment: .leading, spacing: 12) {
+        HStack {
+          Text(next == nil ? "Setup is done" : "\(done) of \(steps.count)").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+          Spacer()
+        }
+        ProgressView(value: Double(done), total: Double(steps.count)).tint(Palette.green)
+        ForEach(steps, id: \.id) { step in
+          HStack(spacing: 10) {
+            Image(systemName: step.done ? "checkmark.circle.fill" : "circle").foregroundStyle(step.done ? Palette.green : Palette.faint)
+            Text(step.title).font(.system(size: 16)).foregroundStyle(step.done ? Palette.muted : Palette.text)
+            Spacer(minLength: 0)
+          }.accessibilityElement(children: .combine)
+        }
+        if let next {
+          if next.id == "agent", store.canManage { Button("Next: make a helper") { addingAgent = true }.buttonStyle(.pill(.primary)) }
+          if next.id == "device" { NavigationLink { DevicesView() } label: { Text("Next: connect a computer").frame(maxWidth: .infinity) }.buttonStyle(.pill(.primary)) }
+          if next.id == "anywhere", store.isOwner { NavigationLink { AccessView() } label: { Text("Next: use Wisp away from home").frame(maxWidth: .infinity) }.buttonStyle(.pill(.primary)) }
+        }
       }
-    } header: { Text("Finish setup") }
+      .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+      .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      CardLabel("My agent isn't answering")
+      CardGroup {
+        ForEach(Readiness.checks(agents: store.agents, devices: devices)) { ReadinessCheckRow(check: $0, store: store, makeHelper: { addingAgent = true }) }
+      }
+      CardHint("Go down this list. The first item marked “Needs fixing” is usually the reason. This updates by itself.")
+      CardGroup {
+        NavigationLink { HelpExamplesView() } label: { RowLabel(title: "What can Wisp do?") }.accessibilityIdentifier("help-examples")
+        NavigationLink { HelpWordsView() } label: { RowLabel(title: "Words you'll see") }.accessibilityIdentifier("help-words")
+        if let url = URL(string: "\(WispRepo.url)/issues") {
+          Link(destination: url) { RowLabel(title: "Report a problem", subtitle: "Open an issue on GitHub", chevron: false) }.accessibilityIdentifier("help-report")
+        }
+      }
+      CardHint("Something broken or confusing? Tell us what you were trying to do, what you expected, and what happened instead. Leave out passwords and private details.")
+    }
+    .task { try? await store.refreshOnboarding() }
+    .sheet(isPresented: $addingAgent) { AddAgent { _ in } }
+    .managementAlert(action)
   }
 
   struct Step: Equatable { var id: String; var title: String; var done: Bool }
@@ -92,36 +85,59 @@ struct HelpView: View {
   }
 }
 
-/** One line of "My helper isn't answering": working, needs fixing, or can't tell yet. */
+struct HelpExamplesView: View {
+  var body: some View {
+    SettingsPage("What can Wisp do?", id: "help-examples-page") {
+      BulletsCard(points: HelpView.examples)
+      CardHint("Each of these needs a helper set up first, and some need a connected app, like Gmail. Wisp can only do what you connect it to.")
+    }
+  }
+}
+
+struct HelpWordsView: View {
+  var body: some View {
+    SettingsPage("Words you'll see", id: "help-words-page") {
+      CardGroup {
+        ForEach(HelpView.glossary, id: \.term) { item in
+          VStack(alignment: .leading, spacing: 4) {
+            Text(item.term).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+            Text(item.meaning).font(.system(size: 15)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 14)
+          .accessibilityElement(children: .combine)
+        }
+      }
+    }
+  }
+}
+
+/** One line of "My agent isn't answering": fine, needs fixing, or can't tell yet. */
 struct ReadinessCheckRow: View {
   var check: Readiness.Check
   var store: Store
   var makeHelper: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(alignment: .top, spacing: 10) {
-        Image(systemName: check.status == .ok ? "checkmark.circle" : check.status == .bad ? "exclamationmark.triangle" : "questionmark.circle")
-          .foregroundStyle(check.status == .bad ? Color.orange : Color.secondary)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(check.label).font(.subheadline).foregroundStyle(check.status == .unknown ? .secondary : .primary)
-          if check.status == .ok { EmptyView() } else {
-            Text(check.status == .bad ? "Needs fixing" : "Can't tell yet").font(.caption).foregroundStyle(.secondary)
-          }
-          if check.status == .bad, let fix = check.fix { Text(fix).font(.caption).foregroundStyle(.secondary) }
-        }
+    HStack(alignment: .top, spacing: 12) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(check.label).font(.system(size: 17)).foregroundStyle(check.status == .unknown ? Palette.muted : Palette.text)
+        Text(check.status == .ok ? "Fine" : check.status == .bad ? "Needs fixing" : "Can't tell yet")
+          .font(.system(size: 14)).foregroundStyle(check.status == .ok ? Palette.green : check.status == .bad ? Palette.red : Palette.faint)
+        if check.status == .bad, let fix = check.fix { Text(fix).font(.system(size: 14)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
       }
+      Spacer(minLength: 8)
       if check.status == .bad { fixLink }
     }
+    .padding(.horizontal, 18).padding(.vertical, 12).frame(minHeight: 62)
     .accessibilityElement(children: .contain)
   }
 
   @ViewBuilder private var fixLink: some View {
     switch check.to {
-    case .makeHelper: if store.canManage { Button("Fix this", action: makeHelper).buttonStyle(.borderless) }
+    case .makeHelper: if store.canManage { Button("Fix this", action: makeHelper).buttonStyle(.pill(.secondary, small: true)) }
     case .chooseDevice(let id), .chooseModel(let id):
-      if let a = store.agent(id) { NavigationLink("Fix this") { AgentPage(agent: a) } }
-    case .devices: NavigationLink("Fix this") { DevicesView() }
+      if let a = store.agent(id) { NavigationLink { AgentPage(agent: a) } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true)) }
+    case .devices: NavigationLink { DevicesView() } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true))
     case nil: EmptyView()
     }
   }

@@ -1,6 +1,6 @@
 import { isLocalOnlyHost } from "../../loopback.ts";
 import { useEffect, useState } from "react";
-import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
+import { Check, Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@wisp/core";
 import { api, getToken } from "../../api.ts";
 import { useStore, useTeams } from "../../store.ts";
@@ -452,40 +452,30 @@ export function AgentsPolicyPage() {
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
       <WorkspaceLead isOwner={isOwner} />
-      <Section title="Ask before" description="Checked actions need your OK (Approve / Deny in the conversation). If you ask Nova to email Sam, it just does it. If it decides on its own to email someone, it asks first.">
+      <Section title="Ask before" description="When an agent is about to do one of these on its own, it asks you first in Inbox and in the chat. You can approve or say not now. If you ask it to do one, it just does it.">
         <Card>
           {ASK.map(([k, label, hint]) => (
-            <label key={k} className={cx("px-4 py-3 flex items-start gap-3", isOwner && "cursor-pointer")}>
-              <input
-                type="checkbox"
-                className="mt-1"
-                disabled={!isOwner}
-                checked={p.askBefore.includes(k)}
-                onChange={(e) => save({ askBefore: e.target.checked ? [...p.askBefore, k] : p.askBefore.filter((x) => x !== k) })}
-              />
-              <span>
-                <span className="block text-sm font-medium">{label}</span>
-                <span className="block text-xs text-muted">{hint}</span>
-              </span>
-            </label>
+            <Row key={k} label={label} hint={hint}>
+              <Toggle on={p.askBefore.includes(k)} disabled={!isOwner} label={label} onChange={(on) => save({ askBefore: on ? [...p.askBefore, k] : p.askBefore.filter((x) => x !== k) })} />
+            </Row>
           ))}
         </Card>
       </Section>
-      <Section title="New agents">
+      <Section title="New agents" description="What a new agent may do where its AI tool runs directly on a device. Inside its own computer an agent always has full access; the computer is its sandbox.">
         <Card>
-          <Row label="Access on their device" hint="What a new agent may do with files and commands where its harness runs directly on a device. Inside its own VM an agent always has full access; the VM is its sandbox.">
-            <Segmented
-              label="Access for new agents"
-              value={p.defaultAccess}
-              disabled={!isOwner}
-              onChange={(v) => save({ defaultAccess: v })}
-              options={[
-                ["read-only", "Read only"],
-                ["edit", "Edit"],
-                ["full", "Full"],
-              ]}
-            />
-          </Row>
+          {(
+            [
+              ["read-only", "Read only", "Can look at files, can't change them"],
+              ["edit", "Can edit files", "Can change files, can't run commands"],
+              ["full", "Full access", "Files and commands on the device"],
+            ] as const
+          ).map(([v, label, hint]) => (
+            <button key={v} type="button" role="radio" aria-checked={p.defaultAccess === v} disabled={!isOwner} onClick={() => save({ defaultAccess: v })} className="w-full text-left disabled:opacity-60 hover:bg-hover">
+              <Row label={label} hint={hint}>
+                {p.defaultAccess === v && <Check size={18} className="text-badge" aria-hidden />}
+              </Row>
+            </button>
+          ))}
         </Card>
       </Section>
       <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">

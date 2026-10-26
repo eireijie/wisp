@@ -103,6 +103,9 @@ final class TourTests: XCTestCase {
     XCTFail("\(id) never settled on screen")
   }
   private func back() {
+    // settings pages draw their own back circle
+    let own = app.buttons["settings-back"].firstMatch
+    if own.exists { own.tap(); return }
     let button = app.navigationBars.buttons.element(boundBy: 0)
     XCTAssertTrue(button.exists)
     button.tap()

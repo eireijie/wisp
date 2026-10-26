@@ -26,6 +26,14 @@ extension Store {
     try switchSession(token: created.token)
   }
 
+  /** An owner deletes an organization. If you were in it, the hub moves your sign-in to another of yours. */
+  func deleteOrg(_ org: OrgSummary, typed name: String) async throws {
+    struct Deleted: Decodable { var token: String? }
+    let data = try await fetch { try await $0.raw("DELETE", "/api/orgs/\(org.id)", body: ["name": name]) }
+    if let token = (try? Wire.decoder.decode(Deleted.self, from: data))?.token { try switchSession(token: token) }
+    else { await refreshOrgs() }
+  }
+
   func switchOrg(_ org: OrgSummary) async throws {
     guard !isCurrent(org) else { return }
     let result: SessionToken = try await fetch { try await $0.post("/api/orgs/\(org.id)/switch", Empty()) }
