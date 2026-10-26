@@ -119,7 +119,7 @@ describe("features", () => {
 describe("agent defaults", () => {
   it("uses the latest agent's harness until an owner saves defaults, and fills in a new agent with them", async () => {
     // the "sched" agent above runs the custom harness; no devices, so no VM
-    expect((await api("GET", "/api/settings/agent-defaults")).data).toEqual({ harness: "custom", model: null, computer: "none", nodeId: null });
+    expect((await api("GET", "/api/settings/agent-defaults")).data).toEqual({ harness: "custom", model: null, computer: "none", nodeId: null, models: {} });
     const sam = await login("sam@example.com");
     expect((await api("PUT", "/api/settings/agent-defaults", { harness: "codex" }, sam)).status).toBe(403);
     expect((await api("PUT", "/api/settings/agent-defaults", { harness: "codex", model: "gpt-6" })).data).toMatchObject({ harness: "codex", model: "gpt-6", computer: "none" });
@@ -132,6 +132,15 @@ describe("agent defaults", () => {
     expect((await api("POST", "/api/agents", { handle: "picked", name: "Picked", harness: "claude-code", useDefaults: true })).data).toMatchObject({ harness: "claude-code", model: null });
     // without defaults a harness is still needed
     expect((await api("POST", "/api/agents", { handle: "nohar", name: "No" })).status).toBe(400);
+  });
+
+  it("keeps a default model per AI tool and uses it for a new agent on that tool", async () => {
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { "claude-code": "sonnet-x" } })).data.models).toEqual({ "claude-code": "sonnet-x" });
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { codex: "sol" } })).data.models).toEqual({ "claude-code": "sonnet-x", codex: "sol" });
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { "claude-code": null } })).data.models).toEqual({ codex: "sol" });
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { nope: "x" } })).status).toBe(400);
+    expect((await api("POST", "/api/agents", { handle: "permodel", name: "Per", harness: "codex", useDefaults: true })).data).toMatchObject({ harness: "codex", model: "sol" });
+    await api("PUT", "/api/settings/agent-defaults", { models: { codex: null } });
   });
 
   it("saves model IDs up to the shared catalog limit", async () => {

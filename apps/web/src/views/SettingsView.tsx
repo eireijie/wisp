@@ -1,11 +1,9 @@
-import { GITHUB_URL } from "@wisp/core";
-import { useEffect, useState, type ReactNode } from "react";
-import { Bell, ChevronLeft, ChevronRight, Gauge, Monitor, Palette, Settings, SlidersHorizontal, Users } from "lucide-react";
+import { useEffect, type ReactNode } from "react";
+import { Bell, Blocks, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, LifeBuoy, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal } from "lucide-react";
 import { resolveFeatures, type Features } from "@wisp/core";
-import { api } from "../api.ts";
 import { useStore } from "../store.ts";
-import { appHashBeforeSettings, go, href, type SettingsPage } from "../router.ts";
-import { Button, Pill, cx } from "../components/ui.tsx";
+import { go, href, type SettingsPage } from "../router.ts";
+import { cx } from "../components/ui.tsx";
 import { useFeatures } from "../features.ts";
 import { AppearancePage, NotificationsPage, PreferencesPage, ProfilePage, SecurityPage } from "./settings/account.tsx";
 import { AgentsPolicyPage, ComputersPage, ConnectionsPage, DataPage, GeneralPage, PeoplePage } from "./settings/workspace.tsx";
@@ -20,70 +18,68 @@ import { ModsPage } from "./settings/features.tsx";
 import { UsagePage } from "./settings/usage.tsx";
 import { AskAndChanges } from "./settings/changes.tsx";
 import { AgentDefaultsPage } from "./settings/defaults.tsx";
+import { AboutPage } from "./settings/about.tsx";
+import { SignOutButton } from "./settings/signout.tsx";
 import { MarketplaceView } from "./MarketplaceView.tsx";
 import { AccessPanel } from "../components/Access.tsx";
-import { Card, PageHeader, Row, Section } from "./settings/parts.tsx";
+import { PageHeader } from "./settings/parts.tsx";
 
 /**
  * Settings: a short list of sections. A section with more than one page lists them under it
  * while it's open. A page can need a feature (Voice, People, Usage), and some aren't for guests.
  * Page ids are the routes (SETTINGS_PAGES), so old links still open the same page.
  */
-type NavPage = { id: SettingsPage; label: string; noGuests?: boolean; feature?: keyof Features };
-type NavSection = { section: string; icon: ReactNode; pages: NavPage[] };
+type NavPage = { id: SettingsPage; label: string; icon: ReactNode; noGuests?: boolean; feature?: keyof Features };
+type NavSection = { section: string; pages: NavPage[] };
+const ic = (I: typeof Settings) => <I size={17} strokeWidth={1.8} />;
 const NAV: NavSection[] = [
   {
-    section: "General",
-    icon: <Settings size={16} />,
+    section: "You",
     pages: [
-      { id: "general", label: "Workspace" },
-      { id: "profile", label: "Profile" },
-      { id: "preferences", label: "App behavior" },
-      { id: "features", label: "Mods" },
-    ],
-  },
-  { section: "Usage", icon: <Gauge size={16} />, pages: [{ id: "usage", label: "Usage", feature: "background" }] },
-  {
-    section: "People",
-    icon: <Users size={16} />,
-    pages: [
-      { id: "people", label: "People", feature: "invite" },
-      { id: "agents", label: "Agents", noGuests: true },
+      { id: "profile", label: "Profile", icon: ic(User) },
+      { id: "notifications", label: "Notifications", icon: ic(Bell) },
+      { id: "appearance", label: "Appearance", icon: ic(Palette) },
+      { id: "preferences", label: "App behavior", icon: ic(SlidersHorizontal) },
+      { id: "voice", label: "Voice", icon: ic(Mic), feature: "voice", noGuests: true },
+      { id: "security", label: "Security", icon: ic(ShieldCheck) },
     ],
   },
   {
-    section: "Notifications",
-    icon: <Bell size={16} />,
+    section: "Workspace",
     pages: [
-      { id: "notifications", label: "Notifications" },
-      { id: "voice", label: "Voice", feature: "voice" },
+      { id: "general", label: "Workspace", icon: ic(Building2), noGuests: true },
+      { id: "people", label: "People", icon: ic(Users), feature: "invite", noGuests: true },
+      { id: "usage", label: "Usage", icon: ic(Gauge), feature: "background", noGuests: true },
+      { id: "features", label: "Mods", icon: ic(Blocks), noGuests: true },
     ],
   },
-  { section: "Appearance", icon: <Palette size={16} />, pages: [{ id: "appearance", label: "Appearance" }] },
+  {
+    section: "Agents",
+    pages: [
+      { id: "agents", label: "Agents policy", icon: ic(Bot), noGuests: true },
+      { id: "agent-defaults", label: "Agent defaults", icon: ic(Wrench), noGuests: true },
+      { id: "harnesses", label: "AI tool settings", icon: ic(SquareTerminal), noGuests: true },
+      { id: "runtimes", label: "Agent runtimes", icon: ic(Cpu), noGuests: true },
+      { id: "logins", label: "Agent logins", icon: ic(KeyRound), noGuests: true },
+      { id: "apps", label: "Connected apps", icon: ic(Store), noGuests: true },
+      { id: "connections", label: "Connections", icon: ic(Plug), noGuests: true },
+      { id: "memory", label: "Memory", icon: ic(BookOpen), noGuests: true },
+    ],
+  },
   {
     section: "Devices",
-    icon: <Monitor size={16} />,
     pages: [
-      { id: "devices", label: "Devices" },
-      { id: "computers", label: "Agent computers", noGuests: true },
-      { id: "logins", label: "Logins", noGuests: true },
-      { id: "mobile", label: "Mobile" },
-      { id: "access", label: "Access" },
+      { id: "devices", label: "Devices", icon: ic(Monitor), noGuests: true },
+      { id: "computers", label: "Agent computers", icon: ic(Sparkles), noGuests: true },
+      { id: "access", label: "Access", icon: ic(Wifi), noGuests: true },
+      { id: "mobile", label: "Mobile", icon: ic(Smartphone), noGuests: true },
     ],
   },
   {
-    section: "Advanced",
-    icon: <SlidersHorizontal size={16} />,
+    section: "More",
     pages: [
-      { id: "agent-defaults", label: "Agent defaults", noGuests: true },
-      { id: "memory", label: "Memory" },
-      { id: "apps", label: "Connected apps", noGuests: true },
-      { id: "runtimes", label: "Agent runtimes", noGuests: true },
-      { id: "harnesses", label: "Harnesses", noGuests: true },
-      { id: "connections", label: "Connections", noGuests: true },
-      { id: "security", label: "Security" },
-      { id: "data", label: "Data" },
-      { id: "updates", label: "About" },
+      { id: "data", label: "Data and export", icon: ic(Database), noGuests: true },
+      { id: "updates", label: "About", icon: ic(Info) },
     ],
   },
 ];
@@ -126,12 +122,18 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   logins: () => <LoginsPage />,
   connections: () => <ConnectionsPage />,
   data: () => <DataPage />,
-  updates: () => <UpdatesPage />,
+  updates: () => <AboutPage />,
 };
 
+/** A link in the list that isn't a settings page: it opens its own area. */
+const LINKS: { after: string; label: string; icon: ReactNode; to: () => string; noGuests?: boolean }[] = [
+  { after: "Devices", label: "Computers and devices", icon: ic(Monitor), to: () => href({ view: "computers", computerId: null }), noGuests: true },
+  { after: "More", label: "Help", icon: ic(LifeBuoy), to: () => href({ view: "help" }) },
+];
+
 /**
- * On larger screens (`fullWindow`) Settings replaces the whole app, sidebar included: its own list
- * on the left with "Back to app", the page on the right. On phones it's a list, then a page.
+ * Settings: on desktops a full page inside the rail layout, a list of sections on the left and the
+ * page on the right. On phones it is a list, then a page with a back button.
  */
 export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage | null; onBack?: () => void; fullWindow?: boolean }) {
   const me = useStore((s) => s.me)!;
@@ -143,102 +145,73 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
   const known = page && all.some((p) => p.id === page) ? page : null;
   const current = known ?? (fullWindow ? all[0].id : null);
   const label = all.find((p) => p.id === current)?.label;
-  const open = nav.find((s) => s.pages.some((p) => p.id === current));
+  const who = `${me.user.name} · ${me.role === "owner" ? "Owner" : me.role === "guest" ? "Guest" : "Member"}`;
 
-  const list = (
-    <nav className="space-y-px" aria-label="Settings">
-      {nav.map((s) => {
-        const isOpen = s === open;
-        return (
-          <div key={s.section}>
+  const items = (s: NavSection) => [
+    ...s.pages.map((p) => ({ key: p.id, label: p.label, icon: p.icon, to: href({ view: "settings", page: p.id }), on: current === p.id })),
+    ...LINKS.filter((l) => l.after === s.section && !(guest && l.noGuests)).map((l) => ({ key: l.label, label: l.label, icon: l.icon, to: l.to(), on: false })),
+  ];
+
+  const list = fullWindow ? (
+    <nav aria-label="Settings" className="space-y-px">
+      {nav.map((s) => (
+        <div key={s.section}>
+          <div className="px-3 pt-4 pb-1.5 text-xs font-semibold tracking-wide text-faint uppercase">{s.section}</div>
+          {items(s).map((it) => (
             <a
-              href={href({ view: "settings", page: s.pages[0].id })}
-              aria-current={isOpen && s.pages.length === 1 ? "page" : undefined}
-              className={cx(
-                "flex items-center gap-2.5 rounded-lg px-2.5 text-[15px]",
-                fullWindow ? "h-[34px] md:text-sm" : "h-11",
-                isOpen ? (fullWindow ? "bg-side-active text-ink font-bold" : "bg-hover text-ink font-medium") : fullWindow ? "text-ink/80 font-medium hover:text-ink hover:bg-side-hover" : "text-ink hover:bg-hover",
-              )}
+              key={it.key}
+              href={it.to}
+              aria-current={it.on ? "page" : undefined}
+              className={cx("flex items-center gap-2.5 h-10 px-3 rounded-xl text-sm font-medium", it.on ? "bg-control text-ink font-semibold" : "text-ink/80 hover:text-ink hover:bg-side-hover")}
             >
-              <span className="shrink-0 opacity-80">{s.icon}</span>
-              <span className="flex-1 truncate">{s.section}</span>
-              {!fullWindow && <ChevronRight size={14} className="text-faint" />}
+              <span className="shrink-0 opacity-80">{it.icon}</span>
+              <span className="truncate">{it.label}</span>
             </a>
-            {fullWindow && isOpen && s.pages.length > 1 && (
-              <div className="ml-[18px] my-1 pl-3 border-l border-line space-y-px">
-                {s.pages.map((p) => (
-                  <a
-                    key={p.id}
-                    href={href({ view: "settings", page: p.id })}
-                    aria-current={current === p.id ? "page" : undefined}
-                    className={cx("flex items-center h-[30px] px-2.5 rounded-lg text-sm truncate", current === p.id ? "text-ink font-bold bg-side-hover" : "text-muted hover:text-ink hover:bg-side-hover")}
-                  >
-                    {p.label}
-                  </a>
-                ))}
-              </div>
-            )}
+          ))}
+        </div>
+      ))}
+    </nav>
+  ) : (
+    <nav aria-label="Settings" className="space-y-5">
+      {nav.map((s) => (
+        <section key={s.section}>
+          <h2 className="px-4 pb-1.5 text-[13px] font-semibold text-faint">{s.section}</h2>
+          <div className="rounded-3xl bg-card overflow-hidden">
+            {items(s).map((it) => (
+              <a key={it.key} href={it.to} className="flex items-center gap-3.5 px-4 min-h-14 border-b border-line last:border-0 hover:bg-hover">
+                <span className="size-5 shrink-0 grid place-items-center text-muted">{it.icon}</span>
+                <span className="flex-1 text-[17px]">{it.label}</span>
+                <ChevronRight size={16} className="text-faint" />
+              </a>
+            ))}
           </div>
-        );
-      })}
+        </section>
+      ))}
+      <SignOutButton icon className="w-full h-12 rounded-full bg-card text-bad text-[15px] font-medium inline-flex items-center justify-center gap-2" />
     </nav>
   );
-
-  // phones: a section's other pages as a row of chips above the page
-  const siblings =
-    !fullWindow && open && open.pages.length > 1 ? (
-      <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4 mb-5" aria-label={`${open.section} pages`}>
-        {open.pages.map((p) => (
-          <a
-            key={p.id}
-            href={href({ view: "settings", page: p.id })}
-            aria-current={current === p.id ? "page" : undefined}
-            className={cx("shrink-0 h-8 px-3.5 rounded-full inline-flex items-center text-[13px] font-bold", current === p.id ? "bg-ink text-bg" : "bg-chip text-muted hover:text-ink")}
-          >
-            {p.label}
-          </a>
-        ))}
-      </div>
-    ) : null;
 
   const body = (id: SettingsPage) =>
     id === "apps" ? (
       <MarketplaceView section="installed" />
     ) : (
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className={cx("max-w-3xl pb-16", fullWindow ? "mx-auto px-7 py-10" : "p-4")}>
-          {siblings}
-          {PAGES[id]()}
-        </div>
+        <div className={cx("max-w-[640px] pb-16", fullWindow ? "mx-auto px-8 py-9" : "p-4")}>{PAGES[id]()}</div>
       </div>
     );
 
   if (fullWindow)
     return (
-      <div className="flex-1 min-w-0 flex gap-2 p-2">
-        <aside className="w-60 shrink-0 overflow-y-auto flex flex-col gap-4 px-1.5 py-2.5 safe-top">
-          <a href={appHashBeforeSettings()} className="flex items-center gap-2 h-9 px-2.5 rounded-lg font-bold text-[15px] hover:bg-side-hover">
-            <ChevronLeft size={16} strokeWidth={2.4} aria-hidden /> Back to app
-          </a>
+      <div className="flex-1 min-w-0 flex">
+        <aside className="w-[268px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-7 safe-top flex flex-col">
+          <div className="px-3 pb-1.5">
+            <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+            <div className="mt-0.5 text-[13px] text-faint truncate">{who}</div>
+          </div>
           {list}
-          {/* the pages that aren't on the rail */}
-          <nav className="space-y-px border-t border-line pt-3" aria-label="Go to">
-            {[
-              { label: "Memory", to: href({ view: "vault", path: null }), show: true },
-              { label: "Marketplace", to: href({ view: "marketplace" }), show: true },
-              { label: "Tasks", to: href({ view: "tasks" }), show: features.tasks },
-              { label: "About you", to: href({ view: "about" }), show: true },
-              { label: "Help", to: href({ view: "help" }), show: true },
-            ]
-              .filter((l) => l.show)
-              .map((l) => (
-                <a key={l.label} href={l.to} className="flex items-center h-[34px] px-2.5 rounded-lg text-sm font-medium text-ink/80 hover:text-ink hover:bg-side-hover">
-                  {l.label}
-                </a>
-              ))}
-          </nav>
+          <SignOutButton label="Sign out" className="mt-4 h-10 px-3 rounded-xl text-sm font-medium text-bad hover:bg-side-hover text-left" />
         </aside>
-        <main className="flex-1 min-w-0 flex flex-col bg-panel rounded-3xl border border-line shadow-panel overflow-hidden" aria-label={label ? `${label} settings` : "Settings"}>
+        <main className="flex-1 min-w-0 flex flex-col" aria-label={label ? `${label} settings` : "Settings"}>
           {body(current!)}
         </main>
       </div>
@@ -248,21 +221,13 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       {current !== "apps" && (
-        <header className="h-15 shrink-0 px-4 flex items-center gap-2 border-b border-line safe-top">
+        <header className="shrink-0 px-[18px] pt-3 pb-2 flex items-center gap-3 safe-top">
           {(onBack || current) && (
-            <button
-              className="h-9 pl-0.5 pr-2 -ml-1.5 rounded-md hover:bg-hover inline-flex items-center gap-0.5 text-sm text-muted hover:text-ink"
-              onClick={() => (current ? go({ view: "settings", page: null }) : onBack?.())}
-              aria-label={current ? "Back to all settings" : "Back"}
-            >
+            <button className="circle shrink-0" onClick={() => (current ? go({ view: "settings", page: null }) : onBack?.())} aria-label={current ? "Back to all settings" : "Back"}>
               <ChevronLeft size={22} aria-hidden />
-              <span aria-hidden>Back</span>
             </button>
           )}
-          <h1 className="text-lg font-bold tracking-tight truncate">
-            Settings
-            {open && <span className="text-muted font-normal normal-case tracking-normal"> / {open.section}</span>}
-          </h1>
+          <h1 className="text-xl font-bold tracking-tight truncate">{label ?? "Settings"}</h1>
         </header>
       )}
       {current === "apps" ? (
@@ -271,143 +236,9 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
         body(current)
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-4 pb-16">{list}</div>
+          <div className="p-[18px] pb-28">{list}</div>
         </div>
       )}
     </div>
-  );
-}
-
-interface UpdateInfo {
-  version: { commit: string | null; date: string | null };
-  check: { behind: number | null; changes: string[]; canUpdate: boolean; reason: string } | null;
-  update: { state: "idle" | "updating" | "restarting" | "failed"; message: string; log: string[] };
-}
-
-/** The hub's version, what's new on GitHub, and a button to update. The page reloads once the hub is back. */
-function UpdatesPage() {
-  const isOwner = useStore((s) => s.me)?.role === "owner";
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [restarting, setRestarting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const check = async () => {
-    setChecking(true);
-    try {
-      setInfo(await api<UpdateInfo>("POST", "/api/updates/check"));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setChecking(false);
-    }
-  };
-  useEffect(() => {
-    api<UpdateInfo>("GET", "/api/updates").then(setInfo, () => {});
-    check();
-  }, []);
-
-  // while the hub updates, follow along; it goes away while restarting, then comes back on the new version
-  const busy = !!restarting || info?.update.state === "updating" || info?.update.state === "restarting";
-  useEffect(() => {
-    if (!busy) return;
-    const from = restarting ?? info?.version.commit ?? null;
-    const t = setInterval(async () => {
-      const next = await api<UpdateInfo>("GET", "/api/updates").catch(() => null);
-      if (!next) return setRestarting(from ?? "");
-      if (next.update.state === "restarting") setRestarting(from ?? "");
-      if (restarting !== null && next.version.commit !== restarting) return location.reload();
-      setInfo(next);
-    }, 2000);
-    return () => clearInterval(t);
-  }, [busy, restarting]);
-
-  const update = async () => {
-    setError(null);
-    try {
-      const r = await api<{ update: UpdateInfo["update"] }>("POST", "/api/updates/hub");
-      setInfo((i) => i && { ...i, update: r.update });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  const v = info?.version;
-  const c = info?.check;
-  const u = info?.update;
-  return (
-    <>
-    <PageHeader title="About">Free and open source. Your data stays on this hub.</PageHeader>
-    <section className="space-y-3 mb-10">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">Updates</h3>
-          <p className="text-sm text-muted">
-            {v?.commit ? (
-              <>
-                This hub runs Wisp <code>{v.commit}</code>
-                {v.date && <> from {new Date(v.date).toLocaleDateString()}</>}. Update devices from{" "}
-                <a className="text-accent-text hover:underline" href="#/nodes">
-                  Devices
-                </a>
-                .
-              </>
-            ) : (
-              "Which version of Wisp this hub runs, and what's new."
-            )}
-          </p>
-        </div>
-        <Button onClick={check} disabled={checking || busy} className="shrink-0">
-          {checking ? "Checking…" : "Check now"}
-        </Button>
-      </div>
-      <div className="rounded-xl border border-line p-4 space-y-3 text-sm">
-        {busy ? (
-          <p className="flex items-center gap-2">
-            <Pill tone="info">{restarting !== null || u?.state === "restarting" ? "Restarting" : "Updating"}</Pill>
-            <span className="text-muted">{restarting !== null || u?.state === "restarting" ? "The hub is restarting with the update. This page reloads when it's back." : (u?.log.at(-1) ?? "Updating…")}</span>
-          </p>
-        ) : !c ? (
-          <p className="text-muted">{checking ? "Asking GitHub what's new…" : "Not checked yet."}</p>
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              {c.canUpdate ? <Pill tone="accent">Update available</Pill> : c.behind === 0 ? <Pill tone="ok">Up to date</Pill> : <Pill tone="warn">Can't update here</Pill>}
-              <span className="text-muted flex-1">{c.reason}</span>
-              {c.canUpdate && isOwner && (
-                <Button variant="primary" onClick={update}>
-                  Update hub
-                </Button>
-              )}
-            </div>
-            {c.changes.length > 0 && (
-              <ul className="space-y-1 text-muted">
-                {c.changes.slice(0, 8).map((line) => (
-                  <li key={line} className="truncate">
-                    <code className="text-faint">{line.slice(0, line.indexOf(" "))}</code> {line.slice(line.indexOf(" ") + 1)}
-                  </li>
-                ))}
-                {c.changes.length > 8 && <li className="text-faint">…and {c.changes.length - 8} more</li>}
-              </ul>
-            )}
-            {c.canUpdate && !isOwner && <p className="text-xs text-muted">Only owners can update.</p>}
-          </>
-        )}
-        {u?.state === "failed" && <p className="text-bad whitespace-pre-wrap">{u.message}</p>}
-        {u?.state === "idle" && u.message && <p className="text-muted">{u.message}</p>}
-        {error && <p className="text-bad">{error}</p>}
-      </div>
-    </section>
-    <Section title="About">
-      <Card>
-        <Row label="Source code" hint="Issues, ideas and contributions welcome.">
-          <a className="text-sm text-accent-text hover:underline" href={GITHUB_URL} target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-        </Row>
-        <Row label="License" hint="Use it, change it, share it.">
-          <span className="text-sm text-muted">Apache-2.0</span>
-        </Row>
-      </Card>
-    </Section>
-    </>
   );
 }

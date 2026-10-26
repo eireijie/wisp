@@ -26,34 +26,42 @@ export function GeneralPage() {
     <>
       <PageHeader title="Workspace">The organization everyone here shares.</PageHeader>
       <OwnersOnly show={!isOwner} />
-      <Section title="Organization name">
-        <form
-          className="flex flex-wrap items-center gap-2 max-w-md"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError(null);
-            try {
-              await api("PATCH", "/api/workspace", { name: name.trim() });
-              await useStore.getState().load();
-              flash();
-            } catch (err) {
-              setError((err as Error).message);
-            }
-          }}
-        >
-          <Input className="flex-1 min-w-48" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required />
-          {isOwner && (
+      <form
+        className="mb-7"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setError(null);
+          try {
+            await api("PATCH", "/api/workspace", { name: name.trim() });
+            await useStore.getState().load();
+            flash();
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      >
+        <Card>
+          <label className="px-[18px] min-h-[54px] flex items-center gap-4">
+            <span className="text-[15px] w-40 shrink-0">Organization name</span>
+            <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Organization name" />
+          </label>
+          <Row label="Hub address" hint="Devices connect here, and so do agents running elsewhere through wisp-mcp. Access gives it an address that works from anywhere.">
+            <span className="text-sm text-muted break-all max-w-[240px] text-right">{shareOrigin(access).replace(/^https?:\/\//, "")}</span>
+          </Row>
+          <Row label="Your role">
+            <span className="text-sm text-muted">{isOwner ? "Owner" : me.role === "guest" ? "Guest" : "Member"}</span>
+          </Row>
+        </Card>
+        {isOwner && (
+          <div className="mt-3 flex items-center gap-3">
             <Button variant="primary" disabled={!name.trim() || name.trim() === me.workspace.name}>
-              Save
+              Save changes
             </Button>
-          )}
-          <SavedNote shown={saved} />
-        </form>
+            <SavedNote shown={saved} />
+          </div>
+        )}
         {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-      </Section>
-      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through wisp-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
-        <CopyBlock text={shareOrigin(access)} />
-      </Section>
+      </form>
       {isOwner && <DeleteOrgSection />}
     </>
   );
@@ -360,7 +368,7 @@ function ResetPassword({ person, onClose }: { person: { id: string; name: string
 
 // --- Agents -----------------------------------------------------------------------------------
 
-interface AgentPolicy {
+export interface AgentPolicy {
   askBefore: string[];
   maxHops: number;
   maxRunsPerMinute: number;
@@ -370,7 +378,7 @@ interface AgentPolicy {
   maxAgentMade: number;
 }
 
-const ASK: [string, string, string][] = [
+export const ASK: [string, string, string][] = [
   ["send", "Sending email or messages outside Wisp", "Email, texts, Slack, DMs on other sites"],
   ["spend", "Buying or paying for anything", "Orders, subscriptions, upgrades, ads"],
   ["delete", "Deleting files, data or accounts", "Anything that can't be undone"],

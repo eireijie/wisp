@@ -6,6 +6,8 @@ export interface AgentDefaults {
   model: string | null;
   computer: "own-vm" | "none";
   nodeId: string | null;
+  /** A default model for each AI tool (harness id to model id); a tool left out uses `model` when it is the default tool, else its own default. */
+  models: Record<string, string>;
 }
 
 const KEY = "agents.defaults";
@@ -20,8 +22,15 @@ export function savedAgentDefaults(store: Store, workspaceId: string): Partial<A
   }
 }
 
-export function saveAgentDefaults(store: Store, workspaceId: string, patch: Partial<AgentDefaults>) {
-  const next = { ...savedAgentDefaults(store, workspaceId), ...patch };
+export function saveAgentDefaults(store: Store, workspaceId: string, patch: Partial<Omit<AgentDefaults, "models">> & { models?: Record<string, string | null> }) {
+  const saved = savedAgentDefaults(store, workspaceId);
+  const { models: change, ...rest } = patch;
+  const models = { ...(saved.models ?? {}) };
+  for (const [harness, model] of Object.entries(change ?? {})) {
+    if (model) models[harness] = model;
+    else delete models[harness];
+  }
+  const next = { ...saved, ...rest, ...(change ? { models } : {}) };
   store.setSetting(workspaceId, KEY, JSON.stringify(next));
 }
 
@@ -41,5 +50,5 @@ export function agentDefaults(store: Store, workspaceId: string): AgentDefaults 
   const harness = saved.harness !== undefined ? saved.harness : (latest?.harness ?? offered[0]?.harness ?? null);
   const model = saved.model !== undefined ? saved.model : latest && latest.harness === harness ? latest.model : null;
   const computer = saved.computer ?? (nodes.some((n) => canRunVms(n.id)) ? "own-vm" : "none");
-  return { harness, model, computer, nodeId };
+  return { harness, model, computer, nodeId, models: saved.models ?? {} };
 }
