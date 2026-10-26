@@ -14,6 +14,8 @@ final class Dictation {
   @ObservationIgnored private var task: SFSpeechRecognitionTask?
   /** a start is waiting on permissions or the microphone; another tap must not begin a second one */
   @ObservationIgnored private var starting = false
+  /** bumped by every start and stop, so results from a finished session can't touch the next one */
+  @ObservationIgnored private var generation = 0
 
   func toggle(_ onText: @escaping (String) -> Void) {
     if active { stop(); return }
@@ -32,8 +34,15 @@ final class Dictation {
       error = "Dictation isn't available right now."
       return
     }
+    let session = AVAudioSession.sharedInstance()
+    // touching inputNode with no audio input aborts the app; say so instead
+    guard Self.hasInput(session) else {
+      error = "No microphone is available right now."
+      return
+    }
+    generation += 1
+    let mine = generation
     do {
-      let session = AVAudioSession.sharedInstance()
       try session.setCategory(.record, mode: .measurement, options: .duckOthers)
       try session.setActive(true, options: .notifyOthersOnDeactivation)
       let request = SFSpeechAudioBufferRecognitionRequest()
@@ -48,8 +57,9 @@ final class Dictation {
         let text = result?.bestTranscription.formattedString
         let done = failure != nil || result?.isFinal == true
         Task { @MainActor in
+          guard let self, self.generation == mine else { return }
           if let text { onText(text) }
-          if done { self?.stop() }
+          if done { self.stop() }
         }
       }
       active = true
@@ -59,10 +69,16 @@ final class Dictation {
     }
   }
 
+  /** the same check a voice call makes before it touches the microphone */
+  static func hasInput(_ session: AVAudioSession) -> Bool {
+    session.isInputAvailable && (!session.currentRoute.inputs.isEmpty || !(session.availableInputs ?? []).isEmpty)
+  }
+
   func stop() {
+    generation += 1
     guard active || request != nil else { return }
     if engine.isRunning { engine.stop() }
-    engine.inputNode.removeTap(onBus: 0)
+    if Self.hasInput(AVAudioSession.sharedInstance()) { engine.inputNode.removeTap(onBus: 0) }
     request?.endAudio()
     task?.cancel()
     request = nil

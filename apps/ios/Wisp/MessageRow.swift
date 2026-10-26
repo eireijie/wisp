@@ -297,7 +297,7 @@ struct PartView: View {
     case .approval(let id):
       ApprovalCard(approvalId: id)
     case .change(let id):
-      ChangeCard(changeId: id)
+      ChangeCard(changeId: id, fallback: message.body)
     case .computer(let id, let request):
       ComputerCard(computerId: id, request: request, agentName: store.agent(message.author.id)?.name)
     case .toolCall, .other:
@@ -343,6 +343,9 @@ struct MarkdownText: View {
 struct ChangeCard: View {
   @Environment(Store.self) private var store
   var changeId: String
+  /** what the message said, for a change too old to be in the recent list */
+  var fallback = ""
+  @State private var looked = false
   @State private var busy = false
   @State private var error: String?
 
@@ -374,9 +377,11 @@ struct ChangeCard: View {
         }
         .padding(.top, 2)
       }
+    } else if looked && !fallback.isEmpty {
+      Text(fallback).font(.system(size: 16)).foregroundStyle(Palette.muted)
     } else {
       // a change made after the list was loaded: fetch it once
-      Color.clear.frame(height: 0).task { try? await store.refreshChanges() }
+      Color.clear.frame(height: 0).task { try? await store.refreshChanges(); looked = true }
     }
   }
 

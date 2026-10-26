@@ -44,12 +44,12 @@ struct NativeSettingsView: View {
       if !guest {
         CardLabel("Devices")
         CardGroup {
-          NavigationLink { ComputersView() } label: { RowLabel(title: "Computers and devices") }.accessibilityIdentifier("settings-computers")
+          Button { store.route = .device(id: nil) } label: { RowLabel(title: "Computers and devices") }.buttonStyle(.plain).accessibilityIdentifier("settings-computers")
           NavigationLink { DevicesSettingsView() } label: { RowLabel(title: "Away from home") }.accessibilityIdentifier("settings-devices")
           if store.canManage { NavigationLink { ComputerSettingsView() } label: { RowLabel(title: "Agent computers") }.accessibilityIdentifier("settings-agent-computers") }
           if store.isOwner { NavigationLink { AccessView() } label: { RowLabel(title: "Access") }.accessibilityIdentifier("settings-access") }
           NavigationLink { MobileSettingsView() } label: { RowLabel(title: "Mobile") }.accessibilityIdentifier("settings-mobile")
-          NavigationLink { InboxView() } label: { RowLabel(title: "Approvals") }.accessibilityIdentifier("settings-approvals")
+          Button { store.route = .inbox } label: { RowLabel(title: "Approvals") }.buttonStyle(.plain).accessibilityIdentifier("settings-approvals")
         }
       }
       CardLabel("More")

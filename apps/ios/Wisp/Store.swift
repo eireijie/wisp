@@ -516,7 +516,7 @@ final class Store {
   var pendingApprovals: [Approval] { approvals.filter { $0.status == "pending" } }
   var unreadTotal: Int { channels.reduce(0) { $0 + $1.badge } }
   /** agents waiting on you: asking for an OK, or for help on their computer */
-  var needsYouCount: Int { pendingApprovals.count + (canViewComputers ? computers.filter { $0.help != nil }.count : 0) }
+  var needsYouCount: Int { (role == "guest" ? 0 : pendingApprovals.count) + (canViewComputers ? computers.filter { $0.help != nil }.count : 0) }
 
   // MARK: live events
 

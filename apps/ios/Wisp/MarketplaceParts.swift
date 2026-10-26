@@ -159,7 +159,8 @@ struct SkillShareSheet: View {
   @Environment(\.dismiss) private var dismiss
   var skill: HelperSkill?
   var onBrought: (HelperSkill) -> Void
-  var onDevices: () -> Void
+  /** nil hides "From your devices", for a screen that has no device list to go to */
+  var onDevices: (() -> Void)?
   enum Page { case home, agents, paste, found }
   @State private var page = Page.home
   @State private var picked: Set<String> = []
@@ -226,7 +227,9 @@ struct SkillShareSheet: View {
       CardGroup {
         Button { page = .paste } label: { MarketRow(symbol: "link", title: "Paste a link", subtitle: "From a shared skill") }.buttonStyle(.plain)
         Button { importing = true } label: { MarketRow(symbol: "doc.text", title: "Choose a file", subtitle: "A .md skill file") }.buttonStyle(.plain)
-        Button { dismiss(); onDevices() } label: { MarketRow(symbol: "laptopcomputer", title: "From your devices", subtitle: "Skills found in your harnesses") }.buttonStyle(.plain)
+        if let onDevices {
+          Button { dismiss(); onDevices() } label: { MarketRow(symbol: "laptopcomputer", title: "From your devices", subtitle: "Skills found in your harnesses") }.buttonStyle(.plain)
+        }
       }
     }
   }

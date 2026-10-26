@@ -92,9 +92,7 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft, attachTrigger: attachTrigger, send: { text, files, replyTo in
-            try await store.send(text, in: channel.id, files: files, replyTo: replyTo)
-          }, onCall: canCall && call == nil ? { startCall() } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")", onModelCommand: store.dmAgent(current).map { agent in { tool = .model(agent) } })
+          composer
         }
         .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
@@ -134,9 +132,18 @@ struct ChannelView: View {
     }
     .onDisappear {
       if store.openChannel == channel.id { store.openChannel = nil }
-      // leaving the chat (not opening the agent's profile from it) hangs up
-      if !showDetails, let call { call.end(store: store); self.call = nil }
     }
+  }
+
+  private var composer: some View {
+    Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft, attachTrigger: attachTrigger, send: { text, files, replyTo in
+            try await store.send(text, in: channel.id, files: files, replyTo: replyTo)
+          }, onCall: canCall && call == nil ? { startCall() } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")", onModelCommand: store.dmAgent(current).map { agent in { tool = .model(agent) } }, callLive: call != nil)
+  }
+
+  /** only really leaving the chat hangs up; opening a thread, the profile or the full-screen call doesn't */
+  private var hangUpWhenLeaving: some View {
+    LeavingWatcher { if let call { call.end(store: store); self.call = nil } }.frame(width: 0, height: 0)
   }
 
   private func startCall() {
@@ -207,6 +214,7 @@ struct ChannelView: View {
       LinearGradient(colors: [Palette.ground, Palette.ground.opacity(0)], startPoint: .top, endPoint: .bottom)
         .padding(.bottom, -10).ignoresSafeArea(edges: .top).allowsHitTesting(false)
     }
+    .background { hangUpWhenLeaving }
   }
 }
 
@@ -558,6 +566,8 @@ struct Composer: View {
   var callLabel = "Start a voice call"
   /** a plain "/model" opens the model sheet after it's sent */
   var onModelCommand: (() -> Void)? = nil
+  /** a call is on: dictating would take the microphone and speaker away from it */
+  var callLive = false
   @State private var dictation = Dictation()
   @State private var dictationBase = ""
   @State private var text = ""
@@ -633,7 +643,7 @@ struct Composer: View {
             .padding(.vertical, 15)
             .padding(.leading, 12)
             .accessibilityIdentifier("composer-field")
-          if empty || dictation.active {
+          if (empty || dictation.active) && !callLive {
             Button {
               if !dictation.active { dictationBase = text }
               dictation.toggle { transcript in
@@ -702,6 +712,7 @@ struct Composer: View {
     }
     .onChange(of: text) { _, new in if let draftKey { ComposerDrafts.save(new, key: draftKey) } }
     .onChange(of: attachTrigger) { pickingFiles = true }
+    .onChange(of: callLive) { _, live in if live { dictation.stop() } }
     .onChange(of: store.replying) { _, _ in if replyTarget != nil { focused = true } }
     .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
     .onChange(of: photos) { _, items in
@@ -915,5 +926,24 @@ enum ComposerMentions {
     guard let range = range(text, caret: caret) else { return (text, caret) }
     let before = String(text[..<range.lowerBound]) + "@\(handle) "
     return (before + text[range.upperBound...], before.count)
+  }
+}
+
+/** Tells when its screen is popped or dismissed, not when something is pushed or presented over it. */
+private struct LeavingWatcher: UIViewControllerRepresentable {
+  var onLeave: () -> Void
+  func makeUIViewController(context: Context) -> Probe { Probe() }
+  func updateUIViewController(_ probe: Probe, context: Context) { probe.onLeave = onLeave }
+
+  final class Probe: UIViewController {
+    var onLeave: () -> Void = {}
+    override func viewDidDisappear(_ animated: Bool) {
+      super.viewDidDisappear(animated)
+      var node: UIViewController? = self
+      while let current = node {
+        if current.isMovingFromParent || current.isBeingDismissed { onLeave(); return }
+        node = current.parent
+      }
+    }
   }
 }

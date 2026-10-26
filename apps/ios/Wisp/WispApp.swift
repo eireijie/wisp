@@ -98,12 +98,21 @@ struct MainTabs: View {
     .onChange(of: store.route, initial: true) { _, route in
       // a route opens a screen in a tab: close the settings and organization sheets that would hide it
       if route != nil { settings = false; orgs = false }
-      switch route {
-      case .chat: tab = .chats
-      case .approval: tab = .inbox
-      case .computer, .device: if store.canViewComputers { tab = .computers } else { store.route = nil }
-      case nil: break
-      }
+      guard let route else { return }
+      if route.tab == .computers && !store.canViewComputers { store.route = nil; return }
+      tab = route.tab
+      if route == .inbox { store.route = nil }
+    }
+  }
+}
+
+extension Route {
+  /** the tab that shows this route's screen */
+  var tab: MainTab {
+    switch self {
+    case .chat: .chats
+    case .approval, .inbox: .inbox
+    case .computer, .device: .computers
     }
   }
 }

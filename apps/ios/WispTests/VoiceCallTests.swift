@@ -5,7 +5,14 @@ import XCTest
 private final class FakeListener: CallListener {
   var starts = 0, stops = 0
   var failure: Error?
-  func start() async throws { starts += 1; if let failure { throw failure } }
+  /** hold the mic start open until `release`, like waiting on a permission */
+  var hold = false
+  var release: CheckedContinuation<Void, Never>?
+  func start() async throws {
+    starts += 1
+    if hold { await withCheckedContinuation { release = $0 } }
+    if let failure { throw failure }
+  }
   func stop() { stops += 1 }
 }
 
@@ -56,6 +63,33 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertTrue(s.state.ready)
     XCTAssertNotNil(s.state.startedAt)
     XCTAssertEqual(listener.starts, 1)
+  }
+
+  func testListenerCallbacksAfterTheCallIsGoneAreIgnored() async {
+    _ = await makeSession()
+    session = nil
+    await settle()
+    callbacks.level(0.5)
+    callbacks.partial("hello")
+    callbacks.final("hello")
+    callbacks.activity(true)
+    callbacks.error("late")
+  }
+
+  func testMuteWhileTheMicIsStartingTurnsItBackOff() async {
+    listener.hold = true
+    let s = VoiceCallSession(agentId: "a1", channelId: "c1", cloudListening: false,
+      listener: { [self] cb in callbacks = cb; return listener }, speaker: speaker,
+      send: { _ in }, messages: { [self] in list }, timing: CallTiming(filler: .seconds(30), longWork: .seconds(60), micHint: .seconds(60)))
+    session = s
+    let starting = Task { await s.start() }
+    await settle()
+    await s.mute(true)
+    let stopsAfterMute = listener.stops
+    listener.release?.resume()
+    await starting.value
+    XCTAssertEqual(listener.stops, stopsAfterMute + 1, "the late mic is switched off again")
+    XCTAssertFalse(s.state.ready)
   }
 
   func testListenerFailureAsksForTheMicrophone() async {
@@ -309,7 +343,11 @@ final class VoiceCallTests: XCTestCase {
 
   func testCallPrefsFallBackToSensibleDefaults() {
     let defaults = WispPreferences.standard
-    for key in [CallPrefs.speedKey, CallPrefs.languageKey, CallPrefs.activityKey] { defaults.removeObject(forKey: key) }
+    let keys = [CallPrefs.speedKey, CallPrefs.languageKey, CallPrefs.activityKey]
+    // put the device's real call settings back afterwards
+    let saved = keys.map { defaults.object(forKey: $0) }
+    defer { for (key, value) in zip(keys, saved) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+    for key in keys { defaults.removeObject(forKey: key) }
     XCTAssertEqual(CallPrefs.speed, 1)
     XCTAssertEqual(CallPrefs.language, "")
     XCTAssertTrue(CallPrefs.showActivity)
@@ -319,6 +357,5 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertEqual(CallPrefs.speed, 1.5)
     XCTAssertEqual(CallPrefs.speedLabel(1.25), "1.25x")
     XCTAssertEqual(CallPrefs.speedLabel(1), "1x")
-    defaults.removeObject(forKey: CallPrefs.speedKey)
   }
 }

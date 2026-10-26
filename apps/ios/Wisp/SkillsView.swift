@@ -78,7 +78,7 @@ struct SkillDetail: View {
     .sheet(isPresented: $editing) { SkillEditor(skill: current, onShare: { sharing = true }) }
     .sheet(isPresented: $installing) { SkillInstallSheet(title: "Add \(skill.name)", request: ["catalogId": AnyEncodable(skill.id)]) }
     .sheet(isPresented: $trying) { TryItSheet(name: current.name, description: current.description ?? "", agentIds: installed?.agentIds ?? [], onOpenChat: { chat = $0 }) }
-    .sheet(isPresented: $sharing) { if let installed { SkillShareSheet(skill: installed, onBrought: { _ in }, onDevices: {}) } }
+    .sheet(isPresented: $sharing) { if let installed { SkillShareSheet(skill: installed, onBrought: { _ in }, onDevices: nil) } }
     .navigationDestination(item: $chat) { ChannelView(channel: $0.channel, draft: $0.draft) }
     .confirmationDialog("Delete this skill? It will be removed from every helper that has it.", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete skill", role: .destructive) { if let installed { action.run { try await store.deleteSkill(installed.id); dismiss() } } }

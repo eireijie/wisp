@@ -233,7 +233,7 @@ struct NoteView: View {
     .sheet(isPresented: $renaming) { RenameNoteView(path: path) { moved in note = nil; unavailable = false; action.error = nil; path = moved } }
     .sheet(isPresented: $moving) { MoveNoteView(path: path) { moved in note = nil; unavailable = false; action.error = nil; path = moved } }
     .navigationDestination(item: $destination) { NoteView(path: $0.path) }
-    .navigationDestination(isPresented: $history) { NoteHistoryView(path: path) }
+    .navigationDestination(isPresented: $history) { NoteHistoryView(path: path, canRestore: note?.editable == true) }
     .navigationDestination(isPresented: $sharing) { MemoryAccessView(path: path) }
     .navigationDestination(isPresented: $graphOpen) { MemoryGraphScreen(browse: browse, initialKind: nil, focus: path) }
   }

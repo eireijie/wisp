@@ -7,7 +7,7 @@ struct InboxView: View {
   @Environment(Store.self) private var store
   @Environment(\.openSettings) private var openSettings
   @State private var mode: Mode = .needs
-  @State private var chat: Channel?
+  @State private var chat: ChatTarget?
   @State private var thread: ThreadRef?
   @State private var agentPage: Agent?
   @State private var showTasks = false
@@ -53,7 +53,7 @@ struct InboxView: View {
       await store.refreshComputers()
       await load()
     }
-    .navigationDestination(item: $chat) { ChannelView(channel: $0) }
+    .navigationDestination(item: $chat) { ChannelView(channel: $0.channel, draft: $0.draft) }
     .navigationDestination(item: $thread) { ThreadView(ref: $0) }
     .navigationDestination(item: $agentPage) { AgentPage(agent: $0) }
     .navigationDestination(isPresented: $showTasks) { TasksView() }
@@ -106,7 +106,7 @@ struct InboxView: View {
 
   private func openApprovalChat(_ a: Approval) {
     guard let ch = store.channels.first(where: { $0.id == a.channelId }) else { return }
-    if let t = a.threadId { thread = ThreadRef(channelId: ch.id, rootId: t) } else { chat = ch }
+    if let t = a.threadId { thread = ThreadRef(channelId: ch.id, rootId: t) } else { chat = ChatTarget(channel: ch, draft: "") }
   }
 
   /** The pieces the sections show that the app doesn't already keep fresh. */
@@ -121,14 +121,14 @@ struct InboxView: View {
 
   private func open(_ target: InboxTarget) {
     switch target {
-    case .chat(let c): chat = c
+    case .chat(let c): chat = ChatTarget(channel: c, draft: "")
     case .thread(let t): thread = t
     case .agent(let a): agentPage = a
     case .devices: store.route = .device(id: nil)
     case .addAgent: addingAgent = true
     case .computer(let id): computerId = id
     case .tasks: showTasks = true
-    case .dm(let a): action.run { chat = try await store.dm(with: a) }
+    case .dm(let a, let draft): action.run { chat = ChatTarget(channel: try await store.dm(with: a), draft: draft) }
     }
   }
 }

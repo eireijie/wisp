@@ -98,6 +98,8 @@ struct NoteHistoryView: View {
   @Environment(Store.self) private var store
   var path: String
   var startOnBlame = false
+  /** restoring writes the note, so it needs edit access */
+  var canRestore = true
   @State private var tab = 0
   @State private var history: [NoteRevision] = []
   @State private var loaded = false
@@ -154,7 +156,7 @@ struct NoteHistoryView: View {
       Spacer(minLength: 6)
       if index == 0 {
         Text("Current").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)).padding(.horizontal, 14).frame(height: 38).background(Capsule().fill(Color(light: 0xDCE9FF, dark: 0x1F3A66)))
-      } else {
+      } else if canRestore {
         Button { restore(revision) } label: { Text("Restore").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 14).frame(height: 38).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline)) }
           .buttonStyle(.plain).disabled(action.busy).accessibilityIdentifier("restore-version")
       }
