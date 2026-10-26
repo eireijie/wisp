@@ -7,7 +7,7 @@ import { api } from "../api.ts";
 import { useStore, useTeams, type ComputerInfo, type LiveRun } from "../store.ts";
 import { useFeature } from "../features.ts";
 import { go, href, type AgentTab } from "../router.ts";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "./MoreOptions.tsx";
 import { openDm } from "../openDm.ts";
 import { agentReadiness, useDevices, type DeviceInfo } from "../devices.ts";
 import { useComputerState } from "../views/ComputersView.tsx";
@@ -148,10 +148,9 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
   const computer = useStore((s) => s.computers.find((c) => c.id === agent.computerId));
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
-  const simple = useSimple();
   const teams = useTeams();
   const voice = useFeature("voice");
-  const next = simple ? setupNextStep(agent, devices) : null;
+  const next = setupNextStep(agent, devices);
   const device = devices?.find((d) => d.id === agent.nodeId);
   type Row = [string, ReactNode];
   const statusRow: Row = ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>];
@@ -197,9 +196,9 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
           )}
         </p>
       )}
-      <Advanced title="More about it">
+      <MoreOptions title="More about it">
         <div className="space-y-4">
-          {simple ? table([statusRow, deviceRow, computerRow, ...tail, ...technical]) : table([statusRow, ...technical, deviceRow, computerRow, ...tail])}
+          {table([statusRow, deviceRow, computerRow, ...tail, ...technical])}
           <div className={cx("grid gap-2", voice && !inDm ? "grid-cols-2" : "grid-cols-1")}>
             {voice && !inDm && (
               <Button onClick={onCall}>
@@ -211,7 +210,7 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
             </Button>
           </div>
         </div>
-      </Advanced>
+      </MoreOptions>
     </div>
   );
 }
@@ -274,8 +273,8 @@ export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "
   if (!agent.nodeId) return { text: `Choose the computer that runs ${agent.name}.`, href: href({ view: "agents", agentId: agent.id, tab: "device" }), action: "Choose a device" };
   const device = devices?.find((d) => d.id === agent.nodeId);
   if (!device) return null;
-  if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "nodes" }), action: "See devices" };
-  if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "nodes" }), action: "See devices" };
+  if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
+  if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
   return { text: `Install ${harnessLabel(agent.harness)} on ${device.name}.`, href: href({ view: "settings", page: "runtimes" }), action: "Install it" };
 }
 

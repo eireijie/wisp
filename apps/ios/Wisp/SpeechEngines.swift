@@ -80,6 +80,9 @@ final class MicCapture: @unchecked Sendable {
   func start(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void, level: @escaping @Sendable (Double) -> Void,
              activity: @escaping @Sendable (Bool) -> Void) throws {
     stop()
+    // touching inputNode with no audio input (mic in use, route change, no hardware) aborts the app; say so instead
+    let session = AVAudioSession.sharedInstance()
+    guard session.isInputAvailable, !session.currentRoute.inputs.isEmpty || !(session.availableInputs ?? []).isEmpty else { throw CallAudioError.noMicrophone }
     // echo cancellation, so the agent's own voice isn't heard as the person; not every device offers it
     var voiceProcessing = (try? engine.inputNode.setVoiceProcessingEnabled(true)) != nil
     do { try begin(onBuffer, level, activity) }
@@ -152,7 +155,7 @@ final class DeviceListener: CallListener {
     if active { return }
     guard await CallAudio.requestMicrophone() else { throw CallAudioError.microphoneDenied }
     guard await CallAudio.requestSpeech() else { throw CallAudioError.speechDenied }
-    let recognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    let recognizer = SFSpeechRecognizer(locale: CallPrefs.listenLocale) ?? SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     guard let recognizer, recognizer.isAvailable else { throw CallAudioError.speechUnavailable }
     self.recognizer = recognizer
     try CallAudio.activate()
@@ -415,7 +418,7 @@ enum DeviceVoices {
 @MainActor
 final class DeviceSpeaker: NSObject, CallSpeaker, AVSpeechSynthesizerDelegate {
   private let synthesizer = AVSpeechSynthesizer()
-  private let preferred: String?
+  var preferred: String?
   private let seed: String
   private var finish: (() -> Void)?
   private var levelTask: Task<Void, Never>?
@@ -427,6 +430,7 @@ final class DeviceSpeaker: NSObject, CallSpeaker, AVSpeechSynthesizerDelegate {
     cancel()
     let utterance = AVSpeechUtterance(string: text)
     utterance.voice = DeviceVoices.pick(preferred: preferred, seed: seed)
+    utterance.rate = min(AVSpeechUtteranceMaximumSpeechRate, AVSpeechUtteranceDefaultSpeechRate * Float(CallPrefs.speed))
     synthesizer.delegate = self
     self.level = level
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -464,7 +468,7 @@ final class DeviceSpeaker: NSObject, CallSpeaker, AVSpeechSynthesizerDelegate {
 @MainActor
 final class CloudSpeaker: NSObject, CallSpeaker, AVAudioPlayerDelegate {
   private let provider: String
-  private let voice: String
+  var voice: String
   private let hub: VoiceHub
   private var token = 0
   private var player: AVAudioPlayer?
@@ -480,6 +484,8 @@ final class CloudSpeaker: NSObject, CallSpeaker, AVAudioPlayerDelegate {
     guard mine == token else { return }
     let player = try AVAudioPlayer(data: data)
     player.isMeteringEnabled = true
+    player.enableRate = true
+    player.rate = Float(CallPrefs.speed)
     player.delegate = self
     self.player = player
     player.prepareToPlay()

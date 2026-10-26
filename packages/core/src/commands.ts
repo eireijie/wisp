@@ -6,7 +6,10 @@ import type { CommandOption } from "./types.ts";
  */
 
 /** Commands Wisp answers itself, for every agent, without waking it. */
-export const WISP_COMMANDS: { name: string; description: string }[] = [{ name: "context", description: "See how full this conversation is" }];
+export const WISP_COMMANDS: { name: string; description: string }[] = [
+  { name: "context", description: "See how full this conversation is" },
+  { name: "model", description: "See or change the model, like /model gpt-6.1-sol (or /model default)" },
+];
 
 /** One entry in the "/" menu: where it comes from decides how it runs. */
 export interface AgentCommand {

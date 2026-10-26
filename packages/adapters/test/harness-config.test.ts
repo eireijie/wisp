@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { changeHarnessSettings, editCodex, editHermes, parseToml, readHarnessSettings, readHarnessSkill } from "../src/index.ts";
+import { changeHarnessSettings, codexArgs, editCodex, editHermes, parseToml, readHarnessSettings, readHarnessSkill } from "../src/index.ts";
 
 const HERMES = `# Hermes settings
 model:
@@ -225,6 +225,50 @@ describe("Codex settings", () => {
       ["review-pr", true],
       ["deploy", true],
     ]);
+  });
+
+  it("lets a ChatGPT login with no config.toml pick a model, and the run passes it to codex", async () => {
+    fs.rmSync(path.join(home, ".codex/config.toml"));
+    write(".codex/auth.json", "{}");
+    const s = await readHarnessSettings("codex", { home });
+    expect(s.error).toBeUndefined();
+    expect(s.model).toBeNull();
+    const after = await changeHarnessSettings("codex", [{ op: "model", model: "gpt-6.1-sol" }], { home });
+    expect(after.model).toBe("gpt-6.1-sol");
+    expect(read(".codex/config.toml")).toContain('model = "gpt-6.1-sol"');
+    expect(codexArgs({ prompt: "", cwd: "/", model: "gpt-6.1-sol", effort: "high", fast: true } as any)).toEqual(
+      expect.arrayContaining(["-m", "gpt-6.1-sol", 'model_reasoning_effort="high"', 'service_tier="priority"']),
+    );
+  });
+
+  it("reads and changes the reasoning effort, and only Codex has one", async () => {
+    expect((await readHarnessSettings("codex", { home })).effort).toBe("high");
+    const after = await changeHarnessSettings("codex", [{ op: "effort", effort: "low" }], { home });
+    expect(after.effort).toBe("low");
+    expect(read(".codex/config.toml")).toContain('model_reasoning_effort = "low" # keep');
+    expect(read(".codex/config.toml")).toContain('notify = ["/bin/notify", "turn-ended"]');
+    // no key yet: it is added; the model beside it stays
+    write(".codex/config.toml", 'model = "gpt-6-astra"\n');
+    const added = await changeHarnessSettings("codex", [{ op: "effort", effort: "medium" }, { op: "model", model: "gpt-6.1-sol" }], { home });
+    expect([added.effort, added.model]).toEqual(["medium", "gpt-6.1-sol"]);
+    write(".claude/settings.json", "{}\n");
+    expect((await readHarnessSettings("claude-code", { home })).effort).toBeUndefined();
+    await expect(changeHarnessSettings("claude-code", [{ op: "effort", effort: "low" }], { home })).rejects.toThrow(/no reasoning effort/);
+    await expect(changeHarnessSettings("codex", [{ op: "effort", effort: "low\nevil" }], { home })).rejects.toThrow();
+  });
+
+  it("changes the model in a config Codex's app wrote (service tier, notify array, project tables)", async () => {
+    write(
+      ".codex/config.toml",
+      'model = "gpt-6-astra"\nmodel_reasoning_effort = "high"\n\nnotify = ["node", "hook.js", "turn-ended"]\nservice_tier = "priority"\n\n[marketplaces.openai-bundled]\nsource_type = "local"\n\n[plugins."github@openai-curated"]\nenabled = true\n\n[projects."/Users/me/Documents/My project"]\ntrust_level = "trusted"\n',
+    );
+    const s = await readHarnessSettings("codex", { home });
+    expect(s.error).toBeUndefined();
+    expect(s.fixed).toBeUndefined();
+    expect(s.model).toBe("gpt-6-astra");
+    const after = await changeHarnessSettings("codex", [{ op: "model", model: "gpt-6.1-sol" }], { home });
+    expect(after.model).toBe("gpt-6.1-sol");
+    expect(read(".codex/config.toml")).toContain('notify = ["node", "hook.js", "turn-ended"]');
   });
 
   it("edits values in place and adds what's missing", async () => {

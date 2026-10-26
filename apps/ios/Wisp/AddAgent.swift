@@ -1,272 +1,262 @@
 import SwiftUI
 
+/** Everything a new agent is being given, shared by the create screen and the pages under More options. */
+@MainActor @Observable
+final class AgentDraft {
+  // every new agent starts white with a face and outfit of its own, picked once (typing its name doesn't change it)
+  var look = GhostLook.newAgent()
+  var name = ""
+  var does = ""
+  var instructions = ""
+  var custom = false
+  var harness = "claude-code"
+  var model = ""
+  /** "vm:<device>", "share:<computer>", "later" (decide later) or "none" (headless) */
+  var computer = "later"
+  var handle = ""
+  var respondTo = "me"
+  var respondPeople: Set<String> = []
+  var apps: Set<String> = []
+  var skills: Set<String> = []
+  var template: String?
+  let computerDraft = AgentComputerDraft()
+
+  /** the short job line the agent is created with (the hub keeps at most 60 characters) */
+  var roleText: String? { does.trimmed.isEmpty ? nil : String(does.trimmed.prefix(60)) }
+
+  func finalHandle() -> String { handle.isEmpty ? ManagementText.handle(name) : ManagementText.handle(handle) }
+}
+
+/** Starting points for a new agent: a job in a few words, and the instructions that go with it. */
+struct AgentTemplate: Identifiable, Hashable {
+  var id: String { name }
+  var name: String
+  var does: String
+  var instructions: String
+
+  static let all = [
+    AgentTemplate(name: "Researcher", does: "Finds answers and shows its sources",
+                  instructions: "## What it owns\n- Finding and checking facts\n- Keeping a short list of sources\n\n## Ask before\n- Buying or signing up for anything\n\n## Reply style\n- Lead with the answer, then the sources."),
+    AgentTemplate(name: "Code reviewer", does: "Reviews pull requests and comments on them",
+                  instructions: "## What it owns\n- Reading a diff and saying what could break\n\n## You decide\n- Whether a change is safe to merge\n\n## Reply style\n- Short comments, the most important first."),
+    AgentTemplate(name: "Planner", does: "Breaks work into steps and keeps track of them",
+                  instructions: "## What it owns\n- Turning a goal into small steps\n- Keeping the list up to date\n\n## Handoffs\n- Give each step to the agent best suited to it."),
+    AgentTemplate(name: "Writer", does: "Drafts and edits writing in your voice",
+                  instructions: "## What it owns\n- First drafts, edits and summaries\n\n## Ask before\n- Sending anything outside Wisp\n\n## Reply style\n- Plain words, short sentences."),
+  ]
+}
+
 /**
- * New agent, on one screen: its look, a name and a job, and where it runs (your defaults unless
- * you customize). Everything else waits under Advanced.
+ * New agent (agent-Create / CreateCustom / CreateMore .dc.html): one screen with a name, what it
+ * does, and where it runs: your defaults, or Customize for the harness, model and computer. Rare
+ * knobs (handle, apps, skills, instructions) are under More options. Bringing in an agent that
+ * already exists is the row near the bottom.
  */
 struct AddAgent: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
+  /** start on this device (from its page) */
+  var nodeId: String? = nil
   var onCreated: (Agent) -> Void
 
-  // every new agent starts white with a face and outfit of its own, picked once (typing its name doesn't change it)
-  @State private var look = GhostLook.newAgent()
+  @State private var draft = AgentDraft()
   @State private var editingLook = false
-  @State private var name = ""
-  @State private var does = ""
-  @State private var instructions = ""
-  @State private var custom = false
-  @State private var harness = "claude-code"
-  @State private var model = ""
-  @State private var computer = "none"
-  @State private var computerDraft = AgentComputerDraft()
-  @State private var advanced = false
-  @State private var handle = ""
-  @State private var respondTo = "me"
-  @State private var respondPeople: Set<String> = []
-  @State private var apps: Set<String> = []
-  @State private var skills: Set<String> = []
-  @State private var invite = false
-  @State private var importing = false
-  @State private var created: Agent?
-  @State private var token: String?
   @State private var action = FormAction()
 
-  private var finalHandle: String { handle.isEmpty ? ManagementText.handle(name) : handle }
-  private var handleTaken: Bool { store.agents.contains { $0.handle == finalHandle } }
+  private var handleTaken: Bool { store.agents.contains { $0.handle == draft.finalHandle() } }
   private var valid: Bool {
-    !name.trimmed.isEmpty && name.count <= 80 && does.count <= 200 &&
-    finalHandle.range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !handleTaken &&
-    instructions.count <= 20000 && model.count <= 200
+    !draft.name.trimmed.isEmpty && draft.name.count <= 80 && draft.does.count <= 60 &&
+    draft.finalHandle().range(of: "^[a-z][a-z0-9-]{0,31}$", options: .regularExpression) != nil && !handleTaken &&
+    draft.instructions.count <= 20000 && draft.model.count <= 200
   }
-  private var choices: [HarnessChoice] {
+  static func choices(_ store: Store) -> [HarnessChoice] {
     let custom = Set(store.nodes.filter(\.usable).flatMap { $0.harnesses ?? [] }.map(\.id).filter { $0.hasPrefix("acp:") })
     return HarnessChoice.all.filter { $0.id != "custom" } + custom.sorted().map {
       HarnessChoice(id: $0, label: HarnessChoice.label($0), blurb: "Available on a connected device", account: "", protocolName: "acp")
     } + HarnessChoice.all.filter { $0.id == "custom" }
   }
-  private var external: Bool { invite || choices.first { $0.id == harness }?.protocolName == "mcp" }
+  private var external: Bool { AddAgent.choices(store).first { $0.id == draft.harness }?.protocolName == "mcp" }
   /** more than one person here: who the agent answers is a real choice */
   private var askWho: Bool { store.features.invite || store.otherPeople.count > 0 }
+  private var firstNode: String? {
+    let usable = store.nodes.filter(\.usable)
+    return usable.first { $0.id == nodeId }?.id ?? usable.first { $0.online }?.id ?? usable.first?.id
+  }
 
   var body: some View {
     NavigationStack {
-      if let created, let token { invitation(created, token) } else { form }
+      AgentFrame(title: "New agent", close: true) {
+        VStack(spacing: 12) {
+          GhostView(look: draft.look, seed: draft.finalHandle(), size: 96, interactive: true).frame(width: 96, height: 96).accessibilityHidden(true)
+          HStack(spacing: 8) {
+            AgentChip(title: "Shuffle its look", symbol: "shuffle") { draft.look = GhostLook.shuffled() }.accessibilityIdentifier("new-shuffle")
+            AgentChip(title: "Edit look", symbol: "paintpalette") { editingLook = true }.accessibilityIdentifier("new-look")
+          }
+        }.frame(maxWidth: .infinity).padding(.vertical, 4)
+
+        FieldCard(label: "Name", text: $draft.name, prompt: "Nova").accessibilityIdentifier("new-name")
+        if handleTaken { AgentError(text: "@\(draft.finalHandle()) is taken. Pick another name, or change the handle under More options.") }
+        FieldCard(label: "What it does", text: $draft.does, prompt: "Optional. e.g. reviews pull requests").accessibilityIdentifier("new-does")
+
+        Segments(options: [(false, "Use defaults"), (true, "Customize")], selection: $draft.custom, id: "new-mode")
+        if draft.custom { customize } else { defaults }
+
+        if !AgentTemplate.all.isEmpty {
+          CardCaption("Start from a template (optional)")
+          FlowLayout(spacing: 8) {
+            ForEach(AgentTemplate.all) { template in
+              AgentChip(title: template.name, on: draft.template == template.name) { apply(template) }
+            }
+          }
+        }
+
+        if store.canManage {
+          CardGroup {
+            NavigationLink { AgentBring { agent in dismiss(); onCreated(agent) } } label: {
+              RowLabel(title: "Already have an agent? Bring it in", leading: { rowIcon("square.and.arrow.down") })
+            }.buttonStyle(.plain).accessibilityIdentifier("new-bring")
+          }
+        }
+        AgentError(text: action.error)
+        PillButton(title: "Create agent", busy: action.busy, id: "new-create") { create() }.disabled(!valid || action.busy)
+      }
+      .sheet(isPresented: $editingLook) { LookEditor(look: $draft.look, name: draft.name, seed: draft.finalHandle()) }
+    }
+    .agentSheet()
+    .interactiveDismissDisabled(action.busy)
+    .task {
+      await store.refreshAgentDefaults()
+      do { try await store.refreshManagement() } catch { action.error = error.localizedDescription }
+      try? await store.refreshSkills()
+      try? await store.refreshConnectors()
+      draft.harness = store.agentDefaults?.harness ?? "claude-code"
+      draft.model = store.agentDefaults?.model ?? ""
+      if store.agentDefaults?.computer != "none", let node = (nodeId != nil && firstNode == nodeId ? nodeId : nil) ?? store.agentDefaults?.nodeId ?? firstNode { draft.computer = "vm:\(node)" }
     }
   }
 
-  private var form: some View {
-      Form {
-        lookSection
-        Section("Name") {
-          TextField("Nova", text: $name).textInputAutocapitalization(.words)
-          if handleTaken {
-            Text("@\(finalHandle) is taken. Pick another name, or change the handle under Advanced.").font(.caption).foregroundStyle(.red)
-          }
-        }
-        Section {
-          TextField("Builds and ships websites", text: $does)
-        } header: {
-          HStack(spacing: 4) { Text("What it does"); Text("· Optional").foregroundStyle(.tertiary) }
-        }
-        Section("Instructions") {
-          TextField("What should it do, and how?", text: $instructions, axis: .vertical).lineLimit(4...12)
-        }
-        if invite { inviteNote } else { aiSection }
-        advancedSection
-        bringYourOwnSection
-        Section { InlineError(error: action.error) }
-      }
-      .navigationTitle("New agent")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(action.busy) }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Create") { create() }.bold().disabled(!valid || action.busy)
-        }
-      }
-      .task {
-        await store.refreshAgentDefaults()
-        do { try await store.refreshManagement() } catch { action.error = error.localizedDescription }
-        try? await store.refreshSkills()
-        try? await store.refreshConnectors()
-        harness = store.agentDefaults?.harness ?? "claude-code"
-        model = store.agentDefaults?.model ?? ""
-        if store.agentDefaults?.computer != "none", let node = store.agentDefaults?.nodeId ?? firstNode { computer = "vm:\(node)" }
-      }
-      .onChange(of: handle) { _, value in handle = ManagementText.handle(value) }
-      .sheet(isPresented: $editingLook) {
-        LookEditor(look: $look, name: name, seed: finalHandle)
-      }
-      .sheet(isPresented: $importing) {
-        ImportAgent { agent in dismiss(); onCreated(agent) }
-      }
-      .interactiveDismissDisabled(action.busy)
-  }
+  // MARK: defaults and customize
 
-  private var firstNode: String? {
-    let usable = store.nodes.filter(\.usable)
-    return usable.first { $0.online }?.id ?? usable.first?.id
-  }
-
-  // MARK: look
-
-  private var lookSection: some View {
-    Section {
-      VStack(spacing: 14) {
-        GhostView(look: look, seed: finalHandle, size: 96, interactive: true)
-          .padding(.top, 8)
-        VStack(spacing: 2) {
-          Text(name.trimmed.isEmpty ? "New agent" : name.trimmed).font(.title3.weight(.semibold))
-          Text("@\(finalHandle.isEmpty ? "handle" : finalHandle)").font(.caption).foregroundStyle(.secondary)
-        }
-        GhostColors(look: $look)
-        HStack(spacing: 10) {
-          Button("Shuffle", systemImage: "shuffle") {
-            look = GhostLook.shuffled()
-          }
-          Button("Edit look", systemImage: "paintpalette") { editingLook = true }
-        }
-        .secondaryButton()
+  private var defaults: some View {
+    let summary = store.defaultsSummary
+    return CardGroup {
+      Button { draft.custom = true } label: {
+        RowLabel(title: "Harness it runs on", value: store.agentDefaults?.harness.map(HarnessChoice.label) ?? "Claude Code", leading: { rowIcon("cpu") })
+      }.buttonStyle(.plain)
+      Button { draft.custom = true } label: {
+        RowLabel(title: "Model", value: store.agentDefaults?.model ?? "Harness default", leading: { rowIcon("dial.medium") })
+      }.buttonStyle(.plain)
+      RowLabel(title: "Computer", value: summary.computer, chevron: false, leading: { rowIcon("desktopcomputer") })
+      if store.isOwner {
+        NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Change defaults", leading: { rowIcon("gearshape") }) }.buttonStyle(.plain)
       }
-      .frame(maxWidth: .infinity)
-      .padding(.bottom, 6)
-    } footer: {
-      Text("Give it a name and a job. You can change everything later.")
     }
   }
 
-  // MARK: AI and computer
-
-  private var aiSection: some View {
-    Section {
-      Picker("AI and computer", selection: $custom) {
-        Text("Use my defaults").tag(false)
-        Text("Customize").tag(true)
+  @ViewBuilder private var customize: some View {
+    CardCaption("Harness it runs on")
+    FlowLayout(spacing: 8) {
+      ForEach(Self.choices(store)) { choice in
+        AgentChip(title: choice.label, on: draft.harness == choice.id) { draft.harness = choice.id }
       }
-      .pickerStyle(.segmented)
-      .listRowSeparator(.hidden)
-      if custom {
-        Picker("Runs on", selection: $harness) {
-          ForEach(choices) { Text($0.label).tag($0.id) }
-        }
-        TextField("Model", text: $model, prompt: Text("Automatic"))
-          .textInputAutocapitalization(.never).autocorrectionDisabled()
-        if !external {
-          Picker("Computer", selection: $computer) {
-            ForEach(store.nodes.filter(\.usable)) { Text("New VM on \($0.name)").tag("vm:\($0.id)") }
-            ForEach(store.computers) { c in Text("Share \(c.name)").tag("share:\(c.id)") }
-            Text("No computer").tag("none")
-          }
+    }
+    if external {
+      CardCaption("Set up where it already runs. It connects to Wisp through the API or wisp-mcp.")
+    } else {
+      CardGroup {
+        NavigationLink { NewAgentModel(draft: draft) } label: {
+          RowLabel(title: "Model", value: draft.model.isEmpty ? "Automatic" : draft.model, leading: { rowIcon("dial.medium") })
+        }.buttonStyle(.plain)
+        NavigationLink { NewAgentComputer(draft: draft) } label: {
+          RowLabel(title: "Runs on", value: computerText, leading: { rowIcon("desktopcomputer") })
+        }.buttonStyle(.plain)
+        Button { draft.computer = "later" } label: {
+          RowLabel(title: "Decide later", subtitle: "Pick a computer later", chevron: false, leading: { rowIcon("clock") })
+            .overlay(alignment: .trailing) { if draft.computer == "later" { Radio(on: true).padding(.trailing, 18) } }
+        }.buttonStyle(.plain)
+      }
+    }
+    if askWho {
+      CardCaption("Who can ask it")
+      Segments(options: [("me", "Only me"), ("anyone", "Anyone"), ("people", "Picked")], selection: $draft.respondTo, id: "new-who")
+      if draft.respondTo == "people" {
+        if store.otherPeople.isEmpty {
+          CardCaption("Nobody else is here yet.")
         } else {
-          Text("Set up where it already runs. It connects to Wisp through the API or wisp-mcp.").font(.footnote).foregroundStyle(.secondary)
-        }
-      } else {
-        let summary = store.defaultsSummary
-        LabeledContent("AI", value: summary.ai)
-        LabeledContent("Computer", value: summary.computer)
-        if store.isOwner {
-          NavigationLink("Change defaults") { AgentDefaultsView() }
-        }
-      }
-    } header: {
-      Text("AI and computer")
-    }
-  }
-
-  // MARK: advanced
-
-  private var advancedSection: some View {
-    Section {
-      DisclosureGroup(isExpanded: $advanced) {
-        TextField("Handle", text: $handle, prompt: Text(ManagementText.handle(name).isEmpty ? "handle" : ManagementText.handle(name)))
-          .textInputAutocapitalization(.never).autocorrectionDisabled()
-        if askWho {
-          Picker("Answers", selection: $respondTo) {
-            Text("Only me").tag("me")
-            Text("Anyone").tag("anyone")
-            Text("Picked people").tag("people")
-          }
-          if respondTo == "people" {
+          CardGroup {
             ForEach(store.otherPeople) { person in
-              Toggle(person.preferredName ?? person.name, isOn: Binding(
-                get: { respondPeople.contains(person.id) },
-                set: { if $0 { respondPeople.insert(person.id) } else { respondPeople.remove(person.id) } }))
+              ChoiceRow(title: person.preferredName ?? person.name, subtitle: person.role.capitalized, selected: draft.respondPeople.contains(person.id)) {
+                if draft.respondPeople.contains(person.id) { draft.respondPeople.remove(person.id) } else { draft.respondPeople.insert(person.id) }
+              }
             }
-            if store.otherPeople.isEmpty { Text("Nobody else is here yet.").font(.footnote).foregroundStyle(.secondary) }
           }
-        }
-        if !store.connectors.isEmpty {
-          Menu {
-            ForEach(store.connectors) { app in
-              Toggle(app.name, isOn: member(app.id, of: $apps))
-            }
-          } label: {
-            LabeledContent("Connected apps", value: summary(apps, names: store.connectors.map { ($0.id, $0.name) }))
-          }
-        }
-        if !store.skills.isEmpty {
-          Menu {
-            ForEach(store.skills) { skill in
-              Toggle(skill.name, isOn: member(skill.id, of: $skills))
-            }
-          } label: {
-            LabeledContent("Skills", value: summary(skills, names: store.skills.map { ($0.id, $0.name) }))
-          }
-        }
-      } label: {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Advanced")
-          Text(askWho ? "Handle, who it answers, apps and skills" : "Handle, apps and skills").font(.caption).foregroundStyle(.secondary)
         }
       }
     }
+    CardGroup {
+      NavigationLink { NewAgentMore(draft: draft, askWho: askWho) } label: {
+        RowLabel(title: "More options", subtitle: "Handle, apps, skills, instructions")
+      }.buttonStyle(.plain).accessibilityIdentifier("new-more")
+    }
   }
 
-  private func member(_ id: String, of set: Binding<Set<String>>) -> Binding<Bool> {
-    Binding(get: { set.wrappedValue.contains(id) }, set: { if $0 { set.wrappedValue.insert(id) } else { set.wrappedValue.remove(id) } })
+  private var computerText: String {
+    let c = draft.computer
+    if c.hasPrefix("vm:") { return "New computer on " + (store.nodes.first { $0.id == String(c.dropFirst(3)) }?.name ?? "a device") }
+    if c.hasPrefix("share:") { return store.computers.first { $0.id == String(c.dropFirst(6)) }?.name ?? "A computer" }
+    return c == "none" ? "No computer" : "Decide later"
   }
 
-  private func summary(_ ids: Set<String>, names: [(String, String)]) -> String {
-    let picked = names.filter { ids.contains($0.0) }.map(\.1)
-    return picked.isEmpty ? "None" : picked.count <= 2 ? picked.joined(separator: ", ") : "\(picked.count)"
+  private func apply(_ template: AgentTemplate) {
+    if draft.template == template.name {
+      draft.template = nil
+      if draft.does == template.does { draft.does = "" }
+      if draft.instructions == template.instructions { draft.instructions = "" }
+      return
+    }
+    draft.template = template.name
+    draft.does = template.does
+    draft.instructions = template.instructions
   }
 
   // MARK: create
 
   private func create() {
     action.run {
-      var settings: Fields = ["appearance": AnyEncodable(look.resolved), "respondTo": AnyEncodable(askWho ? respondTo : "me")]
-      if !does.trimmed.isEmpty { settings["description"] = AnyEncodable(does.trimmed) }
-      if askWho && respondTo == "people" { settings["respondPeople"] = AnyEncodable(Array(respondPeople).sorted()) }
+      let d = draft
+      let external = self.external
+      var settings: Fields = ["appearance": AnyEncodable(d.look.resolved), "respondTo": AnyEncodable(askWho ? d.respondTo : "me")]
+      if let role = d.roleText { settings["role"] = AnyEncodable(role) }
+      if askWho && d.respondTo == "people" { settings["respondPeople"] = AnyEncodable(Array(d.respondPeople).sorted()) }
       var fields: Fields = [
-        "name": AnyEncodable(name.trimmed), "handle": AnyEncodable(finalHandle), "instructions": AnyEncodable(instructions),
+        "name": AnyEncodable(d.name.trimmed), "handle": AnyEncodable(d.finalHandle()), "instructions": AnyEncodable(d.instructions),
       ]
-      if invite {
-        // an outside agent connects from wherever it already runs, so it has no device or computer
-        fields["harness"] = AnyEncodable(harness)
-        fields["nodeId"] = .null
-      } else if custom {
-        fields["harness"] = AnyEncodable(harness)
-        fields["model"] = .nullable(model.trimmed)
+      if d.custom {
+        fields["harness"] = AnyEncodable(d.harness)
+        fields["model"] = .nullable(d.model.trimmed)
         if external {
           fields["nodeId"] = .null
-        } else if computer.hasPrefix("vm:") {
-          let node = String(computer.dropFirst(3))
+        } else if d.computer.hasPrefix("vm:") {
+          let node = String(d.computer.dropFirst(3))
           fields["nodeId"] = AnyEncodable(node)
-          fields["computerId"] = AnyEncodable(try await computerDraft.resolveVM(node: node, name: name.trimmed, store: store))
+          fields["computerId"] = AnyEncodable(try await d.computerDraft.resolveVM(node: node, name: d.name.trimmed, store: store))
           settings["runIn"] = AnyEncodable("computer")
-        } else if computer.hasPrefix("share:"), let c = store.computers.first(where: { $0.id == String(computer.dropFirst(6)) }) {
+        } else if d.computer.hasPrefix("share:"), let c = store.computers.first(where: { $0.id == String(d.computer.dropFirst(6)) }) {
           fields["computerId"] = AnyEncodable(c.id)
           let node = c.nodeId.flatMap { id in store.nodes.first { $0.id == id && $0.usable }?.id } ?? firstNode
           fields["nodeId"] = .nullable(node ?? "")
-          if c.kind == "vm", c.nodeId == node, ["claude-code", "codex", "hermes", "kimi"].contains(harness) { settings["runIn"] = AnyEncodable("computer") }
-        } else {
+          if c.kind == "vm", c.nodeId == node, harnessRunsInVM(d.harness) { settings["runIn"] = AnyEncodable("computer") }
+        } else if d.computer == "none" {
           fields["nodeId"] = .nullable(firstNode ?? "")
           settings["headless"] = AnyEncodable(true)
+        } else {
+          // decide later: on a device, no computer yet
+          fields["nodeId"] = .nullable(firstNode ?? "")
         }
       } else {
         fields["useDefaults"] = AnyEncodable(true)
+        // started from a device's page: the agent goes there, not to the default device
+        if let start = self.nodeId, firstNode == start { fields["nodeId"] = AnyEncodable(start) }
         // hubs without agent defaults still need a harness and a device
         if store.agentDefaults == nil {
           fields["harness"] = AnyEncodable("claude-code")
@@ -275,89 +265,122 @@ struct AddAgent: View {
       }
       fields["settings"] = AnyEncodable(settings)
       let agent = try await store.createAgent(fields)
-      // apps and skills are given to it afterwards; the agent exists either way
-      for id in apps {
-        guard let app = store.connectors.first(where: { $0.id == id }) else { continue }
-        _ = try? await store.saveConnector(id, ["agentIds": AnyEncodable(Array(Set(app.agentIds ?? []).union([agent.id])).sorted())])
-      }
-      for id in skills {
-        guard let skill = store.skills.first(where: { $0.id == id }) else { continue }
-        _ = try? await store.saveSkill(id, ["agentIds": AnyEncodable(Array(Set(skill.agentIds ?? []).union([agent.id])).sorted())])
-      }
-      if external {
-        // it joins from outside, so it needs a token and setup steps before the person leaves
-        // (if the token can't be made, the agent still exists: its Connect screen makes one)
-        if let made = try? await store.createAgentToken(agent.id) {
-          token = made
-          created = agent
-          return
-        }
-      }
+      await AddAgent.giveAppsAndSkills(to: agent, apps: d.apps, skills: d.skills, store: store)
       dismiss()
       onCreated(agent)
     }
   }
 
-  // MARK: bring your own
-
-  private var inviteNote: some View {
-    Section {
-      Text("It connects from where it already runs. After you create it you get a setup to copy into its MCP settings.")
-        .font(.footnote).foregroundStyle(.secondary)
-      Button("Use a Wisp-run agent instead") { invite = false }
-    } header: { Text("Outside agent") }
+  /** Apps and skills are given to it afterwards; the agent exists either way. */
+  @MainActor static func giveAppsAndSkills(to agent: Agent, apps: Set<String>, skills: Set<String>, store: Store) async {
+    for id in apps {
+      guard let app = store.connectors.first(where: { $0.id == id }) else { continue }
+      _ = try? await store.saveConnector(id, ["agentIds": AnyEncodable(Array(Set(app.agentIds ?? []).union([agent.id])).sorted())])
+    }
+    for id in skills {
+      guard let skill = store.skills.first(where: { $0.id == id }) else { continue }
+      _ = try? await store.saveSkill(id, ["agentIds": AnyEncodable(Array(Set(skill.agentIds ?? []).union([agent.id])).sorted())])
+    }
   }
+}
 
-  private var bringYourOwnSection: some View {
-    Section {
-      if !invite {
-        Button { invite = true } label: {
-          row("Invite an outside agent", "Connect any MCP-capable session with a setup code.", "person.badge.plus")
+// MARK: pages under Customize
+
+/** Model for a new agent: automatic, or an id you type. */
+private struct NewAgentModel: View {
+  @Bindable var draft: AgentDraft
+  var body: some View {
+    AgentFrame(title: "Model", subtitle: "New agent") {
+      CardGroup { ChoiceRow(title: "Automatic", subtitle: "\(HarnessChoice.label(draft.harness)) picks for you", selected: draft.model.isEmpty) { draft.model = "" } }
+      FieldCard(label: "Model id", text: $draft.model, prompt: "Leave empty for automatic", lowercase: true)
+      CardCaption("Use the exact id your harness expects. Wisp passes it through unchanged. You can pick from its list once it's on a device.")
+    }
+  }
+}
+
+/** Where a new agent works: a new computer on a device, one that exists, or none. */
+private struct NewAgentComputer: View {
+  @Environment(Store.self) private var store
+  @Bindable var draft: AgentDraft
+
+  var body: some View {
+    AgentFrame(title: "Runs on", subtitle: "New agent") {
+      CardGroup {
+        ForEach(store.nodes.filter(\.usable)) { node in
+          ChoiceRow(title: "New computer on \(node.name)", subtitle: node.online ? "Online" : "Offline", selected: draft.computer == "vm:\(node.id)") { draft.computer = "vm:\(node.id)" }
+        }
+        ForEach(store.computers) { c in
+          ChoiceRow(title: "Share \(c.name)", subtitle: "It uses the same files, browser and sign-ins", selected: draft.computer == "share:\(c.id)") { draft.computer = "share:\(c.id)" }
+        }
+        ChoiceRow(title: "No computer", subtitle: "It can think and write, but can't use apps or a screen", selected: draft.computer == "none") { draft.computer = "none" }
+        ChoiceRow(title: "Decide later", subtitle: "Pick a computer later", selected: draft.computer == "later") { draft.computer = "later" }
+      }
+    }
+  }
+}
+
+/** More options (agent-CreateMore.dc.html): handle, connected apps, skills, instructions, change defaults. */
+private struct NewAgentMore: View {
+  @Environment(Store.self) private var store
+  @Bindable var draft: AgentDraft
+  var askWho: Bool
+
+  var body: some View {
+    AgentFrame(title: "More options", subtitle: "New agent") {
+      FieldCard(label: "Handle", text: Binding(get: { draft.handle.isEmpty ? "" : "@" + draft.handle }, set: { draft.handle = ManagementText.typingHandle($0.replacingOccurrences(of: "@", with: "")) }),
+                prompt: "@" + (ManagementText.handle(draft.name).isEmpty ? "handle" : ManagementText.handle(draft.name)), lowercase: true)
+      CardCaption("Letters a to z. Teammates type this to mention it.")
+      CardGroup {
+        NavigationLink { NewAgentPicks(title: "Connected apps", items: store.connectors.map { ($0.id, $0.name, $0.description ?? $0.category) }, picked: $draft.apps) } label: {
+          RowLabel(title: "Connected apps", value: summary(draft.apps), leading: { rowIcon("square.grid.2x2") })
+        }.buttonStyle(.plain)
+        NavigationLink { NewAgentPicks(title: "Skills", items: store.skills.map { ($0.id, $0.name, $0.plain?.does ?? $0.description) }, picked: $draft.skills) } label: {
+          RowLabel(title: "Skills", value: summary(draft.skills), leading: { rowIcon("bolt") })
+        }.buttonStyle(.plain)
+        NavigationLink { NewAgentInstructions(draft: draft) } label: {
+          RowLabel(title: "Instructions", subtitle: draft.instructions.trimmed.isEmpty ? "Write how it should work" : AgentEditText.firstLine(draft.instructions), leading: { rowIcon("text.alignleft") })
+        }.buttonStyle(.plain)
+        if store.isOwner {
+          NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Change defaults", subtitle: "Settings", leading: { rowIcon("gearshape") }) }.buttonStyle(.plain)
         }
       }
-      Button { importing = true } label: {
-        row("Find on a connected device", "Import a saved setup with its personality, instructions and notes.", "magnifyingglass")
-      }
-    } header: { Text("Already have an agent?") } footer: {
-      Text("Neither option copies skills. Once connected, it can save selected notes to memory itself.")
     }
   }
 
-  private func row(_ title: String, _ detail: String, _ icon: String) -> some View {
-    HStack(spacing: 12) {
-      Image(systemName: icon).frame(width: 24).foregroundStyle(.secondary)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title).foregroundStyle(.primary)
-        Text(detail).font(.caption).foregroundStyle(.secondary)
-      }
-      Spacer()
-      Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
-    }
-  }
+  private func summary(_ ids: Set<String>) -> String { ids.isEmpty ? "None" : "\(ids.count)" }
+}
 
-  private func invitation(_ agent: Agent, _ token: String) -> some View {
-    Form {
-      Section {
-        HStack(spacing: 14) {
-          GhostView(look: look, seed: agent.handle, size: 64)
-          VStack(alignment: .leading, spacing: 3) {
-            Text("Invite \(agent.name) to Wisp").font(.headline)
-            Text("Add this connection to its existing session.").font(.footnote).foregroundStyle(.secondary)
+private struct NewAgentPicks: View {
+  var title: String
+  var items: [(String, String, String?)]
+  @Binding var picked: Set<String>
+  var body: some View {
+    AgentFrame(title: title, subtitle: "New agent") {
+      if items.isEmpty {
+        AgentCard { Text("Nothing here yet.").font(.system(size: 15)).foregroundStyle(Palette.muted) }
+      } else {
+        CardGroup {
+          ForEach(items, id: \.0) { item in
+            SwitchRow(title: item.1, subtitle: item.2, isOn: Binding(get: { picked.contains(item.0) }, set: { if $0 { picked.insert(item.0) } else { picked.remove(item.0) } }))
           }
         }
       }
-      ConnectionInstructions(token: token, harness: agent.harness)
-      Section {
-        Text("Once connected, ask it to introduce itself in #general and save selected notes with memory_write. Its local profile and skills aren't imported automatically.")
-          .font(.footnote).foregroundStyle(.secondary)
+    }
+  }
+}
+
+private struct NewAgentInstructions: View {
+  @Bindable var draft: AgentDraft
+  var body: some View {
+    AgentFrame(title: "Instructions", subtitle: "New agent") {
+      FlowLayout(spacing: 8) {
+        ForEach(AgentEditText.snippets, id: \.self) { snippet in
+          AgentChip(title: snippet, symbol: "plus") { draft.instructions = AgentEditText.insert(snippet, into: draft.instructions) }
+        }
       }
+      FieldCard(label: "Instructions", text: $draft.instructions, prompt: "What should it do, and how?", lines: 6...30)
+      CardCaption("What it's responsible for, how it should work, and who to hand things to. Sent with every request.")
     }
-    .navigationTitle("Invite")
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) { Button("Open agent") { dismiss(); onCreated(agent) }.bold() }
-    }
-    .interactiveDismissDisabled()
   }
 }
 

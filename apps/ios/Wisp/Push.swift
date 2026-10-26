@@ -7,7 +7,11 @@ import OSLog
 enum Route: Equatable {
   case chat(channelId: String, threadId: String?)
   case approval(id: String)
+  /** the Inbox tab, with nothing opened */
+  case inbox
   case computer(id: String)
+  /** the Computers tab, on a device's page (or just the tab) */
+  case device(id: String?)
 
   /** From the `wisp` part of a push the hub sent (see apps/hub/src/apns.ts). */
   init?(_ info: [AnyHashable: Any]) {
@@ -65,6 +69,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
       guard on("enabled", true) else { return [] }
       if case .chat(let channel, _) = route, channel == store.openChannel { return [] }
       guard on(preference, true) else { return [] }
+      // "Only when I'm away": this runs only while the app is open, so there is nothing to show
+      if on("onlyAway", false) { return [] }
       return on("sound", false) ? [.banner, .list, .sound] : [.banner, .list]
     }
   }

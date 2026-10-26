@@ -177,7 +177,7 @@ export class Apns {
       }
     }
 
-    if (e.type === "approval" && e.approval.status === "pending" && this.once(`approval:${e.approval.id}`)) {
+    if (e.type === "approval" && e.approval.status === "pending" && !this.hub.flows.silentApproval(e.approval) && this.once(`approval:${e.approval.id}`)) {
       const a = e.approval;
       for (const u of store.channelMembers(a.channelId))
         if (u.kind === "user") out.set(u.id, { aps: { alert: { title: `${agentName(a.agentId)} wants your OK`, body: a.summary } }, wisp: { kind: "approval", category: "approval", approvalId: a.id, channelId: a.channelId, threadId: a.threadId } });

@@ -82,6 +82,7 @@ struct ComputerFilesView: View {
           Section { HStack { Spacer(); ProgressView(); Spacer() } }
         }
       }
+      .groundBackground()
       .navigationTitle("Files on \(computer?.name ?? "computer")")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

@@ -6,6 +6,9 @@ enum ThemeSettings {
   static let themeKey = "wisp.theme"
   static let textKey = "wisp.textSize"
   static let motionKey = "wisp.motion"
+  static let modeKey = "wisp.mode"
+  /** Wisp is designed dark first; light and "match the system" are a choice away. */
+  static let defaultMode = "dark"
 
   /** The theme's accent: dark in light mode and light in dark mode for Mono, so it reads as the text color. */
   static func accent(_ id: String) -> Color {
@@ -52,31 +55,49 @@ struct AppearanceSettingsView: View {
   @AppStorage(ThemeSettings.themeKey, store: WispPreferences.standard) private var theme = "mono"
   @AppStorage(ThemeSettings.textKey, store: WispPreferences.standard) private var textSize = "default"
   @AppStorage(ThemeSettings.motionKey, store: WispPreferences.standard) private var reduceMotion = false
+  @AppStorage(ThemeSettings.modeKey, store: WispPreferences.standard) private var mode = ThemeSettings.defaultMode
   @Environment(\.colorScheme) private var scheme
 
+  private let sizes = ["small", "default", "large"]
+  private var sizeStep: Binding<Double> {
+    Binding(get: { Double(sizes.firstIndex(of: textSize) ?? 1) }, set: { textSize = sizes[min(max(Int($0.rounded()), 0), 2)] })
+  }
+
   var body: some View {
-    Form {
-      Section("Mode") { ModePicker() }
-      Section {
+    SettingsPage("Appearance", id: "appearance") {
+      CardLabel("Mode")
+      SegmentedPicker(options: [("system", "System"), ("light", "Light"), ("dark", "Dark")], selection: $mode, label: "Mode", id: "mode")
+      CardLabel("Theme")
+      HStack(alignment: .top) {
         ForEach(AppTheme.all) { item in
+          let on = theme == item.id
           Button { theme = item.id } label: {
-            HStack(spacing: 12) {
-              Circle().fill(Color(uiColor: UIColor(hex: scheme == .dark ? item.dark : item.light))).frame(width: 26, height: 26)
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15)))
-              VStack(alignment: .leading, spacing: 2) {
-                Text(item.name).foregroundStyle(.primary)
-                Text(item.blurb).font(.caption).foregroundStyle(.secondary)
-              }
-              Spacer()
-              if theme == item.id { Image(systemName: "checkmark").foregroundStyle(.tint) }
-            }
-          }.accessibilityIdentifier("theme-\(item.id)").accessibilityAddTraits(theme == item.id ? .isSelected : [])
+            VStack(spacing: 8) {
+              Circle()
+                .fill(LinearGradient(stops: [.init(color: Color(hex: item.light), location: 0.5), .init(color: Color(hex: item.dark), location: 0.5)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 52, height: 52)
+                .overlay(Circle().strokeBorder(on ? Palette.blue : Palette.hairline, lineWidth: 2))
+              Text(item.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.text).lineLimit(1).minimumScaleFactor(0.7)
+            }.frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("\(item.name) theme").accessibilityIdentifier("theme-\(item.id)")
+          .accessibilityAddTraits(on ? .isSelected : [])
         }
-      } header: { Text("Theme") } footer: { Text("Every theme works in light and dark. Agents keep their own colors in all of them.") }
-      Section {
-        Picker("Text size", selection: $textSize) { Text("Small").tag("small"); Text("Default").tag("default"); Text("Large").tag("large") }.pickerStyle(.segmented)
-        Toggle("Reduce motion", isOn: $reduceMotion)
-      } header: { Text("Accessibility") } footer: { Text("Text size goes one step either way from your iPhone's own setting. Reduce motion keeps ghosts and transitions still; the iPhone's Reduce Motion setting does this too.") }
-    }.sectionScreen("Appearance", id: "appearance")
+      }
+      .padding(.vertical, 18).padding(.horizontal, 6)
+      .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      CardHint("\(AppTheme.named(theme).name): \(AppTheme.named(theme).blurb) Every theme works in light and dark. Agents keep their own colors in all of them.")
+      CardLabel("Accessibility")
+      CardGroup {
+        HStack(spacing: 12) {
+          Text("A").font(.system(size: 13)).foregroundStyle(Palette.faint)
+          Slider(value: sizeStep, in: 0...2, step: 1).tint(Palette.blue).accessibilityLabel("Text size").accessibilityValue(textSize.capitalized)
+          Text("A").font(.system(size: 22)).foregroundStyle(Palette.text)
+        }.padding(.horizontal, 18).frame(minHeight: 54)
+        ToggleRow(title: "Reduce motion", isOn: $reduceMotion, id: "reduce-motion")
+      }
+      CardHint("Text size goes one step either way from your iPhone's own setting. Reduce motion calms the ghosts and screen transitions; the iPhone's Reduce Motion setting does this too.")
+    }
   }
 }

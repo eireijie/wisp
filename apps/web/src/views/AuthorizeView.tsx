@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
-import { AgentAvatar, Button, GhostMark, Input, cx } from "../components/ui.tsx";
+import { ArrowRight, Check, Globe, Plus } from "lucide-react";
+import { AgentAvatar, cx } from "../components/ui.tsx";
+import { AuthButton, AuthHero, AuthInput, AuthLink, AuthPage } from "../components/auth.tsx";
+import { WispGhost } from "../components/icons.tsx";
 
 const NEW = "new";
 
@@ -24,6 +27,8 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** the request is gone: it expired, or it was already answered */
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
     Promise.all([api<{ client: string; returnsTo: string }>("GET", `/api/oauth/requests/${requestId}`), api<Agent[]>("GET", "/api/agents")])
@@ -35,7 +40,11 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
         setPick(same?.id ?? NEW);
         setName(i.client);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        // a request that has ended answers 404 or 410; anything else is a real problem to show
+        if ([404, 410].includes((e as { status?: number }).status ?? 0)) setExpired(true);
+        else setError(e.message);
+      });
   }, [requestId]);
 
   const finish = async (approve: boolean) => {
@@ -51,57 +60,94 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
       const { redirect } = await api<{ redirect: string }>("POST", `/api/oauth/requests/${requestId}/${approve ? "approve" : "deny"}`, approve ? { agentId } : undefined);
       location.href = redirect;
     } catch (e) {
-      setError((e as Error).message);
+      if ((e as { status?: number }).status === 404 && /expired/i.test((e as Error).message)) setExpired(true);
+      else setError((e as Error).message);
       setBusy(false);
     }
   };
 
-  return (
-    <div className="min-h-full bg-panel flex items-center px-6 sm:px-8 py-10 safe-top">
-      <div className="w-full max-w-sm mx-auto space-y-6">
-        <div className="flex items-center gap-1.5 font-semibold">
-          <GhostMark size={18} className="text-accent-text" /> Wisp
+  if (expired) {
+    return (
+      <AuthPage themeToggle={false}>
+        <AuthHero title="This request expired">Go back to the app and try connecting again.</AuthHero>
+        <div className="mt-9">
+          <AuthButton onClick={() => (window.history.length > 1 ? window.history.back() : window.close())}>Close</AuthButton>
         </div>
-        {!info ? (
-          <p className={cx("text-sm", error ? "text-bad" : "text-muted")}>{error ?? "Loading…"}</p>
-        ) : (
-          <>
-            <div className="space-y-1.5">
-              <h1 className="text-xl font-semibold">Connect {info.client}</h1>
-              <p className="text-sm text-muted">Pick the agent it acts as.</p>
-            </div>
-            <div className="space-y-1.5" role="radiogroup">
-              {agents.map((a) => (
-                <label key={a.id} className={cx("flex items-center gap-3 rounded-xl border px-3 py-2 cursor-pointer", pick === a.id ? "border-ring bg-hover" : "border-line hover:bg-hover")}>
-                  <input type="radio" name="agent" className="sr-only" checked={pick === a.id} onChange={() => setPick(a.id)} />
-                  <AgentAvatar agent={a} size={28} />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium truncate">{a.name}</span>
-                    <span className="block text-xs text-muted truncate">@{a.handle}</span>
-                  </span>
-                </label>
-              ))}
-              <label className={cx("block rounded-xl border px-3 py-2 cursor-pointer space-y-2", pick === NEW ? "border-ring bg-hover" : "border-line hover:bg-hover")}>
-                <span className="flex items-center gap-3">
-                  <input type="radio" name="agent" className="sr-only" checked={pick === NEW} onChange={() => setPick(NEW)} />
-                  <span className="text-sm font-medium">New agent</span>
+      </AuthPage>
+    );
+  }
+  return (
+    <AuthPage themeToggle={false} wide>
+      {!info ? (
+        <div className="flex flex-col items-center gap-4 text-ink">
+          <span className="auth-bob">
+            <WispGhost size={60} />
+          </span>
+          <span className="sr-only">Wisp</span>
+          <p className={cx("text-sm text-center", error ? "text-bad" : "text-muted")}>{error ?? "Loading…"}</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          <div className="flex items-center justify-center gap-3.5">
+            <span className="size-[60px] rounded-[18px] bg-chip grid place-items-center text-ink/85" aria-hidden>
+              <Globe size={28} strokeWidth={1.8} />
+            </span>
+            <ArrowRight size={22} className="text-faint" aria-hidden />
+            <WispGhost size={60} className="text-ink" />
+            <span className="sr-only">Wisp</span>
+          </div>
+          <div className="text-center space-y-1.5">
+            <h1 className="text-[26px] leading-tight font-bold">Let {info.client} act as an agent?</h1>
+            <p className="text-[15px] text-muted">Pick the agent it acts as.</p>
+          </div>
+          <div className="rounded-3xl bg-card overflow-hidden divide-y divide-line" role="radiogroup">
+            {agents.map((a) => (
+              <label key={a.id} className="flex items-center gap-3.5 px-[18px] min-h-16 cursor-pointer hover:bg-hover">
+                <input type="radio" name="agent" className="sr-only" checked={pick === a.id} onChange={() => setPick(a.id)} />
+                <AgentAvatar agent={a} size={34} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[17px] font-medium truncate">{a.name}</span>
+                  <span className="block text-xs text-muted truncate">@{a.handle}</span>
                 </span>
-                {pick === NEW && <Input value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} />}
+                {pick === a.id && (
+                  <span className="size-6 rounded-full bg-badge text-badge-ink grid place-items-center" aria-hidden>
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                )}
               </label>
-            </div>
-            {error && <p className="text-sm text-bad">{error}</p>}
-            <div className="space-y-2">
-              <Button variant="primary" className="w-full h-10" disabled={busy} onClick={() => finish(true)}>
-                Allow
-              </Button>
-              <Button variant="ghost" className="w-full" disabled={busy} onClick={() => finish(false)}>
-                Cancel
-              </Button>
-            </div>
-            <p className="text-xs text-faint">Returns to {info.returnsTo}</p>
-          </>
-        )}
-      </div>
-    </div>
+            ))}
+            <label className="block px-[18px] py-3 min-h-16 cursor-pointer hover:bg-hover space-y-2">
+              <span className="flex items-center gap-3.5 min-h-10">
+                <input type="radio" name="agent" className="sr-only" checked={pick === NEW} onChange={() => setPick(NEW)} />
+                <span className="size-[38px] rounded-xl bg-chip grid place-items-center text-ink/85" aria-hidden>
+                  <Plus size={20} />
+                </span>
+                <span className="flex-1 text-[17px] font-medium">New agent</span>
+                {pick === NEW && (
+                  <span className="size-6 rounded-full bg-badge text-badge-ink grid place-items-center" aria-hidden>
+                    <Check size={14} strokeWidth={3} />
+                  </span>
+                )}
+              </span>
+              {pick === NEW && <AuthInput value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={80} className="h-12 text-[15px] rounded-2xl bg-panel" />}
+            </label>
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-bad text-center">
+              {error}
+            </p>
+          )}
+          <div className="flex flex-col items-center gap-1.5">
+            <AuthButton disabled={busy} onClick={() => finish(true)}>
+              Allow
+            </AuthButton>
+            <AuthLink disabled={busy} onClick={() => finish(false)}>
+              Deny
+            </AuthLink>
+          </div>
+          <p className="text-xs text-faint text-center">Returns to {info.returnsTo}</p>
+        </div>
+      )}
+    </AuthPage>
   );
 }

@@ -79,8 +79,8 @@ enum ShelfLogic {
       headers: Dictionary(uniqueKeysWithValues: headers.map { ($0, "{{\(envName($0))}}") }), fields: fields)
   }
 
-  static func summary(_ item: ShelfItem, simple: Bool) -> ConnectSummary {
-    let who = simple ? "helpers" : "agents"
+  static func summary(_ item: ShelfItem) -> ConnectSummary {
+    let who = "agents"
     let host = item.url.flatMap { URL(string: $0)?.host }
     return ConnectSummary(
       can: "Your \(who) will be able to use \(item.name): read and act on what it allows.",
@@ -97,17 +97,20 @@ enum ConnectorSupport {
   }
 }
 
-/** "14 skills and 3 apps are already on MacBook, in Claude Code and Hermes." */
+
+/** "Found on Mac mini: 5 skills your harnesses already use." */
 struct DeviceBanner: View {
   var pending: [PendingShelfItem]
-  var onBring: () -> Void
+  var onOpen: () -> Void
   var body: some View {
     let devices = Array(NSOrderedSet(array: pending.map(\.device.nodeName))) as? [String] ?? []
-    let harnesses = Array(NSOrderedSet(array: pending.map { ShelfLogic.harnessName($0.item.harness) })) as? [String] ?? []
-    VStack(alignment: .leading, spacing: 10) {
-      Label("\(ShelfLogic.summary(pending.map(\.item))) \(pending.count == 1 ? "is" : "are") already on \(ShelfLogic.sentence(devices)), in \(ShelfLogic.sentence(harnesses)).", systemImage: "laptopcomputer")
-      Button("Bring them in", action: onBring).secondaryButton()
-    }.padding(.vertical, 4)
+    CardGroup {
+      Button(action: onOpen) {
+        MarketRow(symbol: "laptopcomputer", tile: 50, title: "Found on \(ShelfLogic.sentence(devices))", subtitle: "\(ShelfLogic.summary(pending.map(\.item))) your harnesses already \(pending.count == 1 ? "uses" : "use")") {
+          Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint)
+        }
+      }.buttonStyle(.plain)
+    }
   }
 }
 
@@ -119,37 +122,31 @@ struct DeviceShelfList: View {
   var onBring: (DeviceShelf, ShelfItem) -> Void
   var onBringAll: () -> Void
   var onRefresh: (DeviceShelf) -> Void
-  private func shown(_ d: DeviceShelf, _ harness: String) -> [ShelfItem] {
-    d.items.filter { $0.harness == harness && (query.isEmpty || ($0.name + " " + ($0.description ?? "")).localizedCaseInsensitiveContains(query)) }
-      .sorted { ($0.kind, $0.name) < ($1.kind, $1.name) }
+  private func shown(_ d: DeviceShelf) -> [ShelfItem] {
+    d.items.filter { query.isEmpty || ($0.name + " " + ($0.description ?? "")).localizedCaseInsensitiveContains(query) }
+      .sorted { ($0.harness, $0.kind, $0.name) < ($1.harness, $1.kind, $1.name) }
   }
   var body: some View {
     let pending = ShelfLogic.pending(shelves, skills: store.skills, connectors: store.connectors)
     if shelves.isEmpty {
-      Section { Text("Nothing found yet. Skills and apps from Claude Code, Codex and Hermes on your devices show up here.").foregroundStyle(.secondary) }
+      MarketNote(text: "Nothing found yet. Skills and apps from Claude Code, Codex and Hermes on your devices show up here.")
     }
-    if store.canManage && !pending.isEmpty {
-      Section { Button("Bring them all in (\(pending.count))", systemImage: "square.and.arrow.down", action: onBringAll) }
-    }
+    if !pending.isEmpty { DeviceBanner(pending: pending, onOpen: { if store.canManage { onBringAll() } }) }
     ForEach(shelves) { d in
-      Section {
-        if d.items.isEmpty { Text("Nothing found in its harnesses.").foregroundStyle(.secondary) }
-        ForEach(Array(NSOrderedSet(array: d.items.map(\.harness))) as? [String] ?? [], id: \.self) { harness in
-          let items = shown(d, harness)
-          if !items.isEmpty {
-            Text(ShelfLogic.harnessName(harness)).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
-            ForEach(items) { item in ShelfRow(device: d, item: item, onBring: { onBring(d, item) }) }
-          }
-        }
-      } header: {
+      VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text(d.nodeName)
-          if !d.online { Text("Offline").font(.caption).foregroundStyle(.secondary) }
-          Spacer()
-          if d.online { Button("Look again", systemImage: "arrow.clockwise") { onRefresh(d) }.font(.caption).textCase(nil) }
+          MarketLabel(d.nodeName)
+          if !d.online { MarketPill(text: "Offline") }
+          if d.online { Button { onRefresh(d) } label: { Label("Look again", systemImage: "arrow.clockwise").font(.system(size: 13)).foregroundStyle(Palette.muted) }.buttonStyle(.plain) }
+        }
+        if d.items.isEmpty {
+          Text("\(d.nodeName): Nothing found in its harnesses.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+        } else {
+          CardGroup { ForEach(shown(d)) { item in ShelfRow(device: d, item: item, onBring: { onBring(d, item) }) } }
         }
       }
     }
+    if store.canManage && !pending.isEmpty { MarketPrimaryButton(title: "Bring them in", action: onBringAll) }
   }
 }
 
@@ -160,39 +157,41 @@ struct ShelfRow: View {
   var onBring: () -> Void
   var body: some View {
     let have = ShelfLogic.inWisp(device.nodeId, item, skills: store.skills, connectors: store.connectors)
-    HStack(spacing: 12) {
-      IconTile(symbol: item.isSkill ? MarketText.skillSymbol(item.name) : "powerplug", color: .secondary, size: 34)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(item.isSkill ? MarketText.skillTitle(item.name) : item.name).font(.body.weight(.medium))
-        Text(item.isSkill ? (item.description ?? "Skill") : item.readyAsIs ? "App" : "App · needs a key").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-      }
-      Spacer(minLength: 8)
-      if have { Text("In Wisp").font(.footnote).foregroundStyle(.secondary) }
-      else if store.canManage { Button("Bring in", action: onBring).buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.small) }
-    }.accessibilityElement(children: .combine)
+    MarketRow(symbol: item.isSkill ? MarketText.skillSymbol(item.name) : "powerplug", title: item.isSkill ? MarketText.skillTitle(item.name) : item.name, subtitle: ShelfLogic.harnessName(item.harness) + (item.isSkill ? "" : item.readyAsIs ? " · app" : " · app, needs a key")) {
+      if have { MarketPill(text: "In Wisp", tone: .green) }
+      else if store.canManage { AddButton(title: "Bring in", action: onBring) }
+    }
   }
 }
 
-/** Give a skill to helpers, then add it (a store skill or one from a device). */
+/** Give a skill to helpers, then add it (a library skill, a store skill or one from a device). */
 struct SkillInstallSheet: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
   var title: String
-  /** the request without the helpers: storeId, or nodeId + harness + skillId */
+  /** the request without the helpers: catalogId, storeId, or nodeId + harness + skillId */
   var request: Fields
   var onDone: (HelperSkill) -> Void = { _ in }
   @State private var agents: Set<String> = []
   @State private var action = FormAction()
   var body: some View {
-    EditorSheet(title: title, action: action, saveTitle: "Add", save: {
-      action.run {
-        var fields = request
-        fields["agentIds"] = AnyEncodable(agents.sorted())
-        let skill = try await store.saveSkill(nil, fields)
-        dismiss(); onDone(skill)
+    MarketSheet(title: title, subtitle: "Which helpers should know it?", busy: action.busy) {
+      CardGroup {
+        ForEach(store.agents) { agent in
+          MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } })) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
+        }
+        if store.agents.isEmpty { MarketRow(title: "No helpers yet", subtitle: "It goes to the organization, ready for the next one.") }
       }
-    }) {
-      AgentSelection(selected: $agents)
+      Text("You can change this any time from the skill.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      InlineError(error: action.error)
+      MarketPrimaryButton(title: title, busy: action.busy) {
+        action.run {
+          var fields = request
+          fields["agentIds"] = AnyEncodable(agents.sorted())
+          let skill = try await store.saveSkill(nil, fields)
+          dismiss(); onDone(skill)
+        }
+      }
     }.onAppear { if store.agents.count == 1, let only = store.agents.first { agents = [only.id] } }
   }
 }
@@ -209,30 +208,31 @@ struct BringAllSheet: View {
   private var ready: [PendingShelfItem] { pending.filter { $0.item.isSkill || $0.item.readyAsIs } }
   private var later: [PendingShelfItem] { pending.filter { p in !ready.contains { $0.id == p.id } } }
   var body: some View {
-    NavigationStack {
-      Form {
-        Section {
-          Text(ready.isEmpty ? "Each of these needs a key first." : "\(ShelfLogic.summary(ready.map(\.item))) come\(ready.count == 1 ? "s" : "") into Wisp as they are. Apps that need a sign-in ask once, here in Wisp.")
-        }
-        if !ready.isEmpty { AgentSelection(selected: $agents).disabled(busy != nil) }
-        if !later.isEmpty {
-          Section("Need a key") {
-            ForEach(later) { p in
-              HStack { Text(p.item.name); Spacer(); Button("Set up") { dismiss(); onSetUp(p.device, p.item) } }
-            }
+    MarketSheet(title: "Bring them in", subtitle: ready.isEmpty ? "Each of these needs a key first." : "\(ShelfLogic.summary(ready.map(\.item))) come\(ready.count == 1 ? "s" : "") into Wisp as they are.", busy: busy != nil) {
+      if !ready.isEmpty {
+        MarketLabel("Share with")
+        CardGroup {
+          ForEach(store.agents) { agent in
+            MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } }), disabled: busy != nil) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
           }
         }
-        ForEach(errors, id: \.self) { InlineError(error: $0) }
+        Text("You can give them to more helpers later. Apps that need a sign-in ask once, here in Wisp.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       }
-      .navigationTitle("Bring them in").navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button(errors.isEmpty ? "Cancel" : "Done") { dismiss() }.disabled(busy != nil) }
-        if !ready.isEmpty && errors.isEmpty {
-          ToolbarItem(placement: .confirmationAction) {
-            Button(busy.map { "\($0 + 1) of \(ready.count)" } ?? "Bring in \(ready.count)") { go() }.disabled(busy != nil)
+      if !later.isEmpty {
+        MarketLabel("Need a key")
+        CardGroup {
+          ForEach(later) { p in
+            MarketRow(symbol: "powerplug", title: p.item.name) { AddButton(title: "Set up") { dismiss(); onSetUp(p.device, p.item) } }
           }
         }
-      }.interactiveDismissDisabled(busy != nil)
+      }
+      ForEach(errors, id: \.self) { InlineError(error: $0) }
+      HStack(spacing: 10) {
+        Button { dismiss() } label: { Text(errors.isEmpty ? "Cancel" : "Done").frame(maxWidth: .infinity) }.secondaryButton().disabled(busy != nil)
+        if !ready.isEmpty && errors.isEmpty {
+          Button { go() } label: { Text(busy.map { "Bringing in \($0 + 1) of \(ready.count)…" } ?? "Bring in \(ready.count)").frame(maxWidth: .infinity) }.primaryButton().disabled(busy != nil)
+        }
+      }
     }.onAppear { if store.agents.count == 1, let only = store.agents.first { agents = [only.id] } }
   }
   private func go() {

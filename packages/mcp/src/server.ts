@@ -112,14 +112,16 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     "team_setup",
     {
       description:
-        "Set up how a channel's team works, when a person describes it (\"Opus plans, GPT challenges it until it approves, then Opus hands out the work\"). Give each role a name, a description every agent on the team will read, and the agent who fills it; then the steps in order. A new message in the channel goes through the steps: Wisp hands each step to its role's agent. Kinds: do (does it, passes the result on), review (approves, or sends it back to an earlier step, up to max_rounds before asking a person), hand_out (splits the work into pieces for hand_to roles; review_by checks each piece). Replaces the channel's roles and steps. Only the workspace's lead or the channel's lead can.",
+        "Set up how a channel's team works, when a person describes it (\"Opus plans, GPT challenges it until it approves, then Opus hands out the work\"). Give each role a name, a description every agent on the team will read, and the agent who fills it; then the steps in order. A new message in the channel goes through the steps: Wisp hands each step to its role's agent. Kinds: do (does it, passes the result on), review (approves, or sends it back to an earlier step, up to max_rounds before asking a person), hand_out (splits the work into pieces for hand_to roles; review_by checks each piece), ask (a person approves it from the Inbox; send_back_to is where changes go). Replaces the channel's roles and steps. Only the workspace's lead or the channel's lead can.",
       inputSchema: {
         channel: z.string().describe("e.g. #launch-site"),
         roles: z.array(z.object({ name: z.string(), description: z.string(), agent: z.string().describe("agent handle") })),
         steps: z.array(
           z.object({
-            role: z.string().describe("a role name from roles"),
-            kind: z.enum(["do", "review", "hand_out"]).optional(),
+            role: z.string().optional().describe("a role name from roles (not needed for ask)"),
+            kind: z.enum(["do", "review", "hand_out", "ask"]).optional(),
+            prompt: z.string().optional().describe("this step's own instructions"),
+            inputs: z.array(z.number().int()).optional().describe("step numbers (1-based) whose results this step uses and waits for. Give inputs on any step and the steps become a flow chart: steps without inputs start together; otherwise they follow one another"),
             action: z.string().describe("what the role does in this step, e.g. Draft a thorough plan"),
             send_back_to: z.number().int().optional().describe("review: step number (1-based) that gets the work back"),
             max_rounds: z.number().int().optional(),

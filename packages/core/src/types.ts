@@ -282,6 +282,15 @@ export interface Reaction {
   actors: Actor[];
 }
 
+/** The message a reply quotes, as it reads now. Filled in by the hub when messages are sent out. */
+export interface ReplyQuote {
+  id: string;
+  author: Actor;
+  /** the start of its text (or the file it carried); empty when it was deleted */
+  snippet: string;
+  deleted?: boolean;
+}
+
 export interface Message {
   id: string;
   channelId: string;
@@ -292,6 +301,9 @@ export interface Message {
   parts: MessagePart[];
   hop: number; // how many agent-to-agent hops led to this message (loop guard)
   reactions?: Reaction[];
+  /** set when this message replies to another one in the same channel: a quote, not a thread */
+  replyToId?: string;
+  replyTo?: ReplyQuote;
   createdAt: string;
   /** set when its author changed the text */
   editedAt?: string;
@@ -338,6 +350,8 @@ export interface Approval {
   decidedAt: string | null;
   /** set when the agent is asking to use a login from the password manager: only whoever connected it can decide */
   login?: import("./logins.ts").LoginRequest | null;
+  /** set when it's an ask-me step of a team's flow: deciding it moves that request on */
+  flow?: { flowId: string; stepId: string } | null;
 }
 
 /**

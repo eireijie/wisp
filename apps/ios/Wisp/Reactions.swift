@@ -1,13 +1,5 @@
 import SwiftUI
 
-enum ReactionSet {
-  static let quick = ["👍", "❤️", "😂", "🎉", "👀"]
-  static let more = [
-    "👍", "👎", "❤️", "🔥", "🎉", "😂", "😍", "🤔", "😮", "😢", "😅", "🙏", "👏", "🙌", "💯", "✅",
-    "❌", "👀", "🚀", "💡", "⭐️", "🤝", "💪", "😎", "🥳", "😴", "🤯", "🙈", "☕️", "🐛", "📌", "⚠️",
-  ]
-}
-
 extension Reaction {
   func isMine(_ userId: String?) -> Bool {
     guard let userId else { return false }
@@ -46,62 +38,5 @@ extension Store {
     if pinned { try await fetch { try await $0.put("/api/messages/\(message.id)/pin", Empty()) } }
     else { try await fetch { try await $0.delete("/api/messages/\(message.id)/pin") } }
     await refreshChannels()
-  }
-}
-
-/** The reactions under a message; tap one to add yours or take it back. */
-struct ReactionChips: View {
-  @Environment(Store.self) private var store
-  var message: Message
-  var onError: (String) -> Void
-
-  var body: some View {
-    if let reactions = message.reactions, !reactions.isEmpty {
-      HStack(spacing: 4) {
-        ForEach(reactions, id: \.emoji) { r in
-          let mine = r.isMine(store.me?.id)
-          Button {
-            Task { do { try await store.toggleReaction(message, emoji: r.emoji) } catch { onError(error.localizedDescription) } }
-          } label: {
-            Text("\(r.emoji) \(r.actors.count)")
-              .font(.caption)
-              .foregroundStyle(mine ? Color.accentColor : .primary)
-              .padding(.horizontal, 7)
-              .padding(.vertical, 3)
-              .background(Capsule().fill(mine ? Color.accentColor.opacity(0.18) : Color(.secondarySystemFill)))
-          }
-          .buttonStyle(.plain)
-          .disabled(!store.canReact(message))
-          .accessibilityLabel("\(r.emoji), \(r.actors.count) \(r.actors.count == 1 ? "person" : "people")\(mine ? ", including you" : "")")
-          .accessibilityHint(mine ? "Takes your reaction back" : "Adds your reaction")
-        }
-      }
-    }
-  }
-}
-
-/** Any emoji from a small set, for "More…" in a message's React menu. */
-struct EmojiPickerSheet: View {
-  @Environment(\.dismiss) private var dismiss
-  var onPick: (String) -> Void
-  private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 8)
-
-  var body: some View {
-    NavigationStack {
-      ScrollView {
-        LazyVGrid(columns: columns, spacing: 4) {
-          ForEach(ReactionSet.more, id: \.self) { e in
-            Button { onPick(e); dismiss() } label: { Text(e).font(.title2).frame(maxWidth: .infinity, minHeight: 44) }
-              .buttonStyle(.plain)
-              .accessibilityLabel("React \(e)")
-          }
-        }
-        .padding(12)
-      }
-      .navigationTitle("React")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-    }
-    .presentationDetents([.medium])
   }
 }

@@ -3,7 +3,7 @@ import { Bot, Eye, Pencil, Pin, RotateCcw, Users } from "lucide-react";
 import { atLeast, type AccessRule, type Agent, type MemoryLevel, type Subject } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type Member } from "../store.ts";
-import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
+import { MoreOptions } from "./MoreOptions.tsx";
 import { AgentAvatar, Modal, UserAvatar, cx } from "./ui.tsx";
 
 interface AccessInfo {
@@ -110,7 +110,6 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
     load();
   }, [load]);
 
-  const simple = useSimple();
   const summary = info ? accessSummary(info, { myId, agentName: (id, handle) => agents.find((a) => a.id === id)?.name ?? `@${handle}` }) : null;
   const noun = folder ? "folder" : "note";
   const canManage = info?.level === "manage";
@@ -178,7 +177,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
             {isShared(path) && <p className="text-xs text-muted">Shared is the common folder. By default everyone in the organization and all helpers can use what is in it, so don't keep private things there.</p>}
           </div>
         )}
-        <Advanced title="How these rules work">
+        <MoreOptions title="How these rules work">
           <p className="text-muted">
             {folder ? (
               <>
@@ -191,7 +190,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
             )}{" "}
             A rule set here beats what's inherited, and a rule for one agent beats one for its role, its team or all agents.
           </p>
-          <SimpleOnly>
+          <>
             {info && (
               <ul className="mt-2 space-y-1 text-xs text-muted">
                 {[...info.subjects.map((r) => ({ name: subjectLabel(r.subject, agents, members), hint: why(r.subject, r.level, r.via) })), ...info.agents.map((a) => ({ name: `@${a.handle}`, hint: why({ kind: "agent", id: a.id }, a.level, a.via) })), ...info.people.map((p) => ({ name: p.name, hint: p.role === "owner" ? "Owner · always manages everything" : why({ kind: "user", id: p.id }, p.level, p.via) }))].map((r, i) => (
@@ -201,8 +200,8 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                 ))}
               </ul>
             )}
-          </SimpleOnly>
-        </Advanced>
+          </>
+        </MoreOptions>
         {info && !canManage && <p className="rounded-lg bg-hover px-3 py-2 text-muted">You can see who has access. Only people who manage this {folder ? "folder" : "note"} can change it.</p>}
         {error && <p className="text-bad">{error}</p>}
         {!info ? (
@@ -217,7 +216,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={key(r.subject)}
                     avatar={<GroupIcon />}
                     name={subjectLabel(r.subject, agents, members)}
-                    hint={simple ? "" : why(r.subject, r.level, r.via)}
+                    hint=""
                     level={r.level}
                     levels={["none", "read", "edit"]}
                     disabled={!canManage || busy === key(r.subject)}
@@ -236,7 +235,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={a.id}
                     avatar={<AgentAvatar agent={agent} size={28} badge={false} />}
                     name={`@${a.handle}`}
-                    hint={simple ? "" : why(s, a.level, a.via)}
+                    hint=""
                     level={a.level}
                     levels={["none", "read", "edit"]}
                     disabled={!canManage || busy === key(s)}
@@ -259,7 +258,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={key(r.subject)}
                     avatar={<GroupIcon />}
                     name={subjectLabel(r.subject, agents, members)}
-                    hint={simple ? "" : why(r.subject, r.level, r.via)}
+                    hint=""
                     level={r.level}
                     levels={r.subject.kind === "guests" ? ["none", "read"] : ["none", "read", "edit", "manage"]}
                     disabled={!canManage || busy === key(r.subject)}
@@ -275,7 +274,7 @@ export function AccessDialog({ path, folder, onClose, onChanged }: { path: strin
                     key={p.id}
                     avatar={<UserAvatar name={p.name} size={28} />}
                     name={`${p.name}${p.id === myId ? " (you)" : ""}`}
-                    hint={simple ? "" : p.role === "owner" ? "Owner · always manages everything" : why(s, p.level, p.via)}
+                    hint=""
                     level={p.level}
                     levels={p.role === "guest" ? ["none", "read"] : ["none", "read", "edit", "manage"]}
                     disabled={!canManage || p.role === "owner" || busy === key(s)}

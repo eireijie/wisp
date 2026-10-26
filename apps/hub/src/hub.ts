@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -206,6 +206,16 @@ export class Hub {
       this.clients.delete(c);
       c.socket.close(4401, "removed from the workspace");
     }
+  }
+
+  /** Drop every browser and device connection to an organization (it was deleted). */
+  disconnectWorkspace(workspaceId: string) {
+    for (const c of this.clients) {
+      if (c.workspaceId !== workspaceId) continue;
+      this.clients.delete(c);
+      c.socket.close(4401, "organization deleted");
+    }
+    for (const n of this.store.nodes(workspaceId)) this.disconnectNode(n.id);
   }
 
   /** Stop sending events to sign-ins whose tokens were revoked. */
@@ -521,7 +531,7 @@ export class Hub {
    * the person the message ultimately serves; by default the person who wrote it, or for an
    * agent, whoever asked it for the work it's doing now.
    */
-  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null }): Message {
+  postMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null; route?: boolean; replyInThread?: boolean; onBehalfOf?: string | null }): Message {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
     const msg = this.store.insertMessage(m);
@@ -680,8 +690,44 @@ export class Hub {
     return cmd ? { ...cmd, args: parsed.args } : null;
   }
 
-  /** /context: how full the agent's conversation here is, from its last reply's usage. */
+  /** /model: say which model the agent runs on, or switch it ("default" goes back to the harness's own). */
+  private answerModel(agent: Agent, msg: Message, threadId: string | null, ask: string) {
+    const near = { ...msg, threadId };
+    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    const models = catalog?.models ?? [];
+    const handle = this.handleOf(agent.id);
+    const list = models.length ? ` It offers ${models.map((m) => m.id).join(", ")}.` : "";
+    const using = agent.model ?? catalog?.defaultModel;
+    if (!ask) return void this.postSystem(near, `${handle} is on ${agent.model ? agent.model : using ? `${using} (the default)` : "its default model"}.${list} Switch with /model <name>, or /model default.`);
+    // guests can ask, but changing an agent is for members and owners (as in the agent settings)
+    if (this.store.role(agent.workspaceId, msg.author.id) === "guest") return void this.postSystem(near, `Guests can't change ${handle}'s model.`);
+    // an agent on someone's own device is theirs to change
+    const node = agent.nodeId && this.harnessOnDevice(agent) ? this.store.node(agent.nodeId) : undefined;
+    if (node && !node.shared && node.ownerId && node.ownerId !== msg.author.id) return void this.postSystem(near, `${handle} runs directly on ${this.store.user(node.ownerId)?.name ?? "its owner"}'s device, so only they can change its model.`);
+    let model: string | null;
+    if (/^(default|auto|reset)$/i.test(ask)) model = null;
+    else if (!models.length) model = ask;
+    else {
+      // an exact id, else the one model whose id or name has every word typed ("sol 6.1" finds gpt-6.1-sol)
+      const words = ask.toLowerCase().split(/\s+/);
+      const exact = models.filter((m) => m.id === ask);
+      const hits = exact.length ? exact : models.filter((m) => words.every((w) => `${m.id} ${m.label}`.toLowerCase().includes(w)));
+      if (hits.length !== 1) return void this.postSystem(near, `${hits.length ? "That fits more than one model" : `${handle} can't use "${ask}"`}.${list}`);
+      model = hits[0].id;
+    }
+    // an effort the new model doesn't offer is dropped, as in the model menu
+    const efforts = models.find((m) => m.id === (model ?? catalog?.defaultModel))?.efforts;
+    const effort = agent.settings.effort;
+    const dropEffort = !!effort && !!efforts && !efforts.includes(effort);
+    this.store.updateAgent(agent.id, { model, ...(dropEffort ? { settings: { effort: null } } : {}) });
+    this.broadcast(agent.workspaceId, { type: "agents_changed" });
+    this.postSystem(near, `${handle} will use ${model ?? "its default model"} from the next message.`);
+  }
+
+  /** Commands Wisp answers itself: /context (how full the conversation is) and /model. */
   private answerCommand(agent: Agent, msg: Message, threadId: string | null) {
+    const parsed = parseCommand(msg.body, agent.handle);
+    if (parsed?.name === "model") return this.answerModel(agent, msg, threadId, parsed.args);
     const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
     this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
@@ -718,8 +764,6 @@ export class Hub {
     this.broadcast(conn.workspaceId, { type: "agent_status", agentId: agent.id, status: "busy" });
     if (run.kind === "background") this.background.started(run);
     else this.dropWaitingNotice(run, agent);
-    // like a teammate saying "on it": the agent marks the message it picked up
-    if (run.kind !== "background") this.react(run.triggerMessageId, { kind: "agent", id: agent.id }, "👀", true);
     // working again, so an earlier "needs you on my computer" no longer stands
     if (agent.computerId) this.computers.dropHelp(agent.computerId, agent.id);
     // lets browsers show "Nova: thinking" right away, before the harness streams anything
@@ -977,30 +1021,42 @@ export class Hub {
   }
 
   /**
-   * A stepped team, as one of its agents sees it: its roles and what they mean, the steps in order,
-   * and who fills every role. Wisp hands out each step as a task, so agents don't chase each other.
+   * A team that runs on steps, as one of its agents sees it: the steps (what happens, in order, and
+   * what runs at the same time), who does each, and the instructions for the ones it does. Wisp
+   * hands out each step as a task, so agents don't chase each other.
    */
   stepsSection(channelName: string, team: ChannelTeam, agentId: string): string {
-    const roles = team.roles ?? [];
-    const mine = roles.filter((r) => r.agentId === agentId);
-    if (!mine.length) return "";
-    const order = stepOrder(team.steps ?? []);
+    const t = migrateTeam(team);
+    const roles = t.roles ?? [];
+    const all = t.steps ?? [];
+    const mineRoles = roles.filter((r) => r.agentId === agentId);
+    const mineSteps = all.filter((s) => stepAgentId(t, s) === agentId);
+    if (!mineRoles.length && !mineSteps.length) return "";
+    const order = stepOrder(all);
+    const g = stepGraph(all);
     const num = (id: string | null | undefined) => order.findIndex((s) => s.id === id) + 1;
+    const nameOf = (s: (typeof all)[number]) => roles.find((r) => r.id === s.roleId)?.name ?? this.store.agent(stepAgentId(t, s) ?? "")?.name ?? "";
     const steps = order.map((s, i) => {
-      const extra =
-        s.kind === "review"
-          ? ` Approves, or sends it back to step ${num(s.sendBackTo)} (up to ${s.maxRounds ?? DEFAULT_ROUNDS} rounds).`
-          : s.kind === "hand_out"
-            ? ` Hands pieces to ${(s.handTo ?? []).map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean).join(", ")}${s.reviewBy ? `; ${roles.find((x) => x.id === s.reviewBy)?.name} checks each piece` : ""}.`
-            : "";
-      return `${i + 1}. ${stepLabel(s, roles)}.${extra}`;
+      const ins = g.ins.get(s.id) ?? [];
+      const bits: string[] = [];
+      if (ins.length) bits.push(`Uses the result${ins.length > 1 ? "s" : ""} of step${ins.length > 1 ? "s" : ""} ${ins.map(num).join(" and ")}${ins.length > 1 ? " (waits for all of them)" : ""}.`);
+      if (s.kind === "review") bits.push(`Approves, or sends it back to step ${num(s.sendBackTo)} (up to ${s.maxRounds ?? DEFAULT_ROUNDS} rounds).`);
+      if (s.kind === "hand_out") bits.push(`Hands pieces to ${(s.handTo ?? []).map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean).join(", ")}${s.reviewBy ? `; ${roles.find((x) => x.id === s.reviewBy)?.name} checks each piece` : ""}.`);
+      if (s.kind === "ask") bits.push("A person approves it first.");
+      if (s.kind === "handoff") bits.push(`Hands the work to #${this.store.channel(s.handoffTo ?? "")?.name ?? "another team"}.`);
+      if (s.kind === "branch") bits.push(`Decides: ${s.rule ? `result ${s.rule.op.replace("_", " ")} “${s.rule.value}”` : (s.condition ?? "").trim()}.`);
+      const label = `${s.kind === "ask" ? "A person" : s.kind === "handoff" ? "Another team" : nameOf(s) || "Step"}: ${s.action.trim() || stepLabel(s, roles)}`;
+      return `${i + 1}. ${label}.${bits.length ? ` ${bits.join(" ")}` : ""}`;
     });
-    const people = roles.filter((r) => r.agentId && this.store.agent(r.agentId)).map((r) => `- ${r.name}: ${this.handleOf(r.agentId!)}${r.agentId === agentId ? " (you)" : ""}`);
+    const agents = [...new Set(all.map((s) => stepAgentId(t, s)).filter((a): a is string => !!a && !!this.store.agent(a)))];
+    const people = agents.map((a) => `- ${this.store.agent(a)!.name}: ${this.handleOf(a)}${a === agentId ? " (you)" : ""}`);
+    const own = mineSteps.filter((s) => (s.prompt ?? "").trim() && !mineRoles.some((r) => r.id === s.roleId && r.description.trim() === (s.prompt ?? "").trim()));
     return [
       `## Your team in #${channelName}`,
-      ...mine.map((r) => `You are the ${r.name}. ${r.description.trim()}`),
-      `How this team works. A new message in the channel starts at step 1; Wisp hands each step to whoever fills its role as a task, with what the step before produced. When you're handed a step, do it and finish the task with task_update; the next step starts on its own.\n${steps.join("\n")}`,
-      `Who fills each role:\n${people.join("\n")}`,
+      ...mineRoles.map((r) => `You are the ${r.name}. ${r.description.trim()}`),
+      ...own.map((s) => `Your instructions for step ${num(s.id)} (${s.action.trim() || "no title"}): ${(s.prompt ?? "").trim()}`),
+      `How this team works. A new message in the channel starts every step nothing comes before, all at once; a step with several inputs waits for all of them. Wisp hands each step to its agent as a task, with what the steps before produced. When you're handed a step, do it and finish the task with task_update; the next steps start on their own.\n${steps.join("\n")}`,
+      `Who is on the team:\n${people.join("\n")}`,
       "Ask a teammate something with an @mention in the thread. Don't hand the steps themselves to anyone: Wisp does that. Use task_delegate only when your step tells you to hand out pieces.",
     ].join("\n");
   }
@@ -1025,7 +1081,8 @@ export class Hub {
     // a discussion thread is the whole conversation, so agents see all of it
     const history = background ? [] : store.messages(channelId, { threadId, limit: run?.discussionId ? 100 : CONTEXT_MESSAGES }).filter((m) => m.id !== triggerId && m.author.id !== "system");
     const discussion = run && !background ? this.discussions.promptSection(run) : "";
-    const trigger = store.message(triggerId) ?? { body: "", parts: [], author: { kind: "user" as const, id: "system" } };
+    const found = store.message(triggerId);
+    const trigger = found ? store.withReplyQuote(found) : { body: "", parts: [], author: { kind: "user" as const, id: "system" }, replyTo: undefined };
     // a harness's own command goes to it exactly as typed, into the same conversation
     const command = !background && trigger.author.kind === "user" ? this.commandFor(agent, trigger.body) : null;
     if (command?.via === "raw") return `/${command.name}${command.args ? ` ${command.args}` : ""}`;
@@ -1097,6 +1154,7 @@ export class Hub {
       background,
       parentThread.length ? `\nThis is a sub-thread. Earlier, in the thread it branched off from:\n${parentThread.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
+      background ? "" : trigger.replyTo ? `\nThis message replies to ${this.displayName(trigger.replyTo.author)}'s earlier message${trigger.replyTo.deleted ? " (since deleted)" : `: "${trigger.replyTo.snippet}"`}.` : "",
       background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${command?.via === "prompt" ? skillRequest(command.name, command.args) : trigger.body}${taskInstructions(store, agent.id, trigger)}`,
     ]
       .filter(Boolean)

@@ -239,3 +239,34 @@ it("opens a buddy call in the existing chat route", () => {
   expect(parseRoute(href(route))).toEqual(route);
   expect(parseRoute("#/settings/voice")).toEqual({ view: "settings", page: "voice" });
 });
+
+describe("live call state", () => {
+  const run = (event: unknown): ClientEvent => ({ type: "run_event", runId: "r1", agentId: "ghost", channelId: "dm", event } as ClientEvent);
+  it("speaks the first sentence while the agent is still working, then only the rest", async () => {
+    const { call, speaker, cb } = fixture();
+    await call.start();
+    cb.final("what is in main");
+    expect(call.state.phase).toBe("thinking");
+    call.event(run({ type: "tool_call", name: "Read", input: { file_path: "/a/b/main.ts" } }));
+    expect(call.state).toMatchObject({ phase: "working", activity: "Reading main.ts" });
+    call.event(run({ type: "text", text: "It exports one function. And" }));
+    expect(speaker.speak).toHaveBeenCalledWith("It exports one function.", expect.any(Function));
+    expect(call.state.phase).toBe("speaking");
+    call.event(reply("done", "It exports one function. And it is small.\n\nMore."));
+    await vi.advanceTimersByTimeAsync(0);
+    // the first sentence is still playing: the rest waits instead of cutting it off
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    speaker.cancel(); // the first sentence finishes on its own
+    await vi.advanceTimersByTimeAsync(0);
+    expect(speaker.speak).toHaveBeenLastCalledWith("And it is small.", expect.any(Function));
+    call.stop();
+  });
+  it("reports error as its own phase", async () => {
+    const { call, cb } = fixture();
+    await call.start();
+    expect(call.state.phase).toBe("listening");
+    cb.error("nope");
+    expect(call.state.phase).toBe("error");
+    call.stop();
+  });
+});

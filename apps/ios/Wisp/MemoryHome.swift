@@ -36,6 +36,9 @@ import SwiftUI
   }
 }
 
+/** Where the "..." menu and the home's links lead. */
+enum MemoryRoute: Hashable { case graph, activity, access, about, storage }
+
 /** Memory: the front page at the top, then folders. */
 struct MemoryView: View {
   var folder = ""
@@ -44,85 +47,84 @@ struct MemoryView: View {
   }
 }
 
-/** The front page of Memory: find a note, see what changed and who changed it, and the notes everything links to. */
+/** The front page of Memory: find a note, see what changed and who changed it, and the folders. */
 struct MemoryHome: View {
   @Environment(Store.self) private var store
+  @Environment(\.colorScheme) private var scheme
   @State private var browse = MemoryBrowse()
   @State private var query = ""
   @State private var hits: [MemoryNote] = []
   @State private var creating = false
   @State private var created: MemoryNote?
+  @State private var opened: MemoryNote?
+  @State private var route: MemoryRoute?
+  @State private var picking = false
   @State private var camera = GraphCamera()
   @State private var action = FormAction()
 
-  private var topFolders: [String] {
-    let notes = browse.notes ?? store.notes
-    return Array(Set(notes.compactMap { $0.path.contains("/") ? $0.path.components(separatedBy: "/").first : nil })).sorted()
+  private var allNotes: [MemoryNote] { browse.notes ?? store.notes }
+  private func topFolders(_ notes: [MemoryNote]) -> [String] {
+    Array(Set(notes.compactMap { $0.path.contains("/") ? $0.path.components(separatedBy: "/").first : nil })).sorted { rank($0) != rank($1) ? rank($0) < rank($1) : $0 < $1 }
   }
+  private func rank(_ name: String) -> Int { ["shared": 0, "teams": 1, "groups": 2, "people": 3, "agents": 4][name] ?? 50 }
   private var recent: [MemoryChange] {
-    (browse.changes ?? []).map { $0.keeping(visible: browse.visible) }.filter { !$0.files.isEmpty }.prefix(7).map { $0 }
+    (browse.changes ?? []).map { $0.keeping(visible: browse.visible) }.filter { !$0.files.isEmpty }.prefix(5).map { $0 }
   }
   private var shownHits: [MemoryNote] {
     guard let visible = browse.visible else { return hits }
     return hits.filter { visible.contains($0.path) }
   }
+  private var viewingAgent: Agent? { browse.viewAs.flatMap { v in store.agents.first { "agent:\($0.id)" == v } } }
+  private var canView: Bool { store.isOwner && !store.agents.isEmpty }
 
   var body: some View {
-    List {
-      InlineError(error: action.error)
-      if let agent = viewingAgent {
-        Section {
-          HStack {
-            Label("Viewing as @\(agent.handle): only the notes it can read are listed.", systemImage: "eye").font(.footnote)
-            Spacer()
-            Button("Stop") { browse.viewAs = nil }.buttonStyle(.borderless)
-          }
-        }
+    MemoryScreen(title: "Memory", id: "memory", trailing: {
+      MoreCircle {
+        Button("Refresh", systemImage: "arrow.clockwise") { action.run { try await store.connection().post("/api/vault/sync", Empty()); try await store.refreshNotes(); await browse.reload(store) } }
+        Button("Graph", systemImage: "point.3.connected.trianglepath.dotted") { route = .graph }
+        Button("Recent changes", systemImage: "clock") { route = .activity }
+        Button("Who can see and edit what", systemImage: "lock") { route = .access }
+        Button("About you", systemImage: "person") { route = .about }
+        Button("Obsidian and storage", systemImage: "arrow.triangle.2.circlepath") { route = .storage }
       }
-      if !query.trimmed.isEmpty {
-        Section {
-          ForEach(shownHits) { note in
-            NavigationLink { NoteView(path: note.path) } label: {
-              VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline) { Text(note.name); Text(store.placeName(note.path)).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
-                if let snippet = note.snippet { Text(plain(snippet)).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-              }
-            }.accessibilityIdentifier("note-row")
-          }
-          if shownHits.isEmpty { Text("No notes match “\(query.trimmed)”.").foregroundStyle(.secondary) }
-        }
-      } else {
-        header
-        folderChips
-        recentSection
-        graphTeaser
-        mostLinked
-        browseSection
+    }) {
+      Text("What your team remembers").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text).padding(.horizontal, 4)
+      if let agent = viewingAgent { ViewingBanner(agent: agent) { browse.viewAs = nil } }
+      InlineError(error: action.error).padding(.horizontal, 4)
+      MemorySearchField(prompt: "Search every note…", text: $query, id: "memory-search")
+      if canView && viewingAgent == nil {
+        Button { picking = true } label: {
+          HStack(spacing: 8) {
+            Image(systemName: "eye").font(.system(size: 14))
+            Text("View as you").font(.system(size: 15, weight: .semibold))
+            Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+          }.foregroundStyle(Palette.text).padding(.horizontal, 14).frame(height: 40).background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
+        }.buttonStyle(.plain).accessibilityIdentifier("memory-view-as")
       }
+      if !query.trimmed.isEmpty { results } else { front }
     }
-    .sectionScreen("Memory", id: "memory")
-    .searchable(text: $query, prompt: "Search every note…")
-    .toolbar {
-      ToolbarItemGroup(placement: .primaryAction) {
-        if store.isOwner && !store.agents.isEmpty {
-          Menu {
-            Picker("View memory as", selection: Binding(get: { browse.viewAs ?? "" }, set: { browse.viewAs = $0.isEmpty ? nil : $0 })) {
-              Text("View as you").tag("")
-              ForEach(store.agents) { Text("View as @\($0.handle)").tag("agent:\($0.id)") }
-            }
-          } label: { Label("View memory as", systemImage: "eye") }.accessibilityIdentifier("memory-view-as")
-        }
-        Button("Refresh", systemImage: "arrow.clockwise") { action.run { try await store.connection().post("/api/vault/sync", Empty()); try await store.refreshNotes(); await browse.reload(store) } }.disabled(action.busy)
-        if store.canManage && browse.viewAs == nil { Button("New note", systemImage: "square.and.pencil") { creating = true }.accessibilityIdentifier("new-note") }
+    .safeAreaInset(edge: .bottom) {
+      if store.canManage && browse.viewAs == nil {
+        PillAction(title: "New note", symbol: "plus", id: "new-note") { creating = true }.padding(.bottom, 12)
       }
     }
     .sheet(isPresented: $creating) { NewNoteSheet(folder: "people/\(store.me?.id ?? "")") { created = MemoryNote(path: $0) } }
+    .sheet(isPresented: $picking) { ViewAsSheet(current: browse.viewAs) { browse.viewAs = $0 } }
     .navigationDestination(item: $created) { NoteView(path: $0.path) }
+    .navigationDestination(item: $opened) { NoteView(path: $0.path) }
+    .navigationDestination(item: $route) { destination in
+      switch destination {
+      case .graph: MemoryGraphScreen(browse: browse, initialKind: nil)
+      case .activity: MemoryActivityView(visible: browse.visible)
+      case .access: MemoryAccessRulesView()
+      case .about: AboutYouView()
+      case .storage: MemoryStorageView()
+      }
+    }
     .task(id: "\(store.memoryVersion)|\(browse.viewAs ?? "")") {
       do { try await store.refreshNotes() } catch { action.error = error.localizedDescription }
       await browse.reload(store)
     }
-    .refreshable { await browse.reload(store); try? await store.refreshNotes() }
     .task(id: query) {
       guard !query.trimmed.isEmpty else { hits = []; return }
       do {
@@ -133,121 +135,166 @@ struct MemoryHome: View {
     }
   }
 
-  private var viewingAgent: Agent? { browse.viewAs.flatMap { v in store.agents.first { "agent:\($0.id)" == v } } }
-
   private func plain(_ snippet: String) -> String {
     snippet.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression).replacingOccurrences(of: "&amp;", with: "&").replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+      .replacingOccurrences(of: "**", with: "")
   }
 
-  // MARK: sections
-
-  @ViewBuilder private var header: some View {
-    Section {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(stats).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-        Text("What your team remembers").font(.title3.weight(.semibold))
+  @ViewBuilder private var results: some View {
+    CardGroup {
+      ForEach(shownHits) { note in
+        NavigationLink { NoteView(path: note.path) } label: {
+          VStack(alignment: .leading, spacing: 3) {
+            Text(note.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+            Text(store.placeName(note.path)).font(.system(size: 14)).foregroundStyle(Palette.faint).lineLimit(1)
+            if let snippet = note.snippet { Text(plain(snippet)).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(2) }
+          }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 12).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityIdentifier("note-row")
       }
-      if store.notes.isEmpty && browse.graph?.nodes.isEmpty != false && !browse.loading {
-        Text("Write, read and fix notes right here.").foregroundStyle(.secondary)
-      }
+      if shownHits.isEmpty { Text("No notes match “\(query.trimmed)”.").foregroundStyle(Palette.muted).padding(18) }
     }
   }
-  private var stats: String {
-    guard let graph = browse.graph else { return " " }
-    let notes = graph.nodes.filter { $0.path != nil }.count
-    var text = "\(notes) \(notes == 1 ? "note" : "notes") · \(graph.edges.count) \(graph.edges.count == 1 ? "link" : "links")"
-    if let first = browse.changes?.first, let date = Wire.date(first.date) { text += " · last change " + date.formatted(.relative(presentation: .named)) }
-    return text
-  }
 
-  @ViewBuilder private var folderChips: some View {
-    if let graph = browse.graph, graph.nodes.contains(where: { $0.path != nil }) {
-      Section {
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: 8) {
-            ForEach(GraphKind.allCases.filter { $0 != .ghost && graph.count(of: $0) > 0 }, id: \.self) { kind in
-              NavigationLink { MemoryGraphScreen(browse: browse, initialKind: kind) } label: {
-                HStack(spacing: 6) {
-                  Circle().fill(kind.color(dark: scheme == .dark)).frame(width: 9, height: 9)
-                  Text(kind.label(simple: store.simple)).fontWeight(.medium)
-                  Text("\(graph.count(of: kind))").foregroundStyle(.secondary)
-                }.font(.subheadline).padding(.horizontal, 12).padding(.vertical, 8).background(Capsule().fill(Color(.tertiarySystemFill)))
-              }.buttonStyle(.plain).accessibilityLabel("\(kind.label(simple: store.simple)), \(graph.count(of: kind)). See in the graph")
-            }
-          }
-        }.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-      }.listRowBackground(Color.clear)
-    }
-  }
-  @Environment(\.colorScheme) private var scheme
-
-  private var recentSection: some View {
-    Section {
-      if browse.changes == nil { ProgressView() }
-      else if recent.isEmpty {
-        VStack(alignment: .leading, spacing: 6) {
-          Text("Nothing written yet. Notes you and your \(store.simple ? "helpers" : "agents") write show up here.").foregroundStyle(.secondary)
-          if store.canManage && browse.viewAs == nil { Button("Write the first note", systemImage: "square.and.pencil") { creating = true }.buttonStyle(.borderless) }
+  @ViewBuilder private var front: some View {
+    let folders = topFolders(allNotes)
+    if !folders.isEmpty {
+      SectionCaption("Folders")
+      CardGroup {
+        ForEach(folders, id: \.self) { name in
+          NavigationLink { MemoryFolderView(folder: name, viewAs: browse.viewAs) } label: {
+            RowLabel(title: store.folderLabel(name, parent: ""), value: String(allNotes.filter { $0.path.hasPrefix(name + "/") }.count)) { Image(systemName: "folder").font(.system(size: 18)).foregroundStyle(Palette.muted) }
+          }.buttonStyle(.plain).accessibilityIdentifier("memory-folder")
         }
-      } else {
-        ForEach(recent) { ChangeRow(change: $0, compact: true) }
       }
-    } header: {
-      HStack { Text("Recent changes"); Spacer(); NavigationLink("All activity") { MemoryActivityView(visible: browse.visible) }.font(.subheadline).textCase(nil).accessibilityIdentifier("memory-all-activity") }
+      if let agent = viewingAgent {
+        let hidden = topFolders(store.notes).count - folders.count
+        if hidden > 0 { CardCaption("\(hidden) \(hidden == 1 ? "folder" : "folders") hidden from \(agent.name)") }
+      }
     }
-  }
-
-  @ViewBuilder private var graphTeaser: some View {
-    Section {
-      NavigationLink { MemoryGraphScreen(browse: browse, initialKind: nil) } label: {
+    SectionCaption("Recent changes", trailing: AnyView(
+      Button { route = .activity } label: { Text("All activity").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }
+        .buttonStyle(.plain).accessibilityIdentifier("memory-all-activity")))
+    if browse.changes == nil { ProgressView().frame(maxWidth: .infinity).padding() }
+    else if recent.isEmpty {
+      CardGroup {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Nothing written yet. Notes you and your agents write show up here.").foregroundStyle(Palette.muted)
+          if store.canManage && browse.viewAs == nil { Button { creating = true } label: { Text("Write the first note").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain) }
+        }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+      }
+    } else {
+      CardGroup {
+        ForEach(recent) { change in
+          let file = change.files.first { $0.change != "deleted" } ?? change.files[0]
+          let who = displayAuthor(change.author, store: store)
+          Button { if file.change != "deleted" { opened = MemoryNote(path: file.path) } } label: {
+            RowLabel(title: noteTitle(file.path), subtitle: [who.name, relative(change.date)].compactMap { $0 }.joined(separator: " · ")) { AuthorAvatar(author: who, size: 40) }
+          }.buttonStyle(.plain)
+        }
+      }
+    }
+    if let graph = browse.graph, !graph.nodes.isEmpty {
+      Button { route = .graph } label: {
         VStack(alignment: .leading, spacing: 10) {
           ZStack {
-            if let graph = browse.graph, !graph.nodes.isEmpty, !browse.positions.isEmpty {
+            if !browse.positions.isEmpty {
               GraphCanvas(graph: graph, positions: browse.positions, camera: $camera, selected: nil, interactive: false, onSize: { camera = GraphCamera.fit(browse.positions.values.map { $0 }, in: $0, pad: 16) })
                 .id(browse.positions.count)
-            } else {
-              Text(browse.graph == nil && browse.loading ? "Loading…" : "No notes yet").font(.subheadline).foregroundStyle(.secondary)
-            }
-          }.frame(height: 170).frame(maxWidth: .infinity).background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(.tertiarySystemFill))).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-          VStack(alignment: .leading, spacing: 2) { Text("Graph").font(.headline); Text("See how every note links together").font(.caption).foregroundStyle(.secondary) }
-        }.padding(.vertical, 4)
-      }.accessibilityIdentifier("memory-graph-link")
-    }
-  }
-
-  @ViewBuilder private var mostLinked: some View {
-    if let graph = browse.graph {
+            } else { ProgressView() }
+          }.frame(height: 170).frame(maxWidth: .infinity).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+          Text("See how every note links together").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.muted)
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      }.buttonStyle(.plain).accessibilityIdentifier("memory-graph-link")
       let hubs = graph.mostLinked()
       if !hubs.isEmpty {
-        let maxIn = Double(hubs.first?.inboundCount ?? 1)
-        Section("Most linked") {
-          ForEach(hubs) { node in
-            NavigationLink { NoteView(path: node.path ?? "") } label: {
-              HStack(spacing: 10) {
-                Circle().fill(node.graphKind.color(dark: scheme == .dark)).frame(width: 10, height: 10)
-                VStack(alignment: .leading, spacing: 1) {
+        SectionCaption("Most linked")
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            ForEach(hubs) { node in
+              NavigationLink { NoteView(path: node.path ?? "") } label: {
+                HStack(spacing: 6) {
+                  Circle().fill(node.graphKind.color(dark: scheme == .dark)).frame(width: 9, height: 9)
                   Text(node.title).lineLimit(1)
-                  Text(store.placeName(node.path ?? "")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                ProgressView(value: Double(node.inboundCount), total: max(maxIn, 1)).tint(node.graphKind.color(dark: scheme == .dark)).frame(width: 44)
-                Text("\(node.inboundCount)").font(.caption).foregroundStyle(.secondary).monospacedDigit().frame(minWidth: 16, alignment: .trailing)
-              }
-            }.accessibilityLabel("\(node.title), \(node.inboundCount) \(node.inboundCount == 1 ? "note links" : "notes link") here")
+                  Text("\(node.inboundCount)").foregroundStyle(Palette.faint)
+                }.font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 14).frame(height: 40)
+                  .background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
+              }.buttonStyle(.plain).accessibilityLabel("\(node.title), \(node.inboundCount) \(node.inboundCount == 1 ? "note links" : "notes link") here")
+            }
           }
         }
       }
     }
   }
+}
 
-  @ViewBuilder private var browseSection: some View {
-    let names = topFolders
-    if !names.isEmpty {
-      Section("Folders") {
-        ForEach(names, id: \.self) { name in
-          NavigationLink { MemoryFolderView(folder: name, viewAs: browse.viewAs) } label: { Label(store.folderLabel(name, parent: ""), systemImage: "folder") }.accessibilityIdentifier("memory-folder")
-        }
-      }
+/** The blue strip that says memory is being seen the way one agent sees it. */
+struct ViewingBanner: View {
+  var agent: Agent
+  var stop: () -> Void
+  var body: some View {
+    HStack(spacing: 10) {
+      AgentAvatar(agent: agent, size: 28, showStatus: false)
+      Text("Viewing as @\(agent.handle). Only the notes it can read are listed.").font(.system(size: 15, weight: .semibold)).foregroundStyle(Color(light: 0x0B3D8F, dark: 0xDCE9FF)).fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 4)
+      Button(action: stop) { Text("Stop").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.sheet).padding(.horizontal, 18).frame(height: 40).background(Capsule().fill(Palette.text)) }
+        .buttonStyle(.plain).accessibilityIdentifier("memory-view-as-stop")
     }
+    .padding(.horizontal, 14).padding(.vertical, 10)
+    .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(light: 0xDCE9FF, dark: 0x1F3A66)))
+  }
+}
+
+/** "View memory as": pick yourself or one agent, and see how much of memory it can read. */
+struct ViewAsSheet: View {
+  @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  var current: String?
+  var onPick: (String?) -> Void
+  @State private var pick: String = ""
+  @State private var readable: Int?
+
+  var body: some View {
+    VStack(spacing: 0) {
+      SheetHeader(title: "View memory as") { dismiss() }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          Text("See memory the way an agent does. Only the notes it can read are listed.").font(.system(size: 16)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
+          SectionCaption("Helper")
+          CardGroup {
+            Button { pick = "" } label: {
+              HStack(spacing: 12) { Image(systemName: "person").font(.system(size: 18)).foregroundStyle(Palette.muted).frame(width: 40); Text("You").font(.system(size: 17)); Spacer(); RadioMark(on: pick.isEmpty) }
+                .padding(.horizontal, 18).frame(minHeight: 62).contentShape(Rectangle())
+            }.buttonStyle(.plain).foregroundStyle(Palette.text)
+            ForEach(store.agents) { agent in
+              Button { pick = "agent:\(agent.id)" } label: {
+                HStack(spacing: 12) { AgentAvatar(agent: agent, size: 40, showStatus: false); Text(agent.name).font(.system(size: 17)); Spacer(); RadioMark(on: pick == "agent:\(agent.id)") }
+                  .padding(.horizontal, 18).frame(minHeight: 62).contentShape(Rectangle())
+              }.buttonStyle(.plain).foregroundStyle(Palette.text).accessibilityIdentifier("view-as-\(agent.handle)")
+            }
+          }
+          if let agent = store.agents.first(where: { "agent:\($0.id)" == pick }) {
+            SectionCaption("Result")
+            VStack(alignment: .leading, spacing: 6) {
+              if let readable { Text("\(agent.name) can read \(readable) of \(store.notes.count) notes").font(.system(size: 17, weight: .bold)).foregroundStyle(Palette.text) }
+              else { ProgressView() }
+              Text("The notes it can't read stay hidden while you look.").font(.system(size: 15)).foregroundStyle(Palette.muted)
+            }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+          }
+        }.padding(.horizontal, 18).padding(.top, 6)
+      }
+      PillAction(title: viewLabel, symbol: pick.isEmpty ? nil : "eye", id: "view-as-apply") { onPick(pick.isEmpty ? nil : pick); dismiss() }.padding(.vertical, 12)
+    }
+    .background(Palette.sheet.ignoresSafeArea()).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
+    .onAppear { pick = current ?? "" }
+    .task(id: pick) {
+      readable = nil
+      guard !pick.isEmpty else { return }
+      let notes = try? await store.vaultNotes(as: pick)
+      if !Task.isCancelled { readable = notes?.count }
+    }
+  }
+  private var viewLabel: String {
+    guard let agent = store.agents.first(where: { "agent:\($0.id)" == pick }) else { return "View as you" }
+    return "View as \(agent.name)"
   }
 }

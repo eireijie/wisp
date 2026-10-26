@@ -63,60 +63,78 @@ export function ProfilePage() {
     }
   };
 
+  const inline = "h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] placeholder:text-faint";
+  const roleName = me.role === "owner" ? "Owner" : me.role === "guest" ? "Guest" : "Member";
   return (
     <>
-      <PageHeader title="Profile">How you show up to people and agents in {me.workspace.name}.</PageHeader>
-      <form onSubmit={save} className="space-y-6 max-w-lg">
-        <div className="flex items-center gap-4">
-          <UserAvatar name={f.name || me.user.name} size={56} />
-          <div className="text-sm">
-            <div className="font-medium">{f.name || me.user.name}</div>
-            <div className="text-muted capitalize">{me.role}</div>
+      <PageHeader title="Profile">How you appear to people and agents in {me.workspace.name}.</PageHeader>
+      {me.role === "guest" && <p className="mb-6 rounded-[20px] bg-card border border-line px-[18px] py-3.5 text-[15px] leading-snug text-muted">You're a guest in {me.workspace.name}. You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.</p>}
+      <form onSubmit={save} className="space-y-4">
+        <div className="flex items-center gap-4 mb-2">
+          <UserAvatar name={f.name || me.user.name} size={64} />
+          <div>
+            <div className="text-lg font-semibold">{f.name || me.user.name}</div>
+            <div className="text-sm text-muted">
+              {roleName} · {me.workspace.name}
+            </div>
           </div>
         </div>
-        <Field label="Full name">
-          <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={80} />
-        </Field>
-        <Field label="What should agents call you?" hint="Agents use this when they talk to you and when they remember things about you.">
-          <Input value={f.preferredName} onChange={(e) => setF({ ...f, preferredName: e.target.value })} placeholder={me.user.name.split(" ")[0]} maxLength={40} />
-        </Field>
-        <Field label="Email" hint="You sign in with it.">
-          <Input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
-        </Field>
+        <Card>
+          <label className="px-[18px] min-h-[54px] flex items-center gap-4">
+            <span className="text-[15px] w-32 shrink-0">Full name</span>
+            <input className={inline} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={80} aria-label="Full name" />
+          </label>
+          <label className="px-[18px] min-h-[54px] flex items-center gap-4">
+            <span className="w-32 shrink-0">
+              <span className="block text-[15px]">Preferred name</span>
+              <span className="block text-[13px] text-faint">What agents call you</span>
+            </span>
+            <input className={inline} value={f.preferredName} onChange={(e) => setF({ ...f, preferredName: e.target.value })} placeholder={me.user.name.split(" ")[0]} maxLength={40} aria-label="Preferred name" />
+          </label>
+        </Card>
+        <p className="px-1 text-[13px] text-faint">Agents use your preferred name when they talk to you and when they remember things about you.</p>
+        <Card>
+          <label className="px-[18px] min-h-[54px] flex items-center gap-4">
+            <span className="text-[15px] w-32 shrink-0">Email</span>
+            <input className={inline} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required aria-label="Email" />
+          </label>
+          <label className="px-[18px] min-h-[54px] flex items-center gap-4">
+            <span className="text-[15px] w-32 shrink-0">Time zone</span>
+            <select value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} aria-label="Time zone" className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] text-muted">
+              <option value="">Not set (agents see UTC)</option>
+              {(ZONES.length ? ZONES : [HERE]).map((z) => (
+                <option key={z} value={z}>
+                  {z.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </label>
+        </Card>
         {!me.user.timezone && !f.timezone && HERE !== "UTC" && (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-panel px-3 py-2 text-sm">
-            <span>Your time zone isn't set, so agents see UTC.</span>
-            <button type="button" disabled={busy} className="shrink-0 text-accent-text hover:underline disabled:opacity-50" onClick={applyDetected}>
+          <p className="px-1 text-[13px] text-faint">
+            Your time zone isn't set, so agents see UTC.{" "}
+            <button type="button" disabled={busy} className="text-accent-text hover:underline disabled:opacity-50" onClick={applyDetected}>
               Use {HERE.replace(/_/g, " ")} (detected)
             </button>
-          </div>
+          </p>
         )}
-        <Field
-          label="Time zone"
-          hint={
-            <>
-              Agents see your local time, so "tomorrow morning" means yours, and routines you teach run on your clock.{" "}
-              {f.timezone !== HERE && (
-                <button type="button" className="text-accent-text hover:underline" onClick={() => setF({ ...f, timezone: HERE })}>
-                  Use this device's ({HERE})
-                </button>
-              )}
-            </>
-          }
-        >
-          <select value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
-            <option value="">Not set (agents see UTC)</option>
-            {(ZONES.length ? ZONES : [HERE]).map((z) => (
-              <option key={z} value={z}>
-                {z.replace(/_/g, " ")}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {f.timezone && f.timezone !== HERE && (
+          <p className="px-1 text-[13px] text-faint">
+            Agents see your local time, so "tomorrow morning" means yours.{" "}
+            <button type="button" className="text-accent-text hover:underline" onClick={() => setF({ ...f, timezone: HERE })}>
+              Use this device's ({HERE})
+            </button>
+          </p>
+        )}
+        <Card>
+          <Row label="Your role">
+            <span className="text-sm text-muted">{roleName}</span>
+          </Row>
+        </Card>
         {error && <p className="text-sm text-bad">{error}</p>}
-        <div className="flex items-center gap-3">
-          <Button variant="primary" disabled={!dirty || busy}>
-            {busy ? "Saving…" : "Save"}
+        <div className="flex items-center gap-3 pt-2">
+          <Button variant="primary" className="h-11 px-6" disabled={!dirty || busy}>
+            {busy ? "Saving…" : "Save changes"}
           </Button>
           <SavedNote shown={saved} />
         </div>
@@ -150,21 +168,6 @@ export function PreferencesPage() {
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
       </div>
-      <Section title="How much to show" description="Simple keeps the advanced parts (teams, harness details, VM sizes, tokens, raw files) behind “Advanced” so the everyday ones stand out. Nothing is removed; you can switch any time.">
-        <Card>
-          <Row label="Experience" hint={prefs.experience === "simple" ? "The everyday parts first; advanced options a click away." : "Everything, all the time."}>
-            <Segmented
-              label="Experience"
-              value={prefs.experience}
-              onChange={(v) => set({ experience: v })}
-              options={[
-                ["simple", "Simple"],
-                ["advanced", "Advanced"],
-              ]}
-            />
-          </Row>
-        </Card>
-      </Section>
       <Section title="Messages">
         <Card>
           <Row label="Sending a message" hint={prefs.sendWith === "enter" ? "Shift + Enter starts a new line." : "Enter starts a new line, for longer messages."}>

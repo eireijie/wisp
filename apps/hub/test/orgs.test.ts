@@ -119,7 +119,7 @@ describe("features", () => {
 describe("agent defaults", () => {
   it("uses the latest agent's harness until an owner saves defaults, and fills in a new agent with them", async () => {
     // the "sched" agent above runs the custom harness; no devices, so no VM
-    expect((await api("GET", "/api/settings/agent-defaults")).data).toEqual({ harness: "custom", model: null, computer: "none", nodeId: null });
+    expect((await api("GET", "/api/settings/agent-defaults")).data).toEqual({ harness: "custom", model: null, computer: "none", nodeId: null, models: {} });
     const sam = await login("sam@example.com");
     expect((await api("PUT", "/api/settings/agent-defaults", { harness: "codex" }, sam)).status).toBe(403);
     expect((await api("PUT", "/api/settings/agent-defaults", { harness: "codex", model: "gpt-6" })).data).toMatchObject({ harness: "codex", model: "gpt-6", computer: "none" });
@@ -132,6 +132,15 @@ describe("agent defaults", () => {
     expect((await api("POST", "/api/agents", { handle: "picked", name: "Picked", harness: "claude-code", useDefaults: true })).data).toMatchObject({ harness: "claude-code", model: null });
     // without defaults a harness is still needed
     expect((await api("POST", "/api/agents", { handle: "nohar", name: "No" })).status).toBe(400);
+  });
+
+  it("keeps a default model per AI tool and uses it for a new agent on that tool", async () => {
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { "claude-code": "sonnet-x" } })).data.models).toEqual({ "claude-code": "sonnet-x" });
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { codex: "sol" } })).data.models).toEqual({ "claude-code": "sonnet-x", codex: "sol" });
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { "claude-code": null } })).data.models).toEqual({ codex: "sol" });
+    expect((await api("PUT", "/api/settings/agent-defaults", { models: { nope: "x" } })).status).toBe(400);
+    expect((await api("POST", "/api/agents", { handle: "permodel", name: "Per", harness: "codex", useDefaults: true })).data).toMatchObject({ harness: "codex", model: "sol" });
+    await api("PUT", "/api/settings/agent-defaults", { models: { codex: null } });
   });
 
   it("saves model IDs up to the shared catalog limit", async () => {
@@ -232,8 +241,8 @@ describe("organizations", () => {
   it("lists the organizations you're in, and switches between them", async () => {
     const list = (await api<any[]>("GET", "/api/orgs", undefined, secondToken)).data;
     expect(list).toEqual([
-      { id: firstOrg, name: "Home", role: "owner", members: 2, agents: expect.any(Number), current: false, unread: expect.any(Boolean) },
-      { id: second.id, name: "Side project", role: "owner", members: 1, agents: 0, current: true, unread: false },
+      { id: firstOrg, name: "Home", role: "owner", members: 2, agents: expect.any(Number), current: false, unread: expect.any(Boolean), canDelete: false },
+      { id: second.id, name: "Side project", role: "owner", members: 1, agents: 0, current: true, unread: false, canDelete: true },
     ]);
     const back = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, secondToken)).data.token;
     expect((await api("GET", "/api/me", undefined, back)).data.workspace.id).toBe(firstOrg);
@@ -284,6 +293,90 @@ describe("organizations", () => {
       ["Home", "member"],
       ["Side project", "member"],
     ]);
+  });
+
+  it("lets an owner delete an organization, with its agents, channels and memory", async () => {
+    const t = await login("me@example.com");
+    const made = (await api("POST", "/api/orgs", { name: "Throwaway" }, t)).data;
+    const tok = made.token;
+    const a = (await api("POST", "/api/agents", { handle: "temp", name: "Temp", harness: "custom" }, tok)).data;
+    await api("PUT", "/api/vault/note", { path: "shared/gone.md", content: "bye" }, tok);
+    const folder = path.join(dir, "orgs", made.org.id);
+    await expect(fs.stat(folder)).resolves.toBeTruthy();
+    // a team request has no foreign key to the organization
+    hub.store.db.prepare("INSERT INTO team_flows (id, workspace_id, channel_id, thread_id, status, state_json, created_at, updated_at) VALUES ('flow_x', ?, 'ch_x', 't_x', 'done', '{}', 'now', 'now')").run(made.org.id);
+
+    // members can't, the name has to match, and the first organization stays
+    await api("PUT", "/api/features", { invite: true }, tok);
+    const inv = (await api("POST", "/api/invites", { role: "member" }, tok)).data;
+    const sam = (await api("POST", "/api/invites/join", { code: inv.code }, await login("sam@example.com"))).data.token;
+    expect(sam).toBeTruthy();
+    expect((await api("DELETE", `/api/orgs/${made.org.id}`, { name: "Throwaway" }, sam)).status).toBe(403);
+    expect((await api("DELETE", `/api/orgs/${made.org.id}`, { name: "throw" }, tok)).status).toBe(400);
+    const home = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, await login("me@example.com"))).data.token;
+    expect((await api("DELETE", `/api/orgs/${firstOrg}`, { name: "Home" }, home)).status).toBe(409);
+
+    const r = await api("DELETE", `/api/orgs/${made.org.id}`, { name: "Throwaway" }, tok);
+    expect(r.status).toBe(200);
+    // the sign-in that was in it moved somewhere else; the other member's ended
+    expect((await api("GET", "/api/me", undefined, r.data.token)).data.workspace.id).not.toBe(made.org.id);
+    expect((await api("GET", "/api/me", undefined, tok)).status).toBe(401);
+    expect((await api("GET", "/api/me", undefined, sam)).status).toBe(401);
+    expect((await api<any[]>("GET", "/api/orgs", undefined, r.data.token)).data.map((o) => o.id)).not.toContain(made.org.id);
+    expect(hub.store.agent(a.id)).toBeUndefined();
+    expect(hub.store.db.prepare("SELECT 1 FROM team_flows WHERE workspace_id = ?").get(made.org.id)).toBeUndefined();
+    await expect(fs.stat(folder)).rejects.toThrow();
+    // deleting another organization than the one you're in keeps your sign-in
+    const other = (await api("POST", "/api/orgs", { name: "Other" }, r.data.token)).data;
+    const back = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, other.token)).data.token;
+    const r2 = await api("DELETE", `/api/orgs/${other.org.id}`, { name: "Other" }, back);
+    expect(r2.data).toEqual({ ok: true });
+    expect((await api("GET", "/api/me", undefined, back)).status).toBe(200);
+  });
+
+  it("won't delete your only organization", async () => {
+    const t = await login("me@example.com");
+    const solo = (await api("POST", "/api/members", { email: "solo@example.com", name: "Solo", password: "password123" }, (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, t)).data.token)).data;
+    expect(solo.id).toBeTruthy();
+    const s = await login("solo@example.com");
+    const own = (await api("POST", "/api/orgs", { name: "Solo's" }, s)).data;
+    // leave Home so Solo's is the only one
+    hub.store.removeMember(firstOrg, solo.id);
+    expect((await api("DELETE", `/api/orgs/${own.org.id}`, { name: "Solo's" }, own.token)).status).toBe(409);
+  });
+
+  it("deleting an organization removes accounts that were only in it, so their email is free again", async () => {
+    const doomed = (await api("POST", "/api/orgs", { name: "Doomed" }, await login("me@example.com"))).data;
+    const only = (await api("POST", "/api/members", { email: "only-here@example.com", name: "Only", password: "password123" }, doomed.token)).data;
+    const both = (await api("POST", "/api/members", { email: "both@example.com", name: "Both", password: "password123" }, doomed.token)).data;
+    hub.store.addMember(firstOrg, both.id, "member");
+    expect((await api("DELETE", `/api/orgs/${doomed.org.id}`, { name: "Doomed" }, doomed.token)).status).toBe(200);
+    // not stuck with an account that can't sign in anywhere
+    expect(hub.store.user(only.id)).toBeUndefined();
+    expect((await api("POST", "/api/auth/login", { email: "only-here@example.com", password: "password123" }, "")).status).toBe(401);
+    const home = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, await login("me@example.com"))).data.token;
+    expect((await api("POST", "/api/members", { email: "only-here@example.com", name: "Only", password: "password123" }, home)).status).toBe(200);
+    // someone who is in another organization too keeps their account
+    expect(hub.store.user(both.id)).toBeTruthy();
+    expect((await api("POST", "/api/auth/login", { email: "both@example.com", password: "password123" }, "")).status).toBe(200);
+  });
+
+  it("gives someone who was removed and invited back their old chats with agents", async () => {
+    const t = await login("me@example.com");
+    const home = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, t)).data.token;
+    const bot = (await api("POST", "/api/agents", { handle: "dmbot", name: "DM Bot", harness: "custom" }, home)).data;
+    const dee = (await api("POST", "/api/members", { email: "dee@example.com", name: "Dee", password: "password123" }, home)).data;
+    // in another organization too, so the account outlives being removed from this one
+    hub.store.addMember(second.id, dee.id, "member");
+    const deeHome = async () => (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, await login("dee@example.com"))).data.token;
+    const dm = (await api("POST", `/api/dm/${bot.id}`, undefined, await deeHome())).data;
+    expect((await api("POST", `/api/channels/${dm.id}/messages`, { body: "hello" }, await deeHome())).status).toBe(200);
+    hub.store.removeMember(firstOrg, dee.id);
+    hub.store.addMember(firstOrg, dee.id, "member");
+    const again = (await api("POST", `/api/dm/${bot.id}`, undefined, await deeHome())).data;
+    expect(again.id).toBe(dm.id);
+    expect((await api("GET", `/api/channels/${dm.id}/messages`, undefined, await deeHome())).status).toBe(200);
+    expect((await api("POST", `/api/channels/${dm.id}/messages`, { body: "back again" }, await deeHome())).status).toBe(200);
   });
 
   it("opens every organization's memory again after a restart", async () => {

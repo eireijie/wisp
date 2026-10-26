@@ -1,45 +1,84 @@
 import SwiftUI
 
-/** Every saved version of an agent's personality (SOUL.md): who changed it and when, and what it said. */
+/**
+ * History (agent-PersonalityHistory.dc.html): every saved version of an agent's personality
+ * (SOUL.md), who changed it and when. The newest is Current; each older one has Restore, which
+ * puts it in the editor as a draft. Tapping a version shows what it said.
+ */
 struct SoulHistory: View {
   @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
   var agent: Agent
   var canRestore = false
   /** puts an old version into the personality editor as an unsaved draft */
   var onRestore: (String) -> Void
   @State private var revisions: [NoteRevision]?
   @State private var error: String?
+  @State private var restoring: String?
 
   var body: some View {
-    List {
+    AgentFrame(title: "History", subtitle: "Personality") {
       if let revisions {
-        if revisions.isEmpty { Text("No changes yet.").foregroundStyle(.secondary) }
-        ForEach(revisions) { revision in
-          NavigationLink {
-            SoulVersion(agent: agent, revision: revision, canRestore: canRestore, onRestore: onRestore)
-          } label: {
-            VStack(alignment: .leading, spacing: 3) {
-              Text(revision.message?.isEmpty == false ? revision.message! : "Edited")
-              Text(caption(revision)).font(.caption).foregroundStyle(.secondary)
+        if revisions.isEmpty {
+          AgentCard { Text("No changes yet.").font(.system(size: 15)).foregroundStyle(Palette.muted) }
+        } else {
+          CardGroup {
+            ForEach(Array(revisions.enumerated()), id: \.element.id) { index, revision in
+              HStack(spacing: 10) {
+                NavigationLink {
+                  SoulVersion(agent: agent, revision: revision, canRestore: canRestore) { onRestore($0); dismiss() }
+                } label: {
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(when(revision)).font(.system(size: 17)).foregroundStyle(Palette.text)
+                    Text(who(revision)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+                  }
+                  .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                if index == 0 {
+                  Text("Current").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.green)
+                } else if canRestore {
+                  Button { restore(revision) } label: {
+                    Text(restoring == revision.hash ? "…" : "Restore").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.text)
+                      .padding(.horizontal, 14).frame(height: 32).background(Capsule().fill(Color(light: 0xE3E3EA, dark: 0x2E2E32)))
+                  }.buttonStyle(.plain).disabled(restoring != nil).accessibilityIdentifier("history-restore")
+                }
+              }
+              .padding(.horizontal, 18).frame(minHeight: 64)
             }
           }
+          CardCaption("Restoring a version puts it in the editor. Save it there to keep it; the newer ones stay in this list.")
         }
       } else if error == nil {
-        ProgressView()
+        ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
       }
-      InlineError(error: error)
-      if error != nil { Button("Try again") { Task { await load() } } }
+      AgentError(text: error)
+      if error != nil { PillButton(title: "Try again", kind: .secondary) { Task { await load() } } }
     }
-    .navigationTitle("History")
-    .navigationBarTitleDisplayMode(.inline)
     .task { await load() }
   }
 
-  private func caption(_ revision: NoteRevision) -> String {
-    var parts: [String] = []
-    if let author = revision.author, !author.isEmpty { parts.append(author == "@\(agent.handle)" ? "@\(agent.handle) refined it" : author) }
-    if let date = revision.date.flatMap(Wire.date) { parts.append(date.formatted(.relative(presentation: .named))) }
-    return parts.joined(separator: " · ")
+  private func when(_ revision: NoteRevision) -> String {
+    guard let date = revision.date.flatMap(Wire.date) else { return "Earlier" }
+    let time = date.formatted(.dateTime.hour().minute())
+    if Calendar.current.isDateInToday(date) { return "Today, \(time)" }
+    if Calendar.current.isDateInYesterday(date) { return "Yesterday, \(time)" }
+    return date.formatted(.dateTime.month(.abbreviated).day()) + ", " + time
+  }
+
+  private func who(_ revision: NoteRevision) -> String {
+    let author = revision.author ?? ""
+    if author == "@\(agent.handle)" { return "\(agent.name) refined it" }
+    if author.isEmpty { return revision.message?.isEmpty == false ? revision.message! : "Edited" }
+    return "\(author) edited it"
+  }
+
+  private func restore(_ revision: NoteRevision) {
+    restoring = revision.hash
+    Task {
+      defer { restoring = nil }
+      do { onRestore(try await store.noteAt(SoulText.path(agent.id), revision: revision.hash)); dismiss() }
+      catch { self.error = error.localizedDescription }
+    }
   }
 
   private func load() async {
@@ -52,7 +91,6 @@ struct SoulHistory: View {
 /** One old version of the personality, with a way to bring it back as a draft. */
 private struct SoulVersion: View {
   @Environment(Store.self) private var store
-  @Environment(\.dismiss) private var dismiss
   var agent: Agent
   var revision: NoteRevision
   var canRestore: Bool
@@ -61,25 +99,21 @@ private struct SoulVersion: View {
   @State private var error: String?
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 12) {
-        if let content {
+    AgentFrame(title: "Earlier version", subtitle: agent.name) {
+      if let content {
+        AgentCard {
           Text(content.isEmpty ? "This version was empty." : content)
-            .font(.system(.callout, design: .monospaced))
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else if error == nil {
-          ProgressView().frame(maxWidth: .infinity)
+            .font(.system(size: 15, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
         }
-        InlineError(error: error)
-        if let content, canRestore {
-          Button("Use this version") { onRestore(content); dismiss() }.secondaryButton()
-          Text("It goes into the editor as a draft; save it there to keep it.").font(.caption).foregroundStyle(.secondary)
+        if canRestore {
+          PillButton(title: "Use this version") { onRestore(content) }
+          CardCaption("It goes into the editor as a draft; save it there to keep it.")
         }
-      }.padding(16)
+      } else if error == nil {
+        ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
+      }
+      AgentError(text: error)
     }
-    .navigationTitle("Earlier version")
-    .navigationBarTitleDisplayMode(.inline)
     .task {
       do { content = try await store.noteAt(SoulText.path(agent.id), revision: revision.hash) }
       catch { self.error = error.localizedDescription }

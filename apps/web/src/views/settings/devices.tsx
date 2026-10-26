@@ -61,14 +61,14 @@ export function DevicesPage() {
         )}
         {devices?.length === 0 && <p className="p-5 text-sm text-muted">Add your phone or another computer to your Wisp.</p>}
         {devices?.map((device) => (
-          <div key={device.id} className="flex items-center gap-3 px-4 py-4">
+          <a key={device.id} href={href({ view: "computers", computerId: null, deviceId: device.id })} className="flex items-center gap-3 px-4 py-4 hover:bg-hover">
             <Monitor size={22} className="text-muted shrink-0" />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium truncate">{device.name}</span>
               <span className="block text-xs text-muted mt-1">{device.paused ? "Paused" : device.online ? "Connected" : "Offline"}</span>
             </span>
             <span className="text-xs text-muted">{device.mine ? "Yours" : device.ownerName}</span>
-          </div>
+          </a>
         ))}
       </Card>
       <div className="mt-3 flex justify-between gap-3 text-xs text-muted">
@@ -76,7 +76,7 @@ export function DevicesPage() {
           <Smartphone size={13} />
           Phone sign-ins
         </a>
-        <a href={href({ view: "nodes" })} className="hover:text-ink">
+        <a href={href({ view: "computers", computerId: null })} className="hover:text-ink">
           Manage computers
         </a>
       </div>

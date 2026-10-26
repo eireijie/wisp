@@ -48,6 +48,10 @@ export class Push {
     if (!to.length) return;
     const agent = this.hub.store.agent(msg.author.id);
     const asks = msg.parts.some((p) => p.type === "approval");
+    // an ask-me step told not to notify: the card is in the chat and the Inbox, nothing is pushed
+    const card = msg.parts.find((p) => p.type === "approval");
+    const approval = card && card.type === "approval" ? this.hub.store.approval(card.approvalId) : undefined;
+    if (approval && this.hub.flows.silentApproval(approval)) return;
     const title = asks ? `${agent?.name ?? "An agent"} wants your OK` : (agent?.name ?? "Wisp");
     const body = (msg.body || "").replace(/\s+/g, " ").trim().slice(0, 200);
     if (!body) return;

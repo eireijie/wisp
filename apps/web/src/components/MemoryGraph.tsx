@@ -26,9 +26,9 @@ export type GraphKind = "shared" | "people" | "agents" | "teams" | "groups" | "o
 
 export const GRAPH_KINDS: GraphKind[] = ["shared", "people", "agents", "teams", "groups", "other", "ghost"];
 
-/** What each folder kind is called; Simple mode says "helpers", not "agents". */
-export function kindLabel(kind: GraphKind, simple: boolean): string {
-  return { shared: "Shared", people: "People", agents: simple ? "Helpers" : "Agents", teams: "Teams", groups: "Groups", other: "Your folders", ghost: "Not written yet" }[kind];
+/** What each folder kind is called. */
+export function kindLabel(kind: GraphKind): string {
+  return { shared: "Shared", people: "People", agents: "Agents", teams: "Teams", groups: "Groups", other: "Your folders", ghost: "Not written yet" }[kind];
 }
 export const kindColor = (kind: GraphKind) => `var(--kind-${kind})`;
 

@@ -1,4 +1,4 @@
-import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
+import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, migrateTeam, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -134,6 +134,24 @@ export class Store {
     return this.db.prepare("SELECT id, name, created_at AS createdAt FROM workspaces WHERE id = ?").get(wsId) as { id: string; name: string; createdAt: string } | undefined;
   }
 
+  /** Delete an organization; nearly everything in it goes with it (ON DELETE CASCADE). */
+  deleteWorkspace(wsId: string) {
+    this.db.transaction(() => {
+      const people = this.db.prepare("SELECT user_id AS id FROM memberships WHERE workspace_id = ?").all(wsId) as { id: string }[];
+      // these aren't tied to the organization by a foreign key
+      this.db.prepare("DELETE FROM tokens WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM vault_tokens WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM oauth_grants WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM changes WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM push_devices WHERE workspace_id = ?").run(wsId);
+      // team requests: their table is made by TeamFlows, so it may not be there
+      if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'team_flows'").get()) this.db.prepare("DELETE FROM team_flows WHERE workspace_id = ?").run(wsId);
+      this.db.prepare("DELETE FROM workspaces WHERE id = ?").run(wsId);
+      // an account that belonged only here would have nowhere to sign in to: it goes too, as in removeMember
+      for (const p of people) if (!this.db.prepare("SELECT 1 FROM memberships WHERE user_id = ? LIMIT 1").get(p.id)) this.db.prepare("DELETE FROM users WHERE id = ?").run(p.id);
+    })();
+  }
+
   firstWorkspace() {
     return this.db.prepare("SELECT id, name, created_at AS createdAt FROM workspaces ORDER BY created_at LIMIT 1").get() as
       | { id: string; name: string; createdAt: string }
@@ -148,6 +166,7 @@ export class Store {
   removeMember(workspaceId: string, userId: string) {
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM memberships WHERE workspace_id = ? AND user_id = ?").run(workspaceId, userId);
+      this.db.prepare("DELETE FROM channel_members WHERE member_kind = 'user' AND member_id = ? AND channel_id IN (SELECT id FROM channels WHERE workspace_id = ?)").run(userId, workspaceId);
       this.db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND workspace_id = ?").run(userId, workspaceId);
       const elsewhere = this.db.prepare("SELECT 1 FROM memberships WHERE user_id = ? LIMIT 1").get(userId);
       if (!elsewhere) this.db.prepare("DELETE FROM users WHERE id = ?").run(userId);
@@ -269,13 +288,14 @@ export class Store {
   }
 
   /** `settings` is merged key by key, so callers can change one setting at a time. */
-  updateAgent(agentId: string, patch: Partial<{ name: string; model: string | null; nodeId: string | null; computerId: string | null; instructions: string; harness: HarnessId; settings: AgentSettings }>) {
+  updateAgent(agentId: string, patch: Partial<{ name: string; handle: string; model: string | null; nodeId: string | null; computerId: string | null; instructions: string; harness: HarnessId; settings: AgentSettings }>) {
     const cur = this.agentRow(agentId);
     if (!cur) return undefined;
     this.db
-      .prepare("UPDATE agents SET name = ?, model = ?, node_id = ?, computer_id = ?, instructions = ?, harness = ?, settings_json = ? WHERE id = ?")
+      .prepare("UPDATE agents SET name = ?, handle = ?, model = ?, node_id = ?, computer_id = ?, instructions = ?, harness = ?, settings_json = ? WHERE id = ?")
       .run(
         patch.name ?? cur.name,
+        patch.handle?.toLowerCase() ?? cur.handle,
         patch.model !== undefined ? patch.model : cur.model,
         patch.nodeId !== undefined ? patch.nodeId : cur.node_id,
         patch.computerId !== undefined ? patch.computerId : cur.computer_id,
@@ -289,6 +309,7 @@ export class Store {
 
   deleteAgent(agentId: string) {
     this.clearDefaultAgent(agentId);
+    this.db.prepare("DELETE FROM channel_members WHERE member_kind = 'agent' AND member_id = ?").run(agentId);
     this.db.prepare("DELETE FROM agents WHERE id = ?").run(agentId);
   }
 
@@ -378,11 +399,11 @@ export class Store {
 
   // --- approvals ------------------------------------------------------------
 
-  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; login?: Approval["login"] }): Approval {
+  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; login?: Approval["login"]; flow?: Approval["flow"] }): Approval {
     const approvalId = id("apr");
     this.db
-      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, login_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)")
-      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.login ? JSON.stringify(a.login) : null);
+      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, login_json, flow_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)")
+      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.login ? JSON.stringify(a.login) : null, a.flow ? JSON.stringify(a.flow) : null);
     return this.approval(approvalId)!;
   }
 
@@ -524,6 +545,24 @@ export class Store {
     return { ...rest, private: !!r.private, settings: { ...DEFAULT_CHANNEL_SETTINGS, ...settings } };
   }
 
+  /**
+   * Teams that run on a single chain of steps (and the roles that hold their prompts) become flow
+   * charts: every step gets its prompt and all its arrows spelled out. Nothing is removed, and
+   * teams already in the new form are left alone.
+   */
+  migrateTeamSteps(): number {
+    const rows = this.db.prepare("SELECT id, settings_json FROM channels WHERE settings_json LIKE '%\"steps\"%'").all() as { id: string; settings_json: string }[];
+    let n = 0;
+    for (const r of rows) {
+      const team = this.channel(r.id)?.settings.team;
+      if (!team?.steps?.length || isGraphTeam(team)) continue;
+      const migrated = migrateTeam(team);
+      this.updateChannel(r.id, { settings: { team: { ...migrated, ...chartFromSteps(migrated, team.nodes) } } });
+      n++;
+    }
+    return n;
+  }
+
   channel(channelId: string): Channel | undefined {
     return this.toChannel(this.db.prepare(`SELECT ${Store.CHANNEL_COLS} FROM channels WHERE id = ?`).get(channelId) as never);
   }
@@ -567,10 +606,11 @@ export class Store {
       if (!settings) continue;
       if (settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
       const team = settings.team;
-      if (hasSteps(team) && team!.roles!.some((r) => r.agentId === agentId)) {
-        // a team with roles and steps keeps them; the agent's roles just need someone new
-        const roles = team!.roles!.map((r) => (r.agentId === agentId ? { ...r, agentId: null } : r));
-        this.updateChannel(r.id, { settings: { team: { ...team!, roles, ...chartFromSteps({ roles, steps: team!.steps }, team!.nodes) } } });
+      if (hasSteps(team) && (team!.roles?.some((r) => r.agentId === agentId) || team!.steps!.some((s) => s.agentId === agentId))) {
+        // a team with steps keeps them; the agent's steps (and roles) just need someone new
+        const roles = (team!.roles ?? []).map((r) => (r.agentId === agentId ? { ...r, agentId: null } : r));
+        const steps = team!.steps!.map((s) => (s.agentId === agentId ? { ...s, agentId: null } : s));
+        this.updateChannel(r.id, { settings: { team: { ...team!, roles, steps, ...chartFromSteps({ roles, steps }, team!.nodes) } } });
       } else if (team?.nodes.some((n) => n.agentId === agentId)) {
         const above = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
         const below = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
@@ -638,10 +678,17 @@ export class Store {
     });
   }
 
+  /** Members per channel: only people still in the workspace and agents that still exist, like the member list. */
   memberCounts(channelIds: string[]): Record<string, number> {
     if (!channelIds.length) return {};
     const rows = this.db
-      .prepare(`SELECT channel_id, COUNT(*) AS n FROM channel_members WHERE channel_id IN (${channelIds.map(() => "?").join(",")}) GROUP BY channel_id`)
+      .prepare(
+        `SELECT m.channel_id, COUNT(*) AS n FROM channel_members m JOIN channels c ON c.id = m.channel_id
+         WHERE m.channel_id IN (${channelIds.map(() => "?").join(",")})
+           AND ((m.member_kind = 'user' AND EXISTS (SELECT 1 FROM memberships s WHERE s.workspace_id = c.workspace_id AND s.user_id = m.member_id))
+             OR (m.member_kind = 'agent' AND EXISTS (SELECT 1 FROM agents a WHERE a.id = m.member_id AND a.workspace_id = c.workspace_id)))
+         GROUP BY m.channel_id`,
+      )
       .all(...channelIds) as { channel_id: string; n: number }[];
     return Object.fromEntries(rows.map((r) => [r.channel_id, r.n]));
   }
@@ -669,6 +716,17 @@ export class Store {
     for (const id of channelIds) {
       const at = last.get(id) ?? null;
       out[id] = { lastReadAt: at, unread: (count.get(id, at ?? "", userId) as { n: number }).n };
+    }
+    return out;
+  }
+
+  /** The newest top-level message in each channel, for the chats list's preview line and its order. */
+  lastMessages(channelIds: string[]): Record<string, { at: string; body: string; author: { kind: string; id: string } }> {
+    const out: Record<string, { at: string; body: string; author: { kind: string; id: string } }> = {};
+    const stmt = this.db.prepare("SELECT body, author_kind, author_id, created_at FROM messages WHERE channel_id = ? AND thread_id IS NULL AND deleted_at IS NULL AND NOT (author_kind = 'user' AND author_id = 'system') ORDER BY created_at DESC LIMIT 1");
+    for (const id of channelIds) {
+      const r = stmt.get(id) as { body: string; author_kind: string; author_id: string; created_at: string } | undefined;
+      if (r) out[id] = { at: r.created_at, body: r.body.slice(0, 400), author: { kind: r.author_kind, id: r.author_id } };
     }
     return out;
   }
@@ -734,7 +792,12 @@ export class Store {
   dmChannel(workspaceId: string, userId: string, agentId: string): Channel {
     const name = `dm:${userId}:${agentId}`;
     const existing = this.channelByName(workspaceId, name);
-    if (existing) return existing;
+    if (existing) {
+      // someone who was removed and invited back is in their old DM again
+      if (this.role(workspaceId, userId)) this.addChannelMember(existing.id, { kind: "user", id: userId });
+      if (this.agent(agentId)?.workspaceId === workspaceId) this.addChannelMember(existing.id, { kind: "agent", id: agentId });
+      return existing;
+    }
     const c = this.createChannel(workspaceId, name, "dm");
     this.addChannelMember(c.id, { kind: "user", id: userId });
     this.addChannelMember(c.id, { kind: "agent", id: agentId });
@@ -743,12 +806,12 @@ export class Store {
 
   // --- messages -------------------------------------------------------------
 
-  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number }): Message {
-    const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now() };
+  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null }): Message {
+    const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}) };
     this.db
-      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt);
-    return msg;
+      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null);
+    return this.withReplyQuote(msg);
   }
 
   deleteMessage(messageId: string) {
@@ -835,10 +898,20 @@ export class Store {
     return out;
   }
 
-  /** Messages with their reactions attached. */
+  /** A reply with the message it quotes attached, as that message reads now. */
+  withReplyQuote(m: Message): Message {
+    if (!m.replyToId) return m;
+    const q = this.message(m.replyToId);
+    if (!q || q.channelId !== m.channelId) return m;
+    const file = q.parts.find((p) => p.type === "file");
+    const text = q.body.replace(/\s+/g, " ").trim() || (file && file.type === "file" ? file.name : "");
+    return { ...m, replyTo: { id: q.id, author: q.author, snippet: q.deletedAt ? "" : text.length > 140 ? `${text.slice(0, 140)}…` : text, ...(q.deletedAt ? { deleted: true } : {}) } };
+  }
+
+  /** Messages with their reactions and the messages they quote attached. */
   withReactions(messages: Message[]): Message[] {
     const r = this.reactions(messages.map((m) => m.id));
-    return messages.map((m) => ({ ...m, reactions: r[m.id] ?? [] }));
+    return messages.map((m) => this.withReplyQuote({ ...m, reactions: r[m.id] ?? [] }));
   }
 
   // --- search ---------------------------------------------------------------
@@ -1302,6 +1375,7 @@ type ApprovalRow = {
   created_at: string;
   decided_at: string | null;
   login_json: string | null;
+  flow_json: string | null;
 };
 
 function toApproval(r: ApprovalRow): Approval {
@@ -1319,6 +1393,7 @@ function toApproval(r: ApprovalRow): Approval {
     createdAt: r.created_at,
     decidedAt: r.decided_at,
     login: r.login_json ? JSON.parse(r.login_json) : null,
+    flow: r.flow_json ? JSON.parse(r.flow_json) : null,
   };
 }
 
@@ -1388,6 +1463,7 @@ type MessageRow = {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  reply_to_id: string | null;
 };
 
 function toMessage(r: MessageRow): Message {
@@ -1402,6 +1478,7 @@ function toMessage(r: MessageRow): Message {
     createdAt: r.created_at,
     ...(r.edited_at ? { editedAt: r.edited_at } : {}),
     ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
+    ...(r.reply_to_id ? { replyToId: r.reply_to_id } : {}),
   };
 }
 

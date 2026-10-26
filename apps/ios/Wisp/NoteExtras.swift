@@ -1,6 +1,6 @@
 import SwiftUI
 
-/** New note: pick where to keep it (My notes, Shared, a helper's notes, or another folder), then name it. */
+/** New note: a title, where to keep it (My notes, Shared, a helper's notes, or another folder), and an optional first line. */
 struct NewNoteSheet: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
@@ -10,6 +10,7 @@ struct NewNoteSheet: View {
   @State private var selection = ""
   @State private var other = ""
   @State private var title = ""
+  @State private var body_ = ""
   @State private var action = FormAction()
   private let otherTag = "__other"
 
@@ -18,96 +19,120 @@ struct NewNoteSheet: View {
   private var path: String? { NoteLocation.path(folder: target, name: title) }
 
   var body: some View {
-    EditorSheet(title: "New note", action: action, valid: path != nil && title.count <= 200, saveTitle: "Create", save: {
-      guard let path else { return }
-      action.run {
-        let heading = noteTitle(path)
-        try await store.saveNote(path: path, content: "# \(heading)\n\n", message: "Create \(path)")
-        dismiss(); onCreated(path)
-      }
-    }) {
-      Section("Where to keep it") {
-        Picker("Where to keep it", selection: $selection) {
-          ForEach(choices) { Text($0.label).tag($0.folder) }
-          if !store.simple { Text("Other folder…").tag(otherTag) }
-          else if selection == otherTag { Text(store.friendlyFolder(other) ?? other).tag(otherTag) }
+    VStack(spacing: 0) {
+      SheetHeader(title: "New note") { dismiss() }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          SectionCaption("Title")
+          MemoryFieldCard { TextField("Meeting notes", text: $title).foregroundStyle(Palette.text).accessibilityIdentifier("new-note-name") }
+          SectionCaption("Where to keep it")
+          CardGroup {
+            ForEach(choices) { choice in
+              Button { selection = choice.folder } label: {
+                RowLabel(title: choice.label, value: who(choice.folder), chevron: false) {
+                  Image(systemName: selection == choice.folder ? "checkmark.circle.fill" : "folder").font(.system(size: 18)).foregroundStyle(selection == choice.folder ? Palette.blue : Palette.muted)
+                }
+              }.buttonStyle(.plain)
+            }
+          }
+          if selection == otherTag {
+            MemoryFieldCard { TextField("Folder path", text: $other).textInputAutocapitalization(.never).autocorrectionDisabled().foregroundStyle(Palette.text) }
+            CardCaption("Pick one or type a new name to make a folder.")
+          } else {
+            Button { selection = otherTag } label: { Text("Other folder…").font(.system(size: 17)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain).padding(.horizontal, 6)
+          }
+          SectionCaption("Note")
+          TextEditor(text: $body_).scrollContentBackground(.hidden).foregroundStyle(Palette.text).frame(minHeight: 150).padding(12)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+            .overlay(alignment: .topLeading) { if body_.isEmpty { Text("Write something your helpers should remember…").foregroundStyle(Palette.faint).padding(.horizontal, 17).padding(.vertical, 20).allowsHitTesting(false) } }
+          InlineError(error: action.error)
+        }.padding(.horizontal, 18).padding(.top, 6)
+      }.scrollDismissesKeyboard(.interactively)
+      PillAction(title: "Create", symbol: "checkmark", enabled: path != nil && title.count <= 200 && !action.busy, id: "create-note") {
+        guard let path else { return }
+        action.run {
+          let heading = noteTitle(path)
+          let text = body_.trimmed.isEmpty ? "# \(heading)\n\n" : "# \(heading)\n\n\(body_.trimmed)\n"
+          try await store.saveNote(path: path, content: text, message: "Create \(path)")
+          dismiss(); onCreated(path)
         }
-        if selection == otherTag && !store.simple {
-          TextField("Folder path", text: $other).textInputAutocapitalization(.never).autocorrectionDisabled()
-          Text("Type a new name to make a folder.").font(.caption).foregroundStyle(.secondary)
-        }
-      }
-      Section("Name") { TextField("Meeting notes", text: $title).accessibilityIdentifier("new-note-name") }
+      }.padding(.vertical, 12)
     }
+    .background(Palette.sheet.ignoresSafeArea()).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
     .onAppear {
       title = name
       let clean = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
       if choices.contains(where: { $0.folder == clean }) { selection = clean } else { selection = otherTag; other = clean }
     }
   }
+
+  private func who(_ folder: String) -> String? {
+    if folder == "shared" { return "Everyone sees it" }
+    if folder == "people/\(store.me?.id ?? "-")" { return "Only you" }
+    if let agent = store.agents.first(where: { folder == "agents/\($0.id)" }) { return "Private to \(agent.name)" }
+    return nil
+  }
 }
 
-/** The note's front matter, laid out as properties: tags as hashtags, [[links]] you can follow. */
+/** The note's other front matter, laid out as properties: [[links]] you can follow. Tags and type are chips at the top. */
 struct NoteProperties: View {
   @Environment(Store.self) private var store
   var note: MemoryNote
   var from: String
   var kind: GraphKind?
   var onOpen: (String) -> Void
-  @Environment(\.colorScheme) private var scheme
 
   var body: some View {
-    let props = note.properties
+    let props = note.properties.filter { $0.0 != "tags" && $0.0 != "type" }
     if !props.isEmpty {
-      Section("Properties") {
+      SectionCaption("Properties")
+      CardGroup {
         ForEach(props, id: \.0) { key, value in
           VStack(alignment: .leading, spacing: 3) {
-            Text(key.replacingOccurrences(of: "[_-]+", with: " ", options: .regularExpression).capitalizedFirst).font(.caption).foregroundStyle(.secondary)
-            if key == "tags" { Text(value.items.map { "#\($0)" }.joined(separator: "  ")) }
-            else if key == "type", let kind { HStack(spacing: 6) { Circle().fill(kind.color(dark: scheme == .dark)).frame(width: 8, height: 8); Text(value.items.joined(separator: ", ")) } }
-            else {
-              ForEach(value.items, id: \.self) { item in
-                if let link = wikiLinkParts(item) { Button(link.label) { onOpen(link.target) }.buttonStyle(.borderless) }
-                else { Text(item).textSelection(.enabled) }
-              }
+            Text(key.replacingOccurrences(of: "[_-]+", with: " ", options: .regularExpression).capitalizedFirst).font(.system(size: 13)).foregroundStyle(Palette.faint)
+            ForEach(value.items, id: \.self) { item in
+              if let link = wikiLinkParts(item) { Button(link.label) { onOpen(link.target) }.buttonStyle(.borderless).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }
+              else { Text(item).foregroundStyle(Palette.text).textSelection(.enabled) }
             }
-          }.padding(.vertical, 2)
+          }.padding(.horizontal, 18).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
         }
       }
     }
   }
 }
 
-/** Beside a note: what links here and where it points, from the graph. */
+/** Beside a note: where it points, from the graph ("Linked from" is the backlinks card above). */
 struct ConnectedNotes: View {
   @Environment(Store.self) private var store
   var path: String
   var graph: GraphData?
+  /** notes already shown as "Linked from" */
+  var skip: Set<String> = []
 
   private func nodes(_ ids: [String]) -> [GraphNode] {
     let byId = Dictionary((graph?.nodes ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     return ids.compactMap { byId[$0] }.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
   }
-  var incoming: [GraphNode] { nodes(Array(Set((graph?.edges ?? []).filter { $0.target == path && $0.source != path }.map(\.source)))) }
+  var incoming: [GraphNode] { nodes(Array(Set((graph?.edges ?? []).filter { $0.target == path && $0.source != path }.map(\.source)))).filter { !skip.contains($0.id) } }
   var outgoing: [GraphNode] { nodes(Array(Set((graph?.edges ?? []).filter { $0.source == path && $0.target != path }.map(\.target)))) }
 
   var body: some View {
-    if graph != nil, !(incoming.isEmpty && outgoing.isEmpty) {
-      Section("Connected notes") {
-        if !incoming.isEmpty { group("Linked from", incoming) }
-        if !outgoing.isEmpty { group("Links to", outgoing) }
-      }
+    if graph != nil {
+      if !incoming.isEmpty { group("Linked from", incoming) }
+      if !outgoing.isEmpty { group("Links to", outgoing) }
     }
   }
   @ViewBuilder private func group(_ title: String, _ list: [GraphNode]) -> some View {
-    Text("\(title) \(list.count)").font(.caption).foregroundStyle(.secondary)
-    ForEach(list) { node in
-      if let p = node.path {
-        NavigationLink { NoteView(path: p) } label: {
-          VStack(alignment: .leading, spacing: 1) { Text(node.title); Text(store.placeName(p)).font(.caption).foregroundStyle(.secondary) }
+    SectionCaption(title)
+    CardGroup {
+      ForEach(list) { node in
+        if let p = node.path {
+          NavigationLink { NoteView(path: p) } label: {
+            RowLabel(title: node.title, value: store.placeName(p).components(separatedBy: " / ").last) { Image(systemName: "link").font(.system(size: 18)).foregroundStyle(Palette.muted) }
+          }.buttonStyle(.plain)
+        } else {
+          RowLabel(title: node.title, subtitle: "Not written yet", chevron: false) { Image(systemName: "circle.dashed").font(.system(size: 18)).foregroundStyle(Palette.faint) }
         }
-      } else {
-        Label("\(node.title) (not written yet)", systemImage: "circle.dashed").foregroundStyle(.secondary)
       }
     }
   }

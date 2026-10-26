@@ -1,33 +1,71 @@
 import { toolKey } from "./agentActivity.ts";
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, ListChecks, LockKeyhole, RotateCcw, ShieldQuestion, X } from "lucide-react";
+import { CalendarClock, Check, ListChecks, LockKeyhole, Monitor, Pencil, RotateCcw, X } from "lucide-react";
 import { LOGIN_SOURCE_LABEL, describeCron, type Agent, type Approval, type Routine } from "@wisp/core";
 import { api } from "../api.ts";
-import { useStore } from "../store.ts";
+import { usePrefs, useStore } from "../store.ts";
 import { undoChange, useChanges } from "../changes.ts";
 import { href } from "../router.ts";
 import { ComputerMini } from "../views/ComputersView.tsx";
-import { AgentAvatar, Button, Pill, Textarea, agentVar, cx, timeAgo } from "./ui.tsx";
+import { Pill, cx, clockTime } from "./ui.tsx";
 
-/** An agent's request on its computer ("Sign in to Zendesk…"), with the screen live. */
-export function ComputerPart({ computerId, request }: { computerId: string; request?: string }) {
+/** An agent's request on its computer ("Sign in to Zendesk…"): a card that takes you there; with no request, the screen live. */
+export function ComputerPart({ computerId, request, agentName }: { computerId: string; request?: string; agentName?: string }) {
   const computer = useStore((s) => s.computers.find((c) => c.id === computerId));
   if (!computer) return request ? <p className="mt-1 text-sm text-muted">(asked for help on a computer that's gone)</p> : null;
+  if (!request)
+    return (
+      <div className="mt-1.5">
+        <ComputerMini computer={computer} quiet />
+      </div>
+    );
+  const waiting = !!computer.help;
   return (
-    <div className="mt-1.5">
-      {/* the message itself says what the agent asked for */}
-      <ComputerMini computer={computer} request={request} quiet />
+    <ChatCard icon={<Monitor size={13} />} label={waiting ? "Needs you on a computer" : "Helped on a computer"} tone={waiting ? "warn" : "muted"}>
+      <div className="mt-2 text-[15px] font-semibold leading-snug">
+        {agentName ?? "It"} asked for help on {computer.name}
+      </div>
+      <p className="mt-1 text-sm text-muted">{request}</p>
+      <a href={href({ view: "computers", computerId: computer.id })} className="mt-2.5 h-11 w-full rounded-full bg-accent px-5 text-[15px] font-semibold text-accent-ink inline-flex items-center justify-center gap-2">
+        <Monitor size={16} /> Open {computer.name}
+      </a>
+    </ChatCard>
+  );
+}
+
+/** A chat card: a small label with an icon, then the card's own content. Shared by every card an agent posts. */
+export function ChatCard({ icon, label, tone = "muted", children, className, ariaLabel }: { icon: React.ReactNode; label: string; tone?: "muted" | "warn"; children: React.ReactNode; className?: string; ariaLabel?: string }) {
+  return (
+    <section aria-label={ariaLabel ?? label} className={cx("mt-1 w-full max-w-md rounded-3xl bg-card px-4 py-3.5", className)}>
+      <div className={cx("flex items-center gap-1.5 text-[13px] font-medium", tone === "warn" ? "text-warn" : "text-muted")}>
+        <span className="shrink-0 grid place-items-center">{icon}</span>
+        {label}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** "You approved this · 9:41 PM" under a decided card. */
+function Decided({ ok, text, at }: { ok: boolean; text: string; at?: string | null }) {
+  const { clock } = usePrefs();
+  return (
+    <div className={cx("mt-2 flex items-center gap-1.5 text-[13px]", ok ? "text-ok" : "text-muted")}>
+      {ok ? <Check size={14} /> : <X size={14} />}
+      {text}
+      {at && <span className="ml-auto text-faint">{clockTime(at, clock)}</span>}
     </div>
   );
 }
 
-/** "Can I go ahead?" with Approve / Deny, and the outcome once someone decides. */
+const CARD_BUTTON = "h-11 rounded-full px-5 text-[15px] font-semibold disabled:opacity-50";
+
+/** "Can I go ahead?" with Approve / Not now, and the outcome once someone decides. */
 export function ApprovalCard({ id }: { id: string }) {
   const approval = useStore((s) => s.approvals[id]);
   const members = useStore((s) => s.members);
   const me = useStore((s) => s.me);
   const [note, setNote] = useState("");
-  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -47,45 +85,35 @@ export function ApprovalCard({ id }: { id: string }) {
       setBusy(false);
     }
   };
-  const decider = members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone";
+  const decider = approval.decidedBy === me?.user.id ? "You" : (members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone");
   const pending = approval.status === "pending";
   return (
-    <div className={cx("mt-1.5 max-w-lg rounded-2xl border p-3", pending ? "border-accent/40 bg-accent-soft/40" : "border-line bg-panel")}>
-      <div className="flex items-start gap-2">
-        <ShieldQuestion size={16} className={cx("mt-0.5 shrink-0", pending ? "text-accent-text" : "text-muted")} />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">{approval.summary}</div>
-          {approval.details && (
-            <button onClick={() => setOpen(!open)} className="text-xs text-muted hover:text-ink">
-              {open ? "Hide details" : "Show details"}
-            </button>
-          )}
-        </div>
-        {!pending && <Pill tone={approval.status === "approved" ? "ok" : "bad"}>{approval.status === "approved" ? "Approved" : "Denied"}</Pill>}
-      </div>
-      {open && approval.details && <pre className="mt-2 whitespace-pre-wrap text-xs bg-bg rounded-lg p-2 max-h-72 overflow-y-auto">{approval.details}</pre>}
+    <ChatCard icon={<LockKeyhole size={13} />} label="Asking for your OK" ariaLabel="Approval request">
+      <div className="mt-2 text-[15px] font-semibold leading-snug">{approval.summary}</div>
+      {approval.details && <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-code px-3 py-2 font-mono text-[13px] max-h-40 overflow-y-auto">{approval.details}</pre>}
       {pending ? (
         me?.role !== "guest" && (
-          <div className="mt-2.5 space-y-2">
-            <Textarea rows={1} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (optional)" className="text-sm" />
+          <div className="mt-2.5 space-y-2.5">
+            <div className="text-sm text-muted">Can I go ahead?</div>
+            <input value={note} onChange={(e) => setNote(e.target.value)} aria-label="Add a note" placeholder="Add a note (optional)" className="h-11 w-full rounded-2xl border border-control-line bg-control px-3.5 text-sm outline-none placeholder:text-faint focus:border-ring" />
             <div className="flex gap-2">
-              <Button variant="primary" disabled={busy} onClick={() => decide(true)}>
-                <Check size={15} /> Approve
-              </Button>
-              <Button disabled={busy} onClick={() => decide(false)}>
-                <X size={15} /> Deny
-              </Button>
+              <button disabled={busy} onClick={() => decide(true)} className={cx(CARD_BUTTON, "flex-1 bg-accent text-accent-ink")}>
+                Approve
+              </button>
+              <button disabled={busy} onClick={() => decide(false)} className={cx(CARD_BUTTON, "flex-1 border border-control-line bg-control")}>
+                Not now
+              </button>
             </div>
             {error && <p className="text-xs text-bad">{error}</p>}
           </div>
         )
       ) : (
-        <p className="mt-1 text-xs text-muted">
-          {decider} {approval.status} this {approval.decidedAt ? timeAgo(approval.decidedAt) : ""}
-          {approval.note ? `: "${approval.note}"` : "."}
-        </p>
+        <>
+          <Decided ok={approval.status === "approved"} text={approval.status === "approved" ? `${decider} approved this` : `${decider} said not now`} at={approval.decidedAt} />
+          {approval.note && <p className="mt-1 text-[13px] text-muted">“{approval.note}”</p>}
+        </>
       )}
-    </div>
+    </ChatCard>
   );
 }
 
@@ -98,7 +126,7 @@ function LoginApprovalCard({ approval }: { approval: Approval }) {
   const me = useStore((s) => s.me);
   const agent = useStore((s) => s.agents.find((a) => a.id === approval.agentId));
   const owner = useStore((s) => s.members.find((m) => m.id === login.ownerId)?.name ?? "whoever connected it");
-  const decider = useStore((s) => s.members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone");
+  const decider = useStore((s) => (approval.decidedBy === s.me?.user.id ? "You" : (s.members.find((m) => m.id === approval.decidedBy)?.name ?? "Someone")));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = agent?.name ?? "An agent";
@@ -116,50 +144,46 @@ function LoginApprovalCard({ approval }: { approval: Approval }) {
     }
   };
   return (
-    <section aria-label="Login request" className={cx("mt-1.5 max-w-md rounded-2xl border p-3.5", pending ? "border-accent/40 bg-panel" : "border-line bg-panel")}>
-      <div className="flex items-start gap-2.5">
-        <LockKeyhole size={17} className="mt-0.5 shrink-0 text-muted" />
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">
-            {name} wants to use your {login.title} login
+    <ChatCard icon={<LockKeyhole size={13} />} label="Login request" ariaLabel="Login request">
+      <div className="mt-2 text-[15px] font-semibold leading-snug">{pending ? `${name} wants to use your ${login.title} login` : `${name} used your ${login.title} login`}</div>
+      {pending && (
+        <>
+          <p className="mt-1 text-sm text-muted">Your password manager signs in for it. Wisp never sees the password.</p>
+          <div className="mt-2 flex items-center gap-2 rounded-xl bg-code px-3 py-2 text-[13px]">
+            <LockKeyhole size={14} className="shrink-0 text-muted" />
+            <span className="min-w-0 truncate">{login.site}</span>
+            <span className="min-w-0 truncate text-muted">{login.username}</span>
           </div>
-          <div className="text-xs text-muted mt-0.5">
-            {login.username || login.site} · from {LOGIN_SOURCE_LABEL[login.source]}
-          </div>
-          <div className="text-xs text-muted mt-1">
-            Wisp types it into {login.site} on {name}'s computer, so it never goes in chat. Only allow agents you'd trust with this account.
-          </div>
-        </div>
-      </div>
+          <div className="mt-1 text-xs text-faint">From {LOGIN_SOURCE_LABEL[login.source]}</div>
+        </>
+      )}
       {pending ? (
         me?.user.id !== login.ownerId ? (
           <p className="mt-2.5 text-xs text-muted">Waiting for {owner}: only they can let agents use their logins.</p>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="primary" disabled={busy} onClick={() => decide(true)}>
-              Allow once
-            </Button>
-            <Button disabled={busy} onClick={() => decide(true, true)}>
-              Always for {name}
-            </Button>
-            <Button disabled={busy} onClick={() => decide(false)}>
-              No
-            </Button>
+            <button disabled={busy} onClick={() => decide(true)} className={cx(CARD_BUTTON, "flex-1 bg-accent text-accent-ink")}>
+              Approve
+            </button>
+            <button disabled={busy} onClick={() => decide(false)} className={cx(CARD_BUTTON, "flex-1 border border-control-line bg-control")}>
+              Not now
+            </button>
+            <button disabled={busy} onClick={() => decide(true, true)} className="w-full text-center text-[13px] text-muted hover:text-ink">
+              Always allow for {name}
+            </button>
           </div>
         )
       ) : (
-        <p className="mt-2 text-xs text-muted">
-          {approval.status === "approved" ? `${decider} allowed it` : `${decider} said no`} {approval.decidedAt ? timeAgo(approval.decidedAt) : ""}
-        </p>
+        <Decided ok={approval.status === "approved"} text={approval.status === "approved" ? `${decider} approved this` : `${decider} said not now`} at={approval.decidedAt} />
       )}
       {error && <p className="mt-2 text-xs text-bad">{error}</p>}
-    </section>
+    </ChatCard>
   );
 }
 
 const routineCache = new Map<string, Promise<Routine[]>>();
 
-/** A routine mentioned in chat: its name, schedule and steps. */
+/** A routine mentioned in chat: its name, schedule and state, as a card that opens it. */
 export function RoutineChip({ id }: { id: string }) {
   const version = useStore((s) => s.routinesVersion);
   const [routine, setRoutine] = useState<Routine | null>(null);
@@ -171,16 +195,18 @@ export function RoutineChip({ id }: { id: string }) {
   }, [id, version]);
   if (!routine) return null;
   return (
-    <a href={href({ view: "agents", agentId: routine.agentId, tab: "routines" })} className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-panel px-3 h-8 text-xs hover:bg-hover">
-      <ListChecks size={14} className="text-accent-text shrink-0" />
-      <span className="font-medium truncate">{routine.name}</span>
-      {routine.status === "learning" ? (
-        <Pill tone="info">learning</Pill>
-      ) : routine.schedule ? (
-        <span className="text-muted inline-flex items-center gap-1 shrink-0">
-          <CalendarClock size={12} /> {describeCron(routine.schedule)}
-        </span>
-      ) : null}
+    <a href={href({ view: "agents", agentId: routine.agentId, tab: "routines" })} className="block">
+      <ChatCard icon={<ListChecks size={13} />} label="Routine" className="hover:bg-hover">
+        <div className="mt-2 flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{routine.name}</span>
+          {routine.status === "learning" && <Pill tone="info">Learning</Pill>}
+        </div>
+        {routine.schedule && (
+          <div className="mt-1 flex items-center gap-1.5 text-[13px] text-muted">
+            <CalendarClock size={13} /> {describeCron(routine.schedule)}
+          </div>
+        )}
+      </ChatCard>
     </a>
   );
 }
@@ -217,15 +243,17 @@ export function describeTool(name: string, input: unknown, agents: Agent[]): { t
   return { text: `using ${tool}`, with: [] };
 }
 
-/** What an agent changed for you (a setting, a mod), one line each, with Undo. */
+/** What an agent changed for you (a setting, a mod, a note), one line each, with Undo. */
 export function ChangeCard({ id, fallback }: { id: string; fallback: string }) {
   const changes = useChanges();
+  const { clock } = usePrefs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!changes) return null;
   // too old to be in the list: show what changed, without Undo
-  const change = changes.find((c) => c.id === id) ?? { id, lines: fallback.split("\n").filter(Boolean), undoneAt: null, old: true };
-  const old = "old" in change;
+  const found = changes.find((c) => c.id === id);
+  const change = found ?? { id, lines: fallback.split("\n").filter(Boolean), undoneAt: null, createdAt: null as string | null };
+  const old = !found;
   const undo = async () => {
     setBusy(true);
     setError(null);
@@ -237,24 +265,27 @@ export function ChangeCard({ id, fallback }: { id: string; fallback: string }) {
       setBusy(false);
     }
   };
+  const at = change.createdAt;
   return (
-    <div className="mt-1.5 max-w-md rounded-2xl border border-line bg-panel px-3.5 py-3 space-y-1.5">
+    <ChatCard icon={<Pencil size={13} />} label="Changed">
       {change.lines.map((l) => (
-        <div key={l} className={cx("flex items-start gap-2 text-sm", change.undoneAt && "text-muted line-through")}>
-          <Check size={15} className="mt-0.5 shrink-0 text-ok" />
-          <span>{l}</span>
+        <div key={l} className={cx("mt-2 text-[15px] font-semibold leading-snug", change.undoneAt && "text-muted line-through")}>
+          {l}
         </div>
       ))}
-      <div className="pt-1 flex items-center gap-2">
+      <div className="mt-2.5 flex items-center gap-2">
         {old ? null : change.undoneAt ? (
-          <span className="text-xs text-muted">Undone</span>
+          <span className="flex items-center gap-1.5 text-[13px] text-muted">
+            <RotateCcw size={13} /> Undone
+          </span>
         ) : (
-          <Button className="h-8 px-3 text-xs" onClick={undo} disabled={busy}>
-            <RotateCcw size={13} /> Undo
-          </Button>
+          <button className="h-10 rounded-full border border-control-line bg-control px-4 text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50" onClick={undo} disabled={busy}>
+            <RotateCcw size={14} /> Undo
+          </button>
         )}
+        {at && !change.undoneAt && <span className="text-[13px] text-faint">{clockTime(at, clock)}</span>}
         {error && <span className="text-xs text-bad">{error}</span>}
       </div>
-    </div>
+    </ChatCard>
   );
 }

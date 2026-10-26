@@ -36,15 +36,15 @@ struct ActivityPill: View {
           (Text(first.name).fontWeight(.semibold) + Text(" \(ActivityText.phrase(store.activity[first.id]))"))
             .lineLimit(1)
           if list.count > 1 {
-            Text("· \(list[1].name)\(list.count > 2 ? " +\(list.count - 2)" : "")").foregroundStyle(.secondary).lineLimit(1)
+            Text("· \(list[1].name)\(list.count > 2 ? " +\(list.count - 2)" : "")").foregroundStyle(Palette.muted).lineLimit(1)
           }
-          Image(systemName: "chevron.up").font(.caption2.weight(.bold)).foregroundStyle(.tertiary)
+          PulseDots().scaleEffect(0.7)
         }
-        .font(.footnote)
-        .foregroundStyle(.primary)
-        .padding(.leading, 6)
-        .padding(.trailing, 12)
-        .padding(.vertical, 5)
+        .font(.system(size: 14))
+        .foregroundStyle(Palette.text)
+        .padding(.leading, 8)
+        .padding(.trailing, 14)
+        .padding(.vertical, 7)
         .glassCapsule(interactive: true)
       }
       .buttonStyle(.plain)

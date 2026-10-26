@@ -112,8 +112,7 @@ describe("deleting channels", () => {
     expect((await api("POST", "/api/channels", { name: "scratch" })).status).toBe(200);
   });
 
-  it("keeps #general and DMs", async () => {
-    expect((await api("DELETE", `/api/channels/${(await channelNamed("general")).id}`)).status).toBe(409);
+  it("keeps DMs", async () => {
     const dm = (await api("POST", `/api/dm/${atlas.id}`)).data;
     expect((await api("DELETE", `/api/channels/${dm.id}`)).status).toBe(404);
   });
@@ -211,9 +210,7 @@ describe("archiving channels", () => {
     expect((await api("POST", `/api/channels/${ch.id}/messages`, { body: "hello again" })).status).toBe(200);
   });
 
-  it("keeps #general and guests out", async () => {
-    const general = await channelNamed("general");
-    expect((await api("POST", `/api/channels/${general.id}/archive`, {})).status).toBe(409);
+  it("keeps guests out", async () => {
     const ch = await channelNamed("launch");
     expect((await api("POST", `/api/channels/${ch.id}/archive`, {}, guest)).status).toBe(403);
   });
@@ -307,5 +304,20 @@ describe("editing and deleting messages", () => {
     await api("POST", `/api/channels/${ch.id}/archive`, { archived: true });
     expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "new words" })).status).toBe(409);
     expect((await api("DELETE", `/api/messages/${msg.id}`)).status).toBe(409);
+  });
+
+  it("counts only members who still exist, matching the member list", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "headcount" })).data;
+    const gone = (await api("POST", "/api/agents", { handle: "gone", name: "Gone", harness: "custom" })).data;
+    await api("PUT", `/api/channels/${ch.id}/members/agent/${gone.id}`);
+    await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
+    // rows left behind by older versions: a deleted agent and a removed person
+    hub.store.db.prepare("INSERT INTO channel_members (channel_id, member_kind, member_id) VALUES (?, 'agent', 'agt_deleted'), (?, 'user', 'usr_removed')").run(ch.id, ch.id);
+    const listed = async () => (await api<any[]>("GET", `/api/channels/${ch.id}/members`)).data;
+    expect((await channelNamed("headcount")).memberCount).toBe((await listed()).length);
+    await api("DELETE", `/api/agents/${gone.id}`);
+    const after = await listed();
+    expect((await channelNamed("headcount")).memberCount).toBe(after.length);
+    expect((hub.store.db.prepare("SELECT COUNT(*) AS n FROM channel_members WHERE channel_id = ? AND member_id = ?").get(ch.id, gone.id) as { n: number }).n).toBe(0);
   });
 });

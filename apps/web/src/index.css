@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "@fontsource-variable/nunito";
+@import "@fontsource-variable/inter";
 
 /* `dark:` follows the chosen mode, not just the OS */
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
@@ -32,7 +32,15 @@
   --ok: #16a34a;
   --warn: #cc7a00;
   --bad: oklch(0.577 0.245 27.325);
-  --info: #2563eb;
+  --info: #0a84ff;
+  /* unread counts and the "you" bubble: Wisp blue */
+  --badge: #0a84ff;
+  --badge-ink: #ffffff;
+  /* cards inside a panel (24px radius) and controls (circle and pill buttons, search fields) */
+  --card: oklch(0.965 var(--gc) var(--gh));
+  --control: oklch(1 0 0);
+  --control-line: oklch(0 0 0 / 0.1);
+  --glass-bg: oklch(1 0 0 / 0.78);
   --shadow: 0 1px 2px oklch(0.2 0 0 / 0.06), 0 6px 20px oklch(0.2 0 0 / 0.08);
   --ghost-shadow: oklch(0.2 0 0 / 0.14);
   /* status hues: chips and dots mix these with the surface, so one value works in both modes */
@@ -60,23 +68,28 @@
 }
 
 :root[data-mode="dark"] {
-  --app: oklch(0.2 calc(var(--gc) * 1.5) var(--gh));
-  --panel: oklch(0.16 var(--gc) var(--gh));
-  --bg: oklch(0.2 calc(var(--gc) * 1.5) var(--gh));
-  --side-hover: oklch(1 0 0 / 0.04);
-  --side-active: oklch(0.265 calc(var(--gc) * 2) var(--gh));
-  --ink: oklch(0.965 calc(var(--gc) * 0.75) var(--gh));
-  --muted: oklch(0.71 calc(var(--gc) * 2) var(--gh));
-  --faint: oklch(0.55 calc(var(--gc) * 2.5) var(--gh));
-  --line: oklch(1 0 0 / 0.09);
-  --input: oklch(1 0 0 / 0.14);
-  --hover: oklch(1 0 0 / 0.04);
-  --chip: oklch(1 0 0 / 0.075);
-  --code: oklch(0.21 calc(var(--gc) * 1.5) var(--gh));
-  --ok: #34d06f;
+  /* the approved Wisp dark palette: desktop ground, panels and cards (phones override below) */
+  --app: #111113;
+  --panel: #18181b;
+  --bg: #202023;
+  --card: #202023;
+  --control: #2a2a2e;
+  --control-line: rgb(255 255 255 / 0.1);
+  --side-hover: rgb(255 255 255 / 0.04);
+  --side-active: #26262a;
+  --ink: #f2f2f4;
+  --muted: #a1a1aa;
+  --faint: #8e8e96;
+  --line: rgb(255 255 255 / 0.07);
+  --input: rgb(255 255 255 / 0.1);
+  --hover: rgb(255 255 255 / 0.05);
+  --chip: #2a2a2e;
+  --code: #131315;
+  --ok: #5bd68a;
   --warn: #fbbf24;
-  --bad: oklch(0.704 0.191 22.216);
-  --info: #60a5fa;
+  --bad: #ff6b6b;
+  --info: #0a84ff;
+  --glass-bg: rgb(42 42 46 / 0.92);
   --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.4);
   --ghost-shadow: oklch(0 0 0 / 0.42);
   --org-1: oklch(0.58 0.1 180);
@@ -95,6 +108,17 @@
   color-scheme: dark;
 }
 
+/* phones: the ground is #161618 and pages sit straight on it; cards are a step lighter */
+@media (max-width: 767px) {
+  :root[data-mode="dark"] {
+    --app: #161618;
+    --panel: #161618;
+    --bg: #26262a;
+    --card: #26262a;
+    --code: #1c1c1f;
+  }
+}
+
 /*
  * --- themes: an accent per mode, and a faint tint for the grays ----------------------------
  * Not tied to :root, so any element with data-theme and data-mode (like the previews in
@@ -108,7 +132,7 @@
   --accent-soft: oklch(0 0 0 / 0.06); --ring: oklch(0.7 0 0); --loader: var(--faint);
 }
 [data-theme="mono"][data-mode="dark"] {
-  --accent: oklch(0.97 0 0); --accent-ink: oklch(0.17 0 0); --accent-soft: oklch(1 0 0 / 0.09); --ring: oklch(0.55 0 0);
+  --accent: #f2f2f4; --accent-ink: #111113; --accent-soft: oklch(1 0 0 / 0.09); --ring: oklch(0.55 0 0);
 }
 
 [data-theme="mint"] {
@@ -171,9 +195,14 @@
   --color-bad: var(--bad);
   --color-info: var(--info);
   --color-code: var(--code);
+  --color-badge: var(--badge);
+  --color-badge-ink: var(--badge-ink);
+  --color-card: var(--card);
+  --color-control: var(--control);
+  --color-control-line: var(--control-line);
   --shadow-panel: var(--shadow);
-  /* rounded type, like the iPhone app: SF Pro Rounded on Apple devices, Nunito everywhere else */
-  --font-sans: ui-rounded, "SF Pro Rounded", "Nunito Variable", "Nunito", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Inter, with the system font while it loads */
+  --font-sans: "Inter Variable", "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   /* soft, rounded corners like the iPhone app: small controls ~10px, cards ~18–24px, sheets ~30px */
   --radius-sm: 0.5rem;
@@ -244,16 +273,14 @@ body {
  * frosted and translucent with a bright rim, like Liquid Glass on the iPhone app.
  */
 .glass {
-  background: color-mix(in oklab, var(--panel) 68%, transparent);
+  background: var(--glass-bg);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
   backdrop-filter: blur(24px) saturate(1.8);
-  border: 1px solid oklch(1 0 0 / 0.6);
+  border: 1px solid var(--control-line);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.7), 0 1px 2px oklch(0.2 0 0 / 0.06), 0 10px 32px oklch(0.2 0 0 / 0.12);
 }
 :root[data-mode="dark"] .glass {
-  background: color-mix(in oklab, var(--panel) 60%, transparent);
-  border-color: oklch(1 0 0 / 0.12);
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.1), 0 1px 2px oklch(0 0 0 / 0.3), 0 12px 36px oklch(0 0 0 / 0.5);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 10px 30px rgb(0 0 0 / 0.4);
 }
 /* without backdrop blur, glass is just a solid surface */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -265,8 +292,25 @@ body {
  */
 .glass .glass,
 :root[data-mode="dark"] .glass .glass {
-  background: var(--panel);
+  background: var(--control);
 }
+
+/* a glass circle button: 42px on desktops, 52px on phones (add .circle-lg for the big one) */
+.circle {
+  width: 42px; height: 42px; border-radius: 50%; flex: none; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--control); color: var(--ink);
+  border: 1px solid var(--control-line);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.5);
+  transition: background-color 120ms;
+}
+:root[data-mode="dark"] .circle { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08); }
+.circle:hover { background: color-mix(in oklab, var(--control) 88%, var(--ink)); }
+@media (max-width: 767px) { .circle { width: 52px; height: 52px; } }
+.circle-lg { width: 42px; height: 42px; }
+@media (max-width: 767px) { .circle-lg { width: 56px; height: 56px; } }
+.circle-sm { width: 36px; height: 36px; }
+@media (max-width: 767px) { .circle-sm { width: 44px; height: 44px; } }
 
 /* Rendered markdown in messages and the vault preview */
 .prose-w {
@@ -310,15 +354,29 @@ body {
 
 /* chat bubbles, like Messages: yours blue on the right, everyone else's grey on the left */
 :root { --bubble-me: #0a84ff; --bubble-me-ink: #ffffff; --bubble-them: oklch(0.93 calc(var(--gc) * 1.25) var(--gh)); }
-:root[data-mode="dark"] { --bubble-them: oklch(0.3 calc(var(--gc) * 1.5) var(--gh)); }
-.bubble { padding: 0.45em 0.8em; border-radius: 1.15rem; width: fit-content; max-width: min(36rem, 100%); }
+:root[data-mode="dark"] { --bubble-them: #26262a; }
+.bubble { padding: 0.6em 1em; border-radius: 1.5rem; width: fit-content; max-width: min(36rem, 100%); line-height: 1.4; }
 .bubble.them { background: var(--bubble-them); color: var(--ink); }
 .bubble.me { background: var(--bubble-me); color: var(--bubble-me-ink); margin-left: auto; }
 .bubble.me a, .bubble.me .wikilink { color: inherit; background: none; }
 .bubble.me code, .bubble.me pre { background: rgb(0 0 0 / 0.18); }
-.bubble.me .mention, .bubble.me .mention.user, .bubble.me .mention.agent { background: rgb(255 255 255 / 0.22); color: inherit; }
+.bubble.me .mention, .bubble.me .mention.user, .bubble.me .mention.agent,
+:root .bubble.me .prose-w .mention.agent, :root[data-mode="dark"] .bubble.me .prose-w .mention.agent { background: rgb(255 255 255 / 0.22); color: inherit; }
 .bubble.me blockquote { color: inherit; opacity: 0.85; border-color: rgb(255 255 255 / 0.4); }
 .bubble.them pre, .bubble.them code { background: var(--panel); }
+/* the quoted message above a reply, inside its bubble */
+.bubble .quote { display: block; text-align: left; border-left: 2px solid currentColor; padding-left: 0.6rem; margin-bottom: 0.35rem; font-size: 0.8125rem; line-height: 1.3; opacity: 0.8; cursor: pointer; }
+.bubble.them .quote { border-color: var(--faint); }
+.bubble.me .quote { border-color: rgb(255 255 255 / 0.6); }
+/* three pulsing dots: an agent is working */
+@keyframes dot-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.work-dots { display: inline-flex; gap: 4px; }
+.work-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot-pulse 1.2s infinite; }
+.work-dots i:nth-child(2) { animation-delay: 0.2s; }
+.work-dots i:nth-child(3) { animation-delay: 0.4s; }
+@media (prefers-reduced-motion: reduce) { .work-dots i { animation: none; opacity: 0.7; } }
+/* touch: no text selection or callout while a long-press opens a message's actions */
+@media (hover: none) { .msg-press { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; } }
 
 /* inline links are underlined (Paperclip's "Create one") in the readable mint */
 :is(p, li) a.text-accent {
@@ -538,6 +596,10 @@ body {
 }
 
 /* setup: each screen eases in where the last one stood */
+/* the ghost bobbing on sign-in, setup and welcome screens */
+.auth-bob { display: inline-flex; animation: auth-bob 2.6s ease-in-out infinite; }
+@keyframes auth-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .auth-bob { animation: none; } }
 .wizard-in { animation: wizard-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @keyframes wizard-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) {

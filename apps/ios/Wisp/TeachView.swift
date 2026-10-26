@@ -57,6 +57,7 @@ struct TeachAgentPicker: View {
           Text("Do the task once on this computer while an agent watches. It saves the steps as a routine and can do it on its own next time, on a schedule if you like.")
         }
       }
+      .groundBackground()
       .navigationTitle("Teach a task")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
@@ -84,7 +85,7 @@ struct TeachBar: View {
         Spacer(minLength: 4)
         TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
           HStack(spacing: 5) {
-            Circle().fill(Color.red).frame(width: 8, height: 8)
+            Circle().fill(Palette.red).frame(width: 8, height: 8)
             Text(TeachRecording.clock(max(0, Int(ctx.date.timeIntervalSince(session.recording.started))))).font(.subheadline.monospacedDigit())
           }
         }
@@ -94,10 +95,10 @@ struct TeachBar: View {
         .font(.callout)
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.tertiarySystemFill)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.field))
       HStack(spacing: 10) {
-        Button("Cancel", action: cancel).secondaryButton().controlSize(.regular)
-        Button("Done", action: done).primaryButton().controlSize(.regular).disabled(session.recording.count == 0)
+        Button { cancel() } label: { Text("Cancel").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
+        Button { done() } label: { Text("Done").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large).disabled(session.recording.count == 0)
       }
     }
     .card(Corner.card, padding: 12)
@@ -132,6 +133,7 @@ struct TeachSaveSheet: View {
         }
         if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
       }
+      .groundBackground()
       .navigationTitle("Save what you showed")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {

@@ -1,8 +1,10 @@
 import SwiftUI
 
 /**
- * Preview and save the same wardrobe offered by Wisp on the web: every palette, shape, face,
- * hat, accessory and motion, with cheeks, and a mood to preview it in.
+ * Look (agent-Look.dc.html): the ghost, Shuffle, Color, Hat, Neckwear, Back to its original ghost,
+ * Save. Shape, eyes, mouth, motion, cheeks and a mood to preview it in are under More options,
+ * so the same wardrobe as on the web is still here. A ghost stays one simple piece; hats and
+ * neckwear sit rigid on the body.
  */
 struct LookEditor: View {
   @Environment(Store.self) private var store
@@ -13,7 +15,7 @@ struct LookEditor: View {
   private var seed: String
   @State private var look: GhostLook
   @State private var mood: GhostMood = .awake
-  @State private var voice = AgentVoice()
+  @State private var more = false
   @State private var saving = false
   @State private var error: String?
 
@@ -23,7 +25,6 @@ struct LookEditor: View {
     name = agent.name
     seed = agent.handle
     _look = State(initialValue: (agent.settings?.appearance ?? GhostLook.defaultAppearance(agent.handle)).resolved)
-    _voice = State(initialValue: agent.settings?.voice ?? AgentVoice())
   }
 
   /** Edits the look of an agent that doesn't exist yet (New agent); Done hands it back. */
@@ -38,114 +39,83 @@ struct LookEditor: View {
 
   var body: some View {
     NavigationStack {
-      ScrollView {
-        VStack(spacing: 24) {
-          stage
-          colors
+      AgentFrame(title: "Look", subtitle: name, close: true) {
+        VStack(spacing: 12) {
+          GhostView(look: look, seed: seed, size: 160, mood: mood, interactive: true)
+            .frame(width: 160, height: 160).accessibilityHidden(true)
+          AgentChip(title: "Shuffle", symbol: "shuffle") { look = GhostLook.shuffled(keeping: look.motion) }
+            .accessibilityIdentifier("look-shuffle")
+        }.frame(maxWidth: .infinity).padding(.vertical, 4)
+        CardCaption("Color")
+        GhostColors(look: $look, labels: true).padding(.horizontal, 18)
+        options("Hat", values: GhostLook.hats, key: \.hat)
+        options("Neckwear", values: GhostLook.accessories, key: \.accessory)
+        CardGroup {
+          Button { more.toggle() } label: {
+            RowLabel(title: "More options", subtitle: "Shape, eyes, mouth, motion", chevron: false)
+              .overlay(alignment: .trailing) { Image(systemName: more ? "chevron.up" : "chevron.down").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint).padding(.trailing, 18) }
+          }.buttonStyle(.plain).accessibilityIdentifier("look-more")
+        }
+        if more {
           options("Shape", values: GhostLook.shapes, key: \.shape)
           options("Eyes", values: GhostLook.eyeStyles, key: \.eyes)
           options("Mouth", values: GhostLook.mouths, key: \.mouth)
-          options("Hat", values: GhostLook.hats, key: \.hat)
-          options("Accessory", values: GhostLook.accessories, key: \.accessory)
           options("Motion", values: GhostLook.motions, key: \.motion)
-          switches
-          if let agent, store.features.voice { AgentVoicePicker(agent: agent, voice: $voice) }
-          if let error { Text(error).foregroundStyle(.red).font(.footnote).accessibilityLabel("Could not save: \(error)") }
+          CardGroup { SwitchRow(title: "Rosy cheeks", subtitle: "A little blush under the eyes.", isOn: flag(\.cheeks)) }
+          Segments(options: Self.previewMoods.map { ($0.0, $0.1) }, selection: $mood)
+          CardCaption("Preview it awake, working or asleep.")
         }
-        .padding(20)
-        .disabled(saving)
-      }
-      .navigationTitle("\(name)’s look")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-        ToolbarItem(placement: .confirmationAction) {
-          Button {
-            if let draft {
-              draft.wrappedValue = look.resolved
-              dismiss()
-              return
-            }
-            guard let agent else { return }
-            Task {
-              saving = true
-              error = nil
-              do {
-                try await store.saveLook(look, for: agent)
-                if voice != (agent.settings?.voice ?? AgentVoice()) { try await store.saveVoice(voice, for: agent) }
-                dismiss()
-              }
-              catch { self.error = error.localizedDescription }
-              saving = false
-            }
-          } label: {
-            if saving { ProgressView() } else { Text(draft == nil ? "Save" : "Done").bold() }
-          }.disabled(saving)
+        CardGroup {
+          Button { look = GhostLook.defaultAppearance(seed).resolved } label: {
+            RowLabel(title: "Back to its original ghost", chevron: false, leading: { rowIcon("arrow.counterclockwise") })
+          }.buttonStyle(.plain).accessibilityIdentifier("look-reset")
         }
+        AgentError(text: error)
+        PillButton(title: draft == nil ? "Save" : "Done", busy: saving, id: "look-save") { save() }.disabled(saving)
       }
-      .interactiveDismissDisabled(saving)
     }
+    .agentSheet()
+    .interactiveDismissDisabled(saving)
   }
 
-  private var stage: some View {
-    VStack(spacing: 12) {
-      GhostView(look: look, seed: seed, size: 180, mood: mood, interactive: true)
-        .padding(.vertical, 24)
-        .frame(maxWidth: .infinity)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
-      Picker("Preview a mood", selection: $mood) {
-        ForEach(Self.previewMoods, id: \.0) { Text($0.1).tag($0.0) }
-      }
-      .pickerStyle(.segmented)
-      .accessibilityLabel("Preview a mood")
-      HStack {
-        Button("Shuffle", systemImage: "shuffle") { look = GhostLook.shuffled(keeping: look.motion) }
-        Spacer()
-        Button("Reset", systemImage: "arrow.counterclockwise") { look = GhostLook.defaultAppearance(seed) }
-      }.secondaryButton()
+  private func save() {
+    if let draft {
+      draft.wrappedValue = look.resolved
+      dismiss()
+      return
     }
-  }
-
-  private var colors: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text("Colors").font(.headline)
-      GhostColors(look: $look, labels: true)
+    guard let agent else { return }
+    Task {
+      saving = true
+      error = nil
+      do { try await store.saveLook(look, for: agent); dismiss() }
+      catch { self.error = error.localizedDescription }
+      saving = false
     }
-  }
-
-  private var switches: some View {
-    VStack(spacing: 0) {
-      Toggle(isOn: flag(\.cheeks)) {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Rosy cheeks")
-          Text("A little blush under the eyes.").font(.caption).foregroundStyle(.secondary)
-        }
-      }.padding(.vertical, 10)
-    }
-    .padding(.horizontal, 16)
-    .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
   }
 
   private func options(_ title: String, values: [String], key: WritableKeyPath<GhostLook, String?>) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text(title).font(.headline)
-      LazyVGrid(columns: [GridItem(.adaptive(minimum: 82))], spacing: 10) {
-        ForEach(values, id: \.self) { value in
-          let selected = look[keyPath: key] == value
-          Button { look[keyPath: key] = value } label: {
-            VStack(spacing: 4) {
-              GhostView(look: preview(value, key: key), seed: seed, size: 56, animate: title == "Motion")
-              Text(label(value)).font(.caption).foregroundStyle(.primary).lineLimit(1).minimumScaleFactor(0.8)
+    VStack(alignment: .leading, spacing: 8) {
+      CardCaption(title)
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(values, id: \.self) { value in
+            let selected = (look[keyPath: key] ?? (value == values.first ? value : nil)) == value
+            Button { look[keyPath: key] = value } label: {
+              VStack(spacing: 4) {
+                GhostView(look: preview(value, key: key), seed: seed, size: 52, animate: title == "Motion")
+                  .frame(width: 52, height: 52)
+                Text(label(value)).font(.system(size: 13, weight: .medium)).foregroundStyle(selected ? Color(light: 0xFFFFFF, dark: 0x111113) : Palette.text).lineLimit(1)
+              }
+              .padding(.horizontal, 10).padding(.vertical, 8).frame(minWidth: 76)
+              .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(selected ? Palette.text : Palette.card))
+              .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(selected ? Color.accentColor.opacity(0.12) : Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(selected ? Color.accentColor : .clear, lineWidth: 2))
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(title): \(label(value))")
+            .accessibilityAddTraits(selected ? .isSelected : [])
           }
-          .buttonStyle(.plain)
-          .accessibilityLabel("\(title): \(label(value))")
-          .accessibilityAddTraits(selected ? .isSelected : [])
-        }
+        }.padding(.horizontal, 2)
       }
     }
   }
@@ -158,12 +128,17 @@ struct LookEditor: View {
     return result
   }
 
-  private func label(_ value: String) -> String {
-    ["sheet": "Bedsheet", "tophat": "Top hat", "bowtie": "Bow tie", "sunglasses": "Shades"][value] ?? value.capitalized
-  }
+  private func label(_ value: String) -> String { GhostLabels.label(value) }
 
   private func flag(_ key: WritableKeyPath<GhostLook, Bool?>) -> Binding<Bool> {
     Binding(get: { look[keyPath: key] ?? false }, set: { look[keyPath: key] = $0 })
+  }
+}
+
+enum GhostLabels {
+  /** A look option in words: "tophat" is Top hat, "bowtie" is Bow tie, "none" is None. */
+  static func label(_ value: String) -> String {
+    ["sheet": "Bedsheet", "tophat": "Top hat", "bowtie": "Bow tie", "sunglasses": "Shades"][value] ?? value.capitalized
   }
 }
 

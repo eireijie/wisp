@@ -116,6 +116,9 @@ struct Channel: Codable, Identifiable, Hashable {
   var notify: String?
   var starred: Bool?
   var pinnedIds: [String]?
+  /** when the newest message was sent, from the channel list (messages themselves load per chat) */
+  struct Last: Codable, Hashable { var at: String }
+  var last: Last?
 
   var isDM: Bool { kind == "dm" }
   var isMuted: Bool { notify == "mute" }
@@ -176,62 +179,6 @@ struct ChannelTeam: Codable, Hashable {
       try c.encodeIfPresent(harness, forKey: .harness)
     }
   }
-
-  /** One box on a team's flow chart (TeamStep in packages/core). */
-  struct Step: Codable, Hashable, Identifiable {
-    enum Kind: String, Codable, CaseIterable { case `do`, review, handOut = "hand_out" }
-    var id: String
-    var roleId: String
-    var kind: Kind
-    /** what the role does here, e.g. "Draft a thorough plan" */
-    var action: String
-    /** the step after this one (after approval, for a review); nil = the flow ends here */
-    var next: String?
-    /** review: where the work goes back with the notes */
-    var sendBackTo: String? = nil
-    /** rounds of changes before it asks a person */
-    var maxRounds: Int? = nil
-    /** hand-out: the roles the pieces go to, and the role that checks each piece */
-    var handTo: [String]? = nil
-    var reviewBy: String? = nil
-    var x: Double = 0
-    var y: Double = 0
-
-    private enum K: String, CodingKey { case id, roleId, kind, action, next, sendBackTo, maxRounds, handTo, reviewBy, x, y }
-    init(id: String, roleId: String, kind: Kind, action: String, next: String?, sendBackTo: String? = nil, maxRounds: Int? = nil, handTo: [String]? = nil, reviewBy: String? = nil, x: Double = 0, y: Double = 0) {
-      self.id = id; self.roleId = roleId; self.kind = kind; self.action = action; self.next = next
-      self.sendBackTo = sendBackTo; self.maxRounds = maxRounds; self.handTo = handTo; self.reviewBy = reviewBy; self.x = x; self.y = y
-    }
-    init(from decoder: Decoder) throws {
-      let c = try decoder.container(keyedBy: K.self)
-      id = try c.decode(String.self, forKey: .id)
-      roleId = try c.decode(String.self, forKey: .roleId)
-      kind = (try? c.decode(Kind.self, forKey: .kind)) ?? .do
-      action = (try? c.decode(String.self, forKey: .action)) ?? ""
-      next = try c.decodeIfPresent(String.self, forKey: .next)
-      sendBackTo = try c.decodeIfPresent(String.self, forKey: .sendBackTo)
-      maxRounds = try c.decodeIfPresent(Int.self, forKey: .maxRounds)
-      handTo = try c.decodeIfPresent([String].self, forKey: .handTo)
-      reviewBy = try c.decodeIfPresent(String.self, forKey: .reviewBy)
-      x = (try? c.decode(Double.self, forKey: .x)) ?? 0
-      y = (try? c.decode(Double.self, forKey: .y)) ?? 0
-    }
-    // the hub wants next even when the flow ends here
-    func encode(to encoder: Encoder) throws {
-      var c = encoder.container(keyedBy: K.self)
-      try c.encode(id, forKey: .id)
-      try c.encode(roleId, forKey: .roleId)
-      try c.encode(kind, forKey: .kind)
-      try c.encode(action, forKey: .action)
-      try c.encode(next, forKey: .next)
-      try c.encodeIfPresent(sendBackTo, forKey: .sendBackTo)
-      try c.encodeIfPresent(maxRounds, forKey: .maxRounds)
-      try c.encodeIfPresent(handTo, forKey: .handTo)
-      try c.encodeIfPresent(reviewBy, forKey: .reviewBy)
-      try c.encode(x, forKey: .x)
-      try c.encode(y, forKey: .y)
-    }
-  }
 }
 
 struct Reaction: Codable, Hashable {
@@ -240,7 +187,8 @@ struct Reaction: Codable, Hashable {
 }
 
 enum MessagePart: Codable, Hashable {
-  case toolCall(name: String)
+  /** a tool the agent used: its name, one line of what it did ("Read main.ts"), and what it saved to memory when that's what it was */
+  case toolCall(name: String, line: String = "", remembered: Remembered? = nil)
   case file(fileId: String, name: String)
   case status(String)
   case notice(String)
@@ -254,13 +202,24 @@ enum MessagePart: Codable, Hashable {
   case context(ContextUsage?)
   case other(String)
 
-  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage }
+  /** what an agent saved about someone during a reply (the "Remembered" chip): the kind of note, its words, and the note it went to */
+  struct Remembered: Codable, Hashable {
+    var kind: String
+    var text: String
+    var path: String?
+  }
+
+  private enum K: String, CodingKey { case type, name, fileId, text, computerId, request, approvalId, changeId, taskId, routineId, discussionId, usage, input, output }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: K.self)
     let type = (try? c.decode(String.self, forKey: .type)) ?? ""
     switch type {
-    case "tool_call": self = .toolCall(name: (try? c.decode(String.self, forKey: .name)) ?? "tool")
+    case "tool_call":
+      let name = (try? c.decode(String.self, forKey: .name)) ?? "tool"
+      let input = (try? c.decode([String: LooseValue].self, forKey: .input)) ?? [:]
+      let output = (try? c.decode(LooseValue.self, forKey: .output))?.text ?? ""
+      self = .toolCall(name: name, line: ToolLine.of(name, input: input), remembered: ToolLine.remembered(name, input: input, output: output))
     case "file": self = .file(fileId: (try? c.decode(String.self, forKey: .fileId)) ?? "", name: (try? c.decode(String.self, forKey: .name)) ?? "file")
     case "status": self = .status((try? c.decode(String.self, forKey: .text)) ?? "")
     case "notice": self = .notice((try? c.decode(String.self, forKey: .text)) ?? "")
@@ -278,6 +237,30 @@ enum MessagePart: Codable, Hashable {
   func encode(to encoder: Encoder) throws {} // never sent back to the hub
 }
 
+/** The message a reply answers: who said it and a few of their words (ReplyQuote in packages/core/src/types.ts). */
+struct ReplyQuote: Codable, Hashable {
+  var id: String
+  var author: Actor
+  var snippet: String
+  var deleted: Bool?
+}
+
+/** A JSON value read loosely, for the parts of a tool call the app only shows as words. */
+enum LooseValue: Decodable, Hashable {
+  case string(String), number(Double), bool(Bool), null, other
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.singleValueContainer()
+    if let s = try? c.decode(String.self) { self = .string(s) }
+    else if let n = try? c.decode(Double.self) { self = .number(n) }
+    else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+    else if c.decodeNil() { self = .null }
+    else { self = .other }
+  }
+
+  var text: String? { if case .string(let s) = self { s } else { nil } }
+}
+
 struct Message: Codable, Identifiable, Hashable {
   var id: String
   var channelId: String
@@ -286,6 +269,9 @@ struct Message: Codable, Identifiable, Hashable {
   var body: String
   var parts: [MessagePart]
   var reactions: [Reaction]?
+  /** set when this replies to another message in the same chat: a quote, not a thread */
+  var replyToId: String?
+  var replyTo: ReplyQuote?
   var createdAt: String
   /** set when its author changed the text */
   var editedAt: String?
@@ -330,7 +316,7 @@ struct MessagePage: Codable {
 
 struct Computer: Codable, Identifiable, Hashable {
   struct Controller: Codable, Hashable { var id: String; var since: String }
-  struct Help: Codable, Hashable { var agentId: String; var request: String; var channelId: String; var threadId: String? }
+  struct Help: Codable, Hashable { var agentId: String; var request: String; var channelId: String; var threadId: String?; var at: String? }
 
   var id: String
   var name: String
@@ -377,6 +363,19 @@ struct Approval: Codable, Identifiable, Hashable {
   var note: String
   var createdAt: String
   var decidedAt: String?
+  /** set when an agent asks to use a login from the password manager: only whoever connected it decides */
+  var login: Login?
+
+  struct Login: Codable, Hashable {
+    var title: String
+    var site: String
+    var username: String?
+    var source: String?
+    var ownerId: String
+  }
+  /** set when it's an ask-me step of a team's flow: deciding it moves that request on */
+  var flow: Flow? = nil
+  struct Flow: Codable, Hashable { var flowId: String; var stepId: String }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }

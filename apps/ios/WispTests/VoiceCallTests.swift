@@ -5,7 +5,14 @@ import XCTest
 private final class FakeListener: CallListener {
   var starts = 0, stops = 0
   var failure: Error?
-  func start() async throws { starts += 1; if let failure { throw failure } }
+  /** hold the mic start open until `release`, like waiting on a permission */
+  var hold = false
+  var release: CheckedContinuation<Void, Never>?
+  func start() async throws {
+    starts += 1
+    if hold { await withCheckedContinuation { release = $0 } }
+    if let failure { throw failure }
+  }
   func stop() { stops += 1 }
 }
 
@@ -58,6 +65,33 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertEqual(listener.starts, 1)
   }
 
+  func testListenerCallbacksAfterTheCallIsGoneAreIgnored() async {
+    _ = await makeSession()
+    session = nil
+    await settle()
+    callbacks.level(0.5)
+    callbacks.partial("hello")
+    callbacks.final("hello")
+    callbacks.activity(true)
+    callbacks.error("late")
+  }
+
+  func testMuteWhileTheMicIsStartingTurnsItBackOff() async {
+    listener.hold = true
+    let s = VoiceCallSession(agentId: "a1", channelId: "c1", cloudListening: false,
+      listener: { [self] cb in callbacks = cb; return listener }, speaker: speaker,
+      send: { _ in }, messages: { [self] in list }, timing: CallTiming(filler: .seconds(30), longWork: .seconds(60), micHint: .seconds(60)))
+    session = s
+    let starting = Task { await s.start() }
+    await settle()
+    await s.mute(true)
+    let stopsAfterMute = listener.stops
+    listener.release?.resume()
+    await starting.value
+    XCTAssertEqual(listener.stops, stopsAfterMute + 1, "the late mic is switched off again")
+    XCTAssertFalse(s.state.ready)
+  }
+
   func testListenerFailureAsksForTheMicrophone() async {
     listener.failure = CallAudioError.microphoneDenied
     let s = await makeSession()
@@ -81,6 +115,47 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertTrue(s.state.speaking)
     speaker.end(); await settle()
     XCTAssertFalse(s.state.speaking)
+  }
+
+  func testFirstSentenceIsSpokenWhileWorkingAndOnlyTheRestAfter() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    XCTAssertEqual(s.state.phase, .thinking)
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "tool_call", text: nil, tool: "Read", file: "/a/b/main.ts"))
+    XCTAssertEqual(s.state.phase, .working)
+    XCTAssertEqual(s.state.activity, "Reading main.ts")
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "text", text: "It exports one function. And", tool: nil, file: nil))
+    await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function."])
+    XCTAssertEqual(s.state.phase, .speaking)
+    speaker.end(); await settle()
+    list = [msg("m2", body: "It exports one function. And it is small.\\n\\nMore.", at: 2)]
+    s.sync(); await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function.", "And it is small."])
+  }
+
+  func testTheFinishedReplyWaitsForTheFirstSentenceStillPlaying() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "text", text: "It exports one function. And", tool: nil, file: nil))
+    await settle()
+    let cancels = speaker.cancels
+    list = [msg("m2", body: "It exports one function. And it is small.\\n\\nMore.", at: 2)]
+    s.sync(); await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function."])
+    XCTAssertEqual(speaker.cancels, cancels)
+    speaker.end(); await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function.", "And it is small."])
+  }
+
+  func testAnotherTeamsStreamingDoesNotEnterTheCall() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    s.event(CallRunEvent(runId: "r9", agentId: "a1", channelId: "other", threadId: nil, type: "tool_call", text: nil, tool: "Read", file: "/a/x.ts"))
+    s.event(CallRunEvent(runId: "r9", agentId: "a1", channelId: "other", threadId: nil, type: "text", text: "Elsewhere. More", tool: nil, file: nil))
+    await settle()
+    XCTAssertEqual(s.state.activity, "")
+    XCTAssertTrue(speaker.said.isEmpty)
   }
 
   func testRepliesAreOnlySpokenOnce() async {
@@ -223,5 +298,64 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertEqual(wav.count, 144)
     XCTAssertEqual(String(decoding: wav.prefix(4), as: UTF8.self), "RIFF")
     XCTAssertEqual(String(decoding: wav[8..<12], as: UTF8.self), "WAVE")
+  }
+
+  // MARK: how the call looks
+
+  private func facts(_ state: CallState, offline: Bool = false, connected: Bool = true, showActivity: Bool = true) -> CallFacts {
+    CallFacts(state: state, offline: offline, connected: connected, showActivity: showActivity)
+  }
+
+  func testPhasesGetTheirOwnWords() {
+    XCTAssertEqual(CallFacts.phaseLabel(.connecting, paused: false), "Calling…")
+    XCTAssertEqual(CallFacts.phaseLabel(.hearing, paused: false), "Listening")
+    XCTAssertEqual(CallFacts.phaseLabel(.working, paused: false), "Working")
+    XCTAssertEqual(CallFacts.phaseLabel(.listening, paused: true), "Paused")
+    XCTAssertEqual(CallFacts.clock(26), "0:26")
+    XCTAssertEqual(CallFacts.clock(605), "10:05")
+  }
+
+  func testActivityLineShowsOnlyWhileWorkingAndWhenWanted() {
+    var state = CallState(); state.ready = true; state.startedAt = Date(); state.waiting = true; state.activity = "Reading main.ts"
+    XCTAssertEqual(facts(state).activity, "Reading main.ts")
+    XCTAssertEqual(facts(state, showActivity: false).activity, "")
+    state.activity = ""
+    XCTAssertEqual(facts(state).phase, .thinking)
+    XCTAssertEqual(facts(state).activity, "")
+  }
+
+  func testLostMicrophonePausedAndFailedCallsLookDifferent() {
+    var live = CallState(); live.ready = true; live.startedAt = Date()
+    var mic = live; mic.ready = false; mic.needsMic = true
+    XCTAssertTrue(facts(mic).micTrouble)
+    XCTAssertEqual(facts(mic).label, "Can't hear you yet")
+    var paused = live; paused.ready = false
+    XCTAssertTrue(facts(paused).paused)
+    XCTAssertEqual(facts(paused).label, "Paused")
+    var failed = CallState(); failed.error = "No key"
+    XCTAssertTrue(facts(failed).failed)
+    XCTAssertTrue(facts(live, connected: false).failed)
+    XCTAssertEqual(facts(live, connected: false).label, "Reconnecting…")
+    XCTAssertEqual(facts(CallState()).label, "Calling…")
+    XCTAssertTrue(facts(live, offline: true).offline)
+    XCTAssertFalse(facts(live, offline: true).failed)
+  }
+
+  func testCallPrefsFallBackToSensibleDefaults() {
+    let defaults = WispPreferences.standard
+    let keys = [CallPrefs.speedKey, CallPrefs.languageKey, CallPrefs.activityKey]
+    // put the device's real call settings back afterwards
+    let saved = keys.map { defaults.object(forKey: $0) }
+    defer { for (key, value) in zip(keys, saved) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+    for key in keys { defaults.removeObject(forKey: key) }
+    XCTAssertEqual(CallPrefs.speed, 1)
+    XCTAssertEqual(CallPrefs.language, "")
+    XCTAssertTrue(CallPrefs.showActivity)
+    defaults.set(7.0, forKey: CallPrefs.speedKey)
+    XCTAssertEqual(CallPrefs.speed, 1, "a speed the panel doesn't offer is ignored")
+    defaults.set(1.5, forKey: CallPrefs.speedKey)
+    XCTAssertEqual(CallPrefs.speed, 1.5)
+    XCTAssertEqual(CallPrefs.speedLabel(1.25), "1.25x")
+    XCTAssertEqual(CallPrefs.speedLabel(1), "1x")
   }
 }

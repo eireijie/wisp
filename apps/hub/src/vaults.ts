@@ -85,6 +85,19 @@ export class Vaults {
     for (const wsId of ids) await this.open(wsId);
   }
 
+  /** Close an organization's vault and delete its files (the organization was deleted). Never the first one's. */
+  async remove(workspaceId: string) {
+    if (this.isPrimary(workspaceId)) throw new Error("the first organization's memory can't be removed");
+    await this.opening.get(workspaceId)?.catch(() => {});
+    const o = this.others.get(workspaceId);
+    if (o) {
+      o.stopWatching();
+      o.db.close();
+      this.others.delete(workspaceId);
+    }
+    fs.rmSync(this.orgDir(workspaceId), { recursive: true, force: true });
+  }
+
   close() {
     for (const o of this.others.values()) {
       o.stopWatching();

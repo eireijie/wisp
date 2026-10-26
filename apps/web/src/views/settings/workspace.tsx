@@ -1,11 +1,12 @@
 import { isLocalOnlyHost } from "../../loopback.ts";
 import { useEffect, useState } from "react";
-import { Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
+import { Check, Download, KeyRound, Link2, MoreHorizontal, Pin, Plus, Trash2, UserMinus } from "lucide-react";
 import type { AccessRule, Agent, MemoryLevel, Subject } from "@wisp/core";
 import { api, getToken } from "../../api.ts";
 import { useStore, useTeams } from "../../store.ts";
 import { href } from "../../router.ts";
 import { originReach, shareOrigin, useAccess } from "../../access.ts";
+import { deleteOrg, listOrgs, type Org } from "../../orgs.ts";
 import { AgentAvatar, Button, CopyBlock, Field, IconButton, Input, Menu, Modal, Pill, UserAvatar, cx, timeAgo } from "../../components/ui.tsx";
 import { LEVEL_LABEL, folderPaths, pathLabel, subjectLabel } from "../../components/AccessDialog.tsx";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, Toggle, useSavedFlash } from "./parts.tsx";
@@ -25,35 +26,107 @@ export function GeneralPage() {
     <>
       <PageHeader title="Workspace">The organization everyone here shares.</PageHeader>
       <OwnersOnly show={!isOwner} />
-      <Section title="Organization name">
-        <form
-          className="flex flex-wrap items-center gap-2 max-w-md"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError(null);
-            try {
-              await api("PATCH", "/api/workspace", { name: name.trim() });
-              await useStore.getState().load();
-              flash();
-            } catch (err) {
-              setError((err as Error).message);
-            }
-          }}
-        >
-          <Input className="flex-1 min-w-48" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required />
-          {isOwner && (
+      <form
+        className="mb-7"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setError(null);
+          try {
+            await api("PATCH", "/api/workspace", { name: name.trim() });
+            await useStore.getState().load();
+            flash();
+          } catch (err) {
+            setError((err as Error).message);
+          }
+        }}
+      >
+        <Card>
+          <label className="px-[18px] min-h-[54px] flex items-center gap-4">
+            <span className="text-[15px] w-40 shrink-0">Organization name</span>
+            <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Organization name" />
+          </label>
+          <Row label="Hub address" hint="Devices connect here, and so do agents running elsewhere through wisp-mcp. Access gives it an address that works from anywhere.">
+            <span className="text-sm text-muted break-all max-w-[240px] text-right">{shareOrigin(access).replace(/^https?:\/\//, "")}</span>
+          </Row>
+          <Row label="Your role">
+            <span className="text-sm text-muted">{isOwner ? "Owner" : me.role === "guest" ? "Guest" : "Member"}</span>
+          </Row>
+        </Card>
+        {isOwner && (
+          <div className="mt-3 flex items-center gap-3">
             <Button variant="primary" disabled={!name.trim() || name.trim() === me.workspace.name}>
-              Save
+              Save changes
             </Button>
-          )}
-          <SavedNote shown={saved} />
-        </form>
+            <SavedNote shown={saved} />
+          </div>
+        )}
         {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-      </Section>
-      <Section title="Hub address" description="Devices connect here (Devices → Add device), and so do agents running elsewhere through wisp-mcp. Settings → Devices → Access gives it an address that works from anywhere.">
-        <CopyBlock text={shareOrigin(access)} />
-      </Section>
+      </form>
+      {isOwner && <DeleteOrgSection />}
     </>
+  );
+}
+
+function DeleteOrgSection() {
+  const [orgs, setOrgs] = useState<Org[] | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    listOrgs().then(setOrgs);
+  }, []);
+  const current = orgs?.find((o) => o.current);
+  // a hub without organizations, or still loading
+  if (!orgs || !current) return null;
+  return (
+    <Section title="Delete organization" description="Removes its agents, teams, messages, devices, computers and memory for everyone in it. This can't be undone.">
+      {current.canDelete ? (
+        <Button variant="danger" onClick={() => setOpen(true)}>
+          <Trash2 size={14} /> Delete {current.name}
+        </Button>
+      ) : (
+        <p className="text-sm text-muted">{orgs.length > 1 ? "This is the first organization on this Wisp, so it can't be deleted." : "This is your only organization. Make or join another one before deleting it."}</p>
+      )}
+      {open && <DeleteOrg org={current} onClose={() => setOpen(false)} />}
+    </Section>
+  );
+}
+
+function DeleteOrg({ org, onClose }: { org: Org; onClose: () => void }) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal title={`Delete ${org.name}?`} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            await deleteOrg(org.id, typed);
+          } catch (err) {
+            setError((err as Error).message);
+            setBusy(false);
+          }
+        }}
+      >
+        <p className="text-sm text-muted">
+          {org.agents} agent{org.agents === 1 ? "" : "s"}, every team and all of its memory are deleted, and {org.members > 1 ? `the ${org.members - 1} other ${org.members === 2 ? "person" : "people"} in it lose access` : "nobody else is affected"}. You'll move to another organization.
+        </p>
+        <Field label={`Type ${org.name} to confirm`}>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
+        </Field>
+        {error && <p className="text-sm text-bad">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="danger" disabled={busy || typed.trim() !== org.name}>
+            {busy ? "Deleting…" : "Delete organization"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -295,7 +368,7 @@ function ResetPassword({ person, onClose }: { person: { id: string; name: string
 
 // --- Agents -----------------------------------------------------------------------------------
 
-interface AgentPolicy {
+export interface AgentPolicy {
   askBefore: string[];
   maxHops: number;
   maxRunsPerMinute: number;
@@ -305,7 +378,7 @@ interface AgentPolicy {
   maxAgentMade: number;
 }
 
-const ASK: [string, string, string][] = [
+export const ASK: [string, string, string][] = [
   ["send", "Sending email or messages outside Wisp", "Email, texts, Slack, DMs on other sites"],
   ["spend", "Buying or paying for anything", "Orders, subscriptions, upgrades, ads"],
   ["delete", "Deleting files, data or accounts", "Anything that can't be undone"],
@@ -379,45 +452,35 @@ export function AgentsPolicyPage() {
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
       <WorkspaceLead isOwner={isOwner} />
-      <Section title="Ask before" description="Checked actions need your OK (Approve / Deny in the conversation). If you ask Nova to email Sam, it just does it. If it decides on its own to email someone, it asks first.">
+      <Section title="Ask before" description="When an agent is about to do one of these on its own, it asks you first in Inbox and in the chat. You can approve or say not now. If you ask it to do one, it just does it.">
         <Card>
           {ASK.map(([k, label, hint]) => (
-            <label key={k} className={cx("px-4 py-3 flex items-start gap-3", isOwner && "cursor-pointer")}>
-              <input
-                type="checkbox"
-                className="mt-1"
-                disabled={!isOwner}
-                checked={p.askBefore.includes(k)}
-                onChange={(e) => save({ askBefore: e.target.checked ? [...p.askBefore, k] : p.askBefore.filter((x) => x !== k) })}
-              />
-              <span>
-                <span className="block text-sm font-medium">{label}</span>
-                <span className="block text-xs text-muted">{hint}</span>
-              </span>
-            </label>
+            <Row key={k} label={label} hint={hint}>
+              <Toggle on={p.askBefore.includes(k)} disabled={!isOwner} label={label} onChange={(on) => save({ askBefore: on ? [...p.askBefore, k] : p.askBefore.filter((x) => x !== k) })} />
+            </Row>
           ))}
         </Card>
       </Section>
-      <Section title="New agents">
+      <Section title="New agents" description="What a new agent may do where its AI tool runs directly on a device. Inside its own computer an agent always has full access; the computer is its sandbox.">
         <Card>
-          <Row label="Access on their device" hint="What a new agent may do with files and commands where its harness runs directly on a device. Inside its own VM an agent always has full access; the VM is its sandbox.">
-            <Segmented
-              label="Access for new agents"
-              value={p.defaultAccess}
-              disabled={!isOwner}
-              onChange={(v) => save({ defaultAccess: v })}
-              options={[
-                ["read-only", "Read only"],
-                ["edit", "Edit"],
-                ["full", "Full"],
-              ]}
-            />
-          </Row>
+          {(
+            [
+              ["read-only", "Read only", "Can look at files, can't change them"],
+              ["edit", "Can edit files", "Can change files, can't run commands"],
+              ["full", "Full access", "Files and commands on the device"],
+            ] as const
+          ).map(([v, label, hint]) => (
+            <button key={v} type="button" role="radio" aria-checked={p.defaultAccess === v} disabled={!isOwner} onClick={() => save({ defaultAccess: v })} className="w-full text-left disabled:opacity-60 hover:bg-hover">
+              <Row label={label} hint={hint}>
+                {p.defaultAccess === v && <Check size={18} className="text-badge" aria-hidden />}
+              </Row>
+            </button>
+          ))}
         </Card>
       </Section>
       <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">
         <Card>
-          <Row label="Leads can create agents" hint="A channel's lead can create an agent its team is missing. It joins the team chart under the lead.">
+          <Row label="Leads can create agents" hint="A team's lead can create an agent its team is missing. It joins the team chart under the lead.">
             <Toggle on={p.leadsCreateAgents} onChange={(v) => save({ leadsCreateAgents: v })} label="Leads can create agents" disabled={!isOwner} />
           </Row>
           <Row label="Those agents can make sub-agents" hint={p.leadsCreateAgents ? "An agent a lead made can make sub-agents for pieces of its own work, up to 3 levels down." : "Needs “Leads can create agents” on first."}>
@@ -445,8 +508,8 @@ export function AgentsPolicyPage() {
               ))}
             </Select>
           </Row>
-          <Row label="Agent runs per channel per minute" hint="A ceiling on how busy one conversation can get.">
-            <Select label="Agent runs per channel per minute" value={String(p.maxRunsPerMinute)} disabled={!isOwner} onChange={(v) => save({ maxRunsPerMinute: Number(v) })}>
+          <Row label="Agent runs per team per minute" hint="A ceiling on how busy one conversation can get.">
+            <Select label="Agent runs per team per minute" value={String(p.maxRunsPerMinute)} disabled={!isOwner} onChange={(v) => save({ maxRunsPerMinute: Number(v) })}>
               {[5, 10, 20, 40, 60, 100, 200].map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -673,7 +736,7 @@ export function ComputersPage() {
           Computers
         </a>{" "}
         and{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
+        <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
           Devices
         </a>
         .
@@ -880,7 +943,7 @@ export function DataPage() {
               <Row label="What is inside" hint={`${info.notes} notes, ${info.messages} messages, ${info.files} files and ${info.agents} agents.`} />
             </Card>
             <ul className="mt-3 list-disc pl-5 text-sm text-muted space-y-1">
-              <li><code className="text-xs">wisp.db</code>: people, channels, messages, agents, tasks, routines and settings.</li>
+              <li><code className="text-xs">wisp.db</code>: people, teams, messages, agents, tasks, routines and settings.</li>
               <li><code className="text-xs">vault/</code>: your memory notes.</li>
               <li><code className="text-xs">files/</code>: files people uploaded.</li>
             </ul>
@@ -929,7 +992,7 @@ export function DataPage() {
               </Button>
             </Row>
           )}
-          <Row label="Download conversations (JSON, for developers)" hint="Every channel and DM you can see. JSON is a data format for programs, not for reading.">
+          <Row label="Download conversations (JSON, for developers)" hint="Every team and chat you can see. JSON is a data format for programs, not for reading.">
             <Button disabled={!!busy} onClick={() => download("/api/export/conversations.json", `wisp-conversations-${day}.json`)}>
               <Download size={14} /> {busy === "/api/export/conversations.json" ? "Preparing…" : "Download"}
             </Button>

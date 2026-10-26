@@ -39,6 +39,10 @@ struct AgentNode: Decodable, Identifiable, Hashable {
   var capabilities: DeviceCapabilities?
   /** the remote desktop app its owner uses to reach it; only they get it */
   var remoteDesktop: OwnRemoteDesktop?
+  /** a Wisp update in progress on the device (idle, updating, restarting or failed) */
+  struct Update: Decodable, Hashable { var state: String; var message: String? }
+  var update: Update?
+  var isUpdating: Bool { update?.state == "updating" || update?.state == "restarting" }
   var usable: Bool { mine == true || shared == true }
 }
 
@@ -56,6 +60,14 @@ struct AgentModels: Decodable {
     let selected = catalog.models.first { $0.id == (model.isEmpty ? catalog.defaultModel : model) }
     let efforts = selected?.efforts ?? catalog.efforts
     return ["effort": .nullable(efforts.contains(effort) ? effort : ""), "fast": AnyEncodable(fast && selected?.fast != nil)]
+  }
+
+  /** The update that sets a model with its effort and fast mode; without a catalog, resetting to the default model still clears the effort. */
+  static func modelFields(_ models: AgentModels?, model: String, effort: String, fast: Bool) -> Fields {
+    var fields: Fields = ["model": .nullable(model)]
+    if let settings = models?.settings(model: model, effort: effort, fast: fast) { fields["settings"] = AnyEncodable(settings) }
+    else if model.isEmpty && effort.isEmpty { fields["settings"] = AnyEncodable(["effort": AnyEncodable.nullable(""), "fast": AnyEncodable(fast)]) }
+    return fields
   }
 }
 
@@ -77,6 +89,10 @@ struct AgentRun: Decodable, Identifiable {
   var error: String?
   var hint: String?
   var createdAt: String?
+  var finishedAt: String?
+  var kind: String?
+  var channelId: String?
+  var threadId: String?
 }
 
 struct HarnessState: Decodable {
@@ -99,6 +115,12 @@ enum ManagementText {
     String(text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "[^a-z0-9_-]+", with: "-", options: .regularExpression)
       .trimmingCharacters(in: CharacterSet(charactersIn: "-")).prefix(80))
+  }
+
+  /** What a handle field keeps while typing: a trailing dash stays so `release-bot` can be typed. */
+  static func typingHandle(_ text: String) -> String {
+    String(text.lowercased().replacingOccurrences(of: "[^a-z0-9-]+", with: "-", options: .regularExpression)
+      .replacingOccurrences(of: "^[^a-z]+", with: "", options: .regularExpression).prefix(32))
   }
 
   static func handle(_ text: String) -> String {

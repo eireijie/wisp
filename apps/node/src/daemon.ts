@@ -18,6 +18,7 @@ import { HarnessLogins } from "./harness-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
+import { agentFolder } from "./agent-dir.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
 
 const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
@@ -83,6 +84,7 @@ export class NodeDaemon {
   private sessions: Record<string, string>;
   private api: WispClient;
   private catalog: Promise<HarnessCatalog[]> | null = null;
+  private catalogIncomplete = false;
   private registry: Record<string, HarnessAdapter>;
   readonly computers: ComputerHost;
   private tunnels = new Map<string, Tunnel>();
@@ -512,12 +514,12 @@ export class NodeDaemon {
     }
 
     // an agent with a VM here works in the folder it shares with the VM, so files go both ways
-    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agent.handle);
+    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
     fs.mkdirSync(cwd, { recursive: true });
     // coding tasks run in their own checkout of the team repo, on the task's branch
     if (run.workspace) {
       try {
-        cwd = inside ? await prepareClone(this.cfg.dir, vm!.filesDir, run.workspace) : await prepareCheckout(this.cfg.dir, agent.handle, run.workspace);
+        cwd = inside ? await prepareClone(this.cfg.dir, vm!.filesDir, run.workspace) : await prepareCheckout(this.cfg.dir, agentFolder(this.cfg.dir, agent), run.workspace);
         this.send({ type: "run_event", runId: run.runId, event: { type: "status", text: `Working in ${run.workspace.mode === "work" ? "" : "a read-only checkout of "}branch ${run.workspace.branch}` } });
       } catch (err) {
         return this.send({ type: "run_failed", runId: run.runId, error: `couldn't set up the repo: ${(err as Error).message}` });
@@ -685,6 +687,10 @@ export class NodeDaemon {
     };
     const withAccounts = (s: HarnessSettings, account = "default"): HarnessSettings => ({ ...s, account, accounts: this.accounts.list(s.harness), multiAccount: HarnessAccounts.supports(s.harness), agentAccounts: this.accounts.agentAccounts() });
     if (msg.type === "harness_settings") {
+      if (this.catalogIncomplete) {
+        this.catalog = null;
+        void this.harnessCatalog().then((catalog) => this.send({ type: "catalog", catalog }));
+      }
       const installed = new Set((await this.harnessCatalog()).map((c) => c.harness));
       const here = await Promise.all(SETTINGS_HARNESSES.map(async (id) => installed.has(id) || (await harnessConfigured(id, base))));
       const ids = SETTINGS_HARNESSES.filter((id, i) => (msg.harness ? id === msg.harness : here[i]));
@@ -747,7 +753,12 @@ export class NodeDaemon {
           return null;
         }
       }),
-    ).then((list) => list.filter((c): c is HarnessCatalog => !!c && c.version !== null));
+    ).then((list) => {
+      const found = list.filter((c): c is HarnessCatalog => !!c && c.version !== null);
+      // Codex listing no models (offline or not signed in at start-up) is asked again when settings are opened
+      this.catalogIncomplete = found.some((c) => c.models.length === 0 && c.harness === "codex");
+      return found;
+    });
     return this.catalog;
   }
 

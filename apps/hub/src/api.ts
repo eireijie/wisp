@@ -26,6 +26,8 @@ import {
   teamChain,
   teamProblem,
   chartFromSteps,
+  migrateTeam,
+  migrateTemplate,
   hasSteps,
   MAX_ROUNDS_LIMIT,
   layoutSteps,
@@ -60,6 +62,7 @@ import { registerJoinApi } from "./join.ts";
 import { registerPairingApi } from "./pairing.ts";
 import { registerReachApi } from "./api-reach.ts";
 import { registerLoginsApi } from "./api-logins.ts";
+import { registerTeamDraftApi } from "./team-drafts.ts";
 import { registerRemoteMcp } from "./remote-mcp.ts";
 import { agentPolicy } from "./policy.ts";
 import { FEATURE_PRESET, createOrganization, registerOrgApi } from "./api-orgs.ts";
@@ -487,8 +490,10 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const reads = c.actor.kind === "user" ? store.readState(c.actor.id, ids) : {};
     const prefs = c.actor.kind === "user" ? store.channelPrefs(c.actor.id) : {};
     const pins = store.pinnedIds(ids);
+    const lasts = store.lastMessages(ids);
     return list.map((ch) => ({
       ...ch,
+      last: lasts[ch.id] ?? null,
       joined: store.isMember(ch.id, c.actor),
       memberCount: counts[ch.id] ?? 0,
       unread: reads[ch.id]?.unread ?? 0,
@@ -525,16 +530,30 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       .array(
         z.object({
           id: z.string().trim().min(1).max(60),
-          roleId: z.string().min(1).max(60),
-          kind: z.enum(["do", "review", "hand_out"]),
+          // older teams name a role; steps made in the flow chart builder name their agent
+          roleId: z.string().max(60).default(""),
+          kind: z.enum(["do", "review", "hand_out", "ask", "handoff", "branch", "custom"]),
           action: z.string().trim().max(200),
-          next: z.string().nullable(),
+          next: z.string().nullable().default(null),
+          nexts: z.array(z.string()).max(40).optional(),
+          inputs: z.array(z.string()).max(40).optional(),
+          agentId: z.string().nullable().optional(),
+          prompt: z.string().max(8000).optional(),
+          harness: z.string().max(60).optional(),
           sendBackTo: z.string().nullable().optional(),
           maxRounds: z.number().int().min(1).max(MAX_ROUNDS_LIMIT).optional(),
           handTo: z.array(z.string()).max(20).optional(),
           reviewBy: z.string().nullable().optional(),
-          x: z.number().finite(),
-          y: z.number().finite(),
+          show: z.string().max(2000).optional(),
+          notifyPhone: z.boolean().optional(),
+          handoffTo: z.string().nullable().optional(),
+          waitForReply: z.boolean().optional(),
+          condition: z.string().max(500).optional(),
+          rule: z.object({ op: z.enum(["contains", "not_contains", "starts_with", "equals"]), value: z.string().max(500) }).nullable().optional(),
+          ifTrue: z.string().nullable().optional(),
+          ifFalse: z.string().nullable().optional(),
+          x: z.number().finite().default(0),
+          y: z.number().finite().default(0),
         }),
       )
       .max(40)
@@ -543,11 +562,16 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   const CHANNEL_SETTINGS = z.object({ defaultAgentId: z.string().nullable(), replyInThread: z.boolean(), instructions: z.string().max(4_000), team: CHANNEL_TEAM.nullable() }).partial();
   const ours = (c: Caller, agentId: string) => store.agent(agentId)?.workspaceId === c.workspaceId;
   /** What's wrong with the settings (an agent from elsewhere, a chart that doesn't work), or null. */
-  const settingsProblem = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined): string | null => {
+  const settingsProblem = (c: Caller, settings: z.infer<typeof CHANNEL_SETTINGS> | undefined, current?: ChannelTeam | null, selfId?: string): string | null => {
     if (settings?.defaultAgentId && !ours(c, settings.defaultAgentId)) return "agent not found";
     const team = settings?.team;
     if (!team) return null;
-    if (team.nodes.some((n) => !ours(c, n.agentId)) || (team.reportsTo && !ours(c, team.reportsTo)) || team.roles?.some((r) => r.agentId && !ours(c, r.agentId))) return "agent not found";
+    if (team.nodes.some((n) => !ours(c, n.agentId)) || (team.reportsTo && !ours(c, team.reportsTo)) || team.roles?.some((r) => r.agentId && !ours(c, r.agentId)) || team.steps?.some((s) => s.agentId && !ours(c, s.agentId))) return "agent not found";
+    // a hand-off someone else set up stays as it was; only new or changed ones must be to a team this person can see
+    const handoff = team.steps?.find((s) => s.handoffTo && !channelVisible(c, s.handoffTo!) && current?.steps?.find((o) => o.id === s.id)?.handoffTo !== s.handoffTo);
+    // saving refuses a hand-off to the team itself; one an older save already holds still loads (the run-time depth guard covers it)
+    if (selfId && team.steps?.some((s) => s.handoffTo === selfId && current?.steps?.find((o) => o.id === s.id)?.handoffTo !== selfId)) return "A team can't hand work to itself.";
+    if (handoff) return "a step hands work to a team that isn't here";
     return team.nodes.length || !(team.folder || team.repo) ? teamProblem(team) : null;
   };
   /** Everyone on a channel's team (and the agent that answers there) is in the channel. */
@@ -575,8 +599,13 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     };
   };
   /** A stepped team's plain chart always follows its roles, so the rest of Wisp sees who's on it. */
-  const withChart = <T extends z.infer<typeof CHANNEL_TEAM>>(team: T): T => (hasSteps(team) ? { ...team, ...chartFromSteps(team, team.nodes) } : team);
-  /** Channels that can't be archived, made private or deleted: where everyone lands. */
+  const withChart = <T extends z.infer<typeof CHANNEL_TEAM>>(team: T): T => {
+    if (!hasSteps(team)) return team;
+    // steps always carry all their arrows (older apps send only `next`), so every app can read them
+    const graph = migrateTeam(team as unknown as ChannelTeam) as unknown as T;
+    return { ...graph, ...chartFromSteps(graph as unknown as ChannelTeam, graph.nodes) };
+  };
+  /** #general stays public, so everyone in the workspace can still find it. It can be archived or deleted like any other channel. */
   const protectedReason = (_c: Caller, ch: { id: string; name: string }, what: string) => (ch.name === "general" ? `#general can't be ${what}: everyone in the workspace lands there` : null);
   /** A team that just got a memory folder gets a starter brief there. */
   const briefFor = async (c: Caller, channelName: string, folder: string | undefined) => {
@@ -591,9 +620,11 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const c = need(req, reply, { member: true });
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
-    if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
+    if (!ch) return reply.code(404).send({ error: "channel not found" });
     const body = parse(z.object({ name: CHANNEL_NAME, topic: z.string().max(250), sectionId: z.string().nullable(), private: z.boolean(), settings: CHANNEL_SETTINGS }).partial(), req.body, reply);
     if (!body) return;
+    // a chat with an agent can only be filed in a section (the chats list's Move to section); nothing else about it changes
+    if (ch.kind !== "channel" && (Object.keys(body).some((k) => k !== "sectionId") || !store.isMember(ch.id, c.actor))) return reply.code(404).send({ error: "channel not found" });
     if (body.sectionId && store.section(body.sectionId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown section" });
     if (body.name && body.name !== ch.name && store.channelByName(c.workspaceId, body.name)) return reply.code(409).send({ error: "channel exists" });
     if (body.name && body.name !== ch.name && ch.name === "general") return reply.code(409).send({ error: "#general can't be renamed: everyone in the workspace lands there" });
@@ -604,7 +635,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       if (onTeam.size !== sent.size || [...sent].some((a) => !onTeam.has(a))) return reply.code(409).send({ error: "This team runs on roles and steps. Change who's on it from the channel's Team tab in the web app." });
     }
     if (body.settings?.team) body.settings.team = withChart(keepTeamExtras(body.settings.team, ch.settings.team));
-    const problem = settingsProblem(c, body.settings);
+    const problem = settingsProblem(c, body.settings, ch.settings.team, ch.id);
     if (problem) return reply.code(400).send({ error: problem });
     if (body.private && !ch.private) {
       const why = protectedReason(c, ch, "made private");
@@ -673,14 +704,12 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     });
   }
 
-  /** Delete a channel and everything said in it (and its team). Not DMs or #general. */
+  /** Delete a channel and everything said in it (and its team). Not DMs. */
   app.delete("/api/channels/:id", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch || ch.kind !== "channel") return reply.code(404).send({ error: "channel not found" });
-    const why = protectedReason(c, ch, "deleted");
-    if (why) return reply.code(409).send({ error: why });
     // stop what's going on in it first, so nothing finishes into a channel that's gone
     for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
     for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);
@@ -721,8 +750,6 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const body = parse(z.object({ archived: z.boolean().default(true) }), req.body ?? {}, reply);
     if (!body) return;
     if (body.archived) {
-      const why = protectedReason(c, ch, "archived");
-      if (why) return reply.code(409).send({ error: why });
       // nothing keeps working into a channel nobody's looking at
       for (const d of store.discussions(c.workspaceId, { channelId: ch.id })) if (d.status !== "done" && d.status !== "cancelled") store.updateDiscussion(d.id, { status: "cancelled" });
       for (const r of db.prepare("SELECT id FROM runs WHERE channel_id = ? AND status IN ('queued', 'running')").all(ch.id) as { id: string }[]) hub.cancelRun(r.id);
@@ -967,7 +994,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     if (ch.archivedAt) return reply.code(409).send({ error: `#${ch.name} is archived; unarchive it to post here` });
-    const body = parse(z.object({ body: z.string().max(40_000), voice: z.boolean().optional(), threadId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
+    const body = parse(z.object({ body: z.string().max(40_000), voice: z.boolean().optional(), threadId: z.string().nullable().optional(), replyToId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
     if (!body) return;
     const files = body.fileIds.map((fid) => store.file(fid)).filter((f) => f && f.workspaceId === c.workspaceId);
     if (!body.body.trim() && !files.length) return reply.code(400).send({ error: "empty message" });
@@ -977,6 +1004,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const root = store.message(threadId);
       if (!root || root.channelId !== ch.id) return reply.code(400).send({ error: "thread not in channel" });
     }
+    // a reply quotes a message from the same channel
+    const replyToId = body.replyToId ?? null;
+    if (replyToId && store.message(replyToId)?.channelId !== ch.id) return reply.code(400).send({ error: "reply target not in channel" });
     // An agent posting mid-run continues that run's hop count so loops stay bounded.
     let hop = 0;
     if (c.actor.kind === "agent") {
@@ -984,7 +1014,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       hop = (running?.hop ?? 0) + 1;
     }
     store.addChannelMember(ch.id, c.actor);
-    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
+    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, replyToId, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
   });
 
   app.post("/api/runs/:id/cancel", async (req, reply) => {
@@ -1097,7 +1127,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const defaults = useDefaults ? agentDefaults(store, c.workspaceId) : null;
     if (defaults) {
       fields.harness ??= defaults.harness ?? undefined;
-      if (fields.model === undefined && fields.harness === defaults.harness) fields.model = defaults.model;
+      if (fields.model === undefined) fields.model = defaults.models[fields.harness ?? ""] ?? (fields.harness === defaults.harness ? defaults.model : undefined);
       if (fields.nodeId === undefined && defaults.nodeId && canUseDevice(c, defaults.nodeId)) fields.nodeId = defaults.nodeId;
     }
     const harness = fields.harness;
@@ -1143,7 +1173,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const body = parse(
       z
-        .object({ name: z.string().min(1).max(80), harness: HARNESS, model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
+        .object({ name: z.string().min(1).max(80), handle: HANDLE, harness: HARNESS, model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
         .partial(),
       req.body,
       reply,
@@ -1164,6 +1194,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const name = store.user(owner)?.name ?? "its owner";
       return reply.code(403).send({ error: `@${agent.handle} ${owner === deviceOwnerOf(agent) ? "runs" : "would run"} directly on ${name}'s device, so only ${name} can ${owner === deviceOwnerOf(agent) ? "change it" : "make that change"}` });
     }
+    if (body.handle && body.handle !== agent.handle && store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && body.computerId !== agent.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
@@ -1660,16 +1691,19 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (c.actor.kind !== "user") return reply.code(403).send({ error: "a person decides this" });
     const f = hub.flows.flow((req.params as { id: string }).id);
     if (!f || f.workspaceId !== c.workspaceId || !channelVisible(c, f.channelId)) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ action: z.enum(["approve", "retry", "stop"]) }), req.body, reply);
+    const body = parse(z.object({ action: z.enum(["approve", "retry", "stop", "changes"]), stepId: z.string().optional(), note: z.string().max(4000).optional() }), req.body, reply);
     if (!body) return;
-    if (f.status !== "waiting" && (body.action !== "stop" || f.status !== "running")) return reply.code(409).send({ error: f.status === "running" ? "it's still running; only Stop works now" : `it's already ${f.status === "done" ? "done" : "stopped"}` });
-    return hub.flows.decide(f.id, body.action);
+    if (f.status !== "waiting" && f.status !== "running") return reply.code(409).send({ error: `it's already ${f.status === "done" ? "done" : "stopped"}` });
+    const lane = body.stepId ? f.lanes?.[body.stepId] : Object.values(f.lanes ?? {}).find((l) => l.status === "waiting");
+    if (body.action !== "stop" && lane?.status !== "waiting") return reply.code(409).send({ error: "it's still running; only Stop works now" });
+    if (body.action === "changes" && lane?.waitingFor?.options !== "ask") return reply.code(409).send({ error: "only an ask-me step can be sent back with changes" });
+    return hub.flows.decide(f.id, body.action, { stepId: body.stepId, note: body.note, by: c.actor.id });
   });
 
   /** Team templates people saved from their own teams (the built-in ones live in core). */
   const ownTemplates = (workspaceId: string): TeamTemplate[] => {
     try {
-      return JSON.parse(store.setting(workspaceId, "team_templates") ?? "[]") as TeamTemplate[];
+      return (JSON.parse(store.setting(workspaceId, "team_templates") ?? "[]") as TeamTemplate[]).map(migrateTemplate);
     } catch {
       return [];
     }
@@ -1716,13 +1750,15 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     }
     const body = parse(
       z.object({
-        roles: z.array(z.object({ name: z.string().trim().min(1).max(60), description: z.string().max(4000), agent: z.string().min(1) })).min(1).max(30),
+        roles: z.array(z.object({ name: z.string().trim().min(1).max(60), description: z.string().max(4000), agent: z.string().min(1) })).max(30).default([]),
         steps: z
           .array(
             z.object({
-              role: z.string().min(1),
-              kind: z.enum(["do", "review", "hand_out"]).default("do"),
+              role: z.string().default(""),
+              kind: z.enum(["do", "review", "hand_out", "ask"]).default("do"),
               action: z.string().trim().min(1).max(200),
+              prompt: z.string().max(8000).optional(),
+              inputs: z.array(z.number().int().min(1)).max(40).optional(),
               send_back_to: z.number().int().min(1).optional(),
               max_rounds: z.number().int().min(1).max(MAX_ROUNDS_LIMIT).optional(),
               hand_to: z.array(z.string()).optional(),
@@ -1744,18 +1780,23 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       roles.push({ id: `role-${i + 1}`, name: r.name, description: r.description, agentId: a.id });
     }
     const roleId = (name: string | undefined) => (name ? roles.find((r) => key(r.name) === key(name))?.id : undefined);
+    // with `inputs` the steps form a flow chart (steps without inputs start together); without, they follow one another
+    const chained = !body.steps.some((s) => s.inputs);
     const steps = body.steps.map((s, i) => ({
       id: `step-${i + 1}`,
       roleId: roleId(s.role) ?? "",
       kind: s.kind,
       action: s.action,
-      next: i + 1 < body.steps.length ? `step-${i + 2}` : null,
+      ...(s.prompt ? { prompt: s.prompt } : {}),
+      next: chained && i + 1 < body.steps.length ? `step-${i + 2}` : null,
+      ...(chained ? {} : { inputs: (s.inputs ?? []).map((n) => `step-${n}`) }),
+      ...(s.kind === "ask" && s.send_back_to ? { sendBackTo: `step-${s.send_back_to}` } : {}),
       ...(s.kind === "review" ? { sendBackTo: `step-${s.send_back_to ?? Math.max(1, i)}`, maxRounds: s.max_rounds } : {}),
       ...(s.kind === "hand_out" ? { handTo: (s.hand_to ?? []).map((n) => roleId(n) ?? n), reviewBy: roleId(s.review_by) ?? null, maxRounds: s.max_rounds } : {}),
       x: 0,
       y: 0,
     }));
-    const missing = body.steps.find((s) => !roleId(s.role));
+    const missing = body.steps.find((s) => s.kind !== "ask" && !roleId(s.role));
     if (missing) return reply.code(400).send({ error: `no role called ${missing.role}` });
     const team = withChart({ ...(ch.settings.team ?? { nodes: [], edges: [] }), roles, steps: layoutSteps(steps) });
     const problem = teamProblem(team);
@@ -2241,6 +2282,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
   registerPairingApi(app, hub, { need, parse });
   registerReachApi(app, hub, { need, parse });
   registerLoginsApi(app, hub, { need, parse, requesterOf });
+  registerTeamDraftApi(app, hub, { need, parse });
   registerRemoteMcp(app, hub, { need, parse, deviceOwnerOf });
 
   // --- websockets -------------------------------------------------------------

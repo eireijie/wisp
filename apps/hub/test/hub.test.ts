@@ -186,6 +186,27 @@ describe("hub", () => {
     expect((await api("GET", "/api/onboarding")).data.firstReply.agentId).toBe(atlas.id);
   });
 
+  it("stores a reply reference, returns the quote, and gives agents the quoted context", async () => {
+    const orig = (await api<Message>("POST", `/api/channels/${general}/messages`, { body: "the original remark" })).data;
+    const sent = (await api<Message>("POST", `/api/channels/${general}/messages`, { body: "@atlas what do you think?", replyToId: orig.id })).data;
+    expect(sent.replyToId).toBe(orig.id);
+    expect(sent.replyTo).toMatchObject({ id: orig.id, snippet: "the original remark", author: { kind: "user" } });
+    const listed = (await channelMessages()).find((m) => m.id === sent.id)!;
+    expect(listed.replyToId).toBe(orig.id);
+    expect(listed.replyTo?.snippet).toBe("the original remark");
+    await waitFor(async () => (await channelMessages()).find((m) => m.author.id === atlas.id && m.body.includes("what do you think?")));
+    const run = node.runs.at(-1)!;
+    expect(run.type === "run" && run.run.prompt).toContain(`replies to`);
+    expect(run.type === "run" && run.run.prompt).toContain("the original remark");
+    // a plain message has no reference; a target from another channel is refused
+    expect((await channelMessages()).find((m) => m.id === orig.id)!.replyToId).toBeUndefined();
+    const other = (await api("POST", "/api/channels", { name: "reply-other" })).data.id;
+    expect((await api("POST", `/api/channels/${other}/messages`, { body: "x", replyToId: orig.id })).status).toBe(400);
+    // deleting the original leaves the quote, marked deleted
+    await api("DELETE", `/api/messages/${orig.id}`);
+    expect((await channelMessages()).find((m) => m.id === sent.id)!.replyToId).toBe(orig.id);
+  });
+
   it("lets agents wake each other up", async () => {
     await api("POST", `/api/channels/${general}/messages`, { body: "@atlas please ask nova" });
     const fromNova = await waitFor(async () => (await channelMessages()).find((m) => m.author.id === nova.id));
@@ -748,6 +769,14 @@ describe("agent settings", () => {
     expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { effort: "high; rm -rf /" } })).status).toBe(400);
   });
 
+  it("renames an agent's handle unless another agent has it", async () => {
+    const original = nova.handle;
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { handle: atlas.handle })).status).toBe(409);
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { handle: "Bad Handle" })).status).toBe(400);
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { handle: "nova-renamed" })).data.handle).toBe("nova-renamed");
+    await api("PATCH", `/api/agents/${nova.id}`, { handle: original });
+  });
+
   it("lets an agent refine its own soul unless the owner locks it", async () => {
     const asAtlas = { "x-wisp-agent": atlas.id };
     const soul = `agents/${atlas.id}/SOUL.md`;
@@ -798,11 +827,12 @@ describe("agent settings", () => {
 });
 
 describe("workspace features", () => {
-  it("reacts 👀 for the agent when it picks up a message", async () => {
+  it("doesn't react 👀 when an agent picks up a message (the working bubble says it)", async () => {
     const ch = (await api("POST", "/api/channels", { name: "eyes" })).data.id;
     const sent = (await api("POST", `/api/channels/${ch}/messages`, { body: "@nova ping" })).data;
-    const m = await waitFor(async () => (await api<{ messages: Message[] }>("GET", `/api/channels/${ch}/messages`)).data.messages.find((x) => x.id === sent.id && x.reactions?.length));
-    expect(m.reactions).toEqual([{ emoji: "👀", actors: [{ kind: "agent", id: nova.id }] }]);
+    await new Promise((r) => setTimeout(r, 300));
+    const m = (await api<{ messages: Message[] }>("GET", `/api/channels/${ch}/messages`)).data.messages.find((x) => x.id === sent.id);
+    expect(m?.reactions ?? []).toEqual([]);
   });
 
   it("toggles reactions and rejects non-emoji", async () => {

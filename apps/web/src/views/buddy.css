@@ -15,12 +15,16 @@ html.desk-buddy, .desk-buddy body, .desk-buddy #root {
 .buddy-stage[data-raised] .buddy-ghost { transform: translateY(-8px); }
 .buddy-bubble {
   position: absolute; bottom: 150px; left: 10px; right: 10px; padding: 12px 14px;
-  border: 1px solid var(--input); border-radius: 18px; background: var(--panel); color: var(--ink);
-  font-size: 12px; line-height: 1.4; text-align: left; overflow-wrap: anywhere; cursor: pointer;
+  border: 1px solid var(--control-line); border-radius: 24px; background: var(--panel); color: var(--ink);
+  font-size: 13px; line-height: 1.4; text-align: left; overflow-wrap: anywhere; display: flex; flex-direction: column;
   box-shadow: 0 5px 16px rgb(0 0 0 / 0.1), 0 1px 3px rgb(0 0 0 / 0.04);
   transform-origin: calc(100% - 57px) calc(100% + 7px);
   animation: buddy-pop 380ms both;
 }
+.buddy-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.buddy-chip { height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--control-line); background: var(--control); color: var(--ink); font: 500 12px inherit; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.buddy-chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.buddy-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .buddy-bubble-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .buddy-author { display: block; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .buddy-review { flex-shrink: 0; padding: 2px 7px; border-radius: 99px; font-size: 10px; font-weight: 600; line-height: 1.4; }

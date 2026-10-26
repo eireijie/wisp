@@ -43,6 +43,8 @@ export interface ChannelInfo extends Channel {
   /** your own settings for it */
   notify: ChannelNotify;
   starred: boolean;
+  /** the newest top-level message: the chats list's preview and what it sorts by (missing from older hubs) */
+  last?: { at: string; body: string; author: { kind: string; id: string } } | null;
   /** pinned messages, newest pin first */
   pinnedIds: string[];
 }
@@ -112,16 +114,20 @@ interface State {
   memoryVersion: number;
   /** the New task dialog is open */
   newTaskOpen: boolean;
+  /** the New chat picker (the + menu, ⌘K) is open */
+  newChatOpen: boolean;
   /** who takes tasks nobody assigned, and the lead an owner picked (if any); null until loaded */
   lead: LeadStatus | null;
   activeChannel: string | null;
   paletteOpen: boolean;
+  /** text to start the ⌘K search with (the chats list's search field hands its text over) */
+  paletteSeed: string;
   /** every organization you're in; null until loaded. A hub without organizations gives just this one. */
   orgs: Org[] | null;
   /** the New agent screen should open (sidebar +, ⌘K); the Agents page picks it up */
   newAgentOpen: boolean;
   /** the channel browser is open, adding to this section (or none) */
-  channelBrowser: { sectionId: string | null } | null;
+  channelBrowser: { sectionId: string | null; create?: boolean } | null;
 
   load(): Promise<void>;
   loadChannel(id: string): Promise<void>;
@@ -181,9 +187,11 @@ export const useStore = create<State>((set, get) => ({
   flowsVersion: 0,
   memoryVersion: 0,
   newTaskOpen: false,
+  newChatOpen: false,
   lead: null,
   activeChannel: null,
   paletteOpen: false,
+  paletteSeed: "",
   orgs: null,
   newAgentOpen: false,
   channelBrowser: null,
@@ -294,7 +302,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setPalette(open) {
-    set({ paletteOpen: open });
+    set({ paletteOpen: open, ...(open ? {} : { paletteSeed: "" }) });
   },
 
   async setPrefs(patch) {
@@ -357,27 +365,39 @@ export const useStore = create<State>((set, get) => ({
         const mine = m.author.kind === "user" && (m.author.id === get().me?.user.id || m.author.id === "system");
         set((s) => ({
           messages: s.messages[m.channelId] ? { ...s.messages, [m.channelId]: dedupe([...s.messages[m.channelId], m]) } : s.messages,
-          channels: s.channels.map((c) => (c.id === m.channelId && !mine && s.activeChannel !== m.channelId && c.notify !== "mute" ? { ...c, unread: c.unread + 1 } : c)),
+          channels: s.channels.map((c) => {
+            if (c.id !== m.channelId) return c;
+            const last = { at: m.createdAt, body: m.body.slice(0, 400), author: m.author };
+            return !mine && s.activeChannel !== m.channelId && c.notify !== "mute" ? { ...c, last, unread: c.unread + 1 } : { ...c, last };
+          }),
         }));
         if (get().activeChannel === m.channelId && !mine) get().markRead(m.channelId);
       }
     } else if (e.type === "message_updated") {
       const m = e.message;
-      const patch = (list: Message[]) => (list.some((x) => x.id === m.id) ? list.map((x) => (x.id === m.id ? m : x)) : list);
+      // an edit also reaches the quotes of this message and the Chats preview when it is the latest
+      const requote = (x: Message): Message => (x.replyTo?.id === m.id && m.body ? { ...x, replyTo: { ...x.replyTo, snippet: m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body } } : x);
+      const patch = (list: Message[]) => list.map((x) => (x.id === m.id ? m : requote(x)));
       set((s) => ({
         messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [k, patch(v)])),
         threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, patch(v)])),
         roots: s.roots[m.id] ? { ...s.roots, [m.id]: m } : s.roots,
+        channels: s.channels.map((c) => (c.id === m.channelId && !m.threadId && c.last?.at === m.createdAt ? { ...c, last: { ...c.last, body: m.body.slice(0, 400) } } : c)),
       }));
     } else if (e.type === "message_removed") {
       const drop = (list: Message[] | undefined) => list?.filter((m) => m.id !== e.messageId);
+      // quotes of the removed message say so, and the Chats preview moves on if it showed this one
+      const unquote = (x: Message): Message => (x.replyTo?.id === e.messageId ? { ...x, replyTo: { ...x.replyTo, snippet: "", deleted: true } } : x);
+      const gone = (get().messages[e.channelId] ?? []).find((m) => m.id === e.messageId);
+      const wasPreview = !e.threadId && get().channels.some((c) => c.id === e.channelId && c.last && (!gone || c.last.at === gone.createdAt));
       set((s) => ({
         roots: Object.fromEntries(Object.entries(s.roots).filter(([id]) => id !== e.messageId)),
         removedRoots: { ...s.removedRoots, [e.messageId]: true },
-        messages: s.messages[e.channelId] ? { ...s.messages, [e.channelId]: drop(s.messages[e.channelId])! } : s.messages,
-        threads: e.threadId && s.threads[e.threadId] ? { ...s.threads, [e.threadId]: drop(s.threads[e.threadId])! } : s.threads,
+        messages: Object.fromEntries(Object.entries(s.messages).map(([k, v]) => [k, (k === e.channelId ? drop(v)! : v).map(unquote)])),
+        threads: Object.fromEntries(Object.entries(s.threads).map(([k, v]) => [k, (k === e.threadId ? drop(v)! : v).map(unquote)])),
         replyCounts: e.threadId && s.replyCounts[e.threadId] ? { ...s.replyCounts, [e.threadId]: Math.max(0, s.replyCounts[e.threadId] - 1) } : s.replyCounts,
       }));
+      if (wasPreview) get().refreshChannels().catch(() => {});
     } else if (e.type === "reactions") {
       set((s) => applyReactions(s, e.messageId, e.reactions));
     } else if (e.type === "channels_changed") {
@@ -494,6 +514,8 @@ function applyReactions(s: State, messageId: string, reactions: Reaction[]): Par
 function applyEvent(r: LiveRun, ev: AgentEvent): LiveRun {
   if (ev.type === "text") return { ...r, text: r.text + ev.text };
   if (ev.type === "tool_call") return { ...r, tools: [...r.tools, ev.name], last: { name: ev.name, input: ev.input }, usedComputer: r.usedComputer || /computer_/.test(ev.name) };
+  // "started" only opens the live run (the working bubble shows it); it isn't a line of the reply
+  if (ev.type === "status" && ev.text === "started") return r;
   // The existing streaming view renders text; give non-text events their own lines.
   let text: string;
   if (ev.type === "status" || ev.type === "notice") text = ev.text;

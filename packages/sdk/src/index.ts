@@ -61,8 +61,8 @@ export class WispClient {
     if (opts.limit) q.set("limit", String(opts.limit));
     return this.request<{ messages: Message[] }>("GET", `/api/channels/${channelId}/messages?${q}`);
   }
-  send(channelId: string, body: string, opts: { threadId?: string; fileIds?: string[] } = {}) {
-    return this.request<Message>("POST", `/api/channels/${channelId}/messages`, { body, threadId: opts.threadId, fileIds: opts.fileIds ?? [] });
+  send(channelId: string, body: string, opts: { threadId?: string; replyToId?: string; fileIds?: string[] } = {}) {
+    return this.request<Message>("POST", `/api/channels/${channelId}/messages`, { body, threadId: opts.threadId, replyToId: opts.replyToId, fileIds: opts.fileIds ?? [] });
   }
   react(messageId: string, emoji: string, on?: boolean) {
     return this.request("POST", `/api/messages/${messageId}/reactions`, { emoji, on });
@@ -116,7 +116,7 @@ export class WispClient {
   }
   /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
   /** Set up a channel's roles and steps by role names and agent handles. */
-  setTeamSteps(channel: string, team: { roles: { name: string; description: string; agent: string }[]; steps: { role: string; kind?: "do" | "review" | "hand_out"; action: string; send_back_to?: number; max_rounds?: number; hand_to?: string[]; review_by?: string }[] }) {
+  setTeamSteps(channel: string, team: { roles: { name: string; description: string; agent: string }[]; steps: { role?: string; kind?: "do" | "review" | "hand_out" | "ask"; action: string; prompt?: string; inputs?: number[]; send_back_to?: number; max_rounds?: number; hand_to?: string[]; review_by?: string }[] }) {
     return this.request("PUT", `/api/channels/${encodeURIComponent(channel.replace(/^#/, ""))}/team-steps`, team);
   }
   teams() {

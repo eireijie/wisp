@@ -290,11 +290,11 @@ describe("settings regressions", () => {
     vi.mocked(api).mockResolvedValueOnce(policy);
     const m = mount(AgentsPolicyPage);
     await tick();
-    const checked = () => find(m.render(), (el) => el.type === "input" && el.props.type === "checkbox")!;
-    expect(checked().props.checked).toBe(true);
+    const checked = () => find(m.render(), (el) => el.type.name === "Toggle" && el.props.label === "Sending email or messages outside Wisp")!;
+    expect(checked().props.on).toBe(true);
     vi.mocked(api).mockRejectedValueOnce(new Error("policy failed"));
-    await checked().props.onChange({ target: { checked: false } });
-    expect(checked().props.checked).toBe(true);
+    await checked().props.onChange(false);
+    expect(checked().props.on).toBe(true);
     expect(find(m.tree, (el) => el.props.children === "policy failed")).toBeDefined();
   });
 });

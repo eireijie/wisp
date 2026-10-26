@@ -126,6 +126,12 @@ describe("harness settings", () => {
     expect(await status(owner.request("PATCH", `/api/nodes/${nodeId}/harness-settings/gemini`, { changes: [{ op: "model", model: "x" }] }))).toBe(422);
   });
 
+  it("sets a reasoning effort only where the harness has one, and only as a level", async () => {
+    expect(await status(owner.request("PATCH", `/api/nodes/${nodeId}/harness-settings/hermes`, { changes: [{ op: "effort", effort: "LOW\n" }] }))).toBe(400);
+    expect(await status(owner.request("PATCH", `/api/nodes/${nodeId}/harness-settings/hermes`, { changes: [{ op: "effort", effort: "low" }] }))).toBeGreaterThanOrEqual(400);
+    expect(await config()).not.toContain("effort");
+  });
+
   it("lets an agent change it when the device's owner asks, and no one else", async () => {
     const dm = await owner.request<{ id: string }>("POST", `/api/dm/${atlasId}`);
     await owner.send(dm.id, "@atlas switch to gpt-5 please");

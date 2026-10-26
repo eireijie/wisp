@@ -82,30 +82,56 @@ final class VoiceTryOutModel {
   }
 }
 
-struct VoiceTryOut: View {
+struct VoiceTryOutView: View {
   @Environment(Store.self) private var store
   /** the speaking engine as picked on the screen, even if not saved yet */
   var speak: String
   @State private var model = VoiceTryOutModel()
+  @State private var editing: Agent?
 
   var body: some View {
-    Section {
-      VStack(alignment: .leading, spacing: 6) {
-        Button(model.micTesting ? "Listening…" : "Test microphone") { Task { await model.testMicrophone() } }.disabled(model.micTesting)
-        if model.micTesting {
-          Text("Say something. Listening for \(VoiceTryOutModel.micSeconds) seconds…").font(.footnote).foregroundStyle(.secondary)
-          ProgressView(value: model.micLevel).accessibilityHidden(true)
-        } else { outcome(model.micResult) }
+    SettingsPage("Try it out", id: "voice-try") {
+      CardGroup {
+        VStack(alignment: .leading, spacing: 10) {
+          HStack {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("Microphone").font(.system(size: 17)).foregroundStyle(Palette.text)
+              Text("Say something and watch the level move").font(.system(size: 14)).foregroundStyle(Palette.faint)
+            }
+            Spacer(minLength: 8)
+          }
+          if model.micTesting { ProgressView(value: model.micLevel).tint(Palette.green).accessibilityHidden(true) }
+          Button(model.micTesting ? "Listening…" : "Test microphone") { Task { await model.testMicrophone() } }
+            .buttonStyle(.pill(.secondary)).disabled(model.micTesting).accessibilityIdentifier("voice-test-mic")
+          outcome(model.micResult)
+        }.padding(.horizontal, 18).padding(.vertical, 14)
+        VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Speaker").font(.system(size: 17)).foregroundStyle(Palette.text)
+            Text("Plays a short sentence").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          }
+          Button(model.speakerTesting ? "Playing…" : "Test speaker") { Task { await model.testSpeaker(engine: speak, hub: VoiceHub(api: { try store.connection() })) } }
+            .buttonStyle(.pill(.secondary)).disabled(model.speakerTesting).accessibilityIdentifier("voice-test-speaker")
+          outcome(model.speakerResult)
+        }.padding(.horizontal, 18).padding(.vertical, 14)
       }
-      VStack(alignment: .leading, spacing: 6) {
-        Button(model.speakerTesting ? "Playing…" : "Test speaker") { Task { await model.testSpeaker(engine: speak, hub: VoiceHub(api: { try store.connection() })) } }.disabled(model.speakerTesting)
-        outcome(model.speakerResult)
+      if !store.agents.isEmpty {
+        CardLabel("Each agent's voice")
+        CardGroup {
+          ForEach(store.agents) { agent in
+            Button { editing = agent } label: {
+              RowLabel(title: agent.name, value: agent.settings?.voice?[speak] ?? "Default") { AgentAvatar(agent: agent, size: 30, showStatus: false) }
+            }.buttonStyle(.plain)
+          }
+        }
+        CardHint("Every agent can have its own voice. Tap one to pick it and hear a sample. Save first if you changed the speaking voice.")
       }
-    } header: { Text("Try it out") } footer: { Text("Check that your microphone and speaker work. Save first if you changed the speaking voice.") }
-      .onDisappear { model.stop(); CallAudio.deactivate() }
+    }
+    .onDisappear { model.stop(); CallAudio.deactivate() }
+    .sheet(item: $editing) { AgentVoiceSheet(agent: $0).environment(store) }
   }
 
   @ViewBuilder private func outcome(_ result: VoiceTryOutModel.Outcome?) -> some View {
-    if let result { Text(result.text).font(.footnote).foregroundStyle(result.ok ? Color.secondary : Color.red).accessibilityAddTraits(.updatesFrequently) }
+    if let result { Text(result.text).font(.system(size: 14)).foregroundStyle(result.ok ? Palette.green : Palette.red).accessibilityAddTraits(.updatesFrequently) }
   }
 }

@@ -47,7 +47,9 @@ final class Store {
   var changes: [Change]?
   /** computers waiting for an owner to let them join (see Store+Settings) */
   var joinRequests: [JoinRequest] = []
-  var simple = false
+  /** the hub was updated since this app connected to it (see Store+Updates) */
+  var hubUpdated = false
+  @ObservationIgnored var hubCommit: String?
   /** the optional features this organization has on (all on when the hub doesn't say) */
   var features: Features = .everything
   /** every organization you belong to, for the switcher at the top of Chats */
@@ -93,6 +95,8 @@ final class Store {
   var activitySince: [String: Date] = [:]
   /** replies being written right now, by run, until the posted message replaces them */
   var liveRuns: [String: LiveRun] = [:]
+  /** the message each composer is replying to, by conversation (ComposerDrafts.key) */
+  var replying: [String: ReplyTarget] = [:]
   var connected = false
   /** the channel on screen, so new messages there don't count as unread */
   var openChannel: String?
@@ -230,6 +234,7 @@ final class Store {
 
   private func clearData() {
     connectedOnce = false
+    hubUpdated = false; hubCommit = nil
     me = nil
     workspace = nil
     features = .everything; orgs = []; agentDefaults = nil
@@ -260,7 +265,6 @@ final class Store {
       self.me = me.user
       self.role = me.role ?? "member"
       self.prefs = me.prefs
-      self.simple = me.prefs?.experience == "simple"
       self.workspace = me.workspace
       self.features = me.features ?? .everything
       async let ch: [Channel] = api.get("/api/channels")
@@ -395,9 +399,9 @@ final class Store {
 
   // MARK: actions
 
-  func send(_ text: String, in channelId: String, thread: String? = nil, files: [String] = []) async throws {
-    struct Body: Encodable { var body: String; var threadId: String?; var fileIds: [String] }
-    let m: Message = try await fetch { try await $0.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread, fileIds: files)) }
+  func send(_ text: String, in channelId: String, thread: String? = nil, files: [String] = [], replyTo: String? = nil) async throws {
+    struct Body: Encodable { var body: String; var threadId: String?; var fileIds: [String]; var replyToId: String? }
+    let m: Message = try await fetch { try await $0.post("/api/channels/\(channelId)/messages", Body(body: text, threadId: thread, fileIds: files, replyToId: replyTo)) }
     insert(m)
     askForNotificationsIfDue()
   }
@@ -417,9 +421,9 @@ final class Store {
     return channels.first { $0.id == ch.id } ?? ch
   }
 
-  func decide(_ approval: Approval, approve: Bool, note: String = "") async throws {
-    struct Body: Encodable { var approve: Bool; var note: String }
-    let a: Approval = try await fetch { try await $0.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note)) }
+  func decide(_ approval: Approval, approve: Bool, note: String = "", always: Bool? = nil) async throws {
+    struct Body: Encodable { var approve: Bool; var note: String; var always: Bool? }
+    let a: Approval = try await fetch { try await $0.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note, always: always)) }
     upsert(a)
   }
 
@@ -512,7 +516,7 @@ final class Store {
   var pendingApprovals: [Approval] { approvals.filter { $0.status == "pending" } }
   var unreadTotal: Int { channels.reduce(0) { $0 + $1.badge } }
   /** agents waiting on you: asking for an OK, or for help on their computer */
-  var needsYouCount: Int { pendingApprovals.count + (canViewComputers ? computers.filter { $0.help != nil }.count : 0) }
+  var needsYouCount: Int { (role == "guest" ? 0 : pendingApprovals.count) + (canViewComputers ? computers.filter { $0.help != nil }.count : 0) }
 
   // MARK: live events
 
@@ -610,7 +614,6 @@ final class Store {
       let me: Me = try await fetch { try await $0.get("/api/me") }
       self.me = me.user
       prefs = me.prefs
-      simple = me.prefs?.experience == "simple"
       role = me.role ?? "member"
       features = me.features ?? .everything
       syncError = nil
@@ -643,7 +646,22 @@ final class Store {
   private struct DiscussionEvent: Decodable { struct D: Decodable { var id: String }; var discussion: D }
   private struct StatusEvent: Decodable { var agentId: String; var status: Agent.Status }
   private struct RunEvent: Decodable {
-    struct E: Decodable { var type: String; var text: String?; var name: String?; var message: String? }
+    struct E: Decodable {
+      var type: String; var text: String?; var name: String?; var message: String?
+      /** the file a tool works on, when its input names one */
+      var file: String?
+      private enum Keys: String, CodingKey { case type, text, name, message, input }
+      private struct Input: Decodable { var file_path: String?; var path: String? }
+      init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        type = try c.decode(String.self, forKey: .type)
+        text = try? c.decode(String.self, forKey: .text)
+        name = try? c.decode(String.self, forKey: .name)
+        message = try? c.decode(String.self, forKey: .message)
+        let input = try? c.decode(Input.self, forKey: .input)
+        file = input?.file_path ?? input?.path
+      }
+    }
     var runId: String?
     var agentId: String
     var channelId: String
@@ -658,6 +676,9 @@ final class Store {
   private struct RemovedEvent: Decodable { var computerId: String }
   private struct ApprovalEvent: Decodable { var approval: Approval }
 
+  /** Set by an open voice call so it sees the agent's run as it happens. */
+  @ObservationIgnored var onCallRunEvent: ((CallRunEvent) -> Void)?
+
   func handle(_ data: Data) {
     guard let env = try? Wire.decoder.decode(Envelope.self, from: data) else { return }
     let d = Wire.decoder
@@ -667,10 +688,11 @@ final class Store {
       retry = 0
       liveRuns = [:]
       // the first connect follows a full load; only a reconnect has events to catch up on
-      if connectedOnce { Task { await refreshAfterReconnect() } }
+      if connectedOnce { Task { await refreshAfterReconnect(); await checkHubUpdated() } }
       else {
         connectedOnce = true
         Task {
+          await checkHubUpdated()
           do { try await refreshAgents(); try await refreshManagement() } catch { recordSyncError(error) }
           await refreshChannels()
           await refreshOpen()
@@ -723,6 +745,7 @@ final class Store {
       }
     case "run_event":
       guard let e = try? d.decode(RunEvent.self, from: data) else { return }
+      onCallRunEvent?(CallRunEvent(runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text, tool: e.event.name, file: e.event.file))
       activityChannel[e.agentId] = e.channelId
       activityThread[e.agentId] = e.threadId
       activityPath[e.agentId] = e.threadPath ?? []
@@ -732,7 +755,7 @@ final class Store {
         activitySince[e.agentId] = Date()
       }
       if let run = e.runId {
-        applyLive(runId: run, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text ?? e.event.message)
+        applyLive(runId: run, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text ?? e.event.message, tool: e.event.name, file: e.event.file)
       }
       switch e.event.type {
       case "status":

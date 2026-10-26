@@ -59,6 +59,7 @@ export async function buildHub(opts: HubOptions) {
   hub.id = stableHubId(path.resolve(opts.dataDir));
   hub.reach.cloudflare.configure(path.resolve(opts.dataDir));
   await hub.foldTeams();
+  store.migrateTeamSteps();
   await hub.ensureBuiltinSkills(undefined, true);
   hub.routines.start();
   hub.background.start();

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum MarketSection: String, CaseIterable {
-  case all = "All", apps = "Apps", skills = "Skills", devices = "On your devices", installed = "Installed"
+  case all = "All", apps = "Apps", skills = "Skills", agents = "Agents", mods = "Mods", devices = "On your devices", installed = "Installed"
 }
 
 struct MarketApp: Identifiable {
@@ -36,8 +36,8 @@ struct ShelfSkill: Identifiable {
 }
 
 /**
- * Apps and skills in one place, like the web's Marketplace: what's on offer, what your devices
- * already have, and what's installed.
+ * Apps and skills in one place, like the web's Marketplace: what's on offer, agents and mods, what
+ * your devices already have, and what's installed ("Connect apps").
  */
 struct MarketplaceView: View {
   @Environment(Store.self) private var store
@@ -54,7 +54,10 @@ struct MarketplaceView: View {
   @State private var shelves: [DeviceShelf] = []
   @State private var action = FormAction()
   @State private var creating = false
-  @State private var addingOwn = false
+  @State private var editor: ConnectorEditorTarget?
+  @State private var chat: ChatTarget?
+  @State private var importing = false
+  @State private var addingAgent = false
   @State private var bringingAll = false
   @State private var bringingSkill: ShelfSkill?
   @State private var settingUp: ShelfApp?
@@ -63,6 +66,7 @@ struct MarketplaceView: View {
   private static func squash(_ s: String) -> String { String(s.lowercased().filter { $0.isASCII && ($0.isLetter || $0.isNumber) }) }
   private var needle: String { query.trimmed }
   private func match(_ parts: String?...) -> Bool { needle.isEmpty || parts.contains { $0?.localizedCaseInsensitiveContains(needle) == true } }
+  private var installedPage: Bool { section == .installed }
 
   // MARK: apps
 
@@ -84,7 +88,7 @@ struct MarketplaceView: View {
     library.map { MarketSkill(id: "w:" + $0.id, name: $0.name, detail: $0.description ?? "", who: "Wisp", library: $0) }
       + (skillList?.skills ?? []).map { MarketSkill(id: "s:" + $0.id, name: $0.name, detail: $0.description, who: $0.source.label, store: $0) }
   }
-  private var sources: [String] { ["All"] + Array(NSOrderedSet(array: skillItems.map(\.who))) .compactMap { $0 as? String } }
+  private var sources: [String] { ["All"] + Array(NSOrderedSet(array: skillItems.map(\.who))).compactMap { $0 as? String } }
   private var shownSkills: [MarketSkill] {
     skillItems.filter { (skillSource == "All" || $0.who == skillSource) && match($0.name, $0.detail, $0.who) }
   }
@@ -113,37 +117,37 @@ struct MarketplaceView: View {
   }
 
   private var tabs: [MarketSection] {
-    MarketSection.allCases.filter { $0 != .devices || (store.canManage && (!shelves.isEmpty || section == .devices)) }
+    MarketSection.allCases.filter { $0 != .installed && ($0 != .devices || (store.canManage && (!shelves.isEmpty || section == .devices))) }
   }
 
   var body: some View {
-    List {
-      ChipRow(options: tabs.map(\.rawValue), selection: section.rawValue, counts: [
-        MarketSection.devices.rawValue: pending.count,
-        MarketSection.installed.rawValue: store.connectors.count + store.skills.count
-      ]) { section = MarketSection(rawValue: $0) ?? .all }
+    MarketScreen(title: installedPage ? "Connect apps" : "Marketplace", screenId: "marketplace", onBack: installedPage && start != .installed ? { section = .all } : nil, trailing: {
+      if installedPage { Text("\(store.connectors.count) connected").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+      else {
+        Button { section = .installed } label: {
+          Text("\(store.connectors.count) connected").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).padding(.horizontal, 16).frame(height: 44).glassPill()
+        }.buttonStyle(.plain).accessibilityIdentifier("market-connected")
+      }
+    }) {
+      MarketSearch(text: $query, prompt: installedPage ? "Search apps" : "Search apps and skills")
+      if !installedPage {
+        ChipRow(options: tabs.map(\.rawValue), selection: section.rawValue, counts: [MarketSection.devices.rawValue: pending.count]) { section = MarketSection(rawValue: $0) ?? .all }
+      }
       InlineError(error: action.error)
       switch section {
       case .all: allTab
-      case .apps: appsList(apps, limit: nil)
+      case .apps: appsTab
       case .skills: skillsTab
+      case .agents: agentRows(limit: nil)
+      case .mods: modRows(limit: nil)
       case .devices:
         DeviceShelfList(shelves: shelves, query: needle, onBring: bringIn, onBringAll: { bringingAll = true }, onRefresh: refresh)
       case .installed: installedTab
       }
     }
-    .sectionScreen("Marketplace", id: "marketplace")
-    .searchable(text: $query, prompt: "Search apps and skills")
-    .toolbar {
-      if store.canManage {
-        Menu("Make your own", systemImage: "plus") {
-          Button("Create a skill", systemImage: "wand.and.stars") { creating = true }
-          if !store.simple { Button("Add your own app", systemImage: "powerplug") { addingOwn = true } }
-        }
-      }
-    }
     .sheet(isPresented: $creating) { SkillEditor() }
-    .sheet(isPresented: $addingOwn) { ConnectorEditor(onSignInError: { action.error = $0 }) }
+    .sheet(isPresented: $importing) { SkillShareSheet(skill: nil, onBrought: { _ in section = .installed }, onDevices: { section = .devices }) }
+    .sheet(isPresented: $addingAgent) { AddAgent { _ in } }
     .sheet(isPresented: $bringingAll) {
       BringAllSheet(pending: pending, onSetUp: { d, item in settingUp = ShelfApp(nodeId: d.nodeId, item: item) })
     }
@@ -152,12 +156,13 @@ struct MarketplaceView: View {
         "nodeId": AnyEncodable(target.nodeId), "harness": AnyEncodable(target.item.harness), "skillId": AnyEncodable(target.item.skillId)
       ])
     }
+    .connectFlow($editor, chat: $chat)
+    .navigationDestination(item: $chat) { ChannelView(channel: $0.channel, draft: $0.draft) }
     .navigationDestination(item: $settingUp) { target in
-      ConnectorCatalogDetail(entry: ShelfLogic.connector(target.nodeId, target.item), summary: ShelfLogic.summary(target.item, simple: store.simple), presetEnv: target.item.env ?? [:])
+      ConnectorCatalogDetail(entry: ShelfLogic.connector(target.nodeId, target.item), summary: ShelfLogic.summary(target.item), presetEnv: target.item.env ?? [:])
     }
     .task { if !started { started = true; section = start }; await loadAll() }
     .task(id: query) { await searchRegistry() }
-    .refreshable { await loadAll(); await searchRegistry() }
     .onChange(of: scenePhase) { _, phase in if phase == .active { action.run { try await store.refreshConnectors() } } }
   }
 
@@ -165,84 +170,126 @@ struct MarketplaceView: View {
 
   @ViewBuilder private var allTab: some View {
     if store.canManage && !pending.isEmpty && needle.isEmpty {
-      Section { DeviceBanner(pending: pending) { section = .devices } }
+      DeviceBanner(pending: pending) { section = .devices }
     }
-    Section {
-      appRows(apps, limit: needle.isEmpty ? 6 : 12)
-    } header: { shelfHeader("Apps", to: .apps) }
-    Section {
-      skillRows(needle.isEmpty ? takeTurns(shownSkills) : shownSkills, limit: needle.isEmpty ? 6 : 12)
-    } header: { shelfHeader("Skills", to: .skills) }
+    if needle.isEmpty {
+      shelfHeader("Popular apps", to: .apps)
+      appRows(apps, limit: 3)
+      shelfHeader("Skills", to: .skills)
+      skillRows(takeTurns(shownSkills), limit: 3)
+      shelfHeader("Agents and mods", to: .agents)
+      agentRows(limit: 2)
+      modRows(limit: 2)
+      makeYourOwn
+    } else {
+      shelfHeader("Apps", to: .apps)
+      appRows(apps, limit: 12)
+      shelfHeader("Skills", to: .skills)
+      skillRows(shownSkills, limit: 12)
+    }
+  }
+
+  @ViewBuilder private var appsTab: some View {
+    if let registryError { registryProblem(registryError) }
+    appRows(apps, limit: nil)
   }
 
   @ViewBuilder private var skillsTab: some View {
     if sources.count > 2 {
       ChipRow(options: sources, selection: skillSource) { skillSource = skillSource == $0 ? "All" : $0 }
     }
-    ForEach(skillList?.errors ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(.secondary) }
-    Section { skillRows(shownSkills, limit: nil) }
+    ForEach(skillList?.errors ?? [], id: \.self) { Text($0).font(.footnote).foregroundStyle(Palette.muted) }
+    skillRows(shownSkills, limit: nil)
+  }
+
+  @ViewBuilder private var makeYourOwn: some View {
+    if store.canManage {
+      MarketLabel("Make your own")
+      CardGroup {
+        Button { creating = true } label: { MarketRow(symbol: "wand.and.stars", title: "Create a skill", subtitle: "Teach your helper a way of doing something") }.buttonStyle(.plain).accessibilityIdentifier("market-create-skill")
+        Button { editor = ConnectorEditorTarget() } label: { MarketRow(symbol: "powerplug", title: "Add your own app", subtitle: "Use any MCP server or URL") }.buttonStyle(.plain).accessibilityIdentifier("market-add-app")
+        Button { importing = true } label: { MarketRow(symbol: "square.and.arrow.down", title: "Bring a skill in", subtitle: "From a link or a file") }.buttonStyle(.plain)
+      }
+    }
   }
 
   @ViewBuilder private var installedTab: some View {
     let connectors = store.connectors.filter { match($0.name, $0.url, $0.command) }
+    let connected = connectors.filter { $0.catalogId != nil }
+    let own = connectors.filter { $0.catalogId == nil }
     let skills = store.skills.filter { match($0.name, $0.description) }
-    Section("Apps") {
-      if store.connectors.isEmpty {
-        Button("No apps yet. Get one.") { section = .apps }.foregroundStyle(.secondary)
-      }
-      ForEach(connectors) { c in
-        NavigationLink { ConnectorDetail(connector: c) } label: {
-          MarketRow(symbol: "powerplug", title: c.name, sub: connectorLine(c), badge: nil)
+    if store.connectors.isEmpty {
+      MarketNote(text: "No apps yet. Get one from the marketplace.")
+    }
+    if !connected.isEmpty {
+      MarketLabel("Connected")
+      CardGroup { ForEach(connected) { connectorRow($0) } }
+    }
+    if !own.isEmpty {
+      MarketLabel("Your own apps")
+      CardGroup { ForEach(own) { connectorRow($0) } }
+    }
+    MarketLabel("Skills")
+    if store.skills.isEmpty { Text("No skills yet.").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4) }
+    else {
+      CardGroup {
+        ForEach(skills) { s in
+          NavigationLink { SkillDetail(skill: s) } label: {
+            MarketRow(symbol: MarketText.skillSymbol((s.slug ?? "") + " " + s.name), title: s.name, subtitle: "\(MarketText.origin(s)) · \(helpers(s))")
+          }.buttonStyle(.plain)
         }
       }
     }
-    Section("Skills") {
-      if store.skills.isEmpty {
-        Button("No skills yet. Add one.") { section = .skills }.foregroundStyle(.secondary)
-      }
-      ForEach(skills) { s in
-        NavigationLink { SkillDetail(skill: s) } label: {
-          MarketRow(symbol: MarketText.skillSymbol((s.slug ?? "") + " " + s.name), title: s.name, sub: "\(MarketText.origin(s)) · \(helpers(s))", badge: nil)
-        }
-      }
+    CardGroup {
+      Button { section = .apps } label: { MarketRow(symbol: "plus", title: "Get more", subtitle: "Browse the marketplace") }.buttonStyle(.plain)
     }
   }
 
+  private func connectorRow(_ c: AppConnector) -> some View {
+    NavigationLink { ConnectorDetail(connector: c) } label: {
+      MarketRow(symbol: "powerplug", title: c.name, subtitle: connectorLine(c)) {
+        if c.enabled == false { MarketPill(text: "Off") }
+        else if c.needsSignIn { MarketPill(text: "Sign in", tone: .warn) }
+        else { MarketPill(text: "On", tone: .green) }
+      }
+    }.buttonStyle(.plain)
+  }
+
   private func connectorLine(_ c: AppConnector) -> String {
-    if c.enabled == false { return "Off" }
-    if c.needsSignIn { return "Needs sign-in" }
+    if let error = c.auth?.error { return error }
+    if c.needsSignIn { return "Needs sign-in again" }
     if c.auth?.signedIn == true { return "Signed in" }
-    let n = c.agentIds?.count ?? 0
-    return n == 0 ? "No one yet" : "\(n) \(store.simple ? "helper" : "agent")\(n == 1 ? "" : "s")"
+    return c.url ?? c.command ?? "Set up"
   }
   private func helpers(_ s: HelperSkill) -> String {
     let n = s.agentIds?.count ?? 0
-    return n == 0 ? "no one yet" : "\(n) \(store.simple ? "helper" : "agent")\(n == 1 ? "" : "s")"
+    return n == 0 ? "no one yet" : "\(n) helper\(n == 1 ? "" : "s")"
   }
 
   // MARK: rows
 
   private func shelfHeader(_ title: String, to target: MarketSection) -> some View {
-    HStack { Text(title); Spacer(); Button("See all") { section = target }.font(.footnote).textCase(nil) }
-  }
-
-  @ViewBuilder private func appsList(_ list: [MarketApp], limit: Int?) -> some View {
-    if let registryError { registryProblem(registryError) }
-    Section { appRows(list, limit: limit) }
+    HStack {
+      Text(title).font(.system(size: 14)).foregroundStyle(Palette.faint)
+      Spacer()
+      Button("View all") { section = target }.font(.system(size: 14)).foregroundStyle(Palette.muted)
+    }.padding(.horizontal, 4).padding(.top, 6)
   }
 
   @ViewBuilder private func appRows(_ list: [MarketApp], limit: Int?) -> some View {
     if registry == nil && list.isEmpty {
       ProgressView().frame(maxWidth: .infinity)
     } else if list.isEmpty {
-      Text(needle.isEmpty ? "No apps here yet." : "No apps match \"\(needle)\".").foregroundStyle(.secondary)
+      Text(needle.isEmpty ? "No apps here yet." : "No apps match \"\(needle)\".").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
     }
-    ForEach(Array(list.prefix(limit ?? list.count))) { a in
-      NavigationLink {
-        if let entry = a.registry { MarketplaceDetail(entry: entry) }
-        else if let c = a.builtIn { ConnectorCatalogDetail(entry: c, summary: MarketText.summary(builtIn: c)) }
-      } label: {
-        MarketRow(symbol: "powerplug", title: a.name, sub: a.detail, badge: added(a) ? "Added" : nil)
+    VStack(spacing: 0) {
+      ForEach(Array(list.prefix(limit ?? list.count))) { a in
+        NavigationLink {
+          if let entry = a.registry { MarketplaceDetail(entry: entry) }
+          else if let c = a.builtIn { ConnectorCatalogDetail(entry: c, summary: MarketText.summary(builtIn: c)) }
+        } label: {
+          MarketRow(symbol: "powerplug", tile: 50, title: a.name, subtitle: MarketText.whatItsFor(a.detail, max: 60), flush: true) { AddLabel(title: added(a) ? "Added" : "Add", muted: added(a)) }
+        }.buttonStyle(.plain)
       }
     }
     if let registryError, limit != nil { registryProblem(registryError) }
@@ -252,24 +299,50 @@ struct MarketplaceView: View {
     if skillList == nil && list.isEmpty {
       ProgressView().frame(maxWidth: .infinity)
     } else if list.isEmpty {
-      Text(needle.isEmpty ? "No skills here yet." : "No skills match \"\(needle)\".").foregroundStyle(.secondary)
+      Text(needle.isEmpty ? "No skills here yet." : "No skills match \"\(needle)\".").font(.system(size: 14)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
     }
-    ForEach(Array(list.prefix(limit ?? list.count))) { s in
-      NavigationLink {
-        if let have = installed(s) { SkillDetail(skill: have) }
-        else if let lib = s.library { SkillDetail(skill: lib, library: true) }
-        else if let entry = s.store { StoreSkillDetail(skill: entry) }
-      } label: {
-        MarketRow(symbol: MarketText.skillSymbol(s.id + " " + s.name), title: s.name, sub: s.who, badge: installed(s) != nil ? "Added" : s.store?.license.open == false ? "View" : nil)
+    VStack(spacing: 0) {
+      ForEach(Array(list.prefix(limit ?? list.count))) { s in
+        NavigationLink {
+          if let have = installed(s) { SkillDetail(skill: have) }
+          else if let lib = s.library { SkillDetail(skill: lib, library: true) }
+          else if let entry = s.store { StoreSkillDetail(skill: entry) }
+        } label: {
+          MarketRow(symbol: MarketText.skillSymbol(s.id + " " + s.name), tile: 50, title: s.name, subtitle: MarketText.whatItsFor(s.detail, max: 60), flush: true) {
+            AddLabel(title: installed(s) != nil ? "Added" : s.store?.license.open == false ? "View" : "Add", muted: installed(s) != nil)
+          }
+        }.buttonStyle(.plain)
+      }
+    }
+  }
+
+  @ViewBuilder private func agentRows(limit: Int?) -> some View {
+    VStack(spacing: 0) {
+      ForEach(Array(HarnessChoice.all.filter { $0.protocolName != "mcp" }.prefix(limit ?? 100))) { h in
+        MarketRow(symbol: "person.crop.square", tile: 50, title: h.label, subtitle: h.blurb, flush: true) {
+          if store.canManage { AddButton(title: "Add") { addingAgent = true } }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder private func modRows(limit: Int?) -> some View {
+    VStack(spacing: 0) {
+      ForEach(Array(FeatureKey.allCases.prefix(limit ?? 100))) { key in
+        MarketRow(symbol: "sparkles", tile: 50, title: key.name, subtitle: key.detail, flush: true) {
+          if store.features[key] { MarketPill(text: "On", tone: .green) }
+          else if store.isOwner { AddButton(title: "Turn on") { var next = store.features; next[key] = true; action.run { try await store.setFeatures(next) } } }
+          else { MarketPill(text: "Off") }
+        }
       }
     }
   }
 
   private func registryProblem(_ message: String) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(message).font(.footnote).foregroundStyle(.red)
+      Text(message).font(.footnote).foregroundStyle(Palette.red)
       Button("Try again") { Task { await searchRegistry() } }.font(.footnote)
-    }
+    }.padding(.horizontal, 4)
   }
 
   // MARK: loading

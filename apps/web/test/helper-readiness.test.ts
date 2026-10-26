@@ -64,7 +64,7 @@ describe("helperChecklist", () => {
     const c = helperChecklist([helper()], [dev({ online: false })]);
     expect(status(c)).toEqual(["helper:ok", "device:ok", "online:bad", "harness:unknown"]);
     expect(c[2].fix).toContain("Turn on my-mac");
-    expect(c[2].to).toEqual({ view: "nodes" });
+    expect(c[2].to).toEqual({ view: "computers", computerId: null });
     expect(helperChecklist([helper()], [dev({ paused: true })])[2].fix).toContain("paused");
   });
   it("only calls the AI missing when the device reported what it has", () => {

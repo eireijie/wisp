@@ -9,14 +9,14 @@ import { useMemo, useSyncExternalStore } from "react";
  *   #/agents[/<agentId>[/<tab>]]     agents and their settings
  *   #/about                          what agents remember about you
  *   #/tasks                          work handed to agents, by status
- *   #/computers[/<id>[/teach/<agentId>]]  agents' computers, live view, teaching a task
- *   #/nodes[/<nodeId>]               devices, and one device's page
+ *   #/computers[/<id>[/teach/<agentId>]]  devices and their agents' computers, live view, teaching a task
+ *   #/computers/d/<nodeId>           one device's page (#/nodes[/<nodeId>] still lands here)
  *   #/marketplace[/<section>]        apps and skills to get, and what devices already have (MARKET_SECTIONS)
  *   #/connectors, #/skills           older addresses of the marketplace (installed apps, skills)
  *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
  *   #/join/<code>                    accept an invite (signed out)
  *   #/authorize/<requestId>          let an app (Grok, ChatGPT, Claude…) connect as an agent (the hub's /oauth/authorize sends people here)
- *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Wisp is" and Simple or Advanced
+ *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Wisp is"
  *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
  *   #/mods                           mods: optional parts of Wisp, switched on or off
  *   #/                               the dashboard on desktops, the chats list on phones (App.tsx)
@@ -32,8 +32,7 @@ export type Route =
   | { view: "agents"; agentId: string | null; tab?: AgentTab | null }
   | { view: "about" }
   | { view: "tasks" }
-  | { view: "computers"; computerId: string | null; teach?: string | null }
-  | { view: "nodes"; nodeId?: string | null }
+  | { view: "computers"; computerId: string | null; teach?: string | null; deviceId?: string | null }
   | { view: "marketplace"; section?: MarketSection | null }
   | { view: "connectors" }
   | { view: "skills" }
@@ -44,11 +43,11 @@ export type Route =
   | { view: "chats" }
   | { view: "you" };
 
-export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "background", "routines", "permissions", "connect", "runs"] as const;
+export const AGENT_TABS = ["overview", "look", "soul", "instructions", "model", "device", "computer", "access", "background", "routines", "memory", "skills", "apps", "permissions", "connect", "runs", "remove"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 export const SETTINGS_PAGES = ["profile", "preferences", "notifications", "usage", "voice", "appearance", "security", "devices", "mobile", "general", "access", "agent-defaults", "features", "people", "agents", "runtimes", "harnesses", "memory", "computers", "logins", "apps", "connections", "data", "updates"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
-export const MARKET_SECTIONS = ["all", "apps", "skills", "devices", "installed"] as const;
+export const MARKET_SECTIONS = ["all", "apps", "skills", "agents", "mods", "devices", "installed"] as const;
 export type MarketSection = (typeof MARKET_SECTIONS)[number];
 
 export function routeForRole(route: Route, role?: "owner" | "member" | "guest"): Route {
@@ -88,9 +87,11 @@ export function parseRoute(hash: string): Route {
     case "tasks":
       return { view: "tasks" };
     case "computers":
+      if (parts[1] === "d") return { view: "computers", computerId: null, deviceId: parts[2] ?? null };
       return { view: "computers", computerId: parts[1] ?? null, teach: parts[2] === "teach" ? (parts[3] ?? null) : null };
     case "nodes":
-      return { view: "nodes", nodeId: parts[1] ?? null };
+      // devices live inside Computers now
+      return { view: "computers", computerId: null, ...(parts[1] ? { deviceId: parts[1] } : {}) };
     case "settings":
       return { view: "settings", page: SETTINGS_PAGES.find((p) => p === parts[1]) ?? null };
     case "welcome":
@@ -136,9 +137,7 @@ export function href(r: Route): string {
     case "tasks":
       return "#/tasks";
     case "computers":
-      return "#/computers" + (r.computerId ? `/${r.computerId}${r.teach ? `/teach/${r.teach}` : ""}` : "");
-    case "nodes":
-      return "#/nodes" + (r.nodeId ? `/${r.nodeId}` : "");
+      return "#/computers" + (r.deviceId ? `/d/${r.deviceId}` : r.computerId ? `/${r.computerId}${r.teach ? `/teach/${r.teach}` : ""}` : "");
     case "settings":
       return "#/settings" + (r.page ? `/${r.page}` : "");
     case "welcome":

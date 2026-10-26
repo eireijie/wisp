@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArchiveRestore, ArrowLeft, ArrowRight, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
-import { hasSteps, teamProblem, type Agent, type ChannelNotify, type ChannelSettings as AgentRules, type ChannelTeam, type Section } from "@wisp/core";
-import { CreateAgent } from "../views/CreateAgent.tsx";
-import { useDevices } from "../devices.ts";
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
+import { hasSteps, teamProblem, type Agent, type ChannelNotify, type ChannelTeam, type Section } from "@wisp/core";
 import { EMPTY_TEAM, TeamChart, TeamRules, addToTeam, liveTeam } from "./TeamChart.tsx";
-import { TeamSteps, TeamTemplatePicker, withChart } from "./TeamSteps.tsx";
+import { NewTeamFlow } from "../team/Create.tsx";
+import { HowLines } from "../team/How.tsx";
+import { useFlowLines } from "../team/How.tsx";
+import { NewAgentForTeam } from "../team/NewAgent.tsx";
+import { TeamEditSession } from "../team/Session.tsx";
+import { withChart } from "../team/flow.ts";
+import { agentRulesOf, type AgentRules } from "./channel-rules.ts";
 import { api } from "../api.ts";
 import { useNames, useStore, type ChannelInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -19,7 +23,7 @@ export function ChannelIcon({ channel, size = 14, className = "text-faint" }: { 
   return channel.private ? <Lock size={size} className={className} aria-label="Private" /> : <Hash size={size} className={className} />;
 }
 
-/** #general stays public and can't be archived or deleted. */
+/** #general stays public (it can be archived or deleted like any other channel). */
 export function isProtected(channel: ChannelInfo) {
   return channel.name === "general";
 }
@@ -55,7 +59,7 @@ export const NOTIFY: Record<ChannelNotify, { label: string; body: string }> = {
 };
 
 /** "Who answers messages without an @mention?": one agent, or nobody (only @mentioned agents). */
-function AnswerSelect({ agents, value, onChange, disabled }: { agents: Agent[]; value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+export function AnswerSelect({ agents, value, onChange, disabled }: { agents: Agent[]; value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} disabled={disabled} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm" aria-label="Who answers messages without an @mention">
       <option value="">Nobody: only agents someone @mentions</option>
@@ -68,40 +72,15 @@ function AnswerSelect({ agents, value, onChange, disabled }: { agents: Agent[]; 
   );
 }
 
-/** The New agent dialog for a team being built: it hands the agent back instead of opening its page. */
-export function NewAgentForTeam({ onClose, onCreated }: { onClose: () => void; onCreated: (agent: Agent) => void }) {
-  const devices = useDevices(15_000);
-  const refreshAgents = useStore((s) => s.refreshAgents);
-  if (!devices) return null;
-  return (
-    <CreateAgent
-      nodes={devices}
-      onClose={onClose}
-      onCreated={async (a) => {
-        await refreshAgents();
-        onCreated(a);
-      }}
-    />
-  );
-}
+export { NewAgentForTeam };
 
-/** "Add a channel": one box to search, join, or create (Buzz-style). Creating is two steps: what it's for, then its team. */
-export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => void; sectionId?: string | null }) {
+/** "Add a channel": one box to search, join, or create (Buzz-style). Creating is the New team flow (team/Create.tsx). */
+export function ChannelBrowser({ onClose, sectionId = null, create: startCreating = false }: { onClose: () => void; sectionId?: string | null; create?: boolean }) {
   const channels = useStore((s) => s.channels).filter((c) => c.kind === "channel");
-  const sections = useStore((s) => s.sections);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "joined" | "archived">("all");
-  const [step, setStep] = useState<"browse" | "about" | "team">("browse");
-  const [topic, setTopic] = useState("");
-  const [section, setSection] = useState<string | null>(sectionId);
-  const [isPrivate, setPrivate] = useState(false);
-  const [team, setTeam] = useState<ChannelTeam>(EMPTY_TEAM);
-  // roles and steps (a template), or a plain chart of who hands work to whom
-  const [mode, setMode] = useState<"steps" | "chart">("steps");
-  const [newAgent, setNewAgent] = useState<false | { roleId?: string }>(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"browse" | "about">(startCreating ? "about" : "browse");
   const archivedCount = channels.filter((c) => c.archivedAt).length;
 
   const list = useMemo(() => {
@@ -113,7 +92,6 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
   }, [channels, q, tab]);
   const name = slug(q.replace(/^#/, ""));
   const exists = channels.some((c) => c.name === name);
-  const problem = teamProblem(team);
 
   async function open(id: string, joined: boolean) {
     if (!joined) await api("POST", `/api/channels/${id}/join`);
@@ -122,163 +100,17 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
     go({ view: "chat", channelId: id, threadId: null });
   }
 
-  /** Someone described the team: make the channel with the lead alone, and ask the lead (in a DM) to set it up. */
-  async function describe(text: string) {
-    if (busy) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const { lead } = await api<{ lead: string | null }>("GET", "/api/settings/lead");
-      if (!lead) throw new Error("Add an agent first: it sets the team up.");
-      const starter = withChart({ nodes: [], edges: [], roles: [{ id: "lead", name: "Lead", description: "Handles every request until the team is set up.", agentId: lead }], steps: [{ id: "handle", roleId: "lead", kind: "do", action: "Handle the request", next: null, x: 0, y: 0 }] });
-      await api("POST", "/api/channels", { name, topic, sectionId: section, private: isPrivate, settings: { team: starter, replyInThread: true } });
-      const dm = await api<{ id: string }>("POST", `/api/dm/${lead}`);
-      await api("POST", `/api/channels/${dm.id}/messages`, { body: `Set up how the team in #${name} works, with team_setup:\n\n${text}` });
-      await refreshChannels();
-      onClose();
-      go({ view: "chat", channelId: dm.id, threadId: null });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function create() {
-    if (problem || busy) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const ch = await api<{ id: string }>("POST", "/api/channels", { name, topic, sectionId: section, private: isPrivate, settings: { team, replyInThread: true } });
-      await refreshChannels();
-      onClose();
-      go({ view: "chat", channelId: ch.id, threadId: null });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // making an agent for the team: its own dialog, then back to the chart with the agent on it
-  if (newAgent)
-    return (
-      <NewAgentForTeam
-        onClose={() => setNewAgent(false)}
-        onCreated={(a) => {
-          const roleId = newAgent.roleId;
-          setTeam((t) => (roleId ? withChart({ ...t, roles: (t.roles ?? []).map((r) => (r.id === roleId ? { ...r, agentId: a.id } : r)) }) : addToTeam(t, a.id)));
-          setNewAgent(false);
-        }}
-      />
-    );
-
-  if (step === "about")
-    return (
-      <Modal title="New channel" onClose={onClose} wide>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name && !exists) setStep("team");
-          }}
-        >
-          <Steps at={1} />
-          <Field label="Name" hint={exists ? `#${name} already exists.` : undefined}>
-            <div className="relative">
-              <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-              <Input value={name} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="e.g. launch" className="pl-8" />
-            </div>
-          </Field>
-          <Field label="Description" hint="The agents read this too, so say what the channel is for.">
-            <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} maxLength={250} placeholder="e.g. Plan and ship the new website" />
-          </Field>
-          {sections.length > 0 && (
-            <Field label="Section">
-              <SectionSelect sections={sections} value={section} onChange={setSection} />
-            </Field>
-          )}
-          <label className="flex items-center justify-between gap-3 text-sm">
-            <span>
-              <span className="font-medium flex items-center gap-1.5">
-                <Lock size={13} /> Private
-              </span>
-              <span className="block text-xs text-muted">Only people and agents you add can see it.</span>
-            </span>
-            <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" />
-          </label>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" onClick={() => setStep("browse")}>
-              Back
-            </Button>
-            <Button variant="primary" disabled={!name || exists}>
-              Next: its team <ArrowRight size={15} />
-            </Button>
-          </div>
-        </form>
-      </Modal>
-    );
-
-  if (step === "team")
-    return (
-      <Modal title={`#${name}: its team`} label={`The team for #${name}`} onClose={onClose} className="sm:max-w-5xl!">
-        <div className="space-y-4">
-          <Steps at={2} />
-          {mode === "steps" ? (
-            <TeamTemplatePicker
-              team={hasSteps(team) ? team : null}
-              onChange={setTeam}
-              onCreateAgent={(roleId) => setNewAgent({ roleId })}
-              onDescribe={(text) => void describe(text)}
-              onDrawOwn={() => {
-                setMode("chart");
-                setTeam(EMPTY_TEAM);
-              }}
-            />
-          ) : (
-            <>
-              <p className="text-sm text-muted">
-                Pick who works in #{name}. Drag agents onto the chart, make one or more of them leads, and draw an arrow from each agent to whoever it hands work to.{" "}
-                <button
-                  type="button"
-                  className="text-accent-text hover:underline"
-                  onClick={() => {
-                    setMode("steps");
-                    setTeam(EMPTY_TEAM);
-                  }}
-                >
-                  Use roles and steps instead
-                </button>
-              </p>
-              <TeamChart team={team} onChange={setTeam} onCreateAgent={() => setNewAgent({})} />
-              <details className="rounded-xl bg-bg px-3.5 py-2.5">
-                <summary className="text-sm font-medium cursor-pointer">How the team works</summary>
-                <TeamRules className="mt-2" />
-              </details>
-            </>
-          )}
-          {error && <p className="text-sm text-bad">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setStep("about")}>
-              <ArrowLeft size={15} /> Back
-            </Button>
-            <Button variant="primary" disabled={!!problem || busy} onClick={create} title={problem ?? undefined}>
-              Create #{name}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    );
+  if (step === "about") return <NewTeamFlow onClose={onClose} sectionId={sectionId} onBrowse={() => setStep("browse")} SectionPick={SectionSelect} initialName={name} />;
 
   return (
-    <Modal title="Add a channel" onClose={onClose} wide>
+    <Modal title="Add a team" onClose={onClose} wide>
       <div className="space-y-4">
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search or create a channel"
+            placeholder="Search or create a team"
             className="pl-9 h-10"
             onKeyDown={(e) => {
               if (e.key === "Enter" && name && !exists) setStep("about");
@@ -288,7 +120,7 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
         <div className="flex gap-4 border-b border-line text-sm" role="tablist">
           {(["all", "joined", ...(archivedCount ? ["archived" as const] : [])] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx("pb-2 -mb-px border-b-2", tab === t ? "border-ink text-ink font-medium" : "border-transparent text-muted hover:text-ink")}>
-              {t === "all" ? "All channels" : t === "joined" ? "Joined" : `Archived · ${archivedCount}`}
+              {t === "all" ? "All teams" : t === "joined" ? "Joined" : `Archived · ${archivedCount}`}
             </button>
           ))}
         </div>
@@ -297,11 +129,11 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
           <span className="size-7 rounded-lg bg-panel border border-line grid place-items-center">
             <Plus size={15} />
           </span>
-          {name && !exists ? `Create #${name}` : "Create a new channel"}
+          {name && !exists ? `Create #${name}` : "Create a new team"}
         </button>
 
         <div className="rounded-xl border border-line divide-y divide-line max-h-[50vh] overflow-y-auto">
-          {list.length === 0 && <p className="px-4 py-6 text-sm text-muted text-center">No channels match.</p>}
+          {list.length === 0 && <p className="px-4 py-6 text-sm text-muted text-center">No teams match.</p>}
           {list.map((c) => (
             <button key={c.id} onClick={() => open(c.id, c.joined)} className="w-full text-left px-4 py-3 hover:bg-hover flex items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -331,25 +163,10 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
   );
 }
 
-/** "Step 1 of 2" for making a channel. */
-function Steps({ at }: { at: 1 | 2 }) {
-  return (
-    <ol className="flex items-center gap-2 text-xs" aria-label={`Step ${at} of 2`}>
-      {["Name and description", "Its team"].map((label, i) => (
-        <li key={label} className={cx("flex items-center gap-2", i + 1 === at ? "text-ink font-medium" : "text-muted")}>
-          {i > 0 && <span className="h-px w-6 bg-line" />}
-          <span className={cx("size-5 rounded-full grid place-items-center text-[11px] font-semibold", i + 1 <= at ? "bg-ink text-panel" : "bg-chip text-muted")}>{i + 1 < at ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
-          {label}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export function SectionSelect({ sections, value, onChange }: { sections: Section[]; value: string | null; onChange: (v: string | null) => void }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
-      <option value="">Channels (no section)</option>
+      <option value="">No section</option>
       {sections.map((s) => (
         <option key={s.id} value={s.id}>
           {s.emoji} {s.name}
@@ -359,23 +176,22 @@ export function SectionSelect({ sections, value, onChange }: { sections: Section
   );
 }
 
-const SECTION_EMOJI = ["🐇", "🛠️", "🚀", "📣", "🎨", "🧪", "📊", "💬", "🌱", "🔒", "🤖", "⭐"];
 
 /** Create or rename a sidebar section. */
 export function SectionDialog({ section, onClose }: { section?: Section; onClose: () => void }) {
   const [name, setName] = useState(section?.name ?? "");
-  const [emoji, setEmoji] = useState(section?.emoji ?? "🐇");
   const [error, setError] = useState<string | null>(null);
   const refresh = useStore((s) => s.refreshSections);
   return (
-    <Modal title={section ? "Edit section" : "New section"} onClose={onClose}>
+    <Modal title={section ? "Rename section" : "New section"} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={async (e) => {
           e.preventDefault();
           try {
-            if (section) await api("PATCH", `/api/sections/${section.id}`, { name, emoji });
-            else await api("POST", "/api/sections", { name, emoji });
+            // sections are plain names; an emoji an older version gave one is kept as it was
+            if (section) await api("PATCH", `/api/sections/${section.id}`, { name, emoji: section.emoji });
+            else await api("POST", "/api/sections", { name, emoji: "" });
             await refresh();
             onClose();
           } catch (err) {
@@ -384,21 +200,8 @@ export function SectionDialog({ section, onClose }: { section?: Section; onClose
         }}
       >
         <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product" required maxLength={40} />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Launch" required maxLength={40} />
         </Field>
-        <div>
-          <div className="text-sm font-medium mb-1.5">Emoji</div>
-          <div className="flex flex-wrap gap-1">
-            {SECTION_EMOJI.map((x) => (
-              <button type="button" key={x} onClick={() => setEmoji(x)} className={cx("size-9 rounded-lg text-lg", emoji === x ? "bg-accent-soft ring-2 ring-accent" : "hover:bg-hover")} aria-pressed={emoji === x}>
-                {x}
-              </button>
-            ))}
-            <button type="button" onClick={() => setEmoji("")} className={cx("h-9 px-2 rounded-lg text-xs text-muted", !emoji ? "bg-accent-soft ring-2 ring-accent" : "hover:bg-hover")}>
-              None
-            </button>
-          </div>
-        </div>
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end">
           <Button variant="primary">{section ? "Save" : "Create section"}</Button>
@@ -421,10 +224,15 @@ export interface ChannelMember {
 
 export type ChannelSettingsTab = "about" | "team" | "agents" | "members" | "pins" | "danger";
 
+/** Where to land when no channel is picked: #general, or the first open channel if #general is archived or deleted. */
+export function landingChannel(channels: ChannelInfo[]) {
+  const open = channels.filter((c) => c.kind === "channel" && !c.archivedAt);
+  return open.find((c) => c.name === "general") ?? open.find((c) => c.joined) ?? channels.find((c) => c.kind === "channel" && c.name === "general");
+}
+
 /** Back to #general (after leaving or deleting the channel you were in). */
-function toGeneral() {
-  const general = useStore.getState().channels.find((c) => c.kind === "channel" && c.name === "general");
-  go({ view: "chat", channelId: general?.id ?? null, threadId: null });
+export function toGeneral() {
+  go({ view: "chat", channelId: landingChannel(useStore.getState().channels)?.id ?? null, threadId: null });
 }
 
 /** Leave a channel; if you were looking at it, go back to #general. */
@@ -440,7 +248,7 @@ export function ChannelSettings({ channel: initial, tab: initialTab = "about", o
   // follow the live channel, so pins and members update while the dialog is open
   const channel = useStore((s) => s.channels.find((c) => c.id === initial.id)) ?? initial;
   const canManage = role === "owner" || role === "member";
-  const canRemove = canManage && !isProtected(channel);
+  const canRemove = canManage;
   const [tab, setTab] = useState<ChannelSettingsTab>(initialTab === "danger" && !canRemove ? "about" : initialTab);
   // the team being edited lives here, so it survives a trip to the New agent dialog
   const agents = useStore((s) => s.agents);
@@ -486,7 +294,7 @@ export function ChannelSettings({ channel: initial, tab: initialTab = "about", o
         ))}
       </div>
       {tab === "about" && <AboutChannel channel={channel} canManage={canManage} onClose={onClose} />}
-      {tab === "team" && <ChannelTeamTab channel={channel} team={team} onChange={setTeam} canManage={canManage && !channel.archivedAt} onCreateAgent={(roleId) => setNewAgent({ roleId })} onClose={onClose} />}
+      {tab === "team" && <ChannelTeamTab channel={channel} team={team} onChange={setTeam} canManage={canManage && !channel.archivedAt} onCreateAgent={() => setNewAgent({})} onClose={onClose} />}
       {tab === "agents" && <ChannelAgents channel={channel} canManage={canManage && !channel.archivedAt} onClose={onClose} />}
       {tab === "members" && <ChannelMembers channel={channel} canManage={canManage} onClose={onClose} />}
       {tab === "pins" && <ChannelPins channel={channel} onClose={onClose} />}
@@ -495,7 +303,7 @@ export function ChannelSettings({ channel: initial, tab: initialTab = "about", o
   );
 }
 
-function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
+export function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
   const sections = useStore((s) => s.sections);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [name, setName] = useState(channel.name);
@@ -524,14 +332,14 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
       }}
     >
       <fieldset disabled={!canManage} className="space-y-4">
-      <Field label="Name" hint={channel.name === "general" ? "Everyone in the organization lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the channel keep working after a rename."}>
+      <Field label="Name" hint={channel.name === "general" ? "Everyone in the organization lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the team keep working after a rename."}>
         <div className="relative">
           <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <Input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} required maxLength={80} className="pl-8" disabled={channel.name === "general"} />
         </div>
       </Field>
       <Field label="Topic">
-        <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this channel for?" maxLength={250} />
+        <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this team for?" maxLength={250} />
       </Field>
       <Field label="Sidebar section">
         <SectionSelect sections={sections} value={section} onChange={setSection} />
@@ -544,11 +352,11 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
             </span>
             <span className="block text-xs text-muted">{isPrivate ? "Only its members (and organization owners) can see it." : "Anyone in the organization can find and join it."}</span>
           </span>
-          <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" disabled={!canManage} />
+          <Toggle on={isPrivate} onChange={setPrivate} label="Private team" disabled={!canManage} />
         </label>
       )}
       </fieldset>
-      {!canManage && <p className="text-xs text-muted">Guests can't change channels.</p>}
+      {!canManage && <p className="text-xs text-muted">Guests can't change teams.</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex items-center justify-between gap-2 pt-1">
         {channel.joined && channel.name !== "general" ? (
@@ -560,7 +368,7 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
               onClose();
             }}
           >
-            <LogOut size={14} /> Leave channel
+            <LogOut size={14} /> Leave team
           </Button>
         ) : (
           <span />
@@ -719,7 +527,7 @@ export function ChannelMembers({ channel, canManage, onClose }: { channel: Chann
         </div>
       )}
       <p className="text-xs text-muted">
-        Agents here answer when someone @mentions them{channel.settings.defaultAgentId ? "; the channel's own agent answers everything else (see Agents)" : ""}.{" "}
+        Agents here answer when someone @mentions them{channel.settings.defaultAgentId ? "; the team's own agent answers everything else (see Agents)" : ""}.{" "}
         {channel.private ? `Only the people and agents listed can see #${channel.name}.` : `Anyone in the organization can still read and join #${channel.name}.`}
       </p>
     </div>
@@ -734,19 +542,25 @@ export function useTeamWork(channelId: string): Record<string, string> {
   return out;
 }
 
-/** A channel's team chart: who leads, who hands work to whom. Saving it adds everyone on it to the channel. */
-function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onClose }: { channel: ChannelInfo; team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean; onCreateAgent: (roleId?: string) => void; onClose: () => void }) {
+/**
+ * A channel's team. A team that runs on steps shows how it works in plain lines, and the flowchart
+ * builder (team/Builder.tsx) opens from there to change it. An older plain chart (who hands work
+ * to whom) is still drawn here. Saving it adds everyone on it to the channel.
+ */
+export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onClose }: { channel: ChannelInfo; team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean; onCreateAgent: () => void; onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const working = useTeamWork(channel.id);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [building, setBuilding] = useState(false);
   const saved = liveTeam(channel.settings.team, agents) ?? EMPTY_TEAM;
   const changed = JSON.stringify(team) !== JSON.stringify(saved);
-  const problem = team.nodes.length || hasSteps(team) ? teamProblem(team) : null;
-  // a new team, or a switch from a plain chart, starts from a template
-  const [picking, setPicking] = useState(!saved.nodes.length);
   const stepped = hasSteps(team);
+  const problem = team.nodes.length || stepped ? teamProblem(team) : null;
+  // a new team starts by choosing how it works; a plain chart is the other way to draw one
+  const [plain, setPlain] = useState(false);
+  const lines = useFlowLines(team);
   const save = async (next: ChannelTeam | null) => {
     setError(null);
     setSaving(true);
@@ -760,40 +574,42 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
       setSaving(false);
     }
   };
+  /** The builder saves on its own; take what it saved back into this tab. */
+  const closeBuilder = () => {
+    setBuilding(false);
+    const now = useStore.getState().channels.find((c) => c.id === channel.id)?.settings.team ?? null;
+    onChange(liveTeam(now, agents) ?? EMPTY_TEAM);
+  };
   return (
     <div className="space-y-4">
-      {picking && canManage ? (
-        <TeamTemplatePicker
-          team={stepped ? team : null}
-          onChange={onChange}
-          onCreateAgent={(roleId) => onCreateAgent(roleId)}
-          onDrawOwn={() => {
-            setPicking(false);
-            // empty roles and steps say to drop them (left out, the hub keeps the old ones)
-            onChange(saved.roles?.length ? { ...EMPTY_TEAM, roles: [], steps: [] } : saved);
-          }}
-        />
-      ) : stepped ? (
-        <>
-          <p className="text-sm text-muted flex flex-wrap items-center justify-between gap-2">
-            <span>Every new message in #{channel.name} goes through these steps. Click a step or a role to change it.</span>
-            {canManage && (
-              <button type="button" className="text-accent-text hover:underline" onClick={() => setPicking(true)}>
-                Start from a template
-              </button>
-            )}
-          </p>
-          <TeamSteps team={team} onChange={canManage ? onChange : undefined} readOnly={!canManage} onCreateAgent={canManage ? (roleId) => onCreateAgent(roleId) : undefined} channelId={saved.roles?.length ? channel.id : undefined} />
-        </>
+      {stepped || (!saved.nodes.length && !plain) ? (
+        <section aria-label="How the team works" className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted">How the team works</h3>
+          <div className="rounded-3xl bg-card p-4">
+            {stepped ? <HowLines lines={lines} /> : <p className="text-sm text-muted">{`#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Draw the steps and say how each one works.`}</p>}
+          </div>
+          {canManage && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="primary" onClick={() => setBuilding(true)}>
+                {stepped ? "Edit how it works" : "Set up how it works"}
+              </Button>
+              {!stepped && (
+                <button type="button" className="text-sm text-accent-text hover:underline" onClick={() => setPlain(true)}>
+                  Draw who hands work to whom instead
+                </button>
+              )}
+            </div>
+          )}
+        </section>
       ) : (
         <>
           <p className="text-sm text-muted">
             {saved.nodes.length
               ? `The leads read every new message in #${channel.name} and hand out the work along the arrows.`
-              : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Build one: drag agents onto the chart and make one of them a lead.`}{" "}
+              : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Drag agents onto the chart and make one of them a lead.`}{" "}
             {canManage && (
-              <button type="button" className="text-accent-text hover:underline" onClick={() => setPicking(true)}>
-                Use roles and steps instead
+              <button type="button" className="text-accent-text hover:underline" onClick={() => setBuilding(true)}>
+                Use steps instead
               </button>
             )}
           </p>
@@ -804,8 +620,8 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
           </details>
         </>
       )}
-      {team.nodes.length > 0 && !(picking && canManage) && <TeamMore team={team} onChange={onChange} canManage={canManage} />}
-      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This channel is archived." : "Guests can't change channels."}</p>}
+      {team.nodes.length > 0 && <TeamMore team={team} onChange={onChange} canManage={canManage} />}
+      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This team is archived." : "Guests can't change teams."}</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       {canManage && (
         <div className="flex items-center justify-between gap-2">
@@ -821,6 +637,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
           </Button>
         </div>
       )}
+      {building && <TeamEditSession channel={channel} onClose={closeBuilder} />}
     </div>
   );
 }
@@ -899,13 +716,13 @@ function TeamMore({ team, onChange, canManage }: { team: ChannelTeam; onChange: 
 }
 
 /** How agents behave here: who answers un-@mentioned messages, where they reply, and notes they all follow. */
-function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
+export function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const refreshChannels = useStore((s) => s.refreshChannels);
-  const [rules, setRules] = useState<AgentRules>(channel.settings);
+  const [rules, setRules] = useState<AgentRules>(() => agentRulesOf(channel.settings));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const changed = JSON.stringify(rules) !== JSON.stringify(channel.settings);
+  const changed = JSON.stringify(rules) !== JSON.stringify(agentRulesOf(channel.settings));
   const answerer = agents.find((a) => a.id === rules.defaultAgentId);
   return (
     <form
@@ -915,7 +732,7 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
         setError(null);
         setSaving(true);
         try {
-          await api("PATCH", `/api/channels/${channel.id}`, { settings: rules });
+          await api("PATCH", `/api/channels/${channel.id}`, { settings: agentRulesOf(rules) });
           await refreshChannels();
           onClose();
         } catch (err) {
@@ -933,7 +750,7 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
               ? undefined
               : answerer
               ? `${answerer.name} answers anything nobody @mentions, and joins #${channel.name} to do it. @mention another agent to ask them instead.`
-              : "Right now a message only reaches an agent when someone @mentions it. Pick an agent to make this its channel."
+              : "Right now a message only reaches an agent when someone @mentions it. Pick an agent to answer here."
           }
         >
           {channel.settings.team?.nodes.length ? (
@@ -947,16 +764,16 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
         <label className="flex items-center justify-between gap-3 text-sm">
           <span>
             <span className="font-medium">Answer in a thread</span>
-            <span className="block text-xs text-muted">Agents reply under the message they're answering, so the channel stays easy to read.</span>
+            <span className="block text-xs text-muted">Agents reply under the message they're answering, so the chat stays easy to read.</span>
           </span>
           <Toggle on={rules.replyInThread} onChange={(v) => setRules({ ...rules, replyInThread: v })} label="Agents answer in a thread" disabled={!canManage} />
         </label>
-        <Field label="Notes for agents here" hint="Every agent reads these when it works in this channel, e.g. which repo to use or how long replies should be.">
+        <Field label="Notes for agents here" hint="Every agent reads these when it works in this team, e.g. which repo to use or how long replies should be.">
           <Textarea value={rules.instructions} onChange={(e) => setRules({ ...rules, instructions: e.target.value })} rows={4} maxLength={4000} placeholder={`e.g. "This is where we plan the launch. Keep answers short and link the doc in shared/launch.md."`} />
         </Field>
         <p className="text-xs text-muted">In a thread, a plain reply goes back to the agent already talking there; no @mention needed.</p>
       </fieldset>
-      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This channel is archived." : "Guests can't change channels."}</p>}
+      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This team is archived." : "Guests can't change teams."}</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex justify-end">
         <Button variant="primary" disabled={!canManage || !changed || saving}>
@@ -974,7 +791,7 @@ interface PinRow {
 }
 
 /** The messages pinned in a channel, newest pin first, each one a way back to where it was said. */
-function ChannelPins({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
+export function ChannelPins({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {
   const names = useNames();
   const canPin = useStore((s) => s.me?.role !== "guest") && !channel.archivedAt;
   const [pins, setPins] = useState<PinRow[] | null>(null);
@@ -1056,7 +873,7 @@ function ArchiveOrDelete({ channel, onClose }: { channel: ChannelInfo; onClose: 
             }
           }}
         >
-          {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
+          {channel.archivedAt ? "Unarchive team" : "Archive team"}
         </Button>
       </div>
       <form
@@ -1080,13 +897,13 @@ function ArchiveOrDelete({ channel, onClose }: { channel: ChannelInfo; onClose: 
         <div className="font-medium flex items-center gap-2 text-bad">
           <Trash2 size={15} /> Delete #{channel.name}
         </div>
-        <p className="text-sm text-muted">Every message, thread and discussion in it is deleted for everyone, and agents working here are stopped. Tasks and routines that pointed here keep going without a channel. This can't be undone.</p>
+        <p className="text-sm text-muted">Every message, thread and discussion in it is deleted for everyone, and agents working here are stopped. Tasks and routines that pointed here keep going without a team. This can't be undone.</p>
         <Field label={`Type ${channel.name} to confirm`}>
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={channel.name} autoComplete="off" />
         </Field>
         <div className="flex justify-end">
           <Button variant="danger" disabled={typed !== channel.name || busy}>
-            Delete channel
+            Delete team
           </Button>
         </div>
       </form>
@@ -1116,7 +933,7 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           ))
         }
         items={[
-          { label: channel.starred ? "Unstar" : "Star", icon: <Star size={14} />, onSelect: () => void setChannelPrefs(channel, { starred: !channel.starred }) },
+          { label: channel.starred ? "Unpin" : "Pin to top", icon: <Pin size={14} />, onSelect: () => void setChannelPrefs(channel, { starred: !channel.starred }) },
           channel.notify === "mute"
             ? { label: "Unmute", icon: <Bell size={14} />, onSelect: () => void setChannelPrefs(channel, { notify: "default" }) }
             : { label: "Mute", icon: <BellOff size={14} />, onSelect: () => void setChannelPrefs(channel, { notify: "mute" }) },
@@ -1124,8 +941,8 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           ...(role !== "guest" ? [{ label: "Rename…", icon: <Pencil size={14} />, onSelect: () => setSettings("about") }] : []),
           { label: "Agents", icon: <Bot size={14} />, onSelect: () => setSettings("agents") },
           { label: "Members", icon: <Users size={14} />, onSelect: () => setSettings("members") },
-          ...(channel.joined && channel.name !== "general" ? ["divider" as const, { label: "Leave channel", icon: <LogOut size={14} />, onSelect: () => void leaveChannel(channel), danger: true }] : []),
-          ...(role !== "guest" && !isProtected(channel) && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
+          ...(channel.joined && channel.name !== "general" ? ["divider" as const, { label: "Leave team", icon: <LogOut size={14} />, onSelect: () => void leaveChannel(channel), danger: true }] : []),
+          ...(role !== "guest" && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
         ]}
       />
       {/* the sidebar row only shows this button on hover (opacity-0 otherwise), which would hide the dialog too: draw it on the page */}

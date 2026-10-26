@@ -34,10 +34,10 @@ struct SearchResultsSections: View {
 
   var body: some View {
     if !channels.isEmpty {
-      Section("Matching channels") {
+      Section("Matching teams") {
         ForEach(channels) { c in
           Button { open(.channel(c)) } label: {
-            resultRow(symbol: c.private == true ? "lock" : "number", title: c.name, kind: "Channel",
+            resultRow(symbol: c.private == true ? "lock" : "number", title: c.name, kind: "Team",
                       sub: [SearchText.clean(c.topic), c.joined == true ? "" : "Not joined yet"].filter { !$0.isEmpty }.joined(separator: " · "))
           }
         }
@@ -70,7 +70,7 @@ struct SearchResultsSections: View {
       }
     }
     if !results.notes.isEmpty {
-      Section("Memory notes") {
+      Section("Memory") {
         ForEach(results.notes) { n in
           let title = SearchText.clean(n.title ?? "", max: 80).nonEmpty ?? SearchText.humanize((n.path as NSString).lastPathComponent).nonEmpty ?? "Untitled note"
           Button { open(.note(n.path)) } label: {

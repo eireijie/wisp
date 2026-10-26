@@ -1,860 +1,644 @@
 import SwiftUI
 
-/** A role or a step being edited, pushed from the steps editor or a tap on the chart. */
-enum TeamEditTarget: Hashable, Identifiable {
-  case role(String), step(String)
-  var id: String {
-    switch self {
-    case .role(let id): "role:\(id)"
-    case .step(let id): "step:\(id)"
+// The team flowchart builder on the phone: a vertical flow with steps that run at the same time
+// side by side, a "How it works" tab written from the chart, and sheets for each step.
+
+extension Palette {
+  /** a number badge or small chip on a card */
+  static let badge = Color(light: 0x000000, lightAlpha: 0.07, dark: 0xFFFFFF, darkAlpha: 0.10)
+}
+
+struct StepRef: Identifiable, Hashable { var id: String }
+
+/** Where "Add a step" puts the new step. */
+struct AddRequest: Identifiable {
+  let id = UUID()
+  /** between these steps (empty `from` = at the start, empty `to` = at the end) */
+  var from: [String]
+  var to: [String]
+  /** or just after this step, chosen in the sheet */
+  var after: String?
+  var between: Bool
+}
+
+extension ChannelTeam.Step {
+  /** The line and icon a card shows for steps that aren't plain agent steps. */
+  var kindMark: (symbol: String, text: String)? {
+    switch kind {
+    case .do: nil
+    case .review: ("arrow.triangle.2.circlepath", "Repeats until approved")
+    case .ask: ("person.crop.circle.badge.checkmark", "Asks you")
+    case .handoff: ("arrow.up.forward.square", "Hands off")
+    case .branch: ("arrow.triangle.branch", "If / else")
+    case .handOut: ("square.split.2x2", "Splits the work")
+    case .custom: ("slider.horizontal.3", "Custom")
+    }
+  }
+
+  static func kindName(_ kind: Kind) -> String {
+    switch kind {
+    case .do: "Agent"
+    case .review: "Repeat until approved"
+    case .handOut: "Split the work"
+    case .ask: "Ask me"
+    case .handoff: "Hand off to a team"
+    case .branch: "If / else"
+    case .custom: "Custom"
     }
   }
 }
 
-private extension ChannelTeam.Step.Kind {
-  var label: String {
-    switch self {
-    case .do: "Does it"
-    case .review: "Reviews"
-    case .handOut: "Hands out"
-    }
-  }
-}
+// MARK: the builder
 
-private func uid(_ prefix: String) -> String {
-  "\(prefix)-\(String((0..<5).map { _ in "abcdefghijklmnopqrstuvwxyz0123456789".randomElement()! }))"
-}
+struct TeamBuilder: View {
+  enum Tab { case steps, how }
 
-// MARK: the template picker
-
-/**
- * How a team works, picked from a template: the templates, then the picked one's roles with an
- * agent for each and its steps in a line. Use it inside a Form.
- */
-struct TeamTemplatePicker: View {
   @Environment(Store.self) private var store
   @Binding var team: ChannelTeam
-  var onCustomize: () -> Void
-  /** a person describes the team in their words; an agent builds it */
-  var onDescribe: ((String) -> Void)? = nil
-  /** a plain chart instead of roles and steps */
-  var onDrawOwn: (() -> Void)? = nil
-  var busy = false
-  /** over the first section */
-  var header: String? = nil
-  @State private var own: [TeamTemplate] = []
-  @State private var picked: String?
-  @State private var describe = ""
-  @State private var creatingFor: RoleRef?
-
-  private var templates: [TeamTemplate] { TeamTemplate.builtIn + own }
-  private var current: TeamTemplate? { templates.first { $0.id == picked } }
-
-  var body: some View {
-    if let onDescribe {
-      Section {
-        TextField("Or describe it: “Opus plans, GPT pokes holes until it approves, then Opus hands out the work”", text: $describe, axis: .vertical)
-          .lineLimit(1...5)
-        Button("Have an agent build it", systemImage: "sparkles") { onDescribe(describe.trimmingCharacters(in: .whitespacesAndNewlines)) }
-          .disabled(describe.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
-      } header: {
-        if let header { Text(header) }
-      }
-    }
-    Section {
-      ForEach(templates) { t in
-        Button { pick(t) } label: {
-          HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(t.name).foregroundStyle(.primary)
-              if !t.blurb.isEmpty { Text(t.blurb).font(.caption).foregroundStyle(.secondary) }
-            }
-            Spacer()
-            Text("\(t.roles.count) roles").font(.caption).foregroundStyle(.secondary)
-            Image(systemName: "checkmark").font(.subheadline.weight(.semibold)).opacity(picked == t.id ? 1 : 0)
-          }
-        }
-        .accessibilityAddTraits(picked == t.id ? .isSelected : [])
-        .swipeActions {
-          if own.contains(where: { $0.id == t.id }) && store.canManage {
-            Button("Delete", role: .destructive) {
-              Task {
-                try? await store.deleteTeamTemplate(t.id)
-                own.removeAll { $0.id == t.id }
-              }
-            }
-          }
-        }
-      }
-      if let onDrawOwn {
-        Button("Draw who hands work to whom instead") { onDrawOwn() }
-      }
-    } header: {
-      Text(onDescribe == nil ? header ?? "Templates" : "Templates")
-    }
-    if team.hasSteps {
-      Section {
-        ForEach(team.roles ?? []) { r in
-          RoleAgentPicker(team: $team, roleId: r.id, title: r.name, detail: r.description) { creatingFor = RoleRef(id: r.id) }
-        }
-        StepSummary(team: team)
-      } header: {
-        Text(current?.name ?? "Your team")
-      } footer: {
-        if let problem = team.problem { Text(problem).foregroundStyle(.red) }
-      }
-      Section {
-        Button("Customize steps", systemImage: "slider.horizontal.3") { onCustomize() }
-      }
-      .sheet(item: $creatingFor) { ref in
-        AddAgent { agent in team = team.setting(role: ref.id, agent: agent.id) }
-      }
-      .task { own = (try? await store.teamTemplates()) ?? own }
-    } else {
-      // start on the first template so there's always something to look at
-      Color.clear.frame(height: 0).listRowBackground(Color.clear)
-        .onAppear { if picked == nil, let first = TeamTemplate.builtIn.first { pick(first) } }
-    }
-  }
-
-  private func pick(_ t: TeamTemplate) {
-    picked = t.id
-    team = t.filled(with: store.agents, base: team)
-  }
-}
-
-private struct RoleRef: Identifiable { var id: String }
-
-extension ChannelTeam {
-  /** The team with an agent picked for a role, and its chart kept in step. */
-  func setting(role id: String, agent: String?) -> ChannelTeam {
-    var team = self
-    team.roles = roles?.map { r in
-      var r = r
-      if r.id == id { r.agentId = agent }
-      return r
-    }
-    return team.withChart
-  }
-}
-
-/** Pick the agent for a role, or make one. */
-private struct RoleAgentPicker: View {
-  @Environment(Store.self) private var store
-  @Binding var team: ChannelTeam
-  var roleId: String
-  var title: String
-  var detail: String? = nil
-  var onCreate: (() -> Void)?
-
-  private var role: ChannelTeam.Role? { team.role(roleId) }
-
-  var body: some View {
-    Picker(selection: Binding(
-      get: { role?.agentId ?? "" },
-      set: { value in
-        if value == "__new" { onCreate?() } else { team = team.setting(role: roleId, agent: value.isEmpty ? nil : value) }
-      }
-    )) {
-      Text(role?.harness.map { "Pick an agent (\(HarnessChoice.label($0)) fits)" } ?? "Pick an agent").tag("")
-      ForEach(store.agents) { a in Text("\(a.name) · \(HarnessChoice.label(a.harness))").tag(a.id) }
-      if onCreate != nil { Text("Create an agent…").tag("__new") }
-    } label: {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title)
-        if let detail, !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-      }
-    }
-    .pickerStyle(.menu)
-    .tint(role?.agentId == nil ? .orange : .secondary)
-  }
-}
-
-/** The steps as a line: "Lead: Draft a thorough plan → Challenger: Find gaps ↺ max 3 → …". */
-private struct StepSummary: View {
-  var team: ChannelTeam
-  var body: some View {
-    let roles = team.roles ?? []
-    Text(ChannelTeam.stepOrder(team.steps ?? []).map { s in
-      ChannelTeam.stepLabel(s, roles: roles) + (s.kind == .review ? " ↺ max \(s.maxRounds ?? ChannelTeam.defaultRounds)" : "")
-    }.joined(separator: "  →  "))
-    .font(.footnote)
-    .foregroundStyle(.secondary)
-  }
-}
-
-// MARK: the steps editor
-
-/**
- * A stepped team, editable: the chart of its steps (pinch to zoom, drag to move around, tap a
- * step to edit it), then its roles and its steps in order. Use it inside a Form whose screen
- * pushes `TeamEditForm` for `editing`.
- */
-struct TeamStepsEditor: View {
-  @Environment(Store.self) private var store
-  @Binding var team: ChannelTeam
-  @Binding var editing: TeamEditTarget?
-  var editable = true
-  /** a saved channel, so its team can be saved as a template */
+  var name: String
+  /** the team's channel once it exists (to save it as a template) */
   var channelId: String? = nil
-  /** over the chart */
-  var header: String? = nil
-
-  var body: some View {
-    Section {
-      StepChart(team: team, selected: { if case .step(let id) = editing { id } else { nil } }()) { editing = .step($0) }
-        .frame(height: 340)
-        .listRowInsets(EdgeInsets())
-    } header: {
-      if let header { Text(header) }
-    } footer: {
-      if let problem = team.problem { Text(problem).foregroundStyle(.red) }
-    }
-    Section("Roles") {
-      ForEach(team.roles ?? []) { r in
-        Button { editing = .role(r.id) } label: { RoleRow(role: r) }
-      }
-      if editable {
-        Button("Add role", systemImage: "plus") {
-          let r = ChannelTeam.Role(id: uid("role"), name: "New role", description: "", agentId: nil)
-          team.roles = (team.roles ?? []) + [r]
-          editing = .role(r.id)
-        }
-      }
-    }
-    Section("Steps") {
-      ForEach(team.orderedSteps) { s in
-        Button { editing = .step(s.id) } label: { StepRow(team: team, step: s) }
-      }
-      if editable {
-        Button("Add step", systemImage: "plus") {
-          if let id = team.addingStep(after: ChannelTeam.stepOrder(team.steps ?? []).last?.id) { editing = .step(id) }
-        }
-      }
-    }
-    if editable, let channelId {
-      Section { SaveAsTemplate(channelId: channelId) }
-    }
-  }
-}
-
-private struct RoleRow: View {
-  @Environment(Store.self) private var store
-  var role: ChannelTeam.Role
-  var body: some View {
-    let agent = role.agentId.flatMap { store.agent($0) }
-    HStack(spacing: 10) {
-      if let agent { AgentAvatar(agent: agent, size: 30, showStatus: false) } else { NobodyCircle(size: 30) }
-      VStack(alignment: .leading, spacing: 1) {
-        Text(role.name.isEmpty ? "Untitled role" : role.name).foregroundStyle(.primary)
-        Text(agent.map { "\($0.name) · \(HarnessChoice.label($0.harness))" } ?? "Nobody yet").font(.caption).foregroundStyle(agent == nil ? .orange : .secondary)
-      }
-      Spacer()
-      Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-    }
-  }
-}
-
-private struct StepRow: View {
-  var team: ChannelTeam
-  var step: ChannelTeam.Step
-  var body: some View {
-    HStack(spacing: 10) {
-      Image(systemName: step.kind == .review ? "checkmark.seal" : step.kind == .handOut ? "arrow.triangle.branch" : "circle")
-        .foregroundStyle(.secondary)
-        .frame(width: 30)
-      VStack(alignment: .leading, spacing: 1) {
-        Text(step.action.isEmpty ? "Say what it does" : step.action).foregroundStyle(step.action.isEmpty ? .secondary : .primary)
-        Text(([team.role(step.roleId)?.name ?? "?"] + (step.kind == .do ? [] : [step.kind.label.lowercased()])).joined(separator: " · "))
-          .font(.caption).foregroundStyle(.secondary)
-      }
-      Spacer()
-      Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-    }
-  }
-}
-
-/** A dashed circle where an agent would be: nobody fills the role yet. */
-private struct NobodyCircle: View {
-  var size: CGFloat
-  var body: some View {
-    Circle().strokeBorder(Color.orange, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3])).frame(width: size, height: size)
-  }
-}
-
-extension ChannelTeam {
-  /**
-   * A new step right after `after` (or at the end): it takes over where that step led, and
-   * everything under it on the chart moves down a row. Returns the new step's id.
-   */
-  @discardableResult
-  mutating func addingStep(after id: String?) -> String? {
-    let all = steps ?? []
-    let after = all.first { $0.id == id }
-    let boxes = chartBoxes
-    let below = after.map { a in (boxes.filter { $0.id == a.id || $0.id.hasPrefix("\(a.id):") }.map(\.y).max() ?? a.y) + Self.stepRow } ?? 0
-    let s = Step(id: uid("step"), roleId: roles?.first?.id ?? "", kind: .do, action: "", next: after?.next, x: after?.x ?? 0, y: below)
-    steps = all.map { x in
-      var x = x
-      if after != nil && x.y >= below { x.y += Self.stepRow }
-      if x.id == after?.id { x.next = s.id }
-      return x
-    } + [s]
-    self = withChart
-    return s.id
-  }
-
-  /** Take a step out: whatever led to it now leads where it led. */
-  mutating func removeStep(_ id: String) {
-    let gone = step(id)
-    steps = (steps ?? []).filter { $0.id != id }.map { s in
-      var s = s
-      if s.next == id { s.next = gone?.next }
-      if s.sendBackTo == id { s.sendBackTo = nil }
-      return s
-    }
-    self = withChart
-  }
-
-  /** Take a role off (only when no step belongs to it): hand-outs stop naming it. */
-  mutating func removeRole(_ id: String) {
-    roles = (roles ?? []).filter { $0.id != id }
-    steps = steps?.map { s in
-      var s = s
-      s.handTo = s.handTo?.filter { $0 != id }
-      if s.reviewBy == id { s.reviewBy = nil }
-      return s
-    }
-    self = withChart
-  }
-}
-
-/** Save a channel's roles and steps as a template anyone here can start from. */
-private struct SaveAsTemplate: View {
-  @Environment(Store.self) private var store
-  var channelId: String
+  /** the template saves the team as the hub has it, so not while there are changes that aren't saved */
+  var canSaveTemplate = true
+  var saving = false
+  /** what the hub said when saving didn't work */
+  var error: String? = nil
+  var onBack: () -> Void
+  var onDone: () -> Void
+  @State private var tab = Tab.steps
+  @State private var editing: StepRef?
+  @State private var adding: AddRequest?
+  @State private var reordering = false
+  @State private var templates = false
   @State private var naming = false
-  @State private var name = ""
-  @State private var saved = false
+  @State private var templateName = ""
   @State private var action = FormAction()
+  @State private var savedTemplate = false
+
+  private var steps: [ChannelTeam.Step] { team.steps ?? [] }
+  private var problems: [String] { team.stepsProblems }
 
   var body: some View {
-    Button(saved ? "Saved as a template" : "Save as template", systemImage: saved ? "checkmark" : "square.and.arrow.down") { naming = true }
-      .alert("Save as template", isPresented: $naming) {
-        TextField("Template name", text: $name)
-        Button("Save") {
-          let name = name.trimmingCharacters(in: .whitespaces)
-          action.run {
-            try await store.saveTeamTemplate(channelId: channelId, name: String(name.prefix(60)))
-            saved = true
+    ZStack {
+      Palette.ground.ignoresSafeArea()
+      VStack(spacing: 0) {
+        topBar.managementAlert(action)
+        if steps.isEmpty { emptyState } else if tab == .steps { canvas } else { TeamHowList(team: team) { tab = .steps } }
+      }
+      if saving { SavingOverlay() }
+    }
+    .navigationBarHidden(true)
+    .sheet(item: $editing) { ref in
+      StepEditor(team: $team, stepId: ref.id, channelId: channelId) { editing = nil }
+        .presentationDetents([.large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
+    }
+    .sheet(item: $adding) { request in
+      AddStepSheet(team: team, request: request) { kind, anchor in add(kind, request: request, anchor: anchor) }
+        .presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
+    }
+    .sheet(isPresented: $reordering) {
+      ReorderSteps(team: $team) { reordering = false }
+        .presentationDetents([.large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
+    }
+    .sheet(isPresented: $templates) {
+      TemplateBrowser(title: "Start from a template", onClose: { templates = false }) { template in
+        templates = false
+        team = template.team(agents: store.agents, base: team)
+      }
+      .presentationDetents([.large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
+    }
+    .alert("Save as template", isPresented: $naming) {
+      TextField("Template name", text: $templateName)
+      Button("Save") {
+        let clean = String(templateName.trimmingCharacters(in: .whitespaces).prefix(60))
+        guard let channelId, !clean.isEmpty else { return }
+        savedTemplate = false
+        action.run { try await store.saveTeamTemplate(channelId: channelId, name: clean); savedTemplate = true }
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: { Text("Anyone here can start a team from it. Who does each step is left out.") }
+  }
+
+  // MARK: top
+
+  private var topBar: some View {
+    VStack(spacing: 4) {
+      TopBar {
+        CircleButton(symbol: "chevron.left", label: "Back", id: "builder-back", action: onBack)
+      } center: {
+        HStack(spacing: 0) {
+          tabButton("Steps", .steps)
+          tabButton("How it works", .how)
+        }
+        .padding(4)
+        .glassPill()
+      } trailing: {
+        CircleButton(symbol: "checkmark", label: "Done", id: "builder-done") { if problems.isEmpty && !steps.isEmpty { onDone() } }
+          .opacity(problems.isEmpty && !steps.isEmpty ? 1 : 0.4)
+          .disabled(saving)
+      }
+      HStack {
+        Text(savedTemplate ? "Saved as a template" : name).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+        Spacer()
+        if !steps.isEmpty {
+          Menu {
+            Button("Reorder steps", systemImage: "arrow.up.arrow.down") { reordering = true }
+            Button("Start from a template", systemImage: "square.grid.2x2") { templates = true }
+            if channelId != nil && canSaveTemplate { Button("Save as template", systemImage: "square.and.arrow.down") { naming = true } }
+          } label: {
+            HStack(spacing: 4) {
+              Text("\(steps.count) \(steps.count == 1 ? "step" : "steps")")
+              Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+            }
+            .font(.system(size: 15)).foregroundStyle(Palette.muted)
+            .frame(minHeight: 44)
           }
-        }.disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-        Button("Cancel", role: .cancel) {}
-      }
-    InlineError(error: action.error)
-  }
-}
-
-/** A role or a step, edited on its own screen. Edits go straight into the team. */
-struct TeamEditForm: View {
-  @Environment(Store.self) private var store
-  @Environment(\.dismiss) private var dismiss
-  @Binding var team: ChannelTeam
-  @State var target: TeamEditTarget
-  var editable = true
-  @State private var creating = false
-
-  var body: some View {
-    Form {
-      switch target {
-      case .role(let id):
-        if let role = team.role(id) { roleForm(role) }
-      case .step(let id):
-        if let step = team.step(id) { stepForm(step) }
-      }
-    }
-    .disabled(!editable)
-    .navigationTitle({ if case .role(let id) = target { team.role(id)?.name ?? "Role" } else { "Step" } }())
-    .navigationBarTitleDisplayMode(.inline)
-    .sheet(isPresented: $creating) {
-      AddAgent { agent in if case .role(let id) = target { team = team.setting(role: id, agent: agent.id) } }
-    }
-  }
-
-  // MARK: a role
-
-  @ViewBuilder private func roleForm(_ role: ChannelTeam.Role) -> some View {
-    Section("Name") {
-      TextField("Name", text: roleText(role.id, \.name, max: 60))
-    }
-    Section("What this role does") {
-      TextField("Every agent on the team reads this", text: roleText(role.id, \.description, max: 4000), axis: .vertical).lineLimit(4...12)
-    }
-    Section {
-      RoleAgentPicker(team: $team, roleId: role.id, title: "Filled by", onCreate: store.canManage ? { creating = true } : nil)
-    }
-    if editable {
-      let inUse = (team.steps ?? []).contains { $0.roleId == role.id }
-      Section {
-        Button("Remove role", systemImage: "trash", role: .destructive) {
-          team.removeRole(role.id)
-          dismiss()
-        }
-        .disabled(inUse)
-      }
-    }
-  }
-
-  private func roleText(_ id: String, _ key: WritableKeyPath<ChannelTeam.Role, String>, max: Int) -> Binding<String> {
-    Binding(
-      get: { team.role(id)?[keyPath: key] ?? "" },
-      set: { value in
-        guard let i = team.roles?.firstIndex(where: { $0.id == id }) else { return }
-        team.roles![i][keyPath: key] = String(value.prefix(max))
-        team = team.withChart
-      }
-    )
-  }
-
-  // MARK: a step
-
-  @ViewBuilder private func stepForm(_ step: ChannelTeam.Step) -> some View {
-    let roles = team.roles ?? []
-    let others = ChannelTeam.stepOrder(team.steps ?? []).filter { $0.id != step.id }
-    Section {
-      Picker("Who", selection: stepValue(step, \.roleId)) {
-        ForEach(roles) { Text($0.name).tag($0.id) }
-      }
-      Picker("Kind", selection: Binding(get: { step.kind }, set: { setKind($0, of: step.id) })) {
-        ForEach(ChannelTeam.Kind.allCases, id: \.self) { Text($0.label).tag($0) }
-      }
-      .pickerStyle(.segmented)
-    }
-    Section("Does what") {
-      TextField("e.g. Draft a thorough plan", text: Binding(get: { step.action }, set: { v in update(step.id) { $0.action = String(v.prefix(200)) } }))
-    }
-    if step.kind == .review {
-      Section {
-        Picker("Changes go back to", selection: stepValue(step, \.sendBackTo)) {
-          Text("Pick a step").tag(String?.none)
-          ForEach(others) { Text(ChannelTeam.stepLabel($0, roles: roles)).tag(Optional($0.id)) }
+          .accessibilityIdentifier("builder-more")
         }
       }
-    }
-    if step.kind == .handOut {
-      Section("Pieces go to") {
-        ForEach(roles.filter { $0.id != step.roleId }) { r in
-          Toggle(r.name, isOn: Binding(
-            get: { step.handTo?.contains(r.id) ?? false },
-            set: { on in update(step.id) { s in s.handTo = on ? (s.handTo ?? []) + [r.id] : (s.handTo ?? []).filter { $0 != r.id } } }
-          ))
-        }
-      }
-      Section {
-        Picker("Each piece is checked by", selection: stepValue(step, \.reviewBy)) {
-          Text("Nobody").tag(String?.none)
-          ForEach(roles) { Text($0.name).tag(Optional($0.id)) }
-        }
-      }
-    }
-    Section {
-      if step.kind == .review || (step.kind == .handOut && step.reviewBy != nil) {
-        Stepper(value: Binding(get: { step.maxRounds ?? ChannelTeam.defaultRounds }, set: { v in update(step.id) { $0.maxRounds = v } }), in: 1...ChannelTeam.maxRounds) {
-          LabeledContent("Rounds before it asks you", value: "\(step.maxRounds ?? ChannelTeam.defaultRounds)")
-        }
-      }
-      Picker(step.kind == .review ? "When approved, next" : "Next", selection: stepValue(step, \.next)) {
-        Text("Done: the flow ends here").tag(String?.none)
-        ForEach(others) { Text(ChannelTeam.stepLabel($0, roles: roles)).tag(Optional($0.id)) }
-      }
-    }
-    if editable {
-      Section {
-        Button("Add step after", systemImage: "plus") {
-          if let id = team.addingStep(after: step.id) { target = .step(id) }
-        }
-        Button("Remove step", systemImage: "trash", role: .destructive) {
-          team.removeStep(step.id)
-          dismiss()
-        }
-      }
+      .padding(.horizontal, 28)
     }
   }
 
-  private func update(_ id: String, _ change: (inout ChannelTeam.Step) -> Void) {
-    guard let i = team.steps?.firstIndex(where: { $0.id == id }) else { return }
-    change(&team.steps![i])
-    team = team.withChart
-  }
-
-  private func stepValue<V>(_ step: ChannelTeam.Step, _ key: WritableKeyPath<ChannelTeam.Step, V>) -> Binding<V> where V: Hashable {
-    Binding(
-      get: { team.step(step.id)?[keyPath: key] ?? step[keyPath: key] },
-      set: { v in update(step.id) { $0[keyPath: key] = v } }
-    )
-  }
-
-  /** A new kind starts with sensible picks: where a review sends work back, who a hand-out hands pieces to. */
-  private func setKind(_ kind: ChannelTeam.Kind, of id: String) {
-    let roles = team.roles ?? []
-    let others = ChannelTeam.stepOrder(team.steps ?? []).filter { $0.id != id }
-    update(id) { s in
-      s.kind = kind
-      if kind == .review && s.sendBackTo == nil {
-        s.sendBackTo = others.first?.id
-        s.maxRounds = s.maxRounds ?? ChannelTeam.defaultRounds
-      }
-      if kind == .handOut && (s.handTo ?? []).isEmpty {
-        let roleId = s.roleId
-        s.handTo = Array(roles.filter { $0.id != roleId }.prefix(2).map(\.id))
-      }
-    }
-  }
-}
-
-// MARK: the chart
-
-/**
- * A stepped team's chart: pinch to zoom, drag to move around, tap a step to pick it. Boxes sit
- * where the web's chart puts them, with each hand-out's pieces and checker under it.
- */
-struct StepChart: View {
-  @Environment(Store.self) private var store
-  var team: ChannelTeam
-  var selected: String? = nil
-  /** steps someone is on right now */
-  var active: Set<String> = []
-  var onSelect: (String) -> Void
-
-  private struct Viewport: Equatable { var x: CGFloat, y: CGFloat, k: CGFloat }
-  @State private var view = Viewport(x: 20, y: 20, k: 1)
-  @State private var panStart: Viewport?
-  @State private var pinchStart: Viewport?
-  @State private var size: CGSize = .zero
-  @State private var fitted = false
-
-  private static let minK: CGFloat = 0.3, maxK: CGFloat = 2
-  private static func clamp(_ k: CGFloat) -> CGFloat { min(maxK, max(minK, k)) }
-
-  private var boxes: [StepBox] { team.chartBoxes }
-
-  var body: some View {
-    let boxes = boxes
-    let lines = team.chartLines(boxes)
-    GeometryReader { geo in
-      ZStack(alignment: .topLeading) {
-        Color(.secondarySystemBackground)
-        world(boxes, lines)
-          .scaleEffect(view.k, anchor: .topLeading)
-          .offset(x: view.x, y: view.y)
-        if boxes.isEmpty {
-          Text("No steps yet.").font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-      }
-      .clipped()
-      .contentShape(Rectangle())
-      .gesture(pan.simultaneously(with: pinch))
-      .overlay(alignment: .bottomTrailing) { controls(boxes).padding(10) }
-      .onAppear {
-        size = geo.size
-        if !fitted { fit(boxes); fitted = true }
-      }
-      .onChange(of: geo.size) { _, new in
-        size = new
-        fit(boxes)
-      }
-    }
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("Steps chart")
-  }
-
-  /** Everything on the chart, in the chart's own coordinates. */
-  private func world(_ boxes: [StepBox], _ lines: [StepLine]) -> some View {
-    ZStack(alignment: .topLeading) {
-      ForEach(lines) { line in
-        let color = tone(line.tone)
-        StepCurve(line: line).stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: line.tone == .back ? [6, 5] : []))
-        StepArrowhead(line: line).fill(color)
-      }
-      ForEach(lines.filter { $0.label != nil }) { line in
-        Text(line.label!)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(tone(line.tone))
-          .padding(.horizontal, 5)
-          .background(Capsule().fill(Color(.secondarySystemBackground)))
-          .fixedSize()
-          .frame(width: 260, height: 20)
-          .offset(x: line.mid.x - 130, y: line.mid.y - 10)
-          .allowsHitTesting(false)
-      }
-      ForEach(boxes) { box in
-        boxView(box).offset(x: box.x, y: box.y)
-      }
-    }
-    .frame(width: 1, height: 1, alignment: .topLeading)
-  }
-
-  private func tone(_ t: StepLine.Tone) -> Color {
-    switch t {
-    case .go: Color.secondary.opacity(0.6)
-    case .ok: .green
-    case .back: .orange
-    }
-  }
-
-  @ViewBuilder private func boxView(_ box: StepBox) -> some View {
-    let role = team.role(box.roleId)
-    let agent = role?.agentId.flatMap { store.agent($0) }
-    let step = box.step
-    let picked = step != nil && step?.id == selected
-    let on = step.map { active.contains($0.id) } ?? false
-    let card = HStack(spacing: 8) {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(((role?.name ?? "?").uppercased()) + (step.map { $0.kind == .do ? "" : " · \($0.kind.label.lowercased())" } ?? ""))
-          .font(.system(size: 10, weight: .semibold))
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-        Text(step.map { $0.action.isEmpty ? "Say what it does" : $0.action } ?? (box.id.hasSuffix(":check") ? "Checks each piece" : "Builds its piece"))
-          .font(.system(size: 14, weight: .semibold))
-          .foregroundStyle(step?.action.isEmpty == true ? .secondary : .primary)
-          .lineLimit(1)
-      }
-      Spacer(minLength: 0)
-      if let agent { AgentAvatar(agent: agent, size: 26, showStatus: false) } else { NobodyCircle(size: 24) }
-    }
-    .padding(.horizontal, 12)
-    .frame(width: box.w, height: box.h)
-    .background(RoundedRectangle(cornerRadius: Corner.tile, style: .continuous).fill(Color(.systemBackground)))
-    .overlay(
-      RoundedRectangle(cornerRadius: Corner.tile, style: .continuous)
-        .strokeBorder(picked ? Color.accentColor : on ? Color.green : Color(.separator), style: StrokeStyle(lineWidth: picked || on ? 2 : 1, dash: step == nil ? [5, 4] : []))
-    )
-    if let step {
-      Button { onSelect(step.id) } label: { card }
-        .buttonStyle(.plain)
-        .accessibilityLabel(ChannelTeam.stepLabel(step, roles: team.roles ?? []))
-    } else {
-      card.accessibilityLabel("\(role?.name ?? "?"): \(box.id.hasSuffix(":check") ? "checks each piece" : "builds its piece")")
-    }
-  }
-
-  private func controls(_ boxes: [StepBox]) -> some View {
-    HStack(spacing: 0) {
-      Button { zoom(by: 1 / 1.2) } label: { Image(systemName: "minus").frame(width: 34, height: 32).contentShape(Rectangle()) }
-        .accessibilityLabel("Zoom out")
-      Text("\(Int((view.k * 100).rounded()))%")
-        .font(.caption.monospacedDigit())
-        .foregroundStyle(.secondary)
-        .frame(width: 44)
-      Button { zoom(by: 1.2) } label: { Image(systemName: "plus").frame(width: 34, height: 32).contentShape(Rectangle()) }
-        .accessibilityLabel("Zoom in")
-      Divider().frame(height: 18)
-      Button { withAnimation(.snappy) { fit(boxes) } } label: {
-        Label("Fit", systemImage: "arrow.up.left.and.arrow.down.right").font(.caption).padding(.horizontal, 10).frame(height: 32).contentShape(Rectangle())
-      }
-      .accessibilityLabel("Fit the whole chart")
+  private func tabButton(_ title: String, _ value: Tab) -> some View {
+    Button { withAnimation(.snappy(duration: 0.2)) { tab = value } } label: {
+      Text(title).font(.system(size: 17, weight: .semibold))
+        .foregroundStyle(tab == value ? Palette.text : Palette.muted)
+        .padding(.horizontal, 18).frame(height: 44)
+        .background { if tab == value { Capsule().fill(Palette.badge) } }
+        .contentShape(Capsule())
     }
     .buttonStyle(.plain)
-    .glassCapsule()
+    .accessibilityIdentifier(value == .steps ? "builder-tab-steps" : "builder-tab-how")
+    .accessibilityAddTraits(tab == value ? .isSelected : [])
   }
 
-  // MARK: moving around
+  // MARK: states
 
-  private var pan: some Gesture {
-    DragGesture(minimumDistance: 6)
-      .onChanged { v in
-        guard pinchStart == nil else { return }
-        let s = panStart ?? view
-        if panStart == nil { panStart = view }
-        view = Viewport(x: s.x + v.translation.width, y: s.y + v.translation.height, k: s.k)
+  private var emptyState: some View {
+    VStack(spacing: 14) {
+      Spacer()
+      Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 34)).foregroundStyle(Palette.faint)
+      Text("No steps yet").font(.system(size: 22, weight: .semibold)).foregroundStyle(Palette.text)
+      Text("A step is an agent doing one thing. Add more and join them up.")
+        .font(.system(size: 16)).foregroundStyle(Palette.muted).multilineTextAlignment(.center).padding(.horizontal, 40)
+      Button { adding = AddRequest(from: [], to: [], after: nil, between: false) } label: {
+        Label("Add a step", systemImage: "plus").frame(maxWidth: .infinity)
       }
-      .onEnded { _ in panStart = nil }
+      .primaryButton().padding(.horizontal, 40).padding(.top, 8)
+      .accessibilityIdentifier("builder-add-first")
+      Button("Or start from a template") { templates = true }
+        .font(.system(size: 16)).foregroundStyle(Palette.muted).frame(minHeight: 44)
+        .accessibilityIdentifier("builder-templates")
+      Spacer(); Spacer()
+    }
+    .frame(maxWidth: .infinity)
   }
 
-  private var pinch: some Gesture {
-    MagnifyGesture()
-      .onChanged { v in
-        let s = pinchStart ?? view
-        if pinchStart == nil { pinchStart = view; panStart = nil }
-        let k = Self.clamp(s.k * v.magnification)
-        let p = v.startLocation
-        view = Viewport(x: p.x - (p.x - s.x) * k / s.k, y: p.y - (p.y - s.y) * k / s.k, k: k)
+  // MARK: the flow
+
+  private var canvas: some View {
+    let rows = ChannelTeam.stepRows(steps)
+    return ScrollView {
+      VStack(spacing: 0) {
+        if !problems.isEmpty || error != nil { problemBanner.padding(.bottom, 16) }
+        Chip(symbol: "bubble.left", text: "A message comes in")
+        ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+          let before = i == 0 ? 0 : rows[i - 1].count
+          Connector(from: before, to: row.count, plus: row.count == 1) {
+            adding = AddRequest(from: i == 0 ? [] : rows[i - 1].map(\.id), to: row.map(\.id), after: nil, between: true)
+          }
+          HStack(alignment: .top, spacing: 10) {
+            ForEach(row) { s in
+              StepCard(team: team, step: s, wide: row.count == 1, problem: team.problem(of: s)) { editing = StepRef(id: s.id) } onGrip: { reordering = true }
+            }
+          }
+          .padding(.horizontal, 18)
+        }
+        Connector(from: rows.last?.count ?? 0, to: 0, plus: true) {
+          adding = AddRequest(from: rows.last?.map(\.id) ?? [], to: [], after: nil, between: true)
+        }
+        Chip(symbol: "flag", text: "Done")
+        Button { adding = AddRequest(from: [], to: [], after: ChannelTeam.stepOrder(steps).last?.id, between: false) } label: {
+          Label("Add a step", systemImage: "plus").frame(maxWidth: .infinity)
+        }
+        .primaryButton().padding(.horizontal, 60).padding(.top, 28).padding(.bottom, 40)
+        .accessibilityIdentifier("builder-add")
       }
-      .onEnded { _ in pinchStart = nil }
+      .padding(.top, 8)
+    }
+    .scrollIndicators(.hidden)
   }
 
-  private func zoom(by factor: CGFloat) {
-    let p = CGPoint(x: size.width / 2, y: size.height / 2)
-    withAnimation(.snappy) {
-      let k = Self.clamp(view.k * factor)
-      view = Viewport(x: p.x - (p.x - view.x) * k / view.k, y: p.y - (p.y - view.y) * k / view.k, k: k)
+  private var problemBanner: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Label(error != nil ? "Couldn't save" : "\(problems.count) \(problems.count == 1 ? "thing" : "things") to fix", systemImage: "exclamationmark.circle")
+        .font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.red)
+      ForEach(error.map { [$0] } ?? problems, id: \.self) { p in
+        Text(p).font(.system(size: 15)).foregroundStyle(Palette.text).fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(16)
+    .background(Palette.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .padding(.horizontal, 18)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("builder-problems")
+  }
+
+  // MARK: adding
+
+  private func add(_ kind: AddKind, request: AddRequest, anchor: String?) {
+    // between two rows, "after" is the row above (the sheet's own pick only applies to "Add a step")
+    let anchor = anchor ?? request.after ?? request.from.last
+    let fresh = newStep(kind, anchor: anchor)
+    var next = team
+    switch kind {
+    case .beside:
+      next = next.inserting(fresh, beside: anchor)
+    default:
+      if request.between {
+        next = next.insertingBetween(fresh, from: request.from, to: request.to)
+      } else if anchor != nil {
+        next = next.inserting(fresh, after: anchor)
+      } else {
+        next = next.inserting(fresh, atEnd: !steps.isEmpty)
+      }
+    }
+    team = next
+    adding = nil
+    // straight to the new step, to say what it does
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { editing = StepRef(id: fresh.id) }
+  }
+
+  /** A new step of this kind with sensible words in it. */
+  private func newStep(_ kind: AddKind, anchor: String?) -> ChannelTeam.Step {
+    let id = team.freeStepId()
+    let anchorStep = team.step(anchor)
+    let agent = anchorStep.flatMap { team.agentId(of: $0) } ?? steps.compactMap { team.agentId(of: $0) }.last ?? store.agents.first?.id
+    switch kind {
+    case .agent, .beside: return .init(id: id, kind: .do, action: "New step", agentId: agent)
+    case .review: return .init(id: id, kind: .review, action: "Check the work", sendBackTo: anchor, maxRounds: ChannelTeam.defaultRounds, agentId: agent)
+    case .ask: return .init(id: id, kind: .ask, action: "Approve before it goes on", notifyPhone: true)
+    case .handoff: return .init(id: id, kind: .handoff, action: "Hand off the work", waitForReply: true)
+    case .branch: return .init(id: id, kind: .branch, action: "Decide where to go", maxRounds: ChannelTeam.defaultRounds, agentId: agent)
+    case .custom: return .init(id: id, kind: .custom, action: "Custom step", agentId: agent)
+    case .handOut: return .init(id: id, kind: .handOut, action: "Split the work", maxRounds: ChannelTeam.defaultRounds, handTo: [], agentId: agent)
+    }
+  }
+}
+
+extension ChannelTeam {
+  /** Put a step in between: what `from` led to in `to` now goes through it. Empty `from` = a new start; empty `to` = the end. */
+  func insertingBetween(_ step: Step, from: [String], to: [String]) -> ChannelTeam {
+    var new = step
+    new.inputs = []; new.nexts = []; new.next = nil
+    var team = appending(new)
+    let live = to.filter { self.step($0) != nil }
+    // what leads into `to` is what goes through the new step (not just the row drawn above it, which can miss a join's other inputs)
+    var sources = from
+    if !live.isEmpty && !from.isEmpty {
+      sources = []
+      for b in live { for i in self.step(b)?.inputIds ?? [] where !sources.contains(i) { sources.append(i) } }
+    }
+    for a in sources {
+      guard let src = self.step(a) else { continue }
+      // an if/else's Yes and No live on the step, so cutting its arrow clears them: they go to the new step instead
+      let arms = live.flatMap { Array(src.arms(to: $0)) }
+      for b in live { team = team.disconnecting(a, b) }
+      team = team.connecting(a, new.id, arms: arms)
+    }
+    for b in live { team = team.connecting(new.id, b) }
+    return team
+  }
+}
+
+// MARK: pieces of the flow
+
+private struct Chip: View {
+  var symbol: String
+  var text: String
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: symbol).font(.system(size: 13))
+      Text(text).font(.system(size: 15))
+    }
+    .foregroundStyle(Palette.muted)
+    .padding(.horizontal, 14).frame(height: 36)
+    .background(Capsule().fill(Palette.card))
+    .overlay(Capsule().strokeBorder(Palette.hairline))
+    .accessibilityElement(children: .combine)
+  }
+}
+
+/** The lines between two rows of steps, with a plus to put a step there (or "At the same time" where they split). */
+private struct Connector: View {
+  var from: Int
+  var to: Int
+  var plus: Bool
+  var add: () -> Void
+
+  var body: some View {
+    let tall = from > 1 || to > 1
+    ZStack {
+      Canvas { context, size in
+        let line = Palette.faint.opacity(0.55)
+        var path = Path()
+        let mid = size.width / 2
+        let h = size.height
+        func columns(_ n: Int) -> [CGFloat] { n <= 1 ? [mid] : (0..<n).map { (CGFloat($0) + 0.5) / CGFloat(n) * (size.width - 36) + 18 } }
+        if from > 1 {
+          for x in columns(from) { path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: h * 0.28)); path.addLine(to: CGPoint(x: mid, y: h * 0.28)) }
+        } else if from == 1 { path.move(to: CGPoint(x: mid, y: 0)); path.addLine(to: CGPoint(x: mid, y: h * 0.5)) }
+        if to > 1 {
+          for x in columns(to) { path.move(to: CGPoint(x: mid, y: h * 0.72)); path.addLine(to: CGPoint(x: x, y: h * 0.72)); path.addLine(to: CGPoint(x: x, y: h)) }
+          path.move(to: CGPoint(x: mid, y: h * 0.28)); path.addLine(to: CGPoint(x: mid, y: h * 0.72))
+        } else if to == 1 { path.move(to: CGPoint(x: mid, y: h * 0.5)); path.addLine(to: CGPoint(x: mid, y: h)) }
+        context.stroke(path, with: .color(line), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+      }
+      if to > 1 {
+        Chip(symbol: "arrow.triangle.branch", text: "At the same time").scaleEffect(0.9)
+      } else if plus {
+        Button(action: add) {
+          Image(systemName: "plus").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+            .frame(width: 34, height: 34).glassCircle()
+        }
+        .buttonStyle(.plain)
+        .frame(width: 44, height: 44)
+        .accessibilityLabel("Add a step here")
+        .accessibilityIdentifier("builder-plus")
+      }
+    }
+    .frame(height: tall ? 76 : 60)
+  }
+}
+
+private struct StepCard: View {
+  @Environment(Store.self) private var store
+  var team: ChannelTeam
+  var step: ChannelTeam.Step
+  var wide: Bool
+  var problem: String?
+  var open: () -> Void
+  var onGrip: () -> Void
+
+  private var agent: Agent? { team.agentId(of: step).flatMap { store.agent($0) } }
+  private var number: Int { team.number(of: step.id) }
+  private var title: String { step.action.trimmingCharacters(in: .whitespaces).isEmpty ? "Untitled step" : step.action }
+
+  var body: some View {
+    Button(action: open) {
+      HStack(alignment: .center, spacing: 14) {
+        if wide { visual(size: 44) }
+        VStack(alignment: .leading, spacing: 6) {
+          HStack(spacing: 8) {
+            Text("\(number)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
+              .frame(width: 24, height: 24).background(Circle().fill(Palette.badge))
+            if let mark = step.kindMark {
+              Label(mark.text, systemImage: mark.symbol).labelStyle(CompactLabel()).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if !wide {
+              Button(action: onGrip) { Image(systemName: "circle.grid.2x3.fill").font(.system(size: 13)).foregroundStyle(Palette.faint).frame(width: 30, height: 30) }
+                .buttonStyle(.plain).accessibilityLabel("Reorder steps")
+            }
+          }
+          Text(title).font(.system(size: wide ? 19 : 17, weight: .semibold)).foregroundStyle(Palette.text)
+            .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+          HStack(spacing: 8) {
+            if !wide { visual(size: 22) }
+            Text(who).font(.system(size: 15)).foregroundStyle(problem != nil && agent == nil && step.needsAgent ? Palette.red : Palette.muted).lineLimit(1)
+            if step.inputIds.count > 0 {
+              Text("Uses \(FlowWords.join(step.inputIds.map { String(team.number(of: $0)) }))")
+                .font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.muted)
+                .padding(.horizontal, 10).frame(height: 28).background(Capsule().fill(Palette.badge))
+                .lineLimit(1)
+            }
+          }
+          if let note = loopNote {
+            Label(note, systemImage: "arrow.uturn.backward").labelStyle(CompactLabel()).font(.system(size: 13)).foregroundStyle(Palette.muted)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          if let problem, !(agent == nil && step.needsAgent) {
+            Text(problem).font(.system(size: 13)).foregroundStyle(Palette.red).fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        if wide {
+          Button(action: onGrip) { Image(systemName: "circle.grid.2x3.fill").font(.system(size: 14)).foregroundStyle(Palette.faint).frame(width: 36, height: 44) }
+            .buttonStyle(.plain).accessibilityLabel("Reorder steps")
+        }
+      }
+      .padding(.horizontal, 16).padding(.vertical, 14)
+      .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+      .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      .overlay { if problem != nil { RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.red.opacity(0.6), lineWidth: 1.5) } }
+      .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Step \(number), \(title), \(who)")
+    .accessibilityHint("Edit this step")
+    .accessibilityIdentifier("step-card")
+  }
+
+  private var who: String {
+    switch step.kind {
+    case .ask: return "You"
+    case .handoff: return step.handoffTo.flatMap { id in store.channels.first { $0.id == id }?.name }.map { "Team \($0)" } ?? "Pick a team"
+    case .branch where step.rule != nil: return "A simple rule"
+    default: return agent?.name ?? "Pick an agent"
     }
   }
 
-  /** The whole chart in view, no bigger than 100%. */
-  private func fit(_ boxes: [StepBox]) {
-    guard size.width > 0, size.height > 0, !boxes.isEmpty else { return }
-    let x0 = boxes.map(\.x).min()! - 40, y0 = boxes.map(\.y).min()! - 40
-    let x1 = boxes.map { $0.x + $0.w }.max()! + 120, y1 = boxes.map { $0.y + $0.h }.max()! + 40
-    let w = x1 - x0, h = y1 - y0
-    let k = Self.clamp(min(size.width / w, size.height / h, 1))
-    view = Viewport(x: (size.width - w * k) / 2 - x0 * k, y: (size.height - h * k) / 2 - y0 * k, k: k)
+  @ViewBuilder private func visual(size: CGFloat) -> some View {
+    switch step.kind {
+    case .ask:
+      Text(initials).font(.system(size: size * 0.34, weight: .semibold)).foregroundStyle(Palette.muted)
+        .frame(width: size, height: size).background(Circle().fill(Palette.badge))
+    case .handoff:
+      Image(systemName: "arrow.up.forward.square").font(.system(size: size * 0.45)).foregroundStyle(Palette.muted)
+        .frame(width: size, height: size).background(Circle().fill(Palette.badge))
+    case .branch where step.rule != nil:
+      Image(systemName: "arrow.triangle.branch").font(.system(size: size * 0.45)).foregroundStyle(Palette.muted)
+        .frame(width: size, height: size).background(Circle().fill(Palette.badge))
+    default:
+      if let agent { AgentAvatar(agent: agent, size: size, showStatus: false) }
+      else { Image(systemName: "questionmark.circle").font(.system(size: size * 0.6)).foregroundStyle(Palette.faint).frame(width: size, height: size) }
+    }
+  }
+
+  private var initials: String {
+    let name = store.me?.preferredName ?? store.me?.name ?? ""
+    let letters = name.split(separator: " ").prefix(2).compactMap { $0.first }
+    return letters.isEmpty ? "You" : String(letters).uppercased()
+  }
+
+  /** where a repeat, ask-me or if/else sends work */
+  private var loopNote: String? {
+    switch step.kind {
+    case .review:
+      guard let b = step.sendBackTo, !b.isEmpty else { return nil }
+      return "Sends back to step \(team.number(of: b)), up to \(step.maxRounds ?? ChannelTeam.defaultRounds) rounds"
+    case .ask:
+      guard let b = step.sendBackTo, !b.isEmpty else { return nil }
+      return "Changes go back to step \(team.number(of: b))"
+    case .branch:
+      let yes = (step.ifTrue ?? "").isEmpty ? "the end" : "step \(team.number(of: step.ifTrue))"
+      let no = (step.ifFalse ?? "").isEmpty ? "the end" : "step \(team.number(of: step.ifFalse))"
+      return "Yes: \(yes). No: \(no)"
+    default: return nil
+    }
   }
 }
 
-private struct StepCurve: Shape {
-  var line: StepLine
-  func path(in rect: CGRect) -> Path {
-    var p = Path()
-    p.move(to: CGPoint(x: line.start.x, y: line.start.y))
-    p.addCurve(to: CGPoint(x: line.end.x, y: line.end.y), control1: CGPoint(x: line.c1.x, y: line.c1.y), control2: CGPoint(x: line.c2.x, y: line.c2.y))
-    return p
+/** A label whose icon sits close to its text. */
+struct CompactLabel: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(spacing: 5) { configuration.icon.font(.system(size: 12)); configuration.title }
   }
 }
 
-/** The arrowhead at a line's end, pointing the way the line arrives. */
-private struct StepArrowhead: Shape {
-  var line: StepLine
-  func path(in rect: CGRect) -> Path {
-    let from = line.c2 == line.end ? line.start : line.c2
-    let angle = atan2(line.end.y - from.y, line.end.x - from.x)
-    let tip = CGPoint(x: line.end.x, y: line.end.y)
-    var p = Path()
-    p.move(to: tip)
-    p.addLine(to: CGPoint(x: tip.x - 9 * cos(angle - 0.45), y: tip.y - 9 * sin(angle - 0.45)))
-    p.addLine(to: CGPoint(x: tip.x - 9 * cos(angle + 0.45), y: tip.y - 9 * sin(angle + 0.45)))
-    p.closeSubpath()
-    return p
-  }
-}
+// MARK: how it works
 
-// MARK: a request going through the steps
-
-/**
- * Where a request in a stepped channel is, at the top of its thread: a pill per step (done, on
- * now, still to come) and, when it's waiting on a person, what they can do about it.
- */
-struct FlowStrip: View {
+/** The "How it works" tab: one plain line per step, written from the chart. */
+struct TeamHowList: View {
   @Environment(Store.self) private var store
-  var channelId: String
-  var threadId: String
-  @State private var flow: TeamFlow?
-  @State private var action = FormAction()
+  var team: ChannelTeam
+  var onEdit: (() -> Void)?
+  @State private var copied = false
 
-  private var team: ChannelTeam? { store.channels.first { $0.id == channelId }?.settings?.team }
+  var body: some View {
+    let lines = team.flowLines(store)
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        Text("Made from your steps").font(.system(size: 15)).foregroundStyle(Palette.muted)
+        ForEach(lines) { line in TeamHowLine(team: team, line: line) }
+        Text("This is written from the chart. Change a step and it changes here.")
+          .font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.top, 4)
+        HStack(spacing: 12) {
+          Button {
+            UIPasteboard.general.string = lines.map { "\($0.n). \($0.text)" }.joined(separator: "\n")
+            copied = true
+          } label: { Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity) }
+            .secondaryButton().controlSize(.large)
+          if let onEdit {
+            Button(action: onEdit) { Label("Edit steps", systemImage: "square.and.pencil").frame(maxWidth: .infinity) }
+              .secondaryButton().controlSize(.large)
+          }
+        }
+        .padding(.top, 6)
+      }
+      .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 40)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+}
+
+struct TeamHowLine: View {
+  @Environment(Store.self) private var store
+  var team: ChannelTeam
+  var line: FlowLine
+  var size: CGFloat = 30
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      Text("\(line.n)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
+        .frame(width: 24, height: 24).background(Circle().fill(Palette.badge)).padding(.top, 4)
+      who
+      (Text(line.together ? "At the same time, " : "").foregroundColor(Palette.muted)
+        + Text(line.together ? line.who : FlowWords.capitalized(line.who)).bold().foregroundColor(Palette.text)
+        + Text(" \(line.rest).").foregroundColor(Palette.muted))
+        .font(.system(size: 17)).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+      Spacer(minLength: 0)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("\(line.n). \(line.text)")
+  }
+
+  @ViewBuilder private var who: some View {
+    let step = team.step(line.stepId)
+    if let step, step.kind == .ask {
+      Image(systemName: "person.crop.circle").font(.system(size: size * 0.7)).foregroundStyle(Palette.muted).frame(width: size, height: size)
+    } else if let step, step.kind == .handoff {
+      Image(systemName: "arrow.up.forward.square").font(.system(size: size * 0.55)).foregroundStyle(Palette.muted).frame(width: size, height: size)
+    } else if let step, let agent = team.agentId(of: step).flatMap({ store.agent($0) }) {
+      AgentAvatar(agent: agent, size: size, showStatus: false)
+    } else {
+      Image(systemName: "questionmark.circle").font(.system(size: size * 0.6)).foregroundStyle(Palette.faint).frame(width: size, height: size)
+    }
+  }
+}
+
+extension ChannelTeam {
+  /** The plain lines for this team with the names of its agents and teams filled in. */
+  @MainActor func flowLines(_ store: Store) -> [FlowLine] {
+    describeFlow(nameOf: { id in id.flatMap { store.agent($0)?.name } ?? "Someone" },
+      teamName: { id in store.channels.first { $0.id == id }?.name ?? "another" })
+  }
+}
+
+// MARK: reorder
+
+/** Drag steps into a new order. A moved step leaves its place and follows the step above it. */
+struct ReorderSteps: View {
+  @Environment(Store.self) private var store
+  @Binding var team: ChannelTeam
+  var close: () -> Void
+  @State private var order: [String] = []
 
   var body: some View {
     VStack(spacing: 0) {
-      if let flow, let team, team.hasSteps { strip(flow, team) }
-    }
-    .task(id: "\(channelId) \(threadId) \(store.flowVersions[channelId] ?? 0)") {
-      guard team?.hasSteps == true else { return }
-      if let all = try? await store.flows(in: channelId) { flow = all.first { $0.threadId == threadId } }
-    }
-  }
-
-  private func strip(_ flow: TeamFlow, _ team: ChannelTeam) -> some View {
-    let order = ChannelTeam.stepOrder(team.steps ?? [])
-    let done = flow.doneSteps
-    return VStack(alignment: .leading, spacing: 8) {
-      WrapLayout(spacing: 4, lineSpacing: 6) {
-        ForEach(Array(order.enumerated()), id: \.element.id) { i, s in
-          let now = flow.stepId == s.id && (flow.status == "running" || flow.status == "waiting")
-          HStack(spacing: 4) {
-            if i > 0 { Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary) }
-            pill(s, team: team, flow: flow, now: now, done: flow.status == "done" || (done.contains(s.id) && !now))
+      SheetHeader(title: "Reorder", close: close)
+      Text("Drag to reorder").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.bottom, 6)
+      List {
+        ForEach(order, id: \.self) { id in
+          if let step = team.step(id) {
+            HStack(spacing: 12) {
+              Text("\(team.number(of: id))").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted)
+                .frame(width: 26, height: 26).background(Circle().fill(Palette.badge))
+              VStack(alignment: .leading, spacing: 2) {
+                Text(step.action.isEmpty ? "Untitled step" : step.action).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+                Text(step.kindMark?.text ?? team.agentId(of: step).flatMap { store.agent($0)?.name } ?? "").font(.system(size: 14)).foregroundStyle(Palette.muted)
+              }
+              Spacer()
+            }
+            .listRowBackground(Palette.card)
+            .frame(minHeight: 48)
           }
         }
-        if flow.status == "failed" { Text("Stopped").font(.caption.weight(.semibold)).foregroundStyle(.red).padding(.leading, 4) }
-        // a running request can be stopped too (the hub cancels the work still open)
-        if flow.status == "running" {
-          Button("Stop", role: .destructive) { decide("stop") }.font(.caption).buttonStyle(.borderless).disabled(action.busy).padding(.leading, 4)
-        }
-      }
-      .padding(.horizontal, 16)
-      if flow.status == "waiting", let waiting = flow.waitingFor {
-        VStack(alignment: .leading, spacing: 8) {
-          Text(waiting.why).font(.footnote).foregroundStyle(.orange)
-          HStack(spacing: 8) {
-            // the app tint is the text color, so a filled button's label is the background's (as in primaryButton)
-            Button("Approve anyway") { decide("approve") }.foregroundStyle(Color(.systemBackground)).buttonStyle(.borderedProminent)
-            Button(waiting.options == "rounds" ? "Another round" : "Try again") { decide("retry") }.buttonStyle(.bordered)
-            Button("Stop", role: .destructive) { decide("stop") }.buttonStyle(.bordered)
+        .onMove { from, to in
+          var next = order
+          let moved = from.map { next[$0] }
+          next.move(fromOffsets: from, toOffset: to)
+          order = next
+          for id in moved {
+            let i = next.firstIndex(of: id) ?? 0
+            team = team.moving(id, after: i == 0 ? nil : next[i - 1])
           }
-          .controlSize(.small)
-          .disabled(action.busy)
-          InlineError(error: action.error)
+          // the list stays as dragged; numbers follow the chart
         }
-        .padding(.horizontal, 16)
       }
-      Divider()
+      .environment(\.editMode, .constant(.active))
+      .groundBackground(Palette.sheet)
     }
-    .padding(.top, 10)
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("Team steps")
-  }
-
-  private func pill(_ s: ChannelTeam.Step, team: ChannelTeam, flow: TeamFlow, now: Bool, done: Bool) -> some View {
-    let rounds = flow.rounds[s.id] ?? 0
-    let waiting = now && flow.status == "waiting"
-    let fg: Color = now ? (waiting ? .orange : Color(.systemBackground)) : done ? .green : .secondary
-    let bg: Color = now ? (waiting ? Color.orange.opacity(0.15) : .primary) : done ? Color.green.opacity(0.15) : Color(.tertiarySystemFill)
-    return HStack(spacing: 3) {
-      Text(s.action.isEmpty ? ChannelTeam.stepLabel(s, roles: team.roles ?? []) : s.action)
-      if done { Image(systemName: "checkmark").font(.caption2.weight(.bold)) }
-      if rounds > 1 { Text("· round \(rounds)") }
-    }
-    .font(.caption.weight(.medium))
-    .foregroundStyle(fg)
-    .padding(.horizontal, 9)
-    .padding(.vertical, 4)
-    .background(Capsule().fill(bg))
-    .accessibilityLabel("\(ChannelTeam.stepLabel(s, roles: team.roles ?? [])), \(now ? (waiting ? "waiting on you" : "on now") : done ? "done" : "to come")")
-  }
-
-  private func decide(_ choice: String) {
-    guard let id = flow?.id else { return }
-    action.run { flow = try await store.decideFlow(id, choice) }
+    .background(Palette.sheet.ignoresSafeArea())
+    .onAppear { order = team.listOrder }
   }
 }
 
-/** Views in a row that wraps onto the next line when it runs out of room. */
-private struct WrapLayout: Layout {
-  var spacing: CGFloat = 4
-  var lineSpacing: CGFloat = 6
-
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let rows = rows(width: proposal.width ?? .infinity, subviews)
-    let width = rows.map { $0.width }.max() ?? 0
-    let height = rows.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(rows.count - 1, 0))
-    return CGSize(width: width, height: height)
-  }
-
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    var y = bounds.minY
-    for row in rows(width: bounds.width, subviews) {
-      var x = bounds.minX
-      for i in row.items {
-        let size = subviews[i].sizeThatFits(.unspecified)
-        subviews[i].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
-        x += size.width + spacing
+/** "Saving: telling the team how it works" over a screen. */
+struct SavingOverlay: View {
+  var body: some View {
+    ZStack {
+      Color.black.opacity(0.35).ignoresSafeArea()
+      VStack(spacing: 10) {
+        ProgressView()
+        Text("Saving").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
+        Text("Telling the team how it works").font(.system(size: 14)).foregroundStyle(Palette.muted)
       }
-      y += row.height + lineSpacing
+      .padding(28).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
-  }
-
-  private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
-  private func rows(width: CGFloat, _ subviews: Subviews) -> [Row] {
-    var rows: [Row] = [Row()]
-    for (i, view) in subviews.enumerated() {
-      let size = view.sizeThatFits(.unspecified)
-      if !rows[rows.count - 1].items.isEmpty && rows[rows.count - 1].width + spacing + size.width > width { rows.append(Row()) }
-      var row = rows[rows.count - 1]
-      row.width += (row.items.isEmpty ? 0 : spacing) + size.width
-      row.height = max(row.height, size.height)
-      row.items.append(i)
-      rows[rows.count - 1] = row
-    }
-    return rows
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("saving-overlay")
   }
 }

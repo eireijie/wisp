@@ -1,116 +1,109 @@
 import SwiftUI
 
-/** Wisp's sidebar groups, with the things that need you first. */
+/** One line in the Chats list: an agent's direct chat or a team. */
+struct ChatEntry: Identifiable, Hashable {
+  enum Kind: Hashable { case agent(Agent), team(Channel) }
+  var kind: Kind
+  /** the agent's direct chat (nil until the first message makes it) or the team's chat */
+  var channel: Channel?
+  var last: Message?
+  /** when it was last active: its newest loaded message, else what the channel list says */
+  var lastAt: Date? { last?.date ?? channel?.last.flatMap { Wire.date($0.at) } }
+
+  var id: String {
+    switch kind {
+    case .agent(let a): "agent:\(a.id)"
+    case .team(let c): "team:\(c.id)"
+    }
+  }
+  var name: String {
+    switch kind {
+    case .agent(let a): a.name
+    case .team(let c): c.name
+    }
+  }
+  var isTeam: Bool { if case .team = kind { true } else { false } }
+  var pinned: Bool { channel?.starred == true }
+  var sectionId: String? { isTeam ? channel?.sectionId : nil }
+  var badge: Int { channel?.badge ?? 0 }
+}
+
+/** What the Chats list shows and in what order. Pure, so it can be tested. */
+enum ChatList {
+  /** Agents' chats and teams in one flat list: pinned first, then the most recent, then by name. */
+  static func entries(agents: [Agent], channels: [Channel], messages: [String: [Message]], dmAgent: (Channel) -> Agent?) -> [ChatEntry] {
+    var out: [ChatEntry] = []
+    for agent in agents {
+      let dm = channels.first { $0.isDM && dmAgent($0)?.id == agent.id }
+      out.append(ChatEntry(kind: .agent(agent), channel: dm, last: dm.flatMap { messages[$0.id]?.last }))
+    }
+    for c in channels where !c.isDM && c.joined == true && c.archivedAt == nil {
+      out.append(ChatEntry(kind: .team(c), channel: c, last: messages[c.id]?.last))
+    }
+    return out.sorted { a, b in
+      if a.pinned != b.pinned { return a.pinned }
+      let (da, db) = (a.lastAt, b.lastAt)
+      if da != db { return (da ?? .distantPast) > (db ?? .distantPast) }
+      return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+    }
+  }
+
+  /** "9:36 PM" today, "Oct 23" before. */
+  static func timeText(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    if calendar.isDate(date, inSameDayAs: now) { return date.formatted(date: .omitted, time: .shortened) }
+    if calendar.isDate(date, equalTo: now, toGranularity: .year) { return date.formatted(.dateTime.month(.abbreviated).day()) }
+    return date.formatted(.dateTime.month(.abbreviated).day().year())
+  }
+}
+
+/** Your agents and teams in one list, with search, a + menu and your sections. */
 struct ChatsView: View {
   @Environment(Store.self) private var store
+  @Environment(\.openSettings) private var openSettings
+  @Environment(\.openOrganizations) private var openOrganizations
   @State private var path = NavigationPath()
   @State private var search = ""
+  @FocusState private var searchFocused: Bool
   @State private var sheet: String?
   @State private var editingSection: ChannelSection?
   @State private var deletingSection: ChannelSection?
+  @State private var collapsed: Set<String> = []
   @State private var action = FormAction()
   /** what the hub found for the search box, with the text it was found for */
   @State private var found: (query: String, results: SearchResults)?
   @State private var searching = false
 
   private var query: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
+  private var searchMode: Bool { searchFocused || !query.isEmpty }
 
-  private var rooms: [Channel] {
-    store.channels.filter { !$0.isDM && $0.joined == true && $0.archivedAt == nil }
-      .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+  private var entries: [ChatEntry] {
+    ChatList.entries(agents: store.agents, channels: store.channels, messages: store.messages, dmAgent: store.dmAgent)
   }
-
-  /** The owner's agents are theirs; a member or guest mostly sees someone else's. */
-  private var ownAgents: Bool {
-    store.role == "owner" || (!store.agents.isEmpty && store.agents.allSatisfy { $0.settings?.createdBy == store.me?.id })
+  private var matches: [ChatEntry] {
+    entries.filter { e in
+      query.isEmpty || e.name.localizedCaseInsensitiveContains(query) || { if case .agent(let a) = e.kind { a.handle.localizedCaseInsensitiveContains(query) } else { false } }()
+    }
   }
 
   var body: some View {
     NavigationStack(path: $path) {
-      List {
-        if search.isEmpty {
-          Section { InboxRow() }
-        }
-        Section(ownAgents ? "Your agents" : "Agents") {
-          ForEach(store.agents.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.handle.localizedCaseInsensitiveContains(search) }) { agent in
-            Button {
-              action.run { path.append(try await store.dm(with: agent)) }
-            } label: { AgentChatRow(agent: agent) }.disabled(action.busy)
-          }
-          if store.agents.isEmpty { Text("No agents yet.").foregroundStyle(.secondary) }
-          if store.canManage { Button("New agent", systemImage: "plus") { sheet = "agent" } }
-        }
-        if rooms.contains(where: { $0.starred == true }) {
-          Section("Starred") { ForEach(rooms.filter { $0.starred == true }) { ChatChannelRow(channel: $0) } }
-        }
-        ForEach(store.sections) { section in
-          Section {
-            ForEach(rooms.filter { $0.starred != true && $0.sectionId == section.id }) { ChatChannelRow(channel: $0) }
-          } header: {
-            HStack {
-              Text(section.title)
-              Spacer()
-              if store.canManage {
-                Menu {
-                  Button("Rename section") { editingSection = section }
-                  Button("Delete section", role: .destructive) { deletingSection = section }
-                } label: { Image(systemName: "ellipsis") }.accessibilityLabel("\(section.name) options")
-              }
-            }
-            .contextMenu {
-              if store.canManage {
-                Button("Rename section") { editingSection = section }
-                Button("Delete section", role: .destructive) { deletingSection = section }
-              }
-            }
-          }
-        }
-        Section("Channels") {
-          ForEach(rooms.filter { ch in ch.starred != true && !store.sections.contains { $0.id == ch.sectionId } }) { ChatChannelRow(channel: $0) }
-          Button("Add channels", systemImage: "plus") { sheet = "browse" }
-        }
-        if !query.isEmpty { searchResults }
+      VStack(spacing: 0) {
+        if !searchMode { header }
+        searchField
+        list
       }
-      .listStyle(.insetGrouped)
-      .searchable(text: $search, prompt: "Search chats, messages and notes")
+      .background(Palette.ground.ignoresSafeArea())
+      .toolbar(.hidden, for: .navigationBar)
+      .animation(.snappy, value: searchMode)
       .task(id: query) { await runSearch() }
-      .orgSwitcher()
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) { ConnectionDot() }
-        ToolbarItem(placement: .topBarTrailing) {
-          Menu {
-            if store.canManage { Button("New channel", systemImage: "number") { sheet = "channel" } }
-            Button("Browse channels", systemImage: "magnifyingglass") { sheet = "browse" }
-            if store.canManage {
-              Button("New section", systemImage: "folder.badge.plus") { sheet = "section" }
-              Button("New agent", systemImage: "sparkles") { sheet = "agent" }
-            }
-          } label: { Image(systemName: "plus") }.accessibilityLabel("Add to Wisp")
-        }
-      }
-      .refreshable {
-        await store.refreshChannels()
-        await store.refreshApprovals()
-        await store.refreshComputers()
-        do { try await store.refreshAgents(); try await store.refreshManagement() }
-        catch { action.error = error.localizedDescription }
-      }
-      .navigationDestination(for: Channel.self) { ChannelView(channel: $0) }
-      .navigationDestination(for: ThreadRef.self) { ThreadView(ref: $0) }
-      .navigationDestination(for: Agent.self) { AgentPage(agent: $0) }
-      .navigationDestination(for: ChatsScreen.self) { screen in
-        switch screen {
-        case .inbox: InboxView()
-        case .approval(let id): ApprovalDetail(approvalId: id)
-        case .note(let path): NoteView(path: path)
-        }
-      }
+      .chatDestinations()
       .sheet(isPresented: Binding(get: { sheet != nil }, set: { if !$0 { sheet = nil } })) {
         switch sheet {
-        case "channel": NewChannel { path.append($0) }
+        case "team": NewChannel(onBrowse: { sheet = "browse" }) { path.append($0) }
         case "browse": BrowseChannels { path.append($0) }
         case "section": SectionEditor()
         case "agent": AddAgent { path.append($0) }
+        case "chat": NewChatSheet(onNewAgent: store.canManage ? { sheet = "agent" } : nil) { path.append($0) }
         default: EmptyView()
         }
       }
@@ -119,10 +112,176 @@ struct ChatsView: View {
         Button("Delete section", role: .destructive) {
           if let section = deletingSection { action.run { try await store.deleteSection(section.id) } }
         }
-      } message: { Text("Its channels move to Channels. Nothing in them is deleted.") }
+      } message: { Text("Deleting a section keeps its chats. They move back to the main list.") }
       .managementAlert(action)
     }
     .task(id: store.route) { await open(store.route) }
+    .task(id: entries.count) { await warmPreviews() }
+  }
+
+  // MARK: top of the page
+
+  private var header: some View {
+    TopBar {
+      Button { openSettings() } label: { ProfileCircle() }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("profile-button")
+        .contextMenu {
+          Button("Switch organization", systemImage: "building.2") { openOrganizations() }
+        }
+    } center: {
+      EmptyView()
+    } trailing: {
+      Menu {
+        Button("New chat", systemImage: "square.and.pencil") { sheet = "chat" }
+        if store.canManage {
+          Button("New agent", systemImage: "sparkles") { sheet = "agent" }
+          Button("New team", systemImage: "person.2") { sheet = "team" }
+          Button("New section", systemImage: "folder.badge.plus") { sheet = "section" }
+        } else {
+          Button("Browse teams", systemImage: "magnifyingglass") { sheet = "browse" }
+        }
+      } label: { CircleLabel(symbol: "plus", weight: .regular) }
+        .accessibilityLabel("New chat, agent or team").accessibilityIdentifier("new-menu")
+    }
+  }
+
+  private var searchField: some View {
+    HStack(spacing: 12) {
+      HStack(spacing: 10) {
+        Image(systemName: "magnifyingglass").font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.faint)
+        TextField("Search chats", text: $search)
+          .font(.system(size: 16)).foregroundStyle(Palette.text)
+          .focused($searchFocused)
+          .submitLabel(.search)
+          .textInputAutocapitalization(.never).autocorrectionDisabled()
+          .accessibilityIdentifier("chats-search")
+        if !search.isEmpty {
+          Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.faint) }
+            .buttonStyle(.plain).accessibilityLabel("Clear")
+        }
+      }
+      .padding(.horizontal, 16).frame(height: 46)
+      .background(Capsule().fill(Palette.field))
+      if searchMode {
+        Button("Cancel") { search = ""; searchFocused = false }
+          .font(.system(size: 17)).foregroundStyle(Palette.text).buttonStyle(.plain)
+      }
+    }
+    .padding(.horizontal, 18).padding(.top, searchMode ? 12 : 0).padding(.bottom, 4)
+  }
+
+  // MARK: the list
+
+  private var list: some View {
+    List {
+      if searchMode {
+        searchRows
+      } else {
+        chatRows
+      }
+    }
+    .listStyle(.plain)
+    .scrollContentBackground(.hidden)
+    .listRowSpacing(0)
+    .environment(\.defaultMinListRowHeight, 1)
+    .refreshable {
+      await store.refreshChannels()
+      await store.refreshApprovals()
+      await store.refreshComputers()
+      do { try await store.refreshAgents(); try await store.refreshManagement() }
+      catch { action.error = error.localizedDescription }
+    }
+    .overlay {
+      if !searchMode && store.agents.isEmpty && entries.isEmpty {
+        ContentUnavailableView {
+          Label("Add your first agent", systemImage: "sparkles")
+        } description: {
+          Text("Give it a job and a computer.")
+        } actions: {
+          if store.canManage { Button("New agent") { sheet = "agent" }.primaryButton() }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder private var chatRows: some View {
+    let all = entries
+    let loose = all.filter { e in e.sectionId == nil || !store.sections.contains { $0.id == e.sectionId } }
+    ForEach(loose) { rowView($0) }
+    ForEach(store.sections) { section in
+      let rows = all.filter { $0.sectionId == section.id }
+      Section {
+        if !collapsed.contains(section.id) { ForEach(rows) { rowView($0) } }
+      } header: {
+        sectionHeader(section, count: rows.count)
+      }
+    }
+  }
+
+  private func rowView(_ entry: ChatEntry) -> some View {
+    ChatRow(entry: entry, open: { openEntry(entry) }, path: $path)
+      .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18))
+      .listRowSeparator(.hidden)
+      .listRowBackground(Color.clear)
+  }
+
+  private func sectionHeader(_ section: ChannelSection, count: Int) -> some View {
+    let open = !collapsed.contains(section.id)
+    return Button {
+      withAnimation(.snappy) { if open { collapsed.insert(section.id) } else { collapsed.remove(section.id) } }
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).rotationEffect(.degrees(open ? 0 : -90))
+        Text(section.title).font(.system(size: 13, weight: .semibold)).tracking(0.5).textCase(.uppercase)
+        Spacer()
+      }
+      .foregroundStyle(Palette.faint)
+      .padding(.horizontal, 4).padding(.top, 14).padding(.bottom, 4)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .textCase(nil)
+    .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18))
+    .accessibilityLabel("\(section.name), \(count) \(count == 1 ? "chat" : "chats"), \(open ? "expanded" : "collapsed")")
+    .contextMenu {
+      if store.canManage {
+        Button("Rename section", systemImage: "pencil") { editingSection = section }
+        Button("Delete section", systemImage: "trash", role: .destructive) { deletingSection = section }
+      }
+    }
+  }
+
+  // MARK: search
+
+  @ViewBuilder private var searchRows: some View {
+    let chats = matches.filter { !$0.isTeam }
+    let teams = matches.filter { $0.isTeam }
+    if !chats.isEmpty { Section { ForEach(chats) { rowView($0) } } header: { searchHeader("Chats") } }
+    if !teams.isEmpty { Section { ForEach(teams) { rowView($0) } } header: { searchHeader("Teams") } }
+    if !query.isEmpty { searchResults(shown: matches) }
+  }
+
+  private func searchHeader(_ title: String) -> some View {
+    Text(title).font(.system(size: 13, weight: .semibold)).tracking(0.5).textCase(.uppercase).foregroundStyle(Palette.faint)
+      .padding(.horizontal, 4).padding(.top, 14)
+      .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18))
+  }
+
+  @ViewBuilder private func searchResults(shown: [ChatEntry]) -> some View {
+    if let found, found.query == query {
+      SearchResultsSections(
+        results: found.results, query: query,
+        shownChannels: Set(shown.compactMap { $0.isTeam ? $0.channel?.id : nil }),
+        shownAgents: Set(shown.compactMap { if case .agent(let a) = $0.kind { a.id } else { nil } }),
+        open: openResult
+      )
+      if found.results.isEmpty && shown.isEmpty {
+        Section { Text("Nothing found for “\(query)”.").foregroundStyle(Palette.muted) }
+      }
+    } else if searching {
+      Section { HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(Palette.muted) } }
+    }
   }
 
   /** Asks the hub once typing pauses; a newer search drops this one. */
@@ -138,19 +297,20 @@ struct ChatsView: View {
     searching = false
   }
 
-  @ViewBuilder private var searchResults: some View {
-    if let found, found.query == query {
-      SearchResultsSections(
-        results: found.results, query: query,
-        shownChannels: Set(rooms.map(\.id)),
-        shownAgents: Set(store.agents.filter { $0.name.localizedCaseInsensitiveContains(query) || $0.handle.localizedCaseInsensitiveContains(query) }.map(\.id)),
-        open: openResult
-      )
-      if found.results.isEmpty && rooms.isEmpty {
-        Section { Text("Nothing found for “\(query)”.").foregroundStyle(.secondary) }
-      }
-    } else if searching {
-      Section { HStack(spacing: 8) { ProgressView(); Text("Searching…").foregroundStyle(.secondary) } }
+  // MARK: opening things
+
+  /** Loads the newest messages of the first chats, so each row can say what was said last. */
+  private func warmPreviews() async {
+    for entry in entries.prefix(25) {
+      guard let id = entry.channel?.id, store.messages[id] == nil, !Task.isCancelled else { continue }
+      try? await store.loadMessages(id)
+    }
+  }
+
+  private func openEntry(_ entry: ChatEntry) {
+    if let channel = entry.channel { path.append(channel); return }
+    if case .agent(let agent) = entry.kind {
+      action.run { path.append(try await store.dm(with: agent)) }
     }
   }
 
@@ -172,18 +332,12 @@ struct ChatsView: View {
       case .note(let notePath):
         path.append(ChatsScreen.note(path: notePath))
       }
+      search = ""
+      searchFocused = false
     }
   }
 
   private func open(_ route: Route?) async {
-    if case .approval(let id) = route {
-      store.route = nil
-      var p = NavigationPath()
-      p.append(ChatsScreen.inbox)
-      p.append(ChatsScreen.approval(id: id))
-      path = p
-      return
-    }
     guard case .chat(let channelId, let threadId) = route else { return }
     if !store.channels.contains(where: { $0.id == channelId }) { await store.refreshChannels() }
     store.route = nil
@@ -195,153 +349,253 @@ struct ChatsView: View {
   }
 }
 
-struct ChatChannelRow: View {
+/** A row: the agent's ghost (or a team's two), its name and time, and what was said or what it's doing. */
+struct ChatRow: View {
   @Environment(Store.self) private var store
-  var channel: Channel
+  var entry: ChatEntry
+  var open: () -> Void
+  @Binding var path: NavigationPath
   @State private var action = FormAction()
   @State private var moving = false
   @State private var leaving = false
 
-  /** an agent is replying in this channel right now */
-  private var busy: Bool {
-    store.activityChannel.contains { id, ch in ch == channel.id && store.agent(id)?.status == .busy }
-  }
+  private var channel: Channel? { entry.channel.flatMap { c in store.channels.first { $0.id == c.id } } ?? entry.channel }
+  private var muted: Bool { channel?.isMuted == true }
 
   var body: some View {
-    NavigationLink(value: channel) {
-      HStack(spacing: 12) {
-        IconTile(symbol: channel.private == true ? "lock" : "number", color: .secondary, size: 44)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(channel.name).font(.body.weight(channel.badge > 0 ? .semibold : .regular))
-          if !channel.topic.isEmpty { Text(channel.topic).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+    Button(action: open) {
+      HStack(spacing: 14) {
+        avatar
+        VStack(alignment: .leading, spacing: 4) {
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(entry.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+            Spacer(minLength: 8)
+            if entry.pinned { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).accessibilityLabel("Pinned") }
+            if let at = entry.lastAt { Text(ChatList.timeText(at)).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+          }
+          HStack(spacing: 8) {
+            subtitle
+            Spacer(minLength: 0)
+            if muted { Image(systemName: "bell.slash").font(.system(size: 13)).foregroundStyle(Palette.faint) }
+            if entry.badge > 0 { UnreadBadge(count: entry.badge) }
+          }
         }
-        Spacer()
-        if busy { GlowDot(color: .green).accessibilityLabel("An agent is working here") }
-        if channel.isMuted { Image(systemName: "bell.slash").foregroundStyle(.secondary) }
-        UnreadBadge(count: channel.badge)
-      }.opacity(channel.isMuted ? 0.55 : 1)
+      }
+      .padding(.vertical, 12)
+      .opacity(muted ? 0.6 : 1)
+      .contentShape(Rectangle())
     }
-    .contextMenu {
-      starButton
-      muteButton
-      Button("Mark as read", systemImage: "checkmark") { action.run { try await store.readChannel(channel.id) } }
-      if store.canManage { moveMenu }
-      if channel.name != "general" { Button("Leave channel", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { leaving = true } }
-    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier(entry.isTeam ? "team-row" : "chat-row")
+    .contextMenu { menu }
     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-      starButton.tint(.orange)
-      Button("Mark as read", systemImage: "checkmark") { action.run { try await store.readChannel(channel.id) } }.tint(.blue)
+      pinButton.tint(.orange)
+      if channel != nil { Button("Mark as read", systemImage: "checkmark") { action.run { try await store.readChannel(channel!.id) } }.tint(.blue) }
     }
     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-      if channel.name != "general" { Button("Leave", role: .destructive) { leaving = true } }
+      if entry.isTeam, channel?.name != "general" { Button("Leave", role: .destructive) { leaving = true } }
       muteButton.tint(.gray)
-      if store.canManage { Button("Move", systemImage: "folder") { moving = true }.tint(.indigo) }
+      if entry.isTeam, store.canManage { Button("Move", systemImage: "folder") { moving = true }.tint(.indigo) }
     }
-    .confirmationDialog("Move to section", isPresented: $moving, titleVisibility: .visible) { moveChoices }
-    .confirmationDialog("Leave #\(channel.name)?", isPresented: $leaving, titleVisibility: .visible) {
-      Button("Leave channel", role: .destructive) { action.run { try await store.leaveChannel(channel.id) } }
+    .sheet(isPresented: $moving) { if let channel { MoveToSectionSheet(channel: channel) } }
+    .confirmationDialog("Leave \(entry.name)?", isPresented: $leaving, titleVisibility: .visible) {
+      Button("Leave team", role: .destructive) { if let channel { action.run { try await store.leaveChannel(channel.id) } } }
     }
     .managementAlert(action)
   }
 
-  private var starButton: some View {
-    Button(channel.starred == true ? "Unstar" : "Star", systemImage: "star") {
-      action.run { try await store.setChannelPrefs(channel.id, ["starred": AnyEncodable(channel.starred != true)]) }
+  // MARK: pieces
+
+  @ViewBuilder private var avatar: some View {
+    switch entry.kind {
+    case .agent(let a): SoloGhost(agent: store.agent(a.id) ?? a)
+    case .team(let c): TeamGhosts(agents: teamAgents(c), seed: c.name)
+    }
+  }
+
+  private func teamAgents(_ c: Channel) -> [Agent] {
+    guard let team = c.team(agents: store.agents) else { return [] }
+    return team.nodes.sorted { ($0.lead ? 0 : 1) < ($1.lead ? 0 : 1) }.compactMap { store.agent($0.agentId) }
+  }
+
+  /** an agent is replying in this team right now */
+  private var workingHere: Agent? {
+    guard let id = channel?.id else { return nil }
+    return store.activityChannel.compactMap { agentId, ch in ch == id ? store.agent(agentId) : nil }.first { $0.status == .busy }
+  }
+
+  @ViewBuilder private var subtitle: some View {
+    if case .agent(let a) = entry.kind, (store.agent(a.id) ?? a).status == .busy {
+      let doing = store.activity[a.id].flatMap { $0 == "started" ? nil : $0 }
+      Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 15)).foregroundStyle(Palette.green).lineLimit(1)
+    } else if let agent = workingHere {
+      Text("\(agent.name) is working").font(.system(size: 15)).foregroundStyle(Palette.green).lineLimit(1)
+    } else {
+      Text(preview).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+    }
+  }
+
+  private var preview: String {
+    if let m = entry.last, m.deletedAt == nil {
+      var text = SearchText.clean(m.body, max: 90)
+      if text.isEmpty, !m.files.isEmpty { text = "Sent \(m.files.count == 1 ? "a file" : "\(m.files.count) files")" }
+      if !text.isEmpty {
+        if m.author.kind == .user && m.author.id == store.me?.id { return "You: \(text)" }
+        if entry.isTeam { return "\(store.name(of: m.author)): \(text)" }
+        return text
+      }
+    }
+    switch entry.kind {
+    case .agent(let a): return a.settings?.description.flatMap { $0.isEmpty ? nil : $0 } ?? "@\(a.handle)"
+    case .team(let c):
+      if let leads = c.leadLine(agents: store.agents) { return leads }
+      return c.topic.isEmpty ? "No messages yet" : c.topic
+    }
+  }
+
+  @ViewBuilder private var menu: some View {
+    pinButton
+    if entry.isTeam, store.canManage { Button("Move to section", systemImage: "folder") { moving = true } }
+    if channel != nil || !entry.isTeam { muteButton }
+    if channel != nil { Button("Mark as read", systemImage: "checkmark") { action.run { try await store.readChannel(channel!.id) } } }
+    if case .agent(let a) = entry.kind { Button("Agent profile", systemImage: "person.crop.circle") { path.append(store.agent(a.id) ?? a) } }
+    if entry.isTeam, channel?.name != "general" { Button("Leave team", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) { leaving = true } }
+  }
+
+  /** the chat to change a setting on; an agent's chat is made the first time you do */
+  private func ensureChannel() async throws -> Channel {
+    if let channel { return channel }
+    guard case .agent(let a) = entry.kind else { throw API.Failure(status: 0, message: "That chat isn't available.") }
+    return try await store.dm(with: a)
+  }
+
+  private var pinButton: some View {
+    Button(entry.pinned ? "Unpin" : "Pin to top", systemImage: entry.pinned ? "pin.slash" : "pin") {
+      action.run { let c = try await ensureChannel(); try await store.setChannelPrefs(c.id, ["starred": AnyEncodable(!entry.pinned)]) }
     }
   }
 
   private var muteButton: some View {
-    Button(channel.isMuted ? "Unmute" : "Mute", systemImage: channel.isMuted ? "bell" : "bell.slash") {
-      action.run { try await store.setChannelPrefs(channel.id, ["notify": AnyEncodable(channel.isMuted ? "default" : "mute")]) }
-    }
-  }
-
-  private var moveMenu: some View { Menu("Move to section", systemImage: "folder") { moveChoices } }
-
-  @ViewBuilder private var moveChoices: some View {
-    Button("Channels (no section)") { action.run { try await store.updateChannel(channel.id, ["sectionId": .null]) } }
-    ForEach(store.sections) { section in
-      Button(section.title) { action.run { try await store.updateChannel(channel.id, ["sectionId": AnyEncodable(section.id)]) } }
+    Button(muted ? "Unmute" : "Mute", systemImage: muted ? "bell" : "bell.slash") {
+      action.run { let c = try await ensureChannel(); try await store.setChannelPrefs(c.id, ["notify": AnyEncodable(muted ? "default" : "mute")]) }
     }
   }
 }
 
-enum ChatsScreen: Hashable { case inbox, approval(id: String), note(path: String) }
-
-/** The first row in Chats: what's waiting on you (approvals and computers that need you). */
-struct InboxRow: View {
+/** "Move to section": No section, each section (a check on the current one), and a new one. */
+struct MoveToSectionSheet: View {
   @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  var channel: Channel
+  @State private var action = FormAction()
+  @State private var newSection = false
+
+  private var currentId: String? { (store.channels.first { $0.id == channel.id } ?? channel).sectionId }
 
   var body: some View {
-    NavigationLink(value: ChatsScreen.inbox) {
-      HStack(spacing: 12) {
-        IconTile(symbol: "tray.full.fill", color: store.needsYouCount > 0 ? .orange : .secondary, size: 44)
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Inbox").font(.body.weight(store.needsYouCount > 0 ? .semibold : .regular))
-          Text(store.needsYouCount > 0 ? "Waiting on you" : "Nothing waiting on you").font(.caption).foregroundStyle(.secondary)
-        }
-        Spacer()
-        UnreadBadge(count: store.needsYouCount)
-      }
-    }
-    .accessibilityIdentifier("chats-inbox")
-  }
-}
-
-/** A DM with one of your agents: working now, or unread messages. */
-struct AgentChatRow: View {
-  @Environment(Store.self) private var store
-  var agent: Agent
-
-  var body: some View {
-    let dm = store.channels.first { $0.isDM && store.dmAgent($0)?.id == agent.id }
-    let working = agent.status == .busy
-    HStack(spacing: 12) {
-      AgentAvatar(agent: agent, size: 44, showStatus: false)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(agent.name).font(.body.weight((dm?.badge ?? 0) > 0 ? .semibold : .regular)).foregroundStyle(.primary)
-        if working {
-          HStack(spacing: 5) {
-            GlowDot(color: .green)
-            Text(store.activity[agent.id].map { $0 == "started" ? "Working" : $0 } ?? "Working").font(.caption).foregroundStyle(.green).lineLimit(1)
+    VStack(spacing: 0) {
+      SheetHeader(title: "Move to section") { dismiss() }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          Text(channel.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).padding(.horizontal, 6)
+          CardGroup {
+            choice("No section", id: nil, symbol: "tray")
+            ForEach(store.sections) { choice($0.title, id: $0.id, symbol: "folder") }
+            Button { newSection = true } label: {
+              RowLabel(title: "New section…", chevron: false) { Image(systemName: "plus").foregroundStyle(Palette.muted).frame(width: 26) }
+            }.buttonStyle(.plain)
           }
-        } else {
-          Text(agent.settings?.description.flatMap { $0.isEmpty ? nil : $0 } ?? "@\(agent.handle)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+          InlineError(error: action.error)
         }
+        .padding(.horizontal, 18).padding(.top, 8)
       }
-      Spacer()
-      if dm?.isMuted == true { Image(systemName: "bell.slash").foregroundStyle(.secondary) }
-      UnreadBadge(count: dm?.badge ?? 0)
-      Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
     }
-    .opacity(dm?.isMuted == true ? 0.55 : 1)
-    .accessibilityElement(children: .combine)
+    .background(Palette.sheet.ignoresSafeArea())
+    .presentationDetents([.medium, .large])
+    .presentationBackground(Palette.sheet)
+    .presentationCornerRadius(Corner.sheet)
+    .sheet(isPresented: $newSection) { SectionEditor() }
+    .managementAlert(action)
+  }
+
+  private func choice(_ title: String, id: String?, symbol: String) -> some View {
+    Button {
+      guard id != currentId else { dismiss(); return }
+      action.run {
+        try await store.updateChannel(channel.id, ["sectionId": id.map { AnyEncodable($0) } ?? .null])
+        dismiss()
+      }
+    } label: {
+      RowLabel(title: title, chevron: false) { Image(systemName: symbol).foregroundStyle(Palette.muted).frame(width: 26) }
+        .overlay(alignment: .trailing) {
+          if id == currentId { Image(systemName: "checkmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.blue).padding(.trailing, 18) }
+        }
+    }
+    .buttonStyle(.plain)
+    .disabled(action.busy)
   }
 }
 
+/** "New chat": pick an agent to talk to. */
+struct NewChatSheet: View {
+  @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  var onNewAgent: (() -> Void)?
+  var onOpen: (Channel) -> Void
+  @State private var action = FormAction()
+
+  var body: some View {
+    VStack(spacing: 0) {
+      SheetHeader(title: "New chat") { dismiss() }
+      ScrollView {
+        VStack(spacing: 14) {
+          if store.agents.isEmpty {
+            Text("You don't have any agents yet.").foregroundStyle(Palette.muted).padding(.top, 24)
+          } else {
+            CardGroup {
+              ForEach(store.agents) { agent in
+                Button {
+                  action.run { let c = try await store.dm(with: agent); dismiss(); onOpen(c) }
+                } label: {
+                  RowLabel(title: agent.name, subtitle: agent.settings?.description.flatMap { $0.isEmpty ? nil : $0 } ?? HarnessChoice.label(agent.harness), chevron: false) {
+                    AgentAvatar(agent: agent, size: 40, showStatus: false)
+                  }
+                }.buttonStyle(.plain).disabled(action.busy)
+              }
+            }
+          }
+          if let onNewAgent {
+            CardGroup {
+              Button { dismiss(); onNewAgent() } label: {
+                RowLabel(title: "New agent", chevron: false) { Image(systemName: "plus").foregroundStyle(Palette.muted).frame(width: 40) }
+              }.buttonStyle(.plain)
+            }
+          }
+          InlineError(error: action.error)
+        }
+        .padding(.horizontal, 18).padding(.top, 8)
+      }
+    }
+    .background(Palette.sheet.ignoresSafeArea())
+    .presentationDetents([.medium, .large])
+    .presentationBackground(Palette.sheet)
+    .presentationCornerRadius(Corner.sheet)
+    .managementAlert(action)
+  }
+}
+
+/** The blue count on a chat or tab with new messages. */
 struct UnreadBadge: View {
   var count: Int
   var body: some View {
     if count > 0 {
       Text(count > 99 ? "99+" : "\(count)")
-        .font(.caption2.weight(.bold))
-        .foregroundStyle(Color(.systemBackground))
-        .padding(.horizontal, 7)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 6)
         .frame(minWidth: 20, minHeight: 20)
-        .background(Capsule().fill(Color.primary))
-    }
-  }
-}
-
-/** Live updates on or off, shown quietly in the corner. */
-struct ConnectionDot: View {
-  @Environment(Store.self) private var store
-  var body: some View {
-    if !store.connected {
-      Label("Reconnecting", systemImage: "wifi.slash")
-        .labelStyle(.iconOnly)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel("Reconnecting to Wisp")
+        .background(Capsule().fill(Palette.blue))
     }
   }
 }

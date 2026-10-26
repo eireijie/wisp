@@ -16,8 +16,13 @@ struct ChannelView: View {
   var draft = ""
   @State private var error: String?
   @State private var loadingEarlier = false
-  @State private var calling = false
+  @State private var call: CallController?
+  @State private var showDetails = false
+  @State private var showTeam = false
   @State private var noEarlier = false
+  @State private var flashed: String?
+  @State private var attachTrigger = 0
+  @State private var tool: ChatTool?
   @Environment(\.dismiss) private var dismiss
 
   private var current: Channel { store.channels.first { $0.id == channel.id } ?? channel }
@@ -48,13 +53,16 @@ struct ChannelView: View {
         }
         if store.messages[channel.id] == nil {
           ProgressView().frame(maxWidth: .infinity).padding(.top, 60)
-        } else if list.isEmpty {
-          EmptyChannel(channel: channel)
+        } else if list.isEmpty && store.streaming(in: channel.id, thread: nil).isEmpty {
+          EmptyChannel(channel: current, onAddAgent: { showTeam = true }, onAddFiles: { attachTrigger += 1 }, onInvite: { showDetails = true })
         }
         ForEach(Array(list.enumerated()), id: \.element.id) { i, m in
-          MessageRow(message: m, compact: continues(m, after: i > 0 ? list[i - 1] : nil), replies: store.replyCounts[m.id] ?? 0,
+          let prev = i > 0 ? list[i - 1] : nil
+          let next = i + 1 < list.count ? list[i + 1] : nil
+          let stamp = ChatFormat.needsStamp(prev, m)
+          if stamp { TimeDivider(date: m.date) }
+          MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.needsStamp(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
             thread: ThreadRef(channelId: channel.id, rootId: m.id), working: inThreads.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
-          .id(m.id)
         }
         ForEach(store.streaming(in: channel.id, thread: nil)) { StreamingRow(run: $0) }
         Color.clear.frame(height: 1).id(Bottom.id)
@@ -70,67 +78,44 @@ struct ChannelView: View {
       try? await Task.sleep(for: .milliseconds(300))
       Bottom.follow(proxy)
     }
+    .environment(\.scrollToMessage) { id in
+      withAnimation(.snappy) { proxy.scrollTo(id, anchor: .center) }
+      flashed = id
+      Task { try? await Task.sleep(for: .milliseconds(1400)); if flashed == id { flashed = nil } }
+    }
+    .environment(\.flashedMessage, flashed)
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
       if current.archivedAt != nil {
-        Text("#\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
+        ArchivedBar(channel: current)
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft) { text, files in
-            try await store.send(text, in: channel.id, files: files)
-          }
+          composer
         }
         .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
     }
     .toolbar(.hidden, for: .tabBar)
-    .navigationTitle(store.title(of: current))
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .principal) {
-        if let agent = store.dmAgent(current) {
-          NavigationLink {
-            AgentPage(agent: agent)
-          } label: {
-            HStack(spacing: 8) {
-              AgentAvatar(agent: agent, size: 24, showStatus: false)
-              VStack(alignment: .leading, spacing: 0) {
-                Text(agent.name).font(.subheadline.weight(.semibold))
-                Text(statusLine(agent)).font(.caption2).foregroundStyle(.secondary)
-              }
-            }
-          }.buttonStyle(.plain)
-        } else {
-          NavigationLink {
-            ChannelDetails(channel: current)
-          } label: {
-            VStack(spacing: 0) {
-              HStack(spacing: 4) {
-                Image(systemName: current.private == true ? "lock" : "number")
-                Text(current.name).lineLimit(1)
-              }
-              .font(.subheadline.weight(.semibold))
-              // who leads here, from the channel's team: "Atlas and Nova lead here"
-              if let leads = current.leadLine(agents: store.agents) {
-                Text(leads).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-              }
-            }
-          }.buttonStyle(.plain)
-        }
-      }
+    .toolbar(.hidden, for: .navigationBar)
+    .background(Palette.ground.ignoresSafeArea())
+    .safeAreaInset(edge: .top, spacing: 0) {
+      VStack(spacing: 0) {
+        chrome
+        // a call shrunk from full screen sits under the top bar
+        if let call, !call.expanded { CallBar(call: call).transition(.move(edge: .top).combined(with: .opacity)) }
+      }.animation(.snappy, value: call?.expanded)
     }
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        if store.features.voice, current.archivedAt == nil, let agent = store.dmAgent(current) {
-          Button { calling = true } label: { Image(systemName: "phone") }.accessibilityLabel("Call \(agent.name)")
-        }
-      }
+    .callLifecycle(call)
+    .navigationDestination(isPresented: $showDetails) {
+      if let agent = store.dmAgent(current) { AgentPage(agent: agent) } else { TeamInfoPage(channel: current) }
     }
-    .fullScreenCover(isPresented: $calling) {
-      if let agent = store.dmAgent(current) { CallScreen(agent: agent, channel: current) }
+    .navigationDestination(isPresented: $showTeam) { ChannelTeamScreen(channel: current) }
+    .fullScreenCover(isPresented: Binding(get: { call?.expanded == true }, set: { if !$0 { call?.expanded = false } })) {
+      if let call { CallScreen(call: call) }
     }
+    .sheet(item: $tool) { ChatToolSheet(tool: $0, channelId: channel.id) }
     .onChange(of: store.channels) { old, new in
       if old.contains(where: { $0.id == channel.id }) && !new.contains(where: { $0.id == channel.id }) { dismiss() }
       if old.first(where: { $0.id == channel.id })?.joined == true && new.first(where: { $0.id == channel.id })?.joined == false { dismiss() }
@@ -145,31 +130,126 @@ struct ChannelView: View {
       do { try await store.loadMessages(channel.id) } catch { self.error = error.localizedDescription }
       store.markRead(channel.id)
     }
-    .onDisappear { if store.openChannel == channel.id { store.openChannel = nil } }
-  }
-
-  private var placeholder: String {
-    if let agent = store.dmAgent(current) { return "Message \(agent.name)" }
-    return "Message #\(current.name)"
-  }
-
-  private func statusLine(_ a: Agent) -> String {
-    switch a.status {
-    case .busy: "Working"
-    case .online: "Online"
-    case .offline: "Offline"
+    .onDisappear {
+      if store.openChannel == channel.id { store.openChannel = nil }
     }
   }
 
-  private func continues(_ m: Message, after prev: Message?) -> Bool {
-    guard let prev, prev.author == m.author, m.author.id != "system" else { return false }
-    return m.date.timeIntervalSince(prev.date) < 5 * 60
+  private var composer: some View {
+    Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft, attachTrigger: attachTrigger, send: { text, files, replyTo in
+            try await store.send(text, in: channel.id, files: files, replyTo: replyTo)
+          }, onCall: canCall && call == nil ? { startCall() } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")", onModelCommand: store.dmAgent(current).map { agent in { tool = .model(agent) } }, callLive: call != nil)
+  }
+
+  /** only really leaving the chat hangs up; opening a thread, the profile or the full-screen call doesn't */
+  private var hangUpWhenLeaving: some View {
+    LeavingWatcher { if let call { call.end(store: store); self.call = nil } }.frame(width: 0, height: 0)
+  }
+
+  private func startCall() {
+    guard let agent = store.dmAgent(current), call == nil else { return }
+    let started = CallController(agent: agent, channel: current)
+    started.onHangUp = { call = nil }
+    call = started
+    Task { await started.begin(store: store) }
+  }
+
+  private var placeholder: String {
+    if let agent = store.dmAgent(current) { return "Ask \(agent.name)" }
+    return "Message \(current.name)"
+  }
+
+  /** a voice call is on offer in a chat with one agent when voice is on */
+  private var canCall: Bool { store.features.voice && current.archivedAt == nil && store.dmAgent(current) != nil }
+
+  /** teams show their first two agents on the name pill */
+  private var teamAgents: [Agent] {
+    guard let team = current.team(agents: store.agents) else { return [] }
+    return team.nodes.sorted { ($0.lead ? 0 : 1) < ($1.lead ? 0 : 1) }.compactMap { store.agent($0.agentId) }
+  }
+
+  /** the top of a chat: a glass back circle, the name on a pill with the ghost, and a ... circle */
+  private var chrome: some View {
+    TopBar {
+      CircleButton(symbol: "chevron.left", label: "Back", id: "chat-back") { dismiss() }
+    } center: {
+      Button { showDetails = true } label: {
+        NamePill(title: store.title(of: current)) {
+          if let agent = store.dmAgent(current) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
+          else { TeamGhosts(agents: teamAgents, seed: current.name, size: 28) }
+        }
+        .overlay(alignment: .bottom) {
+          if current.archivedAt != nil { Text("Archived").font(.system(size: 11)).foregroundStyle(Palette.muted).offset(y: 14) }
+        }
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(store.dmAgent(current) != nil ? "\(store.title(of: current)), open profile" : "\(current.name), team info")
+      .accessibilityIdentifier("chat-title")
+    } trailing: {
+      Menu {
+        if let agent = store.dmAgent(current) {
+          if canCall, call == nil { Button("Call \(agent.name)", systemImage: "phone") { startCall() } }
+          Button("About \(agent.name)", systemImage: "person.crop.circle") { showDetails = true }
+          if store.role != "guest" { Button("Model and effort", systemImage: "bolt") { tool = .model(agent) } }
+          Button("What it can do", systemImage: "shield") { tool = .access(agent) }
+          Button("Context window", systemImage: "gauge.with.dots.needle.33percent") { tool = .context(agent) }
+        } else {
+          Button("Team info", systemImage: "person.2") { showDetails = true }
+          Menu("Notify me", systemImage: "bell") {
+            Picker("Notify me", selection: Binding(get: { current.notify ?? "default" }, set: { v in Task { try? await store.setChannelPrefs(channel.id, ["notify": AnyEncodable(v)]) } })) {
+              Text("Every message").tag("all")
+              Text("Just what's for me").tag("default")
+              Text("Mute").tag("mute")
+            }
+          }
+          Button("How the team works", systemImage: "point.3.connected.trianglepath.dotted") { showTeam = true }
+          Button((current.starred ?? false) ? "Unpin from the top" : "Pin to the top", systemImage: "pin") {
+            Task { try? await store.setChannelPrefs(channel.id, ["starred": AnyEncodable(!(current.starred ?? false))]) }
+          }
+        }
+      } label: { CircleLabel(symbol: "ellipsis") }
+        .accessibilityLabel("More").accessibilityIdentifier("chat-more")
+    }
+    .background(alignment: .top) {
+      LinearGradient(colors: [Palette.ground, Palette.ground.opacity(0)], startPoint: .top, endPoint: .bottom)
+        .padding(.bottom, -10).ignoresSafeArea(edges: .top).allowsHitTesting(false)
+    }
+    .background { hangUpWhenLeaving }
+  }
+}
+
+/** Where the message bar would be, in an archived team. */
+struct ArchivedBar: View {
+  @Environment(Store.self) private var store
+  var channel: Channel
+  @State private var action = FormAction()
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: "archivebox").font(.system(size: 18)).foregroundStyle(Palette.muted)
+      VStack(alignment: .leading, spacing: 1) {
+        Text("This team is archived").font(.system(size: 16, weight: .semibold))
+        Text("Nobody can post. Notes stay.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+      }
+      Spacer(minLength: 8)
+      if store.canManage {
+        Button("Unarchive") { action.run { try await store.archiveChannel(channel.id, archived: false) } }
+          .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.ground)
+          .padding(.horizontal, 16).frame(height: 40).background(Capsule().fill(Palette.text))
+          .disabled(action.busy)
+      }
+    }
+    .padding(16)
+    .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .padding(.horizontal, 18)
+    .padding(.bottom, 8)
   }
 }
 
 /**
  * A thread. Any reply in it can start a thread of its own (a sub-thread), which shows its reply
- * count and who's working in it; a sub-thread links back up to the thread it came from.
+ * count and who's working in it; a sub-thread links back up to the thread it came from. A step
+ * Wisp handed out opens as its own thread, headed "Handed to Pappy".
  */
 struct ThreadView: View {
   @Environment(Store.self) private var store
@@ -179,12 +259,18 @@ struct ThreadView: View {
   @State private var loadingEarlier = false
   @State private var earlierFailed = false
   @State private var error: String?
+  @State private var flashed: String?
 
   private var root: Message? { store.message(ref.rootId, in: ref.channelId) }
   private var replies: [Message] { store.threads[ref.rootId] ?? [] }
   /** the thread this one branched off from */
   private var parent: String? { root?.threadId }
   private var below: [Agent] { store.working(in: ref.channelId, thread: ref.rootId).filter { store.activityThread[$0.id] != ref.rootId } }
+  private var channel: Channel? { store.channels.first { $0.id == ref.channelId } }
+  private var handoffTask: String? {
+    guard let root, root.author.id == "system" else { return nil }
+    return root.parts.lazy.compactMap { if case .task(let id) = $0 { id } else { nil } }.first
+  }
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -210,18 +296,23 @@ struct ThreadView: View {
           .padding(.vertical, 10)
         }
         if let root {
-          MessageRow(message: root, compact: false, replies: 0, thread: nil)
+          if let task = handoffTask { HandoffBrief(message: root, taskId: task) } else { ThreadRoot(message: root) }
           HStack {
-            Text(replies.count == 1 ? "1 reply" : "\(replies.count) replies").font(.caption).foregroundStyle(.secondary)
-            VStack { Divider() }
+            Text(replies.count == 1 ? "1 reply" : "\(replies.count) replies").font(.system(size: 13)).foregroundStyle(Palette.muted)
+            VStack { Rectangle().fill(Palette.separator).frame(height: 1) }
           }
-          .padding(.horizontal, 16)
-          .padding(.vertical, 6)
+          .padding(.horizontal, 18)
+          .padding(.vertical, 8)
         }
-        ForEach(replies) { m in
-          MessageRow(message: m, compact: false, replies: store.replyCounts[m.id] ?? 0,
+        ForEach(Array(replies.enumerated()), id: \.element.id) { i, m in
+          let prev = i > 0 ? replies[i - 1] : nil
+          let next = i + 1 < replies.count ? replies[i + 1] : nil
+          let stamp = i > 0 && ChatFormat.needsStamp(prev, m)
+          if stamp { TimeDivider(date: m.date) }
+          MessageRow(message: m, compact: !stamp && ChatFormat.groups(prev, m), last: next == nil || ChatFormat.needsStamp(m, next!) || !ChatFormat.groups(m, next!), replies: store.replyCounts[m.id] ?? 0,
             thread: ThreadRef(channelId: ref.channelId, rootId: m.id, from: ref.rootId),
-            working: below.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) })
+            working: below.filter { store.activityThread[$0.id] == m.id || (store.activityPath[$0.id] ?? []).contains(m.id) },
+            composerThread: ref.rootId)
         }
         ForEach(store.streaming(in: ref.channelId, thread: ref.rootId)) { StreamingRow(run: $0) }
         Color.clear.frame(height: 1).id(Bottom.id)
@@ -230,24 +321,67 @@ struct ThreadView: View {
     .defaultScrollAnchor(.bottom)
     .onChange(of: replies.last?.id) { Bottom.follow(proxy) }
     .onChange(of: store.liveLength) { Bottom.follow(proxy) }
+    .environment(\.scrollToMessage) { id in
+      withAnimation(.snappy) { proxy.scrollTo(id, anchor: .center) }
+      flashed = id
+      Task { try? await Task.sleep(for: .milliseconds(1400)); if flashed == id { flashed = nil } }
+    }
+    .environment(\.flashedMessage, flashed)
     }
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
-      if store.channels.first(where: { $0.id == ref.channelId })?.archivedAt != nil {
-        Text("This channel is archived").font(.footnote).foregroundStyle(.secondary).padding()
+      if channel?.archivedAt != nil {
+        ArchivedBar(channel: channel!)
       } else {
         VStack(spacing: 6) {
-          if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch, thread: ref.rootId) }
-          Composer(placeholder: "Reply", channelId: ref.channelId, thread: ref.rootId, refresh: replies.count) { text, files in try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files) }
+          if let ch = channel { ActivityPill(channel: ch, thread: ref.rootId) }
+          Composer(placeholder: handoffAgent.map { "Reply to \($0.name)" } ?? "Reply…", channelId: ref.channelId, thread: ref.rootId, refresh: replies.count) { text, files, replyTo in
+            try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files, replyTo: replyTo)
+          }
         }
       }
     }
     .toolbar(.hidden, for: .tabBar)
-    .navigationTitle(parent == nil ? "Thread" : "Sub-thread")
-    .navigationBarTitleDisplayMode(.inline)
+    .toolbar(.hidden, for: .navigationBar)
+    .background(Palette.ground.ignoresSafeArea())
+    .safeAreaInset(edge: .top, spacing: 0) { chrome }
     .task(id: ref) { await load() }
     .onAppear { store.openThreads[ref.rootId] = ref.channelId }
     .onDisappear { store.openThreads[ref.rootId] = nil }
+  }
+
+  private var handoffAgent: Agent? {
+    handoffTask.flatMap { id in store.tasks.first { $0.id == id } }.flatMap { store.agent($0.toAgentId ?? "") }
+  }
+
+  private var chrome: some View {
+    TopBar {
+      CircleButton(symbol: "chevron.left", label: "Back") { dismiss() }
+    } center: {
+      if let task = handoffTask, let t = store.tasks.first(where: { $0.id == task }) {
+        let agent = store.agent(t.toAgentId ?? "")
+        HStack(spacing: 10) {
+          if let agent { AgentAvatar(agent: agent, size: 30, showStatus: false) }
+          VStack(alignment: .leading, spacing: 0) {
+            Text("Handed to \(agent?.name ?? "an agent")").font(.system(size: 16, weight: .semibold)).lineLimit(1)
+            Text(store.taskState(t)).font(.system(size: 12)).foregroundStyle(store.taskState(t) == "Working" ? Palette.green : Palette.muted)
+          }
+        }
+        .padding(.leading, 14).padding(.trailing, 20).frame(height: 52).glassPill()
+      } else {
+        VStack(spacing: 0) {
+          Text(parent == nil ? "Thread" : "Sub-thread").font(.system(size: 16, weight: .semibold))
+          if let channel { Text(store.title(of: channel)).font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(1) }
+        }
+        .padding(.horizontal, 24).frame(height: 52).glassPill()
+      }
+    } trailing: {
+      if handoffTask != nil, let agent = handoffAgent, agent.status == .busy, store.role != "guest" {
+        CircleButton(symbol: "stop.fill", label: "Stop \(agent.name)") { Task { try? await store.stopAgent(agent.id) } }
+      } else {
+        CircleButton(symbol: "xmark", label: "Close thread") { dismiss() }
+      }
+    }
   }
 
   private func loadEarlier() async {
@@ -280,14 +414,66 @@ struct ThreadView: View {
       Spacer(minLength: 0)
     }
     .font(.caption.weight(.semibold))
-    .foregroundStyle(.secondary)
-    .padding(.horizontal, 16)
-    .padding(.top, 10)
+    .foregroundStyle(Palette.muted)
+    .padding(.horizontal, 18)
+    .padding(.top, 6)
     if ref.from == parent {
       Button { dismiss() } label: { label }.buttonStyle(.plain).accessibilityHint("Back to the thread it came from")
     } else {
       NavigationLink(value: ThreadRef(channelId: ref.channelId, rootId: parent)) { label }.buttonStyle(.plain).accessibilityHint("Opens the thread it came from")
     }
+  }
+}
+
+/** The first message of a thread, on a card at the top of it. */
+struct ThreadRoot: View {
+  @Environment(Store.self) private var store
+  var message: Message
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        if message.author.kind == .agent { AgentAvatar(agent: store.agent(message.author.id), size: 26, showStatus: false) }
+        else { PersonAvatar(name: store.name(of: message.author), size: 26) }
+        Text(message.author == Actor(kind: .user, id: store.me?.id ?? "") ? "You" : store.name(of: message.author)).font(.system(size: 15, weight: .semibold))
+        Text(message.date, format: .dateTime.hour().minute()).font(.system(size: 13)).foregroundStyle(Palette.faint)
+      }
+      if message.deletedAt != nil {
+        Text("This message was deleted.").italic().foregroundStyle(Palette.muted)
+      } else {
+        if !message.body.isEmpty { MarkdownText(message.body, edited: message.editedAt != nil) }
+        ForEach(Array(message.parts.enumerated()), id: \.offset) { _, part in PartView(part: part, message: message) }
+      }
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    .padding(.horizontal, 16)
+    .padding(.top, 4)
+  }
+}
+
+/** The top of a hand-off thread: who handed what to whom, where it stands, and when it started. */
+struct HandoffBrief: View {
+  @Environment(Store.self) private var store
+  var message: Message
+  var taskId: String
+
+  var body: some View {
+    let task = store.tasks.first { $0.id == taskId }
+    let from = task.flatMap { t in t.from.flatMap { $0.kind == .agent ? store.agent($0.id)?.name : nil } }
+    let to = task.flatMap { store.agent($0.toAgentId ?? "") }?.name
+    ChatCardShell(symbol: "arrow.left.arrow.right", label: "\(from ?? "Someone") handed this to \(to ?? "an agent")") {
+      Text(task?.title ?? message.body).font(.system(size: 16, weight: .semibold))
+      if let task, !task.brief.isEmpty { Text(task.brief).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(4) }
+      HStack(spacing: 8) {
+        if let task { Text(store.taskState(task)).font(.system(size: 12, weight: .semibold)).padding(.horizontal, 9).padding(.vertical, 3).background(Capsule().fill(Palette.control)) }
+        Text("Started \(message.date.formatted(date: .omitted, time: .shortened))").font(.system(size: 13)).foregroundStyle(Palette.muted)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 16)
+    .padding(.top, 4)
   }
 }
 
@@ -299,28 +485,65 @@ enum Bottom {
   }
 }
 
+/** What a brand-new chat says: who you're talking to, or how to get a team going. */
 struct EmptyChannel: View {
   @Environment(Store.self) private var store
   var channel: Channel
+  var onAddAgent: () -> Void = {}
+  var onAddFiles: () -> Void = {}
+  var onInvite: () -> Void = {}
+
   var body: some View {
     VStack(spacing: 10) {
       if let a = store.dmAgent(channel) {
-        AgentAvatar(agent: a, size: 64, showStatus: false, interactive: true)
-        Text("This is the start of your chat with \(a.name).").font(.subheadline).foregroundStyle(.secondary)
+        AgentAvatar(agent: a, size: 72, showStatus: false, interactive: true)
+        Text(a.name).font(.system(size: 20, weight: .semibold))
+        Text("This is the start of your conversation with @\(a.handle). Ask it anything, or hand it a task.")
+          .font(.system(size: 16)).foregroundStyle(Palette.muted)
+        HStack(spacing: 6) {
+          GlowDot(color: a.status == .offline ? .gray : Palette.online)
+          Text(a.status == .offline ? "Offline" : "Ready\(store.nodes.first { $0.id == a.nodeId }.map { " on \($0.name)" } ?? "")")
+        }
+        .font(.system(size: 14)).foregroundStyle(Palette.muted)
       } else {
-        Text("#\(channel.name)").font(.title3.bold())
-        Text(channel.topic.isEmpty ? "No messages yet." : channel.topic).font(.subheadline).foregroundStyle(.secondary)
-        if let team = channel.team(agents: store.agents) {
-          let leads = team.leads.compactMap { store.agent($0)?.name }
-          Text("\(ChannelTeam.list(leads)) \(leads.count > 1 ? "read every new message here, plan it together and hand" : "reads every new message here, plans it and hands") the work to the team in a thread. @mention an agent to ask it directly.")
-            .font(.footnote).foregroundStyle(.secondary)
+        let team = channel.team(agents: store.agents)
+        let agents = (team?.nodes ?? []).compactMap { store.agent($0.agentId) }
+        TeamGhosts(agents: agents, seed: channel.name, size: 64)
+        Text(channel.name).font(.system(size: 20, weight: .semibold))
+        Text(intro(team)).font(.system(size: 16)).foregroundStyle(Palette.muted)
+        if channel.archivedAt == nil {
+          CardGroup {
+            if store.canManage {
+              introRow("person.badge.plus", "Add agent", "Pick who answers here", onAddAgent)
+            }
+            introRow("paperclip", "Add files", "Share notes and documents", onAddFiles)
+            if store.features.invite && store.canManage { introRow("person.2", "Invite people", "Bring someone into the team", onInvite) }
+          }
+          .padding(.top, 10)
         }
       }
     }
     .multilineTextAlignment(.center)
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 60)
+    .padding(.top, 48)
+    .padding(.bottom, 24)
     .padding(.horizontal, 24)
+  }
+
+  private func intro(_ team: ChannelTeam?) -> String {
+    let head = channel.topic.isEmpty ? "This is the start of the team. " : "\(channel.topic.trimmingCharacters(in: CharacterSet(charactersIn: ".!? "))). "
+    guard let team else { return head + "Add the agents who will work here." }
+    let leads = team.leads.compactMap { store.agent($0)?.name }
+    if leads.isEmpty { return head + "Add the agents who will work here." }
+    return head + "\(ChannelTeam.list(leads)) \(leads.count > 1 ? "read" : "reads") every new message here and hand\(leads.count > 1 ? "" : "s") out the work."
+  }
+
+  private func introRow(_ symbol: String, _ title: String, _ subtitle: String, _ action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      RowLabel(title: title, subtitle: subtitle) {
+        Image(systemName: symbol).font(.system(size: 16)).foregroundStyle(Palette.muted).frame(width: 36, height: 36).background(Circle().fill(Palette.control))
+      }
+    }.buttonStyle(.plain)
   }
 }
 
@@ -335,11 +558,22 @@ struct Composer: View {
   var refresh = 0
   /** what the message starts with, instead of the saved draft (a request to try a skill) */
   var draft = ""
-  var send: (String, [String]) async throws -> Void
+  /** bump to open the file picker (the intro's "Add files") */
+  var attachTrigger = 0
+  var send: (String, [String], String?) async throws -> Void
+  /** starts a voice call with the agent: the white voice button shows while the field is empty */
+  var onCall: (() -> Void)? = nil
+  var callLabel = "Start a voice call"
+  /** a plain "/model" opens the model sheet after it's sent */
+  var onModelCommand: (() -> Void)? = nil
+  /** a call is on: dictating would take the microphone and speaker away from it */
+  var callLive = false
+  @State private var dictation = Dictation()
+  @State private var dictationBase = ""
   @State private var text = ""
   @State private var selection: TextSelection?
   @State private var files: [UploadedFile] = []
-  @State private var uploading = 0
+  @State private var uploading: [Pending] = []
   @State private var sending = false
   @State private var error: String?
   @State private var pickingPhotos = false
@@ -348,11 +582,16 @@ struct Composer: View {
   @State private var slash = SlashMenuModel()
   @FocusState private var focused: Bool
 
+  struct Pending: Identifiable, Equatable { var id = UUID(); var name: String }
+
   private var empty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && files.isEmpty }
-  private var blocked: Bool { empty || sending || uploading > 0 }
+  private var blocked: Bool { empty || sending || !uploading.isEmpty }
+  private var replyTarget: ReplyTarget? { channelId.flatMap { store.replyTarget(channel: $0, thread: thread) } }
 
   private var caret: Int {
-    if let selection, case .selection(let range) = selection.indices {
+    // The selection is only updated after the text changes, so for a moment its index can point past the end of a shorter text
+    // (or into another string, after a send or a draft load); measuring from it would trap.
+    if let selection, case .selection(let range) = selection.indices, range.lowerBound <= text.endIndex {
       return text.distance(from: text.startIndex, to: range.lowerBound)
     }
     return text.count
@@ -372,7 +611,7 @@ struct Composer: View {
   }
 
   var body: some View {
-    VStack(spacing: 4) {
+    VStack(spacing: 6) {
       if let q = slashQuery {
         let here = slashHere
         let groups = SlashMenu.groups(here: here, lists: slash.lists, only: slash.only, query: q.query)
@@ -385,77 +624,81 @@ struct Composer: View {
           }
         }
       }
-      if !suggestions.isEmpty {
-        VStack(spacing: 0) {
-          ForEach(suggestions) { suggestion in
-            Button {
-              let completed = ComposerMentions.inserting(suggestion.handle, into: text, caret: caret)
-              text = completed.text
-              selection = TextSelection(insertionPoint: text.index(text.startIndex, offsetBy: completed.caret))
-              focused = true
-            } label: {
-              HStack(spacing: 10) {
-                if suggestion.actor.kind == .agent {
-                  AgentAvatar(agent: store.agent(suggestion.actor.id), size: 24, showStatus: false)
-                } else {
-                  Image(systemName: "person.crop.circle").frame(width: 24, height: 24)
-                }
-                Text(suggestion.name).fontWeight(.medium)
-                Text("@\(suggestion.handle)").foregroundStyle(.secondary).lineLimit(1)
-                Spacer(minLength: 0)
-              }
-              .font(.subheadline)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 8)
-              .contentShape(Rectangle())
-            }.buttonStyle(.plain)
-          }
-        }
-        .glass(18)
-      }
-      if let error { Text(error).font(.caption).foregroundStyle(.red) }
-      VStack(alignment: .leading, spacing: 0) {
-        if let agent = chatAgent, let channelId { ChatControls(agent: agent, channelId: channelId, thread: thread, refresh: refresh) }
-        if !files.isEmpty || uploading > 0 { attachments }
+      if !suggestions.isEmpty { mentionPicker }
+      if let error = error ?? dictation.error { Text(error).font(.caption).foregroundStyle(Palette.red).padding(.horizontal, 6) }
+      if let target = replyTarget { replyBar(target) }
+      if !files.isEmpty || !uploading.isEmpty { attachments }
+      HStack(alignment: .center, spacing: 12) {
+        Menu {
+          Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
+          Button("Files", systemImage: "folder") { pickingFiles = true }
+          if chatAgent == nil { Button("Mention an agent", systemImage: "at") { text += (text.isEmpty || text.hasSuffix(" ") ? "@" : " @"); focused = true } }
+        } label: { CircleLabel(symbol: "plus", size: 56, weight: .regular) }
+          .accessibilityLabel("Attach").accessibilityIdentifier("composer-attach")
         HStack(alignment: .bottom, spacing: 6) {
-          Menu {
-            Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
-            Button("Files", systemImage: "folder") { pickingFiles = true }
-          } label: {
-            Image(systemName: "plus")
-              .font(.body.weight(.semibold))
-              .foregroundStyle(.secondary)
-              .frame(width: 36, height: 36)
-          }
-          .padding(.leading, 5)
-          .padding(.bottom, 5)
-          .accessibilityLabel("Attach")
-          TextField(placeholder, text: $text, selection: $selection, axis: .vertical)
+          TextField(replyTarget.map { "Reply to \($0.name)" } ?? placeholder, text: $text, selection: $selection, axis: .vertical)
+            .font(.system(size: 17))
             .lineLimit(1...8)
             .focused($focused)
-            .padding(.vertical, 12)
-          Button {
-            submit()
-          } label: {
-            Image(systemName: sending ? "ellipsis" : "arrow.up")
-              .font(.body.weight(.bold))
-              .foregroundStyle(Color(.systemBackground))
-              .frame(width: 36, height: 36)
-              .background(Circle().fill(Color.primary))
+            .padding(.vertical, 15)
+            .padding(.leading, 12)
+            .accessibilityIdentifier("composer-field")
+          if (empty || dictation.active) && !callLive {
+            Button {
+              if !dictation.active { dictationBase = text }
+              dictation.toggle { transcript in
+                text = dictationBase.isEmpty ? transcript : dictationBase + (dictationBase.hasSuffix(" ") ? "" : " ") + transcript
+              }
+            } label: {
+              Image(systemName: dictation.active ? "mic.fill" : "mic")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(dictation.active ? Palette.blue : Palette.muted)
+                .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 8)
+            .accessibilityLabel(dictation.active ? "Stop dictating" : "Dictate")
           }
-          .buttonStyle(.plain)
-          .disabled(blocked)
-          .opacity(blocked ? 0.25 : 1)
-          .animation(.snappy, value: blocked)
-          .padding(5)
-          .accessibilityLabel("Send")
+          if !empty || sending || onCall == nil {
+            Button { submit() } label: {
+              Image(systemName: sending ? "ellipsis" : "arrow.up")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Palette.ground)
+                .frame(width: 56, height: 44)
+                .background(Capsule().fill(Palette.text))
+            }
+            .buttonStyle(.plain)
+            .disabled(blocked)
+            .opacity(blocked ? 0.3 : 1)
+            .animation(.snappy, value: blocked)
+            .padding(.bottom, 6).padding(.trailing, 6)
+            .accessibilityLabel("Send").accessibilityIdentifier("composer-send")
+          } else if let onCall {
+            Button(action: onCall) {
+              Image(systemName: "waveform")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Palette.ground)
+                .frame(width: 56, height: 44)
+                .background(Capsule().fill(Palette.text))
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 6).padding(.trailing, 6)
+            .accessibilityLabel(callLabel).accessibilityIdentifier("composer-call")
+          }
+        }
+        .frame(minHeight: 56)
+        .background {
+          if #available(iOS 26, *) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.clear).glassEffect(.regular.interactive(), in: .rect(cornerRadius: 28, style: .continuous))
+          } else {
+            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Palette.control)
+              .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Palette.hairline))
+          }
         }
       }
-      // the message bar floats over the conversation on glass, like the tab bar
-      .glass(23, interactive: true)
     }
-    .padding(.horizontal, 12)
-    .padding(.bottom, 6)
+    .padding(.horizontal, 18)
+    .padding(.bottom, 8)
     .padding(.top, 4)
     .task(id: slashQuery != nil) {
       guard slashQuery != nil, let channelId else { return }
@@ -468,17 +711,20 @@ struct Composer: View {
       if !draft.isEmpty { text = draft } else if let draftKey { text = ComposerDrafts.load(draftKey) }
     }
     .onChange(of: text) { _, new in if let draftKey { ComposerDrafts.save(new, key: draftKey) } }
+    .onChange(of: attachTrigger) { pickingFiles = true }
+    .onChange(of: callLive) { _, live in if live { dictation.stop() } }
+    .onChange(of: store.replying) { _, _ in if replyTarget != nil { focused = true } }
     .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: 10, matching: .any(of: [.images, .videos]))
     .onChange(of: photos) { _, items in
       guard !items.isEmpty else { return }
       photos = []
-      for item in items { upload { try await photo(item) } }
+      for item in items { upload("Photo") { try await photo(item) } }
     }
     .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
       switch result {
       case .success(let urls):
         for url in urls {
-          upload {
+          upload(url.lastPathComponent) {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             return (try Data(contentsOf: url), url.lastPathComponent, UTType(filenameExtension: url.pathExtension)?.preferredMIMEType)
@@ -489,41 +735,112 @@ struct Composer: View {
     }
   }
 
+  /** "Mention an agent": who you can @mention here, with what each one does. */
+  private var mentionPicker: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text("Mention an agent").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted).padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+      ForEach(suggestions) { suggestion in
+        Button {
+          let completed = ComposerMentions.inserting(suggestion.handle, into: text, caret: caret)
+          text = completed.text
+          selection = TextSelection(insertionPoint: text.index(text.startIndex, offsetBy: completed.caret))
+          focused = true
+        } label: {
+          HStack(spacing: 12) {
+            if suggestion.actor.kind == .agent {
+              AgentAvatar(agent: store.agent(suggestion.actor.id), size: 32, showStatus: false)
+            } else {
+              PersonAvatar(name: suggestion.name, size: 32)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+              Text(suggestion.name).font(.system(size: 16, weight: .medium))
+              Text(subtitle(suggestion)).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+          }
+          .padding(.horizontal, 16)
+          .padding(.vertical, 8)
+          .contentShape(Rectangle())
+        }.buttonStyle(.plain)
+      }
+      Color.clear.frame(height: 6)
+    }
+    .glass(Corner.card)
+    .accessibilityIdentifier("mention-picker")
+  }
+
+  private func subtitle(_ s: ComposerMentions.Suggestion) -> String {
+    guard s.actor.kind == .agent, let node = channel?.team(agents: store.agents)?.nodes.first(where: { $0.agentId == s.actor.id }) else { return "@\(s.handle)" }
+    return (node.role ?? "@\(s.handle)") + (node.lead ? " · leads" : "")
+  }
+
+  private func replyBar(_ target: ReplyTarget) -> some View {
+    HStack(spacing: 10) {
+      Image(systemName: "arrowshape.turn.up.left").font(.system(size: 14)).foregroundStyle(Palette.muted)
+      Rectangle().fill(Palette.text).frame(width: 2)
+      VStack(alignment: .leading, spacing: 0) {
+        Text("Replying to \(target.name)").font(.system(size: 13, weight: .semibold))
+        Text(target.snippet).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
+      }
+      .fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 4)
+      Button { if let channelId { store.cancelReply(channel: channelId, thread: thread) } } label: {
+        Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.muted).frame(width: 40, height: 40).contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Cancel reply")
+    }
+    .padding(.leading, 14).padding(.trailing, 4).padding(.vertical, 4)
+    .background(Palette.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+  }
+
   /** What's attached so far, each with a way to take it off again. */
   private var attachments: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 6) {
-        ForEach(files) { f in
-          HStack(spacing: 4) {
-            Image(systemName: UploadedFile.isImage(f.name) ? "photo" : "doc")
-            Text(f.name).lineLimit(1).frame(maxWidth: 160)
-            Button { files.removeAll { $0.id == f.id } } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-              .buttonStyle(.plain)
-              .accessibilityLabel("Remove \(f.name)")
+    VStack(alignment: .trailing, spacing: 4) {
+      Text("Draft saved").font(.system(size: 12)).foregroundStyle(Palette.faint)
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(files) { f in
+            HStack(spacing: 8) {
+              Image(systemName: UploadedFile.isImage(f.name) ? "photo" : "doc").foregroundStyle(Palette.muted)
+              VStack(alignment: .leading, spacing: 0) {
+                Text(f.name).font(.system(size: 13, weight: .medium)).lineLimit(1).frame(maxWidth: 140, alignment: .leading)
+                if let size = f.size { Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).font(.system(size: 12)).foregroundStyle(Palette.muted) }
+              }
+              Button { files.removeAll { $0.id == f.id } } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.muted).frame(width: 32, height: 32).contentShape(Circle()) }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(f.name)")
+            }
+            .padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 6)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
           }
-          .font(.caption)
-          .padding(.horizontal, 8)
-          .padding(.vertical, 5)
-          .background(Capsule().fill(Color(.tertiarySystemFill)))
-        }
-        if uploading > 0 {
-          ProgressView().controlSize(.small).padding(.horizontal, 6).accessibilityLabel("Uploading")
+          ForEach(uploading) { p in
+            HStack(spacing: 8) {
+              ProgressView().controlSize(.small)
+              VStack(alignment: .leading, spacing: 0) {
+                Text(p.name).font(.system(size: 13, weight: .medium)).lineLimit(1).frame(maxWidth: 140, alignment: .leading)
+                Text("Uploading").font(.system(size: 12)).foregroundStyle(Palette.muted)
+              }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Palette.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .accessibilityLabel("Uploading \(p.name)")
+          }
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.top, 10)
     }
   }
 
-  private func upload(_ read: @escaping () async throws -> (Data, String, String?)) {
-    uploading += 1
+  private func upload(_ label: String, _ read: @escaping () async throws -> (Data, String, String?)) {
+    let pending = Pending(name: label)
+    uploading.append(pending)
     error = nil
     Task {
       do {
         let (data, name, mime) = try await read()
         files.append(try await store.uploadFile(data, name: name, mime: mime, channelId: channelId))
       } catch { self.error = error.localizedDescription }
-      uploading -= 1
+      uploading.removeAll { $0.id == pending.id }
     }
   }
 
@@ -548,15 +865,23 @@ struct Composer: View {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !blocked else { return }
     let attached = files
+    let quoted = replyTarget
+    let opensModel = body.lowercased() == "/model" && onModelCommand != nil
+    dictation.stop()
     sending = true
     error = nil
     text = ""
     files = []
+    if let channelId { store.cancelReply(channel: channelId, thread: thread) }
     Task {
-      do { try await send(body, attached.map(\.id)) } catch {
+      do {
+        try await send(body, attached.map(\.id), quoted?.id)
+        if opensModel { onModelCommand?() }
+      } catch {
         self.error = error.localizedDescription
         text = Self.restoringFailedText(body, current: text)
         files = attached + files
+        if let channelId, let quoted, store.replyTarget(channel: channelId, thread: thread) == nil { store.replying[ComposerDrafts.key(channel: channelId, thread: thread)] = quoted }
       }
       sending = false
     }
@@ -601,5 +926,24 @@ enum ComposerMentions {
     guard let range = range(text, caret: caret) else { return (text, caret) }
     let before = String(text[..<range.lowerBound]) + "@\(handle) "
     return (before + text[range.upperBound...], before.count)
+  }
+}
+
+/** Tells when its screen is popped or dismissed, not when something is pushed or presented over it. */
+private struct LeavingWatcher: UIViewControllerRepresentable {
+  var onLeave: () -> Void
+  func makeUIViewController(context: Context) -> Probe { Probe() }
+  func updateUIViewController(_ probe: Probe, context: Context) { probe.onLeave = onLeave }
+
+  final class Probe: UIViewController {
+    var onLeave: () -> Void = {}
+    override func viewDidDisappear(_ animated: Bool) {
+      super.viewDidDisappear(animated)
+      var node: UIViewController? = self
+      while let current = node {
+        if current.isMovingFromParent || current.isBeingDismissed { onLeave(); return }
+        node = current.parent
+      }
+    }
   }
 }

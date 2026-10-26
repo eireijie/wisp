@@ -4,7 +4,7 @@ import Foundation
 extension ChannelTeam {
   /** The rules, in the words the web's chart shows them. */
   static let rules = [
-    "Leads read every new message in the channel. Everyone else hears only when a lead hands them work or someone @mentions them.",
+    "Leads read every new message in the team. Everyone else hears only when a lead hands them work or someone @mentions them.",
     "With two or more leads, they talk the request over in its thread and agree on a plan before anyone starts.",
     "Draw an arrow from an agent to whoever it hands work to. Every agent that isn't a lead needs one pointing at it.",
     "Each hand-off opens its own sub-thread, and every agent on the chart knows who else is on the team.",
@@ -134,6 +134,12 @@ extension ChannelTeam {
       var r = r
       if let a = r.agentId, !agentIds.contains(a) { r.agentId = nil }
       return r
+    }
+    // and a step whose agent is gone
+    team.steps = steps?.map { s in
+      var s = s
+      if let a = s.agentId, !agentIds.contains(a) { s.agentId = nil }
+      return s
     }
     return team
   }

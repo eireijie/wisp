@@ -13,7 +13,7 @@ import { go } from "../router.ts";
 import type { NodeInfo } from "./AgentSettings.tsx";
 import { computerKindLabel, usableDevices } from "../devices.ts";
 import { defaultComputer, resolveComputer, vmOnDevice, withComputer, type ComputerChoice } from "../agentComputer.ts";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { useFeature } from "../features.ts";
 import { LookEditorScreen } from "./LookEditor.tsx";
 import { Button, Field, harnessLabel, Input, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
@@ -31,7 +31,6 @@ export function ComputerPicker({
 }) {
   const computers = useStore((s) => s.computers);
   const agents = useStore((s) => s.agents);
-  const simple = useSimple();
   const screenExists = computers.some(
     (c) => c.kind === "device" && c.nodeId === node?.id,
   );
@@ -73,27 +72,15 @@ export function ComputerPicker({
   };
   return (
     <div>
-      {simple ? (
-        <div className="text-sm font-medium mb-2">Where should it work?</div>
-      ) : (
-        <>
-          <div className="text-sm font-medium mb-1">Computer</div>
-          <p className="text-xs text-muted mb-2">
-            Where it works: it opens apps and websites there, and you can watch
-            and take over.
-          </p>
-        </>
-      )}
+      <div className="text-sm font-medium mb-2">Where should it work?</div>
       <div className="grid sm:grid-cols-2 gap-2">
         {node &&
           opt(
             { kind: "vm" },
             <Monitor size={15} />,
-            simple ? `Its own desktop on ${node.name}` : `New VM on ${node.name}`,
+            `Its own desktop on ${node.name}`,
             node.capabilities?.vm.ok
-              ? simple
-                ? "It opens apps and websites there. Your screen stays yours."
-                : "Its own Linux desktop. Doesn't touch your screen."
+              ? "It opens apps and websites there. Your screen stays yours."
               : (node.capabilities?.vm.detail ?? "Connect the device to check"),
             !node.capabilities?.vm.ok,
           )}
@@ -102,14 +89,12 @@ export function ComputerPicker({
           opt(
             { kind: "screen" },
             <Lock size={15} />,
-            simple ? "My own screen" : "Your own screen",
+            "My own screen",
             node.capabilities?.screen.off
               ? `Off. Turn it on at ${node.name}: wisp node screen on`
               : node.capabilities?.screen.ok === false
                 ? node.capabilities.screen.detail
-                : simple
-                  ? "It runs on this computer."
-                  : "It runs on this computer and only does things you ask.",
+                : "It runs on this computer.",
             node.capabilities?.screen.ok !== true,
           )}
         {computers.map((c) =>
@@ -133,18 +118,17 @@ export function ComputerPicker({
             }`,
           ),
         )}
-        {/* the device's job left it without a desktop; in Simple the switch for that is folded away, so show the choice here */}
-        {simple &&
-          value.kind === "headless" &&
+        {/* the device's job left it without a desktop; the switch for that is under More options, so show the choice here */}
+        {value.kind === "headless" &&
           opt({ kind: "headless" }, <Bot size={15} />, "No desktop (answers only)", "It can chat and use files, but can't open apps or websites.")}
         {opt(
           { kind: "later" },
           <Plus size={15} />,
-          simple ? "Decide later" : "Choose later",
-          simple ? "You can pick on its Computer tab." : "Pick one on its Computer tab.",
+          "Decide later",
+          "You can pick on its Computer tab.",
         )}
       </div>
-      <Advanced title="More options" className="mt-2">
+      <MoreOptions className="mt-2">
         <label className="mt-2 flex items-center gap-2 text-xs text-muted">
           <input
             type="checkbox"
@@ -159,7 +143,7 @@ export function ComputerPicker({
           />
           Run it headless: no computer, so no apps or websites
         </label>
-      </Advanced>
+      </MoreOptions>
     </div>
   );
 }
@@ -226,19 +210,18 @@ export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "
  * New agent, on one screen (Buzz style): its ghost on the left (colors, Shuffle, the full look
  * editor), and on the right its name, what it does, a starting role, instructions, and which AI
  * and computer it uses (your defaults, or picked here). Handle, who it answers, apps and skills
- * are under Advanced, open from the start in the Advanced experience. Agents that already run
+ * are under More options. Agents that already run
  * somewhere come in through the link at the bottom.
  */
 /** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. `nodeId`: start on this device. */
-export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void; nodeId?: string }) {
+export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringIn }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void; nodeId?: string; bringIn?: boolean }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
   const me = useStore((s) => s.me);
   const people = useStore((s) => s.members);
-  const simple = useSimple();
   const inviteOn = useFeature("invite");
-  const [view, setView] = useState<View>("form");
+  const [view, setView] = useState<View>(bringIn ? "external" : "form");
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const body = bodyRef.current;
@@ -303,8 +286,8 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { no
     }
   };
 
-  // Advanced: handle, who it answers, apps and skills
-  const [advanced, setAdvanced] = useState(!simple);
+  // More options: handle, who it answers, apps and skills
+  const [advanced, setAdvanced] = useState(false);
   const [respondTo, setRespondTo] = useState<RespondTo>("me");
   const [respondPeople, setRespondPeople] = useState<string[]>([]);
   const [connectors, setConnectors] = useState<Connector[] | null>(null);
@@ -387,7 +370,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { no
           });
         }
         setCreated(a);
-        // apps and skills picked under Advanced; an app already on for every agent needs nothing
+        // apps and skills picked under More options; an app already on for every agent needs nothing
         const agentId = a.id;
         await Promise.all([
           ...pickedApps.flatMap((id) => {
@@ -639,7 +622,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { no
                 <div className="rounded-2xl border border-line">
                   <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced} className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left">
                     <ChevronRight size={16} className={cx("shrink-0 transition-transform", advanced && "rotate-90")} />
-                    <span className="text-sm font-semibold">Advanced</span>
+                    <span className="text-sm font-semibold">More options</span>
                     <span className="text-[13px] text-muted truncate">Handle{inviteOn ? ", who it answers" : ""}, apps and skills</span>
                   </button>
                   {advanced && (

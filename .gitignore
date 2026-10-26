@@ -8,3 +8,4 @@ data
 apps/ios/**/xcuserdata/
 apps/ios/build/
 apps/desktop/build/wisp-runtime/
+apps/desktop/build/warren-runtime/

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Activity, BookOpen, Radar, Ghost, Zap, Check, ChevronRight, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, ListChecks, Lock, MessageSquare, Monitor, Pencil, Plug, ScrollText, Server, Shield, ShieldAlert, Sparkles, Trash2, Unlock } from "lucide-react";
+import { Activity, BookOpen, ChevronLeft, Radar, Ghost, Zap, Cpu, Eye, FileText, GitCommitHorizontal, LayoutGrid, Link2, ListChecks, Lock, Monitor, Pencil, Plug, Shield, ShieldAlert, Sparkles, Trash2, Unlock, Users, Wand2 } from "lucide-react";
 import type { AccessLevel, AccessRule, Agent, HarnessCatalog, ModelOption } from "@wisp/core";
 import { soulPath, soulTemplate } from "@wisp/core/src/soul.ts";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
@@ -11,11 +11,12 @@ import { renderMarkdown } from "../markdown.ts";
 import { LookPanel } from "./LookEditor.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { Intro, SaveBar } from "./SettingsParts.tsx";
+import { AccessPanel, EditAgent, MemoryPanel, AppsPanel, OverviewRows, PageHead, RemovePanel, SkillsPanel, TAB_TITLES } from "./AgentSections.tsx";
 import { AgentAvatar, Button, CopyBlock, Field, harnessLabel, Input, Pill, StatusChip, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
-import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "../devices.ts";
 import { setupNextStep } from "../components/AgentPanel.tsx";
 import { openDm } from "../openDm.ts";
@@ -24,59 +25,52 @@ export type NodeInfo = DeviceInfo;
 
 type FullAgent = Agent & { instructions?: string };
 
-/** Paperclip-style grouped navigation for an agent's settings. */
-const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNode }[] }[] = [
-  {
-    group: "Agent",
-    items: [
-      { id: "overview", label: "Overview", icon: <LayoutGrid size={16} /> },
-      { id: "look", label: "Look", icon: <Ghost size={16} /> },
-      { id: "soul", label: "Personality", icon: <Sparkles size={16} /> },
-      { id: "instructions", label: "Instructions", icon: <ScrollText size={16} /> },
-    ],
-  },
-  {
-    group: "Runtime",
-    items: [
-      { id: "model", label: "Model", icon: <Cpu size={16} /> },
-      { id: "device", label: "Device", icon: <Server size={16} /> },
-      { id: "computer", label: "Computer", icon: <Monitor size={16} /> },
-      { id: "background", label: "Background", icon: <Radar size={16} /> },
-      { id: "routines", label: "Routines", icon: <ListChecks size={16} /> },
-    ],
-  },
-  {
-    group: "Access",
-    items: [
-      { id: "permissions", label: "Permissions", icon: <Shield size={16} /> },
-      { id: "connect", label: "Connect", icon: <Plug size={16} /> },
-    ],
-  },
-  { group: "Activity", items: [{ id: "runs", label: "Activity", icon: <Activity size={16} /> }] },
+/** The left list of sections on desktops (and the pages a profile row opens on phones). */
+const SIDE: { id: AgentTab; label: string; icon: ReactNode }[] = [
+  { id: "overview", label: TAB_TITLES.overview, icon: <LayoutGrid size={18} /> },
+  { id: "model", label: TAB_TITLES.model, icon: <Cpu size={18} /> },
+  { id: "computer", label: TAB_TITLES.computer, icon: <Monitor size={18} /> },
+  { id: "access", label: TAB_TITLES.access, icon: <Users size={18} /> },
+  { id: "routines", label: TAB_TITLES.routines, icon: <ListChecks size={18} /> },
+  { id: "background", label: TAB_TITLES.background, icon: <Radar size={18} /> },
+  { id: "memory", label: TAB_TITLES.memory, icon: <BookOpen size={18} /> },
+  { id: "skills", label: TAB_TITLES.skills, icon: <Wand2 size={18} /> },
+  { id: "apps", label: TAB_TITLES.apps, icon: <Plug size={18} /> },
+  { id: "permissions", label: TAB_TITLES.permissions, icon: <Shield size={18} /> },
+  { id: "connect", label: "Connect", icon: <Link2 size={18} /> },
+  { id: "runs", label: TAB_TITLES.runs, icon: <Activity size={18} /> },
+  { id: "look", label: TAB_TITLES.look, icon: <Ghost size={18} /> },
 ];
 
-/** The nav groups for the mode. Simple keeps the everyday tabs on top and gathers the technical ones under "Advanced" (still one click away). */
-export function agentNav(simple: boolean): typeof NAV {
-  if (!simple) return NAV;
-  const all = new Map(NAV.flatMap((g) => g.items).map((i) => [i.id, i] as const));
-  const pick = (ids: AgentTab[]) => ids.map((id) => all.get(id)!);
-  return [
-    { group: "Agent", items: pick(["overview", "soul", "instructions"]) },
-    { group: "Runtime", items: pick(["device", "computer", "routines"]) },
-    { group: "Activity", items: pick(["runs"]) },
-    { group: "Advanced", items: pick(["model", "permissions", "connect", "background", "look"]) },
-  ];
-}
+/** The sections on the left list; Personality, Instructions and Device are opened from Edit and Computer, Remove from its own row. */
+export const agentSections = () => SIDE.map((i) => i.id);
+
+const TAB_SUBTITLE: Partial<Record<AgentTab, string>> = {
+  overview: "How {name} is set up",
+  model: "What {name} thinks with",
+  computer: "Where {name} works",
+  access: "Who can message {name}",
+  routines: "Things {name} does on a schedule",
+  background: "{name} checks your apps on its own and messages you first",
+  memory: "What {name} remembers",
+  skills: "What {name} knows how to do",
+  apps: "Apps {name} can use",
+  permissions: "What {name} may do without asking",
+  connect: "Connect an agent that already runs somewhere else",
+  runs: "Everything {name} has done lately",
+  look: "How {name} looks and sounds",
+  soul: "How {name} talks and what it values",
+  instructions: "{name}'s job and how it should reply",
+};
 
 /**
- * One agent's page: a breadcrumb header, a grouped secondary sidebar (chips on phones), and
- * the selected section. Editable sections stay mounted so drafts survive switching sections;
- * sections with unsaved changes show a dot.
+ * One agent's page. Phones: the profile (big ghost, grouped rows) and each row's own page.
+ * Desktops: a left list of sections with the selected one beside it. Editable sections stay
+ * mounted so drafts survive switching sections; sections with unsaved changes show a dot.
  */
 export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: NodeInfo[]; tab: AgentTab | null }) {
-  const channels = useStore((s) => s.channels);
-  const nav = agentNav(useSimple());
   const active = tab ?? "overview";
+  const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState<Partial<Record<AgentTab, boolean>>>({});
   const hasDirty = Object.values(dirty).some(Boolean);
   useEffect(() => {
@@ -110,109 +104,172 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
     content.current?.scrollTo({ top: 0 });
   }, [active]);
 
-  async function openDm() {
-    const existing = channels.find((c) => c.kind === "dm" && c.name.endsWith(`:${agent.id}`));
-    const ch: { id: string } = existing ?? (await api("POST", `/api/dm/${agent.id}`));
-    if (!existing) await useStore.getState().refreshChannels();
-    go({ view: "chat", channelId: ch.id, threadId: null });
-  }
-
-  const link = (id: AgentTab, label: string, icon: ReactNode, chip?: boolean) => (
-    <a
-      key={id}
-      href={`#/agents/${agent.id}/${id}`}
-      aria-current={active === id ? "page" : undefined}
-      className={cx(
-        chip ? "h-8 px-3 rounded-full border text-sm whitespace-nowrap" : "h-8 px-2 rounded-lg text-[13px] font-medium w-full",
-        "flex items-center gap-2.5",
-        active === id ? (chip ? "border-accent bg-accent-soft text-ink" : "bg-accent-soft text-ink") : chip ? "border-line text-muted" : "text-ink/80 hover:text-ink hover:bg-hover",
-      )}
-    >
-      {icon} {label}
-      {dirty[id] && <span className="ml-auto size-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
-    </a>
+  const live = useStore((s) => s.live);
+  const working = agent.status === "busy" || Object.values(live).some((r) => r.agentId === agent.id);
+  const devices = useDevices();
+  const readiness = agentReadiness(agent, devices);
+  const next = setupNextStep(agent, devices);
+  const device = active === "computer" || active === "device";
+  const title = TAB_TITLES[active];
+  const sub = (TAB_SUBTITLE[active] ?? "").replace(/\{name\}/g, agent.name);
+  const back = href({ view: "agents", agentId: agent.id, tab: "overview" });
+  const status = working ? (
+    <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full bg-ok/15 text-ok text-xs font-semibold">
+      <span className="size-[7px] rounded-full bg-ok" /> Working
+    </span>
+  ) : (
+    <StatusChip status={agent.status} />
   );
+
+  const link = (id: AgentTab, label: string, icon: ReactNode) => {
+    const here = active === id || (id === "computer" && device);
+    return (
+      <a key={id} href={href({ view: "agents", agentId: agent.id, tab: id })} aria-current={here ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-[15px] font-medium", here ? "bg-card text-ink font-semibold" : "text-ink/75 hover:text-ink hover:bg-hover")}>
+        <span className="flex text-muted">{icon}</span>
+        {label}
+        {dirty[id] && <span className="ml-auto size-1.5 rounded-full bg-accent" aria-label="unsaved changes" />}
+      </a>
+    );
+  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        <a href="#/agents" className="text-lg font-bold tracking-tight text-muted hover:text-ink">
-          Agents
+      {/* desktops: back, ghost, name, status, Edit and Message */}
+      <header className="hidden md:flex shrink-0 items-center gap-4 px-8 pt-6 pb-5 border-b border-line">
+        <a href="#/agents" className="circle" aria-label="Back to agents">
+          <ChevronLeft size={20} />
         </a>
-        <ChevronRight size={14} className="text-faint shrink-0" />
-        <span className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-sm font-medium truncate">{agent.name}</span>
-        </span>
-        <Button onClick={openDm}>
-          <MessageSquare size={15} /> <span className="hidden sm:inline">Message</span>
-        </Button>
-        <Button variant="ghost" onClick={() => go({ view: "vault", path: soulPath(agent.id) })} title="Open its memory folder">
-          <BookOpen size={15} /> <span className="hidden sm:inline">Memory</span>
-        </Button>
+        <AgentAvatar agent={agent} size={56} live />
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight truncate">{agent.name}</h1>
+          <p className="text-sm text-muted truncate">
+            @{agent.handle} · {harnessLabel(agent.harness)}
+          </p>
+        </div>
+        {status}
+        <button onClick={() => setEditing(true)} className="h-[42px] px-[18px] rounded-full border border-control-line bg-control text-sm font-medium hover:bg-hover">
+          Edit
+        </button>
+        <button onClick={() => void openDm(agent.id)} className="h-[42px] px-5 rounded-full bg-accent text-accent-ink text-sm font-semibold">
+          Message
+        </button>
       </header>
-      <nav className="md:hidden shrink-0 flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-line" aria-label="Agent sections">
-        {nav.flatMap((g) => g.items).map((i) => link(i.id, i.label, i.icon, true))}
-      </nav>
-      <div className="flex-1 min-h-0 flex">
-        <nav className="hidden md:block w-52 shrink-0 border-r border-line overflow-y-auto p-2 pt-4 space-y-4" aria-label="Agent sections">
-          {nav.map((g) => (
-            <div key={g.group} className="space-y-px">
-              <div className="px-2 pb-1 text-[13px] font-semibold text-muted">{g.group}</div>
-              {g.items.map((i) => link(i.id, i.label, i.icon))}
+      {/* phones: back, and over a row's page a title with the agent's name under it */}
+      <header className="md:hidden shrink-0 flex items-center gap-3 px-[18px] pt-3 pb-2 safe-top">
+        <a href={active === "overview" ? "#/agents" : back} className="circle" aria-label={active === "overview" ? "Back to agents" : `Back to ${agent.name}`}>
+          <ChevronLeft size={22} />
+        </a>
+        {active !== "overview" && (
+          <>
+            <div className="flex-1 min-w-0 text-center">
+              <div className="text-[17px] font-semibold truncate">{title}</div>
+              <div className="text-[13px] text-muted truncate">{agent.name}</div>
             </div>
-          ))}
+            <span className="w-[52px]" aria-hidden />
+          </>
+        )}
+      </header>
+      <div className="flex-1 min-h-0 flex">
+        <nav className="hidden md:flex w-[250px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-[18px] flex-col gap-0.5" aria-label="Agent sections">
+          {SIDE.map((i) => link(i.id, i.label, i.icon))}
+          <span className="flex-1" />
+          <a href={href({ view: "agents", agentId: agent.id, tab: "remove" })} aria-current={active === "remove" ? "page" : undefined} className={cx("flex items-center gap-3 h-11 px-3.5 rounded-[14px] text-[15px] font-medium text-bad hover:bg-hover", active === "remove" && "bg-card")}>
+            <Trash2 size={18} /> Remove agent
+          </a>
         </nav>
-        <div ref={content} className="flex-1 min-w-0 overflow-y-auto px-4 md:px-8 py-6">
-          <Panel show={active === "overview"}>
-            <OverviewPanel agent={agent} nodes={nodes} active={active === "overview"} />
-          </Panel>
+        <div ref={content} className="flex-1 min-w-0 overflow-y-auto px-[18px] md:px-9 py-4 md:py-7 pb-24 md:pb-7">
+          {active === "overview" && (
+            <div className="max-w-[720px] space-y-4">
+              {/* the profile, on phones */}
+              <div className="md:hidden flex flex-col items-center gap-2.5 pt-2 pb-2">
+                <AgentAvatar agent={agent} size={150} live />
+                <h1 className="text-[26px] font-bold">{agent.name}</h1>
+                <p className="text-[15px] text-muted">
+                  @{agent.handle} · {harnessLabel(agent.harness)}
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditing(true)} className="h-10 px-5 rounded-full bg-chip text-base font-medium">
+                    Edit
+                  </button>
+                  <button onClick={() => void openDm(agent.id)} className="h-10 px-5 rounded-full bg-accent text-accent-ink text-base font-semibold">
+                    Message
+                  </button>
+                </div>
+              </div>
+              <PageHead title="Overview" sub={sub} />
+              {!readiness.ready && (
+                <div role="status" className="rounded-3xl border border-warn/40 bg-warn/10 p-4 text-sm">
+                  <div className="flex items-center gap-2 font-medium">
+                    <Pill tone="warn">Setup incomplete</Pill> {readiness.problem}
+                  </div>
+                  <p className="text-muted mt-1">
+                    Messages to {agent.name} will wait until that's fixed.
+                    {next && (
+                      <>
+                        {" "}
+                        {next.text}{" "}
+                        <a href={next.href} className="text-accent-text underline">
+                          {next.action}
+                        </a>
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+              <OverviewRows agent={agent} nodes={nodes} />
+            </div>
+          )}
+          {active !== "overview" && <PageHead title={device ? TAB_TITLES.computer : title} sub={sub} />}
           <Panel show={active === "look"}>
             <LookPanel agent={agent} onDirty={markDirty("look")} active={active === "look"} />
           </Panel>
-          <Panel show={active === "soul"} hint="How it talks and what it values.">
+          <Panel show={active === "soul"}>
             <SoulPanel agent={agent} onDirty={markDirty("soul")} active={active === "soul"} />
           </Panel>
-          <Panel show={active === "instructions"} hint="Its job and how it should reply.">
+          <Panel show={active === "instructions"}>
             <InstructionsPanel agent={agent} onDirty={markDirty("instructions")} active={active === "instructions"} />
           </Panel>
-          <Panel show={active === "model"} hint="Which AI model it uses and how hard it thinks.">
+          <Panel show={active === "model"}>
             <ModelPanel agent={agent} onDirty={markDirty("model")} active={active === "model"} />
           </Panel>
-          <Panel show={active === "device"} hint="The computer that runs this helper.">
-            <DevicePanel agent={agent} nodes={nodes} onDirty={markDirty("device")} active={active === "device"} />
-          </Panel>
-          <Panel show={active === "computer"} hint="Where it opens apps and websites. Optional.">
+          <Panel show={device}>
             <ComputerPanel agent={agent} nodes={nodes} />
+            <div className="mt-10 border-t border-line pt-6">
+              <DevicePanel agent={agent} nodes={nodes} onDirty={markDirty("device")} active={device} />
+            </div>
           </Panel>
-          <Panel show={active === "background"} hint="What it does on its own while you're away.">
+          <Panel show={active === "access"}>
+            <AccessPanel agent={agent} device={<WhoCanAsk agent={agent} device={nodes.find((n) => n.id === agent.nodeId)} />} />
+          </Panel>
+          <Panel show={active === "background"}>
             <BackgroundPanel agent={agent} active={active === "background"} onDirty={markDirty("background")} />
           </Panel>
-          <Panel show={active === "routines"} hint="Jobs it does on a schedule.">
+          <Panel show={active === "routines"}>
             <RoutinesPanel agent={agent} active={active === "routines"} />
           </Panel>
-          <Panel show={active === "permissions"} hint="What it may do without asking.">
+          {active === "memory" && <MemoryPanel agent={agent} />}
+          {active === "skills" && <SkillsPanel agent={agent} />}
+          {active === "apps" && <AppsPanel agent={agent} />}
+          <Panel show={active === "permissions"}>
             <PermissionsPanel agent={agent} nodes={nodes} onDirty={markDirty("permissions")} active={active === "permissions"} />
           </Panel>
-          <Panel show={active === "connect"} hint="Connect an agent that already runs somewhere else.">
+          <Panel show={active === "connect"}>
             <ConnectPanel agent={agent} nodes={nodes} />
           </Panel>
-          <Panel show={active === "runs"} hint="Everything it has done lately, newest first.">
+          <Panel show={active === "runs"}>
             <RunsPanel agent={agent} active={active === "runs"} />
           </Panel>
+          {active === "remove" && <RemovePanel agent={agent} />}
         </div>
       </div>
+      {editing && <EditAgent agent={agent} onClose={() => setEditing(false)} />}
     </div>
   );
 }
 
-function Panel({ show, hint, children }: { show: boolean; hint?: string; children: ReactNode }) {
+function Panel({ show, children }: { show: boolean; children: ReactNode }) {
   return (
-    <div role="tabpanel" hidden={!show} className="max-w-4xl">
-      {hint && (
-        <SimpleOnly>
-          <p className="mb-3 text-sm text-muted">{hint}</p>
-        </SimpleOnly>
-      )}
+    <div role="tabpanel" hidden={!show} className="max-w-[720px]">
       {children}
     </div>
   );
@@ -497,7 +554,6 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const headless = runsOnDevice(agent.harness);
-  const simple = useSimple();
 
   useEffect(() => {
     if (active) api("GET", `/api/agents/${agent.id}/models`).then(setInfo, () => setInfo({ device: null, catalog: null }));
@@ -515,7 +571,8 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
     onDirty(dirty);
   }, [dirty, onDirty]);
 
-  const selected: ModelOption | undefined = models.find((m) => m.id === form.model);
+  // with no model picked the harness uses its own default, which has the efforts and fast tier too
+  const selected: ModelOption | undefined = models.find((m) => m.id === (form.model || info?.catalog?.defaultModel));
   const efforts = selected?.efforts ?? info?.catalog?.efforts ?? ["low", "medium", "high"];
   const effortDropped = form.effort && !efforts.includes(form.effort);
   // the device's configured effort wins over the model's own default, as in Codex
@@ -579,7 +636,6 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             )}
           </p>
         </Intro>
-        {why && !simple && <p className="mb-2.5 max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
         <div className="max-w-sm space-y-2">
           <select
             aria-label="Model"
@@ -608,7 +664,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
         {custom && (
           <div className="mt-2.5 max-w-sm">
             <Field label="Model id">
-              <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={agent.harness === "codex" ? "gpt-6-astra" : "claude-opus-5-5"} autoFocus />
+              <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={agent.harness === "codex" ? "gpt-6.1-sol" : "claude-opus-5-5"} autoFocus />
             </Field>
           </div>
         )}
@@ -660,8 +716,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
 
   return (
     <div className="space-y-6">
-      {simple && (
-        <section className="rounded-xl border border-accent bg-accent-soft p-3 text-sm">
+      <section className="rounded-xl border border-accent bg-accent-soft p-3 text-sm">
           <div className="font-medium">{isAuto ? "Automatic (recommended)" : `Custom: ${form.model ? prettyModel(form.model) : "your own settings"}`}</div>
           <p className="mt-0.5 text-muted">
             {isAuto ? `Wisp lets ${hLabel} pick the model and effort. That's right for most people.` : `You chose the model or effort yourself. Automatic lets ${hLabel} pick for you.`}
@@ -672,10 +727,9 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             </Button>
           )}
         </section>
-      )}
-      {/* in Simple the controls are folded, so why there are no models to pick sits by the Automatic card */}
-      {simple && !deviceGone && why && <p className="max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
-      {simple && deviceGone ? (
+      {/* the controls are folded, so why there are no models to pick sits by the Automatic card */}
+      {!deviceGone && why && <p className="max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
+      {deviceGone ? (
         <p className="text-sm text-muted">
           {agent.nodeId ? (
             `Connect ${info?.device?.name ?? "its device"} to see available models.`
@@ -689,7 +743,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           )}
         </p>
       ) : (
-        <Advanced title="Choose the model yourself">{controls}</Advanced>
+        <MoreOptions title="Choose the model yourself">{controls}</MoreOptions>
       )}
 
       {error && <p className="text-sm text-bad">{error}</p>}
@@ -1014,213 +1068,6 @@ export function runTitle(trigger: string | null): string {
   return line.length > 80 ? `${line.slice(0, 80).trimEnd()}…` : line;
 }
 
-function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: NodeInfo[]; active: boolean }) {
-  const refreshAgents = useStore((s) => s.refreshAgents);
-  const computers = useStore((s) => s.computers);
-  const teams = useTeams();
-  const [runs, setRuns] = useState<RunRow[] | null>(null);
-  const [soul, setSoul] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ name: agent.name });
-  const myTeams = teams.filter((t) => t.members.some((m) => m.agentId === agent.id));
-  const bossOf = teams.filter((t) => t.reportsTo === agent.id);
-  const device = nodes.find((n) => n.id === agent.nodeId);
-  const soulHtml = useMemo(() => (soul ? renderMarkdown(soul.slice(0, 1500), { stripFrontmatter: true }) : ""), [soul]);
-  const simple = useSimple();
-
-  useEffect(() => {
-    if (!active) return;
-    api<RunRow[]>("GET", `/api/agents/${agent.id}/runs?limit=5`).then(setRuns, () => setRuns([]));
-    api<{ content: string }>("GET", `/api/vault/note?path=${encodeURIComponent(soulPath(agent.id))}`).then(
-      (n) => setSoul(n.content.replace(/^---[\s\S]*?---\s*/, "").replace(/^#.*\n+/, "").trim()),
-      () => setSoul(""),
-    );
-  }, [active, agent.id]);
-
-  const saveProfile = async () => {
-    await api("PATCH", `/api/agents/${agent.id}`, { name: form.name });
-    await refreshAgents();
-    setEditing(false);
-  };
-
-  const computer = computers.find((c) => c.id === agent.computerId);
-  type Card = { label: string; value: ReactNode; to: AgentTab };
-  const modelCard: Card = { label: "Model", value: agent.model ?? "Harness default", to: "model" };
-  const deviceCard: Card = { label: "Device", value: device ? `${device.name} · ${device.online ? "online" : "offline"}` : "None", to: "device" };
-  const computerCard: Card = { label: "Computer", value: computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : <span className="text-warn">None yet</span>, to: "computer" };
-  const accessCard: Card = { label: "Access", value: ACCESS[agent.settings.access ?? "edit"].label, to: "permissions" };
-  // Simple leads with where it runs; the model and access settings fold under "Technical details".
-  const cards: Card[] = simple ? [deviceCard, computerCard] : [modelCard, deviceCard, computerCard, accessCard];
-  const technicalCards: Card[] = [modelCard, { label: "Harness", value: harnessLabel(agent.harness), to: "device" }, accessCard];
-  const devices = useDevices();
-  const readiness = agentReadiness(agent, devices);
-  const next = simple ? setupNextStep(agent, devices) : null;
-  const cardGrid = (list: Card[]) => (
-    <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-      {list.map((c) => (
-        <a key={c.label} href={`#/agents/${agent.id}/${c.to}`} className="rounded-xl border border-line p-3 hover:bg-hover">
-          <div className="text-xs text-muted">{c.label}</div>
-          <div className="mt-0.5 text-sm font-medium truncate">{c.value}</div>
-        </a>
-      ))}
-    </section>
-  );
-
-  return (
-    <div className="space-y-8 max-w-3xl">
-      <section className="flex items-start gap-4">
-        <a href={`#/agents/${agent.id}/look`} title="Change its look" className="rounded-xl p-1 -m-1 hover:bg-hover transition-colors">
-          <AgentAvatar agent={agent} size={80} live />
-        </a>
-        <div className="min-w-0 flex-1">
-          {editing ? (
-            <div className="grid sm:grid-cols-2 gap-3 max-w-lg">
-              <Field label="Display name" hint={`Mentions stay @${agent.handle}.`}>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </Field>
-              <div className="flex gap-2 sm:col-span-2">
-                <Button variant="primary" onClick={saveProfile}>
-                  Save
-                </Button>
-                <Button variant="ghost" onClick={() => (setEditing(false), setForm({ name: agent.name }))}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <h2 className="text-2xl font-semibold flex items-center gap-2">
-                {agent.name}
-                <button onClick={() => setEditing(true)} className="p-1 rounded-md text-muted hover:text-ink hover:bg-hover" aria-label="Edit profile" title="Edit profile">
-                  <Pencil size={15} />
-                </button>
-              </h2>
-              <p className="text-sm text-muted flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
-                <span>
-                  @{agent.handle} · {harnessLabel(agent.harness)}
-                </span>
-                <StatusChip status={agent.status} />
-              </p>
-              <p className="text-sm text-muted mt-2">
-                {myTeams.length || bossOf.length ? (
-                  <>
-                    {myTeams.map((t, i) => {
-                      const role = t.leads.includes(agent.id) ? "lead" : t.members.find((m) => m.agentId === agent.id)?.role;
-                      return (
-                        <span key={t.id}>
-                          {i > 0 && ", "}
-                          {role ? `${role} on ` : "on "}
-                          <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
-                            #{t.name}
-                          </a>
-                        </span>
-                      );
-                    })}
-                    {bossOf.length > 0 && (
-                      <span>
-                        {myTeams.length ? "; " : ""}boss of{" "}
-                        {bossOf.map((t, i) => (
-                          <span key={t.id}>
-                            {i > 0 && ", "}
-                            <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: t.channelId, threadId: null })}>
-                              #{t.name}
-                            </a>
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  "Works on its own."
-                )}
-              </p>
-            </>
-          )}
-        </div>
-      </section>
-
-      {problem(runs) && (
-        <section role="alert" className="rounded-xl border border-warn/40 bg-warn/10 p-4 flex items-start gap-3">
-          <ShieldAlert size={18} className="text-warn shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <div className="font-medium">{agent.name} can't work right now</div>
-            <div className="text-muted mt-0.5">{problem(runs)}</div>
-          </div>
-        </section>
-      )}
-
-      {simple && (
-        <section className="rounded-xl border border-line p-4 space-y-3 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-muted">Status</span>
-            <StatusChip status={agent.status} />
-            {!readiness.ready && <Pill>Setup incomplete</Pill>}
-          </div>
-          {!readiness.ready && (
-            <p className="text-muted">
-              {readiness.problem}. Messages to {agent.name} will wait until that's fixed.
-              {next && (
-                <span className="mt-1 block">
-                  What to do: {next.text}{" "}
-                  <a href={next.href} className="text-accent-text underline">
-                    {next.action}
-                  </a>
-                </span>
-              )}
-            </p>
-          )}
-          <Button onClick={() => void openDm(agent.id)}>
-            <MessageSquare size={15} /> Send a test message
-          </Button>
-        </section>
-      )}
-
-      {cardGrid(cards)}
-      {simple && <Advanced title="Technical details">{cardGrid(technicalCards)}</Advanced>}
-
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold">Personality</h3>
-          <a className="text-sm text-accent-text hover:underline" href={`#/agents/${agent.id}/soul`}>
-            Edit
-          </a>
-        </div>
-        {soulHtml ? (
-          <div className="prose-w rounded-xl border border-line p-4 text-sm text-muted max-h-48 overflow-hidden" dangerouslySetInnerHTML={{ __html: soulHtml }} />
-        ) : (
-          <div className="rounded-xl border border-line p-4 text-sm text-muted">{soul === null ? "Loading…" : "No personality yet. Give it one on the Personality page."}</div>
-        )}
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold">Recent activity</h3>
-          <a className="text-sm text-accent-text hover:underline" href={`#/agents/${agent.id}/runs`}>
-            All activity
-          </a>
-        </div>
-        <RunList runs={runs} compact />
-      </section>
-
-      <section className="pt-6 border-t border-line space-y-2">
-        <h3 className="font-semibold text-bad">Remove agent</h3>
-        <p className="text-sm text-muted">Removes @{agent.handle} from the workspace. Its memory notes and personality stay in the vault.</p>
-        <Button
-          variant="danger"
-          onClick={async () => {
-            if (!confirm(`Remove @${agent.handle}? Its memory notes stay in the vault.`)) return;
-            await api("DELETE", `/api/agents/${agent.id}`);
-            await refreshAgents();
-            go({ view: "agents", agentId: null });
-          }}
-        >
-          <Trash2 size={15} /> Remove @{agent.handle}
-        </Button>
-      </section>
-    </div>
-  );
-}
-
 // --- Runs ---------------------------------------------------------------------
 
 function RunsPanel({ agent, active }: { agent: FullAgent; active: boolean }) {
@@ -1242,7 +1089,7 @@ function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }
   if (!runs) return <p className="text-sm text-muted">Loading…</p>;
   if (!runs.length) return <p className="rounded-xl border border-dashed border-line p-4 text-sm text-muted">Nothing yet. Message the agent to give it something to do.</p>;
   return (
-    <div className="rounded-xl border border-line divide-y divide-line">
+    <div className="rounded-3xl bg-card border border-line/60 overflow-hidden divide-y divide-line/60">
       {runs.map((r) => {
         const secs = r.finishedAt ? Math.max(0, Math.round((new Date(r.finishedAt).getTime() - new Date(r.createdAt).getTime()) / 1000)) : null;
         const channel = r.channelKind === "dm" ? "DM" : `#${r.channelName ?? ""}`;
@@ -1265,6 +1112,12 @@ function RunList({ runs, compact }: { runs: RunRow[] | null; compact?: boolean }
               <details className="mt-1 text-xs text-muted">
                 <summary className="cursor-pointer select-none">Details</summary>
                 <div className="mt-1.5 space-y-1">
+                  <ol className="mb-2 space-y-1 border-l border-line pl-3">
+                    <li>
+                      You asked: {runTitle(r.trigger) || "a message"} <span className="text-faint">· {channel}</span>
+                    </li>
+                    <li className={r.status === "failed" ? "text-bad" : undefined}>{r.status === "failed" ? `Didn't finish${why ? `: ${why}` : ""}` : r.status === "done" ? `Done${secs !== null ? ` in ${secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}m`}` : ""}` : runStatusLabel(r.status)}</li>
+                  </ol>
                   <div>
                     Run id: <span className="font-mono break-all">{r.id}</span>
                   </div>

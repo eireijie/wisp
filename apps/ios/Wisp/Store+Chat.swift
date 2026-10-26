@@ -34,6 +34,11 @@ extension Store {
     message.deletedAt == nil && (message.author == Actor(kind: .user, id: me?.id ?? "") || role == "owner") && writable(message.channelId)
   }
 
+  /** Replying (a quote above your words) works on any message you can still post under. */
+  func canReply(_ message: Message) -> Bool {
+    message.deletedAt == nil && writable(message.channelId)
+  }
+
   private func writable(_ channelId: String) -> Bool {
     channels.first { $0.id == channelId }?.archivedAt == nil
   }

@@ -305,6 +305,15 @@ final class ChatTests: XCTestCase {
     XCTAssertEqual(store.phase, .ready)
   }
 
+  func testGuestInboxBadgeIgnoresApprovalsTheInboxHides() {
+    let store = makeStore()
+    store.approvals = [Approval(id: "ap1", agentId: "a1", channelId: "c1", summary: "OK?", details: "", status: "pending", note: "", createdAt: "")]
+    store.role = "owner"
+    XCTAssertEqual(store.needsYouCount, 1)
+    store.role = "guest"
+    XCTAssertEqual(store.needsYouCount, 0)
+  }
+
   func testGuestsDoNotLoadOrReceiveComputers() async throws {
     let store = makeStore()
     let computer = #"{"id":"desk","name":"Desk","kind":"vm","status":"ready","statusText":"","help":{"agentId":"a1","request":"Help","channelId":"c1"}}"#

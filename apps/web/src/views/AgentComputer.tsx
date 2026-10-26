@@ -8,7 +8,7 @@ import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "
 import { AddComputer, ComputerMini } from "./ComputersView.tsx";
 import { Intro } from "./SettingsParts.tsx";
 import { Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 
 /** Harnesses Wisp starts on a device (natively or over ACP), as opposed to ones that join through MCP. */
 export function runsOnDevice(harness: string) {
@@ -51,14 +51,29 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
       await api("PATCH", `/api/agents/${agent.id}`, { computerId: c.id, ...(runsInVm(agent.harness) && !agent.settings.runIn ? { settings: { runIn: "computer" } } : {}) });
     });
   const quickScreen = () => use("screen", async () => assign(await api<ComputerInfo>("POST", "/api/computers", { kind: "device", nodeId: agent.nodeId })));
-  const goHeadless = () => {
-    if (!confirm(`Run @${agent.handle} headless? It won't be able to see or use a screen: no websites, no apps, only its harness's own tools.`)) return;
+  const [confirmHeadless, setConfirmHeadless] = useState(false);
+  const goHeadless = () => setConfirmHeadless(true);
+  const doHeadless = () => {
+    setConfirmHeadless(false);
     use("headless", () => api("PATCH", `/api/agents/${agent.id}`, { computerId: null, settings: { headless: true } }));
   };
 
   const others = computers.filter((c) => c.id !== agent.computerId);
   return (
     <div className="space-y-8 max-w-3xl">
+      {confirmHeadless && (
+        <Modal title={`Run @${agent.handle} headless?`} onClose={() => setConfirmHeadless(false)}>
+          <p className="text-sm text-muted">Without a computer it can still think and write, but it can't use apps or a screen: no websites, no apps, only its harness's own tools.</p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button onClick={doHeadless} className="h-12 rounded-full bg-accent text-accent-ink font-semibold">
+              Run headless
+            </button>
+            <button onClick={() => setConfirmHeadless(false)} className="h-12 rounded-full border border-control-line bg-control font-medium hover:bg-hover">
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
       <section>
         <Intro title="Computer">
           <p>
@@ -275,8 +290,8 @@ export function routineSteps(result: string, steps: string): string {
 }
 
 /** Why a new routine can't be saved yet (null = fine). The hub needs a name of 1 to 80 characters. */
-export function routineProblem(simple: boolean, name: string, result: string): string | null {
-  if (simple && !result.trim()) return "Say what should happen.";
+export function routineProblem(name: string, result: string): string | null {
+  if (!result.trim()) return "Say what should happen.";
   if (!routineName(name, result)) return "Give the routine a name.";
   return null;
 }
@@ -387,10 +402,9 @@ export function RoutinesPanel({ agent, active }: { agent: Agent; active: boolean
 }
 
 function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void }) {
-  const simple = useSimple();
   const [result, setResult] = useState("");
   const [name, setName] = useState("");
-  const [steps, setSteps] = useState(simple ? "" : "1. \n2. \n3. ");
+  const [steps, setSteps] = useState("");
   const [schedule, setSchedule] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -399,33 +413,25 @@ function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void })
         className="space-y-4"
         onSubmit={async (e) => {
           e.preventDefault();
-          const problem = routineProblem(simple, name, result);
+          const problem = routineProblem(name, result);
           if (problem) return setError(problem);
           try {
-            await api("POST", "/api/routines", { agentId: agent.id, name: routineName(name, result), steps: simple ? routineSteps(result, steps) : steps, schedule, timezone: TZ });
+            await api("POST", "/api/routines", { agentId: agent.id, name: routineName(name, result), steps: routineSteps(result, steps), schedule, timezone: TZ });
             onClose();
           } catch (err) {
             setError((err as Error).message);
           }
         }}
       >
-        {simple && (
-          <Field label="What should happen?">
-            <Textarea rows={3} value={result} onChange={(e) => setResult(e.target.value)} placeholder="Send me three dinner ideas with a shopping list" required />
-          </Field>
-        )}
-        <Field label="Name" hint={simple ? "Leave it empty and we will name it for you." : undefined}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={simple ? "Dinner ideas" : "Inbox zero"} required={!simple} />
+        <Field label="What should happen?">
+          <Textarea rows={3} value={result} onChange={(e) => setResult(e.target.value)} placeholder="Send me three dinner ideas with a shopping list" required />
         </Field>
-        {simple ? (
-          <Field label="Steps (optional)" hint="Your helper works out the steps if you leave this empty.">
-            <Textarea rows={5} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="1. Look at what is in the fridge" />
-          </Field>
-        ) : (
-          <Field label="Steps" hint="Name buttons and fields by their labels, say what changes each time, and what done looks like.">
-            <Textarea rows={8} value={steps} onChange={(e) => setSteps(e.target.value)} />
-          </Field>
-        )}
+        <Field label="Name" hint="Leave it empty and we will name it for you.">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dinner ideas" />
+        </Field>
+        <Field label="Steps (optional)" hint="Your helper works out the steps if you leave this empty. Name buttons and fields by their labels, say what changes each time, and what done looks like.">
+          <Textarea rows={5} value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="1. Look at what is in the fridge" />
+        </Field>
         <ScheduleEditor value={schedule} onChange={setSchedule} />
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -488,10 +494,9 @@ function presetOf(cron: string | null): { preset: Preset; time: string; day: num
 
 /** Plain choices ("every weekday at 9:00") that write a cron schedule; custom cron for the rest. */
 function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
-  const simple = useSimple();
   const init = presetOf(value);
   const [preset, setPreset] = useState<Preset>(init.preset);
-  // an existing custom schedule stays in plain view; a new one is typed under Advanced in Simple
+  // an existing custom schedule stays in plain view; a new one is typed under More options
   const [startedCustom] = useState(init.preset === "custom");
   const [time, setTime] = useState(init.time);
   const [day, setDay] = useState(init.day);
@@ -503,7 +508,7 @@ function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (
     onChange(cron);
   }, [cron]);
   const selectCls = "h-9 rounded-lg border border-line bg-panel px-2 text-sm";
-  // Simple keeps a custom schedule out of the list, but never hides one that is already set.
+  // a custom schedule stays out of the list, but one that is already set is never hidden.
   const customInput = (
     <label className="flex flex-col gap-1 text-xs text-muted">
       Custom schedule (cron)
@@ -530,7 +535,7 @@ function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (
             <option value="weekdays">Every weekday</option>
             <option value="weekly">Every week</option>
             <option value="hourly">Every hour</option>
-            {(!simple || preset === "custom") && <option value="custom">{simple ? "Custom schedule" : "Custom (cron)"}</option>}
+            {preset === "custom" && <option value="custom">Custom schedule</option>}
           </select>
         </label>
         {preset === "weekly" && (
@@ -551,9 +556,9 @@ function ScheduleEditor({ value, onChange }: { value: string | null; onChange: (
             <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={selectCls} />
           </label>
         )}
-        {preset === "custom" && (!simple || startedCustom) && customInput}
+        {preset === "custom" && startedCustom && customInput}
       </div>
-      {simple && !startedCustom && <Advanced title="Custom schedule">{customInput}</Advanced>}
+      {!startedCustom && <MoreOptions about="a custom schedule">{customInput}</MoreOptions>}
       <p className="text-xs text-muted">{cron ? `${describeCron(cron)}, in ${TZ}.` : "Run it from here, or ask the helper in chat."}</p>
     </div>
   );

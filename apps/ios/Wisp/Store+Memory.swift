@@ -69,7 +69,7 @@ extension Store {
   func placeName(_ path: String) -> String {
     let dir = path.components(separatedBy: "/").dropLast()
     let joined = dir.joined(separator: "/")
-    if simple, joined != "shared", let friendly = friendlyFolder(joined) { return friendly }
+    if joined != "shared", let friendly = friendlyFolder(joined) { return friendly }
     let words = dir.enumerated().map { folderLabel($1, parent: $0 > 0 ? Array(dir)[$0 - 1] : "") }.joined(separator: " / ")
     return words.isEmpty ? "Top folder" : words
   }

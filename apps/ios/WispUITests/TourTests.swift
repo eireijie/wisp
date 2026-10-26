@@ -14,8 +14,10 @@ final class TourTests: XCTestCase {
     app.launchEnvironment["WISP_HUB"] = hub
     app.launchEnvironment["WISP_TOKEN"] = token
     app.launch()
-    XCTAssertTrue(app.tabBars.buttons["You"].waitForExistence(timeout: 30), "The test session must reach Wisp.")
-    app.tabBars.buttons["You"].tap()
+    XCTAssertTrue(app.tabBars.buttons["Chats"].waitForExistence(timeout: 30), "The test session must reach Wisp.")
+    XCTAssertEqual(app.tabBars.buttons.count, 4, "Inbox, Chats, Agents and Computers")
+    // your avatar opens the settings sheet, which holds what the You tab used to
+    app.buttons["profile-button"].firstMatch.tap()
 
     open("you-tasks")
     shot("tasks")
@@ -44,16 +46,16 @@ final class TourTests: XCTestCase {
     }
     for _ in 0...depth { back() }
 
-    for (id, name) in [("you-about", "about"), ("you-skills", "skills"), ("you-connectors", "connectors"), ("you-devices", "devices")] {
+    for (id, name) in [("you-about", "about"), ("you-skills", "skills"), ("you-connectors", "connectors")] {
       if reveal(id) { open(id); shot(name); back() }
-      else { shot(name, note: "Teams are hidden in Simple mode.") }
+      else { shot(name, note: "Not available in this workspace.") }
     }
     open("you-settings"); shot("settings")
     for name in ["profile", "people", "workspace"] {
       open("settings-\(name)"); shot(name); back()
     }
     back()
-    if !app.tabBars.buttons["Agents"].exists { app.tabBars.buttons["You"].tap() }
+    app.buttons["Close"].firstMatch.tap()
     XCTAssertTrue(app.tabBars.buttons["Agents"].waitForExistence(timeout: 5))
     app.tabBars.buttons["Agents"].tap()
     if let agent = first("agent-tile") {
@@ -101,6 +103,9 @@ final class TourTests: XCTestCase {
     XCTFail("\(id) never settled on screen")
   }
   private func back() {
+    // settings pages draw their own back circle
+    let own = app.buttons["settings-back"].firstMatch
+    if own.exists { own.tap(); return }
     let button = app.navigationBars.buttons.element(boundBy: 0)
     XCTAssertTrue(button.exists)
     button.tap()

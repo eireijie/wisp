@@ -273,7 +273,8 @@ describe("a stepped team when things go wrong", () => {
     await api("POST", `/api/channels/${ch.id}/messages`, { body: "Plan a thing" });
     const plan = openIn("atlas", ch.id);
     const team = ch.settings.team;
-    const renamed = team.steps.map((s: any) => (s.id === "plan" ? { ...s, id: "plan-2" } : s.sendBackTo === "plan" ? { ...s, sendBackTo: "plan-2" } : s));
+    const swap = (xs: string[]) => xs.map((x) => (x === "plan" ? "plan-2" : x));
+    const renamed = team.steps.map((s: any) => ({ ...s, id: s.id === "plan" ? "plan-2" : s.id, next: s.next === "plan" ? "plan-2" : s.next, nexts: swap(s.nexts ?? []), inputs: swap(s.inputs ?? []), sendBackTo: s.sendBackTo === "plan" ? "plan-2" : s.sendBackTo }));
     expect((await api("PATCH", `/api/channels/${ch.id}`, { settings: { team: { ...team, steps: renamed } } })).status).toBe(200);
     const flow = await flowIn(ch.id);
     expect(flow.status).toBe("failed");
