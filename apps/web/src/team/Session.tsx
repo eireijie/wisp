@@ -1,25 +1,10 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { migrateTeam, stepAgentId, type ChannelTeam } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
 import { Button, Modal } from "../components/ui.tsx";
 import { TeamBuilder } from "./Builder.tsx";
-import { emptyTeam, relayout, withChart } from "./flow.ts";
-
-/** A saved team ready to edit: an older linear team becomes a flow chart (prompts on the steps, every arrow spelled out), and each step names its agent. */
-export function prepareTeam(team: ChannelTeam | null | undefined, liveAgents?: Set<string>): ChannelTeam {
-  const base = team ?? emptyTeam();
-  const migrated = migrateTeam({ ...base, roles: base.roles ?? [], steps: base.steps ?? [] });
-  const steps = (migrated.steps ?? []).map((s) => {
-    const agentId = s.agentId ?? stepAgentId(migrated, s);
-    // an agent that is gone needs someone new
-    return { ...s, agentId: agentId && liveAgents?.size && !liveAgents.has(agentId) ? null : agentId };
-  });
-  const out = { ...base, roles: migrated.roles ?? [], steps };
-  // steps that were never laid out (an agent drew them) get a place on the chart
-  return steps.length > 1 && steps.every((s) => s.x === steps[0].x && s.y === steps[0].y) ? relayout(out) : out;
-}
+import { prepareTeam, withChart } from "./flow.ts";
 
 /** Editing how an existing team works: the builder over the team's own steps, saved to its channel. */
 export function TeamEditSession({ channel, onClose }: { channel: ChannelInfo; onClose: () => void }) {

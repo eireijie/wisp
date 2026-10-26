@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TEAM_TEMPLATES, describeFlow, stepsProblem, type ChannelTeam, type TeamStep } from "@wisp/core";
-import { ADD_KINDS, addStep, connecting, disconnecting, emptyTeam, fillTemplate, fromCanvas, inputIds, movingAfter, numberOf, relayout, removingStep, retype, settingInputs, stepProblems, stepRows, toCanvas, updating } from "../src/team/flow.ts";
+import { TEAM_TEMPLATES, describeFlow, stepPrompt, stepsProblem, type ChannelTeam, type TeamFlow, type TeamStep } from "@wisp/core";
+import { ADD_KINDS, addStep, lanesOf, prepareTeam, waitingLanes, connecting, disconnecting, emptyTeam, fillTemplate, fromCanvas, inputIds, movingAfter, numberOf, relayout, removingStep, retype, settingInputs, stepProblems, stepRows, toCanvas, updating } from "../src/team/flow.ts";
 
 const agents = [
   { id: "nova", harness: "claude-code" },
@@ -141,5 +141,83 @@ describe("editing a team's flow", () => {
       expect(back).toEqual(p);
     }
     expect(toCanvas({ x: 0, y: 150 }).x).toBeGreaterThan(toCanvas({ x: 0, y: 0 }).x);
+  });
+
+  it("readies an older role-based team: prompts and agents on the steps, a place on the chart, gone agents cleared", () => {
+    const old: ChannelTeam = {
+      nodes: [],
+      edges: [],
+      roles: [{ id: "lead", name: "Lead", description: "Plan it.", agentId: "nova" }],
+      steps: [
+        { id: "a", roleId: "lead", kind: "do", action: "Plan", next: "b", x: 0, y: 0 },
+        { id: "b", roleId: "", kind: "do", action: "Build", next: null, agentId: "gone", x: 0, y: 0 },
+      ],
+    };
+    const t = prepareTeam(old, new Set(["nova", "ghosty"]));
+    expect(t.steps![0]).toMatchObject({ agentId: "nova", prompt: "Plan it.", nexts: ["b"] });
+    expect(t.steps![1].agentId).toBeNull();
+    expect(t.steps![1].y).toBeGreaterThan(t.steps![0].y);
+    expect(t.roles).toHaveLength(1);
+  });
+
+  it("reads a request's lanes, and makes some for an older request that has none", () => {
+    const base = { id: "f", workspaceId: "w", channelId: "c", threadId: "t", request: "x", requestedBy: null, taskId: null, rounds: {}, pieces: {}, createdAt: "", updatedAt: "" };
+    const lane = (stepId: string, status: "running" | "waiting" | "done" | "skipped", waitingFor: TeamFlow["waitingFor"] = null) => ({ stepId, status, taskId: null, carry: null, pieces: {}, waitingFor });
+    const withLanes: TeamFlow = { ...base, status: "waiting", stepId: "a", history: [], waitingFor: null, lanes: { a: lane("a", "waiting", { why: "failed", options: "retry" }), b: lane("b", "waiting", { why: "ask", options: "ask" }), c: lane("c", "running") } };
+    expect(waitingLanes(withLanes).map((l) => l.stepId).sort()).toEqual(["a", "b"]);
+    const older: TeamFlow = { ...base, status: "waiting", stepId: "b", history: [{ stepId: "a", taskId: "t1", round: 1, verdict: "approved", at: "" }], waitingFor: { why: "rounds ran out", options: "rounds" } };
+    expect(Object.fromEntries(Object.entries(lanesOf(older)).map(([k, l]) => [k, l.status]))).toEqual({ a: "done", b: "waiting" });
+    expect(waitingLanes(older).map((l) => l.waitingFor?.options)).toEqual(["rounds"]);
+  });
+
+  it("removing or disconnecting a step leaves no edge behind in nexts, inputs or next", () => {
+    const t = sample();
+    const join = stepRows(t.steps!)[1][0];
+    const gone = removingStep(t, join.id);
+    for (const s of gone.steps!) {
+      for (const ref of [...(s.nexts ?? []), ...(s.inputs ?? []), ...(s.next ? [s.next] : [])]) expect(ref).not.toBe(join.id);
+    }
+    expect(stepsProblem(gone)).toBeNull();
+    // cutting A -> B really stops B following A
+    const [a] = stepRows(t.steps!)[0];
+    const cut = disconnecting(t, a.id, join.id);
+    expect(cut.steps!.find((s) => s.id === a.id)).toMatchObject({ nexts: [], next: null });
+    expect(inputIds(cut.steps!.find((s) => s.id === join.id)!)).not.toContain(a.id);
+  });
+
+  it("a step's own prompt is what runs: editing it replaces an older role's text", () => {
+    const old: ChannelTeam = { nodes: [], edges: [], roles: [{ id: "r", name: "R", description: "Merge automatically.", agentId: "nova" }], steps: [{ id: "a", roleId: "r", kind: "do", action: "Merge", next: null, x: 0, y: 0 }] };
+    const t = prepareTeam(old);
+    expect(stepPrompt(t, t.steps![0])).toBe("Merge automatically.");
+    const edited = updating(t, "a", { prompt: "Never merge without approval." });
+    expect(stepPrompt(edited, edited.steps![0])).toBe("Never merge without approval.");
+  });
+
+  it("every kind of step can be edited, with the fields the form has, into a valid team", () => {
+    const base = addStep(emptyTeam(), "agent", {}, agents);
+    const first = base.id;
+    const fill: Record<string, (t: ChannelTeam, id: string) => ChannelTeam> = {
+      review: (t) => t,
+      ask: (t) => t,
+      custom: (t) => t,
+      handoff: (t, id) => updating(t, id, { handoffTo: "other-team" }),
+      branch: (t, id) => updating(t, id, { condition: "every test passed", ifTrue: null, ifFalse: first }),
+      handOut: (t, id) => updating({ ...t, roles: [{ id: "r1", name: "Builder", description: "", agentId: "pappy" }] }, id, { handTo: ["r1"] }),
+    };
+    for (const [kind, configure] of Object.entries(fill)) {
+      const added = addStep(base.team, kind as never, { after: first }, agents);
+      const t = configure(added.team, added.id);
+      expect(stepProblems(t).lines, kind).toEqual([]);
+    }
+    // changing an ordinary step into each kind also ends valid after its fields are filled
+    for (const kind of ["review", "handoff", "branch", "hand_out"] as const) {
+      let t = addStep(base.team, "agent", { after: first }, agents).team;
+      const id = t.steps!.at(-1)!.id;
+      t = retype(t, id, kind, agents);
+      if (kind === "handoff") t = updating(t, id, { handoffTo: "x" });
+      if (kind === "branch") t = updating(t, id, { rule: { op: "contains", value: "ok" }, ifTrue: first });
+      if (kind === "hand_out") t = updating({ ...t, roles: [{ id: "r1", name: "B", description: "", agentId: "pappy" }] }, id, { handTo: ["r1"] });
+      expect(stepProblems(t).lines, kind).toEqual([]);
+    }
   });
 });

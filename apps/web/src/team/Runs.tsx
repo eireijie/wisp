@@ -1,25 +1,13 @@
 import { useEffect, useState } from "react";
 import { Check, Hand } from "lucide-react";
-import { stepOrder, type FlowLane, type TeamFlow, type TeamStep } from "@wisp/core";
+import { stepOrder, type TeamFlow, type TeamStep } from "@wisp/core";
 import { api } from "../api.ts";
 import { href } from "../router.ts";
 import { useStore } from "../store.ts";
 import { Button, cx } from "../components/ui.tsx";
+import { lanesOf } from "./flow.ts";
 
 type Decision = "approve" | "retry" | "stop" | "changes";
-
-/** Every step that has started, by step id. An older request without lanes gets one made from where it is. */
-export function lanesOf(flow: TeamFlow): Record<string, FlowLane> {
-  if (flow.lanes && Object.keys(flow.lanes).length) return flow.lanes;
-  const out: Record<string, FlowLane> = {};
-  const lane = (stepId: string, status: FlowLane["status"], waitingFor: FlowLane["waitingFor"] = null): FlowLane => ({ stepId, status, taskId: null, carry: null, pieces: {}, waitingFor });
-  for (const h of flow.history) if (h.verdict === "done" || h.verdict === "approved") out[h.stepId] = lane(h.stepId, "done");
-  if (flow.status === "running" || flow.status === "waiting") out[flow.stepId] = lane(flow.stepId, flow.status, flow.waitingFor);
-  return out;
-}
-
-/** The lanes waiting on a person. */
-export const waitingLanes = (flow: TeamFlow): FlowLane[] => Object.values(lanesOf(flow)).filter((l) => l.status === "waiting" && !!l.waitingFor);
 
 /**
  * Where a request in a stepped team is, at the top of its thread: a pill for each step (done, on

@@ -5,7 +5,7 @@ import { useStore } from "../store.ts";
 import { AgentAvatar, Button, Modal, cx } from "../components/ui.tsx";
 import { ADD_KINDS, movingAfter, numberOf, stepRows, titleOf, type AddAt, type AddKind, KIND_MARK } from "./flow.ts";
 import { kindsFor } from "./Canvas.tsx";
-import { KindIcon, MessageChip, StepNum, agentOfStep } from "./parts.tsx";
+import { KindIcon, MessageChip, StepNum, agentOfStep, useHandoffName } from "./parts.tsx";
 
 /** The lines between two rows of steps, with a + to put a step there (and "At the same time" where they split). */
 function Connector({ from, to, plus, onAdd }: { from: number; to: number; plus: boolean; onAdd: () => void }) {
@@ -33,6 +33,7 @@ function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; st
   const agents = useStore((s) => s.agents);
   const agent = agentOfStep(team, agents, step);
   const mark = KIND_MARK[step.kind];
+  const handoff = useHandoffName(step.handoffTo);
   const uses = (step.inputs ?? []).length > 1 ? `Uses ${(step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b).join(" and ")}` : null;
   return (
     <button type="button" onClick={onOpen} aria-label={`Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 rounded-[22px] border p-3.5 text-left", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
@@ -52,7 +53,7 @@ function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; st
         {step.kind === "ask" ? (
           <span className="text-[14px] text-muted">You</span>
         ) : step.kind === "handoff" ? (
-          <span className="text-[14px] text-muted">Another team</span>
+          <span className="text-[14px] text-muted">{handoff}</span>
         ) : agent ? (
           <>
             <AgentAvatar agent={agent} size={22} interactive={false} />

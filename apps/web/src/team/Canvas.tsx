@@ -4,7 +4,7 @@ import { DEFAULT_ROUNDS, stepGraph, stepOrder, type ChannelTeam, type TeamStep }
 import { useStore } from "../store.ts";
 import { AgentAvatar, cx } from "../components/ui.tsx";
 import { ADD_KINDS, BOX_H, BOX_W, fromCanvas, numberOf, stepById, titleOf, toCanvas, type AddAt, type AddKind, KIND_MARK } from "./flow.ts";
-import { KindIcon, MessageChip, StepNum } from "./parts.tsx";
+import { KindIcon, MessageChip, StepNum, useHandoffName } from "./parts.tsx";
 
 type Pt = { x: number; y: number };
 
@@ -368,6 +368,7 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { s
   const agentId = step.agentId || team.roles?.find((r) => r.id === step.roleId)?.agentId || null;
   const agent = agents.find((a) => a.id === agentId);
   const mark = KIND_MARK[step.kind];
+  const handoff = useHandoffName(step.handoffTo);
   const n = numberOf(team, step.id);
   const uses = (step.inputs ?? []).length > 1 ? `Uses ${(step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b).join(" and ")}` : null;
   return (
@@ -400,7 +401,7 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { s
             <span className="text-[13px] text-muted">You</span>
           </>
         ) : step.kind === "handoff" ? (
-          <span className="truncate text-[13px] text-muted">Another team</span>
+          <span className="truncate text-[13px] text-muted">{handoff}</span>
         ) : agent ? (
           <>
             <AgentAvatar agent={agent} size={22} interactive={false} />

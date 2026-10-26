@@ -230,3 +230,9 @@ export function TeamGhosts({ agentIds, seed, size }: { agentIds: string[]; seed:
     </span>
   );
 }
+
+/** The name of the team a hand-off step gives work to: "demo-crew", or "Another team" until one is picked. */
+export function useHandoffName(id: string | null | undefined): string {
+  const name = useStore((s) => (id ? s.channels.find((c) => c.id === id)?.name : undefined));
+  return name ?? "Another team";
+}

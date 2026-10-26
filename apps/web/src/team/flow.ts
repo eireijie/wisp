@@ -4,6 +4,7 @@ import {
   STEP_ROW,
   STEP_W,
   chartFromSteps,
+  migrateTeam,
   graphFromTemplate,
   layoutSteps,
   normalizeSteps,
@@ -17,6 +18,8 @@ import {
   startSteps,
   type Agent,
   type ChannelTeam,
+  type FlowLane,
+  type TeamFlow,
   type TeamRole,
   type TeamStep,
   type TeamStepKind,
@@ -411,3 +414,33 @@ export const KIND_MARK: Record<TeamStepKind, string | null> = {
 };
 
 export type { TeamRole };
+
+/** A saved team ready to edit: an older linear team becomes a flow chart (prompts on the steps, every arrow spelled out), and each step names its agent. */
+export function prepareTeam(team: ChannelTeam | null | undefined, liveAgents?: Set<string>): ChannelTeam {
+  const base = team ?? emptyTeam();
+  const migrated = migrateTeam({ ...base, roles: base.roles ?? [], steps: base.steps ?? [] });
+  const steps = (migrated.steps ?? []).map((s) => {
+    const agentId = s.agentId ?? stepAgentId(migrated, s);
+    // an agent that is gone needs someone new
+    return { ...s, agentId: agentId && liveAgents?.size && !liveAgents.has(agentId) ? null : agentId };
+  });
+  const out = { ...base, roles: migrated.roles ?? [], steps };
+  // steps that were never laid out (an agent drew them) get a place on the chart
+  return steps.length > 1 && steps.every((s) => s.x === steps[0].x && s.y === steps[0].y) ? relayout(out) : out;
+}
+
+
+// --- a request's lanes ----------------------------------------------------------------------
+
+/** Every step that has started in a request, by step id. An older request without lanes gets some made from where it is. */
+export function lanesOf(flow: TeamFlow): Record<string, FlowLane> {
+  if (flow.lanes && Object.keys(flow.lanes).length) return flow.lanes;
+  const out: Record<string, FlowLane> = {};
+  const lane = (stepId: string, status: FlowLane["status"], waitingFor: FlowLane["waitingFor"] = null): FlowLane => ({ stepId, status, taskId: null, carry: null, pieces: {}, waitingFor });
+  for (const h of flow.history) if (h.verdict === "done" || h.verdict === "approved") out[h.stepId] = lane(h.stepId, "done");
+  if (flow.status === "running" || flow.status === "waiting") out[flow.stepId] = lane(flow.stepId, flow.status, flow.waitingFor);
+  return out;
+}
+
+/** The lanes waiting on a person. */
+export const waitingLanes = (flow: TeamFlow): FlowLane[] => Object.values(lanesOf(flow)).filter((l) => l.status === "waiting" && !!l.waitingFor);
