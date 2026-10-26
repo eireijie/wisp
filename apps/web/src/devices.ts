@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Agent, DeviceCapabilities, DeviceRole, DiscoveredAgent } from "@wisp/core";
+import type { Agent, DeviceCapabilities, DeviceRole, DiscoveredAgent, OwnRemoteDesktop } from "@wisp/core";
 import { harnessInfo, harnessLabel, runsInVm } from "@wisp/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import type { ComputerInfo } from "./store.ts";
@@ -25,6 +25,10 @@ export interface DeviceInfo {
   capabilities?: DeviceCapabilities | null;
   discovered?: DiscoveredAgent[];
   harnesses?: { id: string; version: string | null }[];
+  /** the Wisp version it runs */
+  version?: { commit: string | null; date: string | null } | null;
+  update?: { state: "idle" | "updating" | "restarting" | "failed"; message: string } | null;
+  remoteDesktop?: OwnRemoteDesktop | null;
 }
 
 /** The devices list, refreshed every few seconds while mounted. */

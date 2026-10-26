@@ -85,7 +85,7 @@ export function HarnessesPage() {
     return (
       <p className="rounded-2xl border border-dashed border-line p-4 text-sm text-muted">
         No devices of yours yet.{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
+        <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
           Connect one
         </a>
         .

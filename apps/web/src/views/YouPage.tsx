@@ -135,7 +135,7 @@ export function YouPage() {
               {features.tasks && row(<ListTodo {...ICON} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to an agent")}
               {features.tasks && row(<SquarePen {...ICON} />, "New task", () => useStore.setState({ newTaskOpen: true }))}
               {row(<Brain {...ICON} />, "About you", href({ view: "about" }), undefined, "What agents should know about you")}
-              {row(<Server {...ICON} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Wisp")}
+              {row(<Server {...ICON} />, "Computers", href({ view: "computers", computerId: null }), undefined, "Computers running Wisp")}
               {row(<Blocks {...ICON} />, "Mods", href({ view: "mods" }), undefined, "Optional parts of Wisp")}
             </>,
           )}

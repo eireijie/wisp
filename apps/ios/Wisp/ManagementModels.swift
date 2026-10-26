@@ -39,6 +39,10 @@ struct AgentNode: Decodable, Identifiable, Hashable {
   var capabilities: DeviceCapabilities?
   /** the remote desktop app its owner uses to reach it; only they get it */
   var remoteDesktop: OwnRemoteDesktop?
+  /** a Wisp update in progress on the device (idle, updating, restarting or failed) */
+  struct Update: Decodable, Hashable { var state: String; var message: String? }
+  var update: Update?
+  var isUpdating: Bool { update?.state == "updating" || update?.state == "restarting" }
   var usable: Bool { mine == true || shared == true }
 }
 

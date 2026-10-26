@@ -212,24 +212,13 @@ struct AccessView: View {
   }
 }
 
-/** Settings → Devices: your devices and away-from-home status. */
+/** Settings → Away from home: away-from-home status. Devices are on the Computers tab. */
 struct DevicesSettingsView: View {
   @Environment(Store.self) private var store
   @State private var info: ReachInfo?
-  @State private var adding = false
 
   var body: some View {
-    SettingsPage(title: "Devices", id: "devices-settings", trailing: {
-      if store.isOwner { CircleButton(symbol: "plus", label: "Add a device") { adding = true } }
-    }) {
-      CardGroup {
-        if store.nodes.isEmpty { RowLabel(title: "Add your phone or another computer to your Wisp.", chevron: false) }
-        ForEach(store.nodes) { node in
-          NavigationLink { DeviceDetail(node: node) } label: {
-            RowLabel(title: node.name, subtitle: node.paused == true ? "Paused" : node.online ? "Connected" : "Offline", value: node.mine == true ? "Yours" : node.ownerName)
-          }
-        }
-      }
+    SettingsPage("Away from home", id: "devices-settings") {
       CardGroup {
         if store.isOwner {
           NavigationLink { AccessView() } label: { RowLabel(title: "Away from home", value: info?.summary) }
@@ -238,7 +227,6 @@ struct DevicesSettingsView: View {
         }
       }
     }
-    .sheet(isPresented: $adding) { AddDeviceView() }
     .task { try? await store.refreshNodes(); info = try? await store.reach() }
   }
 }

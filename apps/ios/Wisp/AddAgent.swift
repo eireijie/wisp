@@ -52,6 +52,8 @@ struct AgentTemplate: Identifiable, Hashable {
 struct AddAgent: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
+  /** start on this device (from its page) */
+  var nodeId: String? = nil
   var onCreated: (Agent) -> Void
 
   @State private var draft = AgentDraft()

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Server, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
+import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useInboxCount, useStore } from "./store.ts";
 import { go, href, routeForRole, useRoute, type Route } from "./router.ts";
@@ -14,8 +14,6 @@ import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ChannelView } from "./views/ChannelView.tsx";
 import { VaultView } from "./views/VaultView.tsx";
 import { AgentsView } from "./views/AgentsView.tsx";
-import { NodesView } from "./views/NodesView.tsx";
-import { DevicePage } from "./views/DevicePage.tsx";
 import { logout } from "./logout.ts";
 import { YouPage } from "./views/YouPage.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
@@ -180,9 +178,7 @@ function Workspace() {
       case "tasks":
         return <TasksView onBack={phone ? () => go({ view: "dashboard" }) : undefined} />;
       case "computers":
-        return <ComputersView computerId={route.computerId} teach={route.teach ?? null} />;
-      case "nodes":
-        return route.nodeId ? <DevicePage nodeId={route.nodeId} /> : <NodesView onBack={phone ? toYou : undefined} />;
+        return <ComputersView computerId={route.computerId} teach={route.teach ?? null} deviceId={route.deviceId ?? null} />;
       case "settings":
         return <SettingsView page={route.page ?? null} onBack={toYou} fullWindow={!phone} />;
       case "welcome":

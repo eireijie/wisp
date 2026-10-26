@@ -46,7 +46,7 @@ final class TourTests: XCTestCase {
     }
     for _ in 0...depth { back() }
 
-    for (id, name) in [("you-about", "about"), ("you-skills", "skills"), ("you-connectors", "connectors"), ("you-devices", "devices")] {
+    for (id, name) in [("you-about", "about"), ("you-skills", "skills"), ("you-connectors", "connectors")] {
       if reveal(id) { open(id); shot(name); back() }
       else { shot(name, note: "Not available in this workspace.") }
     }

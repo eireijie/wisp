@@ -73,6 +73,7 @@ export function useHelpSeen(): string[] {
   return useSyncExternalStore(
     (cb) => (listeners.add(cb), () => void listeners.delete(cb)),
     read,
+    read,
   );
 }
 

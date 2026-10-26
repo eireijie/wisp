@@ -160,6 +160,7 @@ struct TeamLeadView: View {
 /** Settings → Agent computers: how big new VMs are, and the Orgo cloud-computer key. */
 struct ComputerSettingsView: View {
   @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
   @State private var settings: ComputerDefaults?
   @State private var size = "medium"
   @State private var idle = 10
@@ -186,6 +187,14 @@ struct ComputerSettingsView: View {
       if store.isOwner {
         Button("Save key") { save(["orgoApiKey": AnyEncodable(key)]); key = "" }.buttonStyle(.pill(.secondary)).disabled(key.isEmpty || action.busy)
         if settings?.orgo.configured == true { Button("Disconnect") { save(["orgoApiKey": .null]) }.buttonStyle(.pill(.destructive)).disabled(action.busy) }
+      }
+      if store.canManage {
+        CardLabel("New agents get")
+        CardGroup {
+          NavigationLink { AgentDefaultsView() } label: {
+            RowLabel(title: "AI tool, model and computer", value: store.agentDefaults?.model ?? "Each harness")
+          }
+        }
       }
       StatusLine(error: action.error, saved: saved ? "Saved." : nil)
     }

@@ -515,8 +515,8 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
           <WifiOff size={15} className="shrink-0 mt-0.5 text-warn" />
           <span>
             {name} is offline. {ctx.deviceName(t) ? `It starts when ${ctx.deviceName(t)} reconnects.` : "It starts once it has a device."}{" "}
-            <a href={href({ view: "nodes" })} className="underline hover:text-ink">
-              Devices
+            <a href={href({ view: "computers", computerId: null })} className="underline hover:text-ink">
+              Computers
             </a>
           </span>
         </p>

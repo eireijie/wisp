@@ -76,6 +76,7 @@ struct ComputerClipboardView: View {
 
         if let message { Section { Text(message.text).font(.footnote).foregroundStyle(message.bad ? Color.red : Color.green) } }
       }
+      .groundBackground()
       .navigationTitle("Clipboard")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

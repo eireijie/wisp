@@ -51,7 +51,7 @@ struct HelpView: View {
         }
         if let next {
           if next.id == "agent", store.canManage { Button("Next: make a helper") { addingAgent = true }.buttonStyle(.pill(.primary)) }
-          if next.id == "device" { NavigationLink { DevicesView() } label: { Text("Next: connect a computer").frame(maxWidth: .infinity) }.buttonStyle(.pill(.primary)) }
+          if next.id == "device" { Button { store.route = .device(id: nil) } label: { Text("Next: see computers").frame(maxWidth: .infinity) }.buttonStyle(.pill(.primary)) }
           if next.id == "anywhere", store.isOwner { NavigationLink { AccessView() } label: { Text("Next: use Wisp away from home").frame(maxWidth: .infinity) }.buttonStyle(.pill(.primary)) }
         }
       }
@@ -137,7 +137,7 @@ struct ReadinessCheckRow: View {
     case .makeHelper: if store.canManage { Button("Fix this", action: makeHelper).buttonStyle(.pill(.secondary, small: true)) }
     case .chooseDevice(let id), .chooseModel(let id):
       if let a = store.agent(id) { NavigationLink { AgentPage(agent: a) } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true)) }
-    case .devices: NavigationLink { DevicesView() } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true))
+    case .devices: Button { store.route = .device(id: nil) } label: { Text("Fix this") }.buttonStyle(.pill(.secondary, small: true))
     case nil: EmptyView()
     }
   }

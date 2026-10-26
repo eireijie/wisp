@@ -157,12 +157,12 @@ export function AddDeviceContent() {
 
 export function AddDeviceDialog({ onClose }: { onClose: () => void }) {
   return (
-    <Modal title="Add a device" onClose={onClose} wide>
+    <Modal title="Add a device or phone" onClose={onClose} wide>
       <div className="pt-3">
         <AddDeviceContent />
       </div>
       <div className="flex justify-end mt-5">
-        <Button onClick={onClose}>Done for now</Button>
+        <Button variant="primary" onClick={onClose}>Done</Button>
       </div>
     </Modal>
   );

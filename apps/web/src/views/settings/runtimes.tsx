@@ -47,7 +47,7 @@ function useInstall(device: DeviceInfo | undefined) {
 }
 
 /** One harness on a device: whether it's installed, and the button that installs it. */
-function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: HarnessInfo; device: DeviceInfo; version: string | null | undefined; busy: boolean; onInstall: () => void; onHowTo: () => void }) {
+export function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: HarnessInfo; device: DeviceInfo; version: string | null | undefined; busy: boolean; onInstall: () => void; onHowTo: () => void }) {
   const ready = version !== undefined;
   const npm = !!h.install?.npm;
   return (
@@ -153,7 +153,7 @@ export function RuntimesPage() {
       ) : !device ? (
         <p className="rounded-2xl border border-dashed border-line p-4 text-sm text-muted">
           No devices of yours yet.{" "}
-          <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
+          <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
             Connect one
           </a>{" "}
           to see what it can run.
@@ -236,7 +236,7 @@ export function RuntimesPage() {
   );
 }
 
-function HowToInstall({ h, device, onClose }: { h: HarnessInfo; device: DeviceInfo | undefined; onClose: () => void }) {
+export function HowToInstall({ h, device, onClose }: { h: HarnessInfo; device: DeviceInfo | undefined; onClose: () => void }) {
   const info = harnessInfo(h.id)?.install;
   return (
     <Dlg title={`Install ${h.label}`} sub={`On ${device?.name ?? "the device"}, in a terminal`} onClose={onClose}>

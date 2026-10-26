@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, Copy, Download, ExternalLink, Eye, Link2, Lock, Monitor, MoreHorizontal, Pause, Plus, Trash2 } from "lucide-react";
-import { OwnRemoteDesktop, REMOTE_APPS, REMOTE_APP_IDS, formatRustdeskId, remoteDesktopLink, runsInVm, type Agent, type RemoteApp } from "@wisp/core";
+import { Check, Copy, Download, ExternalLink, Eye, Link2, Loader2, Lock, Monitor, MoreHorizontal, Pause, Plus, RefreshCw, Trash2, Users } from "lucide-react";
+import { HARNESSES, OwnRemoteDesktop, REMOTE_APPS, REMOTE_APP_IDS, formatRustdeskId, remoteDesktopLink, runsInVm, type Agent, type DeviceRole, type HarnessInfo, type RemoteApp } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { osName, useDevices } from "../devices.ts";
 import { useFeature } from "../features.ts";
 import { CreateAgent } from "./CreateAgent.tsx";
-import { ConnectDevice, DeviceAccess, DeviceIcon, type NodeInfo } from "./NodesView.tsx";
-import { AgentAvatar, Button, CopyBlock, Empty, Field, Input, Loader, Menu, Pill, StatusChip, cx } from "../components/ui.tsx";
+import { RuntimeRow, HowToInstall } from "./settings/runtimes.tsx";
+import { Toggle } from "./settings/parts.tsx";
+import { BackToComputers, deviceStatus } from "./ComputersParts.tsx";
+import { DeviceIcon, connectionLine, type NodeInfo } from "./deviceBits.tsx";
+import { AgentAvatar, Button, CopyBlock, Empty, Field, Input, Loader, Menu, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
 
 /**
  * One device: the agents that run on it and what each works on, its own screen, and the rest of
@@ -17,7 +20,6 @@ import { AgentAvatar, Button, CopyBlock, Empty, Field, Input, Loader, Menu, Pill
 export function DevicePage({ nodeId }: { nodeId: string }) {
   const [nodes, setNodes] = useState<NodeInfo[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [more, setMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isOwner = useStore((s) => s.me)?.role === "owner";
   const remoteDesktop = useFeature("remoteDesktop");
@@ -33,7 +35,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
   if (!n)
     return (
       <Empty icon={<Monitor />} title="That device is gone">
-        <Button onClick={() => go({ view: "nodes" })}>Back to devices</Button>
+        <Button onClick={() => go({ view: "computers", computerId: null })}>Back to computers</Button>
       </Empty>
     );
 
@@ -41,7 +43,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
     if (!confirm(`Remove ${n.name}? Its token stops working.`)) return;
     try {
       await api("DELETE", `/api/nodes/${n.id}`);
-      go({ view: "nodes" });
+      go({ view: "computers", computerId: null });
     } catch (e) {
       setError(`Couldn't remove ${n.name}: ${(e as Error).message}`);
     }
@@ -54,78 +56,208 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
     }
     refresh();
   };
-  const menu = [
-    ...(isOwner && n.online ? [{ label: "Update Wisp", icon: <Download size={15} />, onSelect: update }] : []),
-    ...(n.mine || isOwner ? [{ label: "Remove device", icon: <Trash2 size={15} />, danger: true, onSelect: remove }] : []),
-  ];
+  const busyUpdate = n.update?.state === "updating" || n.update?.state === "restarting";
+  const st = deviceStatus(n);
+  const canManage = n.mine || isOwner;
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-3 border-b border-line safe-top">
-        <a href={href({ view: "nodes" })} className="p-1.5 -ml-1.5 rounded-md hover:bg-hover text-muted" aria-label="Back to devices">
-          <ChevronLeft size={20} />
-        </a>
+      <header className="shrink-0 px-4 md:px-6 pt-5 pb-3 flex items-center gap-3 safe-top">
+        <BackToComputers />
         <DeviceIcon online={n.online} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold tracking-tight truncate">{n.name}</h1>
-            {n.paused && (
-              <span title={`Paused at the device. Resume it there with: wisp node resume`}>
-                <Pill tone="warn">
-                  <Pause size={11} /> Paused
-                </Pill>
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-muted truncate">
-            {n.capabilities ? `${osName(n.capabilities.platform)} · ` : ""}
-            {n.online ? "Online" : "Offline"}
-            {!n.mine && n.ownerName ? ` · ${n.ownerName}'s` : ""}
-          </div>
+          <h1 className="text-[22px] font-bold tracking-tight truncate">{n.name}</h1>
+          <div className="text-[13px] text-faint truncate">{[n.mine ? "You" : n.ownerName ? `${n.ownerName}'s` : null, n.capabilities ? osName(n.capabilities.platform) : null].filter(Boolean).join(" · ")}</div>
         </div>
-        {menu.length > 0 && (
-          <Menu
-            align="right"
-            items={menu}
-            trigger={(open, toggle) => (
-              <button className={cx("p-1.5 rounded-md text-muted hover:bg-hover hover:text-ink", open && "bg-hover text-ink")} aria-label={`More for ${n.name}`} onClick={toggle}>
-                <MoreHorizontal size={18} />
-              </button>
-            )}
-          />
-        )}
+        <Pill tone={st.tone}>
+          {n.paused && st.label === "Paused" && <Pause size={11} />}
+          {st.label}
+        </Pill>
       </header>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl p-4 md:p-8 space-y-3">
+        <div className="max-w-3xl p-4 md:px-6 md:pb-8 space-y-3.5">
           {error && (
             <p role="alert" className="text-xs text-bad">
               {error}
             </p>
           )}
-          {(n.mine || isOwner) && <ConnectDevice node={n} onChange={refresh} />}
+          {n.paused && (
+            <p className="rounded-2xl bg-card px-4 py-3 text-sm text-muted">
+              Paused at the device. Resume it there with <code>wisp node resume</code>.
+            </p>
+          )}
+          {!n.online && canManage && <OfflineHelp node={n} onChanged={refresh} />}
+          {n.update?.state && n.update.state !== "idle" && <UpdateStatus node={n} />}
+          <RoleSection node={n} onChange={refresh} />
           <AgentsHere node={n} onAdd={() => setCreating(true)} />
           {n.mine && <YourScreen node={n} />}
           {n.mine && remoteDesktop && <RemoteDesktop node={n} onChange={refresh} />}
-          <section className="rounded-2xl border border-line bg-panel">
-            <button className="w-full px-4 py-3 flex items-center text-sm text-muted hover:text-ink" aria-expanded={more} onClick={() => setMore(!more)}>
-              <span className="flex-1 text-left">More</span>
-              <ChevronDown size={16} className={cx("transition-transform", more && "rotate-180")} />
-            </button>
-            {more && (
-              <div className="px-4 pb-4 -mt-3">
-                <DeviceAccess node={n} onChange={refresh} />
-                {n.mine && (
-                  <p className="mt-3 text-xs text-muted">
-                    At {n.name}: <code>wisp node screen code</code> picks a new screen code, and <code>wisp node pause</code> stops everything there until <code>wisp node resume</code>.
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
+          <Harnesses node={n} />
+          {canManage && (
+            <section className="rounded-3xl bg-card divide-y divide-line overflow-hidden">
+              {isOwner && n.online && (
+                <button disabled={busyUpdate} onClick={update} className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-hover disabled:opacity-50">
+                  <Download size={18} className="text-muted shrink-0" />
+                  <span className="flex-1">
+                    <span className="block text-[15px] font-medium">{busyUpdate ? "Updating…" : "Update Wisp"}</span>
+                    <span className="block text-xs text-faint">Get the latest Wisp on this device and restart it</span>
+                  </span>
+                </button>
+              )}
+              <button onClick={remove} className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-hover text-bad">
+                <Trash2 size={18} className="shrink-0" />
+                <span className="flex-1">
+                  <span className="block text-[15px] font-medium">Remove device</span>
+                  <span className="block text-xs text-faint">Its token stops working.</span>
+                </span>
+              </button>
+            </section>
+          )}
+          {n.mine && (
+            <p className="px-1 text-xs text-muted">
+              At {n.name}: <code>wisp node screen code</code> picks a new screen code, and <code>wisp node pause</code> stops everything there until <code>wisp node resume</code>.
+            </p>
+          )}
         </div>
       </div>
       {creating && <CreateAgentHere nodeId={n.id} onClose={() => setCreating(false)} />}
     </div>
+  );
+}
+
+/** What the device does for agents, and who else may add agents and VMs to it. */
+const ROLE_ROWS: { id: DeviceRole; title: string; body: string }[] = [
+  { id: "vms", title: "Runs VMs", body: "Agents get their own virtual computer here" },
+  { id: "screen", title: "Lets agents use its screen", body: "Agents ask before they take over your screen" },
+  { id: "headless", title: "Headless", body: "Agents work in the background only" },
+];
+
+function RoleSection({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+  const patch = async (body: object) => {
+    await api("PATCH", `/api/nodes/${n.id}`, body).catch((err) => alert((err as Error).message));
+    onChange();
+  };
+  return (
+    <section className="rounded-3xl bg-card p-4 space-y-3">
+      <h2 className="font-semibold text-[15px]">What this device does for agents</h2>
+      <div role="radiogroup" aria-label={`What ${n.name} does for agents`} className="space-y-2">
+        {ROLE_ROWS.map((r) => {
+          const on = n.role === r.id;
+          return (
+            <button key={r.id} type="button" role="radio" aria-checked={on} disabled={!n.mine} onClick={() => void patch({ role: r.id })} className={cx("w-full text-left rounded-2xl border px-4 py-3 flex items-center gap-3 disabled:cursor-default", on ? "border-accent bg-accent-soft" : "border-line bg-panel hover:bg-hover")}>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-medium">{r.title}</span>
+                <span className="block text-xs text-muted">{r.body}</span>
+              </span>
+              {on && <Check size={18} className="text-accent-text shrink-0" />}
+            </button>
+          );
+        })}
+        {!n.role && !n.mine && <p className="text-xs text-muted">No job chosen yet</p>}
+      </div>
+      <div className="flex items-center gap-3 pt-1">
+        <span className="flex-1">
+          <span className="block text-sm font-medium">{n.mine ? "Share with the organization" : n.shared ? "Shared" : "Private"}</span>
+          <span className="block text-xs text-muted">{n.mine ? "Let others in the organization add agents and VMs here" : n.shared ? "Anyone in the organization can add agents and VMs here." : `Only ${n.ownerName ?? "its owner"} can add agents and VMs here.`}</span>
+        </span>
+        {n.mine ? <Toggle on={n.shared} onChange={(shared) => void patch({ shared })} label="Let others in the organization add agents and VMs here" /> : n.shared ? <Users size={16} className="text-muted" /> : <Lock size={16} className="text-muted" />}
+      </div>
+    </section>
+  );
+}
+
+/** How to bring an offline device back, and a button to look again. */
+function OfflineHelp({ node: n, onChanged }: { node: NodeInfo; onChanged: () => void }) {
+  const [checking, setChecking] = useState(false);
+  const check = async () => {
+    setChecking(true);
+    await api("POST", `/api/nodes/${n.id}/refresh`).catch(() => {});
+    await new Promise((r) => setTimeout(r, 1500));
+    onChanged();
+    setChecking(false);
+  };
+  const steps = ["Turn it on and wake it up", "Make sure it is on the same Wi-Fi, or Away from home is on", n.lastSeen ? "Open Wisp on it if it is not running" : "Open Wisp on it and pick Join my Wisp"];
+  return (
+    <section className="rounded-3xl bg-card p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold text-[15px]">{n.name} is offline</h2>
+        <p className="text-sm text-muted">{connectionLine(n, timeAgo)}. Agents on it are paused until it is back.</p>
+      </div>
+      <h3 className="text-xs font-semibold text-faint">To bring it back</h3>
+      <ol className="space-y-2">
+        {steps.map((s, i) => (
+          <li key={s} className="flex items-center gap-3 rounded-2xl bg-panel border border-line px-3.5 py-2.5 text-sm">
+            <span className="size-6 shrink-0 rounded-full bg-chip grid place-items-center text-xs font-semibold">{i + 1}</span>
+            {s}
+          </li>
+        ))}
+      </ol>
+      <Button onClick={check} disabled={checking}>
+        <RefreshCw size={14} className={cx(checking && "animate-spin")} /> Check again
+      </Button>
+    </section>
+  );
+}
+
+/** Where an update is: getting the latest, restarting, or failed. */
+function UpdateStatus({ node: n }: { node: NodeInfo }) {
+  const failed = n.update?.state === "failed";
+  return (
+    <section className="rounded-3xl bg-card p-4 space-y-1.5" role="status">
+      <h2 className="font-semibold text-[15px] flex items-center gap-2">
+        {!failed && <Loader2 size={15} className="animate-spin text-muted" />}
+        {failed ? "Update failed" : `Updating Wisp on ${n.name}`}
+      </h2>
+      <p className={cx("text-sm whitespace-pre-wrap", failed ? "text-bad" : "text-muted")}>{n.update?.message || (failed ? "Try again from this page." : "Getting the latest Wisp and restarting it. Agents on this device pause for a moment, then pick up where they left off.")}</p>
+    </section>
+  );
+}
+
+/** The agent tools this device can run, with Install for the ones Wisp can install. */
+function Harnesses({ node: n }: { node: NodeInfo }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [howTo, setHowTo] = useState<HarnessInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const installed = new Map((n.harnesses ?? []).map((h) => [h.id, h.version]));
+  const list = HARNESSES.filter((h) => h.protocol !== "mcp");
+  const install = async (h: HarnessInfo) => {
+    setBusy(h.id);
+    setError(null);
+    setNote(null);
+    try {
+      await api("POST", `/api/nodes/${n.id}/install`, { harness: h.id });
+      setNote(`${h.label} is installed on ${n.name}. Sign it in there before agents use it: ${h.login ?? h.binary}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const refresh = async () => {
+    setChecking(true);
+    await api("POST", `/api/nodes/${n.id}/refresh`).catch((e) => setError((e as Error).message));
+    await new Promise((r) => setTimeout(r, 2500));
+    setChecking(false);
+  };
+  return (
+    <section className="rounded-3xl bg-card overflow-hidden">
+      <div className="px-4 pt-4 pb-1 flex items-center gap-2">
+        <h2 className="font-semibold text-[15px] flex-1">Agent harnesses</h2>
+        <Button variant="ghost" onClick={refresh} disabled={checking || !n.online}>
+          <RefreshCw size={14} className={cx(checking && "animate-spin")} /> Refresh
+        </Button>
+      </div>
+      {error && <p className="px-4 pb-2 text-sm text-bad whitespace-pre-wrap">{error}</p>}
+      {note && <p className="mx-4 mb-2 rounded-lg bg-ok/10 px-3 py-2 text-sm text-ok">{note}</p>}
+      <div className="divide-y divide-line">
+        {list.map((h) => (
+          <RuntimeRow key={h.id} h={h} device={n} version={installed.get(h.id)} busy={busy === h.id} onInstall={() => void install(h)} onHowTo={() => setHowTo(h)} />
+        ))}
+      </div>
+      {howTo && <HowToInstall h={howTo} device={n} onClose={() => setHowTo(null)} />}
+    </section>
   );
 }
 

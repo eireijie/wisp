@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Blocks, Brain, Building2, CornerDownLeft, FileText, Ghost, Hash, Inbox, LifeBuoy, ListTodo, MessageSquare, Monitor, Plug, Plus, Search, Server, Settings, SquarePen, Store, Users, Wand2 } from "lucide-react";
+import { BookOpen, Blocks, Brain, Building2, CornerDownLeft, FileText, Ghost, Hash, Inbox, LifeBuoy, ListTodo, MessageSquare, Monitor, Plug, Plus, Search, Settings, SquarePen, Store, Users, Wand2 } from "lucide-react";
 import type { Agent, Channel, Message } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, useTeams } from "../store.ts";
@@ -252,11 +252,10 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
       pageRow("inbox", <Inbox size={15} />, "Inbox", () => go({ view: "dashboard" }), "dashboard waiting approvals", "⌘1"),
       pageRow("chats", <MessageSquare size={15} />, "Chats", () => (location.hash = chatsTarget()), "conversations teams", "⌘2"),
       pageRow("agents", <Ghost size={15} />, "Agents", () => go({ view: "agents", agentId: null }), "manage helpers", "⌘3"),
-      ...(!guest ? [pageRow("computers", <Monitor size={15} />, "Computers", () => go({ view: "computers", computerId: null }), "screens vm", "⌘4")] : []),
+      ...(!guest ? [pageRow("computers", <Monitor size={15} />, "Computers", () => go({ view: "computers", computerId: null }), "screens vm devices machines nodes", "⌘4")] : []),
       pageRow("vault", <BookOpen size={15} />, "Memory", () => go({ view: "vault", path: null }), "notes vault"),
       ...(features.tasks ? [pageRow("tasks", <ListTodo size={15} />, "Tasks", () => go({ view: "tasks" }), "work board")] : []),
       pageRow("marketplace", <Store size={15} />, "Marketplace", () => go({ view: "marketplace" }), "apps skills shop connect"),
-      pageRow("devices", <Server size={15} />, "Devices", () => go({ view: "nodes" }), "nodes machines"),
       pageRow("connectors", <Plug size={15} />, "Connected apps", () => go({ view: "connectors" }), "connectors mcp gmail slack integrations"),
       pageRow("skills", <Wand2 size={15} />, "Skills", () => go({ view: "skills" }), "shop learn"),
       pageRow("mods", <Blocks size={15} />, "Mods", () => go({ view: "mods" }), "features optional parts"),

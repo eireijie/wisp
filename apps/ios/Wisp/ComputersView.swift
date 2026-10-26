@@ -1,108 +1,32 @@
 import SwiftUI
 
-/** Agents' computers: watch any of them live, take control when one needs you, and hand it back. */
-struct ComputersView: View {
-  @Environment(Store.self) private var store
-  @State private var path: [String] = []
-  @State private var adding = false
-
-  var body: some View {
-    NavigationStack(path: $path) {
-      ScrollView {
-        if store.computers.isEmpty {
-          ContentUnavailableView {
-            Label("No computers yet", systemImage: "desktopcomputer")
-          } description: {
-            Text("Give an agent a computer: a VM on one of your devices, your own screen, or an Orgo cloud computer.")
-          } actions: {
-            Button("Add computer") { adding = true }.primaryButton()
-          }
-          .padding(.top, 80)
-        }
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
-          ForEach(store.computers) { c in
-            NavigationLink(value: c.id) {
-              VStack(alignment: .leading, spacing: 8) {
-                ScreenThumb(computer: c)
-                HStack(alignment: .firstTextBaseline) {
-                  VStack(alignment: .leading, spacing: 2) {
-                    Text(c.name).font(.headline)
-                    Text(c.kindLabel).font(.caption).foregroundStyle(.secondary)
-                  }
-                  Spacer()
-                  ComputerStatus(computer: c)
-                }
-                if let help = c.help {
-                  Label("\(store.agent(help.agentId)?.name ?? "An agent") needs you: \(help.request)", systemImage: "hand.raised.fill")
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(.orange)
-                    .lineLimit(2)
-                }
-              }
-              .card(Corner.card, padding: 10)
-            }
-            .buttonStyle(.plain)
-          }
-        }
-        .padding(16)
-      }
-      .navigationTitle("Computers")
-      .toolbar {
-        ToolbarItem(placement: .primaryAction) {
-          Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Add computer")
-        }
-      }
-      .sheet(isPresented: $adding) { AddComputerView { path = [$0.id] } }
-      .refreshable { await store.refreshComputers() }
-      .navigationDestination(for: String.self) { ComputerDetail(computerId: $0) }
-    }
-    .task(id: store.route) {
-      // a tapped "needs you on its computer" notification
-      guard store.canViewComputers, case .computer(let id) = store.route else { return }
-      store.route = nil
-      if !store.computers.contains(where: { $0.id == id }) { await store.refreshComputers() }
-      path = [id]
-    }
-  }
-}
-
-struct ComputerStatus: View {
-  var computer: Computer
-  var body: some View {
-    let (word, color): (String, Color) = switch computer.status {
-    case "ready": computer.controller != nil ? ("You're in control", .orange) : ("Ready", .green)
-    case "starting": ("Starting", .blue)
-    case "error": ("Problem", .red)
-    case "stopped": ("Stopped", .gray)
-    default: ("Offline", .gray)
-    }
-    HStack(spacing: 5) {
-      GlowDot(color: color)
-      Text(word).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-    }
-  }
-}
+// One computer, live: its screen, taking control and handing back, keys, clipboard, files, details
+// and the activity log, teaching a task (comp-Detail.dc.html, comp-Control.dc.html and friends).
+// The Computers tab itself is in ComputersHome.swift.
 
 /** The latest screen, refreshed every few seconds while it's visible. */
 struct ScreenThumb: View {
   @Environment(Store.self) private var store
   var computer: Computer
+  var radius: CGFloat = 18
   @State private var image: UIImage?
 
   var body: some View {
+    let live = image != nil && computer.status == "ready" && computer.code == nil
     ZStack {
-      RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(.secondarySystemBackground))
-      if let image, computer.status == "ready", computer.code == nil {
+      RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Color(hex: 0x0D0D0F))
+      if let image, live {
         Image(uiImage: image).resizable().scaledToFit()
       } else {
         Image(systemName: computer.code != nil ? "lock" : computer.status == "ready" ? "display" : "moon.zzz")
-          .font(.title)
-          .foregroundStyle(.tertiary)
+          .font(.system(size: radius > 14 ? 26 : 16))
+          .foregroundStyle(Color.white.opacity(0.35))
       }
     }
     .aspectRatio(16 / 10, contentMode: .fit)
-    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(.separator).opacity(0.5)))
+    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Palette.hairline))
+    .opacity(computer.isOnline ? 1 : 0.6)
     .task(id: "\(computer.id):\(computer.status):\(computer.code ?? ""):\(store.session)") {
       image = nil
       // a screen with a code opens only with it, from its own page
@@ -142,6 +66,7 @@ struct ComputerDetail: View {
   @FocusState private var typingFocused: Bool
   /** a screen with a code: asking for it, what the device said about the last one, and a retry */
   @State private var needCode = false
+  @State private var showCodeSheet = false
   @State private var codeError: String?
   @State private var codeTry = 0
   /** the menu's sheets and questions */
@@ -154,7 +79,7 @@ struct ComputerDetail: View {
   @State private var removing = false
   @State private var sharing: SharedFile?
   @State private var handingBack = false
-  @State private var handBackNote = ""
+  @State private var helpLater = false
   /** teaching a task: choosing who learns it, recording, naming it, and where to look afterwards */
   @State private var pickingTeacher = false
   @State private var teach: TeachSession?
@@ -163,81 +88,169 @@ struct ComputerDetail: View {
 
   var body: some View {
     if store.canViewComputers, let c = computer {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          if let help = c.help {
-            HStack(alignment: .top, spacing: 12) {
-              AgentAvatar(agent: store.agent(help.agentId), size: 36, showStatus: false)
-              VStack(alignment: .leading, spacing: 3) {
-                Text("\(store.agent(help.agentId)?.name ?? "An agent") needs you").font(.subheadline.weight(.semibold))
-                Text(help.request).font(.callout)
-              }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color.orange.opacity(0.14)))
+      VStack(spacing: 0) {
+        TopBar {
+          CircleButton(symbol: "chevron.left", label: "Back", id: "computer-back") { dismiss() }
+        } center: {
+          NamePill(title: c.name) {
+            if let a = c.agentIds.first.flatMap({ store.agent($0) }) { AgentAvatar(agent: a, size: 24, showStatus: false) }
           }
-
-          if let teach { TeachBar(session: teach, cancel: { stopTeaching(c) }, done: { savingLesson = true }) }
-
-          screen(c)
-            .overlay(alignment: .bottom) {
-              if let note {
-                Text(note).font(.footnote.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 8).glassCapsule().padding(10).transition(.opacity)
-              }
-            }
-
-          if inControl { controls(c) }
-
-          if c.status == "ready" {
-            if teach == nil { controlButton(c) }
-          } else {
-            HStack { ComputerStatus(computer: c); Spacer() }
-          }
-          Text(hint(c)).font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-          if let error { Text(error).font(.footnote).foregroundStyle(.red) }
-          if c.kind == "device" { OwnScreenNote() }
+        } trailing: {
+          moreMenu(c)
         }
-        .padding(16)
+        ScrollView {
+          VStack(alignment: .leading, spacing: 14) {
+            if let help = c.help, !helpLater, !inControl { helpCard(c, help) }
+            if let teach { TeachBar(session: teach, cancel: { stopTeaching(c) }, done: { savingLesson = true }) }
+
+            screen(c)
+              .overlay(alignment: .bottom) {
+                if let note {
+                  Text(note).font(.footnote.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 8).glassCapsule().padding(10).transition(.opacity)
+                }
+              }
+
+            statusLine(c)
+            if inControl { controls(c) }
+            if c.status == "ready", teach == nil { controlButton(c) }
+            if c.isOnline { chips(c) }
+            rows(c)
+            Text(hint(c)).font(.footnote).foregroundStyle(Palette.faint).frame(maxWidth: .infinity)
+            if let error { Text(error).font(.footnote).foregroundStyle(Palette.red) }
+            if c.kind == "device" { OwnScreenNote() }
+          }
+          .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 30)
+        }
       }
-      .navigationTitle(c.name)
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) { ComputerStatus(computer: c) }
-        ToolbarItem(placement: .topBarTrailing) { moreMenu(c) }
-      }
+      .background(Palette.ground.ignoresSafeArea())
+      .toolbar(.hidden, for: .navigationBar)
       .toolbar(.hidden, for: .tabBar)
+      .tint(Palette.text)
       .task(id: "\(c.status) \(c.code ?? "") \(codeTry) \(store.session)") { await stream(c) }
       .task { if store.nodes.isEmpty { try? await store.refreshNodes() } }
       .onDisappear { if let c = computer, teach != nil { stopTeaching(c) } }
+      .onChange(of: needCode) { _, now in showCodeSheet = now }
       .sheet(isPresented: $showDetails) { ComputerDetailsView(computerId: c.id) }
       .sheet(isPresented: $showFiles) { ComputerFilesView(computerId: c.id) }
       .sheet(isPresented: $showClipboard) { ComputerClipboardView(computerId: c.id) }
       .sheet(item: $sharing) { ShareSheet(items: [$0.url]).ignoresSafeArea() }
       .sheet(isPresented: $pickingTeacher) { TeachAgentPicker(computer: c) { startTeaching(c, with: $0) } }
+      .sheet(isPresented: $showCodeSheet) {
+        ScreenCodeSheet(computer: c, deviceName: store.nodes.first { $0.id == c.nodeId }?.name ?? c.name, error: codeError) { code in
+          store.screenCodes[c.id] = code
+          codeError = nil
+          codeTry += 1
+        }
+      }
+      .sheet(isPresented: $handingBack) {
+        HandBackSheet(agentName: store.agent(c.help?.agentId ?? c.agentIds.first ?? "")?.name ?? "the agent") { handBack(c, note: $0) }
+      }
       .sheet(isPresented: $savingLesson) {
         if let teach { TeachSaveSheet(session: teach, computer: c) { lessonSaved(c, teach.agent) } }
       }
       .sheet(item: $lessonAgent) { a in NavigationStack { RoutinesView(agent: a).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { lessonAgent = nil } } } } }
-      .alert("Rename computer", isPresented: $renaming) {
+      .alert("Rename", isPresented: $renaming) {
         TextField("Name", text: $newName)
         Button("Cancel", role: .cancel) {}
         Button("Save") { rename(c) }
       }
-      .alert("Hand back", isPresented: $handingBack) {
-        TextField("What you did (optional)", text: $handBackNote)
-        Button("Cancel", role: .cancel) {}
-        Button("Hand back") { handBack(c, note: handBackNote) }
-      } message: {
-        Text("\(store.agent(c.help?.agentId ?? "")?.name ?? "The agent") picks up from here. Tell it what you did, if you like.")
-      }
       .confirmationDialog("Remove \(c.name)?", isPresented: $removing, titleVisibility: .visible) {
-        Button(c.kind == "device" ? "Stop sharing this screen" : "Delete computer", role: .destructive) { remove(c) }
+        Button(c.kind == "device" ? "Stop sharing this screen" : "Remove", role: .destructive) { remove(c) }
       } message: {
         Text(ComputerRights.removeWarning(c))
       }
     } else if store.canViewComputers {
       ContentUnavailableView("Computer not found", systemImage: "desktopcomputer.trianglebadge.exclamationmark")
+    }
+  }
+
+  // MARK: pieces
+
+  /** "Ghosty needs you on this computer": take over, or not now. */
+  private func helpCard(_ c: Computer, _ help: Computer.Help) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .top, spacing: 12) {
+        AgentAvatar(agent: store.agent(help.agentId), size: 36, showStatus: false)
+        VStack(alignment: .leading, spacing: 3) {
+          Text("\(store.agent(help.agentId)?.name ?? "An agent") needs you on this computer").font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text)
+          Text(help.request).font(.system(size: 14)).foregroundStyle(Palette.muted)
+        }
+      }
+      HStack(spacing: 10) {
+        Button { takeControl(c) } label: { Text("Take over").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large).disabled(busy || c.status != "ready" || c.controller != nil)
+        Button { helpLater = true } label: { Text("Not now").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
+      }
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Palette.card))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.blue.opacity(0.5)))
+    .accessibilityIdentifier("computer-help")
+  }
+
+  /** What's happening, in one line, with the state pill. */
+  @ViewBuilder private func statusLine(_ c: Computer) -> some View {
+    let s = store.state(of: c)
+    HStack(spacing: 10) {
+      if s.working { WorkingDots(color: Palette.faint) }
+      Text(statusText(c, s)).font(.system(size: 14)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).lineLimit(2)
+      ComputerPill(text: s.label, tone: s.tone)
+    }
+    .padding(.horizontal, 4)
+  }
+
+  private func statusText(_ c: Computer, _ s: ComputerState) -> String {
+    let who = c.agentIds.first.flatMap { store.agent($0)?.name } ?? "The agent"
+    if inControl { return "You are in control. \(who) is paused." }
+    if s.working, let a = c.activity { return "\(store.agent(a.agentId)?.name ?? who) is working · \(a.text)" }
+    if c.status != "ready" { return c.statusText.isEmpty ? "It starts when an agent next uses it." : c.statusText }
+    return store.doing(c)
+  }
+
+  /** Keys, Clipboard, Files, Screenshot. */
+  @ViewBuilder private func chips(_ c: Computer) -> some View {
+    HStack(spacing: 10) {
+      if inControl {
+        Menu {
+          Button("Return", systemImage: "return") { key(c, "Enter") }
+          Button("Tab", systemImage: "arrow.right.to.line") { key(c, "Tab") }
+          Button("Escape", systemImage: "escape") { key(c, "Escape") }
+          Button("Delete", systemImage: "delete.left") { key(c, "Backspace") }
+        } label: { ChipFace(symbol: "keyboard", title: "Keys") }
+          .accessibilityIdentifier("chip-keys")
+      } else {
+        ChipFace(symbol: "keyboard", title: "Keys").opacity(0.4).accessibilityHidden(true)
+      }
+      if c.canTransfer {
+        if inControl {
+          Menu {
+            Button("Paste from iPhone", systemImage: "doc.on.clipboard") { pasteFromPhone(c) }
+            Button("Copy to iPhone", systemImage: "iphone.and.arrow.forward") { copyToPhone(c) }
+            Button("Send text or open a link…", systemImage: "link") { showClipboard = true }
+          } label: { ChipFace(symbol: "doc.on.clipboard", title: "Clipboard") }
+            .accessibilityIdentifier("chip-clipboard")
+        } else {
+          Button { showClipboard = true } label: { ChipFace(symbol: "doc.on.clipboard", title: "Clipboard") }.buttonStyle(.plain).accessibilityIdentifier("chip-clipboard")
+        }
+        Button { showFiles = true } label: { ChipFace(symbol: "folder", title: "Files") }.buttonStyle(.plain).accessibilityIdentifier("chip-files")
+        if c.status == "ready" { Button { screenshot(c) } label: { ChipFace(symbol: "camera", title: "Screenshot") }.buttonStyle(.plain).accessibilityIdentifier("chip-screenshot") }
+      }
+    }
+  }
+
+  /** Details, the agents on it, and Teach a task. */
+  @ViewBuilder private func rows(_ c: Computer) -> some View {
+    let agents = c.agentIds.compactMap { store.agent($0) }
+    CardGroup {
+      Button { showDetails = true } label: { RowLabel(title: "Details", value: store.state(of: c).label) }.buttonStyle(.plain).accessibilityIdentifier("computer-details")
+      Button { showDetails = true } label: {
+        RowLabel(title: "Agents on this computer", value: agents.isEmpty ? "None" : agents.map(\.name).joined(separator: ", "))
+      }.buttonStyle(.plain)
+      if store.features.teach, c.canTransfer, c.status == "ready", teach == nil, c.controller == nil || inControl {
+        Button { pickingTeacher = true } label: {
+          RowLabel(title: "Teach a task", subtitle: "Show \(agents.first?.name ?? "an agent") once, it learns")
+        }.buttonStyle(.plain).accessibilityIdentifier("computer-teach")
+      }
     }
   }
 
@@ -279,25 +292,8 @@ struct ComputerDetail: View {
         }
         toolButton("chevron.up", "Scroll up") { scroll(c, "up") }
         toolButton("chevron.down", "Scroll down") { scroll(c, "down") }
-        Menu {
-          Section("Keys") {
-            Button("Return", systemImage: "return") { key(c, "Enter") }
-            Button("Tab", systemImage: "arrow.right.to.line") { key(c, "Tab") }
-            Button("Escape", systemImage: "escape") { key(c, "Escape") }
-            Button("Delete", systemImage: "delete.left") { key(c, "Backspace") }
-          }
-          Section("Clipboard") {
-            Button("Paste from iPhone", systemImage: "doc.on.clipboard") { pasteFromPhone(c) }
-            Button("Copy to iPhone", systemImage: "iphone.and.arrow.forward") { copyToPhone(c) }
-            Button("Send text or open a link…", systemImage: "link") { showClipboard = true }
-          }
-        } label: {
-          Image(systemName: "ellipsis").font(.title3.weight(.semibold)).frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
-        }
-        .glass(18, interactive: true)
-        .accessibilityLabel("More")
       }
-      .foregroundStyle(.primary)
+      .foregroundStyle(Palette.text)
     }
   }
 
@@ -318,31 +314,23 @@ struct ComputerDetail: View {
 
   @ViewBuilder private func moreMenu(_ c: Computer) -> some View {
     Menu {
-      Button("Details", systemImage: "info.circle") { showDetails = true }
-      if c.canTransfer {
-        Button("Files", systemImage: "folder") { showFiles = true }
-        Button("Clipboard", systemImage: "doc.on.clipboard") { showClipboard = true }
-      }
-      if store.features.teach, c.canTransfer, c.status == "ready", teach == nil, c.controller == nil || inControl {
-        Button("Teach a task", systemImage: "record.circle") { pickingTeacher = true }
-      }
-      Divider()
+      Button("Rename", systemImage: "pencil") { newName = c.name; renaming = true }
       if c.canTransfer, c.status == "ready" {
         Button("Save a screenshot", systemImage: "camera") { screenshot(c) }
       }
-      Button("Rename", systemImage: "pencil") { newName = c.name; renaming = true }
       if c.kind != "device" {
         let stopped = c.status == "stopped"
-        Button(stopped ? "Start" : "Stop", systemImage: stopped ? "play" : "power") { setRunning(c, stopped) }
+        Button(stopped ? "Start this computer" : "Stop this computer", systemImage: stopped ? "play" : "power") { setRunning(c, stopped) }
       }
       if canRemove(c) {
         Divider()
-        Button(c.kind == "device" ? "Stop sharing this screen" : "Delete computer", systemImage: "trash", role: .destructive) { removing = true }
+        Button(c.kind == "device" ? "Stop sharing this screen" : "Remove", systemImage: "trash", role: .destructive) { removing = true }
       }
     } label: {
-      Image(systemName: "ellipsis.circle")
+      CircleLabel(symbol: "ellipsis")
     }
     .accessibilityLabel("More")
+    .accessibilityIdentifier("computer-more")
   }
 
   private func screenshot(_ c: Computer) {
@@ -450,7 +438,7 @@ struct ComputerDetail: View {
 
   @ViewBuilder private func screen(_ c: Computer) -> some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black)
+      RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(hex: 0x0D0D0F))
       if let image, c.status == "ready", !needCode, imageCode == c.code {
         GeometryReader { geo in
           let fit = fitted(in: geo.size)
@@ -467,40 +455,48 @@ struct ComputerDetail: View {
             .onTapGesture(coordinateSpace: .local) { pt in tap(c, at: pt, in: geo.size) }
         }
       } else if needCode && c.status == "ready" {
-        CodePrompt(computer: c, error: codeError) { code in
-          store.screenCodes[c.id] = code
-          codeError = nil
-          codeTry += 1
-        }
-        .padding(20)
+        VStack(spacing: 10) {
+          Image(systemName: "lock").font(.title2).foregroundStyle(.white.opacity(0.7))
+          Text("Enter \(c.name)'s \(c.codeLabel) to open it.").font(.callout).foregroundStyle(.white).multilineTextAlignment(.center)
+          Button("Enter \(c.codeLabel)") { showCodeSheet = true }.buttonStyle(.bordered).tint(.white).accessibilityIdentifier("computer-enter-code")
+        }.padding(20)
       } else if c.status == "ready" {
         ProgressView().tint(.white)
       } else {
         Text(c.status == "starting" ? "Starting…" : "This computer isn't running").foregroundStyle(.white.opacity(0.7)).font(.callout)
       }
     }
-    .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: needCode ? .fill : .fit)
-    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(inControl ? Color.blue : .clear, lineWidth: 3))
-    .shadow(color: inControl ? Color.blue.opacity(0.35) : .clear, radius: 14)
+    .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: .fit)
+    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(inControl ? Palette.blue : Palette.hairline, lineWidth: inControl ? 3 : 1))
+    .shadow(color: inControl ? Palette.blue.opacity(0.35) : .clear, radius: 14)
   }
 
+  /** Take control (white pill), or hand back to the agent. */
   @ViewBuilder private func controlButton(_ c: Computer) -> some View {
-    let button = Button {
-      if inControl && c.help != nil { handBackNote = ""; handingBack = true; return }
-      if inControl { return handBack(c, note: nil) }
-      busy = true
-      Task {
-        do { try await store.control(c, take: true) } catch { self.error = error.localizedDescription }
-        busy = false
+    let who = c.agentIds.first.flatMap { store.agent($0)?.name }
+    Button {
+      if inControl {
+        if !c.agentIds.isEmpty { handingBack = true } else { handBack(c, note: nil) }
+        return
       }
+      takeControl(c)
     } label: {
-      Label(inControl ? "Hand back" : "Take control", systemImage: inControl ? "hand.wave.fill" : "hand.point.up.left.fill")
-        .fontWeight(.semibold)
-        .frame(maxWidth: .infinity)
+      Label(inControl ? "Hand back\(who.map { " to \($0)" } ?? "")" : "Take control", systemImage: inControl ? "hand.wave" : "hand.point.up.left")
+        .font(.system(size: 17, weight: .semibold))
+        .frame(maxWidth: .infinity, minHeight: 28)
     }
+    .primaryButton()
     .disabled(busy || (c.controller != nil && !inControl))
-    if inControl { button.secondaryButton().controlSize(.large) } else { button.primaryButton() }
+    .accessibilityIdentifier("computer-control")
+  }
+
+  private func takeControl(_ c: Computer) {
+    busy = true
+    Task {
+      do { try await store.control(c, take: true); error = nil } catch is Store.Stale {} catch { self.error = error.localizedDescription }
+      busy = false
+    }
   }
 
   private func fitted(in size: CGSize) -> CGSize {
@@ -692,36 +688,6 @@ struct ScreenCodeField: View {
       .padding(.vertical, 11)
       .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
       .accessibilityLabel("The screen's \(kind == "pin" ? "PIN" : "password")")
-  }
-}
-
-/** Asking for the code before a screen opens, on the dark screen background. */
-private struct CodePrompt: View {
-  var computer: Computer
-  var error: String?
-  var onSubmit: (String) -> Void
-  @State private var code = ""
-
-  var body: some View {
-    VStack(spacing: 12) {
-      Image(systemName: "lock").font(.title2).foregroundStyle(.white.opacity(0.7))
-      Text("Enter \(computer.name)'s \(computer.codeLabel) to open it.").font(.callout).foregroundStyle(.white).multilineTextAlignment(.center)
-      ScreenCodeField(kind: computer.code ?? "pin", code: $code) { submit() }
-        .frame(maxWidth: 240)
-        .environment(\.colorScheme, .light)
-      // wraps instead of trailing off: the screen box proposes more width than it shows
-      if let error { Text(error).font(.footnote).foregroundStyle(.red.opacity(0.9)).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true) }
-      Button("Open") { submit() }
-        .buttonStyle(.bordered)
-        .tint(.white)
-        .disabled(!ScreenCodeField.ready(computer.code, code))
-    }
-  }
-
-  private func submit() {
-    guard ScreenCodeField.ready(computer.code, code) else { return }
-    onSubmit(code)
-    code = ""
   }
 }
 

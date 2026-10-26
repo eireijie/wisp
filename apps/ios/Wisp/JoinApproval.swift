@@ -77,39 +77,3 @@ struct JoinApprovalSheet: View {
     action.run { try await store.decideJoin(request, approve: approve) }
   }
 }
-
-/** A link a new computer pastes into Join my Wisp, then approve it here. */
-struct JoinInviteView: View {
-  @Environment(Store.self) private var store
-  @State private var invite: JoinInvite?
-  @State private var action = FormAction()
-  private var expired: Bool { invite.flatMap { Wire.date($0.expiresAt) }.map { $0 <= Date() } ?? false }
-
-  var body: some View {
-    Form {
-      Section("On the other computer") {
-        Label("Get Wisp on it from the Wisp website.", systemImage: "1.circle")
-        Label("Pick Join my Wisp.", systemImage: "2.circle")
-        Label("Paste this link. On this Wi-Fi it can also find you by itself.", systemImage: "3.circle")
-        Label("Approve it here when this phone asks.", systemImage: "4.circle")
-      }
-      Section("Join link") {
-        if let invite, !expired {
-          Text(invite.url).font(.footnote.monospaced()).textSelection(.enabled)
-          ShareLink("Share link", item: invite.url)
-          Button("Copy link") { UIPasteboard.general.string = invite.url }
-          if let date = Wire.date(invite.expiresAt) { Text("Works once, until \(date, format: .dateTime.month().day().hour().minute()).").font(.footnote).foregroundStyle(.secondary) }
-        }
-        if action.busy { HStack { ProgressView(); Text("Making a join link…") } }
-        if !action.busy && (invite == nil || expired) { Button(expired ? "Make a new link" : "Try again", action: make) }
-        InlineError(error: action.error)
-      }
-      if let url = invite.flatMap({ URL(string: $0.url) }), !["https"].contains(url.scheme ?? "") {
-        Section { Text("This link only works on the same Wi-Fi. To add a computer somewhere else, turn on Away from home in Settings, then make a new link.").font(.footnote) }
-      }
-    }.navigationTitle("Join with a link")
-      .task { if store.isOwner && invite == nil { make() } }
-  }
-
-  private func make() { action.run { invite = try await store.makeJoinInvite() } }
-}

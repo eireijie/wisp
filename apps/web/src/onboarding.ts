@@ -200,7 +200,7 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
       status: "bad",
       label: `${device.name} is on and connected`,
       fix: device.paused ? `${device.name} is paused. Resume Wisp on it.` : `Turn on ${device.name} and make sure Wisp is running there.`,
-      to: { view: "nodes" },
+      to: { view: "computers", computerId: null },
     });
     out.push(unknown("harness", "Its AI is installed there"));
     return out;

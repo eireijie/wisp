@@ -543,13 +543,13 @@ function ReadinessCard() {
   if (r.kind === "waiting") {
     // the fix depends on what's missing: a device, the device coming back, or the harness on it
     const next = setupNextStep(r.agent, devices);
-    const onDevice = next?.href === href({ view: "nodes" });
+    const onDevice = next?.href === href({ view: "computers", computerId: null });
     return (
       <Frame agent={r.agent} title={onDevice && r.deviceName ? `${r.agent.name} is waiting for ${r.deviceName}` : `${r.agent.name} isn't ready yet`} sub={next ? next.text : r.problem}>
         {bar}
         <div className="flex flex-wrap gap-2.5">
-          <CardButton tone="primary" onClick={() => (location.hash = next?.href ?? href({ view: "nodes" }))}>
-            {next?.action ?? "See devices"}
+          <CardButton tone="primary" onClick={() => (location.hash = next?.href ?? href({ view: "computers", computerId: null }))}>
+            {next?.action ?? "See computers"}
           </CardButton>
           <CardButton onClick={() => go({ view: "agents", agentId: r.agent.id, tab: "model" })}>Change its AI</CardButton>
         </div>

@@ -45,7 +45,7 @@ struct NativeSettingsView: View {
         CardLabel("Devices")
         CardGroup {
           NavigationLink { ComputersView() } label: { RowLabel(title: "Computers and devices") }.accessibilityIdentifier("settings-computers")
-          NavigationLink { DevicesSettingsView() } label: { RowLabel(title: "Devices") }.accessibilityIdentifier("settings-devices")
+          NavigationLink { DevicesSettingsView() } label: { RowLabel(title: "Away from home") }.accessibilityIdentifier("settings-devices")
           if store.canManage { NavigationLink { ComputerSettingsView() } label: { RowLabel(title: "Agent computers") }.accessibilityIdentifier("settings-agent-computers") }
           if store.isOwner { NavigationLink { AccessView() } label: { RowLabel(title: "Access") }.accessibilityIdentifier("settings-access") }
           NavigationLink { MobileSettingsView() } label: { RowLabel(title: "Mobile") }.accessibilityIdentifier("settings-mobile")
