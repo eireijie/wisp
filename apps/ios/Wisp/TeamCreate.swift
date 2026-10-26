@@ -30,6 +30,8 @@ struct NewChannel: View {
   @State private var action = FormAction()
 
   private var slug: String { ManagementText.channelName(model.name) }
+  /** the name as the person typed it, for headings; the slug is only what gets sent */
+  private var shownName: String { let t = model.name.trimmingCharacters(in: .whitespacesAndNewlines); return t.isEmpty ? slug : t }
   private var exists: Bool { store.channels.contains { $0.name == slug } }
   private var validName: Bool { slug.range(of: "^[a-z0-9][a-z0-9_-]{0,79}$", options: .regularExpression) != nil && !exists && model.topic.count <= 250 }
 
@@ -141,7 +143,7 @@ struct NewChannel: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 22) {
           VStack(alignment: .leading, spacing: 6) {
-            Text("How should \(slug) work?").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text)
+            Text("How should \(shownName) work?").font(.system(size: 28, weight: .bold)).foregroundStyle(Palette.text)
             Text("Pick a start. You can change every step later.").font(.system(size: 16)).foregroundStyle(Palette.muted)
           }
           .padding(.horizontal, 6)
@@ -436,7 +438,7 @@ private struct ReviewPage: View {
           HStack(spacing: 14) {
             TeamGhosts(agents: agents, seed: slug, size: 56)
             VStack(alignment: .leading, spacing: 4) {
-              Text(slug).font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.text)
+              Text(model.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? slug : model.name.trimmingCharacters(in: .whitespacesAndNewlines)).font(.system(size: 24, weight: .bold)).foregroundStyle(Palette.text)
               if !model.topic.isEmpty { Text(model.topic).font(.system(size: 15)).foregroundStyle(Palette.muted) }
             }
           }
