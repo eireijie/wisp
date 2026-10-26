@@ -132,7 +132,7 @@ struct MessageRow: View {
       if let thread { NavigationLink(value: thread) { Label("Reply in thread", systemImage: "arrowshape.turn.up.left") } }
       if store.canPin(message) {
         let pinned = store.isPinned(message)
-        Button(pinned ? "Unpin" : "Pin to channel", systemImage: pinned ? "pin.slash" : "pin") {
+        Button(pinned ? "Unpin" : "Pin to team", systemImage: pinned ? "pin.slash" : "pin") {
           Task { do { try await store.setPinned(message, !pinned) } catch { failure = error.localizedDescription } }
         }
       }

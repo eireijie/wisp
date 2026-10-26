@@ -53,7 +53,7 @@ final class SearchInboxTests: XCTestCase {
   }
 
   func testLocations() {
-    XCTAssertEqual(SearchText.location(channelName: "general", agentHandles: [:]), "#general")
+    XCTAssertEqual(SearchText.location(channelName: "general", agentHandles: [:]), "general")
     XCTAssertEqual(SearchText.location(channelName: "dm:u1:a1", agentHandles: ["a1": "maya"]), "DM with @maya")
     XCTAssertEqual(SearchText.location(channelName: "dm:u1:zz", agentHandles: [:]), "Direct message")
     XCTAssertEqual(SearchText.noteLocation(path: "shared/dinner-plans.md", title: "Dinner plans", people: [:], agents: [:]), "Memory › Shared › Dinner plans")

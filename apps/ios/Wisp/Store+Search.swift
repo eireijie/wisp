@@ -108,7 +108,7 @@ enum SearchText {
     case "shared": crumbs += ["Shared"] + ([id].compactMap { $0 } + rest).map(humanize)
     case "people": crumbs += [id.flatMap { people[$0] } ?? "A person"] + rest.map(humanize)
     case "agents": crumbs += [id.flatMap { agents[$0] }.map { "@\($0)" } ?? "An agent"] + rest.map(humanize)
-    case "teams": crumbs += [id.flatMap { teams[$0] }.map { "#\($0)" } ?? "A team"] + rest.map(humanize)
+    case "teams": crumbs += [id.flatMap { teams[$0] }.map { $0 } ?? "A team"] + rest.map(humanize)
     case "groups": crumbs += ["Groups"] + ([id].compactMap { $0 } + rest).map(humanize)
     default: crumbs += parts.map(humanize)
     }
@@ -125,7 +125,7 @@ enum SearchText {
 
   /** "DM with @maya" or "#general". DM channel names end with the agent id. */
   static func location(channelName: String, agentHandles: [String: String]) -> String {
-    guard channelName.hasPrefix("dm:") else { return "#\(channelName)" }
+    guard channelName.hasPrefix("dm:") else { return channelName }
     let id = channelName.split(separator: ":").last.map(String.init) ?? ""
     return agentHandles[id].map { "DM with @\($0)" } ?? "Direct message"
   }

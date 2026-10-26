@@ -1,6 +1,6 @@
 import SwiftUI
 
-/** Everything agents asked you, waiting and decided (opened from Needs you in Chats, or You). */
+/** Everything agents asked you, waiting and decided: the Inbox tab. */
 struct InboxView: View {
   @Environment(Store.self) private var store
   @State private var chat: Channel?
@@ -57,6 +57,7 @@ struct InboxView: View {
         }
       }
       .listStyle(.insetGrouped)
+      .groundBackground()
       .navigationTitle("Inbox")
       .toolbar {
         if store.features.background, let a = store.allowance {

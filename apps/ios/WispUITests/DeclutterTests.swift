@@ -28,7 +28,7 @@ final class DeclutterTests: XCTestCase {
     undo.tap()
     XCTAssertTrue(app.staticTexts["Undone"].waitForExistence(timeout: 10))
     shot("change-undone")
-    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.buttons["chat-back"].tap()
     settle()
 
     app.tabBars.buttons["Agents"].tap()
@@ -47,7 +47,8 @@ final class DeclutterTests: XCTestCase {
     shot("background-more")
 
     app.swipeDown(); app.swipeDown(); settle()
-    app.tabBars.buttons["You"].tap()
+    app.tabBars.buttons["Chats"].tap()
+    app.buttons["profile-button"].firstMatch.tap()
     tap("you-settings")
     tap("settings-usage")
     XCTAssertTrue(app.buttons["allowance-Medium"].waitForExistence(timeout: 10))

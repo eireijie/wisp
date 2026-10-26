@@ -30,7 +30,7 @@ struct AgentPolicyView: View {
           Toggle(isOn: $leadsCreate) {
             VStack(alignment: .leading, spacing: 2) {
               Text("Leads can create agents")
-              Text("A channel's lead can create an agent its team is missing. It joins the team chart under the lead.").font(.caption).foregroundStyle(.secondary)
+              Text("A team's lead can create an agent its team is missing. It joins the team chart under the lead.").font(.caption).foregroundStyle(.secondary)
             }
           }
           Toggle(isOn: $subAgents) {
@@ -48,7 +48,7 @@ struct AgentPolicyView: View {
       }
       Section("Loop protection") {
         Stepper("Hand-offs in a row: \(hops)", value: $hops, in: 1...30)
-        Stepper("Agent runs per channel per minute: \(runs)", value: $runs, in: 1...200)
+        Stepper("Agent runs per team per minute: \(runs)", value: $runs, in: 1...200)
       }.disabled(!store.isOwner || !loaded)
       if store.isOwner { Button("Save") { action.run { try await store.saveAgentPolicy(AgentPolicy(askBefore: ask.sorted(), maxHops: hops, maxRunsPerMinute: runs, defaultAccess: access,
         leadsCreateAgents: canSpawn ? leadsCreate : nil, subAgents: canSpawn ? subAgents : nil, maxAgentMade: canSpawn ? maxMade : nil)); saved = true } }.disabled(action.busy || !loaded) }

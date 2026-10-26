@@ -3,6 +3,7 @@ import SwiftUI
 /** Everyone you work with: each agent's ghost, what it's doing now, and a tap to open its page. */
 struct AgentsView: View {
   @Environment(Store.self) private var store
+  @Environment(\.openSettings) private var openSettings
   @State private var path = NavigationPath()
   @State private var adding = false
 
@@ -15,37 +16,63 @@ struct AgentsView: View {
 
   var body: some View {
     NavigationStack(path: $path) {
-      ScrollView {
-        if store.agents.isEmpty {
-          ContentUnavailableView {
-            Label("Add your first agent", systemImage: "sparkles")
-          } description: {
-            Text("Give it a job and a computer.")
-          } actions: {
-            if store.canManage { Button("Add agent") { adding = true }.primaryButton() }
-          }.padding(.top, 80)
+      VStack(spacing: 0) {
+        TopBar {
+          Button { openSettings() } label: { ProfileCircle() }.buttonStyle(.plain).accessibilityIdentifier("profile-button")
+        } center: {
+          EmptyView()
+        } trailing: {
+          if store.canManage { CircleButton(symbol: "plus", label: "New agent", id: "agents-add") { adding = true } }
         }
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
-          ForEach(sorted) { a in
-            AgentTile(agent: a, doing: store.activity[a.id], openSettings: { path.append(a) }, openChat: { path.append($0) })
+        ScrollView {
+          VStack(alignment: .leading, spacing: 0) {
+            Text("Agents").font(.system(size: 32, weight: .bold)).foregroundStyle(Palette.text)
+              .padding(.horizontal, 4).padding(.top, 8).padding(.bottom, 14)
+              .accessibilityAddTraits(.isHeader)
+            if store.agents.isEmpty {
+              ContentUnavailableView {
+                Label("Add your first agent", systemImage: "sparkles")
+              } description: {
+                Text("Give it a job and a computer.")
+              } actions: {
+                if store.canManage { Button("Add agent") { adding = true }.primaryButton() }
+              }.padding(.top, 60)
+            } else {
+              LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(sorted) { a in
+                  AgentTile(agent: a, doing: store.activity[a.id], openSettings: { path.append(a) }, openChat: { path.append($0) })
+                }
+                if store.canManage { newAgentTile }
+              }
+            }
           }
+          .padding(.horizontal, 18).padding(.bottom, 24)
         }
-        .padding(16)
+        .refreshable { await store.load() }
       }
-      .navigationTitle("Agents")
-      .refreshable { await store.load() }
-      .toolbar {
-        if store.canManage {
-          ToolbarItem(placement: .topBarTrailing) { Button("Add agent", systemImage: "plus") { adding = true } }
-        }
-      }
+      .background(Palette.ground.ignoresSafeArea())
+      .toolbar(.hidden, for: .navigationBar)
       .sheet(isPresented: $adding) { AddAgent { path.append($0) } }
-      .navigationDestination(for: Agent.self) { AgentPage(agent: $0) }
-      .navigationDestination(for: Channel.self) { ChannelView(channel: $0) }
-      .navigationDestination(for: ThreadRef.self) { ThreadView(ref: $0) }
+      .chatDestinations()
     }
   }
 
+  /** the dashed tile after the last agent */
+  private var newAgentTile: some View {
+    Button { adding = true } label: {
+      VStack(spacing: 10) {
+        Image(systemName: "plus").font(.system(size: 20, weight: .medium)).foregroundStyle(Palette.text)
+          .frame(width: 52, height: 52).glassCircle()
+        Text("New agent").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.muted)
+      }
+      .frame(maxWidth: .infinity, minHeight: 196)
+      .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.hairline, style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+      .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("New agent")
+    .accessibilityIdentifier("agents-new-tile")
+  }
 }
 
 struct AgentTile: View {
@@ -59,22 +86,18 @@ struct AgentTile: View {
   @State private var action = FormAction()
 
   var body: some View {
-    Button(action: openSettings) {
-      VStack(spacing: 10) {
-        GhostView(look: agent.settings?.appearance, seed: agent.handle, size: 64, mood: store.mood(for: agent))
-          .padding(.top, 6)
-        VStack(spacing: 3) {
-          Text(agent.name).font(.headline).lineLimit(1)
-          Text(harnessLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-        }
-        HStack(spacing: 5) {
-          GlowDot(color: statusColor)
-          Text(doing ?? statusWord).font(.caption).foregroundStyle(agent.status == .busy ? .blue : .secondary).lineLimit(1)
-        }
+    Button { openSettings() } label: {
+      VStack(spacing: 6) {
+        GhostView(look: agent.settings?.appearance, seed: agent.handle, size: 76, mood: store.mood(for: agent))
+          .frame(width: 76, height: 76)
+        Text(agent.name).font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1).padding(.top, 6)
+        Text(harnessLabel).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1)
+        status.padding(.top, 4)
       }
-      .frame(maxWidth: .infinity)
-      .padding(14)
-      .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Color(.secondarySystemBackground)))
+      .frame(maxWidth: .infinity, minHeight: 196)
+      .padding(.horizontal, 14).padding(.vertical, 16)
+      .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+      .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier("agent-tile")
@@ -91,8 +114,19 @@ struct AgentTile: View {
     .sheet(isPresented: $editingLook) { LookEditor(agent: store.agent(agent.id) ?? agent) }
   }
 
-  private var statusWord: String { agent.status == .busy ? "Working" : agent.status == .online ? "Online" : "Offline" }
-  private var statusColor: Color { agent.status == .busy ? .blue : agent.status == .online ? .green : .gray }
+  /** "Working · Reading release.md" in green with pulsing dots, or "Idle" / "Offline" */
+  @ViewBuilder private var status: some View {
+    if agent.status == .busy {
+      HStack(spacing: 6) {
+        WorkingDots()
+        Text(["Working", doing.flatMap { $0 == "started" ? nil : $0 }].compactMap { $0 }.joined(separator: " · "))
+          .font(.system(size: 13)).foregroundStyle(Palette.green).lineLimit(2).multilineTextAlignment(.center)
+      }
+    } else {
+      Text(agent.status == .online ? "Idle" : "Offline").font(.system(size: 13)).foregroundStyle(Palette.muted)
+    }
+  }
+
   private var harnessLabel: String {
     HarnessChoice.label(agent.harness)
   }

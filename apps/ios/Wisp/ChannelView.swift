@@ -17,6 +17,7 @@ struct ChannelView: View {
   @State private var error: String?
   @State private var loadingEarlier = false
   @State private var calling = false
+  @State private var showDetails = false
   @State private var noEarlier = false
   @Environment(\.dismiss) private var dismiss
 
@@ -74,59 +75,23 @@ struct ChannelView: View {
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
       if current.archivedAt != nil {
-        Text("#\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
+        Text("\(current.name) is archived").font(.footnote).foregroundStyle(.secondary).padding()
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft) { text, files in
+          Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft, send: { text, files in
             try await store.send(text, in: channel.id, files: files)
-          }
+          }, onCall: canCall ? { calling = true } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")")
         }
         .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
     }
     .toolbar(.hidden, for: .tabBar)
-    .navigationTitle(store.title(of: current))
-    .navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .principal) {
-        if let agent = store.dmAgent(current) {
-          NavigationLink {
-            AgentPage(agent: agent)
-          } label: {
-            HStack(spacing: 8) {
-              AgentAvatar(agent: agent, size: 24, showStatus: false)
-              VStack(alignment: .leading, spacing: 0) {
-                Text(agent.name).font(.subheadline.weight(.semibold))
-                Text(statusLine(agent)).font(.caption2).foregroundStyle(.secondary)
-              }
-            }
-          }.buttonStyle(.plain)
-        } else {
-          NavigationLink {
-            ChannelDetails(channel: current)
-          } label: {
-            VStack(spacing: 0) {
-              HStack(spacing: 4) {
-                Image(systemName: current.private == true ? "lock" : "number")
-                Text(current.name).lineLimit(1)
-              }
-              .font(.subheadline.weight(.semibold))
-              // who leads here, from the channel's team: "Atlas and Nova lead here"
-              if let leads = current.leadLine(agents: store.agents) {
-                Text(leads).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-              }
-            }
-          }.buttonStyle(.plain)
-        }
-      }
-    }
-    .toolbar {
-      ToolbarItem(placement: .topBarTrailing) {
-        if store.features.voice, current.archivedAt == nil, let agent = store.dmAgent(current) {
-          Button { calling = true } label: { Image(systemName: "phone") }.accessibilityLabel("Call \(agent.name)")
-        }
-      }
+    .toolbar(.hidden, for: .navigationBar)
+    .background(Palette.ground.ignoresSafeArea())
+    .safeAreaInset(edge: .top, spacing: 0) { chrome }
+    .navigationDestination(isPresented: $showDetails) {
+      if let agent = store.dmAgent(current) { AgentPage(agent: agent) } else { ChannelDetails(channel: current) }
     }
     .fullScreenCover(isPresented: $calling) {
       if let agent = store.dmAgent(current) { CallScreen(agent: agent, channel: current) }
@@ -149,15 +114,44 @@ struct ChannelView: View {
   }
 
   private var placeholder: String {
-    if let agent = store.dmAgent(current) { return "Message \(agent.name)" }
-    return "Message #\(current.name)"
+    if let agent = store.dmAgent(current) { return "Ask \(agent.name)" }
+    return "Message \(current.name)"
   }
 
-  private func statusLine(_ a: Agent) -> String {
-    switch a.status {
-    case .busy: "Working"
-    case .online: "Online"
-    case .offline: "Offline"
+  /** a voice call is on offer in a chat with one agent when voice is on */
+  private var canCall: Bool { store.features.voice && current.archivedAt == nil && store.dmAgent(current) != nil }
+
+  /** teams show their first two agents on the name pill */
+  private var teamAgents: [Agent] {
+    guard let team = current.team(agents: store.agents) else { return [] }
+    return team.nodes.sorted { ($0.lead ? 0 : 1) < ($1.lead ? 0 : 1) }.compactMap { store.agent($0.agentId) }
+  }
+
+  /** the top of a chat: a glass back circle, the name on a pill with the ghost, and a ... circle */
+  private var chrome: some View {
+    TopBar {
+      CircleButton(symbol: "chevron.left", label: "Back", id: "chat-back") { dismiss() }
+    } center: {
+      Button { showDetails = true } label: {
+        NamePill(title: store.title(of: current)) {
+          if let agent = store.dmAgent(current) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
+          else { TeamGhosts(agents: teamAgents, seed: current.name, size: 28) }
+        }
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(store.dmAgent(current) != nil ? "\(store.title(of: current)), open profile" : "\(current.name), team details")
+      .accessibilityIdentifier("chat-title")
+    } trailing: {
+      Menu {
+        if canCall, let agent = store.dmAgent(current) { Button("Call \(agent.name)", systemImage: "phone") { calling = true } }
+        if let agent = store.dmAgent(current) { Button("\(agent.name)'s profile", systemImage: "person.crop.circle") { showDetails = true } }
+        else { Button("Team details", systemImage: "person.2") { showDetails = true } }
+      } label: { CircleLabel(symbol: "ellipsis") }
+        .accessibilityLabel("More").accessibilityIdentifier("chat-more")
+    }
+    .background(alignment: .top) {
+      LinearGradient(colors: [Palette.ground, Palette.ground.opacity(0)], startPoint: .top, endPoint: .bottom)
+        .padding(.bottom, -10).ignoresSafeArea(edges: .top).allowsHitTesting(false)
     }
   }
 
@@ -234,7 +228,7 @@ struct ThreadView: View {
     .scrollDismissesKeyboard(.interactively)
     .safeAreaInset(edge: .bottom) {
       if store.channels.first(where: { $0.id == ref.channelId })?.archivedAt != nil {
-        Text("This channel is archived").font(.footnote).foregroundStyle(.secondary).padding()
+        Text("This team is archived").font(.footnote).foregroundStyle(.secondary).padding()
       } else {
         VStack(spacing: 6) {
           if let ch = store.channels.first(where: { $0.id == ref.channelId }) { ActivityPill(channel: ch, thread: ref.rootId) }
@@ -308,7 +302,7 @@ struct EmptyChannel: View {
         AgentAvatar(agent: a, size: 64, showStatus: false, interactive: true)
         Text("This is the start of your chat with \(a.name).").font(.subheadline).foregroundStyle(.secondary)
       } else {
-        Text("#\(channel.name)").font(.title3.bold())
+        Text(channel.name).font(.title3.bold())
         Text(channel.topic.isEmpty ? "No messages yet." : channel.topic).font(.subheadline).foregroundStyle(.secondary)
         if let team = channel.team(agents: store.agents) {
           let leads = team.leads.compactMap { store.agent($0)?.name }
@@ -336,6 +330,11 @@ struct Composer: View {
   /** what the message starts with, instead of the saved draft (a request to try a skill) */
   var draft = ""
   var send: (String, [String]) async throws -> Void
+  /** starts a voice call with the agent: the white voice button shows while the field is empty */
+  var onCall: (() -> Void)? = nil
+  var callLabel = "Start a voice call"
+  @State private var dictation = Dictation()
+  @State private var dictationBase = ""
   @State private var text = ""
   @State private var selection: TextSelection?
   @State private var files: [UploadedFile] = []
@@ -415,49 +414,77 @@ struct Composer: View {
         }
         .glass(18)
       }
-      if let error { Text(error).font(.caption).foregroundStyle(.red) }
-      VStack(alignment: .leading, spacing: 0) {
-        if let agent = chatAgent, let channelId { ChatControls(agent: agent, channelId: channelId, thread: thread, refresh: refresh) }
-        if !files.isEmpty || uploading > 0 { attachments }
+      if let error = error ?? dictation.error { Text(error).font(.caption).foregroundStyle(Palette.red).padding(.horizontal, 6) }
+      if let agent = chatAgent, let channelId { ChatControls(agent: agent, channelId: channelId, thread: thread, refresh: refresh) }
+      if !files.isEmpty || uploading > 0 { attachments }
+      HStack(alignment: .center, spacing: 12) {
+        Menu {
+          Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
+          Button("Files", systemImage: "folder") { pickingFiles = true }
+        } label: { CircleLabel(symbol: "plus", size: 56, weight: .regular) }
+          .accessibilityLabel("Attach").accessibilityIdentifier("composer-attach")
         HStack(alignment: .bottom, spacing: 6) {
-          Menu {
-            Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
-            Button("Files", systemImage: "folder") { pickingFiles = true }
-          } label: {
-            Image(systemName: "plus")
-              .font(.body.weight(.semibold))
-              .foregroundStyle(.secondary)
-              .frame(width: 36, height: 36)
-          }
-          .padding(.leading, 5)
-          .padding(.bottom, 5)
-          .accessibilityLabel("Attach")
           TextField(placeholder, text: $text, selection: $selection, axis: .vertical)
+            .font(.system(size: 17))
             .lineLimit(1...8)
             .focused($focused)
-            .padding(.vertical, 12)
+            .padding(.vertical, 15)
+            .padding(.leading, 12)
+            .accessibilityIdentifier("composer-field")
           Button {
-            submit()
+            if !dictation.active { dictationBase = text }
+            dictation.toggle { transcript in
+              text = dictationBase.isEmpty ? transcript : dictationBase + (dictationBase.hasSuffix(" ") ? "" : " ") + transcript
+            }
           } label: {
-            Image(systemName: sending ? "ellipsis" : "arrow.up")
-              .font(.body.weight(.bold))
-              .foregroundStyle(Color(.systemBackground))
-              .frame(width: 36, height: 36)
-              .background(Circle().fill(Color.primary))
+            Image(systemName: dictation.active ? "mic.fill" : "mic")
+              .font(.system(size: 18, weight: .regular))
+              .foregroundStyle(dictation.active ? Palette.blue : Palette.muted)
+              .frame(width: 40, height: 40)
           }
           .buttonStyle(.plain)
-          .disabled(blocked)
-          .opacity(blocked ? 0.25 : 1)
-          .animation(.snappy, value: blocked)
-          .padding(5)
-          .accessibilityLabel("Send")
+          .padding(.bottom, 8)
+          .accessibilityLabel(dictation.active ? "Stop dictating" : "Dictate")
+          if !empty || sending || onCall == nil {
+            Button { submit() } label: {
+              Image(systemName: sending ? "ellipsis" : "arrow.up")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Palette.ground)
+                .frame(width: 56, height: 44)
+                .background(Capsule().fill(Palette.text))
+            }
+            .buttonStyle(.plain)
+            .disabled(blocked)
+            .opacity(blocked ? 0.3 : 1)
+            .animation(.snappy, value: blocked)
+            .padding(.bottom, 6).padding(.trailing, 6)
+            .accessibilityLabel("Send").accessibilityIdentifier("composer-send")
+          } else if let onCall {
+            Button(action: onCall) {
+              Image(systemName: "waveform")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Palette.ground)
+                .frame(width: 56, height: 44)
+                .background(Capsule().fill(Palette.text))
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 6).padding(.trailing, 6)
+            .accessibilityLabel(callLabel).accessibilityIdentifier("composer-call")
+          }
+        }
+        .frame(minHeight: 56)
+        .background {
+          if #available(iOS 26, *) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.clear).glassEffect(.regular.interactive(), in: .rect(cornerRadius: 28, style: .continuous))
+          } else {
+            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Palette.control)
+              .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Palette.hairline))
+          }
         }
       }
-      // the message bar floats over the conversation on glass, like the tab bar
-      .glass(23, interactive: true)
     }
-    .padding(.horizontal, 12)
-    .padding(.bottom, 6)
+    .padding(.horizontal, 18)
+    .padding(.bottom, 8)
     .padding(.top, 4)
     .task(id: slashQuery != nil) {
       guard slashQuery != nil, let channelId else { return }
@@ -550,6 +577,7 @@ struct Composer: View {
     let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !blocked else { return }
     let attached = files
+    dictation.stop()
     sending = true
     error = nil
     text = ""

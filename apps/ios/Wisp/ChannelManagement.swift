@@ -31,18 +31,18 @@ struct NewChannel: View {
       Form {
         Section {
           TextField("Name", text: $name).textInputAutocapitalization(.never).autocorrectionDisabled()
-          if !slug.isEmpty { Text(exists ? "#\(slug) already exists." : "#\(slug)").foregroundStyle(exists ? .red : .secondary) }
+          if !slug.isEmpty { Text(exists ? "\(slug) already exists." : "\(slug)").foregroundStyle(exists ? .red : .secondary) }
         } header: { StepsHeader(at: 1) }
         Section {
           TextField("e.g. Plan and ship the new website", text: $topic, axis: .vertical).lineLimit(2...6)
-        } header: { Text("Description") } footer: { Text("The agents read this too, so say what the channel is for.") }
+        } header: { Text("Description") } footer: { Text("The agents read this too, so say what the team is for.") }
         Section { SectionPicker(selection: $section) }
         Section {
           Toggle("Private", isOn: $isPrivate)
         } footer: { Text("Only people and agents you add can see it.") }
-        if let onBrowse { Section { Button("Browse existing channels", action: onBrowse) } }
+        if let onBrowse { Section { Button("Browse existing teams", action: onBrowse) } }
       }
-      .navigationTitle("New channel")
+      .navigationTitle("New team")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -70,7 +70,7 @@ struct NewChannel: View {
         if action.error != nil { Section { InlineError(error: action.error) } }
       } else {
         Section {
-          Text("Pick who works in #\(slug), make one or more of them leads, and say who hands each of the others work.")
+          Text("Pick who works in \(slug), make one or more of them leads, and say who hands each of the others work.")
             .font(.subheadline).foregroundStyle(.secondary)
           Button("Use roles and steps instead") {
             stepped = true
@@ -81,7 +81,7 @@ struct NewChannel: View {
         Section { InlineError(error: action.error) }
       }
     }
-    .navigationTitle("#\(slug): its team")
+    .navigationTitle("\(slug): its team")
     .navigationBarTitleDisplayMode(.inline)
     .navigationDestination(item: $editing) { TeamEditForm(team: $team, target: $0) }
     .toolbar {
@@ -106,7 +106,7 @@ struct NewChannel: View {
         "settings": AnyEncodable(["team": AnyEncodable(TeamTemplate.starter(lead: lead)), "replyInThread": AnyEncodable(true)]),
       ])
       let dm = try await store.dm(with: agent)
-      try await store.send("Set up how the team in #\(slug) works, with team_setup:\n\n\(text)", in: dm.id)
+      try await store.send("Set up how the team in \(slug) works, with team_setup:\n\n\(text)", in: dm.id)
       dismiss()
       onCreated(dm)
     }
@@ -165,15 +165,15 @@ struct ChannelTeamScreen: View {
       } else {
         Section {
           Text(saved.nodes.isEmpty
-            ? "#\(current.name) has no team yet, so only agents someone @mentions (or the one that answers here) reply. Build one: add agents and make one of them a lead."
-            : "The leads read every new message in #\(current.name) and hand out the work along the arrows.")
+            ? "\(current.name) has no team yet, so only agents someone @mentions (or the one that answers here) reply. Build one: add agents and make one of them a lead."
+            : "The leads read every new message in \(current.name) and hand out the work along the arrows.")
             .font(.subheadline).foregroundStyle(.secondary)
           if editable { Button("Use roles and steps instead") { picking = true } }
         }
         ChannelTeamEditor(team: $team, editable: editable, channelId: channel.id, more: true)
       }
       if !editable {
-        Section { Text(current.archivedAt != nil ? "This channel is archived." : "Guests can't change channels.").font(.footnote).foregroundStyle(.secondary) }
+        Section { Text(current.archivedAt != nil ? "This team is archived." : "Guests can't change teams.").font(.footnote).foregroundStyle(.secondary) }
       }
       if editable && !saved.nodes.isEmpty {
         Section {
@@ -199,9 +199,9 @@ struct ChannelTeamScreen: View {
         loaded = true
       }
     }
-    .confirmationDialog("Remove the team from #\(current.name)?", isPresented: $removing, titleVisibility: .visible) {
+    .confirmationDialog("Remove the team from \(current.name)?", isPresented: $removing, titleVisibility: .visible) {
       Button("Remove the team", role: .destructive) { save(nil) }
-    } message: { Text("The agents stay in the channel, but only answer when someone @mentions them.") }
+    } message: { Text("The agents stay in the team, but only answer when someone @mentions them.") }
   }
 
   private func save(_ next: ChannelTeam?) {
@@ -233,8 +233,8 @@ struct BrowseChannels: View {
   var body: some View {
     NavigationStack {
       List {
-        Picker("Channels", selection: $filter) {
-          Text("All channels").tag("all")
+        Picker("Teams", selection: $filter) {
+          Text("All teams").tag("all")
           Text("Joined").tag("joined")
           Text("Archived").tag("archived")
         }.pickerStyle(.segmented)
@@ -257,10 +257,10 @@ struct BrowseChannels: View {
             }
           }.disabled(action.busy)
         }
-        if list.isEmpty { Text("No channels match.").foregroundStyle(.secondary) }
+        if list.isEmpty { Text("No teams match.").foregroundStyle(.secondary) }
       }
-      .searchable(text: $search, prompt: "Search channels")
-      .navigationTitle("Browse channels")
+      .searchable(text: $search, prompt: "Search teams")
+      .navigationTitle("Browse teams")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
       .refreshable { await store.refreshChannels() }
@@ -374,23 +374,23 @@ struct ChannelDetails: View {
       }.disabled(action.busy)
       Section {
         if store.canManage {
-          Button(current.archivedAt == nil ? "Archive channel" : "Unarchive channel") {
+          Button(current.archivedAt == nil ? "Archive team" : "Unarchive team") {
             if current.archivedAt == nil { confirm = "archive" }
             else { action.run { try await store.archiveChannel(channel.id, archived: false) } }
           }
         }
         if current.name != "general" && current.joined == true {
-          Button("Leave channel", role: .destructive) { confirm = "leave" }
+          Button("Leave team", role: .destructive) { confirm = "leave" }
         }
         if store.role == "owner" {
-          Button("Delete channel", role: .destructive) { confirm = "delete" }
+          Button("Delete team", role: .destructive) { confirm = "delete" }
         }
         InlineError(error: action.error)
         InlineError(error: loadError)
         if loadError != nil { Button("Try again") { Task { await load() } } }
       }.disabled(action.busy)
     }
-    .navigationTitle("#\(current.name)")
+    .navigationTitle("\(current.name)")
     .navigationBarTitleDisplayMode(.inline)
     .task { if !loaded { reset(); loaded = true }; await load() }
     .task(id: store.channelVersion) { await load() }
@@ -409,8 +409,8 @@ struct ChannelDetails: View {
     .sheet(isPresented: $adding, onDismiss: { Task { await load() } }) {
       AddChannelMembers(channel: channel, existing: Set(people.map(\.actor)))
     }
-    .confirmationDialog("\(confirm == "delete" ? "Delete" : confirm == "archive" ? "Archive" : "Leave") #\(current.name)?", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible) {
-      Button(confirm == "delete" ? "Delete channel" : confirm == "archive" ? "Archive channel" : "Leave channel", role: .destructive) {
+    .confirmationDialog("\(confirm == "delete" ? "Delete" : confirm == "archive" ? "Archive" : "Leave") \(current.name)?", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible) {
+      Button(confirm == "delete" ? "Delete team" : confirm == "archive" ? "Archive team" : "Leave team", role: .destructive) {
         let choice = confirm
         action.run {
           if choice == "delete" { try await store.deleteChannel(channel.id); dismiss() }
@@ -419,7 +419,7 @@ struct ChannelDetails: View {
         }
       }
     } message: {
-      Text(confirm == "delete" ? "Every message and thread is deleted for everyone. This can't be undone." : confirm == "archive" ? "It leaves everyone's sidebar and becomes read-only. Agents working here are stopped." : "You can find public channels again in Browse channels.")
+      Text(confirm == "delete" ? "Every message and thread is deleted for everyone. This can't be undone." : confirm == "archive" ? "It leaves everyone's sidebar and becomes read-only. Agents working here are stopped." : "You can find public teams again in Browse teams.")
     }
   }
 
