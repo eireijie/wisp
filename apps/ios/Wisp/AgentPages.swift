@@ -299,6 +299,7 @@ struct AgentRunPage: View {
   var agent: Agent
   var run: AgentRun
   @State private var chat: Channel?
+  @State private var thread: ThreadRef?
 
   private var device: AgentNode? { store.nodes.first { $0.id == (store.agent(agent.id) ?? agent).nodeId } }
   private var channel: Channel? { run.channelId.flatMap { id in store.channels.first { $0.id == id } } }
@@ -323,10 +324,11 @@ struct AgentRunPage: View {
         }
       }
       if channel != nil {
-        Button { chat = channel } label: { PillLabel(title: "Open the conversation", kind: .secondary) }.buttonStyle(.plain)
+        Button { RunOpen.open(run, channel: channel, chat: &chat, thread: &thread) } label: { PillLabel(title: "Open the conversation", kind: .secondary) }.buttonStyle(.plain)
       }
     }
     .navigationDestination(item: $chat) { ChannelView(channel: $0) }
+    .navigationDestination(item: $thread) { ThreadView(ref: $0) }
   }
 
   private var asked: String {
@@ -374,5 +376,16 @@ extension RunLine {
     if Calendar.current.isDateInToday(date) { return "Today \(time)" }
     if Calendar.current.isDateInYesterday(date) { return "Yesterday \(time)" }
     return date.formatted(.dateTime.month(.abbreviated).day()) + " " + time
+  }
+}
+
+/** Where "Open the conversation" goes: the run's own thread when it ran in one, else its chat. */
+enum RunOpen {
+  static func thread(for run: AgentRun) -> ThreadRef? {
+    guard let channel = run.channelId, let root = run.threadId, !root.isEmpty else { return nil }
+    return ThreadRef(channelId: channel, rootId: root)
+  }
+  static func open(_ run: AgentRun, channel: Channel?, chat: inout Channel?, thread: inout ThreadRef?) {
+    if let ref = Self.thread(for: run) { thread = ref } else { chat = channel }
   }
 }

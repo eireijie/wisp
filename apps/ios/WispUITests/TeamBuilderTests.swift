@@ -112,7 +112,7 @@ final class TeamBuilderTests: XCTestCase {
     settle(); shot("review")
     app.buttons["review-create"].tap()
     settle(0.4); shot("saving")
-    XCTAssertTrue(app.buttons["chat-back"].waitForExistence(timeout: 15) || app.tabBars.firstMatch.exists)
+    XCTAssertTrue(app.buttons["chat-back"].waitForExistence(timeout: 15), "creating the team opens its chat")
   }
 
   func testAnAgentBuildsItAndScratchStatesShow() throws {
@@ -168,7 +168,9 @@ final class TeamBuilderTests: XCTestCase {
     XCTAssertTrue(row.waitForExistence(timeout: 10))
     row.tap()
     XCTAssertTrue(app.buttons["chat-title"].waitForExistence(timeout: 10))
-    app.buttons["chat-title"].tap()
+    app.buttons["chat-more"].tap()
+    XCTAssertTrue(app.buttons["How the team works"].waitForExistence(timeout: 5))
+    app.buttons["How the team works"].tap()
     XCTAssertTrue(app.buttons["team-edit-how"].waitForExistence(timeout: 10))
     settle(); shot("team-info")
     app.buttons["team-edit-how"].tap()

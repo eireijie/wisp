@@ -157,13 +157,21 @@ final class AgentProfileTests: XCTestCase {
     XCTAssertEqual(AgentEditText.snippets.count, 6)
   }
 
-  func testTemplatesAreComplete() {
+  func testTemplatesAreComplete() throws {
     XCTAssertEqual(AgentTemplate.all.map(\.name), ["Researcher", "Code reviewer", "Planner", "Writer"])
     for template in AgentTemplate.all {
       XCTAssertFalse(template.does.isEmpty)
       XCTAssertTrue(template.instructions.contains("## "))
-      XCTAssertLessThanOrEqual(template.does.count, 60)
+      // what the create request sends as the role is the whole line, and the hub accepts it
+      let draft = AgentDraft()
+      draft.does = template.does
+      XCTAssertEqual(draft.roleText, template.does)
+      XCTAssertLessThanOrEqual(try XCTUnwrap(draft.roleText).count, 60)
     }
+    let long = AgentDraft()
+    long.does = "  " + String(repeating: "a", count: 90) + " "
+    XCTAssertEqual(long.roleText?.count, 60)
+    XCTAssertNil(AgentDraft().roleText)
   }
 
   func testLookLabels() {

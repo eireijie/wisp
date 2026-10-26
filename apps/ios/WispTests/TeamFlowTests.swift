@@ -421,4 +421,37 @@ final class TeamFlowTests: XCTestCase {
     let spots = Set((t.steps ?? []).map { "\($0.x),\($0.y)" })
     XCTAssertEqual(spots.count, 2)
   }
+
+  func testRetypingAStepKeepsItsArrowsAndFillsWhatTheKindNeeds() {
+    let t = team([step("a", nexts: ["b"]), step("b", agent: nil, inputs: ["a"], nexts: ["c"]), step("c", inputs: ["b"])])
+    let review = t.retyping("b", to: .review, agents: ["nova"])
+    let b = review.step("b")
+    XCTAssertEqual(b?.kind, .review)
+    XCTAssertEqual(b?.sendBackTo, "a", "a checker sends work back to the step before it")
+    XCTAssertEqual(b?.maxRounds, ChannelTeam.defaultRounds)
+    XCTAssertEqual(b?.agentId, "nova")
+    XCTAssertEqual(b?.inputs, ["a"]); XCTAssertEqual(b?.nexts, ["c"])
+    assertConsistent(review)
+    XCTAssertEqual(review.retyping("b", to: .handOut, agents: []).step("b")?.handTo, [])
+    XCTAssertEqual(review.retyping("b", to: .ask, agents: []).step("b")?.notifyPhone, true)
+    XCTAssertEqual(t.retyping("b", to: .do, agents: []).step("b")?.kind, .do, "same kind changes nothing")
+  }
+
+  func testRemovingARoleClearsWhatNamedIt() {
+    var hand = step("h", kind: .handOut)
+    hand.handTo = ["r1", "r2"]; hand.reviewBy = "r1"
+    let roles = [ChannelTeam.Role(id: "r1", name: "A", description: "", agentId: nil), ChannelTeam.Role(id: "r2", name: "B", description: "", agentId: nil)]
+    let t = team([hand], roles: roles).removingRole("r1")
+    XCTAssertEqual(t.roles?.map(\.id), ["r2"])
+    XCTAssertEqual(t.step("h")?.handTo, ["r2"])
+    XCTAssertNil(t.step("h")?.reviewBy)
+  }
+
+  func testRunOpensItsThreadWhenItRanInOne() throws {
+    func run(_ json: String) throws -> AgentRun { try Wire.decoder.decode(AgentRun.self, from: Data(json.utf8)) }
+    let inThread = try run(#"{"id":"r","status":"done","channelId":"c1","threadId":"m9"}"#)
+    XCTAssertEqual(RunOpen.thread(for: inThread), ThreadRef(channelId: "c1", rootId: "m9"))
+    XCTAssertNil(RunOpen.thread(for: try run(#"{"id":"r","status":"done","channelId":"c1"}"#)))
+    XCTAssertNil(RunOpen.thread(for: try run(#"{"id":"r","status":"done","threadId":"m9"}"#)))
+  }
 }

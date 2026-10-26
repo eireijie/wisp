@@ -26,7 +26,7 @@ struct SoulHistory: View {
             ForEach(Array(revisions.enumerated()), id: \.element.id) { index, revision in
               HStack(spacing: 10) {
                 NavigationLink {
-                  SoulVersion(agent: agent, revision: revision, canRestore: canRestore, onRestore: onRestore)
+                  SoulVersion(agent: agent, revision: revision, canRestore: canRestore) { onRestore($0); dismiss() }
                 } label: {
                   VStack(alignment: .leading, spacing: 2) {
                     Text(when(revision)).font(.system(size: 17)).foregroundStyle(Palette.text)
@@ -91,7 +91,6 @@ struct SoulHistory: View {
 /** One old version of the personality, with a way to bring it back as a draft. */
 private struct SoulVersion: View {
   @Environment(Store.self) private var store
-  @Environment(\.dismiss) private var dismiss
   var agent: Agent
   var revision: NoteRevision
   var canRestore: Bool
@@ -107,7 +106,7 @@ private struct SoulVersion: View {
             .font(.system(size: 15, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
         }
         if canRestore {
-          PillButton(title: "Use this version") { onRestore(content); dismiss() }
+          PillButton(title: "Use this version") { onRestore(content) }
           CardCaption("It goes into the editor as a draft; save it there to keep it.")
         }
       } else if error == nil {

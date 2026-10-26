@@ -21,6 +21,9 @@ final class AgentDraft {
   var template: String?
   let computerDraft = AgentComputerDraft()
 
+  /** the short job line the agent is created with (the hub keeps at most 60 characters) */
+  var roleText: String? { does.trimmed.isEmpty ? nil : String(does.trimmed.prefix(60)) }
+
   func finalHandle() -> String { handle.isEmpty ? ManagementText.handle(name) : ManagementText.handle(handle) }
 }
 
@@ -223,7 +226,7 @@ struct AddAgent: View {
       let d = draft
       let external = self.external
       var settings: Fields = ["appearance": AnyEncodable(d.look.resolved), "respondTo": AnyEncodable(askWho ? d.respondTo : "me")]
-      if !d.does.trimmed.isEmpty { settings["role"] = AnyEncodable(String(d.does.trimmed.prefix(60))) }
+      if let role = d.roleText { settings["role"] = AnyEncodable(role) }
       if askWho && d.respondTo == "people" { settings["respondPeople"] = AnyEncodable(Array(d.respondPeople).sorted()) }
       var fields: Fields = [
         "name": AnyEncodable(d.name.trimmed), "handle": AnyEncodable(d.finalHandle()), "instructions": AnyEncodable(d.instructions),

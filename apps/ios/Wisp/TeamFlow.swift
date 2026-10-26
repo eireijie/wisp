@@ -720,6 +720,37 @@ extension ChannelTeam {
     edit { all in if let i = all.firstIndex(where: { $0.id == id }) { change(&all[i]) } }
   }
 
+  /** Turn a step into another kind, filling in what that kind needs (a checker's send-back, a hand-out's list). */
+  func retyping(_ id: String, to kind: Step.Kind, agents: [String]) -> ChannelTeam {
+    guard let s = step(id), s.kind != kind else { return self }
+    let earlier = orderedSteps.filter { $0.id != id && Self.stepsAfter(steps ?? [], $0.id).contains(id) }
+    let fallback = agentId(of: s) ?? agents.first
+    return updating(id) { cur in
+      cur.kind = kind
+      if cur.needsAgent && (cur.agentId ?? "").isEmpty { cur.agentId = fallback }
+      if kind == .review {
+        cur.sendBackTo = cur.sendBackTo ?? earlier.last?.id
+        cur.maxRounds = cur.maxRounds ?? Self.defaultRounds
+      }
+      if kind == .handOut { cur.handTo = cur.handTo ?? []; cur.maxRounds = cur.maxRounds ?? Self.defaultRounds }
+      if kind == .branch { cur.maxRounds = cur.maxRounds ?? Self.defaultRounds }
+      if kind == .ask { cur.notifyPhone = cur.notifyPhone ?? true }
+      if kind == .handoff { cur.waitForReply = cur.waitForReply ?? true }
+    }
+  }
+
+  /** Take a role off the team: hand-outs stop naming it, and steps that were checked by it aren't any more. */
+  func removingRole(_ id: String) -> ChannelTeam {
+    var next = self
+    next.roles = (roles ?? []).filter { $0.id != id }
+    return next.edit { all in
+      for i in all.indices {
+        all[i].handTo = all[i].handTo?.filter { $0 != id }
+        if all[i].reviewBy == id { all[i].reviewBy = nil }
+      }
+    }
+  }
+
   /** Add a step with no edges yet. */
   func appending(_ step: Step) -> ChannelTeam { edit { $0.append(step) } }
 

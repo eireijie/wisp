@@ -130,10 +130,13 @@ private struct Field<Content: View>: View {
 private struct AgentMenu: View {
   @Environment(Store.self) private var store
   @Binding var selection: String?
+  /** "Create an agent…" (shown when the person can add agents) */
+  var onCreate: (() -> Void)? = nil
   var body: some View {
     Menu {
       ForEach(store.agents) { a in Button(a.name) { selection = a.id } }
       if store.agents.isEmpty { Text("Add an agent first") }
+      if let onCreate { Divider(); Button("Create an agent…", systemImage: "plus", action: onCreate) }
     } label: {
       HStack(spacing: 12) {
         if let a = selection.flatMap({ store.agent($0) }) {
@@ -233,8 +236,13 @@ struct StepEditor: View {
   var channelId: String? = nil
   var close: () -> Void
   @State private var confirmDelete = false
+  /** who gets the agent made from "Create an agent…": the step itself, or one of its roles */
+  @State private var creating: CreateFor?
+
+  private enum CreateFor: Identifiable { case step, role(String); var id: String { if case .role(let r) = self { "role-\(r)" } else { "step" } } }
 
   private var step: ChannelTeam.Step? { team.step(stepId) }
+  private var createAgent: (() -> Void)? { store.canManage ? { creating = .step } : nil }
 
   var body: some View {
     VStack(spacing: 0) {
@@ -250,6 +258,7 @@ struct StepEditor: View {
             case .branch: ifStep(step)
             case .handOut: splitStep(step)
             }
+            Field(title: "Kind of step") { kindMenu(step) }
             Button(role: .destructive) { confirmDelete = true } label: {
               Label("Delete step", systemImage: "trash").font(.system(size: 17)).foregroundStyle(Palette.red)
                 .frame(maxWidth: .infinity, minHeight: 54)
@@ -266,6 +275,14 @@ struct StepEditor: View {
       }
     }
     .background(Palette.sheet.ignoresSafeArea())
+    .sheet(item: $creating) { target in
+      AddAgent { made in
+        switch target {
+        case .step: team = team.updating(stepId) { $0.agentId = made.id }
+        case .role(let id): setRole(id) { $0.agentId = made.id }
+        }
+      }
+    }
     .confirmationDialog("Delete this step?", isPresented: $confirmDelete, titleVisibility: .visible) {
       Button("Delete step", role: .destructive) {
         team = team.removingStep(stepId)
@@ -310,10 +327,26 @@ struct StepEditor: View {
     team.orderedSteps.filter { $0.id != stepId && ChannelTeam.stepsAfter(team.steps ?? [], $0.id).contains(stepId) }
   }
 
+  private func kindMenu(_ step: ChannelTeam.Step) -> some View {
+    Menu {
+      ForEach(ChannelTeam.Step.Kind.allCases, id: \.self) { kind in
+        Button(ChannelTeam.Step.kindName(kind)) { team = team.retyping(stepId, to: kind, agents: store.agents.map(\.id)) }
+      }
+    } label: {
+      HStack {
+        Text(ChannelTeam.Step.kindName(step.kind)).font(.system(size: 17)).foregroundStyle(Palette.text)
+        Spacer()
+        Image(systemName: "chevron.up.chevron.down").font(.system(size: 13)).foregroundStyle(Palette.faint)
+      }
+      .padding(.horizontal, 18).frame(minHeight: 56).contentShape(Rectangle())
+    }
+    .accessibilityIdentifier("step-kind")
+  }
+
   // MARK: agent and custom
 
   @ViewBuilder private func agentStep(_ step: ChannelTeam.Step) -> some View {
-    Field(title: "Who does it") { AgentMenu(selection: agent) }
+    Field(title: "Who does it") { AgentMenu(selection: agent, onCreate: createAgent) }
     Field(title: "Title") { TextRow(placeholder: "What is this step called?", text: title, id: "step-title") }
     Field(title: step.kind == .custom ? "What it does (its rules)" : "What it does") {
       BigText(placeholder: "Tell the agent what to do here.", text: text(\.prompt), id: "step-prompt")
@@ -326,7 +359,7 @@ struct StepEditor: View {
 
   @ViewBuilder private func repeatStep(_ step: ChannelTeam.Step) -> some View {
     Field(title: "Title") { TextRow(placeholder: "e.g. Check the plan", text: title, id: "step-title") }
-    Field(title: "Checked by") { AgentMenu(selection: agent) }
+    Field(title: "Checked by") { AgentMenu(selection: agent, onCreate: createAgent) }
     Field(title: "What it does") {
       BigText(placeholder: "Read the work. Find what's wrong. Send it back with a short list, or approve it.", text: text(\.prompt), id: "step-prompt")
     }
@@ -427,7 +460,7 @@ struct StepEditor: View {
       }
     }
     if step.rule == nil {
-      Field(title: "Decided by", note: "An agent reads the result and answers yes or no.") { AgentMenu(selection: agent) }
+      Field(title: "Decided by", note: "An agent reads the result and answers yes or no.") { AgentMenu(selection: agent, onCreate: createAgent) }
     }
     Field(title: "Then go to") {
       VStack(spacing: 0) {
@@ -477,7 +510,7 @@ struct StepEditor: View {
   // MARK: split the work
 
   @ViewBuilder private func splitStep(_ step: ChannelTeam.Step) -> some View {
-    Field(title: "Who hands it out") { AgentMenu(selection: agent) }
+    Field(title: "Who hands it out") { AgentMenu(selection: agent, onCreate: createAgent) }
     Field(title: "Title") { TextRow(placeholder: "e.g. Hand out the pieces", text: title, id: "step-title") }
     Field(title: "What it does") { BigText(placeholder: "Split the work into pieces and say who gets each one.", text: text(\.prompt), id: "step-prompt") }
     Field(title: "Pieces go to", note: "Each role is one kind of worker. Pick who fills it.") {
@@ -526,6 +559,11 @@ struct StepEditor: View {
         TextField("Role name", text: roleBinding(role.id, \.name)).font(.system(size: 17)).foregroundStyle(Palette.text)
         Menu {
           ForEach(store.agents) { a in Button(a.name) { setRole(role.id) { $0.agentId = a.id } } }
+          if store.canManage { Divider(); Button("Create an agent…", systemImage: "plus") { creating = .role(role.id) } }
+          if !(team.steps ?? []).contains(where: { $0.roleId == role.id }) {
+            Divider()
+            Button("Remove role", systemImage: "trash", role: .destructive) { team = team.removingRole(role.id) }
+          }
         } label: {
           HStack(spacing: 6) {
             if let a = role.agentId.flatMap({ store.agent($0) }) { AgentAvatar(agent: a, size: 24, showStatus: false); Text(a.name).foregroundStyle(Palette.muted) }
