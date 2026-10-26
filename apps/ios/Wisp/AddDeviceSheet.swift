@@ -79,22 +79,22 @@ private struct PhonePairing: View {
           if pairing?.state == "claimed" {
             Text("Make sure these digits match on your phone, then confirm.").font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
             HStack(spacing: 10) {
-              Button(role: .destructive) { cancel() } label: { Text("Not mine").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.regular)
-              Button { confirm() } label: { Text("It matches").frame(maxWidth: .infinity) }.primaryButton().controlSize(.regular)
+              Button(role: .destructive) { cancel() } label: { Text("Not mine").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
+              Button { confirm() } label: { Text("It matches").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large)
             }.disabled(action.busy)
           }
         }
         .frame(maxWidth: .infinity).padding(16).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
       case "expired", "rejected":
         Text(pairing?.state == "expired" ? "The code expired." : "Pairing was cancelled.").font(.system(size: 14)).foregroundStyle(Palette.faint)
-        Button { start() } label: { Text("Start again").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.regular)
+        Button { start() } label: { Text("Start again").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
       default:
         Text("Open Wisp on your phone, tap Scan QR code and point it here.").font(.system(size: 15)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
       }
       if let link, pairing?.state == "waiting" {
         Button { UIPasteboard.general.string = link; copied = true; Task { try? await Task.sleep(for: .seconds(1.5)); copied = false } } label: {
           Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity)
-        }.secondaryButton().controlSize(.regular)
+        }.secondaryButton().controlSize(.large)
         Text("These only work on this Wi-Fi unless Away from home is on.").font(.system(size: 13)).foregroundStyle(Palette.faint).multilineTextAlignment(.center)
       }
       InlineError(error: action.error)
@@ -170,13 +170,13 @@ private struct ComputerJoin: View {
               HStack(spacing: 10) {
                 Button { UIPasteboard.general.string = invite.url; copied = true; Task { try? await Task.sleep(for: .seconds(1.5)); copied = false } } label: {
                   Label(copied ? "Copied" : "Copy link", systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity)
-                }.primaryButton().controlSize(.regular)
-                ShareLink(item: invite.url) { Image(systemName: "square.and.arrow.up") }.secondaryButton().controlSize(.regular)
+                }.primaryButton().controlSize(.large)
+                ShareLink(item: invite.url) { Image(systemName: "square.and.arrow.up") }.secondaryButton().controlSize(.large)
               }
               if let url = URL(string: invite.url), url.scheme != "https" { Text("This link only works on the same Wi-Fi. To add a computer somewhere else, turn on Away from home in Settings, then make a new link.").font(.system(size: 13)).foregroundStyle(Palette.faint) }
             }
             if joinAction.busy { HStack { ProgressView(); Text("Making a join link…").foregroundStyle(Palette.muted) } }
-            if !joinAction.busy && (invite == nil || expired) { Button(expired ? "Make a new link" : "Try again", action: make).secondaryButton().controlSize(.regular) }
+            if !joinAction.busy && (invite == nil || expired) { Button(expired ? "Make a new link" : "Try again", action: make).secondaryButton().controlSize(.large) }
             InlineError(error: joinAction.error)
           }
           .padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -218,7 +218,7 @@ private struct ComputerJoin: View {
           TextField("Device name", text: $name)
             .padding(.horizontal, 14).frame(height: 46).background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.field))
           Button { tokenAction.run { token = try await store.addDevice(name.trimmed) } } label: { Text("Add a device").frame(maxWidth: .infinity) }
-            .secondaryButton().controlSize(.regular).disabled(tokenAction.busy || name.trimmed.isEmpty || name.count > 80)
+            .secondaryButton().controlSize(.large).disabled(tokenAction.busy || name.trimmed.isEmpty || name.count > 80)
         }
         InlineError(error: tokenAction.error)
       }.padding(.top, 10)
@@ -230,7 +230,12 @@ private struct ComputerJoin: View {
     .accessibilityIdentifier("add-device-command")
   }
 
-  static func commands(hub: String, token: String, name: String) -> [(String, String)] {
+  static func commands(hub: String, token: String, name: String) -> [(String, String)] { ComputerJoinCommands.make(hub: hub, token: token, name: name) }
+}
+
+/** The commands that install Wisp on another computer and connect it with a key. */
+enum ComputerJoinCommands {
+  static func make(hub: String, token: String, name: String) -> [(String, String)] {
     let origin = hub.hasSuffix("/") ? String(hub.dropLast()) : hub
     let shName = "'" + name.replacingOccurrences(of: "'", with: "'\\''") + "'"
     let psName = "'" + name.replacingOccurrences(of: "'", with: "''") + "'"

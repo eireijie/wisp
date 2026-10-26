@@ -307,8 +307,8 @@ struct ComputersView: View {
         }
       }
       HStack(spacing: 10) {
-        Button { path = [.computer(c.id)] } label: { Text("Open computer").frame(maxWidth: .infinity) }.primaryButton().controlSize(.regular)
-        Button { laterHelp.insert(c.id) } label: { Text("Later").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.regular)
+        Button { path = [.computer(c.id)] } label: { Text("Open computer").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large)
+        Button { laterHelp.insert(c.id) } label: { Text("Later").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
       }
     }
     .padding(14)

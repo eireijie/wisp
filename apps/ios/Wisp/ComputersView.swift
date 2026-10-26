@@ -177,8 +177,8 @@ struct ComputerDetail: View {
         }
       }
       HStack(spacing: 10) {
-        Button { takeControl(c) } label: { Text("Take over").frame(maxWidth: .infinity) }.primaryButton().controlSize(.regular).disabled(busy || c.status != "ready" || c.controller != nil)
-        Button { helpLater = true } label: { Text("Not now").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.regular)
+        Button { takeControl(c) } label: { Text("Take over").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large).disabled(busy || c.status != "ready" || c.controller != nil)
+        Button { helpLater = true } label: { Text("Not now").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
       }
     }
     .padding(14)

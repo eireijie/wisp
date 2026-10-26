@@ -97,8 +97,8 @@ struct TeachBar: View {
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.field))
       HStack(spacing: 10) {
-        Button { cancel() } label: { Text("Cancel").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.regular)
-        Button { done() } label: { Text("Done").frame(maxWidth: .infinity) }.primaryButton().controlSize(.regular).disabled(session.recording.count == 0)
+        Button { cancel() } label: { Text("Cancel").frame(maxWidth: .infinity) }.secondaryButton().controlSize(.large)
+        Button { done() } label: { Text("Done").frame(maxWidth: .infinity) }.primaryButton().controlSize(.large).disabled(session.recording.count == 0)
       }
     }
     .card(Corner.card, padding: 12)

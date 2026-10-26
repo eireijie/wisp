@@ -113,7 +113,7 @@ struct DeviceDetail: View {
 
   private func subtitle(_ n: AgentNode) -> String {
     var parts: [String] = []
-    if let owner = n.ownerName { parts.append(n.mine == true ? "\(owner) · This computer's owner" : "\(owner)'s") }
+    if let owner = n.ownerName { parts.append(n.mine == true ? owner : "\(owner)'s") }
     if let caps = n.capabilities { parts.append(caps.osName) }
     return parts.isEmpty ? (n.online ? "Online" : "Offline") : parts.joined(separator: " · ")
   }
@@ -126,7 +126,7 @@ struct DeviceDetail: View {
       step(2, "Make sure it is on the same Wi-Fi, or Away from home is on")
       if n.lastSeen != nil { step(3, "Open Wisp on it if it is not running") }
       Button { action.run { try await store.refreshNodes() } } label: { Label("Check again", systemImage: "arrow.clockwise").frame(maxWidth: .infinity) }
-        .secondaryButton().controlSize(.regular).disabled(action.busy).accessibilityIdentifier("device-check-again")
+        .secondaryButton().controlSize(.large).disabled(action.busy).accessibilityIdentifier("device-check-again")
     } header: { Text("To bring it back") }.listRowBackground(Palette.card)
   }
 
@@ -181,7 +181,7 @@ struct DeviceDetail: View {
           Text("Share with the organization").font(.system(size: 16)).foregroundStyle(Palette.text)
           Text("Let others in \(store.workspace?.name ?? "the organization") add agents and VMs here").font(.system(size: 13)).foregroundStyle(Palette.faint)
         }
-      }.disabled(!editable || action.busy).accessibilityIdentifier("device-shared")
+      }.tint(Palette.blue).disabled(!editable || action.busy).accessibilityIdentifier("device-shared")
     } header: { Text("What this device does for agents") }
       .listRowBackground(Palette.card)
   }
@@ -370,7 +370,7 @@ private struct HarnessesSection: View {
         HStack {
           Text(HarnessChoice.label(h.id)).foregroundStyle(Palette.text)
           Spacer()
-          Text(h.version ?? "Installed").font(.system(size: 14)).foregroundStyle(Palette.faint)
+          Text(h.version.map { "Installed · \($0)" } ?? "Installed").font(.system(size: 14)).foregroundStyle(Palette.faint)
         }
       }
       if have.isEmpty { Text("Nothing found yet. Refresh once the device is online.").foregroundStyle(Palette.muted) }
@@ -487,7 +487,7 @@ private struct RemoteRow: View {
           copied = true
           Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
         }.buttonStyle(.bordered)
-        if let link { Button("Open") { UIApplication.shared.open(link) }.buttonStyle(.borderedProminent) }
+        if let link { Button("Open") { UIApplication.shared.open(link) }.primaryButton().controlSize(.regular) }
         Spacer()
         if onChange != nil || onRemove != nil {
           Menu {
@@ -548,7 +548,7 @@ private struct OwnAppForm: View {
       Text("Only you see this. Keep the app's password in your password manager; Wisp never asks for it.").font(.footnote).foregroundStyle(.secondary)
       InlineError(error: action.error)
       HStack {
-        Button("Save", action: save).buttonStyle(.borderedProminent).disabled(action.busy || value.trimmed.isEmpty)
+        Button("Save", action: save).primaryButton().controlSize(.regular).disabled(action.busy || value.trimmed.isEmpty)
         Button("Cancel", action: onDone).buttonStyle(.bordered).disabled(action.busy)
       }
     }.onAppear {

@@ -136,6 +136,7 @@
 		C2C8C78CF39CCE833F97E9F4 /* ChangesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA1C5ED729A713227BDFE33B /* ChangesView.swift */; };
 		C3996E4891C45ABFF60EEACC /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FD6DE3A8E6EC9FB4A81DD72 /* AppModels.swift */; };
 		C44AD430DE0DA634747C5549 /* Banners.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86CEE8B1E7302EAD0EC060E1 /* Banners.swift */; };
+		C49C9AD9E454D6DB4B0F8562 /* ComputersHomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72E00E7718C20CC8DA62D330 /* ComputersHomeTests.swift */; };
 		C6D62405FCE8CD60124CA696 /* ReviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7FEB75A5676E133DB50C312 /* ReviewTests.swift */; };
 		C95D0706942AAF17B3EBFDD9 /* NoteMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CE2F599395D7001BDD26F9F /* NoteMarkdown.swift */; };
 		C962BC9A4BF83C636E2EDA0F /* SkillCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 19955D942C3879FC9817E27F /* SkillCatalog.json */; };
@@ -270,6 +271,7 @@
 		6CE2F599395D7001BDD26F9F /* NoteMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteMarkdown.swift; sourceTree = "<group>"; };
 		6FCBCD43FC3685F4608B272B /* GhostAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhostAnimation.swift; sourceTree = "<group>"; };
 		71BEDC1EB302A53EDEF2AB7C /* HelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpView.swift; sourceTree = "<group>"; };
+		72E00E7718C20CC8DA62D330 /* ComputersHomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputersHomeTests.swift; sourceTree = "<group>"; };
 		732C02B2BF0ECD6DD136919F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		73695F1B697075837BCC929A /* UpdateModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateModels.swift; sourceTree = "<group>"; };
 		763D7814574EAA5171BC3676 /* appearance-fixtures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "appearance-fixtures.json"; sourceTree = "<group>"; };
@@ -400,6 +402,7 @@
 				8E2BD0CAE804E6D52F180039 /* ChannelTeamTests.swift */,
 				26BA89596C4F0A27057B9F11 /* ChatParityTests.swift */,
 				82605B02B62FA150E763A605 /* ChatTests.swift */,
+				72E00E7718C20CC8DA62D330 /* ComputersHomeTests.swift */,
 				F822FA007798ACCBD1B3774C /* ComputerTests.swift */,
 				B9CB1825799D151309BAF989 /* DeviceTests.swift */,
 				991A2011355F928BFFCFA982 /* FoundationTests.swift */,
@@ -722,6 +725,7 @@
 				4EDD3768794FFBE9EE2F2449 /* ChatParityTests.swift in Sources */,
 				CD91906D7FE6B9EF17F8A006 /* ChatTests.swift in Sources */,
 				D6235077417FDCACD0AD9708 /* ComputerTests.swift in Sources */,
+				C49C9AD9E454D6DB4B0F8562 /* ComputersHomeTests.swift in Sources */,
 				A8A610D854AAA48D449E537F /* DeviceTests.swift in Sources */,
 				B237E297BC80DF8F16F521ED /* FoundationTests.swift in Sources */,
 				A048F5CC0257AC2CA5F4BFDC /* GhostTests.swift in Sources */,
