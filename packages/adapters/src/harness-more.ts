@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "js-yaml";
-import type { HarnessSettingItem, HarnessSettingsChange } from "@wisp/core";
+import type { HarnessConfigChange, HarnessSettingItem } from "@wisp/core";
 import { asObject, editJson, editYaml, isPlainJson, manifestDirs, mcpItem, objAt, parseJsonc, parseToml, readJson, sameKey, skillItems, str, strings, toggleInList, tomlSet, type ConfigSummary } from "./harness-formats.ts";
 
 /**
@@ -36,7 +36,7 @@ export interface HarnessSpec {
   /** a missing config file is fine: changing makes it */
   missingOk?: boolean;
   read(d: SpecDirs): Promise<ConfigSummary>;
-  edit(text: string, changes: HarnessSettingsChange[], d: SpecDirs): string | Promise<string>;
+  edit(text: string, changes: HarnessConfigChange[], d: SpecDirs): string | Promise<string>;
   skillRoots(d: SpecDirs): string[];
 }
 

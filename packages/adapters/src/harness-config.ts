@@ -5,7 +5,7 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { type ConfigSummary, type TomlDoc, type TomlEntry, asObject, boolish, deepEqual, findSkills, mcpItem, parseToml, readJson, safeWrite, sameKey, setPath, str, strings, tomlSet, tomlString, yamlSetList, yamlSetScalar } from "./harness-formats.ts";
 import { MORE_HARNESSES, configFileFor, type HarnessSpec, type SpecDirs } from "./harness-more.ts";
-import { SETTING_NAME, frontMatter, shortDescription, type HarnessSettingItem, type HarnessSettings, type HarnessSettingsChange, type HarnessSkillFile } from "@wisp/core";
+import { SETTING_NAME, frontMatter, shortDescription, type HarnessConfigChange, type HarnessSettingItem, type HarnessSettings, type HarnessSettingsChange, type HarnessSkillFile } from "@wisp/core";
 
 /**
  * A harness's own settings, straight from its config file: Hermes's ~/.hermes/config.yaml, Codex's
@@ -122,7 +122,11 @@ export async function readHarnessSettings(harness: string, h?: HarnessHomes): Pr
 export async function changeHarnessSettings(harness: string, changes: HarnessSettingsChange[], h?: HarnessHomes): Promise<HarnessSettings> {
   const spec = HARNESS_SPECS[harness];
   if (!spec) throw new Error(`Wisp can't change ${harness}'s settings yet`);
-  for (const c of changes) if (c.op !== "toggle") SETTING_NAME.parse(c.op === "model" ? c.model : c.provider);
+  for (const c of changes) if (c.op === "model" || c.op === "provider") SETTING_NAME.parse(c.op === "model" ? c.model : c.provider);
+  // the reasoning effort is a top-level key of the config, set after the harness's own editor ran
+  const effort = changes.find((c) => c.op === "effort")?.effort;
+  if (effort !== undefined && !/^[a-z]{2,16}$/.test(effort)) throw new Error("a reasoning effort is a level like low, medium or high");
+  const rest = changes.filter((c): c is HarnessConfigChange => c.op !== "effort");
   const d = specDirs(harness, h);
   const file = await configFileFor(harness, d.dir, path.join(d.dir, spec.config));
   const real = await fs.realpath(file).catch(() => file);
@@ -133,7 +137,9 @@ export async function changeHarnessSettings(harness: string, changes: HarnessSet
   const current = await readHarnessSettings(harness, h);
   if (current.error) throw new Error(current.error);
   if (current.fixed?.includes("file")) throw new Error(`${path.basename(file)} has comments in it, so Wisp leaves it as it is; change it on the device`);
-  for (const c of changes) {
+  if (effort !== undefined && current.effort === undefined) throw new Error(`${harness} has no reasoning effort setting Wisp can change`);
+  if (effort !== undefined && current.fixed?.includes("model")) throw new Error(`${harness}'s reasoning effort is changed on the device`);
+  for (const c of rest) {
     if (c.op !== "toggle" && current.fixed?.includes(c.op)) throw new Error(`${harness}'s ${c.op} is changed on the device`);
     if (c.op === "provider" && current.providers === null) throw new Error(`${harness} has no provider setting`);
     if (c.op !== "toggle") continue;
@@ -142,8 +148,9 @@ export async function changeHarnessSettings(harness: string, changes: HarnessSet
     if (!item) throw new Error(`${harness} has no ${c.kind} "${c.id}"`);
     if (!item.canToggle) throw new Error(`${harness} has no off switch for ${item.name}; change it on the device`);
   }
-  if (harness === "hermes") changes = hermesModelChoices(changes, current);
-  const after = migrateMcpConfig(await spec.edit(before, changes, d), harness);
+  const edits = harness === "hermes" ? hermesModelChoices(rest, current) : rest;
+  let after = migrateMcpConfig(await spec.edit(before, edits, d), harness);
+  if (effort !== undefined) after = setCodexEffort(after, effort);
   if (after !== before) await safeWrite(real, before, after);
   return readHarnessSettings(harness, h);
 }
@@ -152,9 +159,9 @@ export async function changeHarnessSettings(harness: string, changes: HarnessSet
  * Hermes lists its models as "provider:model" (its ACP picker does), but keeps the two apart in its
  * config: picking "openai-codex:gpt-6" sets both. A colon that isn't after a provider stays in the name.
  */
-function hermesModelChoices(changes: HarnessSettingsChange[], current: HarnessSettings): HarnessSettingsChange[] {
+function hermesModelChoices(changes: HarnessConfigChange[], current: HarnessSettings): HarnessConfigChange[] {
   const known = new Set([...HERMES_KNOWN_PROVIDERS, ...(current.providers ?? []).map((p) => p.id)]);
-  return changes.flatMap((c): HarnessSettingsChange[] => {
+  return changes.flatMap((c): HarnessConfigChange[] => {
     const m = c.op === "model" ? /^([a-z0-9-]+):(.+)$/.exec(c.model) : null;
     if (!m || !known.has(m[1]) || changes.some((x) => x.op === "provider")) return [c];
     return [
@@ -260,7 +267,7 @@ async function readCodex(d: Homes): Promise<Summary> {
       skills.push({ id: s.id, name: s.name, description: s.description, enabled: o?.enabled ?? true, canToggle: true });
     }
   }
-  return { model: str(get([], "model")), provider: provider ?? "openai", providers: ids.map((id) => ({ id, signedIn: id === "openai" || configured.includes(id) })), apps, plugins, skills };
+  return { model: str(get([], "model")), provider: provider ?? "openai", providers: ids.map((id) => ({ id, signedIn: id === "openai" || configured.includes(id) })), effort: str(get([], "model_reasoning_effort")) ?? null, apps, plugins, skills };
 }
 
 function codexSkillOverrides(doc: TomlDoc) {
@@ -298,7 +305,7 @@ async function readClaude(d: Homes): Promise<Summary> {
 // --- changing ------------------------------------------------------------------------------
 
 /** Hermes: model.default and model.provider, plugins.enabled/disabled, skills.disabled, mcp_servers.<name>.enabled. */
-export function editHermes(text: string, changes: HarnessSettingsChange[]): string {
+export function editHermes(text: string, changes: HarnessConfigChange[]): string {
   const before = asObject(yaml.load(text));
   const expected = structuredClone(before);
   if (typeof before.model === "string" && changes.some((c) => c.op === "model" || c.op === "provider")) {
@@ -347,8 +354,20 @@ export function editHermes(text: string, changes: HarnessSettingsChange[]): stri
   return out;
 }
 
+/** Codex's `model_reasoning_effort` (top level), changed on its own and checked like the other edits. */
+export function setCodexEffort(text: string, effort: string): string {
+  const out = tomlSet(text, [], "model_reasoning_effort", effort);
+  const a = parseToml(text);
+  const b = parseToml(out);
+  const rest = (d: TomlDoc) => d.entries.filter((e) => !(sameKey(e.table, []) && e.key === "model_reasoning_effort")).map((e) => `${e.table.join("\0")}\0${e.key}\0${e.raw}`);
+  const ra = rest(a);
+  const rb = rest(b);
+  if (ra.length !== rb.length || ra.some((x, i) => x !== rb[i]) || !b.entries.some((e) => sameKey(e.table, []) && e.key === "model_reasoning_effort" && e.value === effort)) throw new Error("the change didn't come out as expected, so config.toml was left as it was");
+  return out;
+}
+
 /** Codex: top-level model and model_provider, [mcp_servers.<name>] and [plugins."<id>"] enabled, [[skills.config]] for skills. */
-export function editCodex(text: string, changes: HarnessSettingsChange[]): string {
+export function editCodex(text: string, changes: HarnessConfigChange[]): string {
   let out = text;
   const want: { table: string[]; key: string; value: unknown; arrayIndex?: number; name?: string }[] = [];
   for (const c of changes) {
@@ -387,7 +406,7 @@ export function editCodex(text: string, changes: HarnessSettingsChange[]): strin
 }
 
 /** Claude Code: model, enabledPlugins, skillOverrides in settings.json. */
-export function editClaude(text: string, changes: HarnessSettingsChange[]): string {
+export function editClaude(text: string, changes: HarnessConfigChange[]): string {
   const settings = text.trim() ? asObject(JSON.parse(text)) : {};
   for (const c of changes) {
     if (c.op === "model") settings.model = c.model;

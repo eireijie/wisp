@@ -63,6 +63,11 @@ export const HarnessSettings = z.object({
   fixed: z.array(z.enum(["model", "provider", "file"])).optional(),
   /** models the config itself lists to pick from (Kimi's [models.*]) */
   modelChoices: z.array(z.string().max(200)).max(200).optional(),
+  /**
+   * The reasoning effort it thinks with by default ("low", "medium", "high"…), null when unset. Only
+   * there for harnesses whose config has one Wisp can change (Codex); absent for the rest.
+   */
+  effort: z.string().max(40).nullable().optional(),
   /** the config couldn't be read (shown instead of the settings) */
   error: z.string().max(1000).optional(),
 });
@@ -72,8 +77,11 @@ export const HarnessSettingsChange = z.discriminatedUnion("op", [
   z.object({ op: z.literal("model"), model: SETTING_NAME }),
   z.object({ op: z.literal("provider"), provider: SETTING_NAME }),
   z.object({ op: z.literal("toggle"), kind: z.enum(["app", "plugin", "skill"]), id: z.string().min(1).max(300), enabled: z.boolean() }),
+  z.object({ op: z.literal("effort"), effort: z.string().regex(/^[a-z]{2,16}$/, "a level like low, medium or high") }),
 ]);
 export type HarnessSettingsChange = z.infer<typeof HarnessSettingsChange>;
+/** The changes a harness's own editor applies (the reasoning effort is applied on top, where the config has one). */
+export type HarnessConfigChange = Exclude<HarnessSettingsChange, { op: "effort" }>;
 
 /** What can be done to a harness's accounts on a device. */
 export const HarnessAccountOp = z.discriminatedUnion("op", [
@@ -113,5 +121,6 @@ export type HarnessSkillFile = z.infer<typeof HarnessSkillFile>;
 export function describeChange(c: HarnessSettingsChange): string {
   if (c.op === "model") return `model → ${c.model}`;
   if (c.op === "provider") return `provider → ${c.provider}`;
+  if (c.op === "effort") return `reasoning effort → ${c.effort}`;
   return `turned ${c.enabled ? "on" : "off"} ${c.kind} ${c.id}`;
 }

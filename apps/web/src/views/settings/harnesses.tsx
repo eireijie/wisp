@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowUp, Copy, ExternalLink, Loader2, MoreHorizontal, Plus } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowUp, Bot, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, Download, LogIn, UserMinus, FileCog } from "lucide-react";
 import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@wisp/core";
 import { api } from "../../api.ts";
 import { useDevices } from "../../devices.ts";
 import { href } from "../../router.ts";
 import { useStore } from "../../store.ts";
-import { Button, CopyBlock, Input, Menu, Modal, Pill, cx } from "../../components/ui.tsx";
-import { Card, Section, Select, Toggle } from "./parts.tsx";
+import { CopyBlock, cx } from "../../components/ui.tsx";
+import { MoreOptions } from "../../components/MoreOptions.tsx";
+import { Badge, Circle, Dlg, Item, Label, Panel, Pick, Prim, Sec, Seg, Switch, TextBox, Tile } from "../../components/MarketParts.tsx";
+import { AgentPicker } from "../../components/ShopParts.tsx";
+import { InstallHarness } from "./runtimes.tsx";
 
 export interface HarnessesResponse {
   device: { id: string; name: string };
@@ -17,10 +20,26 @@ export interface HarnessesResponse {
 
 const OTHER = "\u0000other";
 
+const sentence = (names: string[]) => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
+
+/** The harness's tile: a neutral square with a plain line icon. */
+const HarnessTile = ({ size = 40 }: { size?: number }) => (
+  <Tile size={size}>
+    <Bot size={Math.round(size * 0.5)} strokeWidth={1.7} />
+  </Tile>
+);
+
+/** Signed in, needs a sign-in, or unknown (the device can't tell), from the account the page shows. */
+function signState(s: HarnessSettings): { text: string; badge: "Signed in" | "Sign in" | null } {
+  const a = s.accounts.find((x) => x.id === s.account) ?? s.accounts[0];
+  if (!a || a.signedIn === null) return { text: a?.who ?? "Account", badge: null };
+  return a.signedIn ? { text: a.who ?? a.label, badge: "Signed in" } : { text: "Not signed in", badge: "Sign in" };
+}
+
 /**
  * Each harness's own settings on one of your devices, read from and written to its config file
- * there: the model and provider it uses, its apps, plugins and skills. Agents can change the same
- * things when you ask them in chat.
+ * there: the account it's signed in as, the model and provider it uses, its apps, plugins and skills.
+ * Agents can change the same things when you ask them in chat.
  */
 export function HarnessesPage() {
   const devices = useDevices(10_000);
@@ -28,8 +47,10 @@ export function HarnessesPage() {
   const [pick, setPick] = useState("");
   const device = mine.find((d) => d.id === pick) ?? mine.find((d) => d.online) ?? mine[0];
   const [data, setData] = useState<HarnessesResponse | null>(null);
-  const [tab, setTab] = useState<string>("");
+  /** the harness open: on phones the list shows until one is picked, on larger screens the first is open */
+  const [tab, setTab] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
   const online = !!device?.online;
 
   useEffect(() => {
@@ -46,7 +67,8 @@ export function HarnessesPage() {
     };
   }, [device?.id, online]);
 
-  const current = data?.harnesses.find((h) => h.harness === tab) ?? data?.harnesses[0];
+  const current = data?.harnesses.find((h) => h.harness === tab) ?? (tab === null ? undefined : data?.harnesses[0]);
+  const shown = current ?? data?.harnesses[0];
   const replace = (s: HarnessSettings) => setData((d) => d && { ...d, harnesses: d.harnesses.map((h) => (h.harness === s.harness ? s : h)) });
   /** Show one harness as one of its accounts (or again, after a sign-in). */
   const load = async (harness: string, account: string) => {
@@ -56,68 +78,109 @@ export function HarnessesPage() {
     if (s) setData((d) => d && { ...d, agents: r.agents, harnesses: d.harnesses.map((h) => (h.harness === harness ? s : h)) });
   };
 
-  return (
-    <>
-      {devices === null ? (
-        <p className="text-sm text-muted">Loading…</p>
-      ) : !device ? (
-        <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">
-          No devices of yours yet.{" "}
-          <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
-            Connect one
-          </a>
-          .
-        </p>
-      ) : (
-        <>
-          {mine.length > 1 && (
-            <div className="mb-5">
-              <Select label="Device" value={device.id} onChange={setPick}>
+  const intro = <p className="px-1 text-sm text-faint">A harness is the program an agent thinks with. Sign in once and every agent that uses it is ready.</p>;
+
+  if (devices === null) return <p className="text-sm text-muted">Loading…</p>;
+  if (!device)
+    return (
+      <p className="rounded-2xl border border-dashed border-line p-4 text-sm text-muted">
+        No devices of yours yet.{" "}
+        <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
+          Connect one
+        </a>
+        .
+      </p>
+    );
+
+  const list = (
+    <div className="space-y-4">
+      <Panel>
+        <Item
+          icon={
+            <Tile size={40}>
+              <Bot size={20} strokeWidth={1.7} />
+            </Tile>
+          }
+          title={device.name}
+          sub={<span>On</span>}
+          right={
+            mine.length > 1 ? (
+              <Pick label="Device" value={device.id} onChange={(v) => (setPick(v), setTab(null))}>
                 {mine.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
                     {d.online ? "" : " (offline)"}
                   </option>
                 ))}
-              </Select>
-            </div>
-          )}
-          {!online ? (
-            <p className="text-sm text-muted">{device.name} is offline. Its harness settings show up when it's back.</p>
-          ) : error ? (
-            <p className="text-sm text-bad whitespace-pre-wrap">{error}</p>
-          ) : !data ? (
-            <p className="text-sm text-muted flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" /> Reading {device.name}'s harnesses…
-            </p>
-          ) : !current ? (
-            <p className="text-sm text-muted">
-              No harnesses on {device.name} yet.{" "}
-              <a className="text-accent-text hover:underline" href={href({ view: "settings", page: "runtimes" })}>
-                Install one
-              </a>
-              .
-            </p>
+              </Pick>
+            ) : undefined
+          }
+        />
+      </Panel>
+      {intro}
+      {!online ? (
+        <p className="px-1 text-sm text-muted">{device.name} is offline. Its harness settings show up when it's back.</p>
+      ) : error ? (
+        <p className="whitespace-pre-wrap px-1 text-sm text-bad">{error}</p>
+      ) : !data ? (
+        <p className="flex items-center gap-2 px-1 text-sm text-muted">
+          <Loader2 size={14} className="animate-spin" /> Reading {device.name}'s harnesses…
+        </p>
+      ) : (
+        <>
+          {data.harnesses.length === 0 ? (
+            <p className="px-1 text-sm text-muted">No harnesses on {device.name} yet.</p>
           ) : (
-            <>
-              <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Harness">
-                {data.harnesses.map((h) => (
-                  <button
+            <Panel>
+              {data.harnesses.map((h) => {
+                const st = signState(h);
+                return (
+                  <Item
                     key={h.harness}
-                    role="tab"
-                    aria-selected={h.harness === current.harness}
+                    icon={<HarnessTile />}
+                    title={harnessLabel(h.harness)}
+                    sub={st.text}
+                    right={st.badge ? <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge> : undefined}
                     onClick={() => setTab(h.harness)}
-                    className={cx("h-9 rounded-full px-4 text-sm", h.harness === current.harness ? "bg-ink text-bg font-semibold" : "bg-chip hover:bg-hover")}
-                  >
-                    {harnessLabel(h.harness)}
-                  </button>
-                ))}
-              </div>
-              <HarnessPanel key={`${device.id}:${current.harness}`} device={data.device} settings={current} agents={data.agents} catalog={data.catalog.find((c) => c.harness === current.harness)} onChange={replace} onLoad={(account) => load(current.harness, account)} />
-            </>
+                    label={`${harnessLabel(h.harness)}, ${st.text}`}
+                  />
+                );
+              })}
+            </Panel>
           )}
+          <Panel>
+            <Item icon={<Tile size={40}><Download size={20} strokeWidth={1.7} /></Tile>} title="Install a harness" sub={`Add another one to ${device.name}`} onClick={() => setInstalling(true)} />
+          </Panel>
         </>
       )}
+    </div>
+  );
+
+  const detail =
+    online && data && shown ? (
+      <HarnessPanel key={`${device.id}:${shown.harness}`} device={data.device} settings={shown} agents={data.agents} catalog={data.catalog.find((c) => c.harness === shown.harness)} onChange={replace} onLoad={(account) => load(shown.harness, account)} />
+    ) : null;
+
+  return (
+    <>
+      {/* phones: the list, or one harness with a way back; larger screens: both side by side */}
+      <div className="md:hidden">
+        {current && detail ? (
+          <div className="space-y-5">
+            <Circle label="Back to harnesses" onClick={() => setTab(null)}>
+              <ChevronLeft size={22} />
+            </Circle>
+            {detail}
+          </div>
+        ) : (
+          list
+        )}
+      </div>
+      <div className="hidden gap-8 md:grid md:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="min-w-0">{list}</div>
+        <div className="min-w-0">{detail}</div>
+      </div>
+      {installing && <InstallHarness device={device} onClose={() => setInstalling(false)} />}
     </>
   );
 }
@@ -129,6 +192,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sharing, setSharing] = useState<HarnessSettingItem | null>(null);
+  const st = signState(settings);
 
   const change = async (key: string, changes: HarnessSettingsChange[], optimistic?: HarnessSettings) => {
     setBusy(key);
@@ -145,7 +209,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
   };
   const toggle = (kind: "app" | "plugin" | "skill", item: HarnessSettingItem, enabled: boolean) => {
     const list = kind === "app" ? "apps" : kind === "plugin" ? "plugins" : "skills";
-    change(`${kind}:${item.id}`, [{ op: "toggle", kind, id: item.id, enabled }], { ...settings, [list]: settings[list].map((i) => (i.id === item.id ? { ...i, enabled } : i)) });
+    void change(`${kind}:${item.id}`, [{ op: "toggle", kind, id: item.id, enabled }], { ...settings, [list]: settings[list].map((i) => (i.id === item.id ? { ...i, enabled } : i)) });
   };
   const openConfig = async () => {
     setError(null);
@@ -157,74 +221,94 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
     }
   };
 
-  if (settings.error) return <p className="text-sm text-bad whitespace-pre-wrap">{settings.error}</p>;
+  if (settings.error) return <p className="whitespace-pre-wrap text-sm text-bad">{settings.error}</p>;
+  const efforts = catalog?.efforts?.length ? catalog.efforts : ["low", "medium", "high"];
   return (
-    <div className="space-y-8">
-      <header>
-        <h3 className="text-2xl font-bold tracking-tight">{label}</h3>
-        <p className="mt-1 text-sm text-muted">
-          On {device.name}
-          {users.length > 0 && <> · used by {users.map((a) => a.name).join(", ")}</>}
-        </p>
-      </header>
-
-      {(settings.multiAccount || settings.accounts.length > 1) && <Accounts device={device} settings={settings} users={users} onLoad={onLoad} />}
-
-      {settings.fixed?.includes("file") && <p className="text-[13px] text-muted">{settings.configPath.split("/").pop()} has comments in it, so Wisp only shows it. Change it on {device.name}.</p>}
-
-      <Card>
-        <ModelRow settings={settings} catalog={catalog} busy={busy === "model"} onPick={(model) => change("model", [{ op: "model", model }])} />
-        {settings.providers && (
-          <div className="px-4 py-3 flex items-center justify-between gap-4">
-            <label htmlFor="harness-provider" className="text-sm font-medium">
-              Provider
-            </label>
-            <select
-              id="harness-provider"
-              value={settings.provider ?? ""}
-              disabled={busy === "provider" || !!settings.fixed?.some((f) => f === "provider" || f === "file")}
-              onChange={(e) => change("provider", [{ op: "provider", provider: e.target.value }], { ...settings, provider: e.target.value })}
-              className="h-8 max-w-[60%] rounded-lg border border-line bg-panel px-2 text-sm"
-            >
-              {!settings.provider && <option value="">Default</option>}
-              {settings.providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.id}
-                  {p.signedIn ? "" : " (not signed in)"}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="space-y-6">
+      <header className="flex items-center gap-3">
+        <h2 className="min-w-0 flex-1 truncate text-2xl font-bold tracking-tight">{label}</h2>
+        {st.badge && (
+          <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge>
         )}
-      </Card>
+      </header>
+      {settings.fixed?.includes("file") && <p className="px-1 text-[13px] text-muted">{settings.configPath.split("/").pop()} has comments in it, so Wisp only shows it. Change it on {device.name}.</p>}
 
-      {error && <p className="text-sm text-bad whitespace-pre-wrap">{error}</p>}
+      <Accounts device={device} settings={settings} users={users} onLoad={onLoad} />
+
+      <section className="space-y-2">
+        <Label>Model</Label>
+        <Panel>
+          <ModelRow settings={settings} catalog={catalog} busy={busy === "model"} onPick={(model) => change("model", [{ op: "model", model }])} />
+          {settings.providers && (
+            <Item
+              title="Provider"
+              right={
+                <Pick
+                  label="Provider"
+                  value={settings.provider ?? ""}
+                  disabled={busy === "provider" || !!settings.fixed?.some((f) => f === "provider" || f === "file")}
+                  onChange={(v) => change("provider", [{ op: "provider", provider: v }], { ...settings, provider: v })}
+                >
+                  {!settings.provider && <option value="">Default</option>}
+                  {settings.providers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id}
+                      {p.signedIn ? "" : " (not signed in)"}
+                    </option>
+                  ))}
+                </Pick>
+              }
+            />
+          )}
+          {settings.effort !== undefined && (
+            <div className="space-y-2.5 px-4 py-3.5">
+              <div className="text-[17px] font-medium">Reasoning effort</div>
+              <Seg
+                label="Reasoning effort"
+                value={settings.effort ?? ""}
+                disabled={busy === "effort" || !!settings.fixed?.some((f) => f === "model" || f === "file")}
+                onChange={(v) => change("effort", [{ op: "effort", effort: v }], { ...settings, effort: v })}
+                options={efforts.map((e) => [e, e.charAt(0).toUpperCase() + e.slice(1)] as const)}
+              />
+              {!settings.effort && <p className="text-[13px] text-faint">Not set. {label} uses its own default.</p>}
+            </div>
+          )}
+        </Panel>
+      </section>
+
+      {error && <p className="whitespace-pre-wrap text-sm text-bad">{error}</p>}
 
       <WispAndDeviceApps settings={settings} users={users} busy={busy} onToggle={(item, on) => toggle("app", item, on)} />
 
-      <Section title="Plugins and skills" action={<GetMore href={href({ view: "skills" })} />}>
+      <section className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <Label>Plugins and skills</Label>
+          <GetMore href={href({ view: "marketplace", section: "skills" })} />
+        </div>
         {settings.plugins.length + settings.skills.length === 0 ? (
-          <p className="text-sm text-muted">None yet.</p>
+          <p className="px-1 text-sm text-muted">None yet.</p>
         ) : (
-          <Card>
+          <Panel>
             {settings.plugins.map((p) => (
-              <ItemRow key={`p:${p.id}`} item={p} note={p.description ? `${label} plugin · ${p.description}` : `${label} plugin`} busy={busy === `plugin:${p.id}`} onToggle={(on) => toggle("plugin", p, on)} />
+              <ItemRow key={`p:${p.id}`} item={p} note="Plugin" busy={busy === `plugin:${p.id}`} onToggle={(on) => toggle("plugin", p, on)} />
             ))}
             {settings.skills.map((s) => (
-              <ItemRow key={`s:${s.id}`} item={s} note={s.description ? `Skill · ${s.description}` : "Skill"} busy={busy === `skill:${s.id}`} onToggle={(on) => toggle("skill", s, on)} onShare={() => setSharing(s)} />
+              <ItemRow key={`s:${s.id}`} item={s} note="Skill" busy={busy === `skill:${s.id}`} onToggle={(on) => toggle("skill", s, on)} onShare={() => setSharing(s)} />
             ))}
-          </Card>
+          </Panel>
         )}
-      </Section>
+      </section>
 
       {users[0] && <AskBox agent={users[0]} harness={label} device={device.name} />}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button className="text-[13px] text-muted hover:text-ink" title={settings.configPath} onClick={openConfig}>
-          Open config file
-        </button>
-        {note && <span className="text-[13px] text-muted">{note}</span>}
-      </div>
+      <MoreOptions about="its config file">
+        <div className="flex flex-wrap items-center gap-3">
+          <button className="inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-ink" title={settings.configPath} onClick={openConfig}>
+            <FileCog size={14} /> Open config file
+          </button>
+          {note && <span className="text-[13px] text-muted">{note}</span>}
+        </div>
+      </MoreOptions>
 
       {sharing && <ShareSkill deviceId={device.id} harness={settings.harness} account={settings.account} skill={sharing} onClose={() => setSharing(null)} onShared={(n) => (setSharing(null), setNote(n))} />}
     </div>
@@ -246,28 +330,28 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
     onPick(text.trim());
     setTyping(false);
   };
-  return (
-    <div className="px-4 py-3 flex items-center justify-between gap-4">
-      <label htmlFor="harness-model" className="text-sm font-medium">
-        Model
-      </label>
-      {typing ? (
-        <form onSubmit={submit} className="flex items-center gap-2">
-          <input id="harness-model" autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Model name" className="h-8 w-56 rounded-lg border border-line bg-panel px-2 text-sm" />
-          <Button type="submit" className="h-8">
-            Save
-          </Button>
-          <Button type="button" variant="ghost" className="h-8" onClick={() => setTyping(false)}>
-            Cancel
-          </Button>
-        </form>
-      ) : (
-        <select
-          id="harness-model"
+  const shownName = models.find((m) => m.id === value)?.label ?? value ?? "Automatic";
+  return typing ? (
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2 px-4 py-3">
+      <span className="text-[17px] font-medium">Default model</span>
+      <TextBox autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Model name" aria-label="Model name" className="h-10 min-w-0 flex-1" />
+      <Sec type="submit" className="h-10">
+        Save
+      </Sec>
+      <Sec onClick={() => setTyping(false)} className="h-10">
+        Cancel
+      </Sec>
+    </form>
+  ) : (
+    <Item
+      title="Default model"
+      sub={settings.model ? shownName : "Automatic"}
+      right={
+        <Pick
+          label="Default model"
           value={value ?? ""}
           disabled={busy || fixed}
-          onChange={(e) => (e.target.value === OTHER ? (setText(settings.model ?? ""), setTyping(true)) : onPick(e.target.value))}
-          className="h-8 max-w-[60%] rounded-lg border border-line bg-panel px-2 text-sm"
+          onChange={(v) => (v === OTHER ? (setText(settings.model ?? ""), setTyping(true)) : onPick(v))}
         >
           {!settings.model && <option value="">{catalog?.defaultModel ? `Default (${catalog.models.find((m) => m.id === catalog.defaultModel)?.label ?? catalog.defaultModel})` : "Default"}</option>}
           {!known && <option value={value!}>{value}</option>}
@@ -277,9 +361,9 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
             </option>
           ))}
           {!settings.modelChoices && <option value={OTHER}>Other…</option>}
-        </select>
-      )}
-    </div>
+        </Pick>
+      }
+    />
   );
 }
 
@@ -305,41 +389,44 @@ function WispAndDeviceApps({ settings, users, busy, onToggle }: { settings: Harn
   };
   const wispNote = (c: Connector) => (c.auth?.required ? (c.auth.signedIn ? "Logged in through Wisp" : "Needs logging in, in Wisp") : "Set up in Wisp");
   return (
-    <Section title="Apps" action={<GetMore href={href({ view: "connectors" })} />}>
+    <section className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <Label>Apps</Label>
+        <GetMore href={href({ view: "marketplace", section: "apps" })} />
+      </div>
       {wisp.length + settings.apps.length === 0 ? (
-        <p className="text-sm text-muted">None yet.</p>
+        <p className="px-1 text-sm text-muted">None yet.</p>
       ) : (
-        <Card>
+        <Panel>
           {ids.length > 0 &&
-            wisp.map((c) => (
-              <ItemRow key={`w:${c.id}`} item={{ id: c.id, name: c.name, enabled: ids.every((a) => c.agentIds.includes(a)), canToggle: true }} note={wispNote(c)} onToggle={(on) => attach(c, on)} />
-            ))}
+            wisp.map((c) => <ItemRow key={`w:${c.id}`} item={{ id: c.id, name: c.name, enabled: ids.every((a) => c.agentIds.includes(a)), canToggle: true }} note={wispNote(c)} onToggle={(on) => attach(c, on)} />)}
           {settings.apps.map((a) => (
             <ItemRow key={`d:${a.id}`} item={a} note={a.canToggle ? "Set up on this device" : "Set up on this device · changed there"} busy={busy === `app:${a.id}`} onToggle={(on) => onToggle(a, on)} />
           ))}
-        </Card>
+        </Panel>
       )}
-      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
-    </Section>
+      {error && <p className="px-1 text-sm text-bad">{error}</p>}
+    </section>
   );
 }
 
 function ItemRow({ item, note, busy, onToggle, onShare }: { item: HarnessSettingItem; note: string; busy?: boolean; onToggle: (on: boolean) => void; onShare?: () => void }) {
   return (
-    <div className="px-4 py-3 flex items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate">{item.name}</div>
-        <div className="text-xs text-muted truncate" title={item.detail ?? note}>
-          {note}
-        </div>
-      </div>
-      {onShare && (
-        <Button className="h-7 px-3 text-xs" onClick={onShare}>
-          Share
-        </Button>
-      )}
-      <Toggle on={item.enabled} onChange={onToggle} label={`${item.name} on`} disabled={busy || !item.canToggle} />
-    </div>
+    <Item
+      icon={<Tile size={40}><Bot size={20} strokeWidth={1.7} /></Tile>}
+      title={item.name}
+      sub={<span title={item.detail ?? note}>{note}</span>}
+      right={
+        <>
+          {onShare && (
+            <button type="button" onClick={onShare} className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] text-muted hover:bg-hover hover:text-ink" aria-label={`Share ${item.name}`}>
+              <Share2 size={14} /> Share
+            </button>
+          )}
+          <Switch on={item.enabled} onChange={onToggle} label={`${item.name} on`} disabled={busy || !item.canToggle} />
+        </>
+      }
+    />
   );
 }
 
@@ -372,24 +459,24 @@ function AskBox({ agent, harness, device }: { agent: HarnessesResponse["agents"]
   };
   return (
     <div>
-      <form onSubmit={send} className="flex items-center gap-2 rounded-full border border-line bg-panel pl-4 pr-1.5 py-1.5">
+      <form onSubmit={send} className="flex items-center gap-2 rounded-full border border-control-line bg-control py-1.5 pl-4 pr-1.5">
         <label htmlFor="harness-ask" className="sr-only">
           Ask {agent.name} to change {harness}
         </label>
-        <input id="harness-ask" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Ask ${agent.name} to change anything here`} className="flex-1 min-w-0 bg-transparent text-sm outline-none py-1.5" />
-        <button type="submit" aria-label="Send" disabled={!text.trim()} className="size-8 shrink-0 rounded-full bg-ink text-bg grid place-items-center disabled:opacity-40">
+        <input id="harness-ask" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Ask ${agent.name} to change anything here`} className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none placeholder:text-faint" />
+        <button type="submit" aria-label="Send" disabled={!text.trim()} className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-accent-ink disabled:opacity-40">
           <ArrowUp size={16} />
         </button>
       </form>
       {sent && (
-        <p className="mt-2 text-[13px] text-muted">
+        <p className="mt-2 px-1 text-[13px] text-muted">
           Asked {agent.name}.{" "}
           <a className="text-accent-text hover:underline" href={href({ view: "chat", channelId: sent, threadId: null })}>
             See the reply
           </a>
         </p>
       )}
-      {error && <p className="mt-2 text-sm text-bad">{error}</p>}
+      {error && <p className="mt-2 px-1 text-sm text-bad">{error}</p>}
     </div>
   );
 }
@@ -413,28 +500,16 @@ function ShareSkill({ deviceId, harness, account, skill, onClose, onShared }: { 
     }
   };
   return (
-    <Modal title={`Share ${skill.name}`} onClose={onClose}>
-      <div className="space-y-4 text-sm">
-        <div className="max-h-64 overflow-y-auto rounded-xl border border-line divide-y divide-line">
-          {agents.map((a) => (
-            <label key={a.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-hover">
-              <input type="checkbox" checked={picked.includes(a.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, a.id] : p.filter((x) => x !== a.id)))} />
-              <span className="flex-1">{a.name}</span>
-              <span className="text-xs text-muted">{harnessLabel(a.harness)}</span>
-            </label>
-          ))}
-        </div>
-        {error && <p className="text-bad">{error}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={share} disabled={busy}>
-            {busy ? "Sharing…" : "Share"}
-          </Button>
-        </div>
+    <Dlg title={`Share ${skill.name}`} sub="Who gets a copy?" onClose={onClose}>
+      <AgentPicker agents={agents} value={picked} onChange={setPicked} />
+      {error && <p className="text-sm text-bad">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Sec onClick={onClose}>Cancel</Sec>
+        <Prim className="h-11 text-[15px]" onClick={share} disabled={busy}>
+          {busy ? "Sharing…" : "Share"}
+        </Prim>
       </div>
-    </Modal>
+    </Dlg>
   );
 }
 
@@ -459,7 +534,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
   const add = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    run(async () => {
+    void run(async () => {
       if (adding === "rename" && current) {
         await act({ op: "rename", account: current.id, label: name.trim() });
         setAdding(null);
@@ -473,79 +548,74 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
     });
   };
   const using = (agentId: string) => settings.agentAccounts[agentId] ?? "default";
+  const usedBy = (accountId: string) => users.filter((u) => using(u.id) === accountId).map((u) => u.name);
+  const row = (icon: ReactNode, title: string, sub: string, onClick: () => void, danger?: boolean) => <Item icon={<Tile size={40}>{icon}</Tile>} title={title} sub={sub} onClick={onClick} danger={danger} />;
   return (
-    <Card>
-      <div className="px-4 py-3 flex flex-wrap items-center gap-3">
-        <label htmlFor="harness-account" className="text-sm font-medium flex-1">
-          Account
-        </label>
-        {current?.signedIn === true && <Pill tone="ok">Signed in</Pill>}
-        {current?.signedIn === false && (
-          <Button className="h-8" onClick={() => setSigningIn(true)}>
-            Sign in
-          </Button>
-        )}
-        <select id="harness-account" value={settings.account} onChange={(e) => run(() => onLoad(e.target.value))} className="h-8 max-w-[50%] rounded-lg border border-line bg-panel px-2 text-sm">
-          {settings.accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label}
-            </option>
-          ))}
-        </select>
-        <Menu
-          align="right"
-          trigger={(_o, t) => (
-            <button onClick={t} className="p-1.5 rounded-md hover:bg-hover text-muted" aria-label="More for this account">
-              <MoreHorizontal size={16} />
-            </button>
-          )}
-          items={[
-            ...(settings.multiAccount ? [{ label: "Add account", icon: <Plus size={14} />, onSelect: () => (setName(""), setAdding("add")) }] : []),
-            ...(current?.signedIn !== false ? [{ label: current?.signedIn ? "Sign in again" : "Sign in", onSelect: () => setSigningIn(true) }] : []),
-            ...(current && !current.isDefault
-              ? [
-                  { label: "Rename", onSelect: () => (setName(current.label), setAdding("rename")) },
-                  "divider" as const,
-                  { label: "Stop using it", danger: true, onSelect: () => run(async () => (await act({ op: "remove", account: current.id }), await onLoad("default"))) },
-                ]
-              : []),
-          ]}
-        />
-      </div>
+    <section className="space-y-2">
+      <Label>Account</Label>
+      <Panel>
+        {settings.accounts.map((a) => {
+          const who = usedBy(a.id);
+          const shownNow = a.id === current?.id;
+          return (
+            <Item
+              key={a.id}
+              icon={<HarnessTile />}
+              title={a.who ?? a.label}
+              sub={who.length ? `Used by ${sentence(who)}` : a.signedIn === false ? "Not signed in" : shownNow && settings.accounts.length > 1 ? "Showing now" : a.who && a.who !== a.label ? a.label : "Not used by an agent yet"}
+              right={a.signedIn === true ? <Badge tone="green">Signed in</Badge> : a.signedIn === false ? <Badge>Sign in</Badge> : undefined}
+              onClick={settings.accounts.length > 1 && !shownNow ? () => void run(() => onLoad(a.id)) : undefined}
+              label={`${a.label}${shownNow ? ", showing" : ""}`}
+            />
+          );
+        })}
+        {settings.multiAccount && row(<Plus size={20} strokeWidth={1.7} />, "Add account", "Use a second login", () => (setName(""), setAdding("add")))}
+        {current && current.signedIn !== false && row(<LogIn size={20} strokeWidth={1.7} />, current.signedIn ? "Sign in again" : "Sign in", "Open the sign-in page", () => setSigningIn(true))}
+        {current && current.signedIn === false && row(<LogIn size={20} strokeWidth={1.7} />, "Sign in", "Open the sign-in page", () => setSigningIn(true))}
+      </Panel>
       {adding && (
-        <form onSubmit={add} className="px-4 py-3 flex items-center gap-2">
-          <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={`Name, like "Work ${label}"`} aria-label="Account name" className="flex-1" />
-          <Button type="submit" variant="primary" disabled={!name.trim()}>
+        <form onSubmit={add} className="flex items-center gap-2">
+          <TextBox autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={`Name, like "Work ${label}"`} aria-label="Account name" className="h-11 flex-1" />
+          <Prim type="submit" className="h-11 text-[15px]" disabled={!name.trim()}>
             {adding === "rename" ? "Rename" : "Add"}
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setAdding(null)}>
-            Cancel
-          </Button>
+          </Prim>
+          <Sec onClick={() => setAdding(null)}>Cancel</Sec>
         </form>
       )}
-      {settings.accounts.length > 1 &&
-        users.map((u) => (
-          <div key={u.id} className="px-4 py-3 flex items-center gap-3">
-            <label htmlFor={`acct-${u.id}`} className="text-sm flex-1">
-              {u.name} uses
-            </label>
-            <select
-              id={`acct-${u.id}`}
-              value={using(u.id)}
-              onChange={(e) => run(async () => (await act({ op: "assign", agentId: u.id, account: e.target.value === "default" ? null : e.target.value }), await onLoad(settings.account)))}
-              className="h-8 max-w-[50%] rounded-lg border border-line bg-panel px-2 text-sm"
-            >
-              {settings.accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
+      {(settings.accounts.length > 1 || (current && !current.isDefault)) && (
+        <MoreOptions about="who uses which account, rename">
+          <div className="space-y-3">
+            {settings.accounts.length > 1 && (
+              <Panel>
+                {users.map((u) => (
+                  <Item
+                    key={u.id}
+                    title={`${u.name} uses`}
+                    right={
+                      <Pick label={`${u.name} uses`} value={using(u.id)} onChange={(v) => void run(async () => (await act({ op: "assign", agentId: u.id, account: v === "default" ? null : v }), await onLoad(settings.account)))}>
+                        {settings.accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.label}
+                          </option>
+                        ))}
+                      </Pick>
+                    }
+                  />
+                ))}
+              </Panel>
+            )}
+            {current && !current.isDefault && (
+              <Panel>
+                {row(<UserPen size={20} strokeWidth={1.7} />, "Rename", current.label, () => (setName(current.label), setAdding("rename")))}
+                {row(<UserMinus size={20} strokeWidth={1.7} className="text-bad" />, "Stop using it", "Agents go back to the default account", () => void run(async () => (await act({ op: "remove", account: current.id }), await onLoad("default"))), true)}
+              </Panel>
+            )}
           </div>
-        ))}
-      {error && <p className="px-4 py-3 text-sm text-bad">{error}</p>}
+        </MoreOptions>
+      )}
+      {error && <p className="px-1 text-sm text-bad">{error}</p>}
       {signingIn && current && <HarnessSignIn device={device} settings={settings} account={current} onClose={() => setSigningIn(false)} onDone={() => onLoad(current.id)} />}
-    </Card>
+    </section>
   );
 }
 
@@ -574,7 +644,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
   };
   useEffect(() => {
     if (!perProvider) void start();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!login || login.status !== "running") return;
     const t = setInterval(async () => {
@@ -584,7 +654,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
       if (next.status === "done") onDone();
     }, 1500);
     return () => clearInterval(t);
-  }, [login?.id, login?.status]);
+  }, [login?.id, login?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const close = () => {
     if (login?.status === "running") void act({ op: "login_cancel", loginId: login.id }).catch(() => {});
     onClose();
@@ -595,82 +665,114 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
     setLogin(await act({ op: "login_input", loginId: login.id, text: code.trim() }));
     setCode("");
   };
-  return (
-    <Modal title={`Sign in ${label}${account.isDefault ? "" : ` · ${account.label}`}`} onClose={close}>
-      <div className="space-y-4 text-sm">
-        {perProvider && !login && !manual && (
-          <>
-            <label className="flex items-center justify-between gap-3">
-              <span>Provider</span>
-              <select value={provider} onChange={(e) => setProvider(e.target.value)} className="h-8 rounded-lg border border-line bg-panel px-2 text-sm">
-                {(settings.providers ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex justify-end">
-              <Button variant="primary" onClick={start} disabled={!provider}>
-                Continue
-              </Button>
-            </div>
-          </>
-        )}
-        {manual && (
-          <>
-            <p>
-              {label} signs in on its own screen. On {device.name}, run:
-            </p>
-            <CopyBlock text={manual} />
-          </>
-        )}
-        {login?.status === "running" && (
-          <>
-            {login.url ? (
-              <a href={login.url} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 h-10 rounded-full bg-accent text-accent-ink font-medium">
-                <ExternalLink size={15} /> Open the sign-in page
-              </a>
-            ) : (
-              <p className="text-muted flex items-center gap-2">
-                <Loader2 size={14} className="animate-spin" /> Starting {label}'s sign-in on {device.name}…
-              </p>
-            )}
-            {login.code && (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-line px-4 py-3">
-                <span className="text-muted">Enter this code there</span>
-                <button className="font-mono text-lg font-semibold tracking-wider inline-flex items-center gap-2" onClick={() => void navigator.clipboard?.writeText(login.code!)} title="Copy">
-                  {login.code} <Copy size={14} className="text-muted" />
-                </button>
-              </div>
-            )}
-            {login.url && !login.code && (
-              <form onSubmit={send} className="flex items-center gap-2">
-                <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code the page gives you" aria-label="Code from the sign-in page" className="flex-1" />
-                <Button type="submit" disabled={!code.trim()}>
-                  Send
-                </Button>
-              </form>
-            )}
-            <p className="text-xs text-muted flex items-center gap-1.5">
-              <Loader2 size={12} className="animate-spin" /> Waiting for you to finish signing in
-            </p>
-          </>
-        )}
-        {login?.status === "done" && <p className="text-ok">Signed in.</p>}
-        {login?.status === "failed" && (
-          <>
-            <p className="text-bad whitespace-pre-wrap">{login.error ?? "The sign-in didn't finish."}</p>
-            <Button onClick={() => (setLogin(null), perProvider ? undefined : void start())}>Try again</Button>
-          </>
-        )}
-        {error && <p className="text-bad whitespace-pre-wrap">{error}</p>}
-        <div className="flex justify-end">
-          <Button variant={login?.status === "done" || manual ? "primary" : "ghost"} onClick={close}>
-            {login?.status === "done" || manual ? "Done" : "Cancel"}
-          </Button>
-        </div>
+  const step = (n: number, title: string, body: ReactNode, right?: ReactNode) => (
+    <div className="flex items-start gap-3.5 px-4 py-3.5">
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-chip text-sm font-semibold">{n}</span>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="text-[17px] font-medium">{title}</div>
+        {body}
       </div>
-    </Modal>
+      {right}
+    </div>
+  );
+  const running = login?.status === "running" ? login : null;
+  return (
+    <Dlg title={`Sign in to ${label}${account.isDefault ? "" : ` · ${account.label}`}`} sub="Takes about a minute" onClose={close}>
+      {perProvider && !login && !manual && (
+        <>
+          <label className="flex items-center justify-between gap-3 px-1 text-sm">
+            <span>Provider</span>
+            <Pick label="Provider" value={provider} onChange={setProvider}>
+              {(settings.providers ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id}
+                </option>
+              ))}
+            </Pick>
+          </label>
+          <div className="flex justify-end">
+            <Prim onClick={start} disabled={!provider} className="h-11 text-[15px]">
+              Continue
+            </Prim>
+          </div>
+        </>
+      )}
+      {manual && (
+        <>
+          <p className="px-1 text-sm">
+            {label} signs in on its own screen. On {device.name}, run:
+          </p>
+          <CopyBlock text={manual} />
+        </>
+      )}
+      {running && (
+        <>
+          <Panel>
+            {step(
+              1,
+              "Open the sign-in page",
+              running.url ? undefined : (
+                <p className="flex items-center gap-2 text-sm text-muted">
+                  <Loader2 size={14} className="animate-spin" /> Starting {label}'s sign-in on {device.name}…
+                </p>
+              ),
+              running.url ? (
+                <a href={running.url} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-control-line bg-control px-[18px] text-[15px] font-medium hover:bg-hover">
+                  Open <ExternalLink size={14} />
+                </a>
+              ) : undefined,
+            )}
+            {running.code &&
+              step(
+                2,
+                "Enter this code there",
+                <div className="font-mono text-2xl font-semibold tracking-wider">{running.code}</div>,
+                <Circle label="Copy code" onClick={() => void navigator.clipboard?.writeText(running.code!)}>
+                  <Copy size={17} />
+                </Circle>,
+              )}
+            {running.url &&
+              !running.code &&
+              step(
+                2,
+                "Paste the code the page gives you",
+                <form onSubmit={send} id="harness-code" className="flex items-center gap-2">
+                  <TextBox value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste it here" aria-label="Code from the page" className="flex-1" />
+                </form>,
+              )}
+          </Panel>
+          <p className="px-1 text-sm text-faint">
+            Wisp passes the code to {label} on {device.name}. Your password stays with the harness.
+          </p>
+          <p className="flex items-center gap-1.5 px-1 text-xs text-muted">
+            <Loader2 size={12} className="animate-spin" /> Waiting for you to finish signing in
+          </p>
+        </>
+      )}
+      {login?.status === "done" && <p className="px-1 text-ok">Signed in.</p>}
+      {login?.status === "failed" && (
+        <>
+          <p className="whitespace-pre-wrap px-1 text-bad">{login.error ?? "The sign-in didn't finish."}</p>
+          <Sec onClick={() => (setLogin(null), perProvider ? undefined : void start())}>Try again</Sec>
+        </>
+      )}
+      {error && <p className="whitespace-pre-wrap px-1 text-bad">{error}</p>}
+      <div className="flex justify-end gap-2">
+        {running?.url && !running.code ? (
+          <>
+            <Sec onClick={close}>Cancel</Sec>
+            <Prim type="submit" form="harness-code" disabled={!code.trim()} className="h-11 text-[15px]">
+              Send
+            </Prim>
+          </>
+        ) : login?.status === "done" || manual ? (
+          <Prim onClick={close} className={cx("h-11 text-[15px]")}>
+            Done
+          </Prim>
+        ) : (
+          <Sec onClick={close}>Cancel</Sec>
+        )}
+      </div>
+    </Dlg>
   );
 }
