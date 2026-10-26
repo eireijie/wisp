@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArchiveRestore, ArrowLeft, ArrowRight, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
+import { Archive, ArchiveRestore, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
 import { hasSteps, teamProblem, type Agent, type ChannelNotify, type ChannelSettings as AgentRules, type ChannelTeam, type Section } from "@wisp/core";
-import { CreateAgent } from "../views/CreateAgent.tsx";
-import { useDevices } from "../devices.ts";
 import { EMPTY_TEAM, TeamChart, TeamRules, addToTeam, liveTeam } from "./TeamChart.tsx";
-import { TeamSteps, TeamTemplatePicker, withChart } from "./TeamSteps.tsx";
+import { NewTeamFlow } from "../team/Create.tsx";
+import { HowLines } from "../team/How.tsx";
+import { useFlowLines } from "../team/How.tsx";
+import { NewAgentForTeam } from "../team/NewAgent.tsx";
+import { TeamEditSession } from "../team/Session.tsx";
+import { withChart } from "../team/flow.ts";
 import { api } from "../api.ts";
 import { useNames, useStore, type ChannelInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -68,40 +71,15 @@ export function AnswerSelect({ agents, value, onChange, disabled }: { agents: Ag
   );
 }
 
-/** The New agent dialog for a team being built: it hands the agent back instead of opening its page. */
-export function NewAgentForTeam({ onClose, onCreated }: { onClose: () => void; onCreated: (agent: Agent) => void }) {
-  const devices = useDevices(15_000);
-  const refreshAgents = useStore((s) => s.refreshAgents);
-  if (!devices) return null;
-  return (
-    <CreateAgent
-      nodes={devices}
-      onClose={onClose}
-      onCreated={async (a) => {
-        await refreshAgents();
-        onCreated(a);
-      }}
-    />
-  );
-}
+export { NewAgentForTeam };
 
-/** "Add a channel": one box to search, join, or create (Buzz-style). Creating is two steps: what it's for, then its team. */
+/** "Add a channel": one box to search, join, or create (Buzz-style). Creating is the New team flow (team/Create.tsx). */
 export function ChannelBrowser({ onClose, sectionId = null, create: startCreating = false }: { onClose: () => void; sectionId?: string | null; create?: boolean }) {
   const channels = useStore((s) => s.channels).filter((c) => c.kind === "channel");
-  const sections = useStore((s) => s.sections);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "joined" | "archived">("all");
-  const [step, setStep] = useState<"browse" | "about" | "team">(startCreating ? "about" : "browse");
-  const [topic, setTopic] = useState("");
-  const [section, setSection] = useState<string | null>(sectionId);
-  const [isPrivate, setPrivate] = useState(false);
-  const [team, setTeam] = useState<ChannelTeam>(EMPTY_TEAM);
-  // roles and steps (a template), or a plain chart of who hands work to whom
-  const [mode, setMode] = useState<"steps" | "chart">("steps");
-  const [newAgent, setNewAgent] = useState<false | { roleId?: string }>(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"browse" | "about">(startCreating ? "about" : "browse");
   const archivedCount = channels.filter((c) => c.archivedAt).length;
 
   const list = useMemo(() => {
@@ -113,7 +91,6 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
   }, [channels, q, tab]);
   const name = slug(q.replace(/^#/, ""));
   const exists = channels.some((c) => c.name === name);
-  const problem = teamProblem(team);
 
   async function open(id: string, joined: boolean) {
     if (!joined) await api("POST", `/api/channels/${id}/join`);
@@ -122,153 +99,7 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
     go({ view: "chat", channelId: id, threadId: null });
   }
 
-  /** Someone described the team: make the channel with the lead alone, and ask the lead (in a DM) to set it up. */
-  async function describe(text: string) {
-    if (busy) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const { lead } = await api<{ lead: string | null }>("GET", "/api/settings/lead");
-      if (!lead) throw new Error("Add an agent first: it sets the team up.");
-      const starter = withChart({ nodes: [], edges: [], roles: [{ id: "lead", name: "Lead", description: "Handles every request until the team is set up.", agentId: lead }], steps: [{ id: "handle", roleId: "lead", kind: "do", action: "Handle the request", next: null, x: 0, y: 0 }] });
-      await api("POST", "/api/channels", { name, topic, sectionId: section, private: isPrivate, settings: { team: starter, replyInThread: true } });
-      const dm = await api<{ id: string }>("POST", `/api/dm/${lead}`);
-      await api("POST", `/api/channels/${dm.id}/messages`, { body: `Set up how the team in #${name} works, with team_setup:\n\n${text}` });
-      await refreshChannels();
-      onClose();
-      go({ view: "chat", channelId: dm.id, threadId: null });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function create() {
-    if (problem || busy) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const ch = await api<{ id: string }>("POST", "/api/channels", { name, topic, sectionId: section, private: isPrivate, settings: { team, replyInThread: true } });
-      await refreshChannels();
-      onClose();
-      go({ view: "chat", channelId: ch.id, threadId: null });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // making an agent for the team: its own dialog, then back to the chart with the agent on it
-  if (newAgent)
-    return (
-      <NewAgentForTeam
-        onClose={() => setNewAgent(false)}
-        onCreated={(a) => {
-          const roleId = newAgent.roleId;
-          setTeam((t) => (roleId ? withChart({ ...t, roles: (t.roles ?? []).map((r) => (r.id === roleId ? { ...r, agentId: a.id } : r)) }) : addToTeam(t, a.id)));
-          setNewAgent(false);
-        }}
-      />
-    );
-
-  if (step === "about")
-    return (
-      <Modal title="New team" onClose={onClose} wide>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name && !exists) setStep("team");
-          }}
-        >
-          <Steps at={1} />
-          <Field label="Name" hint={exists ? `#${name} already exists.` : undefined}>
-            <div className="relative">
-              <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-              <Input value={name} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="e.g. launch" className="pl-8" />
-            </div>
-          </Field>
-          <Field label="Description" hint="The agents read this too, so say what the team is for.">
-            <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} maxLength={250} placeholder="e.g. Plan and ship the new website" />
-          </Field>
-          {sections.length > 0 && (
-            <Field label="Section">
-              <SectionSelect sections={sections} value={section} onChange={setSection} />
-            </Field>
-          )}
-          <label className="flex items-center justify-between gap-3 text-sm">
-            <span>
-              <span className="font-medium flex items-center gap-1.5">
-                <Lock size={13} /> Private
-              </span>
-              <span className="block text-xs text-muted">Only people and agents you add can see it.</span>
-            </span>
-            <Toggle on={isPrivate} onChange={setPrivate} label="Private team" />
-          </label>
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" className="mr-auto text-sm text-accent-text hover:underline" onClick={() => setStep("browse")}>
-              Browse existing teams
-            </button>
-            <Button variant="primary" disabled={!name || exists}>
-              Next: its team <ArrowRight size={15} />
-            </Button>
-          </div>
-        </form>
-      </Modal>
-    );
-
-  if (step === "team")
-    return (
-      <Modal title={`#${name}: its team`} label={`The team for #${name}`} onClose={onClose} className="sm:max-w-5xl!">
-        <div className="space-y-4">
-          <Steps at={2} />
-          {mode === "steps" ? (
-            <TeamTemplatePicker
-              team={hasSteps(team) ? team : null}
-              onChange={setTeam}
-              onCreateAgent={(roleId) => setNewAgent({ roleId })}
-              onDescribe={(text) => void describe(text)}
-              onDrawOwn={() => {
-                setMode("chart");
-                setTeam(EMPTY_TEAM);
-              }}
-            />
-          ) : (
-            <>
-              <p className="text-sm text-muted">
-                Pick who works in #{name}. Drag agents onto the chart, make one or more of them leads, and draw an arrow from each agent to whoever it hands work to.{" "}
-                <button
-                  type="button"
-                  className="text-accent-text hover:underline"
-                  onClick={() => {
-                    setMode("steps");
-                    setTeam(EMPTY_TEAM);
-                  }}
-                >
-                  Use roles and steps instead
-                </button>
-              </p>
-              <TeamChart team={team} onChange={setTeam} onCreateAgent={() => setNewAgent({})} />
-              <details className="rounded-xl bg-bg px-3.5 py-2.5">
-                <summary className="text-sm font-medium cursor-pointer">How the team works</summary>
-                <TeamRules className="mt-2" />
-              </details>
-            </>
-          )}
-          {error && <p className="text-sm text-bad">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setStep("about")}>
-              <ArrowLeft size={15} /> Back
-            </Button>
-            <Button variant="primary" disabled={!!problem || busy} onClick={create} title={problem ?? undefined}>
-              Create #{name}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    );
+  if (step === "about") return <NewTeamFlow onClose={onClose} sectionId={sectionId} onBrowse={() => setStep("browse")} SectionPick={SectionSelect} initialName={name} />;
 
   return (
     <Modal title="Add a team" onClose={onClose} wide>
@@ -328,21 +159,6 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
         </div>
       </div>
     </Modal>
-  );
-}
-
-/** "Step 1 of 2" for making a channel. */
-function Steps({ at }: { at: 1 | 2 }) {
-  return (
-    <ol className="flex items-center gap-2 text-xs" aria-label={`Step ${at} of 2`}>
-      {["Name and description", "Its team"].map((label, i) => (
-        <li key={label} className={cx("flex items-center gap-2", i + 1 === at ? "text-ink font-medium" : "text-muted")}>
-          {i > 0 && <span className="h-px w-6 bg-line" />}
-          <span className={cx("size-5 rounded-full grid place-items-center text-[11px] font-semibold", i + 1 <= at ? "bg-ink text-panel" : "bg-chip text-muted")}>{i + 1 < at ? <Check size={11} strokeWidth={3} /> : i + 1}</span>
-          {label}
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -477,7 +293,7 @@ export function ChannelSettings({ channel: initial, tab: initialTab = "about", o
         ))}
       </div>
       {tab === "about" && <AboutChannel channel={channel} canManage={canManage} onClose={onClose} />}
-      {tab === "team" && <ChannelTeamTab channel={channel} team={team} onChange={setTeam} canManage={canManage && !channel.archivedAt} onCreateAgent={(roleId) => setNewAgent({ roleId })} onClose={onClose} />}
+      {tab === "team" && <ChannelTeamTab channel={channel} team={team} onChange={setTeam} canManage={canManage && !channel.archivedAt} onCreateAgent={() => setNewAgent({})} onClose={onClose} />}
       {tab === "agents" && <ChannelAgents channel={channel} canManage={canManage && !channel.archivedAt} onClose={onClose} />}
       {tab === "members" && <ChannelMembers channel={channel} canManage={canManage} onClose={onClose} />}
       {tab === "pins" && <ChannelPins channel={channel} onClose={onClose} />}
@@ -725,19 +541,25 @@ export function useTeamWork(channelId: string): Record<string, string> {
   return out;
 }
 
-/** A channel's team chart: who leads, who hands work to whom. Saving it adds everyone on it to the channel. */
-export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onClose }: { channel: ChannelInfo; team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean; onCreateAgent: (roleId?: string) => void; onClose: () => void }) {
+/**
+ * A channel's team. A team that runs on steps shows how it works in plain lines, and the flowchart
+ * builder (team/Builder.tsx) opens from there to change it. An older plain chart (who hands work
+ * to whom) is still drawn here. Saving it adds everyone on it to the channel.
+ */
+export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onClose }: { channel: ChannelInfo; team: ChannelTeam; onChange: (t: ChannelTeam) => void; canManage: boolean; onCreateAgent: () => void; onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const working = useTeamWork(channel.id);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [building, setBuilding] = useState(false);
   const saved = liveTeam(channel.settings.team, agents) ?? EMPTY_TEAM;
   const changed = JSON.stringify(team) !== JSON.stringify(saved);
-  const problem = team.nodes.length || hasSteps(team) ? teamProblem(team) : null;
-  // a new team, or a switch from a plain chart, starts from a template
-  const [picking, setPicking] = useState(!saved.nodes.length);
   const stepped = hasSteps(team);
+  const problem = team.nodes.length || stepped ? teamProblem(team) : null;
+  // a new team starts by choosing how it works; a plain chart is the other way to draw one
+  const [plain, setPlain] = useState(false);
+  const lines = useFlowLines(team);
   const save = async (next: ChannelTeam | null) => {
     setError(null);
     setSaving(true);
@@ -751,40 +573,42 @@ export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAge
       setSaving(false);
     }
   };
+  /** The builder saves on its own; take what it saved back into this tab. */
+  const closeBuilder = () => {
+    setBuilding(false);
+    const now = useStore.getState().channels.find((c) => c.id === channel.id)?.settings.team ?? null;
+    onChange(liveTeam(now, agents) ?? EMPTY_TEAM);
+  };
   return (
     <div className="space-y-4">
-      {picking && canManage ? (
-        <TeamTemplatePicker
-          team={stepped ? team : null}
-          onChange={onChange}
-          onCreateAgent={(roleId) => onCreateAgent(roleId)}
-          onDrawOwn={() => {
-            setPicking(false);
-            // empty roles and steps say to drop them (left out, the hub keeps the old ones)
-            onChange(saved.roles?.length ? { ...EMPTY_TEAM, roles: [], steps: [] } : saved);
-          }}
-        />
-      ) : stepped ? (
-        <>
-          <p className="text-sm text-muted flex flex-wrap items-center justify-between gap-2">
-            <span>Every new message in #{channel.name} goes through these steps. Click a step or a role to change it.</span>
-            {canManage && (
-              <button type="button" className="text-accent-text hover:underline" onClick={() => setPicking(true)}>
-                Start from a template
-              </button>
-            )}
-          </p>
-          <TeamSteps team={team} onChange={canManage ? onChange : undefined} readOnly={!canManage} onCreateAgent={canManage ? (roleId) => onCreateAgent(roleId) : undefined} channelId={saved.roles?.length ? channel.id : undefined} />
-        </>
+      {stepped || (!saved.nodes.length && !plain) ? (
+        <section aria-label="How the team works" className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted">How the team works</h3>
+          <div className="rounded-3xl bg-card p-4">
+            {stepped ? <HowLines lines={lines} /> : <p className="text-sm text-muted">{`#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Draw the steps and say how each one works.`}</p>}
+          </div>
+          {canManage && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="primary" onClick={() => setBuilding(true)}>
+                {stepped ? "Edit how it works" : "Set up how it works"}
+              </Button>
+              {!stepped && (
+                <button type="button" className="text-sm text-accent-text hover:underline" onClick={() => setPlain(true)}>
+                  Draw who hands work to whom instead
+                </button>
+              )}
+            </div>
+          )}
+        </section>
       ) : (
         <>
           <p className="text-sm text-muted">
             {saved.nodes.length
               ? `The leads read every new message in #${channel.name} and hand out the work along the arrows.`
-              : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Build one: drag agents onto the chart and make one of them a lead.`}{" "}
+              : `#${channel.name} has no team yet, so only agents someone @mentions (or the one under Agents) answer here. Drag agents onto the chart and make one of them a lead.`}{" "}
             {canManage && (
-              <button type="button" className="text-accent-text hover:underline" onClick={() => setPicking(true)}>
-                Use roles and steps instead
+              <button type="button" className="text-accent-text hover:underline" onClick={() => setBuilding(true)}>
+                Use steps instead
               </button>
             )}
           </p>
@@ -795,7 +619,7 @@ export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAge
           </details>
         </>
       )}
-      {team.nodes.length > 0 && !(picking && canManage) && <TeamMore team={team} onChange={onChange} canManage={canManage} />}
+      {team.nodes.length > 0 && <TeamMore team={team} onChange={onChange} canManage={canManage} />}
       {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This team is archived." : "Guests can't change teams."}</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       {canManage && (
@@ -812,6 +636,7 @@ export function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAge
           </Button>
         </div>
       )}
+      {building && <TeamEditSession channel={channel} onClose={closeBuilder} />}
     </div>
   );
 }
