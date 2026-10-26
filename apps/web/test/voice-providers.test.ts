@@ -78,7 +78,7 @@ describe("device listening", () => {
     first.result("Hello");
     await vi.advanceTimersByTimeAsync(400);
     first.result("Hello there");
-    await vi.advanceTimersByTimeAsync(799);
+    await vi.advanceTimersByTimeAsync(649);
     expect(cb.final).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(cb.final).toHaveBeenCalledExactlyOnceWith("Hello there");
@@ -86,7 +86,7 @@ describe("device listening", () => {
     await vi.advanceTimersByTimeAsync(150);
     expect(Recognition.instances).toHaveLength(2);
     Recognition.instances[1].result("Another turn");
-    await vi.advanceTimersByTimeAsync(800);
+    await vi.advanceTimersByTimeAsync(650);
     expect(cb.final).toHaveBeenCalledTimes(2);
     listener.stop();
     expect(vi.getTimerCount()).toBe(0);

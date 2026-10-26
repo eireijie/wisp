@@ -43,6 +43,13 @@ enum VoiceText {
     return cut + "…"
   }
 
+  private static let firstSentenceRe = regex("^.{8,}?[.!?]+(?=\\s)")
+  /** The first whole sentence of a reply that is still streaming (it must be followed by whitespace), or nil. */
+  static func firstSentence(_ excerpt: String) -> String? {
+    guard let m = firstSentenceRe.firstMatch(in: excerpt, range: NSRange(excerpt.startIndex..., in: excerpt)), let r = Range(m.range, in: excerpt) else { return nil }
+    return String(excerpt[r])
+  }
+
   /** A stable pick from `count` choices for a seed, so an agent keeps one voice. */
   static func voiceIndex(_ seed: String, _ count: Int) -> Int {
     var hash: UInt32 = 0

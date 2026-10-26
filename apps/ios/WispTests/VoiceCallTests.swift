@@ -83,6 +83,23 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertFalse(s.state.speaking)
   }
 
+  func testFirstSentenceIsSpokenWhileWorkingAndOnlyTheRestAfter() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    XCTAssertEqual(s.state.phase, .thinking)
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "tool_call", text: nil, tool: "Read", file: "/a/b/main.ts"))
+    XCTAssertEqual(s.state.phase, .working)
+    XCTAssertEqual(s.state.activity, "Reading main.ts")
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "text", text: "It exports one function. And", tool: nil, file: nil))
+    await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function."])
+    XCTAssertEqual(s.state.phase, .speaking)
+    speaker.end(); await settle()
+    list = [msg("m2", body: "It exports one function. And it is small.\\n\\nMore.", at: 2)]
+    s.sync(); await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function.", "And it is small."])
+  }
+
   func testRepliesAreOnlySpokenOnce() async {
     let s = await makeSession()
     callbacks.final("hello"); await settle()

@@ -212,7 +212,7 @@ export function createListener(chosen: VoiceSettings["listen"], callbacks: Liste
               if (talking) { timer = setTimeout(finish, 200); return; }
               flush(); rec.onresult = null; rec.abort();
             };
-            timer = setTimeout(finish, 800);
+            timer = setTimeout(finish, 650);
           };
           rec.onspeechend = () => { /* Results, including interim results, drive the silence timer. */ };
           rec.onerror = (e) => {

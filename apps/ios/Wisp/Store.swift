@@ -643,7 +643,22 @@ final class Store {
   private struct DiscussionEvent: Decodable { struct D: Decodable { var id: String }; var discussion: D }
   private struct StatusEvent: Decodable { var agentId: String; var status: Agent.Status }
   private struct RunEvent: Decodable {
-    struct E: Decodable { var type: String; var text: String?; var name: String?; var message: String? }
+    struct E: Decodable {
+      var type: String; var text: String?; var name: String?; var message: String?
+      /** the file a tool works on, when its input names one */
+      var file: String?
+      private enum Keys: String, CodingKey { case type, text, name, message, input }
+      private struct Input: Decodable { var file_path: String?; var path: String? }
+      init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        type = try c.decode(String.self, forKey: .type)
+        text = try? c.decode(String.self, forKey: .text)
+        name = try? c.decode(String.self, forKey: .name)
+        message = try? c.decode(String.self, forKey: .message)
+        let input = try? c.decode(Input.self, forKey: .input)
+        file = input?.file_path ?? input?.path
+      }
+    }
     var runId: String?
     var agentId: String
     var channelId: String
@@ -657,6 +672,9 @@ final class Store {
   private struct ComputerEvent: Decodable { var computer: Computer }
   private struct RemovedEvent: Decodable { var computerId: String }
   private struct ApprovalEvent: Decodable { var approval: Approval }
+
+  /** Set by an open voice call so it sees the agent's run as it happens. */
+  @ObservationIgnored var onCallRunEvent: ((CallRunEvent) -> Void)?
 
   func handle(_ data: Data) {
     guard let env = try? Wire.decoder.decode(Envelope.self, from: data) else { return }
@@ -723,6 +741,7 @@ final class Store {
       }
     case "run_event":
       guard let e = try? d.decode(RunEvent.self, from: data) else { return }
+      onCallRunEvent?(CallRunEvent(runId: e.runId, agentId: e.agentId, channelId: e.channelId, threadId: e.threadId, type: e.event.type, text: e.event.text, tool: e.event.name, file: e.event.file))
       activityChannel[e.agentId] = e.channelId
       activityThread[e.agentId] = e.threadId
       activityPath[e.agentId] = e.threadPath ?? []
