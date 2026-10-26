@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TEAM_TEMPLATES, describeFlow, stepPrompt, stepsProblem, type ChannelTeam, type TeamFlow, type TeamStep } from "@wisp/core";
-import { ADD_KINDS, addStep, lanesOf, prepareTeam, waitingLanes, connecting, disconnecting, emptyTeam, fillTemplate, fromCanvas, inputIds, movingAfter, numberOf, relayout, removingStep, retype, settingInputs, stepProblems, stepRows, toCanvas, updating } from "../src/team/flow.ts";
+import { ADD_KINDS, addStep, lanesOf, prepareTeam, waitingLanes, connecting, disconnecting, emptyTeam, fillTemplate, fromCanvas, inputIds, movingAfter, numberOf, relayout, removingStep, retype, rowInputs, insertingBetween, settingInputs, stepProblems, stepRows, toCanvas, updating } from "../src/team/flow.ts";
 
 const agents = [
   { id: "nova", harness: "claude-code" },
@@ -219,5 +219,22 @@ describe("editing a team's flow", () => {
       if (kind === "hand_out") t = updating({ ...t, roles: [{ id: "r1", name: "B", description: "", agentId: "pappy" }] }, id, { handTo: ["r1"] });
       expect(stepProblems(t).lines, kind).toEqual([]);
     }
+  });
+});
+
+describe("adding a step from the phone's flow", () => {
+  it("goes between a step and what it really waits for, not the whole row above", () => {
+    const step = (id: string, extra: Partial<TeamStep> = {}): TeamStep => ({ id, roleId: "", kind: "do", action: id, agentId: "nova", next: null, nexts: [], inputs: [], x: 0, y: 0, ...extra });
+    // Yes -> A -> Ship, No -> B -> End
+    let t: ChannelTeam = { nodes: [], edges: [], roles: [], steps: [step("gate", { kind: "branch", ifTrue: "a", ifFalse: "b" }), step("a"), step("b"), step("ship", { inputs: ["a"] }), step("end", { inputs: ["b"] })] };
+    t = { ...t, steps: t.steps!.map((s) => ({ ...s })) };
+    const rows = stepRows(t.steps!);
+    const shipRow = rows.find((r) => r.some((s) => s.id === "ship"))!.filter((s) => s.id === "ship");
+    expect(rowInputs(shipRow)).toEqual(["a"]);
+    const next = insertingBetween(t, step("ask", { kind: "ask", agentId: null }), rowInputs(shipRow), ["ship"]);
+    const ask = next.steps!.find((s) => s.id === "ask")!;
+    expect(ask.inputs).toEqual(["a"]);
+    expect(next.steps!.find((s) => s.id === "ship")!.inputs).toEqual(["ask"]);
+    expect(next.steps!.find((s) => s.id === "end")!.inputs).toEqual(["b"]);
   });
 });

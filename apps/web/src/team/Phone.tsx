@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Flag, Plus } from "lucide-react";
 import { stepOrder, type ChannelTeam, type TeamStep } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { AgentAvatar, Button, Modal, cx } from "../components/ui.tsx";
-import { ADD_KINDS, movingAfter, numberOf, stepRows, titleOf, type AddAt, type AddKind, KIND_MARK } from "./flow.ts";
+import { ADD_KINDS, movingAfter, numberOf, rowInputs, stepRows, titleOf, type AddAt, type AddKind, KIND_MARK } from "./flow.ts";
 import { kindsFor } from "./Canvas.tsx";
 import { KindIcon, MessageChip, StepNum, agentOfStep, useHandoffName } from "./parts.tsx";
 
@@ -83,7 +83,7 @@ export function PhoneFlow({ team, problems, banner, onOpen, onAdd }: { team: Cha
         const before = i === 0 ? 0 : rows[i - 1].length;
         return (
           <div key={i} className="flex w-full flex-col items-center">
-            <Connector from={before} to={row.length} plus={row.length === 1} onAdd={() => onAdd({ between: { from: i === 0 ? [] : rows[i - 1].map((s) => s.id), to: row.map((s) => s.id) } })} />
+            <Connector from={before} to={row.length} plus={row.length === 1} onAdd={() => onAdd({ between: { from: rowInputs(row), to: row.map((s) => s.id) } })} />
             <div className="flex w-full items-start gap-2.5">
               {row.map((s) => (
                 <StepCard key={s.id} team={team} step={s} wide={row.length === 1} problem={problems.get(s.id)} onOpen={() => onOpen(s.id)} />

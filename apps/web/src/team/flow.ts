@@ -59,6 +59,11 @@ export function stepRows<T extends { id: string }>(steps: T[]): T[][] {
   return [...rows.keys()].sort((a, b) => a - b).map((k) => rows.get(k)!);
 }
 
+/** The steps the ones in a row really wait for (not just whatever sits in the row above). Nothing = they start with the request. */
+export function rowInputs(row: Pick<TeamStep, "inputs">[]): string[] {
+  return [...new Set(row.flatMap((s) => s.inputs ?? []))];
+}
+
 /** A step id that isn't taken. */
 export function freeStepId(team: Pick<ChannelTeam, "steps">, prefix = "step"): string {
   const taken = new Set(stepsOf(team).map((s) => s.id));
