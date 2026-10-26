@@ -16,7 +16,7 @@ struct ChannelView: View {
   var draft = ""
   @State private var error: String?
   @State private var loadingEarlier = false
-  @State private var calling = false
+  @State private var call: CallController?
   @State private var showDetails = false
   @State private var noEarlier = false
   @Environment(\.dismiss) private var dismiss
@@ -81,7 +81,7 @@ struct ChannelView: View {
           ActivityPill(channel: current)
           Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft, send: { text, files in
             try await store.send(text, in: channel.id, files: files)
-          }, onCall: canCall ? { calling = true } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")")
+          }, onCall: canCall && call == nil ? { startCall() } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")")
         }
         .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
@@ -89,12 +89,19 @@ struct ChannelView: View {
     .toolbar(.hidden, for: .tabBar)
     .toolbar(.hidden, for: .navigationBar)
     .background(Palette.ground.ignoresSafeArea())
-    .safeAreaInset(edge: .top, spacing: 0) { chrome }
+    .safeAreaInset(edge: .top, spacing: 0) {
+      VStack(spacing: 0) {
+        chrome
+        // a call shrunk from full screen sits under the top bar
+        if let call, !call.expanded { CallBar(call: call).transition(.move(edge: .top).combined(with: .opacity)) }
+      }.animation(.snappy, value: call?.expanded)
+    }
+    .callLifecycle(call)
     .navigationDestination(isPresented: $showDetails) {
       if let agent = store.dmAgent(current) { AgentPage(agent: agent) } else { ChannelDetails(channel: current) }
     }
-    .fullScreenCover(isPresented: $calling) {
-      if let agent = store.dmAgent(current) { CallScreen(agent: agent, channel: current) }
+    .fullScreenCover(isPresented: Binding(get: { call?.expanded == true }, set: { if !$0 { call?.expanded = false } })) {
+      if let call { CallScreen(call: call) }
     }
     .onChange(of: store.channels) { old, new in
       if old.contains(where: { $0.id == channel.id }) && !new.contains(where: { $0.id == channel.id }) { dismiss() }
@@ -110,7 +117,19 @@ struct ChannelView: View {
       do { try await store.loadMessages(channel.id) } catch { self.error = error.localizedDescription }
       store.markRead(channel.id)
     }
-    .onDisappear { if store.openChannel == channel.id { store.openChannel = nil } }
+    .onDisappear {
+      if store.openChannel == channel.id { store.openChannel = nil }
+      // leaving the chat (not opening the agent's profile from it) hangs up
+      if !showDetails, let call { call.end(store: store); self.call = nil }
+    }
+  }
+
+  private func startCall() {
+    guard let agent = store.dmAgent(current), call == nil else { return }
+    let started = CallController(agent: agent, channel: current)
+    started.onHangUp = { call = nil }
+    call = started
+    Task { await started.begin(store: store) }
   }
 
   private var placeholder: String {
@@ -143,7 +162,7 @@ struct ChannelView: View {
       .accessibilityIdentifier("chat-title")
     } trailing: {
       Menu {
-        if canCall, let agent = store.dmAgent(current) { Button("Call \(agent.name)", systemImage: "phone") { calling = true } }
+        if canCall, call == nil, let agent = store.dmAgent(current) { Button("Call \(agent.name)", systemImage: "phone") { startCall() } }
         if let agent = store.dmAgent(current) { Button("\(agent.name)'s profile", systemImage: "person.crop.circle") { showDetails = true } }
         else { Button("Team details", systemImage: "person.2") { showDetails = true } }
       } label: { CircleLabel(symbol: "ellipsis") }
