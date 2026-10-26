@@ -330,7 +330,7 @@ struct MessagePage: Codable {
 
 struct Computer: Codable, Identifiable, Hashable {
   struct Controller: Codable, Hashable { var id: String; var since: String }
-  struct Help: Codable, Hashable { var agentId: String; var request: String; var channelId: String; var threadId: String? }
+  struct Help: Codable, Hashable { var agentId: String; var request: String; var channelId: String; var threadId: String?; var at: String? }
 
   var id: String
   var name: String
@@ -377,6 +377,16 @@ struct Approval: Codable, Identifiable, Hashable {
   var note: String
   var createdAt: String
   var decidedAt: String?
+  /** set when an agent asks to use a login from the password manager: only whoever connected it decides */
+  var login: Login?
+
+  struct Login: Codable, Hashable {
+    var title: String
+    var site: String
+    var username: String?
+    var source: String?
+    var ownerId: String
+  }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }
