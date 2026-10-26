@@ -24,7 +24,7 @@ export function GeneralPage() {
   const [saved, flash] = useSavedFlash();
   return (
     <>
-      <PageHeader title="Workspace">The organization everyone here shares.</PageHeader>
+      <PageHeader title="Workspace" />
       <OwnersOnly show={!isOwner} />
       <form
         className="mb-7"
@@ -45,7 +45,7 @@ export function GeneralPage() {
             <span className="text-[15px] w-40 shrink-0">Organization name</span>
             <input className="h-9 w-full min-w-0 bg-transparent border-0 outline-none text-right text-[15px] disabled:text-muted" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} maxLength={60} required aria-label="Organization name" />
           </label>
-          <Row label="Hub address" hint="Devices connect here, and so do agents running elsewhere through wisp-mcp. Access gives it an address that works from anywhere.">
+          <Row label="Hub address">
             <span className="text-sm text-muted break-all max-w-[240px] text-right">{shareOrigin(access).replace(/^https?:\/\//, "")}</span>
           </Row>
           <Row label="Your role">
@@ -176,9 +176,9 @@ export function PeoplePage() {
 
   return (
     <>
-      <PageHeader title="People">Who's in {me.workspace.name}, and what they can do.</PageHeader>
+      <PageHeader title="People" />
       {isOwner && (
-        <Section title="Invite people" description="Make a link and send it to them privately. It works once, for the role you pick, until it expires.">
+        <Section title="Invite people">
           <div className="flex flex-wrap items-center gap-2">
             <Select label="Role" value={inviteRole} onChange={setInviteRole}>
               <option value="member">Member</option>
@@ -408,7 +408,7 @@ function WorkspaceLead({ isOwner }: { isOwner: boolean }) {
   return (
     <Section title="Lead">
       <Card>
-        <Row label="Lead" hint="Takes every task nobody assigned, splits it up and hands the pieces to agents by role.">
+        <Row label="Lead">
           <Select label="Lead agent" value={lead?.leadId ?? ""} disabled={!isOwner} onChange={(v) => save(v || null)} className="max-w-60">
             <option value="">{current ? `Automatic (${current.name})` : "Automatic"}</option>
             {agents.map((a) => (
@@ -445,14 +445,14 @@ export function AgentsPolicyPage() {
   if (!p) return <PageHeader title="Agents">{error ?? "Loading…"}</PageHeader>;
   return (
     <>
-      <PageHeader title="Agents">Rules every agent here follows, whichever AI tool runs it.</PageHeader>
+      <PageHeader title="Agents" />
       <OwnersOnly show={!isOwner} />
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
         {error && <span className="text-sm text-bad">{error}</span>}
       </div>
       <WorkspaceLead isOwner={isOwner} />
-      <Section title="Ask before" description="When an agent is about to do one of these on its own, it asks you first in Inbox and in the chat. You can approve or say not now. If you ask it to do one, it just does it.">
+      <Section title="Ask before">
         <Card>
           {ASK.map(([k, label, hint]) => (
             <Row key={k} label={label} hint={hint}>
@@ -461,7 +461,7 @@ export function AgentsPolicyPage() {
           ))}
         </Card>
       </Section>
-      <Section title="New agents" description="What a new agent may do where its AI tool runs directly on a device. Inside its own computer an agent always has full access; the computer is its sandbox.">
+      <Section title="New agents">
         <Card>
           {(
             [
@@ -478,15 +478,15 @@ export function AgentsPolicyPage() {
           ))}
         </Card>
       </Section>
-      <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">
+      <Section title="Agents making agents">
         <Card>
-          <Row label="Leads can create agents" hint="A team's lead can create an agent its team is missing. It joins the team chart under the lead.">
+          <Row label="Leads can create agents">
             <Toggle on={p.leadsCreateAgents} onChange={(v) => save({ leadsCreateAgents: v })} label="Leads can create agents" disabled={!isOwner} />
           </Row>
           <Row label="Those agents can make sub-agents" hint={p.leadsCreateAgents ? "An agent a lead made can make sub-agents for pieces of its own work, up to 3 levels down." : "Needs “Leads can create agents” on first."}>
             <Toggle on={p.subAgents} onChange={(v) => save({ subAgents: v })} label="Agents a lead made can make sub-agents" disabled={!isOwner || !p.leadsCreateAgents} />
           </Row>
-          <Row label="Most agents made by agents" hint="Once there are this many, agents can't make more until you remove some.">
+          <Row label="Most agents made by agents">
             <Select label="Most agents made by agents" value={String(p.maxAgentMade)} disabled={!isOwner || !p.leadsCreateAgents} onChange={(v) => save({ maxAgentMade: Number(v) })}>
               {[3, 5, 10, 20, 50].map((n) => (
                 <option key={n} value={n}>
@@ -497,9 +497,9 @@ export function AgentsPolicyPage() {
           </Row>
         </Card>
       </Section>
-      <Section title="Loop protection" description="Agents can @mention each other. These stop two agents from pinging each other forever.">
+      <Section title="Loop protection">
         <Card>
-          <Row label="Hand-offs in a row" hint="How many times agents can wake each other from one message before Wisp stops it.">
+          <Row label="Hand-offs in a row">
             <Select label="Hand-offs in a row" value={String(p.maxHops)} disabled={!isOwner} onChange={(v) => save({ maxHops: Number(v) })}>
               {[2, 3, 4, 6, 8, 10, 15, 20, 30].map((n) => (
                 <option key={n} value={n}>
@@ -508,7 +508,7 @@ export function AgentsPolicyPage() {
               ))}
             </Select>
           </Row>
-          <Row label="Agent runs per team per minute" hint="A ceiling on how busy one conversation can get.">
+          <Row label="Agent runs per team per minute">
             <Select label="Agent runs per team per minute" value={String(p.maxRunsPerMinute)} disabled={!isOwner} onChange={(v) => save({ maxRunsPerMinute: Number(v) })}>
               {[5, 10, 20, 40, 60, 100, 200].map((n) => (
                 <option key={n} value={n}>
@@ -541,15 +541,6 @@ export function MemoryRules() {
     <>
       <Section
         title="Who can see and edit what"
-        description={
-          <>
-            By default every agent reads and writes Shared, its own folder, its teams' folders and what it learns about people, and people can edit everything except each other's personal folders. Rules here change that for a folder or note and everything inside it. You can also use the share button on any folder or note in{" "}
-            <a className="text-accent-text hover:underline" href={href({ view: "vault", path: null })}>
-              Memory
-            </a>
-            .
-          </>
-        }
         action={
           isOwner && (
             <Button onClick={() => setAdding(true)}>
@@ -730,17 +721,7 @@ export function ComputersPage() {
   };
   return (
     <>
-      <PageHeader title="Computers">
-        Computers agents can use. Manage them in{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
-          Computers
-        </a>{" "}
-        and{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
-          Devices
-        </a>
-        .
-      </PageHeader>
+      <PageHeader title="Computers" />
       <OwnersOnly show={!isOwner} />
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
@@ -761,7 +742,7 @@ export function ComputersPage() {
               ]}
             />
           </Row>
-          <Row label="Give control back to agents after" hint="When someone takes control of a computer and then stops touching it.">
+          <Row label="Give control back to agents after">
             <Select label="Give control back after" value={String(s?.defaults.controlIdleMinutes ?? 10)} disabled={!isOwner || !s} onChange={(v) => put({ controlIdleMinutes: Number(v) })}>
               {[5, 10, 15, 30, 60, 120].map((n) => (
                 <option key={n} value={n}>
@@ -774,15 +755,6 @@ export function ComputersPage() {
       </Section>
       <Section
         title="Orgo cloud computers"
-        description={
-          <>
-            For computers that keep running when your devices are off, connect{" "}
-            <a className="text-accent-text hover:underline" href="https://www.orgo.ai/start" target="_blank" rel="noreferrer">
-              Orgo
-            </a>
-            . The key stays on this hub; browsers never see it.
-          </>
-        }
       >
         <Card>
           <Row label="Orgo API key">{s?.orgo.configured ? <Pill tone="ok">Connected {s.orgo.hint}</Pill> : <Pill>Not connected</Pill>}</Row>
@@ -834,16 +806,16 @@ export function ConnectionsPage() {
     load();
   }, []);
   const agent = (id: string) => agents.find((a) => a.id === id);
-  const groups: [string, string, Connection[]][] = [
-    ["Connection tokens", "Made on an agent's Connect tab, for a harness that runs elsewhere (wisp-mcp). Disconnect any you don't use.", (list ?? []).filter((c) => c.kind === "connection")],
-    ["Harnesses on devices", "Each agent's harness gets a token for that agent only when its device runs it. Disconnecting one makes the device get a fresh one next run.", (list ?? []).filter((c) => c.kind === "harness")],
+  const groups: [string, Connection[]][] = [
+    ["Connection tokens", (list ?? []).filter((c) => c.kind === "connection")],
+    ["Harnesses on devices", (list ?? []).filter((c) => c.kind === "harness")],
   ];
   return (
     <>
-      <PageHeader title="Connections">Keys for agents running somewhere else. {isOwner ? "You see everyone's." : "You see the ones you made."}</PageHeader>
+      <PageHeader title="Connections" />
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
-      {groups.map(([title, description, items]) => (
-        <Section key={title} title={title} description={description}>
+      {groups.map(([title, items]) => (
+        <Section key={title} title={title}>
           {list === null ? (
             <p className="text-sm text-muted">Loading…</p>
           ) : items.length === 0 ? (
@@ -931,12 +903,12 @@ export function DataPage() {
   const memoryElsewhere = !!(info && memoryPath && !isInside(memoryPath, info.dataDir));
   return (
     <>
-      <PageHeader title="Data">Back up your organization, or take a copy of your notes and conversations.</PageHeader>
-      <Section title="Back up everything" description="One folder on the computer that runs the Wisp hub holds everything for this organization. Copy that folder and you have a full backup.">
+      <PageHeader title="Data" />
+      <Section title="Back up everything">
         {isOwner && info ? (
           <>
             <Card>
-              <Row label="Where the folder is" hint={`It is on ${where}: the computer that runs the Wisp hub.`} />
+              <Row label="Where the folder is" hint={where} />
               <div className="px-4 pb-3.5">
                 <CopyBlock text={info.dataDir} />
               </div>
@@ -982,17 +954,17 @@ export function DataPage() {
           <li>Start Wisp again. Your devices reconnect by themselves when they are online.</li>
         </ol>
       </Section>
-      <Section title="Download copies" description="These downloads are copies to keep or read. They can't restore an organization on their own. The folder backup does.">
+      <Section title="Download copies">
         {error && <p className="mb-2 text-sm text-bad">{error}</p>}
         <Card>
           {isOwner && (
-            <Row label="Download my notes (Markdown ZIP)" hint="Every memory note as a text file, in its folders. Opens in any text editor.">
+            <Row label="Download my notes (Markdown ZIP)">
               <Button disabled={!!busy} onClick={() => download("/api/export/vault.zip", `wisp-memory-${day}.zip`)}>
                 <Download size={14} /> {busy === "/api/export/vault.zip" ? "Preparing…" : "Download"}
               </Button>
             </Row>
           )}
-          <Row label="Download conversations (JSON, for developers)" hint="Every team and chat you can see. JSON is a data format for programs, not for reading.">
+          <Row label="Download conversations (JSON, for developers)">
             <Button disabled={!!busy} onClick={() => download("/api/export/conversations.json", `wisp-conversations-${day}.json`)}>
               <Download size={14} /> {busy === "/api/export/conversations.json" ? "Preparing…" : "Download"}
             </Button>

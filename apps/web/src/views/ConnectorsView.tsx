@@ -263,7 +263,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
           <div className="space-y-4">
             {kind === "mcp-stdio" ? (
               <>
-                <Labeled label="Command" hint="Runs on the agent's device (or inside its VM).">
+                <Labeled label="Command">
                   {(id) => <TextBox id={id} className="font-mono" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" required readOnly={!custom && !existing} />}
                 </Labeled>
                 <Labeled label="Arguments" hint="One per line.">
@@ -272,7 +272,7 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
               </>
             ) : (
               <>
-                <Labeled label="URL" hint="Streamable HTTP; URLs ending in /sse use SSE. If the app asks you to sign in, Wisp takes you to its sign-in page next.">
+                <Labeled label="URL">
                   {(id) => <TextBox id={id} className="font-mono" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/mcp" required readOnly={!custom && !existing} />}
                 </Labeled>
                 <Labeled label="Headers" hint="One per line, as Name: value.">
@@ -319,7 +319,6 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
                 <Plus size={14} /> Add a value
               </button>
             )}
-            {kind !== "secret" && <p className="px-1 text-[13px] text-faint">Secrets are masked once saved. Use {"{{NAME}}"} in the command, arguments, URL or headers to fill one in.</p>}
           </div>
         )}
 

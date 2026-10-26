@@ -104,8 +104,8 @@ export function AboutPage() {
   if (news)
     return (
       <>
-        <PageHeader title="What's new">{v?.commit ? `This hub runs Wisp ${v.commit}.` : "What changed in Wisp."}</PageHeader>
-        <Card>{c?.changes.length ? c.changes.map((line) => <Row key={line} label={subject(line)} />) : <Row label="Nothing new right now" hint="You have everything Wisp has published." />}</Card>
+        <PageHeader title="What's new" />
+        <Card>{c?.changes.length ? c.changes.map((line) => <Row key={line} label={subject(line)} />) : <Row label="Nothing new right now" />}</Card>
         <Button className="mt-6" onClick={() => setNews(false)}>
           Back to About
         </Button>
@@ -115,7 +115,7 @@ export function AboutPage() {
     <>
       <PageHeader title="About">
         Wisp{v?.commit ? ` ${v.commit}` : ""}
-        {v?.date && <> from {new Date(v.date).toLocaleDateString()}</>}. Free and open source. Your data stays on this hub.
+        {v?.date && <> from {new Date(v.date).toLocaleDateString()}</>}
       </PageHeader>
       <Section title="Updates">
         <Card>
@@ -179,12 +179,12 @@ export function AboutPage() {
               <ChevronRight size={16} className="text-faint" />
             </Row>
           </button>
-          <Row label="Source code" hint="Issues, ideas and contributions welcome.">
+          <Row label="Source code">
             <a className="text-sm text-accent-text hover:underline" href={GITHUB_URL} target="_blank" rel="noreferrer">
               GitHub
             </a>
           </Row>
-          <Row label="License" hint="Use it, change it, share it.">
+          <Row label="License">
             <span className="text-sm text-muted">Apache-2.0</span>
           </Row>
         </Card>

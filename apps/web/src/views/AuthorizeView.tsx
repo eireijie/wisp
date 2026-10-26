@@ -98,7 +98,6 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
           </div>
           <div className="text-center space-y-1.5">
             <h1 className="t-title">Let {info.client} act as an agent?</h1>
-            <p className="text-[15px] text-muted">Pick the agent it acts as.</p>
           </div>
           <div className="rounded-3xl bg-card overflow-hidden divide-y divide-line" role="radiogroup">
             {agents.map((a) => (

@@ -21,7 +21,7 @@ export function MemoryPage() {
 
   return (
     <>
-      <PageHeader title="Memory">What your helpers and people remember, and who can see each note.</PageHeader>
+      <PageHeader title="Memory" />
       <MemoryRules />
       {storage && (
         <MoreOptions about="use another notes app (Obsidian) and sync">
@@ -53,7 +53,7 @@ function Location({ storage, reload }: { storage: MemoryStorage; reload: () => v
     }
   };
   return (
-    <Section title="Where memory is kept" description="A folder on the computer that runs Wisp. It can be an existing Obsidian vault.">
+    <Section title="Where memory is kept">
       {storage.path && (
         <Card>
           <div className="px-4 py-3.5 space-y-1.5">
@@ -153,7 +153,7 @@ function ObsidianSteps({ storage, reload }: { storage: MemoryStorage; reload: ()
     }
   };
   return (
-    <Section title="Use it in Obsidian" description="Obsidian is where you browse and edit notes. Anything you change there shows up in Wisp, and your name goes on it.">
+    <Section title="Use it in Obsidian">
       <div className="space-y-6">
         {storage.path && (
           <Card>

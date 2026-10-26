@@ -7,6 +7,7 @@ import { href } from "../../router.ts";
 import { useStore } from "../../store.ts";
 import { CopyBlock, cx } from "../../components/ui.tsx";
 import { MoreOptions } from "../../components/MoreOptions.tsx";
+import { HarnessLogo } from "../../components/HarnessLogo.tsx";
 import { Badge, Circle, Dlg, Item, Label, Panel, Pick, Prim, Sec, Seg, Switch, TextBox, Tile } from "../../components/MarketParts.tsx";
 import { AgentPicker } from "../../components/ShopParts.tsx";
 import { InstallHarness } from "./runtimes.tsx";
@@ -22,10 +23,10 @@ const OTHER = "\u0000other";
 
 const sentence = (names: string[]) => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
 
-/** The harness's tile: a neutral square with a plain line icon. */
-const HarnessTile = ({ size = 40 }: { size?: number }) => (
+/** The harness's tile: a neutral square with its brand mark (a plain line icon when there is none). */
+const HarnessTile = ({ harness, size = 40 }: { harness: string; size?: number }) => (
   <Tile size={size}>
-    <Bot size={Math.round(size * 0.5)} strokeWidth={1.7} />
+    <HarnessLogo harness={harness} size={Math.round(size * 0.55)} />
   </Tile>
 );
 
@@ -137,7 +138,7 @@ export function HarnessesPage() {
                 return (
                   <Item
                     key={h.harness}
-                    icon={<HarnessTile />}
+                    icon={<HarnessTile harness={h.harness} />}
                     title={harnessLabel(h.harness)}
                     sub={st.text}
                     right={st.badge ? <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge> : undefined}
@@ -560,7 +561,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
           return (
             <Item
               key={a.id}
-              icon={<HarnessTile />}
+              icon={<HarnessTile harness={settings.harness} />}
               title={a.who ?? a.label}
               sub={who.length ? `Used by ${sentence(who)}` : a.signedIn === false ? "Not signed in" : shownNow && settings.accounts.length > 1 ? "Showing now" : a.who && a.who !== a.label ? a.label : "Not used by an agent yet"}
               right={a.signedIn === true ? <Badge tone="green">Signed in</Badge> : a.signedIn === false ? <Badge>Sign in</Badge> : undefined}

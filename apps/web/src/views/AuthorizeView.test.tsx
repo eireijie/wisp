@@ -18,7 +18,6 @@ describe("app authorization copy", () => {
     expect(html).not.toMatch(/Warren|\b(hub|node|token)\b/i);
     if (info) {
       expect(html).toContain("Let Grok act as an agent?");
-      expect(html).toContain("Pick the agent it acts as.");
     }
   });
 

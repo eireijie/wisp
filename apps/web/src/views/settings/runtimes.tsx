@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Copy, Loader2, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
+import { Copy, Loader2, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
 import { HARNESSES, harnessInfo, harnessLabel, runsInVm, type HarnessInfo } from "@wisp/core";
 import { api } from "../../api.ts";
 import { usableDevices, useDevices, type DeviceInfo } from "../../devices.ts";
@@ -7,12 +7,13 @@ import { href } from "../../router.ts";
 import { CopyBlock, Menu } from "../../components/ui.tsx";
 import { Add, Badge, Dlg, Item, Label, Panel, Pick, Prim, Sec, Tile } from "../../components/MarketParts.tsx";
 import { PageHeader } from "./parts.tsx";
+import { HarnessLogo } from "../../components/HarnessLogo.tsx";
 
-/** A harness on a neutral tile with a plain line icon (never a brand mark or a letter). */
-function Mark() {
+/** A harness on a neutral tile with its brand mark (a plain line icon when Wisp has none). */
+function Mark({ id }: { id: string }) {
   return (
     <Tile size={40}>
-      <Bot size={20} strokeWidth={1.7} />
+      <HarnessLogo harness={id} size={22} />
     </Tile>
   );
 }
@@ -52,7 +53,7 @@ export function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h
   const npm = !!h.install?.npm;
   return (
     <Item
-      icon={<Mark />}
+      icon={<Mark id={h.id} />}
       title={h.label}
       sub={ready ? (version ? `Version ${version}` : "Installed") : "Not on this device"}
       right={
@@ -147,7 +148,7 @@ export function RuntimesPage() {
 
   return (
     <>
-      <PageHeader title="Agent runtimes">The AI tools, like Claude Code or Codex, each device can run for agents.</PageHeader>
+      <PageHeader title="Agent runtimes" />
       {devices === null ? (
         <p className="text-sm text-muted">Loading devices…</p>
       ) : !device ? (
@@ -205,7 +206,7 @@ export function RuntimesPage() {
                 </div>
               ))}
               {declared.map((d) => (
-                <Item key={d.id} icon={<Mark />} title={harnessLabel(d.id)} sub={`Added on ${device.name} · ${d.version ?? "ready"}`} right={<Badge tone="green">Ready</Badge>} />
+                <Item key={d.id} icon={<Mark id={d.id} />} title={harnessLabel(d.id)} sub={`Added on ${device.name} · ${d.version ?? "ready"}`} right={<Badge tone="green">Ready</Badge>} />
               ))}
               <Item icon={<Tile size={40}><Plus size={20} strokeWidth={1.7} /></Tile>} title="Add runtime" sub="Any agent that speaks ACP" onClick={() => setAdding(true)} />
             </Panel>
@@ -217,7 +218,7 @@ export function RuntimesPage() {
         <p className="px-1 text-sm text-faint">Every VM comes with these, so an agent can run entirely inside its computer. Sign each in once per VM, on the agent's Computer tab.</p>
         <Panel>
           {HARNESSES.filter((h) => runsInVm(h.id)).map((h) => (
-            <Item key={h.id} icon={<Mark />} title={h.label} sub={h.note} right={<Badge tone="green">In every VM</Badge>} />
+            <Item key={h.id} icon={<Mark id={h.id} />} title={h.label} sub={h.note} right={<Badge tone="green">In every VM</Badge>} />
           ))}
         </Panel>
       </section>
@@ -226,7 +227,7 @@ export function RuntimesPage() {
         <p className="px-1 text-sm text-faint">Agents that run somewhere Wisp doesn't start them join through wisp-mcp: add the agent, then make a connection token on its Connect tab.</p>
         <Panel>
           {anywhere.map((h) => (
-            <Item key={h.id} icon={<Mark />} title={h.label} sub={h.note} right={<Badge>Through MCP</Badge>} />
+            <Item key={h.id} icon={<Mark id={h.id} />} title={h.label} sub={h.note} right={<Badge>Through MCP</Badge>} />
           ))}
         </Panel>
       </section>

@@ -111,29 +111,29 @@ export function VoicePage() {
   const neededRows = [needOpenai && openaiRow, needEleven && elevenRow].filter(Boolean);
   const otherRows = [!needOpenai && openaiRow, !needEleven && elevenRow].filter(Boolean);
   return <>
-    <PageHeader title="Voice">Talk with your helpers out loud, and choose how voices sound.</PageHeader>
+    <PageHeader title="Voice" />
     <Section title="How voices work" description="Your microphone is only used when you start a call or a test.">
       <Card>
         <Row label="On this device" hint="Uses your device's voices. It's free and needs no key. Browser speech recognition may use an online service, sending what you say to the browser provider." />
         <Row label="Online voices" hint="Audio goes to OpenAI or ElevenLabs, and they bill you separately for it. You need your own key from them." />
       </Card>
     </Section>
-    <Section title="Your voice choices" description="These settings belong to you.">
+    <Section title="Your voice choices">
       <Card>
-        <Row label="Listening" hint="How your speech becomes a chat message."><Select label="Listening engine" disabled={!loaded} value={listen} onChange={(listen) => setSettings({ ...settings, listen: listen as VoiceSettings["listen"] })}>{!inDesktopApp() && <option value="device">On this device</option>}<option value="openai">OpenAI (online)</option></Select></Row>
-        <Row label="Speaking" hint="An AI voice reads a short version. The complete reply stays in chat."><Select label="Speaking engine" disabled={!loaded} value={settings.speak} onChange={(speak) => setSettings({ ...settings, speak: speak as VoiceSettings["speak"] })}><option value="device">On this device</option><option value="openai">OpenAI (online)</option><option value="elevenlabs">ElevenLabs (online)</option></Select></Row>
+        <Row label="Listening"><Select label="Listening engine" disabled={!loaded} value={listen} onChange={(listen) => setSettings({ ...settings, listen: listen as VoiceSettings["listen"] })}>{!inDesktopApp() && <option value="device">On this device</option>}<option value="openai">OpenAI (online)</option></Select></Row>
+        <Row label="Speaking"><Select label="Speaking engine" disabled={!loaded} value={settings.speak} onChange={(speak) => setSettings({ ...settings, speak: speak as VoiceSettings["speak"] })}><option value="device">On this device</option><option value="openai">OpenAI (online)</option><option value="elevenlabs">ElevenLabs (online)</option></Select></Row>
       </Card>
     </Section>
-    {neededRows.length > 0 && <Section title="One more thing" description="The voices you picked need a key from the company that provides them. They bill you directly."><Card>{neededRows}</Card></Section>}
+    {neededRows.length > 0 && <Section title="One more thing"><Card>{neededRows}</Card></Section>}
     <MoreOptions className="mb-8" about="API keys and troubleshooting">
-      {otherRows.length > 0 && <Section title="API keys" description="Optional. Keys stay on your hub and are hidden when shown again. Clear a key and save to remove it."><Card>{otherRows}</Card></Section>}
+      {otherRows.length > 0 && <Section title="API keys"><Card>{otherRows}</Card></Section>}
       <p className="mb-8 text-xs text-muted">Calls need a secure connection (HTTPS, or localhost on this computer). Headphones help when you interrupt, and stop your speakers from echoing into the microphone.</p>
     </MoreOptions>
     <Button variant="primary" disabled={!loaded || saving} onClick={save}>{saving ? "Saving…" : "Save voice settings"}</Button>
     {message && <p role="status" className="text-sm text-muted mt-3">{message}</p>}
 
     <div className="mt-10" />
-    <Section title="Try it out" description="Check that your microphone and speakers work. Save first if you changed the speaking voice.">
+    <Section title="Try it out">
       <Card>
         <Row label="Listening in this browser" hint={listen === "openai" ? "You chose OpenAI for listening, so this browser's own listening isn't needed." : canListen ? "Listening on this device works in this browser." : "This browser can't listen on its own. Try Chrome or Safari, or choose OpenAI above."} />
         <Row label="Microphone" hint={<>
@@ -144,7 +144,7 @@ export function VoicePage() {
         <Row label="Speaker" hint={<>Plays a short sentence.<Outcome result={speakerTest.result} /></>}><Button disabled={speakerTest.testing} onClick={speakerTest.start}>{speakerTest.testing ? "Playing…" : "Test speaker"}</Button></Row>
       </Card>
     </Section>
-    <Section title="Each helper's voice" description="Every helper can have its own voice.">
+    <Section title="Each helper's voice">
       {agents.length ? <Card>{agents.map((a) => <Row key={a.id} label={a.name}><a href={href({ view: "agents", agentId: a.id, tab: "look" })} className="text-sm text-accent-text hover:underline" aria-label={`Choose voice for ${a.name}`}>Choose voice</a></Row>)}</Card> : <p className="text-sm text-muted">Add a helper first, then you can choose its voice.</p>}
     </Section>
   </>;

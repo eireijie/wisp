@@ -142,7 +142,6 @@ function HelperSection() {
   const checks = helperChecklist(agents, devices);
   return (
     <Section id="helper" title="My helper isn't answering">
-      <p className="text-sm text-muted">Go down this list. The first item marked "Needs fixing" is usually the reason. This updates by itself.</p>
       {devices === null && (
         <p className="text-sm text-faint" role="status">
           Checking your devices…
@@ -193,7 +192,6 @@ function ExamplesSection() {
           <li key={e}>{e}</li>
         ))}
       </ul>
-      <p className="text-sm text-muted">Each of these needs a helper set up first, and some need a connected app, like Gmail. Wisp can only do what you connect it to.</p>
     </Section>
   );
 }

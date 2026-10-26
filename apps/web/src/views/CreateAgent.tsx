@@ -416,7 +416,6 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                 <h1 tabIndex={-1} className="">
                   {invite ? "Invite an agent" : "New agent"}
                 </h1>
-                <p className="text-sm text-muted mt-0.5">{invite ? "Name it and pick the harness it already runs on. You'll get an invitation for its session." : "Give it a name and a job. You can change everything later."}</p>
               </div>
               <button type="button" onClick={onClose} disabled={busy} className="size-9 shrink-0 rounded-xl bg-chip hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label="Close">
                 <X size={16} />
@@ -493,7 +492,6 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                   <div className="space-y-2.5">
                     <span className="block text-sm font-medium">Harness it runs on</span>
                     <HarnessGrid list={harnesses} harness={harness} onPick={setHarness} label="Agent harness" />
-                    <p className="text-xs text-muted">The invitation gives its session Wisp's chat, tasks, memory and file tools. You can give it a computer on its Computer tab afterward.</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
@@ -754,7 +752,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
 
         {view === "external" && (
           <div className="p-5 sm:p-7 space-y-5">
-            <BackHeader title="Bring your agent along" body="Invite it directly, or find it on a device." onBack={() => setView("form")} />
+            <BackHeader title="Bring your agent along" onBack={() => setView("form")} />
             <div className="space-y-3">
               <button
                 type="button"
@@ -782,13 +780,12 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                 <ArrowRight size={18} className="shrink-0" />
               </button>
             </div>
-            <p className="text-xs text-muted leading-relaxed">Discovery checks known configuration folders, so custom setups may not appear. Neither option automatically copies skills. Your agent can save selected knowledge to the vault once connected.</p>
           </div>
         )}
 
         {view === "discover" && (
           <div className="p-5 sm:p-7 space-y-5">
-            <BackHeader title="Find an existing agent" body="Choose a saved setup from one of your devices." onBack={() => setView("external")} />
+            <BackHeader title="Find an existing agent" onBack={() => setView("external")} />
             <ImportAgent
               nodes={nodes}
               onClose={onClose}
@@ -808,7 +805,6 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                 <h1 tabIndex={-1} className="">
                   Invite {cleanName} to Wisp
                 </h1>
-                <p className="text-sm text-muted mt-1">Add this connection to its existing session.</p>
               </div>
             </div>
             <ConnectionInstructions token={token} harness={harness} />
@@ -848,7 +844,7 @@ function AddChip({ onClick }: { onClick: () => void }) {
   );
 }
 
-function BackHeader({ title, body, onBack }: { title: string; body: string; onBack: () => void }) {
+function BackHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="flex items-start gap-3">
       <button type="button" onClick={onBack} className="size-9 shrink-0 rounded-xl bg-chip hover:bg-hover grid place-items-center text-muted hover:text-ink" aria-label="Back">
@@ -858,7 +854,6 @@ function BackHeader({ title, body, onBack }: { title: string; body: string; onBa
         <h1 tabIndex={-1} className="">
           {title}
         </h1>
-        <p className="text-sm text-muted mt-0.5">{body}</p>
       </div>
     </div>
   );
@@ -1209,7 +1204,7 @@ export function ImportAgent({
         >
           <Field
             label="Handle"
-            hint={`Its soul, instructions and notes are copied into Wisp's memory. ${pick.d.path}`}
+            hint={pick.d.path}
           >
             <Input
               value={handle}

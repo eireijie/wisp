@@ -69,11 +69,11 @@ export function AgentDefaultsPage() {
 
   return (
     <>
-      <PageHeader title="Agent defaults">What a new agent starts with when you pick "Use my defaults".</PageHeader>
+      <PageHeader title="Agent defaults" />
       <OwnersOnly show={!isOwner} />
       <Section title="AI and model">
         <Card>
-          <Row label="AI tool" hint="The agent program that does the work, like Claude Code or Codex.">
+          <Row label="AI tool">
             <Select label="AI tool" value={form.harness ?? ""} disabled={!isOwner} onChange={(v) => setForm({ ...form, harness: v || null })}>
               <option value="">Pick for each agent</option>
               {CHOICES.map((h) => (
@@ -83,12 +83,12 @@ export function AgentDefaultsPage() {
               ))}
             </Select>
           </Row>
-          <Row label="Model" hint="Leave empty to use the AI tool's own default.">
+          <Row label="Model">
             <Input className="w-56" value={form.model ?? ""} disabled={!isOwner} placeholder="Default" onChange={(e) => setForm({ ...form, model: e.target.value })} aria-label="Model" />
           </Row>
         </Card>
       </Section>
-      <Section title="Default model per AI tool" description="Leave a tool empty to use its own default. You can still pick a model per agent.">
+      <Section title="Default model per AI tool">
         <Card>
           {CHOICES.map((h) => (
             <Row key={h.id} label={h.label}>
@@ -104,7 +104,7 @@ export function AgentDefaultsPage() {
           ))}
         </Card>
       </Section>
-      <Section title="Computer" description="Agents with their own computer can open apps and browse the web. Without one they only chat and use their tools.">
+      <Section title="Computer">
         <Card>
           <Row label="New agents get" hint={form.computer === "own-vm" && devices && !vmDevices.length ? "None of your devices can run a computer for an agent yet." : undefined}>
             <Segmented

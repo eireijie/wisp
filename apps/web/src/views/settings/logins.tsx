@@ -46,7 +46,7 @@ export function LoginsPage() {
 
   return (
     <>
-      <PageHeader title="Logins">Agents sign in to websites through your password manager. Wisp never stores a password. They ask you before using a login, and Wisp types the password in for them, so it never goes in chat.</PageHeader>
+      <PageHeader title="Logins" />
       <OwnersOnly show={!isOwner} />
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {view && (
@@ -87,7 +87,6 @@ export function LoginsPage() {
           {source && (
             <section className="space-y-2">
               <Label>Logins agents can use</Label>
-              <p className="px-1 text-sm text-faint">From your {source.label} “{source.vaultName}” vault. To add or change a login, do it in {source.label}: it shows up here by itself.</p>
               {view.problem && (
                 <p className="px-1 text-sm text-bad">
                   {view.problem}{" "}
@@ -137,7 +136,6 @@ export function LoginsPage() {
                   ))}
                 </div>
               </Panel>
-              <p className="px-1 text-sm text-faint">Every use shows on that computer's activity, like “Nova used the Zendesk login”. Passwords never pass through chat, memory or logs.</p>
             </section>
           )}
         </div>

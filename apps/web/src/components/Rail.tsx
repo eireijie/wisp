@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { Blocks, BookOpen, Ellipsis, LifeBuoy, ListTodo, Store } from "lucide-react";
+import { useFeatures } from "../features.ts";
 import { useStore, useInboxCount } from "../store.ts";
-import { href, type Route } from "../router.ts";
+import { go, href, type Route } from "../router.ts";
 import { AgentsIcon, ChatsIcon, ComputersIcon, InboxIcon, WispGhost } from "./icons.tsx";
 import { OrgSwitcher, useOrgs } from "./OrgSwitcher.tsx";
-import { cx } from "./ui.tsx";
+import { Menu, cx } from "./ui.tsx";
 
 /** Where the Chats item goes: the chat you were last in, else the newest one. Remembered per page load. */
 let lastChat: string | null = null;
@@ -52,9 +54,36 @@ function NavItem({ to, label, icon, active, badge, dot }: { to: string; label: s
   );
 }
 
+/** The views the More menu opens, so the More item shows active on them. */
+const MORE_VIEWS: Route["view"][] = ["vault", "tasks", "marketplace", "mods", "help"];
+
+/** More: Memory, Tasks, Marketplace, Mods and Help in a small menu, so Settings only holds things you change. */
+function MoreItem({ route, guest }: { route: Route; guest: boolean }) {
+  const features = useFeatures();
+  const icon = { size: 16, strokeWidth: 1.8 };
+  const items = [
+    { label: "Memory", icon: <BookOpen {...icon} />, onSelect: () => go({ view: "vault", path: null }) },
+    ...(!guest && features.tasks ? [{ label: "Tasks", icon: <ListTodo {...icon} />, onSelect: () => go({ view: "tasks" }) }] : []),
+    ...(!guest ? [{ label: "Marketplace", icon: <Store {...icon} />, onSelect: () => go({ view: "marketplace" }) }, { label: "Mods", icon: <Blocks {...icon} />, onSelect: () => go({ view: "mods" }) }] : []),
+    { label: "Help", icon: <LifeBuoy {...icon} />, onSelect: () => go({ view: "help" }) },
+  ];
+  const active = MORE_VIEWS.includes(route.view);
+  return (
+    <Menu
+      items={items}
+      trigger={(open, toggle) => (
+        <button onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-current={active ? "page" : undefined} className={cx("relative w-14 h-[52px] rounded-[14px] flex flex-col items-center justify-center gap-[3px] text-[11px] transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40", active || open ? "bg-side-active text-ink font-medium" : "text-muted font-normal hover:text-ink hover:bg-hover")}>
+          <Ellipsis size={22} strokeWidth={1.8} aria-hidden />
+          More
+        </button>
+      )}
+    />
+  );
+}
+
 /**
  * The slim left rail on desktops: Wisp's ghost on top (it opens the organization switcher),
- * Inbox, Chats, Agents and Computers, and you at the bottom (it opens Settings).
+ * Inbox, Chats, Agents, Computers and More, and you at the bottom (it opens Settings).
  */
 export function Rail({ route }: { route: Route }) {
   const me = useStore((s) => s.me)!;
@@ -75,6 +104,7 @@ export function Rail({ route }: { route: Route }) {
       <NavItem to={chatsTarget()} label="Chats" icon={<ChatsIcon />} active={route.view === "chat" || route.view === "chats"} />
       <NavItem to={href({ view: "agents", agentId: null })} label="Agents" icon={<AgentsIcon />} active={route.view === "agents"} />
       {!isGuest && <NavItem to={href({ view: "computers", computerId: null })} label="Computers" icon={<ComputersIcon />} active={route.view === "computers"} dot={working} />}
+      <MoreItem route={route} guest={isGuest} />
       <span className="flex-1" />
       <UserAvatarButton desktop />
     </nav>

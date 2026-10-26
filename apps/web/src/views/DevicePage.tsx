@@ -331,7 +331,6 @@ function AgentsHere({ node: n, onAdd }: { node: NodeInfo; onAdd: () => void }) {
         <p className="mt-2 text-sm text-muted">No agents here yet.</p>
       )}
       {error && <p className="mt-2 text-xs text-bad">{error}</p>}
-      <p className="mt-2 text-xs text-muted">Only agents that run here can use this computer{n.mine ? ", and only for things you ask" : ""}.</p>
     </section>
   );
 }
@@ -472,13 +471,11 @@ function RemoteDesktop({ node: n, onChange }: { node: NodeInfo; onChange: () => 
           </div>
         ) : (
           <>
-            <p className="mt-0.5 text-xs text-muted">Reach {n.name} from anywhere.</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <button onClick={() => setShowRustdesk(true)} className="rounded-xl border-2 border-accent/60 p-3 text-left hover:bg-hover">
                 <div className="text-sm font-medium flex items-center gap-1.5">
                   <Download size={15} /> Set up RustDesk
                 </div>
-                <p className="mt-0.5 text-xs text-muted">Free and open source. {n.name} installs it after asking you there.</p>
               </button>
               <button onClick={() => setEditing(true)} className="rounded-xl border border-line p-3 text-left hover:bg-hover">
                 <div className="text-sm font-medium flex items-center gap-1.5">

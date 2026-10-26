@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Bell, Blocks, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, LifeBuoy, Link2, ListTodo, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal } from "lucide-react";
 import { resolveFeatures, type Features } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -14,7 +14,6 @@ import { MemoryPage } from "./settings/memory.tsx";
 import { DevicesPage } from "./settings/devices.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
 import { LoginsPage } from "./settings/logins.tsx";
-import { ModsPage } from "./settings/features.tsx";
 import { UsagePage } from "./settings/usage.tsx";
 import { AskAndChanges } from "./settings/changes.tsx";
 import { AgentDefaultsPage } from "./settings/defaults.tsx";
@@ -50,7 +49,6 @@ const NAV: NavSection[] = [
       { id: "general", label: "Workspace", icon: ic(Building2), noGuests: true },
       { id: "people", label: "People", icon: ic(Users), feature: "invite", noGuests: true },
       { id: "usage", label: "Usage", icon: ic(Gauge), feature: "background", noGuests: true },
-      { id: "features", label: "Mods", icon: ic(Blocks), noGuests: true },
     ],
   },
   {
@@ -107,12 +105,11 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   ),
   access: () => (
     <>
-      <PageHeader title="Access">Use Wisp on any Wi-Fi or on cell data.</PageHeader>
+      <PageHeader title="Access" />
       <AccessPanel />
     </>
   ),
   "agent-defaults": () => <AgentDefaultsPage />,
-  features: () => <ModsPage />,
   people: () => <PeoplePage />,
   agents: () => <AgentsPolicyPage />,
   runtimes: () => <RuntimesPage />,
@@ -125,13 +122,9 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   updates: () => <AboutPage />,
 };
 
-/** A link in the list that isn't a settings page: it opens its own area. */
+/** A link in the list that isn't a settings page: it opens its own area. (Memory, Tasks, Marketplace, Mods and Help live under More in the rail, not here.) */
 const LINKS: { after: string; label: string; icon: ReactNode; to: () => string; noGuests?: boolean; feature?: keyof Features }[] = [
-  { after: "You", label: "Memory", icon: ic(BookOpen), to: () => href({ view: "vault", path: null }) },
-  { after: "You", label: "Marketplace", icon: ic(Store), to: () => href({ view: "marketplace" }), noGuests: true },
-  { after: "You", label: "Tasks", icon: ic(ListTodo), to: () => href({ view: "tasks" }), noGuests: true, feature: "tasks" },
   { after: "Devices", label: "Computers and devices", icon: ic(Monitor), to: () => href({ view: "computers", computerId: null }), noGuests: true },
-  { after: "More", label: "Help", icon: ic(LifeBuoy), to: () => href({ view: "help" }) },
 ];
 
 /** The links under a section, for a guest or not, with the organization's features. */
@@ -210,7 +203,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
 
   if (fullWindow)
     return (
-      <div className="flex-1 min-w-0 flex">
+      <div className="flex-1 min-w-0 min-h-0 flex">
         <aside className="w-[268px] shrink-0 border-r border-line overflow-y-auto px-3.5 py-7 safe-top flex flex-col">
           <div className="px-3 pb-1.5">
             <h1 className="">Settings</h1>
@@ -219,7 +212,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
           {list}
           <SignOutButton label="Sign out" className="mt-4 h-10 px-3 rounded-xl text-sm font-medium text-bad hover:bg-side-hover text-left" />
         </aside>
-        <main className="flex-1 min-w-0 flex flex-col" aria-label={label ? `${label} settings` : "Settings"}>
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col" aria-label={label ? `${label} settings` : "Settings"}>
           {body(current!)}
         </main>
       </div>

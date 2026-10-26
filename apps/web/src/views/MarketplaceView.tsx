@@ -381,7 +381,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           return (
             <Entry
               key={a.key}
-              tile={<AppTile name={a.name} category={a.category} />}
+              tile={<AppTile name={a.name} category={a.category} entry={"registry" in a ? a.registry : null} />}
               title={a.name}
               badge={"registry" in a ? <TrustPill t={trustOf(a.registry)} /> : <Badge tone="blue">On Wisp's list</Badge>}
               sub={whatItsFor(a.description, 90) || a.who}
@@ -988,7 +988,6 @@ function BringAll({ pending, agents, onClose, onDone, onSetUp }: { pending: Pend
         <section className="space-y-2">
           <Label>Share with</Label>
           <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} disabled={busy !== null} />
-          <p className="px-1 text-[13px] text-faint">You can give them to more helpers later. Apps that need a sign-in ask once, here in Wisp.</p>
         </section>
       )}
       {later.length > 0 && (

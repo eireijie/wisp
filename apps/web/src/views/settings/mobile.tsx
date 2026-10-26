@@ -33,7 +33,7 @@ function reachHint(addresses: string[]): string {
 
 /** Settings → Mobile: pair the phone app with this Wisp by scanning a QR code, then matching a code. */
 export function MobilePage() {
-  return <><PageHeader title="Mobile">Point your camera here to join your Wisp.</PageHeader><PhonePairing /></>;
+  return <><PageHeader title="Mobile" /><PhonePairing /></>;
 }
 
 export function PhonePairing({ autoStart = false, compact = false }: { autoStart?: boolean; compact?: boolean }) {
@@ -176,7 +176,6 @@ export function PhonePairing({ autoStart = false, compact = false }: { autoStart
               <>
                 <p className="text-sm">Point your camera here. It gets the app and joins.</p>
                 {!compact && <p className="text-xs text-muted">{reachHint(started.addresses)}</p>}
-                {!compact && <p className="text-xs text-muted">The code expires in 5 minutes.</p>}
                 <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink">
                   {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy pairing link"}
                 </button>
