@@ -51,9 +51,6 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (timezone) await api("PATCH", "/api/me", { timezone }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
       }
-      if (needsSetup) {
-        await api("PUT", "/api/me/prefs", { experience: "simple" }, { headers: { authorization: `Bearer ${r.token}` } }).catch(() => {});
-      }
       if (needsSetup) location.hash = "#/welcome/intro";
       else if (joining) location.hash = "#/";
       onAuthed(r.token);

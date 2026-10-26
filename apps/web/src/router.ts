@@ -16,7 +16,7 @@ import { useMemo, useSyncExternalStore } from "react";
  *   #/settings[/<page>]              your settings and the organization's (see SETTINGS_PAGES); full window on desktops
  *   #/join/<code>                    accept an invite (signed out)
  *   #/authorize/<requestId>          let an app (Grok, ChatGPT, Claude…) connect as an agent (the hub's /oauth/authorize sends people here)
- *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Wisp is" and Simple or Advanced
+ *   #/welcome[/intro]                first-run onboarding; /intro opens on "what Wisp is"
  *   #/help                           help: finish setup, why a helper isn't answering, words you'll see
  *   #/mods                           mods: optional parts of Wisp, switched on or off
  *   #/                               the dashboard on desktops, the chats list on phones (App.tsx)

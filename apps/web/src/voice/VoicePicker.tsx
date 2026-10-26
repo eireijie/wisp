@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Agent, AgentSettings } from "@wisp/core";
 import { Play, Square } from "lucide-react";
 import { api } from "../api.ts";
-import { Advanced } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { Button, cx, Input } from "../components/ui.tsx";
 import { Select } from "../views/settings/parts.tsx";
 import { createSpeaker, deviceVoices, ELEVEN_VOICES, OPENAI_VOICES, type VoiceSettings, type VoiceSpeaker } from "./providers.ts";
@@ -162,9 +162,9 @@ export function VoicePicker({ agent, value, onChange, onLevel }: { agent: Agent;
         </div> : <p className="text-xs text-muted">No voices match. Clear the search or choose another language.</p>}
       </div>}
     </div>}
-    {engine === "elevenlabs" && <Advanced title="Advanced: use your own ElevenLabs voice">
+    {engine === "elevenlabs" && <MoreOptions about="use your own ElevenLabs voice">
       <Input aria-label="Custom ElevenLabs voice ID" placeholder="Paste your ElevenLabs voice ID" value={value?.elevenlabs ?? ""} disabled={playing !== null} onChange={(e) => onChange({ ...value, elevenlabs: e.target.value })} />
-    </Advanced>}
+    </MoreOptions>}
     {error && <p role="alert" className="text-xs text-bad">{error}</p>}
   </section>;
 }

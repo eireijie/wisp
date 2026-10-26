@@ -5,7 +5,7 @@ import { api } from "../api.ts";
 import { Button, Field, Input, Menu, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 import { AgentPicker, AgentStack, AppLogo, Group, IconTile } from "../components/ShopParts.tsx";
 import { useDevices, type DeviceInfo } from "../devices.ts";
-import { Advanced } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 
 const KIND_LABEL: Record<ConnectorKind, string> = { "mcp-stdio": "MCP · runs on the device", "mcp-http": "MCP · remote", secret: "Key" };
 
@@ -367,9 +367,9 @@ export function ConnectorForm({ entry, existing, agents, taken, onClose, onSaved
         <Group label="Which agents get it">
           <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} note={agentNote(kind, command, devices)} unavailable={(a) => !harnessSupportsConnectors(a.harness, kind)} />
         </Group>
-        <Advanced hide>
+        <MoreOptions about="what it works with">
           <p className="text-xs text-muted">{worksWith(kind)}</p>
-        </Advanced>
+        </MoreOptions>
         {cantStart.map((w) => (
           <p key={w} role="alert" className="text-sm text-warn rounded-lg border border-warn/40 bg-warn/10 px-3 py-2">
             {w} You can still connect it; it starts working once the command is there.

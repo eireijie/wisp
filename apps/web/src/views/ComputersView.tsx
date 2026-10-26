@@ -6,7 +6,7 @@ import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { computerKindLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { ClipboardPanel, FilesPanel, remotePlatform, saveScreenshot, sendFiles, useClipboardSync } from "../components/ComputerSync.tsx";
 import { AgentAvatar, Button, Empty, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
@@ -133,7 +133,7 @@ function ComputerCard({ computer: c, devices }: { computer: ComputerInfo; device
 
 type Kind = "vm" | "device" | "orgo";
 
-/** The Simple-mode question: what should the helper be able to do? */
+/** The question: what should the helper be able to do? */
 export type Capability = "chat" | "vm" | "device";
 
 /** Which kind of computer to create for an answer. "Answer questions only" creates nothing. */
@@ -141,7 +141,7 @@ export function capabilityKind(c: Capability | null): Kind | null {
   return c === "vm" || c === "device" ? c : null;
 }
 
-/** New VMs are medium unless someone opens the size choice (under Advanced in Simple mode). */
+/** New VMs are medium unless someone opens the size choice (under More options). */
 export const DEFAULT_SIZE = "medium" as const;
 
 /** Whether the Orgo cloud option can be used yet: it needs an API key saved in Settings → Computers. */
@@ -151,7 +151,6 @@ export function orgoStatus(orgo: { configured: boolean } | null): "checking" | "
 
 /** Pick where a new computer lives. Used on the Computers page and an agent's Computer tab. */
 export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, defaultName }: { devices: DeviceInfo[]; onClose: () => void; onCreated: (c: ComputerInfo) => void; nodeId?: string | null; defaultName?: string }) {
-  const simple = useSimple();
   const [kind, setKind] = useState<Kind | null>(null);
   const [capability, setCapability] = useState<Capability | null>(null);
   const usable = usableDevices(devices);
@@ -229,7 +228,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
     </p>
   );
 
-  const chatOnly = simple && capability === "chat";
+  const chatOnly = capability === "chat";
   const showSizing = kind === "orgo" || kind === "vm";
   const sizeField = (
     <Field label="Size">
@@ -244,29 +243,20 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
   return (
     <Modal title="Add a computer" onClose={onClose} wide>
       <div className="space-y-4">
-        {simple ? (
-          <div className="space-y-2">
-            <p id="cap-q" className="text-sm font-medium">What should the helper be able to do?</p>
-            <div role="radiogroup" aria-labelledby="cap-q" className="space-y-2">
-              {card(capability === "chat", () => pickCapability("chat"), <Hand size={18} />, "Answer questions only", "No desktop needed")}
-              {card(capability === "vm", () => pickCapability("vm"), <Monitor size={18} />, "Use apps in its own desktop", "A separate desktop with a web browser, a terminal and files. Your own computer stays untouched.", vmAvailabilityNote(usable))}
-              {mineOnly.length > 0 && card(capability === "device", () => pickCapability("device"), <Lock size={18} />, "Use apps on my screen", "Runs on your computer and uses your real screen and apps while you watch. It only does what you ask.")}
+        <div className="space-y-2">
+          <p id="cap-q" className="text-sm font-medium">What should the helper be able to do?</p>
+          <div role="radiogroup" aria-labelledby="cap-q" className="space-y-2">
+            {card(capability === "chat", () => pickCapability("chat"), <Hand size={18} />, "Answer questions only", "No desktop needed")}
+            {card(capability === "vm", () => pickCapability("vm"), <Monitor size={18} />, "Use apps in its own desktop", "A separate desktop with a web browser, a terminal and files. Your own computer stays untouched.", vmAvailabilityNote(usable))}
+            {mineOnly.length > 0 && card(capability === "device", () => pickCapability("device"), <Lock size={18} />, "Use apps on my screen", "Runs on your computer and uses your real screen and apps while you watch. It only does what you ask.")}
+          </div>
+          <MoreOptions about="a cloud computer (Orgo)">
+            <div role="radiogroup" aria-label="Cloud computer" className="space-y-2">
+              {orgoOption}
+              {orgoNeedsKey}
             </div>
-            <Advanced title="Cloud computer (Orgo)">
-              <div role="radiogroup" aria-label="Cloud computer" className="space-y-2">
-                {orgoOption}
-                {orgoNeedsKey}
-              </div>
-            </Advanced>
-          </div>
-        ) : (
-          <div role="radiogroup" aria-label="Kind of computer" className="space-y-2">
-            {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.", vmAvailabilityNote(usable))}
-            {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. Agents that run on this device can use it, for things you ask, when a task needs an app that only lives on your computer.")}
-            {orgoOption}
-            {orgoNeedsKey}
-          </div>
-        )}
+          </MoreOptions>
+        </div>
 
         {chatOnly && (
           <div className="rounded-xl border border-line bg-bg p-3 text-sm space-y-1">
@@ -280,7 +270,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
           </div>
         )}
 
-        {kind && kind !== "orgo" && !(simple && choices.length === 1) && (
+        {kind && kind !== "orgo" && choices.length !== 1 && (
           <Field label="Device" hint={choices.length ? undefined : "Connect a device first under Devices."}>
             <select value={nodeId} onChange={(e) => setNodeId(e.target.value)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
               {choices.map((d) => (
@@ -309,13 +299,12 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
             <Field label="Name">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "device" ? (device?.name ?? "") : kind === "vm" ? "Research desk" : "Cloud desk"} />
             </Field>
-            {!simple && kind !== "device" && !existing && sizeField}
           </div>
         )}
-        {simple && showSizing && !existing && (
-          <Advanced title="Size and resources">
+        {showSizing && !existing && (
+          <MoreOptions about="size and resources">
             <div className="grid sm:grid-cols-2 gap-3">{sizeField}</div>
-          </Advanced>
+          </MoreOptions>
         )}
         {kind === "orgo" && (
           <Field label="Or connect a computer you already have in Orgo" hint="Its ID (a UUID) from the Orgo dashboard. Leave empty to make a new one.">

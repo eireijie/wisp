@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from "react";
 import { Maximize2, Minus, Plus, Search, Share2, X } from "lucide-react";
 import { Button, cx } from "../components/ui.tsx";
 import { GRAPH_KINDS, MemoryGraph, kindColor, kindLabel, type GraphData, type GraphKind, type GraphNode } from "../components/MemoryGraph.tsx";
-import { useSimple } from "../experience.tsx";
 
 /** The whole memory as a map: every note you can read, and the links between them. */
 export function MemoryGraphView({
@@ -21,7 +20,6 @@ export function MemoryGraphView({
   /** start writing a note that's linked to but doesn't exist yet */
   onWrite?: (title: string) => void;
 }) {
-  const simple = useSimple();
   const [hidden, setHidden] = useState<Set<GraphKind>>(() => (initialKind ? new Set(GRAPH_KINDS.filter((k) => k !== initialKind)) : new Set()));
   const [tag, setTag] = useState("");
   const [query, setQuery] = useState("");
@@ -96,7 +94,7 @@ export function MemoryGraphView({
                 <button key={n.id} role="option" aria-selected={false} onClick={() => pick(n)} className="w-full text-left px-3 py-1.5 hover:bg-hover flex items-center gap-2">
                   <span className="size-2.5 rounded-full shrink-0" style={{ background: kindColor(n.kind) }} />
                   <span className="truncate flex-1">{n.title}</span>
-                  <span className="text-xs text-faint truncate max-w-[40%]">{n.path ? where(n.path) : kindLabel("ghost", simple)}</span>
+                  <span className="text-xs text-faint truncate max-w-[40%]">{n.path ? where(n.path) : kindLabel("ghost")}</span>
                 </button>
               ))}
             </div>
@@ -113,7 +111,7 @@ export function MemoryGraphView({
                 className={cx("shrink-0 inline-flex items-center gap-1.5 h-7 rounded-full px-2.5 text-xs font-medium border transition-colors", on ? "border-line bg-panel text-ink" : "border-transparent bg-transparent text-faint line-through")}
               >
                 <span className={cx("size-2 rounded-full", k === "ghost" && "ring-1 ring-inset ring-current bg-transparent!")} style={{ background: on ? kindColor(k) : "var(--faint)", color: kindColor(k) }} />
-                {kindLabel(k, simple)}
+                {kindLabel(k)}
                 <span className="text-faint tabular-nums">{counts.get(k)}</span>
               </button>
             );
@@ -160,7 +158,7 @@ export function MemoryGraphView({
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{picked.title}</div>
                 <div className="text-xs text-muted truncate">
-                  {picked.path ? where(picked.path) : `${kindLabel("ghost", simple)}: other notes link to it`}
+                  {picked.path ? where(picked.path) : `${kindLabel("ghost")}: other notes link to it`}
                   {picked.type ? ` · ${picked.type}` : ""}
                 </div>
               </div>
