@@ -123,6 +123,7 @@ const uniq = <T,>(xs: T[]) => [...new Set(xs)];
 export function stepGraph(steps: TeamStep[]): StepGraph {
   const ids = steps.map((s) => s.id);
   const known = new Set(ids);
+  const byId = new Map(steps.map((s) => [s.id, s]));
   const outs = new Map<string, string[]>(ids.map((i) => [i, []]));
   const ins = new Map<string, string[]>(ids.map((i) => [i, []]));
   const back = new Map<string, string[]>(ids.map((i) => [i, []]));
@@ -133,7 +134,8 @@ export function stepGraph(steps: TeamStep[]): StepGraph {
   };
   for (const s of steps) {
     if (s.kind !== "branch") for (const n of [...(s.nexts ?? []), ...(s.next ? [s.next] : [])]) add(s.id, n);
-    for (const i of s.inputs ?? []) add(i, s.id);
+    // an if/else only leads to the steps its Yes and No name; a plain arrow from it never fires
+    for (const i of s.inputs ?? []) if (byId.get(i)?.kind !== "branch") add(i, s.id);
   }
   // an if/else's arrows go forward, unless they point at a step that leads here (that's a loop)
   const reaches = (from: string, to: string) => {

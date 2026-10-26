@@ -112,8 +112,11 @@ export class TeamFlows {
     if (!f.lanes) {
       // a request that began before steps could run together: its history and current step become lanes
       const lanes: Record<string, FlowLane> = {};
+      // a review that sent work back is in history already, but it has to run again: only what comes before the current step is done
+      const team = this.team(f);
+      const later = team ? stepsAfter(team.steps, f.stepId) : new Set<string>();
       for (const h of f.history) {
-        if (h.stepId === f.stepId) continue;
+        if (h.stepId === f.stepId || later.has(h.stepId)) continue;
         lanes[h.stepId] = { stepId: h.stepId, status: "done", taskId: h.taskId, carry: null, pieces: {}, waitingFor: null, result: this.hub.store.task(h.taskId)?.result ?? undefined };
       }
       const open = f.status === "running" || f.status === "waiting";
@@ -450,7 +453,6 @@ export class TeamFlows {
           lane.status = "waiting";
           return this.waitLane(f, lane, `${this.title(team, step)} sent the work back ${used} time${used === 1 ? "" : "s"}. Approve it anyway, or give it another round.`, "rounds");
         }
-        for (const o of g.outs.get(step.id) ?? []) this.skip(f, team, o);
         this.resetFrom(f, team, to!);
         return this.runStep(f, team.steps.find((s) => s.id === to)!, { from: this.who(team, step), text: result || "(no notes given)", sentBack: true });
       }

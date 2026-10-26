@@ -76,6 +76,12 @@ const blank = (s: TeamStep): TeamStep => ({ ...s, inputs: [], nexts: [], next: n
 /** Draw an arrow a -> b (both ends, and `next`). */
 export function connecting(team: ChannelTeam, a: string, b: string): ChannelTeam {
   if (a === b) return team;
+  const src = stepById(team, a);
+  // an if/else leads only where its Yes and No point: fill an empty one, or do nothing when both are taken
+  if (src?.kind === "branch") {
+    if (src.ifTrue === b || src.ifFalse === b) return team;
+    return updating(team, a, !src.ifTrue ? { ifTrue: b } : !src.ifFalse ? { ifFalse: b } : {});
+  }
   return edit(team, (all) =>
     all.map((s) => {
       if (s.id === a && !(s.nexts ?? []).includes(b)) return { ...s, nexts: [...(s.nexts ?? []), b] };

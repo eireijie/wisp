@@ -475,6 +475,25 @@ describe("a team saved before flow charts", () => {
     expect(flow.history.map((h) => `${h.stepId}:${h.verdict}`)).toEqual(["plan:done", "check:approved", "ship:done"]);
   });
 
+  it("a request the review had sent back keeps its review ahead of it after the upgrade", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "legacy-sent-back", settings: { team: legacy() } })).data;
+    await say(ch);
+    await finish("atlas", openIn("atlas", ch.id)!.id, "Plan v1");
+    await finish("sol", openIn("sol", ch.id)!.id, "Needs more", "changes");
+    const again = openIn("atlas", ch.id)!;
+    // stored the old way: no lanes, and the history already holds plan, check
+    const row = hub.store.db.prepare("SELECT id, state_json FROM team_flows WHERE channel_id = ?").get(ch.id) as { id: string; state_json: string };
+    const state = JSON.parse(row.state_json);
+    delete state.lanes;
+    hub.store.db.prepare("UPDATE team_flows SET state_json = ? WHERE id = ?").run(JSON.stringify(state), row.id);
+    expect((await flowIn(ch.id)).lanes!.check).toBeUndefined();
+    await finish("atlas", again.id, "Plan v2");
+    // the review runs again, with the plan, not the old notes
+    const review = openIn("sol", ch.id)!;
+    expect(review.brief).toMatch(/Plan v2/);
+    expect(openIn("atlas", ch.id)).toBeUndefined();
+  });
+
   it("keeps the plain chart for older apps, and takes a step with only `next` from an older app", async () => {
     const ch = (await api("POST", "/api/channels", { name: "old-client", settings: { team: legacy() } })).data;
     expect(ch.settings.team.nodes.map((n: any) => n.agentId).sort()).toEqual([agents.atlas.id, agents.sol.id].sort());
@@ -634,6 +653,34 @@ describe("branches, loops and hand-offs in odd shapes", () => {
     flow = await flowIn(ch.id);
     expect(flow.status).toBe("done");
     expect(flow.lanes!.report.status).toBe("done");
+  });
+
+  it("an if/else going back round doesn't start a step that joins the path it just left", async () => {
+    const ch = await channel("loop-join", [
+      step("a", "atlas"),
+      step("f", "pixel"),
+      step("gate", null, { kind: "branch", inputs: ["a"], rule: { op: "contains", value: "PASS" }, ifTrue: "c", ifFalse: "a" }),
+      step("c", "forge"),
+      step("e", "sol", { inputs: ["c", "f"] }),
+    ]);
+    await say(ch);
+    await finish("pixel", openIn("pixel", ch.id)!.id, "F done");
+    await finish("atlas", openIn("atlas", ch.id)!.id, "FAIL");
+    expect(tasksIn("sol", ch.id)).toHaveLength(0);
+    expect(openIn("atlas", ch.id)).toBeDefined();
+  });
+
+  it("a step that only lists an if/else as its input isn't skipped forever", async () => {
+    const ch = await channel("branch-plain-arrow", [
+      step("a", "atlas"),
+      step("gate", null, { kind: "branch", inputs: ["a"], rule: { op: "contains", value: "PASS" }, ifTrue: "c", ifFalse: null }),
+      step("c", "forge"),
+      step("d", "sol", { inputs: ["gate"] }),
+    ]);
+    expect(ch.settings.team.steps.find((s: any) => s.id === "d").inputs).toEqual([]);
+    await say(ch);
+    expect(openIn("sol", ch.id)).toBeDefined();
+    expect((await flowIn(ch.id)).lanes!.d.status).toBe("running");
   });
 
   it("approving a loop that ran out of rounds leaves it, instead of asking the same question again", async () => {
