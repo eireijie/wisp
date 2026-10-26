@@ -273,8 +273,8 @@ export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "
   if (!agent.nodeId) return { text: `Choose the computer that runs ${agent.name}.`, href: href({ view: "agents", agentId: agent.id, tab: "device" }), action: "Choose a device" };
   const device = devices?.find((d) => d.id === agent.nodeId);
   if (!device) return null;
-  if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "nodes" }), action: "See devices" };
-  if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "nodes" }), action: "See devices" };
+  if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
+  if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "computers", computerId: null }), action: "See computers" };
   return { text: `Install ${harnessLabel(agent.harness)} on ${device.name}.`, href: href({ view: "settings", page: "runtimes" }), action: "Install it" };
 }
 

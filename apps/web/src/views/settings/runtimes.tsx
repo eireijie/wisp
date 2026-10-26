@@ -75,7 +75,7 @@ export function RuntimesPage() {
       ) : !device ? (
         <p className="text-sm text-muted rounded-xl border border-dashed border-line p-4">
           No devices of yours yet.{" "}
-          <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
+          <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
             Connect one
           </a>{" "}
           to see what it can run.
@@ -161,7 +161,7 @@ export function RuntimesPage() {
   );
 }
 
-function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: HarnessInfo; device: DeviceInfo; version: string | null | undefined; busy: boolean; onInstall: () => void; onHowTo: () => void }) {
+export function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: HarnessInfo; device: DeviceInfo; version: string | null | undefined; busy: boolean; onInstall: () => void; onHowTo: () => void }) {
   const ready = version !== undefined;
   const npm = !!h.install?.npm;
   return (
@@ -207,7 +207,7 @@ function RuntimeRow({ h, device, version, busy, onInstall, onHowTo }: { h: Harne
   );
 }
 
-function HowToInstall({ h, device, onClose }: { h: HarnessInfo; device: DeviceInfo | undefined; onClose: () => void }) {
+export function HowToInstall({ h, device, onClose }: { h: HarnessInfo; device: DeviceInfo | undefined; onClose: () => void }) {
   const info = harnessInfo(h.id)?.install;
   return (
     <Modal title={`Install ${h.label}`} onClose={onClose}>

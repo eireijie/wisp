@@ -738,7 +738,7 @@ export function ComputersPage() {
           Computers
         </a>{" "}
         and{" "}
-        <a className="text-accent-text hover:underline" href={href({ view: "nodes" })}>
+        <a className="text-accent-text hover:underline" href={href({ view: "computers", computerId: null })}>
           Devices
         </a>
         .

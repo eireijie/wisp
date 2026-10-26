@@ -64,6 +64,7 @@ export function JoinApproval() {
     <Modal title={`${request.name} wants to join`} onClose={later} headerless label={`${request.name} wants to join`} className="z-60" contentClassName="pt-6">
       <Monitor size={26} className="mb-4 text-muted" />
       <h2 className="text-xl font-semibold">{request.name} wants to join</h2>
+      <p className="mt-1 text-sm text-muted">Only approve a device you set up yourself.</p>
       <div className="my-6 rounded-xl border border-line bg-bg p-5 text-center">
         <p className="text-sm text-muted">It should show the same code</p>
         <p className="mt-3 font-mono text-4xl font-semibold tracking-widest tabular-nums">{displayJoinCode(request.code)}</p>

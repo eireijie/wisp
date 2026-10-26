@@ -1,50 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ChevronLeft, ChevronRight, ClipboardList, Cloud, Eye, FolderOpen, Hand, Info, Laptop, Loader2, Lock, Minimize2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Upload, Video, X } from "lucide-react";
+import { Camera, ChevronRight, ClipboardList, Cloud, Eye, FolderOpen, Hand, Info, Keyboard, Loader2, Lock, Monitor, MoreHorizontal, Play, Power, Server, Trash2, Upload, Video, X } from "lucide-react";
 import { type Actor, type Agent, type PageElement } from "@wisp/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
 import { computerKindLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
+import { BackToComputers, ComputersHome, ComputersShell } from "./ComputersParts.tsx";
+import { DevicePage } from "./DevicePage.tsx";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { ClipboardPanel, FilesPanel, remotePlatform, saveScreenshot, sendFiles, useClipboardSync } from "../components/ComputerSync.tsx";
-import { AgentAvatar, Button, Empty, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
+import { AgentAvatar, Button, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
-/** How a computer is doing, in a word or two, for cards and headers. */
-export function computerState(c: ComputerInfo, meId: string | undefined, agents: Agent[], memberName: (id: string) => string): { label: string; tone: "neutral" | "ok" | "warn" | "bad" | "info" | "accent"; working: boolean } {
-  if (!c.online) return { label: "Offline", tone: "neutral", working: false };
-  if (c.paused) return { label: "Paused at the device", tone: "warn", working: false };
-  if (c.status === "starting") return { label: c.statusText || "Starting…", tone: "info", working: false };
-  if (c.status === "error") return { label: "Problem", tone: "bad", working: false };
-  if (c.controller) return { label: c.controller.id === meId ? "You're in control" : `${memberName(c.controller.id)} is in control`, tone: "accent", working: false };
-  const recent = c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000;
-  const busy = agents.some((a) => c.agents.includes(a.id) && a.status === "busy");
-  if (recent || (busy && c.activity)) return { label: "Working", tone: "warn", working: true };
-  return { label: c.status === "stopped" ? "Stopped" : "Ready", tone: "ok", working: false };
-}
+export { computerState, useComputerState, KIND_ICON } from "./computerState.ts";
+import { useComputerState, KIND_ICON } from "./computerState.ts";
 
-export function useComputerState(c: ComputerInfo) {
-  const me = useStore((s) => s.me);
-  const agents = useStore((s) => s.agents);
-  const members = useStore((s) => s.members);
-  // re-evaluate "Working" as activity ages
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 5000);
-    return () => clearInterval(t);
-  }, []);
-  return computerState(c, me?.user.id, agents, (id) => members.find((m) => m.id === id)?.name ?? "Someone");
-}
-
-const KIND_ICON = { device: Laptop, vm: Monitor, orgo: Cloud };
-
-export function ComputersView({ computerId, teach, onBack }: { computerId: string | null; teach: string | null; onBack?: () => void }) {
+export function ComputersView({ computerId, teach, deviceId }: { computerId: string | null; teach: string | null; deviceId?: string | null }) {
   const computers = useStore((s) => s.computers);
   const me = useStore((s) => s.me);
   const devices = useDevices();
-  const [adding, setAdding] = useState(false);
   const selected = computers.find((c) => c.id === computerId);
-  const canEdit = me?.role !== "guest";
 
   useEffect(() => {
     if (me?.role !== "guest") useStore.getState().refreshComputers();
@@ -52,81 +27,20 @@ export function ComputersView({ computerId, teach, onBack }: { computerId: strin
 
   if (me?.role === "guest") return null;
 
+  // one device: its role, agents, screen, remote desktop, tools
+  if (deviceId && !computerId) return <ComputersShell><DevicePage nodeId={deviceId} /></ComputersShell>;
+
   if (computerId) {
-    if (!selected) return <div className="flex-1 grid place-items-center text-sm text-muted">{computers.length ? "That computer is gone." : "Loading…"}</div>;
+    if (!selected)
+      return (
+        <ComputersShell>
+          <div className="flex-1 grid place-items-center text-sm text-muted">{computers.length ? "That computer is gone." : "Loading…"}</div>
+        </ComputersShell>
+      );
     return <ComputerDetail key={selected.id} computer={selected} devices={devices} teach={teach} />;
   }
 
-  return (
-    <div className="flex-1 min-h-0 flex flex-col">
-      <header className="h-15 shrink-0 px-4 md:px-6 flex items-center gap-2 border-b border-line safe-top">
-        {onBack && (
-          <button className="md:hidden p-1.5 -ml-1.5 rounded-md hover:bg-hover" onClick={onBack} aria-label="Back">
-            <ChevronLeft size={22} />
-          </button>
-        )}
-        <h1 className="text-lg font-bold tracking-tight flex-1 truncate">Computers</h1>
-        {canEdit && (
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <Plus size={16} /> Add computer
-          </Button>
-        )}
-      </header>
-      <div className="flex-1 overflow-y-auto">
-        {computers.length === 0 ? (
-          <Empty icon={<Monitor />} title="Give your agents a computer">
-            <p>Agents work on computers the way you do: they open apps and websites, sign in once, and keep their files. You can watch them work and take control anytime.</p>
-            <p>Each agent gets its own screen: a VM on one of your devices, or an Orgo cloud computer. Your own screen stays yours.</p>
-            {canEdit && (
-              <Button variant="primary" onClick={() => setAdding(true)}>
-                <Plus size={16} /> Add computer
-              </Button>
-            )}
-          </Empty>
-        ) : (
-          <div className="p-4 md:p-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 max-w-6xl">
-            {computers.map((c) => (
-              <ComputerCard key={c.id} computer={c} devices={devices} />
-            ))}
-          </div>
-        )}
-      </div>
-      {adding && devices && <AddComputer devices={devices} onClose={() => setAdding(false)} onCreated={(c) => (setAdding(false), go({ view: "computers", computerId: c.id }))} />}
-    </div>
-  );
-}
-
-function ComputerCard({ computer: c, devices }: { computer: ComputerInfo; devices: DeviceInfo[] | null }) {
-  const agents = useStore((s) => s.agents);
-  const state = useComputerState(c);
-  const Icon = KIND_ICON[c.kind];
-  const on = agents.filter((a) => c.agents.includes(a.id));
-  return (
-    <a href={href({ view: "computers", computerId: c.id })} className="group rounded-2xl border border-line bg-panel p-3 hover:shadow-panel transition-shadow">
-      <div className="flex items-start gap-2 mb-2.5">
-        <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{c.name}</div>
-          <div className="text-xs text-muted flex items-center gap-1">
-            <Icon size={12} /> {computerKindLabel(c, devices)}
-          </div>
-        </div>
-        {state.working ? <WorkingBadge /> : <Pill tone={state.tone}>{state.label}</Pill>}
-      </div>
-      <ScreenThumb computer={c} />
-      <div className="mt-2.5 flex items-center gap-2 min-h-7">
-        <span className="flex -space-x-1.5">
-          {on.slice(0, 5).map((a) => (
-            <span key={a.id} className="rounded-full ring-2 ring-panel" title={`@${a.handle}`}>
-              <AgentAvatar agent={a} size={24} badge={false} />
-            </span>
-          ))}
-        </span>
-        <span className="text-xs text-muted truncate">
-          {c.help ? <span className="text-accent-text font-medium">Needs you: {c.help.request}</span> : c.activity && state.working ? c.activity.text : on.length ? on.map((a) => a.name).join(", ") : "No agents yet"}
-        </span>
-      </div>
-    </a>
-  );
+  return <ComputersHome />;
 }
 
 // --- adding a computer ------------------------------------------------------------------------------
@@ -368,9 +282,6 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
     const current = useStore.getState().computers.find((computer) => computer.id === c.id);
     if (current?.controller?.id === me.user.id) void api("POST", `/api/computers/${c.id}/control`, { take: false }).catch(() => {});
   }, [c.id, me.user.id]);
-  const leave = () => {
-    go({ view: "computers", computerId: null });
-  };
 
   // teaching needs control
   useEffect(() => {
@@ -394,57 +305,44 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
     }
   };
   const lead = on[0];
-  const darkBtn = "inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-medium text-white hover:bg-white/10 disabled:opacity-50";
+  const chip = "inline-flex items-center gap-2 h-[42px] px-4 rounded-full bg-control border border-[var(--control-line)] text-sm font-medium hover:bg-hover disabled:opacity-40";
+  const [keys, setKeys] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [handing, setHanding] = useState(false);
+  const act = (action: object) => api("POST", `/api/computers/${c.id}/act`, { action }).catch((e) => setError((e as Error).message));
+  const members = useStore((s) => s.members);
 
-  // The computer opens as its desk: the screen big on a dark backdrop, like the full-screen view.
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#141312] text-white safe-top safe-bottom">
-      <header className="shrink-0 relative flex flex-wrap items-center gap-2 px-3 md:px-5 pt-3 pb-3 min-h-14">
-        {lead ? <AgentAvatar agent={lead} size={26} live /> : <Icon size={18} className="text-white/70 shrink-0" />}
-        <span className="font-medium truncate">{c.name}</span>
-        {!mine && (state.working ? <WorkingBadge text={c.activity?.text ?? "Working"} /> : <Pill tone={state.tone}>{state.label}</Pill>)}
-        {mine && !teacher && (
-          <div className="md:absolute md:left-1/2 md:top-3 md:-translate-x-1/2 inline-flex items-center gap-2 rounded-full bg-info text-white pl-3.5 pr-1 h-9 text-sm font-medium shadow-panel" role="status">
-            <Hand size={15} /> You are in control
-            <button disabled={busy} onClick={() => control(false)} className="h-7 px-3 rounded-full bg-white/20 hover:bg-white/30 text-xs font-medium">
-              Hand back
-            </button>
-          </div>
-        )}
-        <div className="ml-auto flex items-center gap-1">
-          {canControl && !teacher && (
-            <button onClick={() => setPickTeach(true)} className={cx(darkBtn, "border border-white/20")} title="Do a task once while an agent watches; it saves it as a routine">
-              <Video size={15} /> Teach a task
-            </button>
+    <ComputersShell>
+      <div className="flex-1 min-h-0 flex flex-col safe-top safe-bottom">
+        <header className="shrink-0 flex flex-wrap items-center gap-2.5 px-4 md:px-6 pt-5 pb-3">
+          <BackToComputers />
+          {lead ? <AgentAvatar agent={lead} size={28} live /> : <Icon size={20} className="text-muted shrink-0" />}
+          <h1 className="text-[22px] font-bold tracking-tight truncate min-w-0 flex-1">{c.name}</h1>
+          {mine && !teacher ? (
+            <span className="inline-flex items-center gap-2 rounded-full bg-info text-white px-3.5 h-9 text-sm font-medium" role="status">
+              <Hand size={15} /> You are in control
+            </span>
+          ) : state.working ? (
+            <WorkingBadge />
+          ) : (
+            <Pill tone={state.tone}>{state.label}</Pill>
           )}
-          {canTransfer && (
-            <>
-              <button onClick={() => toggle("files")} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", panel === "files" && "bg-white/15")} aria-label="Files" title="Files: download from it, upload to it">
-                <FolderOpen size={18} />
-              </button>
-              <button onClick={() => toggle("clipboard")} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", panel === "clipboard" && "bg-white/15")} aria-label="Clipboard" title="Clipboard: copy and paste between it and this device">
-                <ClipboardList size={18} />
-              </button>
-            </>
-          )}
-          <button onClick={() => toggle("info")} className={cx("size-9 rounded-full grid place-items-center hover:bg-white/10", panel === "info" && "bg-white/15")} aria-label="Details" title="Details">
-            <Info size={18} />
-          </button>
           {canEdit && (
             <Menu
               align="right"
               trigger={(_o, t) => (
-                <button onClick={t} className="size-9 rounded-full grid place-items-center hover:bg-white/10" aria-label="More">
+                <button onClick={t} className="circle" aria-label="More">
                   <MoreHorizontal size={18} />
                 </button>
               )}
               items={[
                 { label: "Rename", onSelect: () => setRenaming(true) },
                 ...(c.online && !c.paused ? [{ label: "Save a screenshot", icon: <Camera size={14} />, onSelect: () => void saveScreenshot(c).catch((e) => setError(e.message)) }] : []),
-                ...(c.kind !== "device" ? [{ label: c.status === "stopped" ? "Start" : "Stop", icon: c.status === "stopped" ? <Play size={14} /> : <Power size={14} />, onSelect: () => api("POST", `/api/computers/${c.id}/${c.status === "stopped" ? "start" : "stop"}`).catch((e) => setError(e.message)) }] : []),
+                ...(c.kind !== "device" ? [{ label: c.status === "stopped" ? "Start this computer" : "Stop this computer", icon: c.status === "stopped" ? <Play size={14} /> : <Power size={14} />, onSelect: () => api("POST", `/api/computers/${c.id}/${c.status === "stopped" ? "start" : "stop"}`).catch((e) => setError(e.message)) }] : []),
                 ...(canRemove ? ["divider" as const] : []),
                 ...(canRemove ? [{
-                  label: c.kind === "device" ? "Stop sharing this screen" : "Delete computer",
+                  label: c.kind === "device" ? "Stop sharing this screen" : "Remove",
                   icon: <Trash2 size={14} />,
                   danger: true,
                   onSelect: async () => {
@@ -457,168 +355,284 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
               ]}
             />
           )}
-          <button onClick={leave} className="size-9 rounded-full grid place-items-center hover:bg-white/10" aria-label="Back to computers" title="Back to computers">
-            <Minimize2 size={18} />
-          </button>
-        </div>
-      </header>
+        </header>
 
-      <div className="text-ink">
         {teacher && <TeachBar agent={teacher} computer={c} screen={screen} />}
 
         {!teacher && c.help && (
-          <div className="shrink-0 mx-3 md:mx-5 mb-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-3 flex flex-wrap items-center gap-3">
+          <div className="shrink-0 mx-4 md:mx-6 mb-3 rounded-2xl border border-accent/40 bg-accent-soft px-4 py-3 flex flex-wrap items-center gap-3" role="status">
             {agents.find((a) => a.id === c.help!.agentId) && <AgentAvatar agent={agents.find((a) => a.id === c.help!.agentId)} size={28} badge={false} />}
             <div className="min-w-0 flex-1 text-sm">
-              <span className="font-medium">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you: </span>
+              <span className="font-semibold">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you on this computer: </span>
               {c.help.request}
               <span className="text-muted"> · {timeAgo(c.help.at)}</span>
             </div>
             {canEdit && !mine && (
               <Button variant="primary" onClick={() => control(true)} disabled={busy}>
-                <Hand size={15} /> Take control
+                <Hand size={15} /> Take over
               </Button>
             )}
             {mine && <span className="text-xs text-muted">When you're done, press Hand back and @{agents.find((a) => a.id === c.help!.agentId)?.handle} picks up from there.</span>}
           </div>
         )}
-      </div>
-      {error && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{error}</p>}
-      {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{c.statusText}</p>}
+        {error && <p className="shrink-0 mx-4 md:mx-6 mb-2 text-sm text-bad">{error}</p>}
+        {c.status === "error" && c.statusText && <p className="shrink-0 mx-4 md:mx-6 mb-2 text-sm text-bad">{c.statusText}</p>}
 
-      <div className="flex-1 min-h-0 flex gap-4 px-3 md:px-5">
-        <div
-          className="relative flex-1 min-h-0 min-w-0"
-          onKeyDownCapture={sync.onKeyDownCapture}
-          onDragOver={(e) => {
-            if (!canTransfer || !e.dataTransfer.types.includes("Files")) return;
-            e.preventDefault();
-            setDropping(true);
-          }}
-          onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropping(false)}
-          onDrop={(e) => {
-            setDropping(false);
-            if (!canTransfer || !e.dataTransfer.files.length) return;
-            e.preventDefault();
-            void dropOnScreen([...e.dataTransfer.files]);
-          }}
-        >
-          {dropping && (
-            <div className="absolute inset-0 z-10 rounded-2xl border-2 border-dashed border-info bg-info/15 grid place-items-center pointer-events-none">
-              <span className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 h-10 text-sm font-medium">
-                <Upload size={16} /> Drop to send to {c.name}'s Desktop
-              </span>
+        <div className="flex-1 min-h-0 flex gap-5 px-4 md:px-6 pb-4 overflow-y-auto lg:overflow-hidden">
+          <div className="flex-1 min-w-0 flex flex-col gap-3.5">
+            <div
+              className="relative flex-1 min-h-[280px] rounded-3xl overflow-hidden bg-black border border-line"
+              onKeyDownCapture={sync.onKeyDownCapture}
+              onDragOver={(e) => {
+                if (!canTransfer || !e.dataTransfer.types.includes("Files")) return;
+                e.preventDefault();
+                setDropping(true);
+              }}
+              onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropping(false)}
+              onDrop={(e) => {
+                setDropping(false);
+                if (!canTransfer || !e.dataTransfer.files.length) return;
+                e.preventDefault();
+                void dropOnScreen([...e.dataTransfer.files]);
+              }}
+            >
+              {dropping && (
+                <div className="absolute inset-0 z-10 rounded-3xl border-2 border-dashed border-info bg-info/15 grid place-items-center pointer-events-none">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-black/70 text-white px-4 h-10 text-sm font-medium">
+                    <Upload size={16} /> Drop to send to {c.name}'s Desktop
+                  </span>
+                </div>
+              )}
+              {sync.note && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 max-w-[90%] truncate rounded-full bg-black/75 text-white px-4 h-9 leading-9 text-sm shadow-panel pointer-events-none" role="status">
+                  {sync.note}
+                </div>
+              )}
+              <LiveScreen
+                ref={screen}
+                computer={c}
+                control={mine}
+                onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined}
+                onTakeControl={canControl && !c.controller && !teacher ? () => void control(true) : undefined}
+                onActivity={() => {
+                  // VNC input skips the hub, so say now and then that you're still using it
+                  if (Date.now() - touched.current < 15_000) return;
+                  touched.current = Date.now();
+                  void api("POST", `/api/computers/${c.id}/control`, { take: true }).catch(() => {});
+                }}
+              />
             </div>
-          )}
-          {sync.note && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 max-w-[90%] truncate rounded-full bg-black/75 px-4 h-9 leading-9 text-sm shadow-panel pointer-events-none" role="status">
-              {sync.note}
+
+            <div className="shrink-0 flex items-center gap-2.5 text-sm text-muted min-h-6" role="status">
+              {teacher ? (
+                `${teacher.name} is watching. Do the task, then press Done.`
+              ) : state.working ? (
+                <>
+                  <span className="flex gap-1" aria-hidden="true">
+                    {[0, 1, 2].map((i) => (
+                      <i key={i} className="size-1.5 rounded-full bg-muted motion-safe:animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                    ))}
+                  </span>
+                  {lead?.name ?? "An agent"} is working · {c.activity?.text ?? "Working"}
+                </>
+              ) : c.help ? (
+                <span>
+                  <span className="font-medium text-ink">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you.</span>
+                  {mine ? " Hand back when you're done." : " Take over to help."}
+                </span>
+              ) : mine ? (
+                `You are in control.${lead ? ` ${lead.name} is paused.` : ""} Agents get it back when you hand it back or stop using it.`
+              ) : c.controller ? (
+                state.label
+              ) : canControl ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Eye size={14} /> Watching · click the screen to take control
+                </span>
+              ) : null}
             </div>
+
+            {!teacher && (
+              <div className="shrink-0 flex flex-wrap gap-2.5">
+                {mine ? (
+                  <button disabled={busy} onClick={() => setHanding(true)} className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-ink text-panel text-sm font-semibold disabled:opacity-50">
+                    <Hand size={16} /> Hand back{lead ? ` to ${lead.name}` : ""}
+                  </button>
+                ) : (
+                  canControl && (
+                    <button disabled={busy || !!c.controller} onClick={() => void control(true)} className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-ink text-panel text-sm font-semibold disabled:opacity-50">
+                      <Hand size={16} /> Take control
+                    </button>
+                  )
+                )}
+                {mine && (
+                  <button onClick={() => setKeys((k) => !k)} className={cx(chip, keys && "bg-hover")} aria-expanded={keys}>
+                    <Keyboard size={16} /> Keys
+                  </button>
+                )}
+                {canTransfer && (
+                  <>
+                    <button onClick={() => toggle("clipboard")} className={cx(chip, panel === "clipboard" && "bg-hover")} title="Clipboard: copy and paste between it and this device">
+                      <ClipboardList size={16} /> Clipboard
+                    </button>
+                    <button onClick={() => toggle("files")} className={cx(chip, panel === "files" && "bg-hover")} title="Files: download from it, upload to it">
+                      <FolderOpen size={16} /> Files
+                    </button>
+                  </>
+                )}
+                {c.online && !c.paused && (
+                  <button onClick={() => void saveScreenshot(c).catch((e) => setError(e.message))} className={chip}>
+                    <Camera size={16} /> Screenshot
+                  </button>
+                )}
+                {canControl && (
+                  <button onClick={() => setPickTeach(true)} className={chip} title="Do a task once while an agent watches; it saves it as a routine">
+                    <Video size={16} /> Teach a task
+                  </button>
+                )}
+                <button onClick={() => toggle("info")} className={cx(chip, "lg:hidden", panel === "info" && "bg-hover")} title="Details">
+                  <Info size={16} /> Details
+                </button>
+              </div>
+            )}
+            {mine && keys && !teacher && (
+              <form
+                className="shrink-0 flex flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!typed) return;
+                  void act({ action: "type", text: typed });
+                  setTyped("");
+                }}
+              >
+                <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type on computer" aria-label="Type on computer" className="flex-1 min-w-40" />
+                <Button type="submit" disabled={!typed}>
+                  Send
+                </Button>
+                {[["Return", "Enter"], ["Tab", "Tab"], ["Escape", "Escape"], ["Delete", "Backspace"]].map(([label, key]) => (
+                  <Button key={label} type="button" onClick={() => void act({ action: "key", keys: key })}>
+                    {label}
+                  </Button>
+                ))}
+              </form>
+            )}
+          </div>
+
+          {panel && panel !== "info" && (
+            <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-80 shrink-0 overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-3xl lg:rounded-3xl p-4 shadow-panel">
+              {panel === "files" ? <FilesPanel computer={c} onClose={() => setPanel(null)} refresh={filesChanged} onSent={sync.flash} /> : <ClipboardPanel computer={c} mine={mine} platform={platform} onClose={() => setPanel(null)} />}
+            </aside>
           )}
-          <LiveScreen
-            ref={screen}
-            computer={c}
-            control={mine}
-            onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined}
-            onTakeControl={canControl && !c.controller && !teacher ? () => void control(true) : undefined}
-            onActivity={() => {
-              // VNC input skips the hub, so say now and then that you're still using it
-              if (Date.now() - touched.current < 15_000) return;
-              touched.current = Date.now();
-              void api("POST", `/api/computers/${c.id}/control`, { take: true }).catch(() => {});
+          {(panel === "info" || !panel) && (
+            <aside className={cx("shrink-0 overflow-y-auto space-y-4 text-sm text-ink lg:w-[340px] lg:border-l lg:border-line lg:pl-5", panel === "info" ? "fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none bg-panel border border-line rounded-t-3xl lg:rounded-none lg:border-y-0 lg:border-r-0 p-4 shadow-panel lg:shadow-none" : "hidden lg:block")}>
+              <div className="flex items-center lg:hidden">
+                <h3 className="font-semibold">Details</h3>
+                <button onClick={() => setPanel(null)} className="ml-auto p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close details">
+                  <X size={16} />
+                </button>
+              </div>
+              <h3 className="hidden lg:block font-semibold text-sm text-faint">Details</h3>
+              <section className="rounded-2xl bg-card divide-y divide-line">
+                {[
+                  ["Kind", c.kind === "vm" ? "Virtual computer" : c.kind === "orgo" ? "Cloud computer" : "Your own screen"],
+                  ["Status", state.label],
+                  ["In control", c.controller ? (c.controller.id === me.user.id ? "You" : (members.find((m) => m.id === c.controller!.id)?.name ?? "Someone")) : "No one"],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-3 px-4 min-h-[52px]">
+                    <span className="flex-1">{k}</span>
+                    <span className="text-muted">{v}</span>
+                  </div>
+                ))}
+                {c.nodeId && (
+                  <a href={href({ view: "computers", computerId: null, deviceId: c.nodeId })} className="flex items-center gap-3 px-4 min-h-[52px] hover:bg-hover rounded-b-2xl">
+                    <span className="flex-1">Lives on</span>
+                    <span className="text-muted">{device?.name ?? "A device"}</span>
+                    <ChevronRight size={15} className="text-faint" />
+                  </a>
+                )}
+              </section>
+              {c.kind === "device" && <OwnScreen computer={c} />}
+              <section className="space-y-2">
+                <h3 className="font-semibold text-sm text-faint">Agents on this computer</h3>
+                {on.length ? (
+                  on.map((a) => (
+                    <a key={a.id} href={href({ view: "agents", agentId: a.id, tab: "computer" })} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-hover">
+                      <AgentAvatar agent={a} size={26} live />
+                      <span className="min-w-0 flex-1 truncate">
+                        {a.name} <span className="text-muted">@{a.handle}</span>
+                      </span>
+                      {a.status === "busy" && <Loader2 size={13} className="animate-spin text-muted" />}
+                    </a>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted">None yet. Give an agent this computer on its page (Agents → Computer). Agents that share a computer share its files, browser and sign-ins.</p>
+                )}
+              </section>
+              <ActivityLog computer={c} />
+            </aside>
+          )}
+        </div>
+
+        {pickTeach && (
+          <Modal title="Who should learn it?" onClose={() => setPickTeach(false)}>
+            <div className="space-y-3 text-sm">
+              <p className="text-muted">Show an agent how to do something once on this computer. It saves the steps as a routine and can do it on its own next time, on a schedule if you like.</p>
+              <div className="space-y-1">
+                {(on.length ? on : agents).map((a) => (
+                  <button key={a.id} onClick={() => (setPickTeach(false), go({ view: "computers", computerId: c.id, teach: a.id }))} className="w-full flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-hover text-left">
+                    <AgentAvatar agent={a} size={28} badge={false} />
+                    <span className="flex-1">
+                      {a.name} <span className="text-muted">{on.includes(a) ? `on ${c.name}` : `@${a.handle}`}</span>
+                    </span>
+                    <ChevronRight size={14} className="text-faint" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Modal>
+        )}
+        {handing && (
+          <HandBack
+            agentName={lead?.name}
+            busy={busy}
+            onClose={() => setHanding(false)}
+            onHand={async (note) => {
+              await control(false, note);
+              setHanding(false);
             }}
           />
+        )}
+        {renaming && <RenameComputer computer={c} onClose={() => setRenaming(false)} />}
+      </div>
+    </ComputersShell>
+  );
+}
+
+/** "Hand back to Ghosty": say what you changed so it doesn't redo or undo it. */
+function HandBack({ agentName, busy, onClose, onHand }: { agentName?: string; busy: boolean; onClose: () => void; onHand: (note?: string) => void | Promise<void> }) {
+  const [note, setNote] = useState("");
+  return (
+    <Modal title={`Hand back${agentName ? ` to ${agentName}` : ""}`} onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onHand(note.trim() || undefined);
+        }}
+      >
+        <p className="text-sm text-muted">{agentName ?? "The agent"} picks up where you left off. Tell it what you changed so it does not redo or undo it.</p>
+        <Field label="What you did (optional)">
+          <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Signed in to the dashboard" autoFocus />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Keep control
+          </Button>
+          <Button variant="primary" disabled={busy}>
+            Hand back
+          </Button>
         </div>
-        {panel && panel !== "info" && (
-          <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-80 shrink-0 overflow-y-auto text-sm bg-bg text-ink rounded-t-2xl lg:rounded-2xl p-4 shadow-panel">
-            {panel === "files" ? (
-              <FilesPanel computer={c} onClose={() => setPanel(null)} refresh={filesChanged} onSent={sync.flash} />
-            ) : (
-              <ClipboardPanel computer={c} mine={mine} platform={platform} onClose={() => setPanel(null)} />
-            )}
-          </aside>
-        )}
-        {panel === "info" && (
-          <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-72 shrink-0 overflow-y-auto space-y-4 text-sm bg-bg text-ink rounded-t-2xl lg:rounded-2xl p-4 shadow-panel">
-            <div className="flex items-center lg:hidden">
-              <h3 className="font-semibold">Details</h3>
-              <button onClick={() => setPanel(null)} className="ml-auto p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close details">
-                <X size={16} />
-              </button>
-            </div>
-            {c.kind === "device" && <OwnScreen computer={c} />}
-            <section className="rounded-xl border border-line p-3 space-y-1.5">
-              <div className="text-xs text-muted">{computerKindLabel(c, devices)}</div>
-              <p className="text-muted text-xs">
-                {mine
-                  ? "You're in control: your mouse and keyboard go to this computer, and agents wait until you hand it back."
-                  : c.controller
-                    ? "Someone has control; agents are waiting."
-                    : c.kind === "device"
-                      ? "Take control to use it from here. Agents that run on this device use it for things you ask."
-                      : "Agents use it on their own. Take control to use it yourself; they pause until you hand it back."}
-              </p>
-            </section>
-            <section className="space-y-2">
-              <h3 className="font-semibold text-sm">Agents on this computer</h3>
-              {on.length ? (
-                on.map((a) => (
-                  <a key={a.id} href={href({ view: "agents", agentId: a.id, tab: "computer" })} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover">
-                    <AgentAvatar agent={a} size={26} live />
-                    <span className="min-w-0 flex-1 truncate">
-                      {a.name} <span className="text-muted">@{a.handle}</span>
-                    </span>
-                    {a.status === "busy" && <Loader2 size={13} className="animate-spin text-muted" />}
-                  </a>
-                ))
-              ) : (
-                <p className="text-xs text-muted">None yet. Give an agent this computer on its page (Agents → Computer). Agents that share a computer share its files, browser and sign-ins.</p>
-              )}
-            </section>
-            <ActivityLog computer={c} />
-          </aside>
-        )}
-      </div>
-
-      <div className="shrink-0 py-3 px-3 text-center text-sm text-white/70 min-h-11">
-        {teacher ? (
-          `${teacher.name} is watching. Do the task, then press Done.`
-        ) : c.help ? (
-          <span>
-            <span className="font-medium text-white">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you.</span>
-            {mine ? " Hand back when you're done." : " Click the screen to take control."}
-          </span>
-        ) : mine ? (
-          "Agents get it back when you hand it back or stop using it."
-        ) : c.controller ? (
-          state.label
-        ) : canControl ? (
-          <span className="inline-flex items-center gap-1.5">
-            <Eye size={14} /> Watching · click the screen to take control
-          </span>
-        ) : null}
-      </div>
-
-      {pickTeach && (
-        <Modal title="Teach a task" onClose={() => setPickTeach(false)}>
-          <div className="space-y-3 text-sm">
-            <p className="text-muted">Do the task once on this computer while an agent watches. It saves the steps as a routine and can do it on its own next time, on a schedule if you like.</p>
-            <div className="space-y-1">
-              {(on.length ? on : agents).map((a) => (
-                <button key={a.id} onClick={() => (setPickTeach(false), go({ view: "computers", computerId: c.id, teach: a.id }))} className="w-full flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-hover text-left">
-                  <AgentAvatar agent={a} size={28} badge={false} />
-                  <span className="flex-1">
-                    {a.name} <span className="text-muted">@{a.handle}</span>
-                  </span>
-                  <ChevronRight size={14} className="text-faint" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </Modal>
-      )}
-      {renaming && <RenameComputer computer={c} onClose={() => setRenaming(false)} />}
-    </div>
+      </form>
+    </Modal>
   );
 }
 

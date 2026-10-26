@@ -99,10 +99,10 @@ describe("guest routes", () => {
 });
 
 describe("device pages", () => {
-  it("opens one device by its id, and goes back to the list without one", () => {
-    expect(router.parseRoute("#/nodes/box")).toEqual({ view: "nodes", nodeId: "box" });
-    expect(router.href({ view: "nodes", nodeId: "box" })).toBe("#/nodes/box");
-    expect(router.parseRoute("#/nodes")).toEqual({ view: "nodes", nodeId: null });
-    expect(router.href({ view: "nodes" })).toBe("#/nodes");
+  it("opens one device inside Computers, and the old Devices addresses land there", () => {
+    expect(router.parseRoute("#/computers/d/box")).toEqual({ view: "computers", computerId: null, deviceId: "box" });
+    expect(router.href({ view: "computers", computerId: null, deviceId: "box" })).toBe("#/computers/d/box");
+    expect(router.parseRoute("#/nodes/box")).toEqual({ view: "computers", computerId: null, deviceId: "box" });
+    expect(router.parseRoute("#/nodes")).toEqual({ view: "computers", computerId: null });
   });
 });

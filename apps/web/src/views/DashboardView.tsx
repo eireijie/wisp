@@ -377,7 +377,7 @@ function ReadinessCard() {
   if (r.kind === "waiting") {
     // the fix depends on what's missing: a device, the device coming back, or the harness on it
     const next = setupNextStep(r.agent, devices);
-    const onDevice = next?.href === href({ view: "nodes" });
+    const onDevice = next?.href === href({ view: "computers", computerId: null });
     return (
       <section className={box} aria-labelledby="ready-h">
         <h2 id="ready-h" className="text-base font-semibold">
@@ -386,9 +386,9 @@ function ReadinessCard() {
         <p className="text-sm text-muted">{next ? next.text : r.problem}</p>
         <a
           className="inline-flex items-center h-9 rounded-full px-4 text-sm font-medium bg-accent text-accent-ink hover:bg-accent/90 outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
-          href={next?.href ?? href({ view: "nodes" })}
+          href={next?.href ?? href({ view: "computers", computerId: null })}
         >
-          {next?.action ?? "See devices"}
+          {next?.action ?? "See computers"}
         </a>
       </section>
     );

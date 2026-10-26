@@ -39,24 +39,32 @@ export function CodeInput({ kind, value, onChange, onSubmit, autoFocus, classNam
   );
 }
 
-/** Asking for the code before a screen opens, on the dark screen background. */
-export function CodePrompt({ computer, error, onSubmit }: { computer: ComputerInfo; error: string | null; onSubmit: (code: string) => void }) {
+/** Asking for the code before a screen opens: "Screen code", checked on the device, never by Wisp. */
+export function CodePrompt({ computer, error, onSubmit, deviceName }: { computer: ComputerInfo; error: string | null; onSubmit: (code: string) => void; deviceName?: string }) {
   const [code, setCode] = useState("");
   const kind = computer.code ?? "pin";
   const ready = kind === "pin" ? code.length === 6 : code.length > 0;
   return (
     <form
-      className="space-y-3 w-full max-w-64"
+      className="space-y-3 w-full max-w-72"
       onSubmit={(e) => {
         e.preventDefault();
         if (ready) onSubmit(code);
       }}
     >
       <KeyRound size={22} className="mx-auto opacity-70" />
-      <p>Enter {computer.name}'s {codeLabel(kind)} to open it.</p>
+      <h3 className="text-base font-semibold">Screen code</h3>
+      <p className="text-white/70">Type the {kind === "pin" ? "code" : "password"} you set on {deviceName ?? computer.name} to open its screen. The device checks it, not Wisp.</p>
       <CodeInput kind={kind} value={code} onChange={setCode} autoFocus className="text-center text-ink" />
-      {error && <p className="text-xs text-red-300">{error}</p>}
-      <button type="submit" disabled={!ready} className="inline-flex items-center rounded-lg border border-white/20 px-3 h-8 hover:bg-white/10 disabled:opacity-40">
+      {kind === "pin" && (
+        <div className="flex justify-center gap-2" aria-hidden="true">
+          {Array.from({ length: 6 }, (_, i) => (
+            <span key={i} className={i < code.length ? "size-2.5 rounded-full bg-white" : "size-2.5 rounded-full bg-white/25"} />
+          ))}
+        </div>
+      )}
+      {error && <p className="text-xs text-red-300">{/wrong|not right|incorrect/i.test(error) ? "That code is not right. Try again." : error}</p>}
+      <button type="submit" disabled={!ready} className="inline-flex items-center rounded-full border border-white/20 px-4 h-9 hover:bg-white/10 disabled:opacity-40">
         Open
       </button>
     </form>

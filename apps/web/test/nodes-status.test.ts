@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { connectionLine, isLocalOnlyHost, notConnectedLine, screenLine } from "../src/views/NodesView.tsx";
+import { connectionLine, isLocalOnlyHost, notConnectedLine, screenLine } from "../src/views/deviceBits.tsx";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 

@@ -51,7 +51,7 @@ export function ScreenThumb({ computer, refreshMs = 4000, className }: { compute
   }, [computer.id, computer.online, refreshMs]);
 
   return (
-    <div ref={box} className={cx("relative aspect-[16/10] overflow-hidden rounded-xl bg-[#1f1d1b] grid place-items-center", className)}>
+    <div ref={box} className={cx("relative aspect-[16/10] overflow-hidden rounded-xl bg-black grid place-items-center", className)}>
       {url && computer.online && !computer.paused ? (
         <img src={url} alt={`${computer.name}'s screen`} className="absolute inset-0 size-full object-cover object-top" />
       ) : (
@@ -342,7 +342,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 
   return (
     <div
-      className={cx("relative size-full overflow-hidden bg-[#1f1d1b] transition-shadow", !compact && "min-h-64 rounded-2xl", control && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
+      className={cx("relative size-full overflow-hidden bg-black transition-shadow", !compact && "min-h-64 rounded-2xl", control && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
       onPointerDownCapture={(e) => {
         // clicking a live screen you don't control takes control; that click doesn't reach the computer
         if (control || !onTakeControl || state !== "live" || e.button !== 0) return;

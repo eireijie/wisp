@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Server, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
+import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useInboxCount, useStore } from "./store.ts";
 import { go, href, routeForRole, useRoute, type Route } from "./router.ts";
@@ -14,8 +14,6 @@ import { CommandPalette } from "./components/CommandPalette.tsx";
 import { ChannelView } from "./views/ChannelView.tsx";
 import { VaultView } from "./views/VaultView.tsx";
 import { AgentsView } from "./views/AgentsView.tsx";
-import { NodesView } from "./views/NodesView.tsx";
-import { DevicePage } from "./views/DevicePage.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
 import { JoinApproval } from "./components/JoinApproval.tsx";
@@ -178,9 +176,7 @@ function Workspace() {
       case "tasks":
         return <TasksView onBack={phone ? toYou : undefined} />;
       case "computers":
-        return <ComputersView computerId={route.computerId} teach={route.teach ?? null} />;
-      case "nodes":
-        return route.nodeId ? <DevicePage nodeId={route.nodeId} /> : <NodesView onBack={phone ? toYou : undefined} />;
+        return <ComputersView computerId={route.computerId} teach={route.teach ?? null} deviceId={route.deviceId ?? null} />;
       case "settings":
         return <SettingsView page={route.page ?? null} onBack={toYou} />;
       case "welcome":
@@ -355,7 +351,6 @@ function YouPage() {
           {row(<BookOpen size={20} strokeWidth={1.8} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your agents share")}
           {row(<Brain size={20} strokeWidth={1.8} />, "About you", href({ view: "about" }), undefined, "What agents should know about you")}
           {row(<Store size={20} strokeWidth={1.8} />, "Marketplace", href({ view: "marketplace" }), undefined, "Apps and skills for your agents")}
-          {row(<Server size={20} strokeWidth={1.8} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Wisp")}
           {row(<Blocks size={20} strokeWidth={1.8} />, "Mods", href({ view: "mods" }), undefined, "Optional parts of Wisp")}
         </div>
         <div className="rounded-3xl bg-card overflow-hidden">

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ListTodo, Plug, Plus, Search, Server, Wand2 } from "lucide-react";
+import { ListTodo, Plug, Plus, Search, Wand2 } from "lucide-react";
 import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href, type AgentTab } from "../router.ts";
@@ -127,7 +127,6 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
             {features.tasks && <MoreLink to={href({ view: "tasks" })} icon={<ListTodo size={16} />} label="Tasks" />}
             <MoreLink to={href({ view: "skills" })} icon={<Wand2 size={16} />} label="Skills" />
             <MoreLink to={href({ view: "connectors" })} icon={<Plug size={16} />} label="Connected apps" />
-            <MoreLink to={href({ view: "nodes" })} icon={<Server size={16} />} label="Devices" />
           </nav>
         </div>
       </div>
