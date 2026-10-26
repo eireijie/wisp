@@ -43,7 +43,7 @@ interface Chat {
 }
 
 /** "9:34 PM" for today, "Yesterday", the weekday this week, else "Oct 23". */
-function shortTime(at: number, clock: "auto" | "12h" | "24h"): string {
+export function shortTime(at: number, clock: "auto" | "12h" | "24h"): string {
   if (!at) return "";
   const d = new Date(at);
   const now = new Date();

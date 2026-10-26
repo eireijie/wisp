@@ -176,7 +176,7 @@ function Workspace() {
       case "about":
         return <AboutView onBack={phone ? toYou : undefined} />;
       case "tasks":
-        return <TasksView onBack={phone ? toYou : undefined} />;
+        return <TasksView onBack={phone ? () => go({ view: "dashboard" }) : undefined} />;
       case "computers":
         return <ComputersView computerId={route.computerId} teach={route.teach ?? null} />;
       case "nodes":

@@ -26,19 +26,11 @@ extension View {
 /** The Inbox as its own tab: what's waiting on you, with your avatar at the top left. */
 struct InboxTab: View {
   @Environment(Store.self) private var store
-  @Environment(\.openSettings) private var openSettings
   @State private var path = NavigationPath()
 
   var body: some View {
     NavigationStack(path: $path) {
-      InboxView()
-        .toolbar {
-          ToolbarItem(placement: .topBarLeading) {
-            Button { openSettings() } label: { ProfileCircle(size: 34, glass: false) }
-              .accessibilityLabel("You and settings").accessibilityIdentifier("profile-button")
-          }
-        }
-        .chatDestinations()
+      InboxView().chatDestinations()
     }
     .task(id: store.route) {
       // a tapped approval notification opens that approval

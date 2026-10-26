@@ -60,10 +60,11 @@ struct FileChip: View {
 struct TaskChip: View {
   @Environment(Store.self) private var store
   var taskId: String
+  @State private var open: TaskRef?
 
   var body: some View {
     if let task = store.tasks.first(where: { $0.id == taskId }) {
-      NavigationLink { TaskDetail(task: task) } label: {
+      Button { open = TaskRef(id: task.id) } label: {
         HStack(spacing: 6) {
           Image(systemName: "checklist").foregroundStyle(.secondary)
           Text(task.title).fontWeight(.semibold).lineLimit(1)
@@ -83,6 +84,7 @@ struct TaskChip: View {
         .background(Capsule().fill(Color(.secondarySystemBackground)))
       }
       .buttonStyle(.plain)
+      .sheet(item: $open) { TaskSheet(taskId: $0.id) }
     } else {
       // a task handed out after the list was loaded: fetch it once
       Color.clear.frame(height: 0).task { try? await store.refreshTasks() }

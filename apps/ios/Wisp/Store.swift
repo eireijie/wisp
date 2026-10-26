@@ -419,9 +419,9 @@ final class Store {
     return channels.first { $0.id == ch.id } ?? ch
   }
 
-  func decide(_ approval: Approval, approve: Bool, note: String = "") async throws {
-    struct Body: Encodable { var approve: Bool; var note: String }
-    let a: Approval = try await fetch { try await $0.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note)) }
+  func decide(_ approval: Approval, approve: Bool, note: String = "", always: Bool? = nil) async throws {
+    struct Body: Encodable { var approve: Bool; var note: String; var always: Bool? }
+    let a: Approval = try await fetch { try await $0.post("/api/approvals/\(approval.id)/decide", Body(approve: approve, note: note, always: always)) }
     upsert(a)
   }
 
