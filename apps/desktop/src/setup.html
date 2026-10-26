@@ -6,115 +6,160 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
 <title>Wisp</title>
 <style>
+  /* Wisp's look: a dark ground with a rounded panel, tall rounded fields, pill buttons. Light follows the system. */
   :root {
-    --app: #fff; --panel: #fff; --ink: #1b1b1b; --muted: #777; --faint: #a3a3a3; --line: #ebebeb;
-    --input: #dadada; --chip: #f1f1f1; --accent: #1f1f1f; --accent-ink: #fcfcfc; --bad: #c9372c; --ok: #16a34a;
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
+    --ground: #ececef; --panel: #ffffff; --card: #f2f2f5; --control: #ffffff; --control-line: rgb(0 0 0 / 0.12);
+    --ink: #17171a; --muted: #5f5f68; --faint: #8a8a94; --line: rgb(0 0 0 / 0.08);
+    --accent: #17171a; --accent-ink: #fafafa; --chip: #e9e9ee; --blue: #0a84ff; --link: #0a6fe0;
+    --bad: #c9372c; --ok: #1a9a4a; --tile: #e6e6eb; --off: #c9c9d0;
     color-scheme: light;
   }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #111113; --panel: #18181b; --card: #202023; --control: #2a2a2e; --control-line: rgb(255 255 255 / 0.1);
+      --ink: #f2f2f4; --muted: #a1a1aa; --faint: #8e8e96; --line: rgb(255 255 255 / 0.07);
+      --accent: #f2f2f4; --accent-ink: #111113; --chip: #2a2a2e; --blue: #0a84ff; --link: #9ec5ff;
+      --bad: #ff6b6b; --ok: #5bd68a; --tile: #2e2e32; --off: #3a3a3f;
+      color-scheme: dark;
+    }
+  }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; min-height: 100%; }
   body {
-    background: var(--app); color: var(--ink);
-    font: 14px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    display: grid; place-items: center; padding: 24px; -webkit-font-smoothing: antialiased;
+    background: var(--ground); color: var(--ink);
+    font: 15px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    display: grid; place-items: center; padding: 24px; min-height: 100vh; -webkit-font-smoothing: antialiased;
   }
-  main { width: 100%; max-width: 560px; }
-  header { display: grid; justify-items: center; text-align: center; gap: 18px; margin-bottom: 32px; }
-  header svg { width: 64px; height: 76px; }
-  h1 { font-size: 28px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
-  header p { margin: 8px 0 0; color: var(--muted); }
-  .card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
-    padding: 18px 18px 16px; margin-bottom: 12px;
+  main {
+    width: 100%; max-width: 560px; background: var(--panel); border: 1px solid var(--line); border-radius: 28px; padding: 36px;
+    display: flex; flex-direction: column; gap: 18px;
   }
-  .card h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
-  .card p { margin: 0 0 12px; color: var(--muted); }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  header { display: grid; justify-items: center; text-align: center; gap: 10px; }
+  header svg { width: 64px; height: 64px; color: var(--ink); }
+  h1 { font-size: 28px; font-weight: 700; margin: 6px 0 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); max-width: 400px; }
+  header p:empty { display: none; }
+  /* only the first screen has the big welcome; the others lead with their own title (and the ghost keeps floating while Wisp starts) */
+  main[data-screen]:not([data-screen="welcome"]):not([data-screen="starting"]):not([data-screen="unreachable"]) header { display: none; }
+  main[data-screen="starting"] header div, main[data-screen="unreachable"] header div { display: none; }
+  section > h2 { font-size: 24px; font-weight: 700; margin: 0 0 6px; text-align: center; letter-spacing: -0.01em; }
+  section > p { margin: 0 0 14px; color: var(--muted); text-align: center; }
+  h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 8px 0 8px 6px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .row > button { flex: 1; min-width: 140px; }
   button {
-    font: inherit; font-weight: 550; border-radius: 8px; padding: 7px 14px; cursor: pointer;
-    border: 1px solid var(--input); background: var(--panel); color: var(--ink);
+    font: inherit; font-weight: 600; font-size: 15px; height: 48px; border-radius: 24px; padding: 0 22px; cursor: pointer;
+    border: 1px solid var(--control-line); background: var(--control); color: var(--ink);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   button:disabled { opacity: 0.5; cursor: default; }
-  button.link { border: 0; background: none; padding: 0; color: var(--muted); text-decoration: underline; font-weight: 450; }
-  input {
-    font: inherit; flex: 1; min-width: 200px; padding: 7px 10px; border-radius: 8px;
-    border: 1px solid var(--input); background: var(--panel); color: var(--ink); outline: none;
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); box-shadow: none; }
+  button.link { border: 0; background: none; box-shadow: none; height: 44px; padding: 0 12px; color: var(--link); font-weight: 500; }
+  button.link:hover { text-decoration: underline; }
+  button.back {
+    width: 42px; height: 42px; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; color: var(--ink);
+    align-self: flex-start; margin: -6px 0 0;
   }
-  input:focus { border-color: var(--ink); }
-  .checks { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 4px; }
-  .checks li { display: flex; gap: 8px; align-items: baseline; color: var(--muted); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(-1px); }
-  .dot.ok { background: var(--ok); } .dot.no { background: var(--faint); }
-  code {
-    font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--chip);
-    padding: 8px 10px; border-radius: 8px; display: block; margin: 8px 0 12px; user-select: all; word-break: break-all;
+  button.back svg { width: 18px; height: 18px; }
+  input, select {
+    font: inherit; font-size: 15px; width: 100%; height: 48px; padding: 0 18px; border-radius: 16px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); outline: none;
   }
-  .error { color: var(--bad); margin: 10px 0 0; }
+  input::placeholder { color: var(--faint); }
+  input:focus, select:focus { border-color: var(--faint); }
+  select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--faint) 50%), linear-gradient(135deg, var(--faint) 50%, transparent 50%); background-position: calc(100% - 22px) 21px, calc(100% - 17px) 21px; background-size: 5px 5px; background-repeat: no-repeat; }
+  .field { display: grid; gap: 7px; margin-bottom: 12px; color: var(--muted); font-size: 13px; font-weight: 500; }
+  .field > span, .field:not(:has(span)) { padding-left: 6px; }
+  .hint { font-size: 13px; color: var(--faint); margin: 8px 6px 0; }
+  .error { color: var(--bad); margin: 10px 6px 0; font-size: 14px; }
+  .group { background: var(--card); border-radius: 24px; overflow: hidden; }
+  /* the choices on the first screen */
+  .choices { display: grid; gap: 12px; margin-top: 6px; }
+  .choice {
+    display: flex; align-items: center; gap: 16px; text-align: left; padding: 18px 20px; border-radius: 24px; height: auto; min-height: 76px;
+    background: var(--card); border: 1px solid var(--line); box-shadow: none; font-weight: 400; width: 100%;
+  }
+  .choice:hover { border-color: var(--faint); }
+  .choice.primary { background: var(--card); border-color: var(--ink); color: var(--ink); }
+  .choice .tile { width: 44px; height: 44px; border-radius: 14px; background: var(--tile); display: grid; place-items: center; flex: none; }
+  .choice .tile svg { width: 22px; height: 22px; }
+  .choice .text { flex: 1; display: grid; gap: 3px; }
+  .choice strong { font-size: 17px; font-weight: 600; }
+  .choice .text span { color: var(--muted); font-size: 14px; }
+  .choice .chev { color: var(--faint); width: 18px; height: 18px; flex: none; }
+  .other-ways { margin-top: 2px; color: var(--muted); }
+  .other-ways summary { cursor: pointer; text-align: center; font-size: 15px; font-weight: 500; color: var(--link); list-style: none; min-height: 44px; display: grid; place-items: center; }
+  .other-ways summary::-webkit-details-marker { display: none; }
+  .other-ways summary:hover { text-decoration: underline; }
+  .other-ways .choice { margin-top: 12px; }
+  .other-ways p { font-size: 13px; text-align: center; }
+  a { color: var(--link); }
+  /* a switch row */
+  label.check {
+    display: flex; gap: 14px; align-items: center; justify-content: space-between; background: var(--card); border-radius: 24px;
+    padding: 14px 18px; min-height: 64px; color: var(--ink); margin: 6px 0 16px; cursor: pointer; font-size: 16px;
+  }
+  label.check small { display: block; color: var(--muted); font-size: 13px; }
+  label.check input {
+    appearance: none; -webkit-appearance: none; width: 51px; height: 31px; min-width: 51px; padding: 0; border-radius: 16px; border: 0;
+    background: var(--off); position: relative; flex: none; order: 2; cursor: pointer; transition: background 120ms;
+  }
+  label.check input::after { content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 14px; background: #fff; transition: transform 120ms; }
+  label.check input:checked { background: var(--blue); }
+  label.check input:checked::after { transform: translateX(20px); }
+  /* found Wisps and waiting rows */
+  .found { display: grid; margin: 0; }
+  .found:empty { display: none; }
+  .found-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px; min-height: 64px; border-top: 1px solid var(--line); }
+  .found-row:first-child { border-top: 0; }
+  .found-row .identity { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .found-row strong { font-weight: 600; }
+  .found-row small { display: block; color: var(--muted); }
+  .found-row button { height: 38px; padding: 0 18px; }
+  .status-row { display: flex; align-items: center; gap: 12px; padding: 0 18px; min-height: 64px; color: var(--muted); font-size: 15px; }
+  .status-row .dots { display: flex; gap: 4px; }
+  .status-row .dots i, .checks .dot.wait { width: 6px; height: 6px; border-radius: 3px; background: var(--muted); animation: pulse 1.2s infinite; }
+  .status-row .dots i:nth-child(2) { animation-delay: 0.2s; }
+  .status-row .dots i:nth-child(3) { animation-delay: 0.4s; }
+  .found:empty + .status-row { border-top: 0; }
+  .waiting { text-align: center; }
+  .code {
+    font-size: 40px; font-weight: 700; letter-spacing: 0.2em; font-variant-numeric: tabular-nums; margin: 6px 0 18px;
+    background: var(--card); border-radius: 24px; padding: 20px 18px 20px calc(18px + 0.2em);
+  }
+  .checks { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+  .checks li { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: var(--ok); } .dot.no { background: var(--faint); } .checks .dot.bad { background: var(--bad); }
+  @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
   pre {
-    font: 11.5px ui-monospace, Menlo, monospace; background: var(--chip); border-radius: 8px; padding: 10px;
+    font: 11.5px ui-monospace, Menlo, monospace; background: var(--card); border-radius: 16px; padding: 12px;
     max-height: 200px; overflow: auto; white-space: pre-wrap; color: var(--muted);
   }
-  .center { text-align: center; padding: 40px 0; }
-  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--ink); animation: spin 0.9s linear infinite; margin: 0 auto 14px; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .float { animation: float 3.2s ease-in-out infinite; }
-  @keyframes float { 50% { transform: translateY(-3px); } }
-  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .choice { text-align: left; padding: 18px; border-radius: 14px; display: grid; gap: 6px; align-content: start; font-weight: 450; box-shadow: var(--shadow); border-color: var(--line); }
-  .choice:hover { border-color: var(--ink); }
-  .choice strong { font-size: 15px; font-weight: 600; }
-  .choice span { color: var(--muted); }
-  .choice svg { width: 22px; height: 22px; margin-bottom: 4px; }
-  label.check { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); margin: 2px 0 14px; cursor: pointer; }
-  label.check input { flex: none; min-width: 0; margin: 3px 0 0; }
-  label.check small { display: block; color: var(--muted); font-size: 13px; }
-  .checks .dot.bad { background: var(--bad); }
-  .checks .dot.wait { background: var(--faint); animation: pulse 1s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: 0.3; } }
-  .back { margin-bottom: 12px; }
-  .choice.primary span { color: #d1d1d1; }
-  .other-ways { grid-column: 1 / -1; margin-top: 12px; color: var(--muted); }
-  .other-ways summary { cursor: pointer; text-align: center; font-size: 13px; }
-  .other-ways .choice { width: 100%; margin-top: 18px; }
-  .other-ways p { font-size: 13px; text-align: center; }
-  .found { display: grid; gap: 10px; margin: 16px 0; }
-  .found-row { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
-  .found-row .identity { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-  .found-row small { display: block; color: var(--muted); }
-  .code { font-size: 56px; font-weight: 650; letter-spacing: .08em; font-variant-numeric: tabular-nums; margin: 24px 0; }
-  .waiting { text-align: center; }
-  :focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
-  a { color: inherit; }
-  .hint { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
-  ol.steps { margin: 0 0 12px; padding-left: 20px; color: var(--muted); }
-  select {
-    font: inherit; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--input);
-    background: var(--panel); color: var(--ink); min-width: 200px;
-  }
-  .field { display: grid; gap: 4px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
-  .field input, .field select { min-width: 0; width: 100%; font-size: 14px; }
-  .plans { display: grid; gap: 6px; margin: 4px 0 14px; }
-  .plan {
-    display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--line);
-    border-radius: 10px; cursor: pointer;
-  }
+  .center { text-align: center; padding: 6px 0; }
+  .spinner { display: none; }
+  .float { animation: float 2.6s ease-in-out infinite; }
+  @keyframes float { 50% { transform: translateY(-6px); } }
+  ol.steps { margin: 0 0 14px; padding-left: 20px; color: var(--muted); }
+  ol.steps li { margin-bottom: 4px; }
+  .plans { display: grid; gap: 8px; margin: 4px 0 14px; }
+  .plan { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border: 1px solid var(--line); background: var(--card); border-radius: 18px; cursor: pointer; }
   .plan:has(input:checked) { border-color: var(--ink); }
-  .plan input { flex: none; min-width: 0; margin: 0; }
+  .plan input { flex: none; width: auto; height: auto; margin: 0; accent-color: var(--ink); }
   .plan .spec { flex: 1; }
   .plan .spec small { display: block; color: var(--muted); font-size: 12.5px; }
   .plan .price { font-weight: 600; white-space: nowrap; }
   .tag { font-size: 11.5px; background: var(--chip); border-radius: 6px; padding: 1px 6px; margin-left: 6px; font-weight: 500; color: var(--muted); }
-  h3 { font-size: 14px; font-weight: 600; margin: 4px 0 8px; }
-  @media (max-width: 520px) { .choices { grid-template-columns: 1fr; } }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { .float, .status-row .dots i, .checks .dot.wait { animation: none; } }
+  @media (max-width: 520px) { main { padding: 24px 18px; } }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <svg class="float" viewBox="20 10 80 100" aria-hidden="true"><path fill="#1f1f1f" d="M30 60 C30 32 44 18 60 18 C76 18 90 32 90 60 L90 96 Q85 104 80 96 Q75 88 70 96 Q65 104 60 96 Q55 88 50 96 Q45 104 40 96 Q35 88 30 96 Z"/><circle cx="50" cy="57" r="5" fill="white"/><circle cx="70" cy="57" r="5" fill="white"/></svg>
+    <svg class="float" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5a7.5 7.5 0 0 0-7.5 7.5v11l2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7 2.5-1.7 2.5 1.7V10A7.5 7.5 0 0 0 12 2.5z"/><circle cx="9.5" cy="10.5" r="1.3" fill="var(--panel)"/><circle cx="14.5" cy="10.5" r="1.3" fill="var(--panel)"/></svg>
     <div>
       <h1 id="title">Welcome to Wisp</h1>
       <p id="subtitle">Wisp lives on one computer. Your other devices join it.</p>
@@ -123,32 +168,32 @@
 
   <div id="welcome" class="choices" hidden>
     <button class="choice primary" id="pick-create">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M12 8v4M10 10h4"/></svg>
-      <strong>Start Wisp on this computer</strong>
-      <span>First time? Pick this one.</span>
+      <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M2 20h20"/></svg></span>
+      <span class="text"><strong>Start Wisp on this computer</strong><span>First time? Pick this one.</span></span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
     </button>
     <button class="choice" id="pick-join">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
-      <strong>Join my Wisp</strong>
-      <span>It's already on another computer.</span>
+      <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
+      <span class="text"><strong>Join my Wisp</strong><span>It's already on another computer.</span></span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
     </button>
     <details class="other-ways" id="other-ways">
       <summary>Other ways: a cloud server, Docker</summary>
       <button class="choice" id="pick-cloud">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg>
-      <strong>Start Wisp with Hetzner</strong>
-      <span>Your Wisp stays on in your own Hetzner account.</span>
+        <span class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5Z"/></svg></span>
+        <span class="text"><strong>Start Wisp with Hetzner</strong><span>Your Wisp stays on in your own Hetzner account.</span></span>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
       <p>For Docker, follow the <a href="https://github.com/eireijie/wisp/blob/main/docs/deploy.md#docker" target="_blank">Docker instructions</a>.</p>
     </details>
   </div>
 
   <div id="create" hidden>
-    <button class="link back" data-back>← Back</button>
-    <section class="card">
+    <button class="back" data-back aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <section>
       <h2>Start Wisp on this computer</h2>
       <p>Wisp keeps running here when you close the window.</p>
-      <label class="check"><input type="checkbox" id="create-device" checked /><span>Let agents work on this computer<small class="device-name"></small></span></label>
+      <label class="check"><span>Let agents work on this computer<small class="device-name"></small></span><input type="checkbox" id="create-device" checked /></label>
       <div class="row"><button class="primary" id="create-go">Start Wisp</button></div>
       <p class="error" id="create-error" hidden></p>
       <pre id="log" hidden></pre>
@@ -156,98 +201,100 @@
   </div>
 
   <div id="join" hidden>
-    <button class="link back" data-back>← Back</button>
-    <section class="card">
+    <button class="back" data-back aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <section>
       <h2>Join my Wisp</h2>
       <p>Find your Wisp on this Wi-Fi, or paste an invite link.</p>
-      <p id="discovery-status" role="status" aria-live="polite">Looking on this Wi-Fi…</p>
-      <div id="wisps" class="found"></div>
-      <button class="link" id="scan">Search again</button>
-      <form id="join-form" style="margin-top:24px">
-        <label class="field" for="url">Somewhere else? Paste an invite link.</label>
-        <div class="row">
-          <input id="url" placeholder="https://your-wisp.example/join/…" autocomplete="off" spellcheck="false" required />
-          <button class="primary" type="submit" id="join-go">Join</button>
-        </div>
+      <div class="group">
+        <div id="wisps" class="found"></div>
+        <div class="status-row"><span class="dots" id="discovery-dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="discovery-status" role="status" aria-live="polite">Looking on this Wi-Fi…</span></div>
+      </div>
+      <div class="row"><button class="link" id="scan">Search again</button></div>
+      <form id="join-form" style="margin-top:14px">
+        <label class="field" for="url"><span>Somewhere else? Paste an invite link.</span></label>
+        <input id="url" placeholder="https://your-wisp.example/join/…" autocomplete="off" spellcheck="false" required />
+        <div class="row" style="margin-top:14px"><button class="primary" type="submit" id="join-go">Join</button></div>
       </form>
       <p class="error" id="join-error" role="alert" hidden></p>
     </section>
   </div>
 
-  <section id="waiting" class="card waiting" hidden>
-    <h2>Approve this computer on your Wisp</h2>
+  <section id="waiting" class="waiting" hidden>
+    <h2 id="waiting-title">Approve this computer on your Wisp</h2>
     <p id="approval-host"></p>
     <div class="code" id="join-code" aria-label="Approval code"></div>
     <p id="join-status" role="status" aria-live="polite">It should show the same code.</p>
     <p class="hint" id="join-expiry"></p>
     <p class="error" id="waiting-error" role="alert" hidden></p>
-    <button id="cancel-join">Cancel</button>
-    <button class="primary" id="join-again" hidden>Try again</button>
+    <div class="row" style="margin-top:14px">
+      <button id="cancel-join">Cancel</button>
+      <button class="primary" id="join-again" hidden>Try again</button>
+    </div>
   </section>
 
   <div id="cloud" hidden>
-    <button class="link back" data-back>← Back</button>
-    <section class="card" id="cloud-connect">
+    <button class="back" data-back aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <section id="cloud-connect">
       <h2>Start Wisp in your Hetzner account</h2>
-      <p>Wisp runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account.</p>
+      <p>Wisp runs in your own <a href="https://www.hetzner.com/cloud" target="_blank">Hetzner Cloud</a> account, so it stays on.</p>
       <ol class="steps">
         <li>Sign in at <a href="https://console.hetzner.com" target="_blank">console.hetzner.com</a> (or sign up) and open a project.</li>
         <li>Go to <strong>Security → API keys</strong>, click <strong>Generate API key</strong>, and choose <strong>Read &amp; Write</strong>.</li>
         <li>Paste it here.</li>
       </ol>
       <form id="cloud-token-form">
-        <div class="row">
-          <input id="cloud-token" type="password" placeholder="Hetzner API key" autocomplete="off" spellcheck="false" />
-          <button class="primary" type="submit" id="cloud-token-go">Continue</button>
-        </div>
+        <label class="field"><span>API key</span>
+          <input id="cloud-token" type="password" placeholder="Paste it here." aria-label="API key" autocomplete="off" spellcheck="false" />
+        </label>
+        <p class="hint" style="margin:-6px 6px 14px">This key stays in this window until setup finishes.</p>
+        <div class="row"><button class="primary" type="submit" id="cloud-token-go">Continue</button></div>
       </form>
-      <p class="hint">This key stays in this window until setup finishes.</p>
       <p class="error" id="cloud-token-error" hidden></p>
     </section>
 
-    <section class="card" id="cloud-choose" hidden>
+    <section id="cloud-choose" hidden>
       <h2>Choose your computer</h2>
-      <label class="field">Location<select id="cloud-location"></select></label>
+      <label class="field"><span>Location</span><select id="cloud-location"></select></label>
       <div class="plans" id="cloud-plans" role="radiogroup" aria-label="Size"></div>
-      <p class="hint" id="cloud-billing"></p>
-      <h3 style="margin-top:16px">Your account</h3>
+      <p class="hint" id="cloud-billing" style="text-align:left"></p>
+      <h3>Your account</h3>
       <form id="cloud-form">
-        <label class="field">Name<input id="cloud-name" autocomplete="name" required /></label>
-        <label class="field">Email<input id="cloud-email" type="email" autocomplete="email" required /></label>
-        <label class="field">Password<input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters" /></label>
-        <label class="check"><input type="checkbox" id="cloud-device" checked /><span>Let agents work on this computer<small class="device-name"></small></span></label>
+        <label class="field"><input id="cloud-name" autocomplete="name" placeholder="Name" aria-label="Name" required /></label>
+        <label class="field"><input id="cloud-email" type="email" autocomplete="email" placeholder="Email" aria-label="Email" required /></label>
+        <label class="field"><input id="cloud-password" type="password" autocomplete="new-password" minlength="8" required placeholder="Password" aria-label="Password" /></label>
+        <label class="check"><span>Let agents work on this computer<small class="device-name"></small></span><input type="checkbox" id="cloud-device" checked /></label>
         <div class="row"><button class="primary" type="submit" id="cloud-go">Start Wisp</button></div>
       </form>
       <p class="error" id="cloud-error" hidden></p>
     </section>
 
-    <section class="card" id="cloud-progress" hidden>
+    <section id="cloud-progress" hidden>
       <h2 id="cloud-progress-title">Getting your Wisp ready…</h2>
       <p>This usually takes 3 to 5 minutes.</p>
       <ul class="checks" id="cloud-checks"></ul>
       <p class="error" id="cloud-fail" hidden></p>
       <div class="row" id="cloud-fail-actions" hidden>
-        <button class="primary" id="cloud-delete">Delete the cloud computer</button>
-        <button id="cloud-wait">Keep waiting</button>
-        <button id="cloud-keep">Keep it</button>
+        <button id="cloud-delete">Delete the cloud computer</button>
+        <button class="primary" id="cloud-wait">Keep waiting</button>
+        <button class="link" id="cloud-keep">Keep it</button>
       </div>
-      <p class="hint" id="cloud-fail-hint" hidden></p>
+      <p class="hint" id="cloud-fail-hint" style="text-align:center" hidden></p>
     </section>
   </div>
 
-  <section id="starting" class="card center" hidden>
+  <section id="starting" class="center" hidden>
     <div class="spinner"></div>
     <h2 id="starting-title">Getting ready…</h2>
     <p>The first start can take a minute.</p>
   </section>
 
-  <section id="unreachable" class="card" hidden>
+  <section id="unreachable" hidden>
     <h2>Can't reach your Wisp</h2>
     <p id="unreachable-detail"></p>
     <div class="row">
       <button class="primary" id="retry">Try again</button>
-      <button id="switch">Start or join another Wisp</button>
     </div>
+    <div class="row"><button class="link" id="switch">Start or join another Wisp</button></div>
   </section>
 </main>
 
@@ -256,7 +303,10 @@
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
   const setup = window.wispSetup;
   const SCREENS = ["welcome", "create", "join", "cloud", "waiting", "starting", "unreachable"];
-  const show = (id) => SCREENS.forEach((s) => ($(s).hidden = s !== id));
+  const show = (id) => {
+    SCREENS.forEach((s) => ($(s).hidden = s !== id));
+    document.querySelector("main")?.setAttribute("data-screen", id);
+  };
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };
 
   setup.check().then((c) => {
@@ -293,6 +343,7 @@
     const generation = ++scanGeneration;
     $("scan").disabled = true;
     $("discovery-status").textContent = "Looking on this Wi-Fi…";
+    $("discovery-dots").hidden = false;
     $("wisps").replaceChildren();
     try {
       const result = await setup.discover();
@@ -317,7 +368,7 @@
       }));
     } catch {
       if (generation === scanGeneration) $("discovery-status").textContent = "Couldn't search this Wi-Fi; paste an invite link.";
-    } finally { if (generation === scanGeneration) $("scan").disabled = false; }
+    } finally { if (generation === scanGeneration) { $("scan").disabled = false; $("discovery-dots").hidden = true; } }
   }
 
   function goJoin() {
@@ -349,6 +400,8 @@
       $("join-status").textContent = "It should show the same code.";
       $("join-expiry").textContent = "This code lasts 10 minutes.";
       $("join-again").hidden = true;
+      $("join-code").hidden = false;
+      $("waiting-title").textContent = "Approve this computer on your Wisp";
       $("cancel-join").textContent = "Cancel";
       err("waiting-error", "");
       show("waiting");
@@ -361,7 +414,10 @@
   }
 
   function finishJoin(status) {
-    $("join-status").textContent = status === "denied" ? "This computer wasn't approved." : "This code has expired.";
+    $("waiting-title").textContent = status === "denied" ? "Not approved" : "This code expired";
+    $("join-code").hidden = true;
+    $("approval-host").textContent = "";
+    $("join-status").textContent = status === "denied" ? "This computer wasn't approved. Your Wisp said no, or nobody answered in time. You can ask again." : "This code has expired.";
     $("join-expiry").textContent = "Ask to join again for a new code.";
     $("join-again").hidden = false;
     $("cancel-join").textContent = "Back";

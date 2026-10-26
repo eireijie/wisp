@@ -35,6 +35,10 @@ enum Pairing {
 
   struct Failure: LocalizedError {
     var message: String
+    /** no address answered */
+    var unreachable = false
+    /** the computer said no, or the code ran out: the person can ask again */
+    var denied = false
     var errorDescription: String? { message }
   }
 
@@ -73,9 +77,9 @@ enum Pairing {
       case "approved":
         if let token = s.token { return token }
       case "rejected":
-        throw Failure(message: "Pairing was cancelled on your computer.")
+        throw Failure(message: "Your Wisp said no, or nobody answered in time. You can ask again.", denied: true)
       case "expired":
-        throw Failure(message: "The code expired. Show a new one on your computer and scan again.")
+        throw Failure(message: "The code expired. Show a new one on your computer and scan again.", denied: true)
       default:
         break
       }
