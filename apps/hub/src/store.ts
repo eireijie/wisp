@@ -148,6 +148,7 @@ export class Store {
   removeMember(workspaceId: string, userId: string) {
     this.db.transaction(() => {
       this.db.prepare("DELETE FROM memberships WHERE workspace_id = ? AND user_id = ?").run(workspaceId, userId);
+      this.db.prepare("DELETE FROM channel_members WHERE member_kind = 'user' AND member_id = ? AND channel_id IN (SELECT id FROM channels WHERE workspace_id = ?)").run(userId, workspaceId);
       this.db.prepare("DELETE FROM tokens WHERE kind = 'session' AND subject_id = ? AND workspace_id = ?").run(userId, workspaceId);
       const elsewhere = this.db.prepare("SELECT 1 FROM memberships WHERE user_id = ? LIMIT 1").get(userId);
       if (!elsewhere) this.db.prepare("DELETE FROM users WHERE id = ?").run(userId);
@@ -289,6 +290,7 @@ export class Store {
 
   deleteAgent(agentId: string) {
     this.clearDefaultAgent(agentId);
+    this.db.prepare("DELETE FROM channel_members WHERE member_kind = 'agent' AND member_id = ?").run(agentId);
     this.db.prepare("DELETE FROM agents WHERE id = ?").run(agentId);
   }
 
@@ -638,10 +640,17 @@ export class Store {
     });
   }
 
+  /** Members per channel: only people still in the workspace and agents that still exist, like the member list. */
   memberCounts(channelIds: string[]): Record<string, number> {
     if (!channelIds.length) return {};
     const rows = this.db
-      .prepare(`SELECT channel_id, COUNT(*) AS n FROM channel_members WHERE channel_id IN (${channelIds.map(() => "?").join(",")}) GROUP BY channel_id`)
+      .prepare(
+        `SELECT m.channel_id, COUNT(*) AS n FROM channel_members m JOIN channels c ON c.id = m.channel_id
+         WHERE m.channel_id IN (${channelIds.map(() => "?").join(",")})
+           AND ((m.member_kind = 'user' AND EXISTS (SELECT 1 FROM memberships s WHERE s.workspace_id = c.workspace_id AND s.user_id = m.member_id))
+             OR (m.member_kind = 'agent' AND EXISTS (SELECT 1 FROM agents a WHERE a.id = m.member_id AND a.workspace_id = c.workspace_id)))
+         GROUP BY m.channel_id`,
+      )
       .all(...channelIds) as { channel_id: string; n: number }[];
     return Object.fromEntries(rows.map((r) => [r.channel_id, r.n]));
   }

@@ -313,7 +313,18 @@ export function openDb(file: string): Database.Database {
   if (added.has("nodes.role")) migrateNodeRoles(db);
   migrateTaskAssignee(db);
   migrateLoans(db);
+  dropOrphanChannelMembers(db);
   return db;
+}
+
+/** Deleted agents and removed people used to stay in channel_members, inflating member counts. */
+function dropOrphanChannelMembers(db: Database.Database) {
+  db.exec(`
+    DELETE FROM channel_members WHERE member_kind = 'agent' AND NOT EXISTS
+      (SELECT 1 FROM agents a JOIN channels c ON c.workspace_id = a.workspace_id WHERE a.id = member_id AND c.id = channel_id);
+    DELETE FROM channel_members WHERE member_kind = 'user' AND NOT EXISTS
+      (SELECT 1 FROM memberships s JOIN channels c ON c.workspace_id = s.workspace_id WHERE s.user_id = member_id AND c.id = channel_id);
+  `);
 }
 
 /**
