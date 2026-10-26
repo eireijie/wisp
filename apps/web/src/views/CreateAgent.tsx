@@ -193,6 +193,9 @@ export interface AgentDefaults {
   nodeId: string | null;
 }
 
+/** "Use my defaults" can't create an agent until the defaults name an AI: then you pick one right in the form. */
+export const defaultsNeedPicking = (d: AgentDefaults | "error" | null) => d === "error" || (d !== null && !d.harness);
+
 type View = "form" | "look" | "external" | "discover" | "invitation";
 type RespondTo = "me" | "anyone" | "people";
 
@@ -256,6 +259,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
       (d) => {
         if (!live) return;
         setDefaults(d);
+        if (defaultsNeedPicking(d)) setMode("custom");
         // Customize starts from the defaults, unless you already changed something
         if (touched.current) return;
         if (d.harness) setHarness(d.harness);
