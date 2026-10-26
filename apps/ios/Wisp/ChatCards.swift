@@ -23,8 +23,7 @@ struct FileChip: View {
           .resizable()
           .scaledToFit()
           .frame(maxWidth: 260, maxHeight: 260, alignment: .leading)
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-          .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(.separator), lineWidth: 0.5))
+          .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
       } else {
         HStack(spacing: 6) {
           if loading { ProgressView().controlSize(.mini) } else { Image(systemName: failed ? "exclamationmark.triangle" : isImage ? "photo" : "doc") }
@@ -32,9 +31,9 @@ struct FileChip: View {
         }
         .font(.callout)
         .foregroundStyle(failed ? .secondary : .primary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Capsule().fill(Color(.secondarySystemBackground)))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Palette.card))
       }
     }
     .buttonStyle(.plain)
@@ -56,7 +55,7 @@ struct FileChip: View {
   }
 }
 
-/** A task this message hands out: what it is, who has it and how it's going. */
+/** A task an agent mentions: what it is, who has it and how it's going. */
 struct TaskChip: View {
   @Environment(Store.self) private var store
   var taskId: String
@@ -64,23 +63,21 @@ struct TaskChip: View {
   var body: some View {
     if let task = store.tasks.first(where: { $0.id == taskId }) {
       NavigationLink { TaskDetail(task: task) } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "checklist").foregroundStyle(.secondary)
-          Text(task.title).fontWeight(.semibold).lineLimit(1)
-          if let agent = store.agent(task.toAgentId ?? "") {
-            AgentAvatar(agent: agent, size: 16, showStatus: false)
-            Text(agent.name).foregroundStyle(.secondary).lineLimit(1)
+        ChatCardShell(symbol: "checklist", label: "Task") {
+          Text(task.title).font(.system(size: 16, weight: .semibold)).multilineTextAlignment(.leading)
+          HStack(spacing: 8) {
+            Text(store.taskState(task))
+              .font(.system(size: 12, weight: .semibold))
+              .padding(.horizontal, 9).padding(.vertical, 3)
+              .background(Capsule().fill(Palette.control))
+            if let agent = store.agent(task.toAgentId ?? "") {
+              HStack(spacing: 5) {
+                AgentAvatar(agent: agent, size: 18, showStatus: false)
+                Text(agent.name).font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(1)
+              }
+            }
           }
-          Text(store.taskState(task))
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Color(.tertiarySystemFill)))
         }
-        .font(.caption)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Capsule().fill(Color(.secondarySystemBackground)))
       }
       .buttonStyle(.plain)
     } else {
@@ -97,23 +94,22 @@ struct RoutineChip: View {
 
   var body: some View {
     if let routine = store.routines.first(where: { $0.id == routineId }) {
-      let chip = HStack(spacing: 6) {
-        Image(systemName: "list.bullet.clipboard").foregroundStyle(.secondary)
-        Text(routine.name).fontWeight(.semibold).lineLimit(1)
-        if routine.status == "learning" {
-          Text("learning").foregroundStyle(.blue)
-        } else if let schedule = routine.schedule {
-          Label(describeCron(schedule), systemImage: "calendar.badge.clock").foregroundStyle(.secondary).lineLimit(1)
+      let card = ChatCardShell(symbol: "list.bullet.clipboard", label: "Routine") {
+        HStack(spacing: 8) {
+          Text(routine.name).font(.system(size: 16, weight: .semibold)).lineLimit(2)
+          if routine.status == "learning" {
+            Text("Learning").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.blue)
+              .padding(.horizontal, 9).padding(.vertical, 3).background(Capsule().fill(Palette.control))
+          }
+        }
+        if let schedule = routine.schedule {
+          Label(describeCron(schedule), systemImage: "calendar.badge.clock").font(.system(size: 14)).foregroundStyle(Palette.muted).lineLimit(1)
         }
       }
-      .font(.caption)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 7)
-      .background(Capsule().fill(Color(.secondarySystemBackground)))
       if let agent = store.agent(routine.agentId) {
-        NavigationLink { RoutinesView(agent: agent) } label: { chip }.buttonStyle(.plain)
+        NavigationLink { RoutinesView(agent: agent) } label: { card }.buttonStyle(.plain)
       } else {
-        chip
+        card
       }
     } else {
       Color.clear.frame(height: 0).task { try? await store.refreshRoutines() }
@@ -129,21 +125,11 @@ struct DiscussionCard: View {
 
   var body: some View {
     if let d = store.discussions[discussionId] {
-      VStack(alignment: .leading, spacing: 8) {
-        HStack(spacing: 6) {
-          Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(.blue)
-          Text(d.topic).font(.callout.weight(.semibold)).lineLimit(2)
-          Spacer(minLength: 4)
-          Text(label(d.status))
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(d.status == "done" ? .green : d.live ? .blue : .secondary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Color(.tertiarySystemFill)))
-        }
+      ChatCardShell(symbol: "bubble.left.and.bubble.right", label: "Discussion") {
+        Text(title(d)).font(.system(size: 16, weight: .semibold)).multilineTextAlignment(.leading)
         if d.live {
           Text(d.status == "summarizing" ? "Writing the decision" : "Round \(max(d.round, 1)) of \(d.rounds)")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.system(size: 14)).foregroundStyle(Palette.muted)
           FlowRow(ids: d.status == "summarizing" ? [d.moderatorId] : d.participants, progress: d.progress ?? [])
           if store.role != "guest" {
             Button {
@@ -152,31 +138,30 @@ struct DiscussionCard: View {
                 try? await store.stopDiscussion(d.id)
                 stopping = false
               }
-            } label: { Label("Stop", systemImage: "stop.fill") }
-              .font(.caption.weight(.semibold))
-              .tint(.red)
+            } label: { Label("Stop", systemImage: "stop.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.red) }
               .disabled(stopping)
           }
         }
         if let path = d.decisionPath {
           NavigationLink { NoteView(path: path) } label: {
-            Label("Read the decision", systemImage: "book").font(.caption.weight(.semibold))
-          }
+            Label("Read the decision", systemImage: "chevron.right").labelStyle(TrailingIconLabel())
+              .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
+              .padding(.horizontal, 16).frame(height: 40)
+              .background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
+          }.buttonStyle(.plain)
         }
       }
-      .frame(maxWidth: 420, alignment: .leading)
-      .card(Corner.card, padding: 12)
     } else {
       Color.clear.frame(height: 0).task { await store.loadDiscussion(discussionId) }
     }
   }
 
-  private func label(_ status: String) -> String {
-    switch status {
-    case "running": "in progress"
-    case "summarizing": "writing the decision"
-    case "done": "decided"
-    default: "stopped"
+  private func title(_ d: Discussion) -> String {
+    switch d.status {
+    case "done": "Decided: \(d.topic)"
+    case "running", "summarizing":
+      "Talking it through with \(ChannelTeam.list((d.status == "summarizing" ? [d.moderatorId] : d.participants).compactMap { store.agent($0)?.name }))…"
+    default: d.topic
     }
   }
 
@@ -195,7 +180,7 @@ struct DiscussionCard: View {
               AgentAvatar(agent: store.agent(id), size: 18, showStatus: false)
               Text(store.agent(id)?.name ?? "Agent").lineLimit(1)
               switch state {
-              case "done": Image(systemName: "checkmark").foregroundStyle(.green)
+              case "done": Image(systemName: "checkmark").foregroundStyle(Palette.green)
               case "running": ProgressView().controlSize(.mini)
               case "queued": Image(systemName: "clock").foregroundStyle(.orange)
               default: EmptyView()
@@ -205,13 +190,20 @@ struct DiscussionCard: View {
             .padding(.leading, 2)
             .padding(.trailing, 8)
             .padding(.vertical, 2)
-            .background(Capsule().fill(Color(.tertiarySystemFill)))
+            .background(Capsule().fill(Palette.control))
             .accessibilityElement(children: .combine)
             .accessibilityValue(state == "done" ? "answered" : state == "running" ? "answering" : state == "queued" ? "waiting for its device" : "")
           }
         }
       }
     }
+  }
+}
+
+/** A label with its icon after the words. */
+struct TrailingIconLabel: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(spacing: 6) { configuration.title; configuration.icon.font(.system(size: 12, weight: .semibold)) }
   }
 }
 
@@ -229,30 +221,36 @@ struct ContextCard: View {
     let used = usage?.contextUsed
     let window = usage?.contextWindow
     let fraction = used.flatMap { u in window.map { min(1, Double(u) / Double(max($0, 1))) } }
-    VStack(alignment: .leading, spacing: 8) {
+    ChatCardShell(symbol: "gauge.with.dots.needle.33percent", label: "Context window") {
       HStack(alignment: .firstTextBaseline) {
-        Text(used.map { "\(Self.tokens($0))\(window.map { " of \(Self.tokens($0))" } ?? "") used" } ?? "Nothing used yet")
-          .font(.callout.weight(.semibold))
-          .monospacedDigit()
+        Text(Self.words(fraction)).font(.system(size: 16, weight: .semibold))
         Spacer(minLength: 8)
-        if let model = usage?.model { Text(model).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+        if let model = usage?.model { Text(model).font(.caption).foregroundStyle(Palette.muted).lineLimit(1) }
       }
       if let fraction {
-        ProgressView(value: fraction).tint(fraction > 0.85 ? .red : fraction > 0.6 ? .orange : .green)
+        ProgressView(value: fraction).tint(fraction > 0.85 ? .red : fraction > 0.6 ? .orange : Palette.online)
       }
-      if used == nil { Text("This shows up after its first reply here.").font(.caption).foregroundStyle(.secondary) }
+      Text(used.map { "\(Self.tokens($0))\(window.map { " of \(Self.tokens($0))" } ?? "") used. Older messages are summarized when it fills up." } ?? "This shows up after its first reply here.")
+        .font(.system(size: 14)).foregroundStyle(Palette.muted)
       if let shrink, used != nil, store.role != "guest" {
         Button(shrink.name == "compact" ? "Compact" : "Compress") { run(shrink) }
-          .secondaryButton().controlSize(.small).disabled(running)
+          .buttonStyle(.plain).font(.system(size: 15, weight: .semibold))
+          .padding(.horizontal, 16).frame(height: 40)
+          .background(Capsule().fill(Palette.control)).overlay(Capsule().strokeBorder(Palette.hairline))
+          .disabled(running)
       }
-      if let error { Text(error).font(.caption).foregroundStyle(.red) }
+      if let error { Text(error).font(.caption).foregroundStyle(Palette.red) }
     }
-    .frame(maxWidth: 360, alignment: .leading)
-    .card(Corner.card, padding: 12)
     .task(id: message?.author.id) {
       guard let message, message.author.kind == .agent else { return }
       shrink = await SlashMenuModel.commands(store, agentId: message.author.id).first { $0.via == "raw" && ($0.name == "compact" || $0.name == "compress") }
     }
+  }
+
+  /** "Roughly half full" for the card's headline. */
+  static func words(_ fraction: Double?) -> String {
+    guard let f = fraction else { return "Nothing used yet" }
+    return f < 0.35 ? "Roughly a third full" : f < 0.65 ? "Roughly half full" : f < 0.85 ? "Getting full" : "Nearly full"
   }
 
   /** Ask the agent to shrink its conversation by sending its command, in the same thread. */

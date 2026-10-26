@@ -3,7 +3,7 @@ import type { Agent, AgentCommand } from "@wisp/core";
 import { api } from "../api.ts";
 import type { ChannelInfo } from "../store.ts";
 import type { ChannelMember } from "./Channels.tsx";
-import { harnessLabel, agentVar, cx } from "./ui.tsx";
+import { agentVar, cx } from "./ui.tsx";
 
 /**
  * The "/" menu, like Discord's: type "/" at the start of a message and every agent here shows
@@ -79,11 +79,18 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
 
   useEffect(() => setPick(0), [query?.query, only]);
 
+  const matches = (c: AgentCommand) => c.name.toLowerCase().includes(query?.query ?? "");
+  const rank = (c: AgentCommand) => Number(!c.name.toLowerCase().startsWith(query?.query ?? ""));
   const groups = here
     .filter((a) => !only || a.id === only)
-    .map((agent) => ({ agent, items: (lists[agent.id] ?? []).filter((c) => c.name.toLowerCase().includes(query?.query ?? "")).sort((x, y) => Number(!x.name.toLowerCase().startsWith(query?.query ?? "")) - Number(!y.name.toLowerCase().startsWith(query?.query ?? ""))) }))
+    .map((agent) => ({ agent, items: (lists[agent.id] ?? []).filter(matches).sort((x, y) => rank(x) - rank(y)) }))
     .filter((g) => g.items.length);
-  const flat: SlashItem[] = groups.flatMap((g) => g.items.map((command) => ({ agent: g.agent, command })));
+  // with everyone's commands showing, a command they all share (/context, /model) is listed once
+  const merged = !only && here.length > 1;
+  const rows: SlashItem[] = merged
+    ? [...new Map(groups.flatMap((g) => g.items.map((command) => [command.name, { agent: g.agent, command }] as const)).reverse()).values()].reverse().sort((x, y) => rank(x.command) - rank(y.command))
+    : groups.flatMap((g) => g.items.map((command) => ({ agent: g.agent, command })));
+  const flat = rows;
   const current = flat.length ? flat[((pick % flat.length) + flat.length) % flat.length] : undefined;
 
   /** What the message box should say after picking. */
@@ -107,41 +114,37 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
         )}
         <div role="listbox" aria-label="Commands" className="flex-1 min-h-0 overflow-y-auto p-1.5">
           {!flat.length && <div className="px-3 py-2.5 text-sm text-muted">Loading…</div>}
-          {groups.map((g) => (
-            <div key={g.agent.id}>
-              {here.length > 1 && !only && (
-                <div className="px-3 pt-2 pb-0.5 text-[12px] text-muted flex items-center gap-1.5" style={agentVar(g.agent)}>
-                  <span className="font-semibold agent-ink">{g.agent.name}</span>
-                  <span>{harnessLabel(g.agent.harness)}</span>
-                </div>
-              )}
-              {g.items.map((c) => {
-                const selected = current?.agent.id === g.agent.id && current.command.name === c.name;
-                return (
-                  <button
-                    key={c.name}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    ref={(el) => {
-                      if (selected) el?.scrollIntoView({ block: "nearest" });
-                    }}
-                    onMouseDown={(e) => (e.preventDefault(), onPick({ agent: g.agent, command: c }))}
-                    className={cx("w-full px-3 py-2 min-h-12 rounded-2xl flex items-center gap-3 text-left", selected && "bg-hover")}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-semibold truncate">
-                        /{c.name}
-                        {c.hint && <span className="ml-1.5 font-normal text-muted">{c.hint}</span>}
-                      </span>
-                      {c.description && <span className="block text-[13px] text-muted truncate">{c.description}</span>}
-                    </span>
-                    {c.kind === "skill" || c.kind === "wisp-skill" ? <span className="shrink-0 text-[11px] text-faint">{KIND_LABEL[c.kind]}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {rows.map(({ agent, command: c }) => {
+            const selected = current?.agent.id === agent.id && current.command.name === c.name;
+            return (
+              <button
+                key={`${agent.id}:${c.name}`}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                ref={(el) => {
+                  if (selected) el?.scrollIntoView({ block: "nearest" });
+                }}
+                onMouseDown={(e) => (e.preventDefault(), onPick({ agent, command: c }))}
+                className={cx("w-full px-3 py-2 min-h-12 rounded-2xl flex items-center gap-3 text-left", selected && "bg-hover")}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold truncate">
+                    /{c.name}
+                    {c.hint && <span className="ml-1.5 font-normal text-muted">{c.hint}</span>}
+                  </span>
+                  {c.description && <span className="block text-[13px] text-muted truncate">{c.description}</span>}
+                </span>
+                {!merged && here.length > 1 ? (
+                  <span className="shrink-0 text-[11px] text-faint" style={agentVar(agent)}>
+                    {agent.name}
+                  </span>
+                ) : c.kind === "skill" || c.kind === "wisp-skill" ? (
+                  <span className="shrink-0 text-[11px] text-faint">{KIND_LABEL[c.kind]}</span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       </div>
     ),

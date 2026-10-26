@@ -7,9 +7,13 @@ struct LiveRun: Identifiable, Equatable {
   var channelId: String
   var threadId: String?
   var text = ""
+  /** the last tool it called, and the file that tool works on, for "Reading main.ts" */
+  var tool: String?
+  var file: String?
 
   /** Add what a run event says, the way the web does: text appends, status lines and errors get their own line. */
-  mutating func apply(type: String, text new: String?) {
+  mutating func apply(type: String, text new: String?, tool newTool: String? = nil, file newFile: String? = nil) {
+    if type == "tool_call", let newTool { tool = newTool; file = newFile }
     guard let new, !new.isEmpty else { return }
     switch type {
     case "text":
@@ -25,9 +29,9 @@ struct LiveRun: Identifiable, Equatable {
 }
 
 extension Store {
-  func applyLive(runId: String, agentId: String, channelId: String, threadId: String?, type: String, text: String?) {
+  func applyLive(runId: String, agentId: String, channelId: String, threadId: String?, type: String, text: String?, tool: String? = nil, file: String? = nil) {
     var run = liveRuns[runId] ?? LiveRun(id: runId, agentId: agentId, channelId: channelId, threadId: threadId)
-    run.apply(type: type, text: text)
+    run.apply(type: type, text: text, tool: tool, file: file)
     if liveRuns[runId] != run { liveRuns[runId] = run }
   }
 
@@ -40,33 +44,10 @@ extension Store {
   /** What's being written right now in this channel (or thread), oldest first. */
   func streaming(in channelId: String, thread: String?) -> [LiveRun] {
     liveRuns.values
-      .filter { $0.channelId == channelId && $0.threadId == thread && !$0.text.isEmpty }
+      .filter { $0.channelId == channelId && $0.threadId == thread }
       .sorted { $0.id < $1.id }
   }
 
   var liveLength: Int { liveRuns.values.reduce(0) { $0 + $1.text.count } }
 }
 
-/** A reply as it's being written, faded a little, until the real message replaces it. */
-struct StreamingRow: View {
-  @Environment(Store.self) private var store
-  var run: LiveRun
-
-  var body: some View {
-    HStack(alignment: .top, spacing: 10) {
-      AgentAvatar(agent: store.agent(run.agentId), size: 34, showStatus: false).frame(width: 34)
-      VStack(alignment: .leading, spacing: 5) {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-          Text(store.agent(run.agentId)?.name ?? "Agent").font(.subheadline.weight(.semibold))
-          Text("writing…").font(.caption2).foregroundStyle(.tertiary)
-        }
-        MarkdownText(run.text).opacity(0.7)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    .padding(.horizontal, 16)
-    .padding(.top, 10)
-    .padding(.bottom, 2)
-    .accessibilityElement(children: .combine)
-  }
-}
