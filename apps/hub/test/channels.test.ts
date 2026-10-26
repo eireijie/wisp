@@ -305,4 +305,19 @@ describe("editing and deleting messages", () => {
     expect((await api("PATCH", `/api/messages/${msg.id}`, { body: "new words" })).status).toBe(409);
     expect((await api("DELETE", `/api/messages/${msg.id}`)).status).toBe(409);
   });
+
+  it("counts only members who still exist, matching the member list", async () => {
+    const ch = (await api("POST", "/api/channels", { name: "headcount" })).data;
+    const gone = (await api("POST", "/api/agents", { handle: "gone", name: "Gone", harness: "custom" })).data;
+    await api("PUT", `/api/channels/${ch.id}/members/agent/${gone.id}`);
+    await api("PUT", `/api/channels/${ch.id}/members/agent/${atlas.id}`);
+    // rows left behind by older versions: a deleted agent and a removed person
+    hub.store.db.prepare("INSERT INTO channel_members (channel_id, member_kind, member_id) VALUES (?, 'agent', 'agt_deleted'), (?, 'user', 'usr_removed')").run(ch.id, ch.id);
+    const listed = async () => (await api<any[]>("GET", `/api/channels/${ch.id}/members`)).data;
+    expect((await channelNamed("headcount")).memberCount).toBe((await listed()).length);
+    await api("DELETE", `/api/agents/${gone.id}`);
+    const after = await listed();
+    expect((await channelNamed("headcount")).memberCount).toBe(after.length);
+    expect((hub.store.db.prepare("SELECT COUNT(*) AS n FROM channel_members WHERE channel_id = ? AND member_id = ?").get(ch.id, gone.id) as { n: number }).n).toBe(0);
+  });
 });
