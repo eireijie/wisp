@@ -241,4 +241,60 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertEqual(String(decoding: wav.prefix(4), as: UTF8.self), "RIFF")
     XCTAssertEqual(String(decoding: wav[8..<12], as: UTF8.self), "WAVE")
   }
+
+  // MARK: how the call looks
+
+  private func facts(_ state: CallState, offline: Bool = false, connected: Bool = true, showActivity: Bool = true) -> CallFacts {
+    CallFacts(state: state, offline: offline, connected: connected, showActivity: showActivity)
+  }
+
+  func testPhasesGetTheirOwnWords() {
+    XCTAssertEqual(CallFacts.phaseLabel(.connecting, paused: false), "Calling…")
+    XCTAssertEqual(CallFacts.phaseLabel(.hearing, paused: false), "Listening")
+    XCTAssertEqual(CallFacts.phaseLabel(.working, paused: false), "Working")
+    XCTAssertEqual(CallFacts.phaseLabel(.listening, paused: true), "Paused")
+    XCTAssertEqual(CallFacts.clock(26), "0:26")
+    XCTAssertEqual(CallFacts.clock(605), "10:05")
+  }
+
+  func testActivityLineShowsOnlyWhileWorkingAndWhenWanted() {
+    var state = CallState(); state.ready = true; state.startedAt = Date(); state.waiting = true; state.activity = "Reading main.ts"
+    XCTAssertEqual(facts(state).activity, "Reading main.ts")
+    XCTAssertEqual(facts(state, showActivity: false).activity, "")
+    state.activity = ""
+    XCTAssertEqual(facts(state).phase, .thinking)
+    XCTAssertEqual(facts(state).activity, "")
+  }
+
+  func testLostMicrophonePausedAndFailedCallsLookDifferent() {
+    var live = CallState(); live.ready = true; live.startedAt = Date()
+    var mic = live; mic.ready = false; mic.needsMic = true
+    XCTAssertTrue(facts(mic).micTrouble)
+    XCTAssertEqual(facts(mic).label, "Can't hear you yet")
+    var paused = live; paused.ready = false
+    XCTAssertTrue(facts(paused).paused)
+    XCTAssertEqual(facts(paused).label, "Paused")
+    var failed = CallState(); failed.error = "No key"
+    XCTAssertTrue(facts(failed).failed)
+    XCTAssertTrue(facts(live, connected: false).failed)
+    XCTAssertEqual(facts(live, connected: false).label, "Reconnecting…")
+    XCTAssertEqual(facts(CallState()).label, "Calling…")
+    XCTAssertTrue(facts(live, offline: true).offline)
+    XCTAssertFalse(facts(live, offline: true).failed)
+  }
+
+  func testCallPrefsFallBackToSensibleDefaults() {
+    let defaults = WispPreferences.standard
+    for key in [CallPrefs.speedKey, CallPrefs.languageKey, CallPrefs.activityKey] { defaults.removeObject(forKey: key) }
+    XCTAssertEqual(CallPrefs.speed, 1)
+    XCTAssertEqual(CallPrefs.language, "")
+    XCTAssertTrue(CallPrefs.showActivity)
+    defaults.set(7.0, forKey: CallPrefs.speedKey)
+    XCTAssertEqual(CallPrefs.speed, 1, "a speed the panel doesn't offer is ignored")
+    defaults.set(1.5, forKey: CallPrefs.speedKey)
+    XCTAssertEqual(CallPrefs.speed, 1.5)
+    XCTAssertEqual(CallPrefs.speedLabel(1.25), "1.25x")
+    XCTAssertEqual(CallPrefs.speedLabel(1), "1x")
+    defaults.removeObject(forKey: CallPrefs.speedKey)
+  }
 }

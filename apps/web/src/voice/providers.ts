@@ -99,7 +99,7 @@ class Microphone {
   }
 }
 
-export function createListener(chosen: VoiceSettings["listen"], callbacks: ListenCallbacks): VoiceListener {
+export function createListener(chosen: VoiceSettings["listen"], callbacks: ListenCallbacks, language: () => string = () => ""): VoiceListener {
   const engine = effectiveListen(chosen);
   const mic = new Microphone();
   let active = false, generation = 0;
@@ -190,7 +190,7 @@ export function createListener(chosen: VoiceSettings["listen"], callbacks: Liste
           if (!active || current !== generation) return;
           const Recognition = recognitionClass()!;
           const rec = recognition = new Recognition();
-          rec.continuous = true; rec.interimResults = true; rec.lang = navigator.language || "en-US";
+          rec.continuous = true; rec.interimResults = true; rec.lang = language() || navigator.language || "en-US";
           rec.onstart = () => {
             if (!active || current !== generation || rec !== recognition) return;
             finishStarting?.(); finishStarting = undefined;
@@ -230,7 +230,8 @@ export function createListener(chosen: VoiceSettings["listen"], callbacks: Liste
   };
 }
 
-export function createSpeaker(engine: VoiceSettings["speak"], voices: AgentSettings["voice"], seed: string): VoiceSpeaker {
+/** `speed` is read at every reply, so a change in the middle of a call is heard on the next one. */
+export function createSpeaker(engine: VoiceSettings["speak"], voices: AgentSettings["voice"], seed: string, speed: () => number = () => 1): VoiceSpeaker {
   if (engine === "device") deviceVoices(); // Trigger asynchronous OS voice discovery before the first reply.
   let cancelCurrent = () => {};
   return {
@@ -245,7 +246,7 @@ export function createSpeaker(engine: VoiceSettings["speak"], voices: AgentSetti
           const local = list.filter((v) => v.lang.split("-")[0] === (navigator.language || "en").split("-")[0]);
           const candidates = local.length ? local : list;
           utterance.voice = list.find((v) => v.voiceURI === voices?.device) ?? candidates[voiceIndex(seed, candidates.length)] ?? null;
-          utterance.rate = 1.03;
+          utterance.rate = 1.03 * speed();
           let interval: ReturnType<typeof setInterval> | undefined, finished = false;
           const end = (error?: Error) => {
             if (finished) return;
@@ -274,7 +275,7 @@ export function createSpeaker(engine: VoiceSettings["speak"], voices: AgentSetti
         const res = await voiceRequest({ kind: "speak", provider: engine, text, voice }, controller.signal);
         const buffer = await context.decodeAudioData(await res.arrayBuffer());
         if (controller.signal.aborted) return;
-        source = context.createBufferSource(); source.buffer = buffer;
+        source = context.createBufferSource(); source.buffer = buffer; source.playbackRate.value = speed();
         const analyser = context.createAnalyser(); analyser.fftSize = 512;
         source.connect(analyser); analyser.connect(context.destination);
         const data = new Float32Array(analyser.fftSize);

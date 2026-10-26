@@ -1,0 +1,19 @@
+{
+  "name": "warren-runtime",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "apps/hub",
+    "apps/node",
+    "packages/*"
+  ],
+  "dependencies": {
+    "tsx": "^4.19.0",
+    "better-sqlite3": "^13.0.3"
+  },
+  "overrides": {
+    "better-sqlite3": "^13.0.3"
+  }
+}

@@ -1,0 +1,200 @@
+import type { Agent, Approval, Channel, ComputerAction, Message, Routine, Followup } from "@warren/core";
+
+export interface WarrenClientOptions {
+  url: string; // hub base URL, e.g. http://localhost:4747
+  token: string; // agent token, or node token + agentId
+  agentId?: string;
+}
+
+export class WarrenError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+/** Minimal typed client for the Warren hub API. Used by warren-mcp, the node daemon, and custom agents. */
+export class WarrenClient {
+  readonly url: string;
+  constructor(private opts: WarrenClientOptions) {
+    this.url = opts.url.replace(/\/+$/, "");
+  }
+
+  async request<T = any>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+    const res = await fetch(this.url + path, {
+      method,
+      headers: {
+        authorization: `Bearer ${this.opts.token}`,
+        ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}),
+        ...(body !== undefined && !(body instanceof Uint8Array) ? { "content-type": "application/json" } : {}),
+        ...headers,
+      },
+      body: body === undefined ? undefined : body instanceof Uint8Array ? (body as unknown as BodyInit) : JSON.stringify(body),
+    });
+    const text = await res.text();
+    const data = text ? safeJson(text) : null;
+    if (!res.ok) throw new WarrenError((data as { error?: string })?.error ?? `${res.status} ${res.statusText}`, res.status);
+    return data as T;
+  }
+
+  me() {
+    return this.request<{ kind: "user" | "agent"; agent?: Agent; workspace: { id: string; name: string } }>("GET", "/api/me");
+  }
+  agents() {
+    return this.request<Agent[]>("GET", "/api/agents");
+  }
+  channels() {
+    return this.request<Channel[]>("GET", "/api/channels");
+  }
+  async channelByName(name: string) {
+    const n = name.replace(/^#/, "");
+    const all = await this.channels();
+    return all.find((c) => c.name === n || c.id === n);
+  }
+  messages(channelId: string, opts: { thread?: string; limit?: number } = {}) {
+    const q = new URLSearchParams();
+    if (opts.thread) q.set("thread", opts.thread);
+    if (opts.limit) q.set("limit", String(opts.limit));
+    return this.request<{ messages: Message[] }>("GET", `/api/channels/${channelId}/messages?${q}`);
+  }
+  send(channelId: string, body: string, opts: { threadId?: string; fileIds?: string[] } = {}) {
+    return this.request<Message>("POST", `/api/channels/${channelId}/messages`, { body, threadId: opts.threadId, fileIds: opts.fileIds ?? [] });
+  }
+  react(messageId: string, emoji: string, on?: boolean) {
+    return this.request("POST", `/api/messages/${messageId}/reactions`, { emoji, on });
+  }
+  delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[]; parentTaskId?: string } = {}) {
+    return this.request("POST", "/api/tasks", { to, title, brief, ...opts });
+  }
+  updateTask(id: string, status: "open" | "in_progress" | "done" | "failed", result?: string) {
+    return this.request("PATCH", `/api/tasks/${id}`, { status, result });
+  }
+  tasks(filter: { agent?: string; status?: string } = {}) {
+    return this.request("GET", `/api/tasks?${new URLSearchParams(filter as Record<string, string>)}`);
+  }
+  notes() {
+    return this.request<{ path: string; title: string; tags: string[]; links: string[] }[]>("GET", "/api/vault/notes");
+  }
+  readNote(path: string) {
+    return this.request<{ path: string; content: string; backlinks: string[] }>("GET", `/api/vault/note?path=${encodeURIComponent(path)}`);
+  }
+  writeNote(path: string, content: string, message?: string) {
+    return this.request("PUT", "/api/vault/note", { path, content, message });
+  }
+  appendNote(path: string, text: string) {
+    return this.request("POST", "/api/vault/append", { path, text });
+  }
+  search(q: string, limit = 10) {
+    return this.request<{ path: string; title: string; snippet: string }[]>("GET", `/api/vault/search?q=${encodeURIComponent(q)}&limit=${limit}`);
+  }
+  deleteNote(path: string) {
+    return this.request("DELETE", `/api/vault/note?path=${encodeURIComponent(path)}`);
+  }
+  /** Save something about a person (default: who you're working with). */
+  remember(m: { kind: "preference" | "plan" | "did" | "detail"; text?: string; about?: string; title?: string; status?: "active" | "done" | "dropped"; due?: string | null; pinned?: boolean; replaces?: string; force?: boolean }) {
+    return this.request<{ saved: boolean; path?: string; similar?: { path: string; text: string }[]; person: { id: string; name: string } }>("POST", "/api/memory/remember", m);
+  }
+  /** What this agent would start a run with: who it works with, its teams, pinned and related notes. */
+  memoryContext(q = "", about?: string) {
+    return this.request<{ text: string }>("GET", `/api/memory/context?${new URLSearchParams({ q, ...(about ? { about } : {}) })}`);
+  }
+  /** Start a discussion between agents; it runs on its own and ends with a decision note. */
+  startDiscussion(d: { topic: string; goal?: string; participants?: string[]; moderator?: string; rounds?: number; team?: string; channelId?: string }) {
+    return this.request<{ id: string; threadId: string; channelId: string; rounds: number }>("POST", "/api/discussions", d);
+  }
+  /** Merge a task's branch into its team's base branch. */
+  mergeTask(taskId: string) {
+    return this.request<{ ok: boolean; output: string }>("POST", `/api/tasks/${taskId}/merge`);
+  }
+  teams() {
+    return this.request<{ id: string; name: string; description: string; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
+  }
+  /** Give an agent ("@nova"), a team, or "all agents" read access to a note or folder you can edit. */
+  shareNote(path: string, withWho: string) {
+    return this.request<{ id: string; path: string }>("POST", "/api/access/share", { path, with: withWho });
+  }
+  /** The computer this agent uses, or null when it's headless. */
+  async myComputer(): Promise<{ id: string; name: string; kind: string; online: boolean; status: string; statusText: string } | null> {
+    try {
+      return await this.request("GET", "/api/computers/mine");
+    } catch (err) {
+      if (err instanceof WarrenError && err.status === 404) return null;
+      throw err;
+    }
+  }
+  /** Do something on this agent's computer (screenshots come back as base64 JPEG). */
+  computer<T = any>(action: ComputerAction, device?: string) {
+    return this.request<T>("POST", "/api/computers/mine/act", { action, ...(device ? { computer: device } : {}) });
+  }
+  /** Devices this agent could ask to borrow, and whether each can be asked right now. */
+  borrowableDevices() {
+    return this.request<{ name: string; owner: string; available: boolean; note: string }[]>("GET", "/api/computers/borrowable");
+  }
+  /** Ask a device's owner to let this agent use its screen; the answer arrives as a message that wakes the agent. */
+  requestDevice(device: string, reason: string) {
+    return this.request<{ ok: boolean; approvalId: string; deviceName: string }>("POST", "/api/computers/loans", { device, reason });
+  }
+  /** Hand a borrowed device back. */
+  returnDevice(device?: string) {
+    return this.request<{ ok: boolean; deviceName: string }>("POST", "/api/computers/loans/return", { device });
+  }
+  /** Ask a person to do something on this agent's computer (sign in, enter a code). */
+  computerHelp(request: string) {
+    return this.request<{ ok: boolean; messageId: string }>("POST", "/api/computers/mine/help", { request });
+  }
+  /** Ask a person's OK before doing something; the answer arrives as a message that wakes the agent. */
+  requestApproval(summary: string, details = "") {
+    return this.request<Approval>("POST", "/api/approvals", { summary, details });
+  }
+  /** Write to the person this agent works for, in their DM; it reaches their phone by push. */
+  messagePerson(text: string, fileIds: string[] = []) {
+    return this.request<{ messageId: string; channelId: string }>("POST", "/api/message-person", { text, fileIds });
+  }
+  /** When this agent's next background check should be. */
+  nextCheck(minutes: number, reason = "") {
+    return this.request<{ nextAt: string; minutes: number; on: boolean }>("POST", "/api/background/next", { minutes, reason });
+  }
+  followups() {
+    return this.request<Followup[]>("GET", "/api/followups");
+  }
+  setFollowup(f: { at?: string; inMinutes?: number; note: string }) {
+    return this.request<Followup & { timezone: string }>("POST", "/api/followups", f);
+  }
+  cancelFollowup(followupId: string) {
+    return this.request<{ ok: boolean }>("DELETE", `/api/followups/${followupId}`);
+  }
+  routines() {
+    return this.request<Routine[]>("GET", "/api/routines");
+  }
+  saveRoutine(r: { routineId?: string; name?: string; steps: string; schedule?: string | null; timezone?: string }) {
+    return this.request<Routine>("POST", "/api/routines/save", r);
+  }
+  runRoutine(routineId: string) {
+    return this.request<{ ok: boolean }>("POST", `/api/routines/${routineId}/run`);
+  }
+  uploadFile(name: string, data: Uint8Array, mime = "application/octet-stream", channelId?: string) {
+    return this.request<{ id: string; name: string; size: number }>("POST", "/api/files", data, {
+      "content-type": "application/octet-stream",
+      "x-filename": encodeURIComponent(name),
+      "x-mime-type": mime,
+      ...(channelId ? { "x-channel-id": channelId } : {}),
+    });
+  }
+  async downloadFile(id: string): Promise<{ data: Uint8Array; name: string; mime: string }> {
+    const res = await fetch(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}) } });
+    if (!res.ok) throw new WarrenError(`download failed: ${res.status}`, res.status);
+    const cd = res.headers.get("content-disposition") ?? "";
+    const name = decodeURIComponent(cd.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? id);
+    return { data: new Uint8Array(await res.arrayBuffer()), name, mime: res.headers.get("content-type") ?? "application/octet-stream" };
+  }
+}
+
+function safeJson(t: string) {
+  try {
+    return JSON.parse(t);
+  } catch {
+    return { error: t };
+  }
+}

@@ -47,6 +47,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   const names = useNames();
   const voice = useFeature("voice");
   const [calling, setCalling] = useState(!!route.call);
+  const [callSlot, setCallSlot] = useState<HTMLElement | null>(null);
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
 
@@ -127,7 +128,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
                 </button>
               </span>
             )}
-            {dmAgent && voice && (
+            {dmAgent && voice && !calling && (
               <span className="max-md:hidden">
                 <button onClick={() => setCalling(true)} className="circle" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}>
                   <Phone size={18} />
@@ -149,10 +150,11 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             )}
           </div>
         </header>
+        <div ref={setCallSlot} />
         <SoloAgent.Provider value={dmAgent?.id ?? null}>
           <MessageList messageId={!route.threadId ? route.messageId : undefined} channel={channel} readMark={readMark?.channelId === channel.id ? readMark.at : null} onAddAgent={() => setSettings("team")} onMembers={() => openSide({ kind: "info", tab: "members" })} />
         </SoloAgent.Provider>
-        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Ask ${dmAgent.name}` : `Message ${channel.name}`} onDetails={openAgent} onCall={dmAgent && voice ? () => setCalling(true) : undefined} />}
+        {channel.archivedAt ? <ArchivedBar channel={channel} /> : <Composer channelId={channel.id} agentId={dmAgent?.id} placeholder={dmAgent ? `Ask ${dmAgent.name}` : `Message ${channel.name}`} onDetails={openAgent} onCall={dmAgent && voice && !calling ? () => setCalling(true) : undefined} />}
       </div>
       {route.threadId && <ThreadPanel key={route.threadId} messageId={route.messageId} channelId={channel.id} rootId={route.threadId} agentId={dmAgent?.id} />}
       {sideAgent && side?.kind === "agent" && (
@@ -167,7 +169,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
         />
       )}
       {infoOpen && side?.kind === "info" && <TeamInfo channel={channel} tab={side.tab} onTab={(tab) => setSide({ kind: "info", tab })} onClose={() => setSide(null)} onSettings={setSettings} />}
-      {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
+      {calling && dmAgent && <CallScreen key={`${channel.id}:${dmAgent.id}`} agent={dmAgent} channelId={channel.id} barSlot={callSlot} onClose={() => { setCalling(false); if (route.call) go({ view: "chat", channelId: channel.id, threadId: null }); }} />}
       {settings && <ChannelSettings key={settings} channel={channel} tab={settings} onClose={() => setSettings(null)} />}
     </div>
   );
