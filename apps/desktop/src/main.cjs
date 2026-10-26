@@ -1,7 +1,7 @@
 // Wisp desktop: the workspace in its own window, plus what only an app on this computer can do:
 // run a hub here, connect this computer as a device for agents (one click, no token to copy), and
 // keep both going from the menu bar after the window closes.
-const { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, shell, Notification } = require("electron");
+const { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, nativeTheme, shell, Notification } = require("electron");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -460,7 +460,7 @@ function showCodeWindow(change) {
   codeSaved = false;
   codeWin = new BrowserWindow({
     width: 420,
-    height: 410,
+    height: 540,
     useContentSize: true,
     resizable: false,
     minimizable: false,
@@ -469,7 +469,7 @@ function showCodeWindow(change) {
     title: change ? "Change Screen Code" : "Screen Code",
     icon: ICON,
     show: false,
-    backgroundColor: "#f7f7f7",
+    backgroundColor: nativeTheme?.shouldUseDarkColors ? "#18181b" : "#ffffff",
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true, spellcheck: false },
   });
   codeWin.setMenuBarVisibility(false);
@@ -552,7 +552,7 @@ function trayMenu() {
     buddy.menu(),
     { type: "separator" },
     isDevice || deviceWaiting
-      ? { label: deviceWaiting ? "Don't Make This Computer a Device" : "Disconnect This Computer", enabled: deviceBy !== "service", click: () => stopDevice() }
+      ? { label: deviceWaiting ? "Don't Make This Computer a Device" : "Disconnect This Computer for Agents…", enabled: deviceBy !== "service", click: () => stopDevice() }
       : { label: "Connect This Computer for Agents…", enabled: !!hubOrigin, click: () => startDevice() },
     { label: "Let Me Use This Screen from Wisp", type: "checkbox", visible: isDevice, checked: !!n.shareScreen && !n.noScreen, click: (i) => setDeviceFlag("shareScreen", i.checked) },
     { label: n.screenCode ? "Change Screen Code…" : "Pick a Screen Code…", visible: isDevice && !!n.shareScreen && !n.noScreen, click: () => showCodeWindow(!!n.screenCode) },
@@ -590,9 +590,13 @@ function appMenu() {
       label: "Go",
       submenu: [
         { label: "Inbox", accelerator: "CmdOrCtrl+1", click: go("dashboard") },
-        { label: "Computers", accelerator: "CmdOrCtrl+2", click: go("computers") },
-        { label: "Memory", accelerator: "CmdOrCtrl+3", click: go("vault") },
-        { label: "Devices", accelerator: "CmdOrCtrl+4", click: go("nodes") },
+        { label: "Chats", accelerator: "CmdOrCtrl+2", click: go("chats") },
+        { label: "Agents", accelerator: "CmdOrCtrl+3", click: go("agents") },
+        { label: "Computers", accelerator: "CmdOrCtrl+4", click: go("computers") },
+        { type: "separator" },
+        { label: "Memory", accelerator: "CmdOrCtrl+5", click: go("vault") },
+        { label: "Devices", accelerator: "CmdOrCtrl+6", click: go("nodes") },
+        { type: "separator" },
         { label: "Back", accelerator: "CmdOrCtrl+[", click: () => win?.webContents.navigationHistory.goBack() },
         { label: "Forward", accelerator: "CmdOrCtrl+]", click: () => win?.webContents.navigationHistory.goForward() },
       ],

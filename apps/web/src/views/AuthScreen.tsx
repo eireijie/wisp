@@ -1,8 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Check } from "lucide-react";
 import { api } from "../api.ts";
-import { useAppearance } from "../theme.ts";
-import { Button, Field, GhostMark, Input } from "../components/ui.tsx";
+import { AuthButton, AuthError, AuthField, AuthHero, AuthInput, AuthLink, AuthPage } from "../components/auth.tsx";
 
 /** An invite link: #/join/<code>. */
 const inviteCode = () => location.hash.match(/^#\/join\/([\w-]+)/)?.[1] ?? null;
@@ -10,7 +9,6 @@ const inviteCode = () => location.hash.match(/^#\/join\/([\w-]+)/)?.[1] ?? null;
 const linkedSetupCode = () => location.hash.match(/^#\/setup\/([\w-]+)/)?.[1] ?? "";
 
 export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) {
-  const { resolvedMode, toggleMode } = useAppearance();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [needsCode, setNeedsCode] = useState(false);
   const [linkedCode] = useState(linkedSetupCode);
@@ -19,6 +17,12 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState(inviteCode);
   const [invite, setInvite] = useState<{ workspace: string; role: string } | null>(null);
+  /** the invite didn't check out (expired or revoked) */
+  const [inviteBad, setInviteBad] = useState(false);
+  /** asking for an invite link to paste */
+  const [pasting, setPasting] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     api<{ needsSetup: boolean; needsCode?: boolean }>("GET", "/api/setup")
@@ -27,10 +31,12 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
         setNeedsCode(!!r.needsCode);
       })
       .catch(() => setError("Can't reach your Wisp."));
-  }, []);
+  }, [attempt]);
   useEffect(() => {
     if (!code) return;
-    api<{ workspace: string; role: string }>("GET", `/api/invites/check?code=${encodeURIComponent(code)}`).then(setInvite, (e) => setError((e as Error).message));
+    setInvite(null);
+    setInviteBad(false);
+    api<{ workspace: string; role: string }>("GET", `/api/invites/check?code=${encodeURIComponent(code)}`).then(setInvite, () => setInviteBad(true));
   }, [code]);
   const joining = !!code && !needsSetup;
 
@@ -61,71 +67,170 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
     }
   }
 
-  return (
-    <div className="relative min-h-full bg-panel flex items-center px-6 sm:px-8 py-10 safe-top">
-      <button onClick={toggleMode} className="absolute top-4 right-4 p-2 rounded-lg text-muted hover:text-ink hover:bg-hover" aria-label={resolvedMode === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
-        {resolvedMode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-      <form onSubmit={submit} className="w-full max-w-sm space-y-6">
-        <div className="flex items-center gap-1.5 font-semibold">
-          <GhostMark size={18} className="text-accent-text" /> Wisp
+  const leaveInvite = () => {
+    location.hash = "#/";
+    setCode(null);
+    setInviteBad(false);
+    setPasting(false);
+    setError(null);
+  };
+  const usePasted = () => {
+    // a link (https://…/#/join/<code>) or just the code itself
+    const text = pasted.trim();
+    const next = text.match(/\/join\/([\w-]+)/)?.[1] ?? (/^[\w-]+$/.test(text) ? text : null);
+    if (!next) return setError("That isn't a Wisp invite link.");
+    setError(null);
+    setPasting(false);
+    setPasted("");
+    location.hash = `#/join/${next}`;
+    setCode(next);
+  };
+
+  // can't reach the Wisp at all
+  if (needsSetup === null && error) {
+    return (
+      <AuthPage>
+        <AuthHero title="Can't reach your Wisp">Check that it's running and that you're online.</AuthHero>
+        <div className="mt-9 flex flex-col items-center gap-1.5">
+          <AuthButton
+            onClick={() => {
+              setError(null);
+              setAttempt((n) => n + 1);
+            }}
+          >
+            Try again
+          </AuthButton>
         </div>
-        <div className="space-y-1.5">
-          <h1 className="text-xl font-semibold">{needsSetup ? "Set up Wisp" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Wisp"}</h1>
-          <p className="text-sm text-muted">
-            {needsSetup ? "You'll be the owner of this organization." : joining ? (invite ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}. Make your account.` : "Checking your invite…") : "Where people and agents work together."}
-          </p>
+      </AuthPage>
+    );
+  }
+  if (needsSetup === null) {
+    return (
+      <AuthPage>
+        <AuthHero title="Connecting…" />
+      </AuthPage>
+    );
+  }
+  // an invite that doesn't work
+  if (!needsSetup && code && inviteBad) {
+    return (
+      <AuthPage>
+        <AuthHero title="This invite didn't work">It may have expired or been revoked. Ask the person who invited you for a new link.</AuthHero>
+        <div className="mt-9 flex flex-col items-center gap-1.5">
+          <AuthButton
+            onClick={() => {
+              setInviteBad(false);
+              setCode(null);
+              setPasting(true);
+            }}
+          >
+            Try another link
+          </AuthButton>
+          <AuthLink onClick={leaveInvite}>Sign in instead</AuthLink>
         </div>
-        {needsSetup === null && !error ? (
-          <p className="text-sm text-muted">Connecting…</p>
-        ) : (
-          <div className="space-y-4">
-            {joining && (
-              <Field label="Your name">
-                <Input value={form.name} onChange={set("name")} autoComplete="name" required />
-              </Field>
-            )}
-            {needsSetup && (
-              <>
-                <Field label="Your name">
-                  <Input value={form.name} onChange={set("name")} autoComplete="name" required />
-                </Field>
-                <Field label="Your Wisp">
-                  <Input value={form.workspaceName} onChange={set("workspaceName")} placeholder={form.name.trim() ? `${form.name.trim()}'s Wisp` : "Your Wisp"} />
-                </Field>
-                {needsCode && !linkedCode && (
-                  <Field label="Setup code" hint="On the computer Wisp runs on, run wisp setup-code.">
-                    <Input value={form.setupCode} onChange={set("setupCode")} placeholder="abcd-efgh-jkmn" autoComplete="off" autoCapitalize="none" spellCheck={false} required />
-                  </Field>
-                )}
-              </>
-            )}
-            <Field label="Email">
-              <Input type="email" value={form.email} onChange={set("email")} autoComplete="email" required />
-            </Field>
-            <Field label="Password" hint={needsSetup || joining ? "At least 8 characters." : undefined}>
-              <Input type="password" value={form.password} onChange={set("password")} autoComplete={needsSetup || joining ? "new-password" : "current-password"} minLength={needsSetup || joining ? 8 : undefined} required />
-            </Field>
-            {error && <p className="text-sm text-bad">{error}</p>}
-            <Button variant="primary" className="w-full h-10" disabled={busy || (joining && !invite)}>
-              {needsSetup ? "Start Wisp" : joining ? "Join" : "Sign in"}
-            </Button>
-            {joining && (
-              <button
-                type="button"
-                className="w-full text-sm text-muted hover:text-ink"
-                onClick={() => {
-                  location.hash = "#/";
-                  setCode(null);
-                  setError(null);
-                }}
-              >
-                I already have an account
-              </button>
-            )}
+      </AuthPage>
+    );
+  }
+  // a place to paste an invite link
+  if (!needsSetup && !code && pasting) {
+    return (
+      <AuthPage>
+        <AuthHero title="Join with an invite">Paste the invite link you were sent.</AuthHero>
+        <form
+          className="mt-9 flex flex-col gap-3.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            usePasted();
+          }}
+        >
+          <AuthField label="Invite link">
+            <AuthInput value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="https://…/#/join/…" autoComplete="off" autoCapitalize="none" spellCheck={false} aria-label="Invite link" autoFocus required />
+          </AuthField>
+          <AuthError>{error}</AuthError>
+          <div className="mt-3 flex flex-col items-center gap-1.5">
+            <AuthButton disabled={!pasted.trim()}>Continue</AuthButton>
+            <AuthLink
+              onClick={() => {
+                setPasting(false);
+                setError(null);
+              }}
+            >
+              Sign in instead
+            </AuthLink>
           </div>
+        </form>
+      </AuthPage>
+    );
+  }
+
+  return (
+    <AuthPage>
+      <form onSubmit={submit} className="flex flex-col">
+        <AuthHero title={needsSetup ? "Set up Wisp" : joining ? `Join ${invite?.workspace ?? "the workspace"}` : "Sign in to Wisp"}>
+          {needsSetup
+            ? "You'll be the owner of this organization."
+            : joining
+              ? invite
+                ? `You're invited as ${invite.role === "owner" ? "an owner" : `a ${invite.role}`}.`
+                : "Checking your invite…"
+              : "Where people and agents work together."}
+        </AuthHero>
+        {joining && invite && (
+          <p className="mt-6 flex items-center gap-3 rounded-[20px] bg-card px-4 py-3 text-[15px]">
+            <Check size={18} className="text-ok shrink-0" aria-hidden />
+            Invite checked. It's good to use.
+          </p>
         )}
+        <div className="mt-8 flex flex-col gap-3.5">
+          {(joining || needsSetup) && (
+            <AuthField label="Your name">
+              <AuthInput value={form.name} onChange={set("name")} autoComplete="name" placeholder="Your name" aria-label="Your name" required />
+            </AuthField>
+          )}
+          {needsSetup && (
+            <>
+              <AuthField label="Your Wisp">
+                <AuthInput value={form.workspaceName} onChange={set("workspaceName")} placeholder={form.name.trim() ? `${form.name.trim()}'s Wisp` : "Your Wisp"} aria-label="Your Wisp" />
+              </AuthField>
+              {needsCode && !linkedCode && (
+                <AuthField label="Setup code" hint="On the computer Wisp runs on, run wisp setup-code.">
+                  <AuthInput value={form.setupCode} onChange={set("setupCode")} placeholder="abcd-efgh-jkmn" autoComplete="off" autoCapitalize="none" spellCheck={false} aria-label="Setup code" required />
+                </AuthField>
+              )}
+            </>
+          )}
+          <AuthField label="Email">
+            <AuthInput type="email" value={form.email} onChange={set("email")} autoComplete="email" placeholder="you@example.com" aria-label="Email" required />
+          </AuthField>
+          <AuthField label="Password" hint={needsSetup || joining ? "At least 8 characters." : undefined}>
+            <AuthInput
+              type="password"
+              value={form.password}
+              onChange={set("password")}
+              autoComplete={needsSetup || joining ? "new-password" : "current-password"}
+              minLength={needsSetup || joining ? 8 : undefined}
+              placeholder={needsSetup || joining ? "At least 8 characters" : "Password"}
+              aria-label="Password"
+              required
+            />
+          </AuthField>
+          <AuthError>{error}</AuthError>
+        </div>
+        <div className="mt-8 flex flex-col items-center gap-1.5">
+          <AuthButton disabled={busy || (joining && !invite)}>{needsSetup ? "Start Wisp" : joining ? (invite ? `Join ${invite.workspace}` : "Join") : "Sign in"}</AuthButton>
+          {joining && <AuthLink onClick={leaveInvite}>I already have an account</AuthLink>}
+          {!needsSetup && !joining && (
+            <AuthLink
+              onClick={() => {
+                setError(null);
+                setPasting(true);
+              }}
+            >
+              Have an invite link? Join
+            </AuthLink>
+          )}
+        </div>
       </form>
-    </div>
+    </AuthPage>
   );
 }
