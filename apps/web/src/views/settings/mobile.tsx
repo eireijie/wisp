@@ -154,7 +154,7 @@ export function PhonePairing({ autoStart = false, compact = false }: { autoStart
             ) : state === "claimed" ? (
               <div className="text-center px-3" aria-live="polite">
                 <div className="text-xs text-muted mb-2">Code on {phone}</div>
-                <div className="font-mono text-4xl font-semibold tracking-[0.2em] tabular-nums">{pairing!.code}</div>
+                <div className="font-mono text-4xl font-medium tracking-[0.2em] tabular-nums">{pairing!.code}</div>
               </div>
             ) : state === "approved" ? (
               <div className="text-center px-4" aria-live="polite">

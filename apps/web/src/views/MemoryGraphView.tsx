@@ -159,7 +159,7 @@ export function MemoryGraphView({
             <div className="flex items-start gap-2">
               <span className="mt-1.5 size-2.5 rounded-full shrink-0" style={{ background: kindColor(picked.kind) }} />
               <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{picked.title}</div>
+                <div className="font-medium truncate">{picked.title}</div>
                 <div className="text-xs text-muted truncate">
                   {picked.path ? where(picked.path) : `${kindLabel("ghost")}: other notes link to it`}
                   {picked.type ? ` · ${picked.type}` : ""}

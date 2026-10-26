@@ -101,7 +101,7 @@ export function TeamInfo({ channel, tab, onTab, onClose, onSettings }: { channel
       <header className="h-[4.5rem] shrink-0 px-4 flex items-center gap-3 border-b border-line safe-top">
         <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={36} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[16px] font-semibold leading-tight">{channel.name}</div>
+          <div className="truncate text-[15px] font-medium leading-tight">{channel.name}</div>
           <div className="truncate text-[13px] text-muted">{teamCount(channel, members)}</div>
         </div>
         <button onClick={onClose} className="circle circle-sm" aria-label="Close">
@@ -228,7 +228,7 @@ function About({ channel, members, canManage, onSettings, onDialog }: { channel:
             }}
           >
             <input autoFocus value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={250} aria-label="Topic" placeholder="What's this team for?" className="h-10 min-w-0 flex-1 rounded-xl border border-control-line bg-control px-3 text-sm outline-none focus:border-ring" />
-            <button disabled={busy} className="h-10 rounded-full bg-accent px-4 text-sm font-semibold text-accent-ink disabled:opacity-50">
+            <button disabled={busy} className="h-10 rounded-full bg-accent px-4 text-sm font-medium text-accent-ink disabled:opacity-50">
               Save
             </button>
             <button type="button" onClick={() => (setTopic(channel.topic), setEditing(false))} className="h-10 rounded-full px-3 text-sm text-muted">
@@ -333,7 +333,7 @@ function AnswersDialog({ channel, onClose }: { channel: ChannelInfo; onClose: ()
       <p className="mb-3 text-sm text-muted">The agent that answers a message nobody @mentions. It joins the team to do it.</p>
       <AnswerSelect agents={agents} value={value} onChange={setValue} />
       <div className="mt-4 flex justify-end gap-2">
-        <button onClick={onClose} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-semibold">
+        <button onClick={onClose} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-medium">
           Cancel
         </button>
         <button
@@ -349,7 +349,7 @@ function AnswersDialog({ channel, onClose }: { channel: ChannelInfo; onClose: ()
               setBusy(false);
             }
           }}
-          className="h-11 rounded-full bg-accent px-5 text-[15px] font-semibold text-accent-ink disabled:opacity-50"
+          className="h-11 rounded-full bg-accent px-5 text-[15px] font-medium text-accent-ink disabled:opacity-50"
         >
           Save
         </button>
@@ -383,8 +383,8 @@ function ContextAccessDialog({ channel, members, onClose }: { channel: ChannelIn
       <SectionTitle>How full is the conversation</SectionTitle>
       <div className="rounded-3xl bg-card p-4">
         <div className="flex items-baseline justify-between">
-          <span className="text-[15px] font-semibold">Context window</span>
-          <span className="text-[15px] font-semibold tabular-nums" style={{ color }}>
+          <span className="text-[15px] font-medium">Context window</span>
+          <span className="text-[15px] font-medium tabular-nums" style={{ color }}>
             {pct === null ? "–" : `${pct < 1 ? "<1" : Math.round(pct)}%`}
           </span>
         </div>
@@ -444,11 +444,11 @@ function Confirm({ title, body, action, danger, onClose, onConfirm }: { title: s
               setBusy(false);
             }
           }}
-          className={cx("h-12 rounded-full px-5 text-[15px] font-semibold disabled:opacity-50", danger ? "bg-bad text-white" : "bg-accent text-accent-ink")}
+          className={cx("h-12 rounded-full px-5 text-[15px] font-medium disabled:opacity-50", danger ? "bg-bad text-white" : "bg-accent text-accent-ink")}
         >
           {action}
         </button>
-        <button onClick={onClose} className="h-12 rounded-full border border-control-line bg-control px-5 text-[15px] font-semibold">
+        <button onClick={onClose} className="h-12 rounded-full border border-control-line bg-control px-5 text-[15px] font-medium">
           Cancel
         </button>
       </div>

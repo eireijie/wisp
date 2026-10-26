@@ -444,7 +444,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
   const shelf = (title: string, to: MarketSection, children: ReactNode) => (
     <section aria-label={title} className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm text-faint md:text-[17px] md:font-semibold md:text-ink">{title}</h2>
+        <h2 className="text-sm text-faint md:text-[14px] md:font-semibold md:text-ink">{title}</h2>
         <a href={href({ view: "marketplace", section: to })} className="text-sm text-muted hover:text-ink">
           View all
         </a>
@@ -680,7 +680,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           </Circle>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[19px] font-semibold md:text-[22px] md:font-bold">Connect apps</h1>
+          <h1 className="t-title truncate">Connect apps</h1>
           <p className="hidden text-sm text-faint md:block">{connectedCount} connected</p>
         </div>
         <span className="text-sm text-faint md:hidden">{connectedCount} connected</span>
@@ -692,7 +692,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
             <ChevronLeft size={22} />
           </Circle>
         )}
-        <h1 className="min-w-0 flex-1 truncate text-[19px] font-semibold">Marketplace</h1>
+        <h1 className="min-w-0 flex-1 truncate t-title">Marketplace</h1>
         <Sec onClick={() => (location.hash = href({ view: "marketplace", section: "installed" }))}>{connectedCount} connected</Sec>
       </div>
     );
@@ -730,9 +730,9 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
     <div className="flex min-h-0 flex-1">
       {!embedded && (
         <aside className="hidden w-60 shrink-0 flex-col gap-1 overflow-y-auto border-r border-line px-3 pb-5 pt-7 pl-5 md:flex" aria-label="Marketplace">
-          <h2 className="px-3 pb-3.5 text-[22px] font-bold">Marketplace</h2>
+          <h2 className="t-title px-3 pb-3.5">Marketplace</h2>
           {nav.map((n) => (
-            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("flex h-11 items-center gap-3 rounded-2xl px-3 text-[15px]", section === n.id ? "bg-side-active font-semibold text-ink" : "font-medium text-muted hover:bg-side-hover hover:text-ink")}>
+            <a key={n.id} href={href({ view: "marketplace", section: n.id === "all" ? null : n.id })} aria-current={section === n.id ? "page" : undefined} className={cx("flex h-11 items-center gap-3 rounded-2xl px-3 text-[15px]", section === n.id ? "bg-side-active font-medium text-ink" : "font-medium text-muted hover:bg-side-hover hover:text-ink")}>
               <span aria-hidden className="shrink-0">{n.icon}</span>
               <span className="flex-1">{n.label}</span>
               {!!n.count && <span className="tabular-nums text-sm text-faint">{n.count}</span>}
@@ -853,7 +853,7 @@ function Entry({ tile, title, badge, sub, action, onOpen }: { tile: ReactNode; t
         <span className="max-md:hidden">{tile}</span>
         <span className="md:hidden">{cloneSize(tile)}</span>
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-[17px] font-medium md:text-base">{title}</span>
+          <span className="truncate text-[15px] font-medium md:text-base">{title}</span>
           <span className="hidden md:flex">{badge}</span>
           <span className="truncate text-sm text-faint md:hidden">{sub}</span>
         </span>
@@ -865,7 +865,7 @@ function Entry({ tile, title, badge, sub, action, onOpen }: { tile: ReactNode; t
 }
 /** The phone row's tile is a little bigger. */
 function cloneSize(tile: ReactNode): ReactNode {
-  return <span className="block [&>span]:!size-[50px] [&>span]:!rounded-[15px]">{tile}</span>;
+  return <span className="block [&>span]:!size-[50px] [&>span]:!rounded-xl">{tile}</span>;
 }
 
 function RegistryError({ error, onRetry }: { error: string; onRetry: () => void }) {

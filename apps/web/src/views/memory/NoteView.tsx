@@ -326,7 +326,7 @@ export function NoteView({
           {viewing && mode !== "authors" && (
             <div className="mt-4">
               <div className="rounded-2xl bg-info/15 px-4 py-2.5 text-sm">Viewing the version from {new Date(viewing.commit.date).toLocaleString()} by {whoIs(viewing.commit.author, agents, members).name}</div>
-              <div onClick={onClick} className="prose-w mt-3 text-[16px] leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+              <div onClick={onClick} className="prose-w mt-3 text-[15px] leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
             </div>
           )}
         </div>
@@ -368,7 +368,7 @@ export function NoteView({
                 <ChevronRight size={13} className="text-faint shrink-0" />
               </span>
             ))}
-            <span className="text-ink font-semibold truncate">{baseName(path)}</span>
+            <span className="text-ink font-medium truncate">{baseName(path)}</span>
           </nav>
           {actions}
           {menu}
@@ -378,7 +378,7 @@ export function NoteView({
         <div className="flex-1 min-w-0 overflow-y-auto">
           <div className={cx("mx-auto px-4 md:px-6 pt-2 pb-36 md:pb-12", historyOpen ? "max-w-[560px]" : "max-w-[640px]")}>
             {phone && <p className="px-1 text-[13px] text-muted">{crumbs.map((c) => c.text).join(" / ")}</p>}
-            <h2 className="mt-1 text-[30px] md:text-[34px] leading-tight font-bold tracking-tight break-words">{title}</h2>
+            <h2 className="t-title mt-1 break-words">{title}</h2>
             <p className="mt-3 px-0.5 flex items-center gap-2 text-[14px] text-muted flex-wrap">
               {w && w.avatar}
               <span>
@@ -389,7 +389,7 @@ export function NoteView({
             {(type || tags.length > 0) && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {type && (
-                  <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-info/20 text-[13px] font-semibold text-info capitalize">
+                  <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-info/20 text-[13px] font-medium text-info capitalize">
                     {kind && <span className="size-2 rounded-full" style={{ background: kindColor(kind) }} title={kindLabel(kind)} />}
                     {type}
                   </span>
@@ -429,7 +429,7 @@ export function NoteView({
                   </div>
                 )}
                 <div className="mt-4 rounded-3xl md:rounded-none bg-card md:bg-transparent px-5 py-4 md:p-0">
-                  <div onClick={onClick} className="prose-w text-[16px] md:text-[15.5px] leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+                  <div onClick={onClick} className="prose-w text-[15px] md:text-[15.5px] leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
                 </div>
               </>
             )}
@@ -454,7 +454,7 @@ export function NoteView({
         {!phone && historyOpen && (
           <aside className="w-[340px] shrink-0 border-l border-line overflow-y-auto px-5 pb-8" aria-label="History">
             <div className="h-16 flex items-center">
-              <h3 className="flex-1 text-[19px] font-bold tracking-tight">History</h3>
+              <h3 className="flex-1 t-title">History</h3>
               <button onClick={() => (setHistoryOpen(false), setViewing(null), setMode("read"))} className="circle circle-sm" aria-label="Close history">
                 <X size={16} />
               </button>
@@ -477,7 +477,7 @@ function Segmented({ mode, setMode, labels }: { mode: "read" | "authors"; setMod
   return (
     <div role="tablist" className="p-1 rounded-full bg-card flex gap-1">
       {(["read", "authors"] as const).map((m, i) => (
-        <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cx("flex-1 h-10 rounded-full text-[14px] font-semibold transition-colors", mode === m ? "bg-control text-ink shadow-sm border border-control-line" : "text-muted hover:text-ink")}>
+        <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cx("flex-1 h-10 rounded-full text-[14px] font-medium transition-colors", mode === m ? "bg-control text-ink shadow-sm border border-control-line" : "text-muted hover:text-ink")}>
           {labels[i]}
         </button>
       ))}
@@ -500,16 +500,16 @@ function HistoryList({ history, viewing, canEdit, onView, onRestore }: { history
             <div key={c.hash} className={cx("flex items-center gap-3 px-4 py-3", on && "bg-hover")}>
               {w.avatar}
               <button onClick={() => onView(c, i === 0)} className="flex-1 min-w-0 text-left" title="See this version">
-                <span className="block truncate text-[15px] font-semibold">{c.message}</span>
+                <span className="block truncate text-[15px] font-medium">{c.message}</span>
                 <span className="block text-xs text-muted">
                   {w.name} · {timeAgo(c.date)}
                 </span>
               </button>
               {i === 0 ? (
-                <span className="h-8 px-3 rounded-full bg-info/25 text-info text-[13px] font-semibold inline-flex items-center">Current</span>
+                <span className="h-8 px-3 rounded-full bg-info/25 text-info text-[13px] font-medium inline-flex items-center">Current</span>
               ) : (
                 canEdit && (
-                  <button onClick={() => confirm("Bring this version back as a new change? Nothing is lost.") && onRestore(c)} className="h-8 px-3.5 rounded-full border border-control-line bg-control text-[13px] font-semibold hover:bg-hover">
+                  <button onClick={() => confirm("Bring this version back as a new change? Nothing is lost.") && onRestore(c)} className="h-8 px-3.5 rounded-full border border-control-line bg-control text-[13px] font-medium hover:bg-hover">
                     Restore
                   </button>
                 )
@@ -570,9 +570,9 @@ function NoteLinks({ items, where, phone }: { items: { id: string; path: string 
     return (
       <Cards>
         {items.map((n) => (
-          <button key={n.id} disabled={!n.path} onClick={() => open(n.path)} className="w-full text-left px-4 min-h-14 flex items-center gap-3 hover:bg-hover/60">
+          <button key={n.id} disabled={!n.path} onClick={() => open(n.path)} className="w-full text-left px-4 min-h-12 flex items-center gap-3 hover:bg-hover/60">
             <Link2 size={19} strokeWidth={1.7} className="text-muted shrink-0" />
-            <span className="flex-1 truncate text-[16px]">{n.title}</span>
+            <span className="flex-1 truncate text-[15px]">{n.title}</span>
             <span className="text-muted text-[15px] truncate max-w-[40%]">{sub(n)}</span>
             <ChevronRight size={16} className="text-faint" />
           </button>
@@ -583,7 +583,7 @@ function NoteLinks({ items, where, phone }: { items: { id: string; path: string 
     <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
       {items.map((n) => (
         <button key={n.id} disabled={!n.path} onClick={() => open(n.path)} className="text-left rounded-3xl bg-card px-4 py-3 hover:bg-hover/60 transition-colors min-w-0">
-          <span className="block font-semibold text-[14px] truncate">{n.title}</span>
+          <span className="block font-medium text-[14px] truncate">{n.title}</span>
           <span className="block text-xs text-muted truncate">{sub(n)}</span>
         </button>
       ))}
@@ -693,7 +693,7 @@ function Editor({ path, draft, setDraft, saving, dirty, phone, where, onSave, on
         ) : (
           <>
             <nav className="flex-1 min-w-0 text-[14px] text-muted truncate">
-              {where} <ChevronRight size={13} className="inline text-faint" /> <span className="text-ink font-semibold">{baseName(path)}</span>
+              {where} <ChevronRight size={13} className="inline text-faint" /> <span className="text-ink font-medium">{baseName(path)}</span>
             </nav>
             <button className={pill} onClick={onCancel}>
               Cancel

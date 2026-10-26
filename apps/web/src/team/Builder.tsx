@@ -117,8 +117,8 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   const last = stepOrder(steps).at(-1)?.id ?? null;
   const anchor = sel && stepById(team, sel) ? sel : last;
   const banner = (problems.lines.length > 0 || error) && steps.length > 0 && (
-    <div role="alert" aria-label="Problems" className="w-full rounded-[20px] bg-bad/15 p-4 text-left">
-      <div className="flex items-center gap-2 text-[15px] font-semibold text-bad">
+    <div role="alert" aria-label="Problems" className="w-full rounded-xl bg-bad/15 p-4 text-left">
+      <div className="flex items-center gap-2 text-[15px] font-medium text-bad">
         <AlertCircle size={17} aria-hidden />
         {error ? "Couldn't save" : `${problems.lines.length} ${problems.lines.length === 1 ? "thing" : "things"} to fix`}
       </div>
@@ -149,7 +149,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   const tabs = (
     <div role="tablist" aria-label="View" className="glass flex h-[42px] items-center rounded-full p-[3px] text-[14px]">
       {(["canvas", "how"] as const).map((t) => (
-        <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx("h-9 rounded-full px-4 font-semibold", tab === t ? "bg-chip text-ink" : "text-muted hover:text-ink")}>
+        <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx("h-9 rounded-full px-4 font-medium", tab === t ? "bg-chip text-ink" : "text-muted hover:text-ink")}>
           {t === "canvas" ? (phone ? "Steps" : "Canvas") : "How it works"}
         </button>
       ))}
@@ -177,7 +177,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             <>
               <TeamGhosts agentIds={teamAgentIds(team)} seed={name} size={34} />
               <div className="min-w-0">
-                <div className="truncate text-[17px] font-semibold leading-tight">{name}</div>
+                <div className="truncate text-[15px] font-medium leading-tight">{name}</div>
                 <div className="text-[13px] text-muted">How the team works</div>
               </div>
             </>
@@ -261,7 +261,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             </div>
             <aside aria-label={selected ? "Step" : "Step panel"} className="flex w-[360px] shrink-0 flex-col border-l border-line bg-panel">
               <div className="flex h-[60px] shrink-0 items-center justify-between px-5">
-                <h2 className="text-[17px] font-semibold">{selected ? stepHeading(team, selected) : steps.length ? "No step picked" : "No steps yet"}</h2>
+                <h2 className="text-[15px] font-semibold">{selected ? stepHeading(team, selected) : steps.length ? "No step picked" : "No steps yet"}</h2>
                 {selected && (
                   <button type="button" onClick={() => setSel(null)} aria-label="Close" className="circle circle-sm">
                     <X size={16} />
@@ -279,7 +279,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             <div className="flex w-[300px] items-center gap-3 rounded-3xl border border-line bg-card p-5 shadow-panel">
               <Loader2 size={22} className="animate-spin text-muted" />
               <div>
-                <div className="text-[16px] font-semibold">Saving</div>
+                <div className="text-[15px] font-medium">Saving</div>
                 <div className="text-sm text-muted">Telling the team how it works</div>
               </div>
             </div>
@@ -326,7 +326,7 @@ function EmptyState({ onAdd, onTemplates }: { onAdd: () => void; onTemplates: ()
         <span className="grid size-[104px] place-items-center rounded-full border border-dashed border-input text-faint">
           <Workflow size={40} strokeWidth={1.5} />
         </span>
-        <h2 className="text-[22px] font-semibold">Add your first step</h2>
+        <h2 className="t-title">Add your first step</h2>
         <p className="text-[15px] text-muted">A step is an agent doing one thing. Add more and join them up.</p>
         <div className="mt-2 flex flex-wrap justify-center gap-2.5">
           <Button type="button" variant="primary" onClick={onAdd} className="h-[42px] px-5">

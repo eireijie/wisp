@@ -226,7 +226,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <h2 className="min-w-0 flex-1 truncate text-2xl font-bold tracking-tight">{label}</h2>
+        <h2 className="t-title min-w-0 flex-1 truncate">{label}</h2>
         {st.badge && (
           <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge>
         )}
@@ -262,7 +262,7 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
           )}
           {settings.effort !== undefined && (
             <div className="space-y-2.5 px-4 py-3.5">
-              <div className="text-[17px] font-medium">Reasoning effort</div>
+              <div className="text-[15px] font-medium">Reasoning effort</div>
               <Seg
                 label="Reasoning effort"
                 value={settings.effort ?? ""}
@@ -333,7 +333,7 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
   const shownName = models.find((m) => m.id === value)?.label ?? value ?? "Automatic";
   return typing ? (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2 px-4 py-3">
-      <span className="text-[17px] font-medium">Default model</span>
+      <span className="text-[15px] font-medium">Default model</span>
       <TextBox autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Model name" aria-label="Model name" className="h-10 min-w-0 flex-1" />
       <Sec type="submit" className="h-10">
         Save
@@ -667,9 +667,9 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
   };
   const step = (n: number, title: string, body: ReactNode, right?: ReactNode) => (
     <div className="flex items-start gap-3.5 px-4 py-3.5">
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-chip text-sm font-semibold">{n}</span>
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-chip text-sm font-medium">{n}</span>
       <div className="min-w-0 flex-1 space-y-2">
-        <div className="text-[17px] font-medium">{title}</div>
+        <div className="text-[15px] font-medium">{title}</div>
         {body}
       </div>
       {right}
@@ -726,7 +726,7 @@ export function HarnessSignIn({ device, settings, account, onClose, onDone }: { 
               step(
                 2,
                 "Enter this code there",
-                <div className="font-mono text-2xl font-semibold tracking-wider">{running.code}</div>,
+                <div className="font-mono text-2xl font-medium tracking-wider">{running.code}</div>,
                 <Circle label="Copy code" onClick={() => void navigator.clipboard?.writeText(running.code!)}>
                   <Copy size={17} />
                 </Circle>,

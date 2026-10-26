@@ -185,7 +185,7 @@ async function callAgent(agentId: string) {
 /** A team's name in a pill at the top of its chat, with its agents' ghosts; opens its info page. */
 function TeamPill({ channel, open, onClick }: { channel: ChannelInfo; open: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} aria-expanded={open} aria-label={`${channel.name}. Team info`} className={cx("h-[52px] md:h-[46px] max-w-[min(20rem,60vw)] rounded-full border border-control-line bg-control pl-3 pr-5 inline-flex items-center gap-2.5 text-[17px] md:text-[16px] font-semibold hover:bg-hover", open && "bg-hover")}>
+    <button onClick={onClick} aria-expanded={open} aria-label={`${channel.name}. Team info`} className={cx("h-[52px] md:h-[46px] max-w-[min(20rem,60vw)] rounded-full border border-control-line bg-control pl-3 pr-5 inline-flex items-center gap-2.5 text-[15px] md:text-[14px] font-medium hover:bg-hover", open && "bg-hover")}>
       <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={30} />
       <span className="min-w-0 text-left leading-tight">
         <span className="block truncate">{channel.name}</span>
@@ -281,11 +281,11 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
       <div className="mx-auto max-w-2xl rounded-3xl bg-card px-4 py-3 flex items-center gap-3">
         <Archive size={18} className="text-muted shrink-0" />
         <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold">This team is archived</span>
+          <span className="block text-[15px] font-medium">This team is archived</span>
           <span className="block text-[13px] text-muted">Nobody can post. Notes stay.</span>
         </span>
         {canManage && (
-          <button className="h-10 rounded-full bg-accent px-4 text-sm font-semibold text-accent-ink" onClick={() => setArchived(channel, false).catch((e) => setError((e as Error).message))}>
+          <button className="h-10 rounded-full bg-accent px-4 text-sm font-medium text-accent-ink" onClick={() => setArchived(channel, false).catch((e) => setError((e as Error).message))}>
             Unarchive
           </button>
         )}
@@ -490,7 +490,7 @@ function ModelPanel({ agent, ctx, catalog, close }: { agent: Agent; ctx: AgentCo
           <Zap size={13} className={cx(fast && ctx.fastAvailable && "fill-accent")} />
         </button>
         <div className="flex-1 min-w-0 text-center">
-          <div className="text-sm font-semibold text-accent-text leading-tight">{shown ? effortName(shown) : "Default"}</div>
+          <div className="text-sm font-medium text-accent-text leading-tight">{shown ? effortName(shown) : "Default"}</div>
           <button onClick={() => setView("models")} className="inline-flex items-center gap-0.5 text-[11px] text-muted hover:text-ink">
             {prettyModel(current?.label ?? ctx.model ?? "Default model")}
             <ChevronRight size={12} />
@@ -550,7 +550,7 @@ function ContextBody({ ctx }: { ctx: AgentContext }) {
   return (
     <div className="space-y-2.5 text-sm">
       <div className="flex items-baseline justify-between">
-        <span className="font-semibold">Context window</span>
+        <span className="font-medium">Context window</span>
         {pct !== null && <span className="text-xs tabular-nums" style={{ color }}>{pct < 1 ? "<1" : Math.round(pct)}%</span>}
       </div>
       {pct !== null && (
@@ -622,7 +622,7 @@ function ContextCard({ usage }: { usage: ContextUsage | null }) {
   return (
     <ChatCard icon={<AudioLines size={13} />} label="Context window">
       <div className="mt-2 flex items-baseline justify-between gap-3">
-        <span className="text-[15px] font-semibold">{pct === null ? "Nothing used yet" : pct < 35 ? "Roughly a third full" : pct < 65 ? "Roughly half full" : pct < 85 ? "Getting full" : "Nearly full"}</span>
+        <span className="text-[15px] font-medium">{pct === null ? "Nothing used yet" : pct < 35 ? "Roughly a third full" : pct < 65 ? "Roughly half full" : pct < 85 ? "Getting full" : "Nearly full"}</span>
         {usage?.model && <span className="text-xs text-muted truncate">{prettyModel(usage.model)}</span>}
       </div>
       {pct !== null && (
@@ -632,7 +632,7 @@ function ContextCard({ usage }: { usage: ContextUsage | null }) {
       )}
       <p className="mt-2 text-[13px] text-muted">{used !== null ? `${tokens(used)}${window ? ` of ${tokens(window)}` : ""} used. Older messages are summarized when it fills up.` : "This shows up after its first reply here."}</p>
       {shrink && used !== null && (
-        <button className="mt-2.5 h-10 rounded-full border border-control-line bg-control px-4 text-sm font-semibold" onClick={run}>
+        <button className="mt-2.5 h-10 rounded-full border border-control-line bg-control px-4 text-sm font-medium" onClick={run}>
           {shrink.name === "compact" ? "Compact" : "Compress"}
         </button>
       )}
@@ -769,7 +769,7 @@ function MessageList({ channel, readMark, onAddAgent, onMembers, messageId }: { 
             <div key={m.id}>
               {stamp && <TimeDivider at={m.createdAt} />}
               {m.id === firstNew && (
-                <div ref={dividerRef} className="flex items-center gap-3 px-5 my-2 text-[11px] font-semibold tracking-wide text-accent-text">
+                <div ref={dividerRef} className="flex items-center gap-3 px-5 my-2 text-[11px] font-medium tracking-wide text-accent-text">
                   <span className="h-px flex-1 bg-accent/40" /> NEW <span className="h-px flex-1 bg-accent/40" />
                 </div>
               )}
@@ -814,7 +814,7 @@ function ChannelIntro({ channel, onAddAgent, onMembers }: { channel: ChannelInfo
     return (
       <div className="px-8 pb-6 pt-10 flex flex-col items-center text-center">
         <AgentAvatar agent={a} size={72} live />
-        <h2 className="mt-3 text-lg font-semibold">{a?.name}</h2>
+        <h2 className="mt-3 t-title">{a?.name}</h2>
         <p className="mt-1 max-w-xs text-[15px] text-muted">This is the start of your conversation with @{a?.handle}. Ask it anything, or hand it a task.</p>
         {a && <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-muted"><StatusDot status={a.status} />{a.status === "offline" ? "Offline" : `Ready${where ? ` on ${where}` : ""}`}</p>}
       </div>
@@ -830,7 +830,7 @@ function ChannelIntro({ channel, onAddAgent, onMembers }: { channel: ChannelInfo
   return (
     <div className="px-6 pb-6 pt-8 flex flex-col items-center text-center">
       <ChatAvatar chat={{ kind: "team", agent: null, channel }} size={64} />
-      <h2 className="mt-3 text-lg font-semibold">{channel.name}</h2>
+      <h2 className="mt-3 t-title">{channel.name}</h2>
       <p className="mt-1 max-w-sm text-[15px] text-muted">
         {channel.topic ? `${channel.topic.replace(/[.!?]\s*$/, "")}. ` : "This is the start of the team. "}
         {leads.length
@@ -845,7 +845,7 @@ function ChannelIntro({ channel, onAddAgent, onMembers }: { channel: ChannelInfo
             <button key={c.title} type="button" onClick={c.onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-hover">
               <span className="size-9 shrink-0 rounded-full bg-chip grid place-items-center text-muted">{c.icon}</span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-semibold">{c.title}</span>
+                <span className="block text-[15px] font-medium">{c.title}</span>
                 <span className="block text-[13px] text-muted">{c.body}</span>
               </span>
               <ChevronRight size={16} className="shrink-0 text-faint" />
@@ -930,7 +930,7 @@ function HandoffRow({ m, taskId, replies, working, onOpen }: { m: Message; taskI
       >
         <ChevronRight size={14} className="shrink-0 text-muted" />
         <span className="truncate">
-          Handed to <b className="font-semibold">{agent?.name ?? m.body.match(/^@([\w-]+)/)?.[1] ?? "an agent"}</b>
+          Handed to <b className="font-medium">{agent?.name ?? m.body.match(/^@([\w-]+)/)?.[1] ?? "an agent"}</b>
         </span>
         {!!replies && <span className="shrink-0 text-muted">· {replies} {replies === 1 ? "reply" : "replies"}</span>}
         {state && (
@@ -1013,7 +1013,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
           <div className="bubble them text-[15px] text-muted italic">This message was deleted.</div>
         ) : (
           showBubble && (
-            <div className={cx("bubble text-[16px] md:text-[15px]", mine ? "me" : "them")} title={time}>
+            <div className={cx("bubble text-[15px] md:text-[15px]", mine ? "me" : "them")} title={time}>
               {quote && (
                 <button
                   type="button"
@@ -1023,7 +1023,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
                   }}
                   aria-label="Go to the message this replies to"
                 >
-                  <b className="block font-semibold">{quote.author.kind === "user" && quote.author.id === meId ? "You" : (quote.author.kind === "agent" ? names.agent(quote.author.id)?.name : names.member(quote.author.id)?.name) ?? "Someone"}</b>
+                  <b className="block font-medium">{quote.author.kind === "user" && quote.author.id === meId ? "You" : (quote.author.kind === "agent" ? names.agent(quote.author.id)?.name : names.member(quote.author.id)?.name) ?? "Someone"}</b>
                   <span className="line-clamp-2">{quote.deleted ? "This message was deleted." : quote.snippet}</span>
                 </button>
               )}
@@ -1070,7 +1070,7 @@ function PersonMessage({ m, grouped, last = true, replies, onReplies, inThread, 
           actions={actions}
           onClose={() => setSheet(false)}
           preview={
-            <div className={cx("bubble text-[16px]", mine ? "me" : "them")}>
+            <div className={cx("bubble text-[15px]", mine ? "me" : "them")}>
               <div className="prose-w line-clamp-6" dangerouslySetInnerHTML={{ __html: html || "&nbsp;" }} />
             </div>
           }
@@ -1247,7 +1247,7 @@ function StreamingItem({ run }: { run: LiveRun }) {
       )}
       <div className="min-w-0 flex flex-col items-start gap-[3px] max-w-[84%] md:max-w-[36rem]">
         {!home && <div className="px-3.5 pb-0.5 text-[12px] text-muted">{agent?.name ?? "Agent"}</div>}
-        {html && <div className="bubble them text-[16px] md:text-[15px]"><div className="prose-w" dangerouslySetInnerHTML={{ __html: html }} /></div>}
+        {html && <div className="bubble them text-[15px] md:text-[15px]"><div className="prose-w" dangerouslySetInnerHTML={{ __html: html }} /></div>}
         <div role="status" aria-live="polite" aria-label={`${agent?.name ?? "Agent"} is working: ${workLine(run, agents)}`} className="bubble them inline-flex items-center gap-2.5 !py-3">
           <span className="work-dots" aria-hidden>
             <i />
@@ -1335,7 +1335,7 @@ function ThreadHeader({ channelId, parent, onBack, onClose }: { channelId: strin
         </button>
       </span>
       <div className="min-w-0 flex-1 px-1">
-        <div className="truncate text-[16px] font-semibold leading-tight">{parent ? "Sub-thread" : "Thread"}</div>
+        <div className="truncate text-[15px] font-medium leading-tight">{parent ? "Sub-thread" : "Thread"}</div>
         {channel && <div className="truncate text-[13px] text-muted">{channel.kind === "dm" ? "Chat" : channel.name}</div>}
       </div>
       <span className="max-lg:hidden">
@@ -1364,7 +1364,7 @@ function HandoffHeader({ taskId, runs, parent, onBack, onClose }: { taskId: stri
       <div className="min-w-0 flex-1 flex items-center gap-2.5 px-1">
         {agent && <AgentAvatar agent={agent} size={32} live={mine.length > 0} />}
         <div className="min-w-0">
-          <div className="truncate text-[16px] font-semibold leading-tight">Handed to {agent?.name ?? "an agent"}</div>
+          <div className="truncate text-[15px] font-medium leading-tight">Handed to {agent?.name ?? "an agent"}</div>
           <div className={cx("text-[13px]", mine.length ? "text-ok" : st?.tone === "bad" ? "text-bad" : "text-muted")}>{mine.length ? "Working" : (st?.label ?? "")}</div>
         </div>
       </div>
@@ -1393,7 +1393,7 @@ function HandoffBrief({ m, taskId }: { m: Message; taskId: string }) {
   return (
     <div className="px-3 pb-1">
       <ChatCard icon={<ArrowRightLeft size={13} />} label={`${from ?? "Someone"} handed this to ${to ?? "an agent"}`} className="max-w-none">
-        <div className="mt-2 text-[15px] font-semibold leading-snug">{task?.title ?? m.body.replace(/^@[\w-]+\s*/, "")}</div>
+        <div className="mt-2 text-[15px] font-medium leading-snug">{task?.title ?? m.body.replace(/^@[\w-]+\s*/, "")}</div>
         <div className="mt-2 flex items-center gap-2 text-[13px] text-muted">
           {st && <Pill tone={st.tone}>{st.label}</Pill>}
           <span>Started {clockTime(m.createdAt, clock)}</span>
@@ -1419,7 +1419,7 @@ function ThreadRoot({ m }: { m: Message; composerThread?: string }) {
       <div className="rounded-3xl bg-card px-4 py-3">
         <div className="flex items-center gap-2.5">
           {agent ? <AgentAvatar agent={agent} size={24} interactive={false} /> : <UserAvatar name={names.member(m.author.id)?.name ?? name} size={24} />}
-          <span className="text-[14px] font-semibold">{name}</span>
+          <span className="text-[14px] font-medium">{name}</span>
           <span className="text-[13px] text-faint">{clockTime(m.createdAt, clock)}</span>
         </div>
         {m.deletedAt ? (
@@ -1487,7 +1487,7 @@ function TaskChip({ id }: { id: string }) {
   return (
     <a href={href({ view: "tasks" })} className="block">
       <ChatCard icon={<ListChecks size={13} />} label="Task" className="hover:bg-hover">
-        <div className="mt-2 text-[15px] font-semibold leading-snug">{task.title}</div>
+        <div className="mt-2 text-[15px] font-medium leading-snug">{task.title}</div>
         <div className="mt-2 flex items-center gap-2">
           <Pill tone={st.tone}>{st.label}</Pill>
           {agent && (
@@ -1814,7 +1814,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
         <div className="mb-2 flex items-center gap-3 rounded-3xl bg-card pl-4 pr-1.5 py-1.5">
           <CornerUpLeft size={15} className="shrink-0 text-muted" />
           <div className="min-w-0 flex-1 border-l-2 border-accent pl-2.5 leading-tight">
-            <div className="text-[13px] font-semibold">Replying to {replyTo.name}</div>
+            <div className="text-[13px] font-medium">Replying to {replyTo.name}</div>
             <div className="truncate text-[13px] text-muted">{replyTo.snippet}</div>
           </div>
           <button onClick={() => updateDraft((d) => ({ ...d, replyTo: null }))} className="size-9 shrink-0 rounded-full grid place-items-center text-muted hover:bg-hover hover:text-ink" aria-label="Cancel reply">
@@ -1854,7 +1854,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
         {slash.open && !suggestions.length && slash.render(pickCommand)}
         {suggestions.length > 0 && (
           <div className="glass absolute bottom-full mb-2 left-0 w-80 max-w-full rounded-3xl p-1.5 z-10" role="listbox" aria-label="Mention an agent">
-            <div className="px-3 pt-1.5 pb-1 text-[13px] font-semibold text-muted">Mention an agent</div>
+            <div className="px-3 pt-1.5 pb-1 text-[13px] font-medium text-muted">Mention an agent</div>
             {suggestions.map((a, i) => {
               const node = channel?.settings.team?.nodes.find((n) => n.agentId === a.id);
               return (
@@ -1932,7 +1932,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
                 send();
               }
             }}
-            className="block min-w-0 flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[17px] md:text-[15px] outline-none placeholder:text-faint"
+            className="block min-w-0 flex-1 resize-none bg-transparent py-[11px] md:py-[7px] text-[15px] md:text-[15px] outline-none placeholder:text-faint"
           />
           {dmAgent && ctx && (
             <span className="self-center max-md:hidden">
@@ -1979,7 +1979,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
 
 function ComposerMenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button role="menuitem" onClick={onClick} className="w-full px-3 h-12 rounded-2xl flex items-center gap-3 text-[16px] hover:bg-hover">
+    <button role="menuitem" onClick={onClick} className="w-full px-3 h-12 rounded-2xl flex items-center gap-3 text-[15px] hover:bg-hover">
       <span className="text-muted">{icon}</span>
       {label}
     </button>

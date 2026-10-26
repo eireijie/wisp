@@ -176,7 +176,7 @@ export function AuthScreen({ onAuthed }: { onAuthed: (token: string) => void }) 
               : "Where people and agents work together."}
         </AuthHero>
         {joining && invite && (
-          <p className="mt-6 flex items-center gap-3 rounded-[20px] bg-card px-4 py-3 text-[15px]">
+          <p className="mt-6 flex items-center gap-3 rounded-xl bg-card px-4 py-3 text-[15px]">
             <Check size={18} className="text-ok shrink-0" aria-hidden />
             Invite checked. It's good to use.
           </p>

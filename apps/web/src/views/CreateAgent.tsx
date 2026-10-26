@@ -413,7 +413,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
           >
             <div className="flex items-start justify-between gap-4 px-5 sm:px-7 pt-6 pb-1">
               <div>
-                <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight">
+                <h1 tabIndex={-1} className="">
                   {invite ? "Invite an agent" : "New agent"}
                 </h1>
                 <p className="text-sm text-muted mt-0.5">{invite ? "Name it and pick the harness it already runs on. You'll get an invitation for its session." : "Give it a name and a job. You can change everything later."}</p>
@@ -425,10 +425,10 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
 
             <div className="flex flex-col md:flex-row gap-6 md:gap-7 px-5 sm:px-7 pt-4 pb-6">
               {/* its ghost */}
-              <div className="md:w-60 shrink-0 self-stretch md:self-start md:sticky md:top-4 rounded-[1.25rem] bg-bg px-4 py-6 flex flex-col items-center gap-3.5">
+              <div className="md:w-60 shrink-0 self-stretch md:self-start md:sticky md:top-4 rounded-xl bg-bg px-4 py-6 flex flex-col items-center gap-3.5">
                 <Ghost look={look} size={140} trackPointer label="Your new agent, looking toward your pointer" />
                 <div className="text-center min-w-0 max-w-full">
-                  <div className="text-lg font-semibold truncate">{cleanName || "Your agent"}</div>
+                  <div className="text-lg font-medium truncate">{cleanName || "Your agent"}</div>
                   <div className="text-[13px] text-muted truncate">@{finalHandle || "your-agent"}</div>
                 </div>
                 <GhostColors look={look} onChange={(c) => setAppearance({ ...look, ...c })} limit={5} size={26} disabled={!!created} />
@@ -446,7 +446,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
               <fieldset disabled={busy || !!created} className="flex-1 min-w-0 space-y-5">
                 <div className="flex flex-col sm:flex-row gap-3.5">
                   <label className="flex-1 space-y-1.5">
-                    <span className="block text-sm font-semibold">Name</span>
+                    <span className="block text-sm font-medium">Name</span>
                     <Input
                       maxLength={80}
                       value={name}
@@ -460,7 +460,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                     />
                   </label>
                   <label className="flex-[1.4] space-y-1.5">
-                    <span className="block text-sm font-semibold">
+                    <span className="block text-sm font-medium">
                       What it does <span className="font-normal text-muted">· Optional</span>
                     </span>
                     <Input maxLength={60} value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Builds and ships websites" className="h-11! text-[15px]!" />
@@ -485,20 +485,20 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                 )}
 
                 <label className="block space-y-1.5">
-                  <span className="block text-sm font-semibold">Instructions</span>
+                  <span className="block text-sm font-medium">Instructions</span>
                   <Textarea rows={4} value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="What is this agent responsible for, and how should it work?" />
                 </label>
 
                 {invite ? (
                   <div className="space-y-2.5">
-                    <span className="block text-sm font-semibold">Harness it runs on</span>
+                    <span className="block text-sm font-medium">Harness it runs on</span>
                     <HarnessGrid list={harnesses} harness={harness} onPick={setHarness} label="Agent harness" />
                     <p className="text-xs text-muted">The invitation gives its session Wisp's chat, tasks, memory and file tools. You can give it a computer on its Computer tab afterward.</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-sm font-semibold">AI and computer</span>
+                      <span className="text-sm font-medium">AI and computer</span>
                       {defaults !== "error" && (
                         <div className="flex rounded-xl bg-chip p-0.5" role="radiogroup" aria-label="AI and computer">
                           {(
@@ -507,7 +507,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                               ["custom", "Customize"],
                             ] as const
                           ).map(([m, label]) => (
-                            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={cx("h-8 px-3.5 rounded-[10px] text-[13px] font-semibold", mode === m ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
+                            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} className={cx("h-8 px-3.5 rounded-[10px] text-[13px] font-medium", mode === m ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
                               {label}
                             </button>
                           ))}
@@ -517,17 +517,17 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                     {mode === "defaults" && defaults !== "error" ? (
                       <div className="rounded-2xl bg-bg px-4 py-3 flex flex-wrap items-center gap-4">
                         <div className="flex-1 min-w-36">
-                          <div className="text-xs font-semibold text-muted">AI</div>
-                          <div className="text-sm font-semibold flex items-center gap-1.5">
+                          <div className="text-xs font-medium text-muted">AI</div>
+                          <div className="text-sm font-medium flex items-center gap-1.5">
                             {defaults?.harness && <HarnessLogo harness={defaults.harness} size={16} />}
                             {summary ? summary.ai : "Loading…"}
                           </div>
                         </div>
                         <div className="flex-1 min-w-36">
-                          <div className="text-xs font-semibold text-muted">Computer</div>
-                          <div className="text-sm font-semibold">{summary ? summary.computer : "Loading…"}</div>
+                          <div className="text-xs font-medium text-muted">Computer</div>
+                          <div className="text-sm font-medium">{summary ? summary.computer : "Loading…"}</div>
                         </div>
-                        <a href="#/settings/agent-defaults" onClick={onClose} className="text-[13px] font-semibold text-accent-text hover:underline">
+                        <a href="#/settings/agent-defaults" onClick={onClose} className="text-[13px] font-medium text-accent-text hover:underline">
                           Change defaults
                         </a>
                       </div>
@@ -536,7 +536,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                         {defaults === "error" && <p className="text-xs text-muted">Pick which AI it uses and where it works.</p>}
                         <div className="grid sm:grid-cols-3 gap-3">
                           <label className="space-y-1.5">
-                            <span className="block text-[13px] font-semibold text-muted">Runs on</span>
+                            <span className="block text-[13px] font-medium text-muted">Runs on</span>
                             <select
                               value={harness}
                               onChange={(e) => {
@@ -553,7 +553,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                             </select>
                           </label>
                           <label className="space-y-1.5">
-                            <span className="block text-[13px] font-semibold text-muted">Model</span>
+                            <span className="block text-[13px] font-medium text-muted">Model</span>
                             <Input
                               value={model}
                               onChange={(e) => {
@@ -569,14 +569,14 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                           {/* only ask which device when there's a real choice */}
                           {usable.length < 2 ? (
                             <div className="space-y-1.5">
-                              <span className="block text-[13px] font-semibold text-muted">Device</span>
+                              <span className="block text-[13px] font-medium text-muted">Device</span>
                               <div className="h-10 flex items-center text-sm">
                                 {usable[0] ? `${usable[0].name}${usable[0].online ? "" : " (offline)"}` : "None yet. Connect one under Devices."}
                               </div>
                             </div>
                           ) : (
                           <label className="space-y-1.5">
-                            <span className="block text-[13px] font-semibold text-muted">Device</span>
+                            <span className="block text-[13px] font-medium text-muted">Device</span>
                             {/* only ask which device when there's a real choice */}
                             {usable.length < 2 ? (
                               <p className="h-10 flex items-center text-sm text-muted">
@@ -622,13 +622,13 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                 <div className="rounded-2xl border border-line">
                   <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced} className="w-full flex items-center gap-2.5 px-3.5 py-3 text-left">
                     <ChevronRight size={16} className={cx("shrink-0 transition-transform", advanced && "rotate-90")} />
-                    <span className="text-sm font-semibold">More options</span>
+                    <span className="text-sm font-medium">More options</span>
                     <span className="text-[13px] text-muted truncate">Handle{inviteOn ? ", who it answers" : ""}, apps and skills</span>
                   </button>
                   {advanced && (
                     <div className="grid sm:grid-cols-2 gap-4 px-4 pb-4 pt-1">
                       <label className="space-y-1.5">
-                        <span className="block text-[13px] font-semibold text-muted">Handle</span>
+                        <span className="block text-[13px] font-medium text-muted">Handle</span>
                         <Input
                           value={handle}
                           onChange={(e) => {
@@ -643,7 +643,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                       </label>
                       {inviteOn && (
                         <div className="space-y-1.5">
-                          <span className="block text-[13px] font-semibold text-muted">Answers</span>
+                          <span className="block text-[13px] font-medium text-muted">Answers</span>
                           <div className="flex rounded-xl bg-chip p-0.5" role="radiogroup" aria-label="Who it answers">
                             {(
                               [
@@ -652,7 +652,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                                 ["people", "Picked people"],
                               ] as const
                             ).map(([v, label]) => (
-                              <button key={v} type="button" role="radio" aria-checked={respondTo === v} onClick={() => setRespondTo(v)} className={cx("flex-1 h-8 px-2 rounded-[10px] text-[13px] font-semibold whitespace-nowrap", respondTo === v ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
+                              <button key={v} type="button" role="radio" aria-checked={respondTo === v} onClick={() => setRespondTo(v)} className={cx("flex-1 h-8 px-2 rounded-[10px] text-[13px] font-medium whitespace-nowrap", respondTo === v ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
                                 {label}
                               </button>
                             ))}
@@ -672,7 +672,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                         </div>
                       )}
                       <div className="space-y-1.5">
-                        <span className="block text-[13px] font-semibold text-muted">Connected apps</span>
+                        <span className="block text-[13px] font-medium text-muted">Connected apps</span>
                         <div className="flex flex-wrap gap-1.5">
                           {connectors === null && <span className="text-xs text-muted">Loading…</span>}
                           {connectors?.map((c) =>
@@ -691,7 +691,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
                         {!canUseConnectedApps(selectedHarness) && <p className="text-xs text-muted">{selectedHarness.label} can't use connected apps yet.</p>}
                       </div>
                       <div className="space-y-1.5">
-                        <span className="block text-[13px] font-semibold text-muted">Skills</span>
+                        <span className="block text-[13px] font-medium text-muted">Skills</span>
                         <div className="flex flex-wrap gap-1.5">
                           {skills === null && <span className="text-xs text-muted">Loading…</span>}
                           {skills?.map((sk) => (
@@ -716,11 +716,11 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
             )}
             <div className="flex flex-wrap items-center justify-between gap-3 px-5 sm:px-7 py-4 border-t border-line bg-bg rounded-b-3xl">
               {invite ? (
-                <button type="button" disabled={busy || !!created} onClick={() => setInvite(false)} className="text-[13px] font-semibold text-muted hover:text-ink">
+                <button type="button" disabled={busy || !!created} onClick={() => setInvite(false)} className="text-[13px] font-medium text-muted hover:text-ink">
                   Make a new agent instead
                 </button>
               ) : (
-                <button type="button" disabled={busy || !!created} onClick={() => setView("external")} className="text-[13px] font-semibold text-muted hover:text-ink underline-offset-2 hover:underline">
+                <button type="button" disabled={busy || !!created} onClick={() => setView("external")} className="text-[13px] font-medium text-muted hover:text-ink underline-offset-2 hover:underline">
                   Already running somewhere? Bring it in
                 </button>
               )}
@@ -805,7 +805,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
             <div className="flex items-center gap-4">
               <Ghost look={look} size={72} trackPointer />
               <div>
-                <h1 tabIndex={-1} className="text-2xl font-semibold">
+                <h1 tabIndex={-1} className="">
                   Invite {cleanName} to Wisp
                 </h1>
                 <p className="text-sm text-muted mt-1">Add this connection to its existing session.</p>
@@ -834,7 +834,7 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
 
 function Chip({ on, onClick, children, title, small }: { on: boolean; onClick: () => void; children: React.ReactNode; title?: string; small?: boolean }) {
   return (
-    <button type="button" role={small ? undefined : "radio"} aria-checked={small ? undefined : on} aria-pressed={small ? on : undefined} onClick={onClick} title={title} className={cx("rounded-full border font-semibold transition-colors", small ? "h-8 px-2.5 text-[13px] rounded-lg" : "h-8 px-3.5 text-[13px]", on ? "bg-ink text-bg border-ink" : "bg-panel text-ink border-line hover:bg-hover")}>
+    <button type="button" role={small ? undefined : "radio"} aria-checked={small ? undefined : on} aria-pressed={small ? on : undefined} onClick={onClick} title={title} className={cx("rounded-full border font-medium transition-colors", small ? "h-8 px-2.5 text-[13px] rounded-lg" : "h-8 px-3.5 text-[13px]", on ? "bg-ink text-bg border-ink" : "bg-panel text-ink border-line hover:bg-hover")}>
       {children}
     </button>
   );
@@ -842,7 +842,7 @@ function Chip({ on, onClick, children, title, small }: { on: boolean; onClick: (
 
 function AddChip({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="h-8 px-2.5 rounded-lg border border-dashed border-line text-[13px] font-semibold text-muted hover:text-ink inline-flex items-center gap-1">
+    <button type="button" onClick={onClick} className="h-8 px-2.5 rounded-lg border border-dashed border-line text-[13px] font-medium text-muted hover:text-ink inline-flex items-center gap-1">
       <Plus size={13} /> Add
     </button>
   );
@@ -855,7 +855,7 @@ function BackHeader({ title, body, onBack }: { title: string; body: string; onBa
         <ArrowLeft size={17} />
       </button>
       <div>
-        <h1 tabIndex={-1} className="text-2xl font-semibold tracking-tight">
+        <h1 tabIndex={-1} className="">
           {title}
         </h1>
         <p className="text-sm text-muted mt-0.5">{body}</p>

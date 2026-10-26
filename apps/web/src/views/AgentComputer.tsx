@@ -65,7 +65,7 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
         <Modal title={`Run @${agent.handle} headless?`} onClose={() => setConfirmHeadless(false)}>
           <p className="text-sm text-muted">Without a computer it can still think and write, but it can't use apps or a screen: no websites, no apps, only its harness's own tools.</p>
           <div className="mt-4 flex flex-col gap-2">
-            <button onClick={doHeadless} className="h-12 rounded-full bg-accent text-accent-ink font-semibold">
+            <button onClick={doHeadless} className="h-12 rounded-full bg-accent text-accent-ink font-medium">
               Run headless
             </button>
             <button onClick={() => setConfirmHeadless(false)} className="h-12 rounded-full border border-control-line bg-control font-medium hover:bg-hover">

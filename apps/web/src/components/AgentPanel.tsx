@@ -64,7 +64,7 @@ export function AgentPanel({ agent, tab, onTab, onClose, onCall, inDm = false }:
   return (
     <RightPane label={`${agent.name}'s details`}>
       <div className="h-15 shrink-0 flex items-center gap-1.5 px-4 border-b border-line">
-        <span className="font-semibold flex-1">Agent</span>
+        <span className="font-medium flex-1">Agent</span>
         <button onClick={() => go({ view: "agents", agentId: agent.id, tab: "overview" })} className="size-8 rounded-lg grid place-items-center text-muted hover:text-ink hover:bg-hover" aria-label="Open its full page" title="Open its full page">
           <ExternalLink size={16} />
         </button>
@@ -76,7 +76,7 @@ export function AgentPanel({ agent, tab, onTab, onClose, onCall, inDm = false }:
         <div className="flex items-center gap-3.5 pt-5">
           <AgentAvatar agent={agent} size={64} live />
           <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold truncate">{agent.name}</h2>
+            <h2 className="t-title truncate">{agent.name}</h2>
             <RoleLabel agent={agent} />
             <div className={cx("mt-0.5 flex items-center gap-1.5 text-[13px] font-medium", working ? "text-ok" : "text-muted")}>
               <span className={cx("size-1.5 rounded-full", working ? "bg-ok" : "bg-faint")} style={working ? undefined : { background: status.dot ?? status.hue }} aria-hidden />
@@ -233,7 +233,7 @@ function WhatItsDoing({ agent, runs }: { agent: Agent; runs: LiveRun[] }) {
         <ol className="space-y-2">
           {hidden > 0 && <li className="text-xs text-faint pl-7">{hidden} earlier {hidden === 1 ? "step" : "steps"}</li>}
           {shown.map((st, i) => (
-            <li key={i} className={cx("flex items-center gap-2.5 text-sm", st.now ? "text-ink font-semibold" : "text-muted")}>
+            <li key={i} className={cx("flex items-center gap-2.5 text-sm", st.now ? "text-ink font-medium" : "text-muted")}>
               <span className={cx("size-5 shrink-0 rounded-full grid place-items-center", st.now ? "bg-ok/15" : "bg-ink text-panel")}>
                 {st.now ? <span className="size-2 rounded-full bg-ok animate-pulse" /> : <Check size={12} strokeWidth={3} />}
               </span>
@@ -262,7 +262,7 @@ function AnswersRow({ agent }: { agent: Agent }) {
   return (
     <a href={href({ view: "agents", agentId: agent.id, tab: "permissions" })} className="flex items-center justify-between gap-3 pt-3 border-t border-line text-[13px] hover:text-ink group" title="Change who it answers">
       <span className="text-muted">Answers</span>
-      <span className="font-semibold truncate group-hover:underline">{label}</span>
+      <span className="font-medium truncate group-hover:underline">{label}</span>
     </a>
   );
 }

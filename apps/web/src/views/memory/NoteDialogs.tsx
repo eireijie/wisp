@@ -36,7 +36,7 @@ export function FolderChoice({ value, onChange, folders, current, hints = true }
     <div>
       <Cards>
         {rows.map((c) => (
-          <button key={c.value} type="button" onClick={() => (setOther(false), onChange(c.value))} aria-pressed={value === c.value && !other} className="w-full min-h-14 px-4 py-2 flex items-center gap-3 text-left hover:bg-hover/60">
+          <button key={c.value} type="button" onClick={() => (setOther(false), onChange(c.value))} aria-pressed={value === c.value && !other} className="w-full min-h-12 px-4 py-2 flex items-center gap-3 text-left hover:bg-hover/60">
             <Folder size={19} strokeWidth={1.7} className="text-muted shrink-0" />
             <span className="flex-1 min-w-0">
               <span className="block text-[15px] truncate">{c.label}</span>

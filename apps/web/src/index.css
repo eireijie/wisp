@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
 
 /* `dark:` follows the chosen mode, not just the OS */
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
@@ -25,6 +24,7 @@
   --muted: oklch(0.52 calc(var(--gc) * 3) var(--gh));
   --faint: oklch(0.68 calc(var(--gc) * 2.5) var(--gh));
   --line: oklch(0.922 var(--gc) var(--gh));
+  --edge: oklch(0 0 0 / 0.08); /* 1px border on cards and panels */
   --input: oklch(0.87 calc(var(--gc) * 1.75) var(--gh));
   --hover: oklch(0.97 var(--gc) var(--gh));
   --chip: oklch(0.95 calc(var(--gc) * 1.25) var(--gh));
@@ -40,8 +40,8 @@
   --card: oklch(0.965 var(--gc) var(--gh));
   --control: oklch(1 0 0);
   --control-line: oklch(0 0 0 / 0.1);
-  --glass-bg: oklch(1 0 0 / 0.78);
-  --shadow: 0 1px 2px oklch(0.2 0 0 / 0.06), 0 6px 20px oklch(0.2 0 0 / 0.08);
+  --glass-bg: oklch(1 0 0);
+  --shadow: 0 2px 8px oklch(0.2 0 0 / 0.08);
   --ghost-shadow: oklch(0.2 0 0 / 0.14);
   /* status hues: chips and dots mix these with the surface, so one value works in both modes */
   --status-idle: #a8aeb2;
@@ -72,7 +72,7 @@
   --app: #111113;
   --panel: #18181b;
   --bg: #202023;
-  --card: #202023;
+  --card: #1e1e21;
   --control: #2a2a2e;
   --control-line: rgb(255 255 255 / 0.1);
   --side-hover: rgb(255 255 255 / 0.04);
@@ -81,6 +81,7 @@
   --muted: #a1a1aa;
   --faint: #8e8e96;
   --line: rgb(255 255 255 / 0.07);
+  --edge: rgb(255 255 255 / 0.08);
   --input: rgb(255 255 255 / 0.1);
   --hover: rgb(255 255 255 / 0.05);
   --chip: #2a2a2e;
@@ -89,8 +90,8 @@
   --warn: #fbbf24;
   --bad: #ff6b6b;
   --info: #0a84ff;
-  --glass-bg: rgb(42 42 46 / 0.92);
-  --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px oklch(0 0 0 / 0.4);
+  --glass-bg: #2a2a2e;
+  --shadow: 0 2px 8px oklch(0 0 0 / 0.25);
   --ghost-shadow: oklch(0 0 0 / 0.42);
   --org-1: oklch(0.58 0.1 180);
   --org-2: oklch(0.58 0.16 295);
@@ -113,8 +114,8 @@
   :root[data-mode="dark"] {
     --app: #161618;
     --panel: #161618;
-    --bg: #26262a;
-    --card: #26262a;
+    --bg: #1e1e21;
+    --card: #1e1e21;
     --code: #1c1c1f;
   }
 }
@@ -182,6 +183,7 @@
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-line: var(--line);
+  --color-edge: var(--edge);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-hover: var(--hover);
@@ -201,16 +203,18 @@
   --color-control: var(--control);
   --color-control-line: var(--control-line);
   --shadow-panel: var(--shadow);
-  /* Inter, with the system font while it loads */
-  --font-sans: "Inter Variable", "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+  /* Apple's system font everywhere */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
+  --text-base: 0.9375rem;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  /* soft, rounded corners like the iPhone app: small controls ~10px, cards ~18–24px, sheets ~30px */
-  --radius-sm: 0.5rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.125rem;
-  --radius-2xl: 1.5rem;
-  --radius-3xl: 1.875rem;
+  /* sharper corners: small controls 6-10px, cards, groups, menus and panels 12px. Circles and
+     pills use rounded-full; sheets use rounded-t-[16px] */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 0.75rem;
 }
 
 /* A status chip: a full pill tinted from its status hue (set --sc), like Paperclip's. */
@@ -263,41 +267,29 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 0.875rem;
-  font-weight: 450;
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
 
 /*
- * Glass: what floats over content (the phone's tab bar, the message bar, menus, sheets) is
- * frosted and translucent with a bright rim, like Liquid Glass on the iPhone app.
+ * Floating surfaces (the phone's tab bar, the message bar, menus, sheets): a solid control
+ * surface with a 1px rim and a light shadow. No blur.
  */
 .glass {
   background: var(--glass-bg);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  backdrop-filter: blur(24px) saturate(1.8);
   border: 1px solid var(--control-line);
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.7), 0 1px 2px oklch(0.2 0 0 / 0.06), 0 10px 32px oklch(0.2 0 0 / 0.12);
+  box-shadow: 0 4px 14px oklch(0.2 0 0 / 0.1);
 }
-:root[data-mode="dark"] .glass {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 10px 30px rgb(0 0 0 / 0.4);
-}
-/* without backdrop blur, glass is just a solid surface */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { background: var(--panel); }
-}
-/*
- * Glass inside glass (the @mention, / and emoji popups over the message bar) can only blur its
- * parent, not the messages behind it, so it would show them through; it's solid instead.
- */
+:root[data-mode="dark"] .glass { box-shadow: 0 4px 14px rgb(0 0 0 / 0.35); }
 .glass .glass,
 :root[data-mode="dark"] .glass .glass {
   background: var(--control);
 }
 
-/* a glass circle button: 42px on desktops, 52px on phones (add .circle-lg for the big one) */
+/* a circle button: 38px on desktops, 44px on phones */
 .circle {
-  width: 42px; height: 42px; border-radius: 50%; flex: none; padding: 0;
+  width: 38px; height: 38px; border-radius: 50%; flex: none; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--control); color: var(--ink);
   border: 1px solid var(--control-line);
@@ -306,11 +298,11 @@ body {
 }
 :root[data-mode="dark"] .circle { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08); }
 .circle:hover { background: color-mix(in oklab, var(--control) 88%, var(--ink)); }
-@media (max-width: 767px) { .circle { width: 52px; height: 52px; } }
-.circle-lg { width: 42px; height: 42px; }
-@media (max-width: 767px) { .circle-lg { width: 56px; height: 56px; } }
-.circle-sm { width: 36px; height: 36px; }
-@media (max-width: 767px) { .circle-sm { width: 44px; height: 44px; } }
+@media (max-width: 767px) { .circle { width: 44px; height: 44px; } }
+.circle-lg { width: 38px; height: 38px; }
+@media (max-width: 767px) { .circle-lg { width: 44px; height: 44px; } }
+.circle-sm { width: 32px; height: 32px; }
+@media (max-width: 767px) { .circle-sm { width: 40px; height: 40px; } }
 
 /* Rendered markdown in messages and the vault preview */
 .prose-w {
@@ -320,7 +312,7 @@ body {
 .prose-w > * + * {
   margin-top: 0.5em;
 }
-.prose-w h1 { font-size: 1.5em; font-weight: 700; margin-top: 0.6em; }
+.prose-w h1 { font-size: 1.4em; font-weight: 600; margin-top: 0.6em; }
 .prose-w h2 { font-size: 1.25em; font-weight: 650; margin-top: 0.8em; }
 .prose-w h3 { font-size: 1.05em; font-weight: 650; margin-top: 0.8em; }
 .prose-w ul { list-style: disc; padding-left: 1.4em; }
@@ -354,10 +346,10 @@ body {
 
 /* chat bubbles, like Messages: yours blue on the right, everyone else's grey on the left */
 :root { --bubble-me: #0a84ff; --bubble-me-ink: #ffffff; --bubble-them: oklch(0.93 calc(var(--gc) * 1.25) var(--gh)); }
-:root[data-mode="dark"] { --bubble-them: #26262a; }
-.bubble { padding: 0.6em 1em; border-radius: 1.5rem; width: fit-content; max-width: min(36rem, 100%); line-height: 1.4; }
-.bubble.them { background: var(--bubble-them); color: var(--ink); }
-.bubble.me { background: var(--bubble-me); color: var(--bubble-me-ink); margin-left: auto; }
+:root[data-mode="dark"] { --bubble-them: #242428; }
+.bubble { padding: 0.5em 0.75em; border-radius: 16px; width: fit-content; max-width: min(36rem, 100%); line-height: 1.4; }
+.bubble.them { border-bottom-left-radius: 4px; background: var(--bubble-them); color: var(--ink); }
+.bubble.me { border-bottom-right-radius: 4px; background: var(--bubble-me); color: var(--bubble-me-ink); margin-left: auto; }
 .bubble.me a, .bubble.me .wikilink { color: inherit; background: none; }
 .bubble.me code, .bubble.me pre { background: rgb(0 0 0 / 0.18); }
 .bubble.me .mention, .bubble.me .mention.user, .bubble.me .mention.agent,
@@ -575,8 +567,8 @@ body {
 .agent-wizard form { display: flex; flex-direction: column; }
 .agent-drawer-eyebrow { text-transform: uppercase; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; color: var(--muted); }
 .agent-wizard-hero { text-align: left; }
-.agent-wizard-hero h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.04em; line-height: 1.2; }
-.agent-wizard-hero p { margin-top: 12px; font-size: 16px; color: var(--muted); line-height: 1.5; }
+.agent-wizard-hero h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+.agent-wizard-hero p { margin-top: 12px; font-size: 15px; color: var(--muted); line-height: 1.5; }
 .agent-wizard-hero.compact { padding-bottom: 28px; }
 .agent-handle-preview { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
 .agent-harness-card { position: relative; display: flex; align-items: center; gap: 10px; min-height: 68px; padding: 14px 22px 14px 12px; text-align: left; border: 1px solid var(--line); border-radius: 8px; transition: border-color 150ms, background 150ms; outline: none; }
@@ -589,7 +581,6 @@ body {
 @media (max-width: 639px) {
   .agent-wizard { max-width: 100%; }
   .agent-wizard > :first-child { padding: 20px 24px 8px; }
-  .agent-wizard-hero h1 { font-size: 28px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-harness-card { transition: none; }
@@ -632,3 +623,21 @@ body {
   }
 }
 
+
+/* titles: 22px on phones, 20px on desktops, weight 600 */
+@utility t-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  @media (min-width: 768px) { font-size: 20px; }
+}
+/* body text is 15px on phones and 14px on desktops */
+@media (min-width: 768px) {
+  .text-\[15px\]:not([class*="md:text-"]):not([class*="lg:text-"]) { font-size: 14px; }
+}
+@media (min-width: 768px) {
+  .bubble { border-radius: 14px; }
+  .bubble.me { border-bottom-right-radius: 4px; }
+  .bubble.them { border-bottom-left-radius: 4px; }
+}

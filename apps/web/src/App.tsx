@@ -218,12 +218,12 @@ function Workspace() {
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="relative flex-1 min-h-0 flex">
           {withColumn && (
-            <aside className="w-80 shrink-0 my-2.5 rounded-l-[28px] bg-panel overflow-hidden">
+            <aside className="w-[300px] shrink-0 my-2 rounded-xl border border-edge bg-panel overflow-hidden">
               <ChatList route={route} />
             </aside>
           )}
           {/* the floating tab bar sits over the page, so pages leave room for it at the bottom */}
-          <main className={cx("flex-1 min-w-0 min-h-0 flex flex-col bg-panel overflow-hidden", showTabs && "[&_.overflow-y-auto]:pb-28", !phone && (withColumn ? "my-2.5 mr-2.5 rounded-r-[28px] border-l border-line" : "m-2.5 ml-0 rounded-[28px]"))}>
+          <main className={cx("flex-1 min-w-0 min-h-0 flex flex-col bg-panel overflow-hidden", showTabs && "[&_.overflow-y-auto]:pb-28", !phone && "my-2 mr-2 rounded-xl border border-edge", !phone && withColumn && "ml-2")}>
             <OfflineBanner phone={phone} />
             {page}
           </main>
@@ -254,20 +254,20 @@ function TabBar({ route }: { route: Route }) {
   const inbox = useInboxCount();
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const tab = (active: boolean, label: string, icon: ReactNode, target: string, badge?: number, dot?: boolean) => (
-    <a href={target} aria-current={active ? "page" : undefined} className={cx("relative flex-1 flex flex-col items-center justify-center gap-[3px] h-[54px] rounded-full text-xs transition-colors", active ? "bg-ink/10 text-ink font-semibold" : "text-muted font-medium")}>
+    <a href={target} aria-current={active ? "page" : undefined} className={cx("relative flex-1 flex flex-col items-center justify-center gap-[2px] h-[48px] rounded-full text-xs transition-colors", active ? "bg-ink/10 text-ink font-medium" : "text-muted font-normal")}>
       {icon}
       {label}
-      {!!badge && <span className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-semibold grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>}
+      {!!badge && <span className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>}
       {dot && <span className="absolute top-2 left-[calc(50%+10px)] size-2 rounded-full bg-ok" aria-label="An agent is working" />}
     </a>
   );
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 px-[34px] pb-[30px] pointer-events-none safe-bottom">
-      <nav className="glass pointer-events-auto mx-auto max-w-md h-[66px] flex items-center justify-between p-1.5 rounded-full" aria-label="Main">
-        {tab(route.view === "dashboard", "Inbox", <InboxIcon size={23} />, href({ view: "dashboard" }), inbox)}
-        {tab(route.view === "chats" || route.view === "chat", "Chats", <ChatsIcon size={23} />, href({ view: "chats" }))}
-        {tab(route.view === "agents", "Agents", <AgentsIcon size={23} />, href({ view: "agents", agentId: null }))}
-        {!isGuest && tab(route.view === "computers", "Computers", <ComputersIcon size={23} />, href({ view: "computers", computerId: null }), undefined, working)}
+    <div className="absolute inset-x-0 bottom-0 z-30 px-6 pb-6 pointer-events-none safe-bottom">
+      <nav className="glass pointer-events-auto mx-auto max-w-md h-[60px] flex items-center justify-between p-1.5 rounded-[30px]" aria-label="Main">
+        {tab(route.view === "dashboard", "Inbox", <InboxIcon size={22} />, href({ view: "dashboard" }), inbox)}
+        {tab(route.view === "chats" || route.view === "chat", "Chats", <ChatsIcon size={22} />, href({ view: "chats" }))}
+        {tab(route.view === "agents", "Agents", <AgentsIcon size={22} />, href({ view: "agents", agentId: null }))}
+        {!isGuest && tab(route.view === "computers", "Computers", <ComputersIcon size={22} />, href({ view: "computers", computerId: null }), undefined, working)}
       </nav>
     </div>
   );

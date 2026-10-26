@@ -36,7 +36,7 @@ function Sample({ template }: { template: TeamTemplate }) {
             {!you && <SeedGhost seed={line.who} size={26} />}
             <div className={cx("max-w-[80%]", you && "text-right")}>
               {!you && <div className="px-2 pb-0.5 text-[12px] text-faint">{line.who}</div>}
-              <div className={cx("inline-block rounded-[18px] px-3.5 py-2 text-left text-[14px] leading-snug", you ? "bg-badge text-badge-ink" : "bg-chip")}>{line.text}</div>
+              <div className={cx("inline-block rounded-[14px] px-3.5 py-2 text-left text-[14px] leading-snug", you ? "bg-badge text-badge-ink" : "bg-chip")}>{line.text}</div>
             </div>
           </div>
         );
@@ -50,7 +50,7 @@ function Detail({ template, index, count, onPrev, onNext, own, onDelete }: { tem
     <div className="min-w-0 flex-1 space-y-5">
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
-          <h3 className="text-2xl font-bold">{template.name}</h3>
+          <h3 className="">{template.name}</h3>
           <p className="mt-1 text-sm text-muted">{template.blurb}</p>
         </div>
         <div className="flex shrink-0 items-center justify-end gap-2">
@@ -102,7 +102,7 @@ export function TemplateBrowser({ title = "Templates", onClose, onUse }: { title
           <div role="listbox" aria-label="Templates" className="w-[280px] shrink-0 space-y-1">
             {all.map((t, i) => (
               <button key={t.id} type="button" role="option" aria-selected={i === page} onClick={() => setPage(i)} className={cx("w-full rounded-2xl px-3.5 py-2.5 text-left", i === page ? "bg-card" : "hover:bg-hover")}>
-                <span className="block text-[15px] font-semibold">{t.name}</span>
+                <span className="block text-[15px] font-medium">{t.name}</span>
                 <span className="block text-[13px] text-muted">{t.blurb}</span>
               </button>
             ))}

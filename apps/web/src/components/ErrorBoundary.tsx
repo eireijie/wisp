@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
       <div className="min-h-full grid place-items-center p-6">
         <div className="max-w-md space-y-4 text-center">
           <img src="/icon.svg" alt="" className="size-10 mx-auto" />
-          <h1 className="text-lg font-semibold">Something went wrong</h1>
+          <h1 className="t-title">Something went wrong</h1>
           <p className="text-sm text-muted">Wisp hit an error on this screen. Your messages, agents and memory are safe on the hub.</p>
           <pre className="text-left text-xs bg-code rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-words">{error.message}</pre>
           <div className="flex justify-center gap-2">

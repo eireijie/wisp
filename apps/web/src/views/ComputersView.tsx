@@ -318,7 +318,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
         <header className="shrink-0 flex flex-wrap items-center gap-2.5 px-4 md:px-6 pt-5 pb-3">
           <BackToComputers />
           {lead ? <AgentAvatar agent={lead} size={28} live /> : <Icon size={20} className="text-muted shrink-0" />}
-          <h1 className="text-[22px] font-bold tracking-tight truncate min-w-0 flex-1">{c.name}</h1>
+          <h1 className="t-title truncate min-w-0 flex-1">{c.name}</h1>
           {mine && !teacher ? (
             <span className="inline-flex items-center gap-2 rounded-full bg-info text-white px-3.5 h-9 text-sm font-medium" role="status">
               <Hand size={15} /> You are in control
@@ -363,7 +363,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
           <div className="shrink-0 mx-4 md:mx-6 mb-3 rounded-2xl border border-accent/40 bg-accent-soft px-4 py-3 flex flex-wrap items-center gap-3" role="status">
             {agents.find((a) => a.id === c.help!.agentId) && <AgentAvatar agent={agents.find((a) => a.id === c.help!.agentId)} size={28} badge={false} />}
             <div className="min-w-0 flex-1 text-sm">
-              <span className="font-semibold">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you on this computer: </span>
+              <span className="font-medium">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you on this computer: </span>
               {c.help.request}
               <span className="text-muted"> · {timeAgo(c.help.at)}</span>
             </div>
@@ -454,12 +454,12 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             {!teacher && (
               <div className="shrink-0 flex flex-wrap gap-2.5">
                 {mine ? (
-                  <button disabled={busy} onClick={() => setHanding(true)} className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-ink text-panel text-sm font-semibold disabled:opacity-50">
+                  <button disabled={busy} onClick={() => setHanding(true)} className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-ink text-panel text-sm font-medium disabled:opacity-50">
                     <Hand size={16} /> Hand back{lead ? ` to ${lead.name}` : ""}
                   </button>
                 ) : (
                   canControl && (
-                    <button disabled={busy || !!c.controller} onClick={() => void control(true)} className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-ink text-panel text-sm font-semibold disabled:opacity-50">
+                    <button disabled={busy || !!c.controller} onClick={() => void control(true)} className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-ink text-panel text-sm font-medium disabled:opacity-50">
                       <Hand size={16} /> Take control
                     </button>
                   )
@@ -518,12 +518,12 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
           </div>
 
           {panel && panel !== "info" && (
-            <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-80 shrink-0 overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-3xl lg:rounded-3xl p-4 shadow-panel">
+            <aside className="fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none lg:w-80 shrink-0 overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-[16px] lg:rounded-3xl p-4 shadow-panel">
               {panel === "files" ? <FilesPanel computer={c} onClose={() => setPanel(null)} refresh={filesChanged} onSent={sync.flash} /> : <ClipboardPanel computer={c} mine={mine} platform={platform} onClose={() => setPanel(null)} />}
             </aside>
           )}
           {(panel === "info" || !panel) && (
-            <aside className={cx("shrink-0 overflow-y-auto space-y-4 text-sm text-ink lg:w-[340px] lg:border-l lg:border-line lg:pl-5", panel === "info" ? "fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none bg-panel border border-line rounded-t-3xl lg:rounded-none lg:border-y-0 lg:border-r-0 p-4 shadow-panel lg:shadow-none" : "hidden lg:block")}>
+            <aside className={cx("shrink-0 overflow-y-auto space-y-4 text-sm text-ink lg:w-[340px] lg:border-l lg:border-line lg:pl-5", panel === "info" ? "fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 lg:static lg:max-h-none bg-panel border border-line rounded-t-[16px] lg:rounded-none lg:border-y-0 lg:border-r-0 p-4 shadow-panel lg:shadow-none" : "hidden lg:block")}>
               <div className="flex items-center lg:hidden">
                 <h3 className="font-semibold">Details</h3>
                 <button onClick={() => setPanel(null)} className="ml-auto p-1.5 rounded-md hover:bg-hover text-muted" aria-label="Close details">

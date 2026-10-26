@@ -379,7 +379,7 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { s
       aria-pressed={selected}
       aria-label={`Step ${n}, ${titleOf(step)}${problem ? `. ${problem}` : ""}`}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onKey())}
-      className={cx("absolute cursor-grab rounded-[22px] border text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring", dragging && "cursor-grabbing shadow-panel", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card", selected && "border-ink/60 ring-2 ring-ink/25")}
+      className={cx("absolute cursor-grab rounded-xl border text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring", dragging && "cursor-grabbing shadow-panel", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card", selected && "border-ink/60 ring-2 ring-ink/25")}
       style={{ left: at.x, top: at.y, width: BOX_W, height: BOX_H }}
     >
       <div className="flex items-start gap-2 px-3.5 pt-3">
@@ -391,13 +391,13 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { s
               <span className="truncate">{mark}</span>
             </div>
           )}
-          <div className={cx("line-clamp-2 text-[15px] font-semibold leading-tight", !step.action.trim() && "text-faint")}>{step.action.trim() || "Untitled step"}</div>
+          <div className={cx("line-clamp-2 text-[15px] font-medium leading-tight", !step.action.trim() && "text-faint")}>{step.action.trim() || "Untitled step"}</div>
         </div>
       </div>
       <div className="absolute inset-x-3.5 bottom-3 flex items-center gap-1.5">
         {step.kind === "ask" ? (
           <>
-            <span className="grid size-[22px] place-items-center rounded-full bg-chip text-[10px] font-semibold">YOU</span>
+            <span className="grid size-[22px] place-items-center rounded-full bg-chip text-[10px] font-medium">YOU</span>
             <span className="text-[13px] text-muted">You</span>
           </>
         ) : step.kind === "handoff" ? (

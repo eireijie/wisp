@@ -67,12 +67,12 @@ export function ProfilePage() {
   return (
     <>
       <PageHeader title="Profile" />
-      {me.role === "guest" && <p className="mb-6 rounded-[20px] bg-card border border-line px-[18px] py-3.5 text-[15px] leading-snug text-muted">You're a guest in {me.workspace.name}. You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.</p>}
+      {me.role === "guest" && <p className="mb-6 rounded-xl bg-card border border-line px-[18px] py-3.5 text-[15px] leading-snug text-muted">You're a guest in {me.workspace.name}. You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and people belong to the owner.</p>}
       <form onSubmit={save} className="space-y-4">
         <div className="flex items-center gap-4 mb-2">
           <UserAvatar name={f.name || me.user.name} size={64} />
           <div>
-            <div className="text-lg font-semibold">{f.name || me.user.name}</div>
+            <div className="text-lg font-medium">{f.name || me.user.name}</div>
             <div className="text-sm text-muted">
               {roleName} · {me.workspace.name}
             </div>

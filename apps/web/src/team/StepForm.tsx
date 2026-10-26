@@ -214,10 +214,10 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
             )}
           </FieldBox>
           {!step.rule && <AgentField label="Decided by" value={agentValue} onChange={(agentId) => set({ agentId })} note="An agent reads the result and answers yes or no." />}
-          <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+          <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
             {([true, false] as const).map((yes) => (
               <label key={String(yes)} className="relative flex items-center gap-3 px-4 py-2.5">
-                <span className="w-9 text-[15px] font-semibold">{yes ? "Yes" : "No"}</span>
+                <span className="w-9 text-[15px] font-medium">{yes ? "Yes" : "No"}</span>
                 <span className="min-w-0 flex-1 truncate text-[15px]">{stepText(yes ? step.ifTrue : step.ifFalse, "The end")}</span>
                 <select aria-label={yes ? "If yes, go to" : "If no, go to"} value={(yes ? step.ifTrue : step.ifFalse) ?? "__end"} onChange={(e) => setBranch(yes, e.target.value === "__end" ? null : e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
                   <option value="__end">The end</option>
@@ -241,7 +241,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
           <TextBox label="What it does" value={step.prompt ?? ""} onChange={(v) => set({ prompt: v })} placeholder="Split the work into pieces and say who gets each one." rows={4} maxLength={4000} />
           <div className="space-y-1.5">
             <span className="block px-2 text-xs text-muted">Pieces go to</span>
-            <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+            <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
               {(team.roles ?? []).map((r) => {
                 const on = (step.handTo ?? []).includes(r.id);
                 const a = agents.find((x) => x.id === r.agentId);
@@ -291,7 +291,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
             options={(Object.keys(KIND_NAME) as TeamStepKind[]).map((k) => ({ value: k, label: KIND_NAME[k] }))}
             onPick={(k) => onChange(retype(team, stepId, k as TeamStepKind, agents))}
           />
-          <button type="button" onClick={onDelete} className="flex h-12 w-full items-center justify-center gap-2 rounded-[18px] border border-line bg-card text-[15px] text-bad hover:bg-hover">
+          <button type="button" onClick={onDelete} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-card text-[15px] text-bad hover:bg-hover">
             <Trash2 size={16} aria-hidden /> Delete step
           </button>
           <p className="px-2 text-xs text-faint">What led to it will lead to what came after it.</p>
@@ -319,7 +319,7 @@ function HandoffTeams({ value, onPick, except, channels }: { value: string | nul
   return (
     <div className="space-y-1.5">
       <span className="block px-2 text-xs text-muted">Hand off to</span>
-      <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+      <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
         {teams.map((t) => (
           <button key={t.id} type="button" role="radio" aria-checked={value === t.id} onClick={() => onPick(t.id)} className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-[15px] hover:bg-hover">
             <span className="min-w-0 flex-1 truncate">{t.name}</span>

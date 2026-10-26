@@ -11,7 +11,7 @@ import { useCreateAgent } from "./NewAgent.tsx";
 /** A step's number: its place in the order things happen in. */
 export function StepNum({ n, size = 22 }: { n: number; size?: number }) {
   return (
-    <span className="grid shrink-0 place-items-center rounded-full bg-chip font-semibold text-ink/85 tabular-nums" style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }} aria-hidden>
+    <span className="grid shrink-0 place-items-center rounded-full bg-chip font-medium text-ink/85 tabular-nums" style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }} aria-hidden>
       {n}
     </span>
   );
@@ -51,7 +51,7 @@ export function MessageChip({ className }: { className?: string }) {
 export function FieldBox({ label, note, children, className }: { label?: string; note?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <div className="space-y-1.5">
-      <div className={cx("rounded-[18px] border border-line bg-card px-4 py-2.5", className)}>
+      <div className={cx("rounded-xl border border-line bg-card px-4 py-2.5", className)}>
         {label && <span className="block text-xs text-muted">{label}</span>}
         {children}
       </div>
@@ -92,7 +92,7 @@ export function PickBox({
 }) {
   const groups = useMemo(() => [...new Set(options.map((o) => o.group ?? ""))], [options]);
   return (
-    <div className={cx("relative flex items-center gap-3 rounded-[18px] border bg-card px-4 py-2.5", invalid ? "border-bad/50" : "border-line")}>
+    <div className={cx("relative flex items-center gap-3 rounded-xl border bg-card px-4 py-2.5", invalid ? "border-bad/50" : "border-line")}>
       {lead}
       <span className="min-w-0 flex-1">
         <span className="block text-xs text-muted">{label}</span>
@@ -163,7 +163,7 @@ export function InputsField({ team, stepId, options, title, onSet }: { team: Cha
   return (
     <div className="space-y-1.5">
       <span className="block px-2 text-xs text-muted">{title}</span>
-      <div className="overflow-hidden rounded-[18px] border border-line bg-card divide-y divide-line">
+      <div className="overflow-hidden rounded-xl border border-line bg-card divide-y divide-line">
         {options.map((s) => {
           const on = current.includes(s.id);
           return (

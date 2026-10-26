@@ -259,12 +259,12 @@ export function TeamChart({
                 >
                   <AgentAvatar agent={a} size={34} live={!!busy} interactive={false} />
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold truncate agent-ink">{a.name}</div>
+                    <div className="text-sm font-medium truncate agent-ink">{a.name}</div>
                     <div className="text-[11px] text-muted truncate">{busy ? <span className="text-ok font-medium">{busy}</span> : n.role?.trim() || a.settings.role?.trim() || `@${a.handle}`}</div>
                   </div>
                   {readOnly ? (
                     n.lead && (
-                      <span className="absolute -top-2.5 left-3 h-5 px-1.5 rounded-full bg-ink text-panel text-[10px] font-semibold inline-flex items-center gap-1">
+                      <span className="absolute -top-2.5 left-3 h-5 px-1.5 rounded-full bg-ink text-panel text-[10px] font-medium inline-flex items-center gap-1">
                         <Crown size={10} /> Lead
                       </span>
                     )
@@ -275,7 +275,7 @@ export function TeamChart({
                         onClick={() => toggleLead(n)}
                         aria-pressed={n.lead}
                         title={n.lead ? "Lead: reads every new message. Click to make it get work from a lead instead." : "Make it a lead"}
-                        className={cx("absolute -top-2.5 left-3 h-5 px-1.5 rounded-full text-[10px] font-semibold inline-flex items-center gap-1 border", n.lead ? "bg-ink text-panel border-ink" : "bg-panel text-muted border-line opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100")}
+                        className={cx("absolute -top-2.5 left-3 h-5 px-1.5 rounded-full text-[10px] font-medium inline-flex items-center gap-1 border", n.lead ? "bg-ink text-panel border-ink" : "bg-panel text-muted border-line opacity-0 group-hover:opacity-100 focus:opacity-100 pointer-coarse:opacity-100")}
                       >
                         <Crown size={10} /> {n.lead ? "Lead" : "Make lead"}
                       </button>
@@ -312,7 +312,7 @@ export function TeamChart({
         {!readOnly && (
           <aside className="md:w-64 shrink-0 border-t md:border-t-0 md:border-l border-line flex flex-col max-h-72 md:max-h-none" aria-label="Your agents">
             <div className="px-3 pt-3 pb-2 space-y-2">
-              <div className="text-sm font-semibold">Your agents</div>
+              <div className="text-sm font-medium">Your agents</div>
               {agents.length > 6 && (
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />

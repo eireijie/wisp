@@ -36,7 +36,7 @@ function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; st
   const handoff = useHandoffName(step.handoffTo);
   const uses = (step.inputs ?? []).length > 1 ? `Uses ${(step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b).join(" and ")}` : null;
   return (
-    <button type="button" onClick={onOpen} aria-label={`Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 rounded-[22px] border p-3.5 text-left", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
+    <button type="button" onClick={onOpen} aria-label={`Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 rounded-xl border p-3.5 text-left", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
       <div className="flex items-start gap-2.5">
         <StepNum n={numberOf(team, step.id)} />
         <div className="min-w-0 flex-1">
@@ -46,7 +46,7 @@ function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; st
               <span className="truncate">{mark}</span>
             </div>
           )}
-          <div className="line-clamp-2 text-[16px] font-semibold leading-tight">{titleOf(step)}</div>
+          <div className="line-clamp-2 text-[15px] font-medium leading-tight">{titleOf(step)}</div>
         </div>
       </div>
       <div className="mt-3 flex items-center gap-2">
@@ -96,7 +96,7 @@ export function PhoneFlow({ team, problems, banner, onOpen, onAdd }: { team: Cha
       <span className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line bg-card px-3.5 text-[14px] text-muted">
         <Flag size={14} aria-hidden /> Done
       </span>
-      <Button type="button" variant="primary" onClick={() => onAdd({ after: stepOrder(team.steps ?? []).at(-1)?.id ?? null })} className="mt-7 h-12 w-56 text-[16px]">
+      <Button type="button" variant="primary" onClick={() => onAdd({ after: stepOrder(team.steps ?? []).at(-1)?.id ?? null })} className="mt-7 h-12 w-56 text-[15px]">
         <Plus size={16} /> Add a step
       </Button>
     </div>

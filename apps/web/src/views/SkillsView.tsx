@@ -178,7 +178,7 @@ export function SkillDetail({ open, agents, canEdit, onInstall, onEdit, onChange
           <CatalogIcon name={entry?.icon} fallback={Wand2} size={26} />
         </Tile>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h2 className="text-2xl font-bold tracking-tight">{name}</h2>
+          <h2 className="">{name}</h2>
           <div className="flex flex-wrap items-center gap-2">
             {skill ? <Badge tone={skill.catalogId?.startsWith("device:") || skill.source === "custom" ? "grey" : "green"}>{skillOrigin(skill)}</Badge> : <Badge tone="green" icon={<BadgeCheck size={13} aria-hidden />}>Made by Wisp</Badge>}
             {skill && <span className="text-sm text-faint">{helperLine(agents, skill.agentIds)}</span>}
@@ -257,7 +257,7 @@ export function StoreSkillDetail({ s, icon, canEdit, onAdd, onTry }: { s: StoreS
       <header className="flex items-start gap-4">
         <Tile size={56}>{icon}</Tile>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h2 className="text-2xl font-bold tracking-tight">{s.name}</h2>
+          <h2 className="">{s.name}</h2>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="grey">From {s.source.label}</Badge>
             <Badge tone={s.license.open ? "grey" : "warn"}>{s.license.label}</Badge>
