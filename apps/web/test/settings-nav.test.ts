@@ -3,7 +3,7 @@ import { FEATURE_PRESETS } from "@wisp/core";
 
 // the settings pages read browser state when their modules load; the list itself doesn't need it
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, THEMES: [], useAppearance: () => ({}) }));
-const { settingsNav } = await import("../src/views/SettingsView.tsx");
+const { settingsNav, settingsLinks } = await import("../src/views/SettingsView.tsx");
 const { SETTINGS_PAGES } = await import("../src/router.ts");
 const ids = (sections: ReturnType<typeof settingsNav>) => sections.map((s) => [s.section, s.pages.map((p) => p.id)]);
 
@@ -16,6 +16,11 @@ describe("settings navigation", () => {
       ["Devices", ["devices", "computers", "access", "mobile"]],
       ["More", ["data", "updates"]],
     ]);
+  });
+
+  it("links Memory, Marketplace and Tasks from Settings, with Memory for guests too", () => {
+    expect(settingsLinks("You", false, FEATURE_PRESETS.everything).map((l) => l.label)).toEqual(["Memory", "Marketplace", "Tasks"]);
+    expect(settingsLinks("You", true, FEATURE_PRESETS.everything).map((l) => l.label)).toEqual(["Memory"]);
   });
 
   it("still opens every route (SETTINGS_PAGES) somewhere", () => {

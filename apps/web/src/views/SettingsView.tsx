@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Bell, Blocks, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, LifeBuoy, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal } from "lucide-react";
+import { Bell, Blocks, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, LifeBuoy, Link2, ListTodo, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal } from "lucide-react";
 import { resolveFeatures, type Features } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -126,10 +126,18 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
 };
 
 /** A link in the list that isn't a settings page: it opens its own area. */
-const LINKS: { after: string; label: string; icon: ReactNode; to: () => string; noGuests?: boolean }[] = [
+const LINKS: { after: string; label: string; icon: ReactNode; to: () => string; noGuests?: boolean; feature?: keyof Features }[] = [
+  { after: "You", label: "Memory", icon: ic(BookOpen), to: () => href({ view: "vault", path: null }) },
+  { after: "You", label: "Marketplace", icon: ic(Store), to: () => href({ view: "marketplace" }), noGuests: true },
+  { after: "You", label: "Tasks", icon: ic(ListTodo), to: () => href({ view: "tasks" }), noGuests: true, feature: "tasks" },
   { after: "Devices", label: "Computers and devices", icon: ic(Monitor), to: () => href({ view: "computers", computerId: null }), noGuests: true },
   { after: "More", label: "Help", icon: ic(LifeBuoy), to: () => href({ view: "help" }) },
 ];
+
+/** The links under a section, for a guest or not, with the organization's features. */
+export function settingsLinks(section: string, guest: boolean, features: Features = resolveFeatures(null)) {
+  return LINKS.filter((l) => l.after === section && !(guest && l.noGuests) && (!l.feature || features[l.feature]));
+}
 
 /**
  * Settings: on desktops a full page inside the rail layout, a list of sections on the left and the
@@ -149,7 +157,7 @@ export function SettingsView({ page, onBack, fullWindow }: { page: SettingsPage 
 
   const items = (s: NavSection) => [
     ...s.pages.map((p) => ({ key: p.id, label: p.label, icon: p.icon, to: href({ view: "settings", page: p.id }), on: current === p.id })),
-    ...LINKS.filter((l) => l.after === s.section && !(guest && l.noGuests)).map((l) => ({ key: l.label, label: l.label, icon: l.icon, to: l.to(), on: false })),
+    ...settingsLinks(s.section, guest, features).map((l) => ({ key: l.label, label: l.label, icon: l.icon, to: l.to(), on: false })),
   ];
 
   const list = fullWindow ? (
