@@ -96,6 +96,8 @@ struct MainTabs: View {
     .onChange(of: store.unreadTotal, initial: true) { store.updateBadge() }
     // a tapped notification: go to its tab; the tab's own screen opens the chat, computer or approval
     .onChange(of: store.route, initial: true) { _, route in
+      // a route opens a screen in a tab: close the settings and organization sheets that would hide it
+      if route != nil { settings = false; orgs = false }
       switch route {
       case .chat: tab = .chats
       case .approval: tab = .inbox

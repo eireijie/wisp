@@ -116,6 +116,9 @@ struct Channel: Codable, Identifiable, Hashable {
   var notify: String?
   var starred: Bool?
   var pinnedIds: [String]?
+  /** when the newest message was sent, from the channel list (messages themselves load per chat) */
+  struct Last: Codable, Hashable { var at: String }
+  var last: Last?
 
   var isDM: Bool { kind == "dm" }
   var isMuted: Bool { notify == "mute" }

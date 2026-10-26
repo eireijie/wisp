@@ -200,6 +200,32 @@ final class TeamFlowTests: XCTestCase {
     assertConsistent(t)
   }
 
+  func testAddingAGateBeforeABranchTargetKeepsTheBranchRoute() {
+    var q = step("q", kind: .branch, inputs: ["s"]); q.ifTrue = "a"; q.ifFalse = "b"
+    var t = team([step("s", nexts: ["q"]), q, step("a", inputs: ["q"]), step("b", inputs: ["q"])])
+    t = t.inserting(.init(id: "gate", kind: .ask, action: "Say go"), before: "a")
+    XCTAssertEqual(t.step("q")?.ifTrue, "gate")
+    XCTAssertEqual(t.step("q")?.ifFalse, "b")
+    XCTAssertEqual(t.step("gate")?.nexts, ["a"])
+    assertConsistent(t)
+  }
+
+  func testMovingAStepKeepsTheArrowsThatPointedAtIt() {
+    var t = team([step("plan", nexts: ["build"]), step("build", inputs: ["plan"], nexts: ["rev"]), step("rev", kind: .review, inputs: ["build"], back: "build")])
+    t = t.moving("build", after: nil)
+    XCTAssertEqual(t.orderedSteps.map(\.id), ["build", "plan", "rev"])
+    XCTAssertEqual(t.step("rev")?.sendBackTo, "build")
+    assertConsistent(t)
+  }
+
+  func testMovingAStepKeepsTheBranchArmsThatPointedAtIt() {
+    var q = step("q", kind: .branch, inputs: ["s"]); q.ifTrue = "a"; q.ifFalse = "b"
+    var t = team([step("s", nexts: ["q"]), q, step("a", inputs: ["q"]), step("b", inputs: ["q"])])
+    t = t.moving("a", after: "b")
+    XCTAssertEqual(t.step("q")?.ifTrue, "a")
+    XCTAssertEqual(t.step("q")?.ifFalse, "b")
+  }
+
   func testMovingAStepFollowsTheOneAbove() {
     var t = team([step("a", nexts: ["b"]), step("b", inputs: ["a"], nexts: ["c"]), step("c", inputs: ["b"])])
     t = t.moving("c", after: "a")

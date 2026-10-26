@@ -267,6 +267,18 @@ final class ManagementTests: XCTestCase {
     XCTAssertEqual(json["fast"] as? Bool, true)
   }
 
+  func testResettingToTheDefaultModelClearsTheEffortInTheSameUpdate() throws {
+    func json(_ fields: Fields) throws -> [String: Any] {
+      try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(fields)) as? [String: Any])
+    }
+    let models = try Wire.decoder.decode(AgentModels.self, from: Data(#"{"catalog":{"models":[{"id":"model","label":"Model"}],"efforts":["high"],"defaultModel":"model"}}"#.utf8))
+    let withCatalog = try json(AgentModels.modelFields(models, model: "", effort: "", fast: true))
+    XCTAssertTrue(withCatalog["model"] is NSNull)
+    XCTAssertTrue((withCatalog["settings"] as? [String: Any])?["effort"] is NSNull || (withCatalog["settings"] as? [String: Any])?["effort"] as? String == "")
+    let without = try json(AgentModels.modelFields(nil, model: "", effort: "", fast: false))
+    XCTAssertNotNil(without["settings"])
+  }
+
   func testSlowHarnessRequestsKeepDefaultTimeoutForOtherCalls() async throws {
     let store = try makeStore()
     reply("GET", "/api/agents/a1/harness", #"{"possible":true,"inComputer":true,"signedIn":false,"computerId":"vm1"}"#)

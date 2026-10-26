@@ -197,7 +197,9 @@ struct ManagePersonView: View {
   @State private var removing = false
   @State private var action = FormAction()
 
-  private var lastOwner: Bool { member.role == "owner" && store.members.filter { $0.role == "owner" }.count < 2 }
+  /** the role the hub has now (the `member` passed in is a snapshot from when the page opened) */
+  private var savedRole: String { store.members.first { $0.id == member.id }?.role ?? member.role }
+  private var lastOwner: Bool { savedRole == "owner" && store.members.filter { $0.role == "owner" }.count < 2 }
 
   var body: some View {
     SettingsPage(member.name, id: "manage-person") {
@@ -211,7 +213,15 @@ struct ManagePersonView: View {
       }
       CardLabel("Role")
       SegmentedPicker(options: lastOwner ? [("owner", "Owner")] : [("owner", "Owner"), ("member", "Member"), ("guest", "Guest")], selection: $role, label: "Role", id: "manage-role")
-        .onChange(of: role) { if role != member.role { action.run { try await store.updateMember(member.id, role: role) } } }
+        .disabled(action.busy)
+        .onChange(of: role) {
+          guard role != savedRole else { return }
+          let wanted = role
+          action.run {
+            do { try await store.updateMember(member.id, role: wanted) }
+            catch { role = savedRole; throw error }
+          }
+        }
       CardHint(lastOwner ? "An organization needs at least one owner; make someone else an owner first." : (roleHint[role] ?? ""))
       CardGroup {
         NavigationLink { TemporaryPasswordView(member: member) } label: { RowLabel(title: "Set a temporary password", subtitle: "Set a new password and end their sign-ins") }
@@ -220,7 +230,7 @@ struct ManagePersonView: View {
       StatusLine(error: action.error)
       Button("Remove person") { removing = true }.buttonStyle(.pill(.destructive)).accessibilityIdentifier("manage-remove")
     }
-    .onAppear { role = member.role }
+    .onAppear { role = savedRole }
     .confirmCard($removing, title: "Remove \(member.name)?", message: "Their tokens and devices will be disconnected.", confirm: "Remove") {
       action.run { try await store.removePerson(member.id); dismiss() }
     }

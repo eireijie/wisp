@@ -77,7 +77,7 @@ struct AddAgent: View {
   private var askWho: Bool { store.features.invite || store.otherPeople.count > 0 }
   private var firstNode: String? {
     let usable = store.nodes.filter(\.usable)
-    return usable.first { $0.online }?.id ?? usable.first?.id
+    return usable.first { $0.id == nodeId }?.id ?? usable.first { $0.online }?.id ?? usable.first?.id
   }
 
   var body: some View {
@@ -128,7 +128,7 @@ struct AddAgent: View {
       try? await store.refreshConnectors()
       draft.harness = store.agentDefaults?.harness ?? "claude-code"
       draft.model = store.agentDefaults?.model ?? ""
-      if store.agentDefaults?.computer != "none", let node = store.agentDefaults?.nodeId ?? firstNode { draft.computer = "vm:\(node)" }
+      if store.agentDefaults?.computer != "none", let node = (nodeId != nil && firstNode == nodeId ? nodeId : nil) ?? store.agentDefaults?.nodeId ?? firstNode { draft.computer = "vm:\(node)" }
     }
   }
 
@@ -252,6 +252,8 @@ struct AddAgent: View {
         }
       } else {
         fields["useDefaults"] = AnyEncodable(true)
+        // started from a device's page: the agent goes there, not to the default device
+        if let start = self.nodeId, firstNode == start { fields["nodeId"] = AnyEncodable(start) }
         // hubs without agent defaults still need a harness and a device
         if store.agentDefaults == nil {
           fields["harness"] = AnyEncodable("claude-code")

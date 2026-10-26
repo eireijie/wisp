@@ -75,6 +75,8 @@ final class CallController {
   @ObservationIgnored var onHangUp: (() -> Void)?
   @ObservationIgnored private var deviceSpeaker: DeviceSpeaker?
   @ObservationIgnored private var cloudSpeaker: CloudSpeaker?
+  /** bumped by every begin and by hanging up, so a start that finishes late can tell it was replaced */
+  @ObservationIgnored private var generation = 0
 
   init(agent: Agent, channel: Channel) {
     self.agent = agent; self.channel = channel
@@ -85,11 +87,14 @@ final class CallController {
 
   func begin(store: Store) async {
     stopSession()
+    generation += 1
+    let mine = generation
     loadError = ""; engine = ""
     guard store.agent(agent.id)?.status != .offline else { return }
     do {
       let api = try store.connection()
       let prefs: VoicePreferences = try await api.get("/api/voice/settings")
+      guard mine == generation, !Task.isCancelled else { return }
       let hub = VoiceHub(api: { try store.connection() })
       let channelId = channel.id, agentId = agent.id
       let speaker = CallEngines.speaker(engine: prefs.speak, voice: voice, seed: agent.handle, hub: hub)
@@ -120,6 +125,7 @@ final class CallController {
 
   /** hang up: stop everything and let the chat drop the call */
   func end(store: Store) {
+    generation += 1
     stopSession()
     store.onCallRunEvent = nil
     CallAudio.deactivate()

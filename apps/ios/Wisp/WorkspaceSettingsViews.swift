@@ -67,15 +67,21 @@ struct AgentPolicyView: View {
   }
 
   private func update(_ edit: (inout AgentPolicy) -> Void) {
-    guard var next = store.agentPolicy, store.isOwner else { return }
+    guard var next = store.agentPolicy, store.isOwner, !action.busy else { return }
     edit(&next)
     if next.leadsCreateAgents != true { next.subAgents = canSpawn ? false : nil }
     store.agentPolicy = next
-    action.run { try await store.saveAgentPolicy(next) }
+    action.run { try await store.saveAgentPolicyOrRestore(next) }
   }
 }
 
 extension Store {
+  /** Saves the policy; if that fails, shows what the hub still has instead of the unsaved choice. */
+  func saveAgentPolicyOrRestore(_ next: AgentPolicy) async throws {
+    do { try await saveAgentPolicy(next) }
+    catch { try? await refreshAgentPolicy(); throw error }
+  }
+
   func refreshAgentPolicyAndLead(into action: FormAction) async {
     do { try await refreshAgentPolicy() } catch { action.error = error.localizedDescription }
     try? await refreshTaskLead()
@@ -97,10 +103,10 @@ struct AskBeforeView: View {
             next.askBefore.removeAll { $0 == item.key }
             if on { next.askBefore.append(item.key) }
             store.agentPolicy = next
-            action.run { try await store.saveAgentPolicy(next) }
+            action.run { try await store.saveAgentPolicyOrRestore(next) }
           }), id: "ask-\(item.key)")
         }
-      }.disabled(!store.isOwner || store.agentPolicy == nil)
+      }.disabled(!store.isOwner || store.agentPolicy == nil || action.busy)
       CardHint("When an agent is about to do one of these on its own, it asks you first in Inbox and in the chat. You can approve or say not now. If you ask it to do one, it just does it.")
       StatusLine(error: action.error)
     }
@@ -122,8 +128,8 @@ struct NewAgentAccessView: View {
             guard var next = store.agentPolicy else { return }
             next.defaultAccess = item.key
             store.agentPolicy = next
-            action.run { try await store.saveAgentPolicy(next) }
-          }.disabled(!store.isOwner)
+            action.run { try await store.saveAgentPolicyOrRestore(next) }
+          }.disabled(!store.isOwner || action.busy)
         }
       }
       CardHint("What a new agent may do where its AI tool runs directly on a device. Inside its own computer an agent always has full access; the computer is its sandbox.")
@@ -397,6 +403,6 @@ struct AgentVoicesView: View {
       }
       CardHint("Every agent can have its own voice. Tap one to pick it and hear a sample.")
     }
-    .sheet(item: $editing) { LookEditor(agent: $0).environment(store) }
+    .sheet(item: $editing) { AgentVoiceSheet(agent: $0).environment(store) }
   }
 }

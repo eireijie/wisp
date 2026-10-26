@@ -57,22 +57,24 @@ struct TeamInfoPage: View {
         CircleButton(symbol: "xmark", label: "Close", size: 44) { dismiss() }
       }
       .padding(.horizontal, 18).padding(.vertical, 10)
+      ScrollViewReader { scroll in
       ScrollView {
         VStack(alignment: .leading, spacing: 22) {
           HStack(spacing: 10) {
             quick("bell", "Notify") { notify = true }
-            quick("pin", "Pins") { }
+            quick("pin", "Pins") { withAnimation { scroll.scrollTo("team-pins", anchor: .top) } }
             quick("gauge.with.dots.needle.33percent", "Context") { context = true }
           }
           about
           agentsSection
           membersSection
-          pinsSection
+          pinsSection.id("team-pins")
           teamSection
           InlineError(error: action.error)
         }
         .padding(.horizontal, 18)
         .padding(.bottom, 30)
+      }
       }
     }
     .toolbar(.hidden, for: .navigationBar)
@@ -83,7 +85,9 @@ struct TeamInfoPage: View {
     .onChange(of: current.memberCount) { Task { await load() } }
     .onChange(of: current.pinnedIds) { Task { await load() } }
     .sheet(isPresented: $notify) { NotifySheet(channel: current) }
-    .sheet(isPresented: $context) { ContextAccessSheet(channel: current, agents: agentMembers) }
+    .sheet(isPresented: $context) {
+      NavigationStack { ContextAccessSheet(channel: current, agents: agentMembers).toolbar(.hidden, for: .navigationBar) }
+    }
     .sheet(isPresented: $adding, onDismiss: { Task { await load() } }) { AddChannelMembers(channel: channel, existing: Set(people.map(\.actor))) }
     .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), titleVisibility: .visible) {
       Button(confirm == "delete" ? "Delete team" : confirm == "archive" ? "Archive team" : "Leave team", role: confirm == "archive" ? nil : .destructive) {

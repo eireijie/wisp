@@ -28,6 +28,15 @@ final class FoundationTests: XCTestCase {
     XCTAssertTrue(again.first?.pinned == true)
   }
 
+  func testChatListOrdersUnloadedChatsByTheChannelListsLastMessage() {
+    var channels = [channel("c1", name: "alpha"), channel("c2", name: "zulu")]
+    channels[1].last = Channel.Last(at: "2026-10-25T10:00:00Z")
+    let messages = ["c1": [message("m1", "c1", at: "2026-10-20T10:00:00Z")]]
+    let list = ChatList.entries(agents: [], channels: channels, messages: messages, dmAgent: { _ in nil })
+    XCTAssertEqual(list.map(\.name), ["zulu", "alpha"])
+    XCTAssertNotNil(list.first?.lastAt)
+  }
+
   func testTimeText() {
     var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
     let now = Date(timeIntervalSince1970: 1_792_000_000)

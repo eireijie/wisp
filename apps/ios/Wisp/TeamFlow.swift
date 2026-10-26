@@ -630,6 +630,20 @@ extension ChannelTeam {
 
 // MARK: editing, keeping every edge consistent
 
+/** The two ways out of an if/else. */
+fileprivate enum BranchArm { case yes, no }
+
+fileprivate extension ChannelTeam.Step {
+  /** Which of an if/else's arms lead to `id` (empty for any other step). */
+  func arms(to id: String) -> Set<BranchArm> {
+    guard kind == .branch else { return [] }
+    var out = Set<BranchArm>()
+    if ifTrue == id { out.insert(.yes) }
+    if ifFalse == id { out.insert(.no) }
+    return out
+  }
+}
+
 extension ChannelTeam {
   /** A new step id that isn't taken. */
   func freeStepId(_ prefix: String = "step") -> String {
@@ -707,8 +721,10 @@ extension ChannelTeam {
     var team = appending(new)
     if let after, let anchor = self.step(after) {
       let followers = (anchor.nexts ?? []).filter { id in self.step(id) != nil }
+      let arms = Dictionary(uniqueKeysWithValues: followers.map { ($0, anchor.arms(to: $0)) })
       for f in followers { team = team.disconnecting(after, f) }
       team = team.connecting(after, new.id)
+      for f in followers { team = team.sendingArms(of: after, arms[f] ?? [], to: new.id) }
       for f in followers where f != new.id { team = team.connecting(new.id, f) }
     } else if let beside, let anchor = self.step(beside) {
       for i in anchor.inputIds { team = team.connecting(i, new.id) }
@@ -729,8 +745,22 @@ extension ChannelTeam {
     var new = step
     new.inputs = []; new.nexts = []; new.next = nil
     var team = appending(new)
-    for i in anchor.inputIds { team = team.disconnecting(i, id).connecting(i, new.id) }
+    for i in anchor.inputIds {
+      // an if/else that sent Yes or No to `id` now sends it to the new step
+      let arms = self.step(i)?.arms(to: id) ?? []
+      team = team.disconnecting(i, id).connecting(i, new.id).sendingArms(of: i, arms, to: new.id)
+    }
     return team.connecting(new.id, id)
+  }
+
+  /** Point an if/else's Yes and/or No arms at `to` (nothing happens for other steps). */
+  fileprivate func sendingArms(of id: String, _ arms: Set<BranchArm>, to: String) -> ChannelTeam {
+    guard !arms.isEmpty else { return self }
+    return updating(id) { s in
+      guard s.kind == .branch else { return }
+      if arms.contains(.yes) { s.ifTrue = to }
+      if arms.contains(.no) { s.ifFalse = to }
+    }
   }
 
   /** Take a step off. Whatever led to it now leads to whatever followed it, and arrows that pointed at it are cleared. */
@@ -759,6 +789,8 @@ extension ChannelTeam {
    */
   func moving(_ id: String, after target: String?) -> ChannelTeam {
     guard let moved = step(id), target != id else { return self }
+    // taking the step off clears the arrows that pointed at it; they are put back once it has moved
+    let pointing = (steps ?? []).filter { $0.id != id }.map { ($0.id, $0.sendBackTo == id, $0.ifTrue == id, $0.ifFalse == id) }
     var team = removingStep(id)
     var fresh = moved
     fresh.inputs = []; fresh.nexts = []; fresh.next = nil
@@ -768,6 +800,15 @@ extension ChannelTeam {
       let starts = Self.startSteps(team.steps ?? []).map(\.id)
       team = team.appending(fresh)
       for s in starts { team = team.connecting(fresh.id, s) }
+    }
+    for (owner, back, yes, no) in pointing where team.step(owner) != nil {
+      // "send it back to" only makes sense for a step that still comes before the owner
+      let before = !Self.stepsAfter(team.steps ?? [], owner).contains(id)
+      team = team.updating(owner) { s in
+        if back && before { s.sendBackTo = id }
+        if yes { s.ifTrue = id }
+        if no { s.ifFalse = id }
+      }
     }
     return team
   }

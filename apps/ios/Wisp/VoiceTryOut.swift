@@ -128,7 +128,7 @@ struct VoiceTryOutView: View {
       }
     }
     .onDisappear { model.stop(); CallAudio.deactivate() }
-    .sheet(item: $editing) { LookEditor(agent: $0).environment(store) }
+    .sheet(item: $editing) { AgentVoiceSheet(agent: $0).environment(store) }
   }
 
   @ViewBuilder private func outcome(_ result: VoiceTryOutModel.Outcome?) -> some View {

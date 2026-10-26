@@ -100,6 +100,30 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertEqual(speaker.said, ["It exports one function.", "And it is small."])
   }
 
+  func testTheFinishedReplyWaitsForTheFirstSentenceStillPlaying() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "text", text: "It exports one function. And", tool: nil, file: nil))
+    await settle()
+    let cancels = speaker.cancels
+    list = [msg("m2", body: "It exports one function. And it is small.\\n\\nMore.", at: 2)]
+    s.sync(); await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function."])
+    XCTAssertEqual(speaker.cancels, cancels)
+    speaker.end(); await settle()
+    XCTAssertEqual(speaker.said, ["It exports one function.", "And it is small."])
+  }
+
+  func testAnotherTeamsStreamingDoesNotEnterTheCall() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    s.event(CallRunEvent(runId: "r9", agentId: "a1", channelId: "other", threadId: nil, type: "tool_call", text: nil, tool: "Read", file: "/a/x.ts"))
+    s.event(CallRunEvent(runId: "r9", agentId: "a1", channelId: "other", threadId: nil, type: "text", text: "Elsewhere. More", tool: nil, file: nil))
+    await settle()
+    XCTAssertEqual(s.state.activity, "")
+    XCTAssertTrue(speaker.said.isEmpty)
+  }
+
   func testRepliesAreOnlySpokenOnce() async {
     let s = await makeSession()
     callbacks.final("hello"); await settle()
