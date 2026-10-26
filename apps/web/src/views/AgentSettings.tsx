@@ -515,7 +515,8 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
     onDirty(dirty);
   }, [dirty, onDirty]);
 
-  const selected: ModelOption | undefined = models.find((m) => m.id === form.model);
+  // with no model picked the harness uses its own default, which has the efforts and fast tier too
+  const selected: ModelOption | undefined = models.find((m) => m.id === (form.model || info?.catalog?.defaultModel));
   const efforts = selected?.efforts ?? info?.catalog?.efforts ?? ["low", "medium", "high"];
   const effortDropped = form.effort && !efforts.includes(form.effort);
   // the device's configured effort wins over the model's own default, as in Codex
@@ -608,7 +609,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
         {custom && (
           <div className="mt-2.5 max-w-sm">
             <Field label="Model id">
-              <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={agent.harness === "codex" ? "gpt-6-astra" : "claude-opus-5-5"} autoFocus />
+              <Input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder={agent.harness === "codex" ? "gpt-6.1-sol" : "claude-opus-5-5"} autoFocus />
             </Field>
           </div>
         )}

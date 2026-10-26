@@ -241,6 +241,20 @@ describe("Codex settings", () => {
     );
   });
 
+  it("changes the model in a config Codex's app wrote (service tier, notify array, project tables)", async () => {
+    write(
+      ".codex/config.toml",
+      'model = "gpt-6-astra"\nmodel_reasoning_effort = "high"\n\nnotify = ["node", "hook.js", "turn-ended"]\nservice_tier = "priority"\n\n[marketplaces.openai-bundled]\nsource_type = "local"\n\n[plugins."github@openai-curated"]\nenabled = true\n\n[projects."/Users/me/Documents/My project"]\ntrust_level = "trusted"\n',
+    );
+    const s = await readHarnessSettings("codex", { home });
+    expect(s.error).toBeUndefined();
+    expect(s.fixed).toBeUndefined();
+    expect(s.model).toBe("gpt-6-astra");
+    const after = await changeHarnessSettings("codex", [{ op: "model", model: "gpt-6.1-sol" }], { home });
+    expect(after.model).toBe("gpt-6.1-sol");
+    expect(read(".codex/config.toml")).toContain('notify = ["node", "hook.js", "turn-ended"]');
+  });
+
   it("edits values in place and adds what's missing", async () => {
     const s = await changeHarnessSettings(
       "codex",
