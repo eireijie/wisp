@@ -80,6 +80,9 @@ final class MicCapture: @unchecked Sendable {
   func start(onBuffer: @escaping @Sendable (AVAudioPCMBuffer) -> Void, level: @escaping @Sendable (Double) -> Void,
              activity: @escaping @Sendable (Bool) -> Void) throws {
     stop()
+    // touching inputNode with no audio input (mic in use, route change, no hardware) aborts the app; say so instead
+    let session = AVAudioSession.sharedInstance()
+    guard session.isInputAvailable, !session.currentRoute.inputs.isEmpty || !(session.availableInputs ?? []).isEmpty else { throw CallAudioError.noMicrophone }
     // echo cancellation, so the agent's own voice isn't heard as the person; not every device offers it
     var voiceProcessing = (try? engine.inputNode.setVoiceProcessingEnabled(true)) != nil
     do { try begin(onBuffer, level, activity) }
