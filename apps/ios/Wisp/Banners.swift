@@ -23,6 +23,7 @@ struct AppBanners: View {
         Text(error).font(.system(size: 14)).foregroundStyle(Palette.red)
           .multilineTextAlignment(.center).padding(.horizontal, 16).padding(.vertical, 10)
           .glass(20)
+          .allowsHitTesting(false)
           .transition(.opacity)
       }
     }
@@ -43,7 +44,14 @@ struct AppBanners: View {
       if !Task.isCancelled { offline = true }
     }
     .onChange(of: store.hubUpdated) { _, now in if !now { dismissedUpdate = false } }
-    .allowsHitTesting(!covered && (offline || store.hubUpdated || store.syncError != nil))
+    // a sync error fades by itself; it never blocks what's under it
+    .task(id: store.syncError) {
+      guard store.syncError != nil else { return }
+      try? await Task.sleep(for: .seconds(6))
+      if !Task.isCancelled { store.syncError = nil }
+    }
+    .animation(.snappy, value: store.syncError)
+    .allowsHitTesting(!covered && (offline || store.hubUpdated))
   }
 }
 

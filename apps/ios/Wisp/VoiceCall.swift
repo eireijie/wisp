@@ -134,21 +134,25 @@ final class VoiceCallSession {
     self.speaker = speaker; self.sendText = send; self.messages = messages; self.refresh = refresh; self.timing = timing
     markSeen(conversation().last)
     self.listener = listener(ListenCallbacks(
-      partial: { [unowned self] text in
+      partial: { [weak self] text in
+        guard let self else { return }
         if stopped || state.muted || !state.ready || echo(text) { return }
         if !text.isEmpty { interrupt() }
         update { $0.userCaption = text; $0.talking = !text.isEmpty }
       },
-      final: { [unowned self] text in
+      final: { [weak self] text in
+        guard let self else { return }
         if !stopped && !state.muted && state.ready && !echo(text) { Task { await self.turn(text) } }
       },
-      level: { [unowned self] level in update { $0.micLevel = level } },
-      activity: { [unowned self] talking in
+      level: { [weak self] level in self?.update { $0.micLevel = level } },
+      activity: { [weak self] talking in
+        guard let self else { return }
         if stopped || state.muted || !state.ready { return }
         update { $0.talking = talking }
         if talking && cloudListening { interrupt() }
       },
-      error: { [unowned self] message in
+      error: { [weak self] message in
+        guard let self else { return }
         micHint?.cancel()
         update { $0.error = message; $0.needsMic = true; $0.ready = false; $0.talking = false }
       }))
@@ -182,7 +186,9 @@ final class VoiceCallSession {
       if pending > 0 { await refresh?() }
       if mine != capture || stopped { return }
       try await listener.start()
-      if mine == capture && state.error.isEmpty {
+      // muted, hung up or restarted while the mic was still starting: turn it back off
+      if mine != capture || stopped { listener.stop(); return }
+      if state.error.isEmpty {
         update { $0.ready = true; $0.needsMic = false; if $0.startedAt == nil { $0.startedAt = Date() } }
         sync(catchUp: true)
       }

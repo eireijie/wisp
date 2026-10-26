@@ -4,7 +4,7 @@ import SwiftUI
 enum InboxTarget {
   case chat(Channel)
   case thread(ThreadRef)
-  case dm(Agent)
+  case dm(Agent, draft: String = "")
   case addAgent
   case agent(Agent)
   case devices
@@ -409,7 +409,7 @@ struct ReadinessSection: View {
           Text("Try asking \(agent.name)…").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text)
         }
         ForEach(Self.examples, id: \.self) { text in
-          Button { open(.dm(agent)) } label: {
+          Button { open(.dm(agent, draft: text)) } label: {
             Text(text).font(.system(size: 14)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
               .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 10)
               .background(Palette.sheet, in: RoundedRectangle(cornerRadius: 16, style: .continuous))

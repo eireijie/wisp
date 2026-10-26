@@ -88,7 +88,7 @@ struct AgentDefaultsView: View {
         PickerRow(title: "AI tool", subtitle: "The program that does the work", options: harnesses.map { ($0.id, $0.label) }, selection: $harness, id: "defaults-harness")
         FieldRow(title: "Model", text: $model, prompt: "Automatic", id: "defaults-model")
         NavigationLink { DefaultModelsView() } label: { RowLabel(title: "Default model per tool", value: "\(harnesses.count) tools") }.accessibilityIdentifier("defaults-models")
-      }
+      }.disabled(!store.isOwner)
       CardHint("Leave the model blank to let \(HarnessChoice.label(harness)) pick.")
       CardLabel("Computer")
       CardGroup {
@@ -96,7 +96,7 @@ struct AgentDefaultsView: View {
         if computer == "own-vm" {
           PickerRow(title: "Device", options: [("", "Pick one automatically")] + store.nodes.filter(\.usable).map { ($0.id, $0.name) }, selection: $nodeId, id: "defaults-device")
         }
-      }
+      }.disabled(!store.isOwner)
       CardLabel("Memory")
       CardGroup {
         NavigationLink { MemoryRulesView() } label: { RowLabel(title: "Memory rules", subtitle: "Who can see and edit what", value: rules > 0 ? "\(rules) \(rules == 1 ? "rule" : "rules")" : nil) }.accessibilityIdentifier("defaults-memory-rules")
@@ -112,7 +112,6 @@ struct AgentDefaultsView: View {
         }.buttonStyle(.pill(.primary)).disabled(action.busy || model.count > 100 || (loaded && store.agentDefaults == nil)).accessibilityIdentifier("defaults-save")
       }
     }
-    .disabled(!store.isOwner)
     .task {
       await store.refreshAgentDefaults()
       try? await store.refreshNodes()

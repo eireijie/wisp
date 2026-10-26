@@ -50,6 +50,11 @@ final class ComputersHomeTests: XCTestCase {
 
   func testDeviceLinksOpenTheComputersTab() {
     // the old Devices entry points set this route; the tab then shows the device (or the page)
+    XCTAssertEqual(Route.device(id: nil).tab, .computers)
+    XCTAssertEqual(Route.computer(id: "c1").tab, .computers)
+    XCTAssertEqual(Route.inbox.tab, .inbox)
+    XCTAssertEqual(Route.approval(id: "a1").tab, .inbox)
+    XCTAssertEqual(Route.chat(channelId: "c", threadId: nil).tab, .chats)
     XCTAssertNotEqual(Route.device(id: nil), Route.device(id: "n1"))
     XCTAssertEqual(Route.device(id: "n1"), Route.device(id: "n1"))
   }
@@ -83,6 +88,6 @@ final class ComputersHomeTests: XCTestCase {
     window.rootViewController = controller
     window.makeKeyAndVisible()
     controller.view.layoutIfNeeded()
-    XCTAssertNotNil(controller.view)
+    XCTAssertFalse(controller.view.subviews.isEmpty, "the page drew something")
   }
 }

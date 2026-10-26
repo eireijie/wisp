@@ -7,6 +7,8 @@ import OSLog
 enum Route: Equatable {
   case chat(channelId: String, threadId: String?)
   case approval(id: String)
+  /** the Inbox tab, with nothing opened */
+  case inbox
   case computer(id: String)
   /** the Computers tab, on a device's page (or just the tab) */
   case device(id: String?)

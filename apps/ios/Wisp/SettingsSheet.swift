@@ -32,6 +32,7 @@ struct SettingsSheet: View {
   @State private var confirmSignOut = false
   @State private var newTask = false
   @State private var orgs = false
+  @State private var policyAction = FormAction()
 
   private var online: Int { store.nodes.filter(\.online).count }
   private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
@@ -51,6 +52,7 @@ struct SettingsSheet: View {
               CardGroup {
                 if store.isOwner {
                   ToggleRow(title: "Ask before risky actions", subtitle: "Shell, apps and computer use", isOn: askBefore, id: "you-ask-before")
+                    .disabled(policyAction.busy)
                 } else {
                   NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Ask before risky actions", subtitle: "Shell, apps and computer use") }
                     .accessibilityIdentifier("you-ask-before")
@@ -81,6 +83,7 @@ struct SettingsSheet: View {
       }
       .background(Palette.sheet.ignoresSafeArea())
       .toolbar(.hidden, for: .navigationBar)
+      .chatDestinations()
     }
     .tint(Palette.text)
     .presentationBackground(Palette.sheet)
@@ -91,6 +94,7 @@ struct SettingsSheet: View {
     .confirmCard($confirmSignOut, title: "Sign out of Wisp on this iPhone?", message: "Your agents keep working. To come back, scan your Wisp's QR code or sign in again.", confirm: "Sign out") {
       dismiss(); store.signOut()
     }
+    .managementAlert(policyAction)
     .task { try? await store.refreshAgentPolicy(); await store.refreshAgentDefaults(); await store.setUpPush() }
   }
 
@@ -99,10 +103,10 @@ struct SettingsSheet: View {
   /** the switch for "Ask before risky actions": on when any action asks first */
   private var askBefore: Binding<Bool> {
     Binding(get: { !(store.agentPolicy?.askBefore.isEmpty ?? true) }, set: { on in
-      guard var next = store.agentPolicy else { return }
+      guard var next = store.agentPolicy, !policyAction.busy else { return }
       next.askBefore = on ? ["send", "spend", "delete", "post", "signup", "share"] : []
       store.agentPolicy = next
-      Task { try? await store.saveAgentPolicy(next) }
+      policyAction.run { try await store.saveAgentPolicyOrRestore(next) }
     })
   }
 

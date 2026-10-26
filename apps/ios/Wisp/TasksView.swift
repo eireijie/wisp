@@ -148,6 +148,7 @@ struct TaskSheet: View {
     NavigationStack {
       TaskDetail(taskId: taskId, root: true)
         .navigationDestination(for: TaskRef.self) { TaskDetail(taskId: $0.id, root: false) }
+        .chatDestinations()
     }
     .tint(Palette.text)
     .presentationBackground(Palette.sheet)

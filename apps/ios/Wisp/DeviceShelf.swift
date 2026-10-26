@@ -131,7 +131,7 @@ struct DeviceShelfList: View {
     if shelves.isEmpty {
       MarketNote(text: "Nothing found yet. Skills and apps from Claude Code, Codex and Hermes on your devices show up here.")
     }
-    if !pending.isEmpty { DeviceBanner(pending: pending, onOpen: {}) }
+    if !pending.isEmpty { DeviceBanner(pending: pending, onOpen: { if store.canManage { onBringAll() } }) }
     ForEach(shelves) { d in
       VStack(alignment: .leading, spacing: 8) {
         HStack {
