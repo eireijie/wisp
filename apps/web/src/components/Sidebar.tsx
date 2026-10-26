@@ -62,7 +62,8 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   const isGuest = me.role === "guest";
   // the owner's agents are theirs; a member or guest mostly sees someone else's
   const ownAgents = me.role === "owner" || (agents.length > 0 && agents.every((a) => a.settings.createdBy === me.user.id));
-  const browse = (sectionId: string | null) => useStore.setState({ channelBrowser: { sectionId } });
+  // the + buttons start a new channel; browsing existing ones is a link inside that dialog
+  const browse = (sectionId: string | null) => useStore.setState({ channelBrowser: { sectionId, create: true } });
 
   const active = route.view === "chat" ? route.channelId : null;
   // archived channels leave the sidebar; starred ones get their own group at the top

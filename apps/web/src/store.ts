@@ -121,7 +121,7 @@ interface State {
   /** the New agent screen should open (sidebar +, ⌘K); the Agents page picks it up */
   newAgentOpen: boolean;
   /** the channel browser is open, adding to this section (or none) */
-  channelBrowser: { sectionId: string | null } | null;
+  channelBrowser: { sectionId: string | null; create?: boolean } | null;
 
   load(): Promise<void>;
   loadChannel(id: string): Promise<void>;

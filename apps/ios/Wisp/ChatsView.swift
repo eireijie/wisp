@@ -67,7 +67,7 @@ struct ChatsView: View {
         }
         Section("Channels") {
           ForEach(rooms.filter { ch in ch.starred != true && !store.sections.contains { $0.id == ch.sectionId } }) { ChatChannelRow(channel: $0) }
-          Button("Add channels", systemImage: "plus") { sheet = "browse" }
+          Button(store.canManage ? "New channel" : "Browse channels", systemImage: store.canManage ? "plus" : "magnifyingglass") { sheet = store.canManage ? "channel" : "browse" }
         }
         if !query.isEmpty { searchResults }
       }
@@ -107,7 +107,7 @@ struct ChatsView: View {
       }
       .sheet(isPresented: Binding(get: { sheet != nil }, set: { if !$0 { sheet = nil } })) {
         switch sheet {
-        case "channel": NewChannel { path.append($0) }
+        case "channel": NewChannel(onBrowse: { sheet = "browse" }) { path.append($0) }
         case "browse": BrowseChannels { path.append($0) }
         case "section": SectionEditor()
         case "agent": AddAgent { path.append($0) }

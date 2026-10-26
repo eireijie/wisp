@@ -182,7 +182,7 @@ function Workspace() {
       <JoinApproval />
       <HelpPopup />
       {newTaskOpen && <NewTask onClose={() => useStore.setState({ newTaskOpen: false })} />}
-      {channelBrowser && <ChannelBrowser sectionId={channelBrowser.sectionId} onClose={() => useStore.setState({ channelBrowser: null })} />}
+      {channelBrowser && <ChannelBrowser sectionId={channelBrowser.sectionId} create={channelBrowser.create} onClose={() => useStore.setState({ channelBrowser: null })} />}
     </>
   );
 

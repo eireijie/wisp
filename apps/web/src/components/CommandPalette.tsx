@@ -227,7 +227,7 @@ function Palette({ onClose, onNewOrg }: { onClose: () => void; onNewOrg: () => v
     const pageRow = (key: string, icon: ReactNode, label: string, run: () => void, also = ""): Row & { words: string } => ({ key: `p:${key}`, group: "Pages", kind: "Page", icon, label, run, words: `${label} ${also}` });
     const actions = [
       ...(!guest ? [action("agent", <Plus size={15} />, "New agent", () => (useStore.setState({ newAgentOpen: true }), go({ view: "agents", agentId: null })), "add create helper")] : []),
-      action("channel", <Hash size={15} />, "New channel", () => useStore.setState({ channelBrowser: { sectionId: null } }), "add create browse channels"),
+      action("channel", <Hash size={15} />, "New channel", () => useStore.setState({ channelBrowser: { sectionId: null, create: true } }), "add create browse channels"),
       ...(!guest && features.tasks ? [action("task", <SquarePen size={15} />, "New task", () => useStore.setState({ newTaskOpen: true }), "create assign work")] : []),
       action("org", <Building2 size={15} />, "New organization", onNewOrg, "create workspace"),
     ];
