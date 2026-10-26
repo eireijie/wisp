@@ -1,19 +1,17 @@
 import SwiftUI
 
 /**
- * An agent working in the background for you: it checks in on its own and writes to you only when
- * something needs you. The settings read as one sentence; each underlined word opens a picker.
- * Anything else is under More, or you just tell the agent.
+ * An agent working in the background for you (agent-Background.dc.html): it checks in on its own
+ * and writes to you only when something needs you. A switch, how often, quiet hours and the most
+ * checks a day; what's coming up and what it can see; model and usage under More options.
+ * Anything else, you just tell the agent.
  */
 struct BackgroundView: View {
   @Environment(Store.self) private var store
   var agent: Agent
   @State private var catalog: AgentModels.Catalog?
-  @State private var picking: Word?
-  @State private var showMore = false
   @State private var action = FormAction()
 
-  enum Word: String, Identifiable { case focus, pace, quiet; var id: String { rawValue } }
   static let paces: [(minutes: Int, label: String)] = [(15, "every 15 minutes"), (30, "every 30 minutes"), (60, "every hour"), (120, "every 2 hours"), (240, "every 4 hours")]
   static let caps = [6, 12, 24, 48, 96]
 
@@ -26,64 +24,65 @@ struct BackgroundView: View {
   private var quietEnd: String { work?.quietEnd ?? "07:00" }
   private var watching: String {
     let f = (work?.focus ?? "").trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: ". "))
-    return f.isEmpty ? "everything it can reach" : f
+    return f.isEmpty ? "Everything it can reach" : f.prefix(1).uppercased() + f.dropFirst()
   }
-  private var paceText: String { Self.paces.first { $0.minutes == every }?.label ?? "every \(every) minutes" }
-  private var quietText: String { quietStart == quietEnd ? "never" : "\(Self.clock(quietStart))–\(Self.clock(quietEnd))" }
+  private var paceText: String {
+    let text = Self.paces.first { $0.minutes == every }?.label ?? "every \(every) minutes"
+    return text.prefix(1).uppercased() + text.dropFirst()
+  }
+  private var quietText: String { Self.quiet(quietStart, quietEnd) }
+  private var cap: Int { work == nil ? state?.defaultDailyCap ?? 24 : work?.dailyCap ?? 0 }
 
   var body: some View {
-    Form {
+    AgentFrame(title: "Background", subtitle: agent.name) {
       if state == nil {
-        ProgressView()
+        ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
       } else if let reason = state?.notAllowed {
-        Text("\(reason).").foregroundStyle(.secondary)
+        AgentCard { Text("\(reason).").font(.system(size: 15)).foregroundStyle(Palette.muted) }
       } else {
-        Section {
-          Toggle("Work in the background for you", isOn: Binding(get: { on }, set: { v in save(["enabled": AnyEncodable(v)]) }))
-            .font(.body.weight(.semibold)).disabled(!canEdit || action.busy)
-            .accessibilityIdentifier("background-toggle")
+        CardGroup {
+          SwitchRow(title: "Work in the background for you", subtitle: "\(agent.name) checks your apps on its own and messages you first",
+                    isOn: Binding(get: { on }, set: { v in save(["enabled": AnyEncodable(v)]) }), id: "background-toggle")
+            .disabled(!canEdit || action.busy)
         }
-        Section {
-          sentence
-          if let work, on || work.lastAt != nil { status(work) }
-        }
-        if let a = store.allowance {
-          Section {
-            NavigationLink { UsageView() } label: { allowanceRow(a) }
-          }
-        }
-        if let followups = state?.followups, !followups.isEmpty {
-          Section("Coming up") {
-            ForEach(followups) { f in
-              HStack(spacing: 12) {
-                if let date = Wire.date(f.dueAt) { Text(Self.at(date)).font(.footnote.weight(.bold)).foregroundStyle(.secondary).frame(width: 86, alignment: .leading) }
-                Text(f.note).lineLimit(2)
-                Spacer(minLength: 0)
-                if f.userId == nil || f.userId == store.me?.id || store.isOwner {
-                  Button { action.run { try await store.cancelFollowup(f, agentId: agent.id) } } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless).foregroundStyle(.secondary).accessibilityLabel("Cancel this follow-up")
-                }
-              }
+        CardCaption("Check in")
+        CardGroup {
+          NavigationLink { focusPage } label: { RowLabel(title: "What it checks", value: watching) }
+            .buttonStyle(.plain).accessibilityIdentifier("background-focus")
+          NavigationLink { pacePage } label: { RowLabel(title: "How often", value: paceText) }
+            .buttonStyle(.plain).accessibilityIdentifier("background-pace")
+          NavigationLink { quietPage } label: { RowLabel(title: "Quiet hours", value: quietText) }
+            .buttonStyle(.plain).accessibilityIdentifier("background-quiet")
+          Menu {
+            ForEach(Array(Set(Self.caps + (cap > 0 ? [cap] : []))).sorted(), id: \.self) { n in
+              Button("\(n) a day") { save(["dailyCap": AnyEncodable(n)]) }
             }
+            Button("No limit") { save(["dailyCap": .null]) }
+          } label: {
+            RowLabel(title: "Most checks a day", value: cap == 0 ? "No limit" : "\(cap)", chevron: true)
+          }.disabled(!canEdit).accessibilityIdentifier("background-cap")
+        }
+        .disabled(!canEdit || action.busy)
+        today
+        if let sources = state?.sources, !sources.isEmpty {
+          CardGroup {
+            RowLabel(title: "Can see", value: sources.map(\.name).joined(separator: ", "), chevron: false, leading: { rowIcon("eye") })
           }
         }
-        Section {
-          DisclosureGroup("More", isExpanded: $showMore) { more }
-            .accessibilityIdentifier("background-more")
-        } footer: {
-          Text("Or just tell \(agent.name), like \u{201C}check less on weekends\u{201D}.")
+        CardGroup {
+          NavigationLink { morePage } label: { RowLabel(title: "More options", subtitle: "Model, effort, usage") }
+            .buttonStyle(.plain).accessibilityIdentifier("background-more")
         }
+        if let work, on || work.lastAt != nil {
+          CardCaption(statusText(work))
+        }
+        PillButton(title: "Check now", kind: .secondary, busy: work?.checking == true, id: "background-check") {
+          action.run { try await store.checkBackground(agent.id) }
+        }.disabled(action.busy || work?.checking == true || !canEdit)
+        CardCaption("Or just tell \(agent.name), like \u{201C}check less on weekends\u{201D}.")
       }
-      InlineError(error: action.error)
+      AgentError(text: action.error)
     }
-    .sectionScreen("Background", id: "background")
-    .sheet(item: $picking) { word in
-      NavigationStack { picker(word) }.presentationDetents([.medium, .large])
-    }
-    .environment(\.openURL, OpenURLAction { url in
-      if canEdit, let word = Word(rawValue: url.host() ?? "") { picking = word }
-      return .handled
-    })
     .task {
       do {
         try await store.refreshBackground(agent.id)
@@ -93,64 +92,96 @@ struct BackgroundView: View {
     }
   }
 
-  // MARK: the sentence
+  // MARK: today
 
-  private var sentence: some View {
-    var s = AttributedString("While you're away, \(agent.name) checks ")
-    s += link(watching, .focus)
-    s += AttributedString(" ")
-    s += link(paceText, .pace)
-    s += AttributedString(", stays quiet ")
-    s += link(quietText, .quiet)
-    s += AttributedString(", and messages you when something needs you.")
-    return Text(s)
-      .font(.title3.weight(.semibold))
-      .lineSpacing(7)
-      .foregroundStyle(on ? .primary : .secondary)
-      .padding(.vertical, 8)
-      .accessibilityIdentifier("background-sentence")
-  }
-
-  private func link(_ text: String, _ word: Word) -> AttributedString {
-    var s = AttributedString(text)
-    s.link = URL(string: "wisp-background://\(word.rawValue)")
-    s.font = .title3.weight(.heavy)
-    s.underlineStyle = .single
-    s.foregroundColor = on ? .primary : .secondary
-    return s
-  }
-
-  @ViewBuilder private func picker(_ word: Word) -> some View {
-    switch word {
-    case .focus: FocusPicker(initial: work?.focus ?? "") { text in save(["focus": AnyEncodable(text)]) }
-    case .pace:
-      List(Self.paces, id: \.minutes) { pace in
-        Button { save(["everyMinutes": AnyEncodable(pace.minutes)]); picking = nil } label: {
-          HStack { Text(pace.label).foregroundStyle(.primary); Spacer(); if pace.minutes == every { Image(systemName: "checkmark") } }
+  @ViewBuilder private var today: some View {
+    let followups = state?.followups ?? []
+    let usage = state?.usage
+    if !followups.isEmpty || (usage?.checksToday ?? 0) > 0 {
+      CardCaption("Today")
+      CardGroup {
+        ForEach(followups) { f in
+          HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(f.note).font(.system(size: 17)).foregroundStyle(Palette.text).lineLimit(2)
+              if let date = Wire.date(f.dueAt) { Text("Coming up at \(Self.at(date))").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+            }
+            Spacer(minLength: 8)
+            if f.userId == nil || f.userId == store.me?.id || store.isOwner {
+              Button("Cancel") { action.run { try await store.cancelFollowup(f, agentId: agent.id) } }
+                .font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.red).buttonStyle(.plain)
+                .accessibilityLabel("Cancel this follow-up")
+            }
+          }
+          .padding(.horizontal, 18).padding(.vertical, 8).frame(minHeight: 60)
         }
-      }.navigationTitle("How often").navigationBarTitleDisplayMode(.inline)
-    case .quiet:
-      QuietPicker(start: quietStart, end: quietEnd, timezoneSet: store.me?.timezone != nil) { patch in save(patch) } done: { picking = nil }
+        if let checks = usage?.checksToday, checks > 0 {
+          RowLabel(title: "Checked \(checks) \(checks == 1 ? "time" : "times") today", subtitle: followups.isEmpty ? nil : "\(followups.count) follow-up\(followups.count == 1 ? "" : "s")", chevron: false)
+        }
+      }
     }
   }
 
-  // MARK: status, allowance, more
+  private func statusText(_ work: BackgroundWork) -> String {
+    if work.checking == true { return store.agent(agent.id)?.status == .offline ? "Waiting for its device" : "Checking now" }
+    if let last = work.lastAt.flatMap(Wire.date) {
+      return "Checked " + last.formatted(.relative(presentation: .named)) + (work.lastNote.map { $0.isEmpty ? "" : ": \($0)" } ?? "")
+    }
+    return "Hasn't checked yet"
+  }
 
-  private func status(_ work: BackgroundWork) -> some View {
-    HStack(spacing: 12) {
-      Group {
-        if work.checking == true {
-          Text(store.agent(agent.id)?.status == .offline ? "Waiting for its device" : "Checking now")
-        } else if let last = work.lastAt.flatMap(Wire.date) {
-          Text("Checked \(last, format: .relative(presentation: .named))\(work.lastNote.map { $0.isEmpty ? "" : ": \($0)" } ?? "")")
-        } else {
-          Text("Hasn't checked yet")
+  // MARK: pages
+
+  private var focusPage: some View { FocusPage(agent: agent, initial: work?.focus ?? "") { text in save(["focus": AnyEncodable(text)]) } }
+
+  private var pacePage: some View {
+    AgentFrame(title: "How often", subtitle: agent.name) {
+      CardGroup {
+        ForEach(Self.paces, id: \.minutes) { pace in
+          ChoiceRow(title: pace.label.prefix(1).uppercased() + pace.label.dropFirst(), selected: pace.minutes == every) { save(["everyMinutes": AnyEncodable(pace.minutes)]) }
         }
-      }
-      .font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
-      Spacer(minLength: 0)
-      Button { action.run { try await store.checkBackground(agent.id) } } label: { Label("Check now", systemImage: "arrow.clockwise") }
-        .secondaryButton().controlSize(.small).disabled(action.busy || work.checking == true || !canEdit)
+      }.disabled(!canEdit || action.busy)
+    }
+  }
+
+  private var quietPage: some View {
+    QuietPage(agent: agent, start: quietStart, end: quietEnd, timezoneSet: store.me?.timezone != nil) { patch in save(patch) }
+  }
+
+  private var morePage: some View {
+    AgentFrame(title: "More options", subtitle: agent.name) {
+      let models = catalog?.models ?? []
+      let chosen = models.first { $0.id == (work?.model ?? agent.model) }
+      let efforts = chosen?.efforts ?? catalog?.efforts ?? []
+      CardGroup {
+        menuRow("Model for checks", value: work?.model.flatMap { id in models.first { $0.id == id }?.label ?? id } ?? "\(agent.name)'s own") {
+          Button("\(agent.name)'s own") { save(["model": .null, "effort": .null]) }
+          ForEach(models) { m in Button(m.label) { save(["model": AnyEncodable(m.id), "effort": .null]) } }
+        }
+        if !efforts.isEmpty || work?.effort != nil {
+          menuRow("Effort", value: AgentLine.effort(work?.effort ?? "")) {
+            Button("Default") { save(["effort": .null]) }
+            ForEach(efforts, id: \.self) { e in Button(AgentLine.effort(e)) { save(["effort": AnyEncodable(e)]) } }
+          }
+        }
+        NavigationLink { ConnectorsView() } label: { RowLabel(title: "Connect an app") }.buttonStyle(.plain)
+        if let a = store.allowance {
+          NavigationLink { UsageView() } label: { allowanceRow(a) }.buttonStyle(.plain)
+        }
+      }.disabled(!canEdit || action.busy)
+      if let usage = state?.usage { CardCaption(Self.usageLine(usage, cap: work?.dailyCap)) }
+      AgentError(text: action.error)
+    }
+  }
+
+  private func menuRow<Items: View>(_ title: String, value: String, @ViewBuilder _ items: () -> Items) -> some View {
+    Menu { items() } label: {
+      HStack {
+        Text(title).font(.system(size: 17)).foregroundStyle(Palette.text)
+        Spacer(minLength: 8)
+        Text(value).font(.system(size: 17)).foregroundStyle(Palette.faint).lineLimit(1)
+        Image(systemName: "chevron.up.chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.faint)
+      }.padding(.horizontal, 18).frame(minHeight: 54).contentShape(Rectangle())
     }
   }
 
@@ -158,41 +189,12 @@ struct BackgroundView: View {
     let mine = a.agents.first { $0.agentId == agent.id }
     let share = a.dailyTokens.flatMap { daily in mine.map { Int((Double($0.tokens) / Double(daily) * 100).rounded()) } }
     return HStack(spacing: 12) {
-      Capsule().fill(Color(.tertiarySystemFill)).frame(width: 70, height: 8)
+      Capsule().fill(Palette.separator).frame(width: 70, height: 8)
         .overlay(alignment: .leading) { Capsule().fill(agentTint(agent)).frame(width: 70 * min(1, Double(share ?? 0) / 100)) }
       Text(share.map { "\(agent.name) used \($0)% of today's allowance" } ?? mine.map { "\(agent.name) used \(Allowance.text($0.tokens)) today" } ?? "\(agent.name) hasn't used any of today's allowance")
-        .font(.subheadline.weight(.semibold))
-    }
-  }
-
-  @ViewBuilder private var more: some View {
-    let models = catalog?.models ?? []
-    let chosen = models.first { $0.id == (work?.model ?? agent.model) }
-    let efforts = chosen?.efforts ?? catalog?.efforts ?? []
-    Picker("Model for checks", selection: Binding(get: { work?.model ?? "" }, set: { save(["model": .nullable($0), "effort": .null]) })) {
-      Text("\(agent.name)'s own").tag("")
-      ForEach(models) { Text($0.label).tag($0.id) }
-      if let m = work?.model, !models.contains(where: { $0.id == m }) { Text(m).tag(m) }
-    }.disabled(!canEdit)
-    if !efforts.isEmpty || work?.effort != nil {
-      Picker("Effort", selection: Binding(get: { work?.effort ?? "" }, set: { save(["effort": .nullable($0)]) })) {
-        Text("Default").tag("")
-        ForEach(efforts, id: \.self) { Text($0.capitalized).tag($0) }
-        if let e = work?.effort, !efforts.contains(e) { Text(e).tag(e) }
-      }.disabled(!canEdit)
-    }
-    let cap = work == nil ? state?.defaultDailyCap ?? 24 : work?.dailyCap ?? 0
-    Picker("Most checks a day", selection: Binding(get: { cap }, set: { save(["dailyCap": $0 == 0 ? .null : AnyEncodable($0)]) })) {
-      ForEach(Array(Set(Self.caps + (cap > 0 ? [cap] : []))).sorted(), id: \.self) { Text("\($0) a day").tag($0) }
-      Text("No limit").tag(0)
-    }.disabled(!canEdit)
-    if let sources = state?.sources, !sources.isEmpty {
-      ForEach(Array(sources.enumerated()), id: \.offset) { _, source in
-        Label(source.name, systemImage: source.kind == "app" ? "app" : source.kind == "computer" ? "desktopcomputer" : "folder")
-      }
-    }
-    NavigationLink("Connect an app") { ConnectorsView() }
-    if let usage = state?.usage { Text(Self.usageLine(usage, cap: work?.dailyCap)).font(.footnote).foregroundStyle(.secondary) }
+        .font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
+      Spacer(minLength: 0)
+    }.padding(.horizontal, 18).frame(minHeight: 60)
   }
 
   private func save(_ patch: Fields) {
@@ -206,6 +208,16 @@ struct BackgroundView: View {
     let p = hhmm.split(separator: ":").compactMap { Int($0) }
     guard p.count == 2 else { return hhmm }
     return "\(p[0] % 12 == 0 ? 12 : p[0] % 12)\(p[1] > 0 ? String(format: ":%02d", p[1]) : "")\(p[0] < 12 ? "am" : "pm")"
+  }
+
+  /** "10 PM", "7:30 AM" */
+  static func clockLong(_ hhmm: String) -> String {
+    clock(hhmm).replacingOccurrences(of: "am", with: " AM").replacingOccurrences(of: "pm", with: " PM")
+  }
+
+  /** "10 PM to 7 AM", or "Never" when the two times are the same */
+  static func quiet(_ start: String, _ end: String) -> String {
+    start == end ? "Never" : "\(clockLong(start)) to \(clockLong(end))"
   }
 
   static func at(_ date: Date) -> String {
@@ -225,44 +237,44 @@ struct BackgroundView: View {
 }
 
 /** What to keep an eye on, in the person's own words. */
-private struct FocusPicker: View {
+private struct FocusPage: View {
+  var agent: Agent
   var initial: String
   var save: (String) -> Void
   @State private var text = ""
   @Environment(\.dismiss) private var dismiss
   var body: some View {
-    Form {
-      TextField("Everything it can reach. Or: my inbox and calendar, anything from my landlord.", text: $text, axis: .vertical)
-        .lineLimit(3...8).accessibilityLabel("What to keep an eye on")
-    }
-    .navigationTitle("What it checks").navigationBarTitleDisplayMode(.inline)
-    .toolbar {
-      ToolbarItem(placement: .confirmationAction) {
-        Button("Save") { save(text); dismiss() }.disabled(text.count > 2000)
-      }
+    AgentFrame(title: "What it checks", subtitle: agent.name) {
+      FieldCard(label: "What to keep an eye on", text: $text, prompt: "Everything it can reach. Or: my inbox and calendar, anything from my landlord.", lines: 3...8)
+      PillButton(title: "Save") { save(text); dismiss() }.disabled(text.count > 2000)
     }
     .onAppear { text = initial }
   }
 }
 
 /** Quiet hours: two times, or none. */
-private struct QuietPicker: View {
+private struct QuietPage: View {
+  var agent: Agent
   var start: String
   var end: String
   var timezoneSet: Bool
   var save: (Fields) -> Void
-  var done: () -> Void
+
   var body: some View {
-    Form {
-      DatePicker("From", selection: time(start) { save(["quietStart": AnyEncodable($0)]) }, displayedComponents: .hourAndMinute)
-      DatePicker("To", selection: time(end) { save(["quietEnd": AnyEncodable($0)]) }, displayedComponents: .hourAndMinute)
-      Button { save(["quietEnd": AnyEncodable(start)]); done() } label: {
-        HStack { Text("No quiet hours").foregroundStyle(.primary); Spacer(); if start == end { Image(systemName: "checkmark") } }
+    AgentFrame(title: "Quiet hours", subtitle: agent.name) {
+      CardGroup {
+        DatePicker(selection: time(start) { save(["quietStart": AnyEncodable($0)]) }, displayedComponents: .hourAndMinute) {
+          Text("From").font(.system(size: 17)).foregroundStyle(Palette.text)
+        }.padding(.horizontal, 18).frame(minHeight: 54)
+        DatePicker(selection: time(end) { save(["quietEnd": AnyEncodable($0)]) }, displayedComponents: .hourAndMinute) {
+          Text("To").font(.system(size: 17)).foregroundStyle(Palette.text)
+        }.padding(.horizontal, 18).frame(minHeight: 54)
+        ChoiceRow(title: "No quiet hours", selected: start == end) { save(["quietEnd": AnyEncodable(start)]) }
       }
-      if !timezoneSet { NavigationLink("Set your time zone (now UTC)") { ProfileSettingsView() } }
+      if !timezoneSet {
+        CardGroup { NavigationLink { ProfileSettingsView() } label: { RowLabel(title: "Set your time zone", subtitle: "It's UTC for now") }.buttonStyle(.plain) }
+      }
     }
-    .navigationTitle("Quiet hours").navigationBarTitleDisplayMode(.inline)
-    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) } }
   }
 
   private func time(_ hhmm: String, _ set: @escaping (String) -> Void) -> Binding<Date> {

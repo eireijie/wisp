@@ -769,6 +769,14 @@ describe("agent settings", () => {
     expect((await api("PATCH", `/api/agents/${nova.id}`, { settings: { effort: "high; rm -rf /" } })).status).toBe(400);
   });
 
+  it("renames an agent's handle unless another agent has it", async () => {
+    const original = nova.handle;
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { handle: atlas.handle })).status).toBe(409);
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { handle: "Bad Handle" })).status).toBe(400);
+    expect((await api("PATCH", `/api/agents/${nova.id}`, { handle: "nova-renamed" })).data.handle).toBe("nova-renamed");
+    await api("PATCH", `/api/agents/${nova.id}`, { handle: original });
+  });
+
   it("lets an agent refine its own soul unless the owner locks it", async () => {
     const asAtlas = { "x-wisp-agent": atlas.id };
     const soul = `agents/${atlas.id}/SOUL.md`;

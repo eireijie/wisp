@@ -40,12 +40,10 @@ describe("settings navigation", () => {
 });
 
 describe("agent settings navigation", () => {
-  it("groups the technical tabs under More options, and keeps every tab", async () => {
-    const { agentNav } = await import("../src/views/AgentSettings.tsx");
-    const nav = agentNav();
-    expect(nav.map((g) => g.group)).toEqual(["Agent", "Runtime", "Activity", "More options"]);
-    expect(nav.at(-1)!.items.map((i) => i.id)).toEqual(["model", "permissions", "connect", "background", "look"]);
-    expect(nav.slice(0, 3).flatMap((g) => g.items.map((i) => i.id))).toEqual(["overview", "soul", "instructions", "device", "computer", "routines", "runs"]);
-    expect(nav.flatMap((g) => g.items).length).toBe(12);
+  it("lists the sections, and every other tab opens from Edit, Computer or Remove", async () => {
+    const { agentSections } = await import("../src/views/AgentSettings.tsx");
+    const { AGENT_TABS } = await import("../src/router.ts");
+    expect(agentSections()).toEqual(["overview", "model", "computer", "access", "routines", "background", "memory", "skills", "apps", "permissions", "connect", "runs", "look"]);
+    expect(AGENT_TABS.filter((t) => !agentSections().includes(t))).toEqual(["soul", "instructions", "device", "remove"]);
   });
 });

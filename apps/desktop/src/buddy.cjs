@@ -93,8 +93,8 @@ module.exports = function deskBuddy({ config, save, mainWindow, open, refresh })
   ipcMain.on("buddy:expand", (e, value) => {
     if (!trusted(e, win) || typeof value !== "boolean" || value === expanded) return;
     const b = win.getBounds();
-    const width = value ? 280 : 140;
-    const height = value ? 260 : 160;
+    const width = value ? 300 : 140;
+    const height = value ? 300 : 160;
     expanded = value;
     win.setBounds(clamp({ x: b.x + b.width - width, y: b.y + b.height - height, width, height }));
   });

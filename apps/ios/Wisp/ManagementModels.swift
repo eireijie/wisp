@@ -77,6 +77,10 @@ struct AgentRun: Decodable, Identifiable {
   var error: String?
   var hint: String?
   var createdAt: String?
+  var finishedAt: String?
+  var kind: String?
+  var channelId: String?
+  var threadId: String?
 }
 
 struct HarnessState: Decodable {

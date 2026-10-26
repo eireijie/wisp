@@ -51,14 +51,29 @@ export function ComputerPanel({ agent, nodes }: { agent: Agent; nodes: DeviceInf
       await api("PATCH", `/api/agents/${agent.id}`, { computerId: c.id, ...(runsInVm(agent.harness) && !agent.settings.runIn ? { settings: { runIn: "computer" } } : {}) });
     });
   const quickScreen = () => use("screen", async () => assign(await api<ComputerInfo>("POST", "/api/computers", { kind: "device", nodeId: agent.nodeId })));
-  const goHeadless = () => {
-    if (!confirm(`Run @${agent.handle} headless? It won't be able to see or use a screen: no websites, no apps, only its harness's own tools.`)) return;
+  const [confirmHeadless, setConfirmHeadless] = useState(false);
+  const goHeadless = () => setConfirmHeadless(true);
+  const doHeadless = () => {
+    setConfirmHeadless(false);
     use("headless", () => api("PATCH", `/api/agents/${agent.id}`, { computerId: null, settings: { headless: true } }));
   };
 
   const others = computers.filter((c) => c.id !== agent.computerId);
   return (
     <div className="space-y-8 max-w-3xl">
+      {confirmHeadless && (
+        <Modal title={`Run @${agent.handle} headless?`} onClose={() => setConfirmHeadless(false)}>
+          <p className="text-sm text-muted">Without a computer it can still think and write, but it can't use apps or a screen: no websites, no apps, only its harness's own tools.</p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button onClick={doHeadless} className="h-12 rounded-full bg-accent text-accent-ink font-semibold">
+              Run headless
+            </button>
+            <button onClick={() => setConfirmHeadless(false)} className="h-12 rounded-full border border-control-line bg-control font-medium hover:bg-hover">
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
       <section>
         <Intro title="Computer">
           <p>

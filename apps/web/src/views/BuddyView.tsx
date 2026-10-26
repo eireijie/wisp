@@ -233,10 +233,15 @@ export function BuddyView() {
   return (
     <div className="buddy-stage" data-raised={expanded && !reduced ? "true" : undefined} data-controls={controlsHovered ? "true" : undefined}>
       {expanded && (
-        <button key={notice.id} data-buddy-hit className="buddy-bubble" data-leaving={leaving ? "true" : undefined} style={agentVar(author)} onClick={open} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocus={() => setHovered(true)} onBlur={() => setHovered(false)}>
-          <span className="buddy-bubble-heading"><span className="buddy-author agent-ink">{author?.name ?? "An agent"}</span>{notice.mood === "waiting" && <span className="buddy-review agent-ink agent-tint">Review</span>}</span>
+        <div key={notice.id} data-buddy-hit role="group" aria-label={`${author?.name ?? "An agent"} says`} className="buddy-bubble" data-leaving={leaving ? "true" : undefined} style={agentVar(author)} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onFocus={() => setHovered(true)} onBlur={() => setHovered(false)}>
+          <span className="buddy-bubble-heading"><span className="buddy-author agent-ink">{author?.name ?? "An agent"}</span></span>
           <span className="buddy-message" role="status">{notice.text}</span>
-        </button>
+          <span className="buddy-chips">
+            <button type="button" className={notice.mood === "waiting" ? "buddy-chip" : "buddy-chip on"} onClick={open}>Open chat</button>
+            {author && <button type="button" className="buddy-chip" onClick={startCall}><Phone size={13} /> Call</button>}
+            {notice.mood === "waiting" && <button type="button" className="buddy-chip on" onClick={open}>Review</button>}
+          </span>
+        </div>
       )}
       {agent && connected && <button data-buddy-hit className="buddy-call" aria-label={`Call ${agent.name}`} title={`Call ${agent.name}`} onClick={startCall}><Phone size={16} /></button>}
       <button

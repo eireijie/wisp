@@ -283,13 +283,14 @@ export class Store {
   }
 
   /** `settings` is merged key by key, so callers can change one setting at a time. */
-  updateAgent(agentId: string, patch: Partial<{ name: string; model: string | null; nodeId: string | null; computerId: string | null; instructions: string; harness: HarnessId; settings: AgentSettings }>) {
+  updateAgent(agentId: string, patch: Partial<{ name: string; handle: string; model: string | null; nodeId: string | null; computerId: string | null; instructions: string; harness: HarnessId; settings: AgentSettings }>) {
     const cur = this.agentRow(agentId);
     if (!cur) return undefined;
     this.db
-      .prepare("UPDATE agents SET name = ?, model = ?, node_id = ?, computer_id = ?, instructions = ?, harness = ?, settings_json = ? WHERE id = ?")
+      .prepare("UPDATE agents SET name = ?, handle = ?, model = ?, node_id = ?, computer_id = ?, instructions = ?, harness = ?, settings_json = ? WHERE id = ?")
       .run(
         patch.name ?? cur.name,
+        patch.handle?.toLowerCase() ?? cur.handle,
         patch.model !== undefined ? patch.model : cur.model,
         patch.nodeId !== undefined ? patch.nodeId : cur.node_id,
         patch.computerId !== undefined ? patch.computerId : cur.computer_id,

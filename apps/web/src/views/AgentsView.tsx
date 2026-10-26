@@ -22,6 +22,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
   const live = useStore((s) => s.live);
   const me = useStore((s) => s.me);
   const [creating, setCreating] = useState(false);
+  const [bringing, setBringing] = useState(false);
   const features = useFeatures();
   // "New agent" from the + menu or ⌘K opens it here
   const newAgentOpen = useStore((s) => s.newAgentOpen);
@@ -72,6 +73,11 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search agents" className="flex-1 min-w-0 bg-transparent outline-none text-[15px] text-ink placeholder:text-faint" />
             </label>
             {canEdit && (
+              <button onClick={() => setBringing(true)} className="hidden md:inline-flex h-10 px-4 items-center rounded-full bg-control border border-control-line text-sm font-medium hover:bg-hover">
+                Bring in
+              </button>
+            )}
+            {canEdit && (
               <button onClick={() => setCreating(true)} className="hidden md:inline-flex h-10 px-5 items-center gap-2 rounded-full bg-accent text-accent-ink text-sm font-semibold">
                 <Plus size={16} strokeWidth={2.2} /> New agent
               </button>
@@ -115,6 +121,12 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                 <Plus size={20} strokeWidth={1.8} /> New agent
               </button>
             )}
+            {canEdit && (
+              <button onClick={() => setBringing(true)} className="md:hidden w-full rounded-3xl bg-card p-4 min-h-[72px] text-left">
+                <span className="block text-[17px] font-medium">Bring an agent in</span>
+                <span className="block text-sm text-muted">Import one, or invite an outside agent</span>
+              </button>
+            )}
             {agents.length === 0 && (
               <p className="text-sm text-muted px-1">
                 Give an agent a job and a computer. Claude Code, Codex, Hermes, Gemini CLI, OpenCode, Goose and other agents all work here, share its teams and memory, and use their computers like you would.
@@ -132,6 +144,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
         </div>
       </div>
       {creating && <CreateAgent nodes={nodes} onClose={() => setCreating(false)} />}
+      {bringing && <CreateAgent bringIn nodes={nodes} onClose={() => setBringing(false)} />}
     </div>
   );
 }

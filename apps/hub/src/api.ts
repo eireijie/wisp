@@ -1146,7 +1146,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const body = parse(
       z
-        .object({ name: z.string().min(1).max(80), harness: HARNESS, model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
+        .object({ name: z.string().min(1).max(80), handle: HANDLE, harness: HARNESS, model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), nodeId: z.string().nullable(), computerId: z.string().nullable(), instructions: z.string().max(20_000), settings: SETTINGS })
         .partial(),
       req.body,
       reply,
@@ -1167,6 +1167,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const name = store.user(owner)?.name ?? "its owner";
       return reply.code(403).send({ error: `@${agent.handle} ${owner === deviceOwnerOf(agent) ? "runs" : "would run"} directly on ${name}'s device, so only ${name} can ${owner === deviceOwnerOf(agent) ? "change it" : "make that change"}` });
     }
+    if (body.handle && body.handle !== agent.handle && store.agentByHandle(c.workspaceId, body.handle)) return reply.code(409).send({ error: "handle taken" });
     if (body.nodeId && store.node(body.nodeId)?.workspaceId !== c.workspaceId) return reply.code(400).send({ error: "unknown node" });
     if (body.nodeId && body.nodeId !== agent.nodeId && !canUseDevice(c, body.nodeId)) return reply.code(403).send({ error: "that's someone else's device; they can let others add agents there under Devices" });
     if (body.computerId && body.computerId !== agent.computerId && !canAssignComputer(c, body.computerId)) return reply.code(400).send({ error: "unknown computer" });
