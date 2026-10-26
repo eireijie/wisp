@@ -53,3 +53,20 @@ describe("add agent onboarding", () => {
     }
   });
 });
+
+describe("creating an agent from the team builder", () => {
+  it("asks for an AI in the form when the defaults name none, instead of failing with 'pick a harness'", async () => {
+    const { defaultsNeedPicking } = await import("../src/views/CreateAgent.tsx");
+    expect(defaultsNeedPicking({ harness: null, model: null, computer: "none", nodeId: null })).toBe(true);
+    expect(defaultsNeedPicking("error")).toBe(true);
+    expect(defaultsNeedPicking({ harness: "claude-code", model: null, computer: "none", nodeId: null })).toBe(false);
+    expect(defaultsNeedPicking(null)).toBe(false);
+  });
+
+  it("opens the dialog even when the devices never load", async () => {
+    const { devicesToShow } = await import("../src/team/NewAgent.tsx");
+    expect(devicesToShow(null, false)).toBeNull();
+    expect(devicesToShow(null, true)).toEqual([]);
+    expect(devicesToShow([{ id: "a" }], false)).toEqual([{ id: "a" }]);
+  });
+});
