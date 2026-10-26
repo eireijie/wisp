@@ -92,7 +92,16 @@ if [ -d "$DIR/.git" ]; then
   echo "Updating $DIR"
   origin=$(git -C "$DIR" remote get-url origin)
   case "$origin" in https://github.com/eireijie/warren|https://github.com/eireijie/warren.git|git@github.com:eireijie/warren.git) git -C "$DIR" remote set-url origin "$WISP_REPO" ;; esac
-  git -C "$DIR" pull --ff-only
+  git -C "$DIR" fetch origin
+  if ! git -C "$DIR" merge-base HEAD origin/main >/dev/null 2>&1; then
+    # an old Warren checkout: Wisp's main shares none of its history, so it can't fast-forward
+    [ -z "$(git -C "$DIR" status --porcelain --untracked-files=no)" ] ||
+      fail "$DIR has local changes from Warren. Commit or discard them, then run this again."
+    echo "Moving $DIR from Warren to Wisp"
+    git -C "$DIR" checkout -q -B main origin/main
+  else
+    git -C "$DIR" pull --ff-only
+  fi
 else
   [ -e "$DIR" ] && fail "$DIR exists and isn't a Wisp checkout. Pick another folder with --dir."
   git clone "$WISP_REPO" "$DIR"

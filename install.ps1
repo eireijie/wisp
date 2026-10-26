@@ -54,7 +54,17 @@ if (Test-Path (Join-Path $Dir ".git")) {
   Write-Host "Updating $Dir"
   $origin = git -C $Dir remote get-url origin
   if ($origin -match "^(https://github.com/eireijie/warren(?:\.git)?|git@github.com:eireijie/warren\.git)$") { git -C $Dir remote set-url origin $Repo }
-  git -C $Dir pull --ff-only
+  git -C $Dir fetch origin
+  if ($LASTEXITCODE) { Fail "Couldn't get Wisp from $Repo." }
+  git -C $Dir merge-base HEAD origin/main | Out-Null
+  if ($LASTEXITCODE) {
+    # an old Warren checkout: Wisp's main shares none of its history, so it can't fast-forward
+    if (git -C $Dir status --porcelain --untracked-files=no) { Fail "$Dir has local changes from Warren. Commit or discard them, then run this again." }
+    Write-Host "Moving $Dir from Warren to Wisp"
+    git -C $Dir checkout -q -B main origin/main
+  } else {
+    git -C $Dir pull --ff-only
+  }
 } else {
   if (Test-Path $Dir) { Fail "$Dir exists and isn't a Wisp checkout. Pick another folder with -Dir." }
   git clone $Repo $Dir
