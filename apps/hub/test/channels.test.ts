@@ -112,8 +112,7 @@ describe("deleting channels", () => {
     expect((await api("POST", "/api/channels", { name: "scratch" })).status).toBe(200);
   });
 
-  it("keeps #general and DMs", async () => {
-    expect((await api("DELETE", `/api/channels/${(await channelNamed("general")).id}`)).status).toBe(409);
+  it("keeps DMs", async () => {
     const dm = (await api("POST", `/api/dm/${atlas.id}`)).data;
     expect((await api("DELETE", `/api/channels/${dm.id}`)).status).toBe(404);
   });
@@ -211,9 +210,7 @@ describe("archiving channels", () => {
     expect((await api("POST", `/api/channels/${ch.id}/messages`, { body: "hello again" })).status).toBe(200);
   });
 
-  it("keeps #general and guests out", async () => {
-    const general = await channelNamed("general");
-    expect((await api("POST", `/api/channels/${general.id}/archive`, {})).status).toBe(409);
+  it("keeps guests out", async () => {
     const ch = await channelNamed("launch");
     expect((await api("POST", `/api/channels/${ch.id}/archive`, {}, guest)).status).toBe(403);
   });

@@ -7,7 +7,7 @@ import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, u
 import { go, href, type Route } from "../router.ts";
 import type { TaskRow } from "./TasksView.tsx";
 import { renderMarkdown } from "../markdown.ts";
-import { ChannelIcon, ChannelMembers, ChannelSettings, NOTIFY, isProtected, setArchived, setChannelPrefs, type ChannelMember, type ChannelSettingsTab } from "../components/Channels.tsx";
+import { ChannelIcon, ChannelMembers, ChannelSettings, NOTIFY, landingChannel, setArchived, setChannelPrefs, type ChannelMember, type ChannelSettingsTab } from "../components/Channels.tsx";
 import { EffortSlider, effortName, prettyModel } from "../components/EffortSlider.tsx";
 import { DiscussionCard } from "../components/Discussion.tsx";
 import { ApprovalCard, ChangeCard, ComputerPart, RoutineChip } from "../components/AgentCards.tsx";
@@ -48,7 +48,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
   useEffect(() => { setCalling(!!route.call); }, [route.channelId, route.call]);
   const [settings, setSettings] = useState<ChannelSettingsTab | null>(null);
 
-  const channel = channels.find((c) => c.id === route.channelId) ?? (route.channelId ? undefined : channels.find((c) => c.name === "general"));
+  const channel = channels.find((c) => c.id === route.channelId) ?? (route.channelId ? undefined : landingChannel(channels));
   const dmAgentId = channel?.kind === "dm" ? channel.name.split(":").pop()! : null;
   // the pane beside the chat: an agent's details or the member list
   const [side, setSideState] = useState<Side | null>(null);
@@ -91,7 +91,7 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel?.id, setActive, loadChannel]);
 
-  if (!channel) return <Empty icon={<Hash />} title="Channel not found" />;
+  if (!channel) return <Empty icon={<Hash />} title={route.channelId ? "Channel not found" : "No channels yet"} />;
 
   const dmAgent = dmAgentId ? names.agent(dmAgentId) : undefined;
   const sideAgent = !route.threadId && side?.kind === "agent" ? names.agent(side.agentId) : undefined;
@@ -330,7 +330,7 @@ function ArchivedBar({ channel }: { channel: ChannelInfo }) {
       <div className="rounded-2xl border border-line bg-bg px-4 py-3 flex items-center gap-3 text-sm">
         <Archive size={16} className="text-muted shrink-0" />
         <span className="flex-1 text-muted">#{channel.name} is archived. You can read and search it, but nobody can post here.</span>
-        {canManage && !isProtected(channel) && (
+        {canManage && (
           <Button onClick={() => setArchived(channel, false).catch((e) => setError((e as Error).message))}>Unarchive</Button>
         )}
       </div>

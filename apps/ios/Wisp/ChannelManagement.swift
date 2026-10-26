@@ -370,7 +370,7 @@ struct ChannelDetails: View {
         }))
       }.disabled(action.busy)
       Section {
-        if store.canManage && !store.isProtected(current) {
+        if store.canManage {
           Button(current.archivedAt == nil ? "Archive channel" : "Unarchive channel") {
             if current.archivedAt == nil { confirm = "archive" }
             else { action.run { try await store.archiveChannel(channel.id, archived: false) } }
@@ -379,7 +379,7 @@ struct ChannelDetails: View {
         if current.name != "general" && current.joined == true {
           Button("Leave channel", role: .destructive) { confirm = "leave" }
         }
-        if store.role == "owner" && !store.isProtected(current) {
+        if store.role == "owner" {
           Button("Delete channel", role: .destructive) { confirm = "delete" }
         }
         InlineError(error: action.error)
