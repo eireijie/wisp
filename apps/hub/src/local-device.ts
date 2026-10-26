@@ -5,7 +5,7 @@ import { issueToken } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
 /**
- * The hub's own computer as a device, without tokens: `warren service install node --local` (the
+ * The hub's own computer as a device, without tokens: `wisp service install node --local` (the
  * installer runs it) leaves a request next to the hub's data, and once the organization has an
  * owner the hub registers this computer as their device and writes back where and how to connect.
  * The device service, waiting on the same computer, picks that up and connects.
@@ -19,7 +19,7 @@ export interface LocalDeviceGrant {
   name: string;
 }
 
-/** This computer's name for the device list ("Yugs-MacBook-Air.local" → "Yugs-MacBook-Air"). */
+/** This computer's name for the device list ("Alexs-MacBook-Air.local" → "Alexs-MacBook-Air"). */
 export const localName = (host = os.hostname()) => host.replace(/\.(local|lan|home)$/i, "").slice(0, 80) || "This computer";
 
 /** Answer a waiting request, if there is one and an owner to give the device to. True when a device was made. */

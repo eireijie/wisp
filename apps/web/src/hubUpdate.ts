@@ -3,7 +3,7 @@ import { useStore } from "./store.ts";
 
 /**
  * Noticing that the hub now serves a newer web app than the one this window loaded (after
- * Settings → Updates, `warren update`, or a redeploy), so the page can offer a reload instead of
+ * Settings → Advanced → About, `wisp update`, or a redeploy), so the page can offer a reload instead of
  * running old code until someone happens to refresh. The built app's entry script has a content
  * hash in its name, so a different name in the hub's index.html means a different build.
  */

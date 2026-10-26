@@ -1,6 +1,6 @@
-# Contributing to Warren
+# Contributing to Wisp
 
-Thanks for helping out. Warren is a TypeScript monorepo using npm workspaces.
+Thanks for helping out. Wisp is a TypeScript monorepo using npm workspaces.
 
 ```bash
 npm install
@@ -25,13 +25,13 @@ Open http://localhost:5173 during development; it proxies the API to the hub.
 
 - Keep the default experience simple; put advanced options one click deeper.
 - Every vault change must stay a plain markdown file plus a git commit, so users can always leave with their data.
-- New API routes check access through `can()` from `@warren/core`; agents never see another agent's private scope without a grant.
+- New API routes check access through `can()` from `@wisp/core`; agents never see another agent's private scope without a grant.
 - Add a test with each fix or feature. Integration tests in `apps/hub/test` start a real hub on a random port.
 
 ## Installing and releasing
 
 - `install.sh` and `install.ps1` are what new people run first. The hub serves them at `/install.sh` and `/install.ps1` for **Devices → Add device**, and the Installer workflow runs them on Linux, macOS and Windows. Keep them working without sudo or admin rights.
-- `warren service` (`apps/node/src/service.ts`) keeps a hub or device running with launchd, systemd or Task Scheduler.
-- Pushing to `main` publishes the hub image (`ghcr.io/<owner>/warren:latest`). Pushing a tag like `v0.2.0` also publishes `:0.2.0` and a GitHub release with generated notes.
+- `wisp service` (`apps/node/src/service.ts`) keeps a hub or device running with launchd, systemd or Task Scheduler.
+- Pushing to `main` publishes the hub image (`ghcr.io/<owner>/wisp:latest`). Pushing a tag like `v0.2.0` also publishes `:0.2.0` and a GitHub release with generated notes.
 
 By contributing you agree your work is licensed under Apache-2.0.

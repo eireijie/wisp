@@ -1,7 +1,7 @@
 import type { Channel, ChannelTeam } from "./types.ts";
 
 /**
- * A channel's team as the rest of Warren reads it: who's on it and in what role, who leads, its
+ * A channel's team as the rest of Wisp reads it: who's on it and in what role, who leads, its
  * shared memory folder and repo, and who it reports to. A channel is the only kind of team, so a
  * team's id is its channel's id and its name is the channel's name.
  */
@@ -58,11 +58,6 @@ export function channelTeams(channels: Parameters<typeof teamOf>[0][]): Team[] {
 /** A memory folder as a team stores it: forward slashes, no slashes at either end. */
 export function cleanFolder(folder: string): string {
   return folder.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-}
-
-/** Is a team's own data (roles, folder, repo, boss) off? Nothing beyond the chart itself. */
-export function plainTeam(t: ChannelTeam): boolean {
-  return !t.folder && !t.repo && !t.reportsTo && t.nodes.every((n) => !n.role && !n.roleNotes);
 }
 
 /**

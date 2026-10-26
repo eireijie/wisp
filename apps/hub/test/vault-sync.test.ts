@@ -43,7 +43,7 @@ async function tryGit(cwd: string, ...args: string[]): Promise<{ ok: boolean; ou
     return { ok: false, out: `${err.stdout ?? ""}${err.stderr ?? ""}` };
   }
 }
-const remote = (token: string) => `http://warren:${token}@${base.replace("http://", "")}/git/vault.git`;
+const remote = (token: string) => `http://wisp:${token}@${base.replace("http://", "")}/git/vault.git`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function waitFor<T>(fn: () => Promise<T | undefined | false>, ms = 8000): Promise<T> {
   const end = Date.now() + ms;
@@ -59,14 +59,14 @@ let ownerToken: string;
 let clone: string;
 
 beforeAll(async () => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "warren-sync-"));
-  delete process.env.WARREN_VAULT_DIR;
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-sync-"));
+  delete process.env.WISP_VAULT_DIR;
   const built = await buildHub({ dataDir: path.join(tmp, "data"), setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yugal", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
+  owner = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Lab" }, "")).data.token;
   ownerId = (await api("GET", "/api/me")).data.user.id;
   const invite = (await api("POST", "/api/invites", { role: "member" })).data;
   sam = (await api("POST", "/api/invites/accept", { code: invite.code, name: "Sam", email: "sam@example.com", password: "password123" }, "")).data.token;
@@ -101,7 +101,7 @@ describe("memory over git", () => {
     await git(tmp, "clone", "-q", remote(ownerToken), clone);
     expect(fs.readFileSync(path.join(clone, "shared/hello.md"), "utf8")).toContain("first note");
     expect(fs.readFileSync(path.join(clone, ".gitignore"), "utf8")).toContain(".obsidian/");
-    expect((await git(clone, "log", "--format=%an")).split("\n")).toContain("Yugal");
+    expect((await git(clone, "log", "--format=%an")).split("\n")).toContain("Alex");
   });
 
   it("takes a push from Obsidian, credits the person in Activity, and indexes the note", async () => {
@@ -115,11 +115,11 @@ describe("memory over git", () => {
     expect((await api("GET", "/api/vault/note?path=shared/hello.md")).data.content).toContain("edited on the laptop");
     expect((await api<any[]>("GET", "/api/vault/search?q=fromlaptop")).data.map((h) => h.path)).toEqual(["shared/new.md"]);
     const changes = (await api<any[]>("GET", "/api/vault/changes")).data;
-    expect(changes[0]).toMatchObject({ author: "Yugal", message: "Laptop edits" });
+    expect(changes[0]).toMatchObject({ author: "Alex", message: "Laptop edits" });
     expect(changes[0].files.map((f: any) => f.path).sort()).toEqual(["shared/hello.md", "shared/new.md"]);
-    expect((await api<any[]>("GET", "/api/vault/history?path=shared/new.md")).data[0].author).toBe("Yugal");
+    expect((await api<any[]>("GET", "/api/vault/history?path=shared/new.md")).data[0].author).toBe("Alex");
     // the line-by-line view says the same
-    expect((await api<any[]>("GET", "/api/vault/blame?path=shared/new.md")).data[0].author).toBe("Yugal");
+    expect((await api<any[]>("GET", "/api/vault/blame?path=shared/new.md")).data[0].author).toBe("Alex");
     // and the vault on disk is at the pushed commit, with a clean working folder
     expect(await git(hub.vaults.primary.root, "rev-parse", "HEAD")).toBe(await git(clone, "rev-parse", "HEAD"));
     expect(await git(hub.vaults.primary.root, "status", "--porcelain")).toBe("");
@@ -137,14 +137,14 @@ describe("memory over git", () => {
     expect(fs.readFileSync(path.join(again, "shared/big.md"), "utf8")).toHaveLength(fs.readFileSync(path.join(clone, "shared/big.md"), "utf8").length);
   });
 
-  it("pulls what agents and people wrote in Warren", async () => {
-    await api("PUT", "/api/vault/note", { path: "shared/from-warren.md", content: "# From Warren\n" });
+  it("pulls what agents and people wrote in Wisp", async () => {
+    await api("PUT", "/api/vault/note", { path: "shared/from-wisp.md", content: "# From Wisp\n" });
     await git(clone, "pull", "-q", "--ff-only");
-    expect(fs.existsSync(path.join(clone, "shared/from-warren.md"))).toBe(true);
+    expect(fs.existsSync(path.join(clone, "shared/from-wisp.md"))).toBe(true);
   });
 
   it("refuses a push that isn't up to date, and one that touches hidden files, links or other branches", async () => {
-    // not up to date: Warren has a newer commit than this clone
+    // not up to date: Wisp has a newer commit than this clone
     fs.writeFileSync(path.join(clone, "shared/stale.md"), "stale\n");
     await git(clone, "add", "-A");
     await git(clone, "commit", "-q", "-m", "stale");
@@ -251,7 +251,7 @@ describe("memory over git", () => {
 });
 
 describe("edits made in Obsidian on this machine", () => {
-  it("show up in Warren, credited to Obsidian, without looping on Warren's own saves", async () => {
+  it("show up in Wisp, credited to Obsidian, without looping on Wisp's own saves", async () => {
     const root = hub.vaults.primary.root;
     fs.mkdirSync(path.join(root, "Projects"), { recursive: true });
     fs.writeFileSync(path.join(root, "Projects/Idea.md"), "# Idea\nwritten straight to disk zebrafinch\n");
@@ -260,20 +260,20 @@ describe("edits made in Obsidian on this machine", () => {
     expect(changes[0]).toMatchObject({ author: "Edited in Obsidian" });
     expect(changes[0].files[0].path).toBe("Projects/Idea.md");
 
-    // Warren's own save is not mistaken for an outside edit
+    // Wisp's own save is not mistaken for an outside edit
     const before = await git(root, "rev-list", "--count", "HEAD");
-    await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nsaved by Warren\n" });
+    await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nsaved by Wisp\n" });
     await sleep(2500);
     expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(Number(before) + 1);
-    expect(await git(root, "log", "-1", "--format=%an")).toBe("Yugal");
+    expect(await git(root, "log", "-1", "--format=%an")).toBe("Alex");
 
-    // editing and deleting in Warren (the web app's Save and Delete) don't add outside-edit commits either
+    // editing and deleting in Wisp (the web app's Save and Delete) don't add outside-edit commits either
     const n = Number(await git(root, "rev-list", "--count", "HEAD"));
     await api("PUT", "/api/vault/note", { path: "shared/agent-note.md", content: "# Agent\nfixed by a person" });
     await api("DELETE", "/api/vault/note?path=shared/agent-note.md");
     await sleep(2500);
     expect(Number(await git(root, "rev-list", "--count", "HEAD"))).toBe(n + 2);
-    expect(await git(root, "log", "-2", "--format=%an")).toBe("Yugal\nYugal");
+    expect(await git(root, "log", "-2", "--format=%an")).toBe("Alex\nAlex");
 
     // deleting in Obsidian removes it from search too
     fs.rmSync(path.join(root, "Projects/Idea.md"));
@@ -282,7 +282,7 @@ describe("edits made in Obsidian on this machine", () => {
 });
 
 describe("where memory lives", () => {
-  it("shows the folder to the owner only, and refuses folders that would hold Warren's own data", async () => {
+  it("shows the folder to the owner only, and refuses folders that would hold Wisp's own data", async () => {
     const s = (await api("GET", "/api/memory/storage")).data;
     expect(s).toMatchObject({ path: hub.vaults.primary.root, source: "default", pendingRestart: false, sync: { allowed: true, urlPath: "/git/vault.git" } });
     expect((await api("GET", "/api/memory/storage", undefined, sam)).data.path).toBeNull();

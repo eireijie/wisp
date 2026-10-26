@@ -1,13 +1,14 @@
+const { envVar } = require("./env.cjs");
 // Keeping the desktop app up to date from GitHub releases, without code signing.
 //
 // electron-updater's Mac half (Squirrel.Mac) only installs updates signed by the same Apple
-// developer as the running app, and Warren's builds are signed ad hoc for now, so the app does it
+// developer as the running app, and Wisp's builds are signed ad hoc for now, so the app does it
 // itself: find the newest `desktop-v*` release, download this platform's build, check it against
-// the digest GitHub publishes, and swap it in when you restart (or quit) Warren.
+// the digest GitHub publishes, and swap it in when you restart (or quit) Wisp.
 //
-//   Mac      Warren-mac-<arch>.zip      unzip, replace the .app, open it again
-//   Windows  Warren-win-x64.exe         run the installer silently; it opens Warren when done
-//   Linux    Warren-linux-x86_64.AppImage  replace the AppImage you ran (a .deb install updates through apt)
+//   Mac      Wisp-mac-<arch>.zip      unzip, replace the .app, open it again
+//   Windows  Wisp-win-x64.exe         run the installer silently; it opens Wisp when done
+//   Linux    Wisp-linux-x86_64.AppImage  replace the AppImage you ran (download and install a newer .deb manually)
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -16,9 +17,9 @@ const { spawn } = require("node:child_process");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 
-const REPO = "eireijie/warren";
-// WARREN_UPDATE_FEED points a build at another list of releases (for trying an update locally)
-const RELEASES = process.env.WARREN_UPDATE_FEED || `https://api.github.com/repos/${REPO}/releases?per_page=30`;
+const { GITHUB_REPO } = require("./repo.cjs");
+// WISP_UPDATE_FEED points a build at another list of releases (for trying an update locally)
+const RELEASES = envVar("UPDATE_FEED", process.env) ?? `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`;
 const TAG = /^desktop-v(\d+\.\d+\.\d+)$/;
 const FIRST_CHECK_MS = 30_000;
 const EVERY_MS = 6 * 60 * 60_000;
@@ -34,9 +35,9 @@ function compareVersions(a, b) {
 
 /** The release file this computer installs, or null when this kind of install can't update itself. */
 function assetName(platform = process.platform, arch = process.arch, env = process.env) {
-  if (platform === "darwin") return `Warren-mac-${arch === "x64" ? "x64" : "arm64"}.zip`;
-  if (platform === "win32") return "Warren-win-x64.exe";
-  if (platform === "linux" && env.APPIMAGE) return "Warren-linux-x86_64.AppImage";
+  if (platform === "darwin") return `Wisp-mac-${arch === "x64" ? "x64" : "arm64"}.zip`;
+  if (platform === "win32") return "Wisp-win-x64.exe";
+  if (platform === "linux" && env.APPIMAGE) return "Wisp-linux-x86_64.AppImage";
   return null;
 }
 
@@ -100,8 +101,8 @@ async function downloadTo(url, dest, { size, digest }, { fetchImpl = fetch, head
 }
 
 /**
- * The script that swaps a new Mac build in once Warren (`pid`) has quit. If the new app can't be
- * moved into place, the old one goes back where it was, so Warren is never left missing.
+ * The script that swaps a new Mac build in once Wisp (`pid`) has quit. If the new app can't be
+ * moved into place, the old one goes back where it was, so Wisp is never left missing.
  */
 function macScript({ pid, file, unpacked, bundle, dir, relaunch }) {
   const b = q(bundle);
@@ -136,7 +137,7 @@ function linuxScript({ pid, file, target, relaunch }) {
   ].join("\n");
 }
 
-/** The .app bundle this process runs from (…/Warren.app/Contents/MacOS/Warren). */
+/** The .app bundle this process runs from (…/Wisp.app/Contents/MacOS/wisp). */
 const macBundle = (execPath = process.execPath) => path.resolve(execPath, "..", "..", "..");
 
 /**
@@ -167,14 +168,14 @@ function createUpdater(o) {
     }
     if (state === "checking" || state === "downloading" || installing) return;
     if (state === "ready") {
-      if (manual) o.notify(`Warren ${found.version} is ready`, "Restart Warren to finish updating.");
+      if (manual) o.notify(`Wisp ${found.version} is ready`, "Restart Wisp to finish updating.");
       return;
     }
     const name = assetName();
     const stuck = process.platform === "darwin" && !canReplace(macBundle());
     if (stuck) {
-      set("error", "move Warren to Applications to get updates");
-      if (manual) o.notify("Move Warren to Applications", "Warren can only update itself from your Applications folder.");
+      set("error", "move Wisp to Applications to get updates");
+      if (manual) o.notify("Move Wisp to Applications", "Wisp can only update itself from your Applications folder.");
       return;
     }
     if (!name) {
@@ -183,12 +184,12 @@ function createUpdater(o) {
     }
     set("checking");
     try {
-      const res = await fetch(RELEASES, { signal: AbortSignal.timeout(30_000), headers: { accept: "application/vnd.github+json", "user-agent": `Warren/${app.getVersion()}` } });
+      const res = await fetch(RELEASES, { signal: AbortSignal.timeout(30_000), headers: { accept: "application/vnd.github+json", "user-agent": `Wisp/${app.getVersion()}` } });
       if (!res.ok) throw new Error(res.status === 404 ? "the release page isn't public yet" : `GitHub said ${res.status}`);
       const update = pickUpdate(await res.json(), app.getVersion(), name);
       if (!update) {
         set("idle");
-        if (manual) o.notify("Warren is up to date", `You have the newest version, ${app.getVersion()}.`);
+        if (manual) o.notify("Wisp is up to date", `You have the newest version, ${app.getVersion()}.`);
         return;
       }
       found = update;
@@ -207,14 +208,14 @@ function createUpdater(o) {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
     const dest = path.join(dir, name);
-    await downloadTo(update.url, dest, update, { headers: { "user-agent": `Warren/${app.getVersion()}` } });
+    await downloadTo(update.url, dest, update, { headers: { "user-agent": `Wisp/${app.getVersion()}` } });
     file = dest;
     set("ready", update.version);
     o.log(`update ${update.version} downloaded to ${dest}`);
-    o.notify(`Warren ${update.version} is ready`, "It installs when you restart or quit Warren.");
+    o.notify(`Wisp ${update.version} is ready`, "It installs when you restart or quit Wisp.");
   }
 
-  /** Swap the new build in after this process exits; `relaunch` opens Warren again afterwards. */
+  /** Swap the new build in after this process exits; `relaunch` opens Wisp again afterwards. */
   async function install(relaunch) {
     if ((state !== "ready" && state !== "error") || !file || installing) return false;
     installing = true;
@@ -223,7 +224,7 @@ function createUpdater(o) {
       if (process.platform === "darwin") {
         await runDetached("/bin/sh", [writeScript(macScript({ pid, file, unpacked: path.join(dir, "unpacked"), bundle: macBundle(), dir, relaunch }))]);
       } else if (process.platform === "win32") {
-        // electron-builder's one-click installer: /S is silent, --force-run opens Warren when done
+        // electron-builder's one-click installer: /S is silent, --force-run opens Wisp when done
         await runDetached(file, relaunch ? ["/S", "--force-run"] : ["/S"]);
       } else {
         await runDetached("/bin/sh", [writeScript(linuxScript({ pid, file, target: process.env.APPIMAGE, relaunch }))]);
@@ -241,12 +242,12 @@ function createUpdater(o) {
   }
 
   function writeScript(script) {
-    const sh = path.join(os.tmpdir(), `warren-update-${process.pid}.sh`);
+    const sh = path.join(os.tmpdir(), `wisp-update-${process.pid}.sh`);
     fs.writeFileSync(sh, script, { mode: 0o755 });
     return sh;
   }
 
-  /** Start the installer on its own; if it can't start, say so instead of crashing Warren. */
+  /** Start the installer on its own; if it can't start, say so instead of crashing Wisp. */
   function runDetached(cmd, args) {
     return new Promise((resolve, reject) => {
       const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
@@ -273,7 +274,7 @@ function createUpdater(o) {
     if (await install(true)) app.quit();
   }
 
-  /** Defer quitting until the installer starts; leave Warren running if it fails. */
+  /** Defer quitting until the installer starts; leave Wisp running if it fails. */
   let gaveUp = false; // an install-on-quit that failed: the next quit goes ahead without the update
   function installOnQuit(event) {
     if (installed || gaveUp || !file || (state !== "ready" && state !== "error")) return false;
@@ -293,13 +294,13 @@ function createUpdater(o) {
     check: () => check({ manual: true }),
     /** restart into the new version now */
     restart,
-    /** called while quitting: a downloaded update goes in quietly, without reopening Warren */
+    /** called while quitting: a downloaded update goes in quietly, without reopening Wisp */
     installOnQuit,
     status: () => ({ state, detail, version: found?.version ?? null }),
     /** the tray's update item(s) */
     menu() {
       if (state === "ready" || (state === "error" && file)) return [{ label: `Restart to Update to ${found.version}`, click: restart }];
-      if (state === "downloading") return [{ label: `Downloading Warren ${detail}…`, enabled: false }];
+      if (state === "downloading") return [{ label: `Downloading Wisp ${detail}…`, enabled: false }];
       return [{ label: state === "checking" ? "Checking for Updates…" : "Check for Updates…", enabled: state !== "checking", click: () => check({ manual: true }) }];
     },
   };

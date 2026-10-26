@@ -33,7 +33,7 @@ readline.createInterface({ input: process.stdin }).on("line", async (line) => {
       return reply({});
     case "session/prompt": {
       const sid = m.params.sessionId;
-      update(sid, { sessionUpdate: "tool_call", toolCallId: "t1", title: "warren/memory_search", kind: "other", status: "pending", rawInput: { query: "launch" } });
+      update(sid, { sessionUpdate: "tool_call", toolCallId: "t1", title: "wisp/memory_search", kind: "other", status: "pending", rawInput: { query: "launch" } });
       update(sid, { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed", content: [{ type: "content", content: { type: "text", text: "found 2 notes" } }] });
       update(sid, { sessionUpdate: "tool_call", toolCallId: "t2", title: "rm -rf build", kind: "execute", status: "pending" });
       const perm = await ask("session/request_permission", { sessionId: sid, toolCall: { toolCallId: "t2", kind: "execute", title: "rm -rf build" }, options: [{ optionId: "yes", name: "Allow", kind: "allow_once" }, { optionId: "no", name: "Reject", kind: "reject_once" }] });

@@ -1,6 +1,6 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@warren/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, HarnessSettings, HarnessSettingsChange, Message, Routine, Followup } from "@wisp/core";
 
-export interface WarrenClientOptions {
+export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
   token: string; // agent token, or node token + agentId
   agentId?: string;
@@ -8,7 +8,7 @@ export interface WarrenClientOptions {
   fetch?: typeof fetch;
 }
 
-export class WarrenError extends Error {
+export class WispError extends Error {
   constructor(
     message: string,
     readonly status: number,
@@ -17,10 +17,10 @@ export class WarrenError extends Error {
   }
 }
 
-/** Minimal typed client for the Warren hub API. Used by warren-mcp, the node daemon, and custom agents. */
-export class WarrenClient {
+/** Minimal typed client for the Wisp hub API. Used by wisp-mcp, the node daemon, and custom agents. */
+export class WispClient {
   readonly url: string;
-  constructor(private opts: WarrenClientOptions) {
+  constructor(private opts: WispClientOptions) {
     this.url = opts.url.replace(/\/+$/, "");
   }
 
@@ -29,7 +29,7 @@ export class WarrenClient {
       method,
       headers: {
         authorization: `Bearer ${this.opts.token}`,
-        ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}),
+        ...(this.opts.agentId ? { "x-wisp-agent": this.opts.agentId } : {}),
         ...(body !== undefined && !(body instanceof Uint8Array) ? { "content-type": "application/json" } : {}),
         ...headers,
       },
@@ -37,7 +37,7 @@ export class WarrenClient {
     });
     const text = await res.text();
     const data = text ? safeJson(text) : null;
-    if (!res.ok) throw new WarrenError((data as { error?: string })?.error ?? `${res.status} ${res.statusText}`, res.status);
+    if (!res.ok) throw new WispError((data as { error?: string })?.error ?? `${res.status} ${res.statusText}`, res.status);
     return data as T;
   }
 
@@ -74,8 +74,8 @@ export class WarrenClient {
   delegate(to: string, title: string, brief: string, opts: { channelId?: string; fileIds?: string[]; parentTaskId?: string } = {}) {
     return this.request("POST", "/api/tasks", { to, title, brief, ...opts });
   }
-  updateTask(id: string, status: "open" | "in_progress" | "done" | "failed", result?: string) {
-    return this.request("PATCH", `/api/tasks/${id}`, { status, result });
+  updateTask(id: string, status: "open" | "in_progress" | "done" | "failed", result?: string, verdict?: "approved" | "changes") {
+    return this.request("PATCH", `/api/tasks/${id}`, { status, result, ...(verdict ? { verdict } : {}) });
   }
   tasks(filter: { agent?: string; status?: string } = {}) {
     return this.request("GET", `/api/tasks?${new URLSearchParams(filter as Record<string, string>)}`);
@@ -115,6 +115,10 @@ export class WarrenClient {
     return this.request<{ ok: boolean; output: string }>("POST", `/api/tasks/${taskId}/merge`);
   }
   /** Every channel's team: `name` is the channel's, `folder` "" when it has no memory folder. */
+  /** Set up a channel's roles and steps by role names and agent handles. */
+  setTeamSteps(channel: string, team: { roles: { name: string; description: string; agent: string }[]; steps: { role: string; kind?: "do" | "review" | "hand_out"; action: string; send_back_to?: number; max_rounds?: number; hand_to?: string[]; review_by?: string }[] }) {
+    return this.request("PUT", `/api/channels/${encodeURIComponent(channel.replace(/^#/, ""))}/team-steps`, team);
+  }
   teams() {
     return this.request<{ id: string; channelId: string; name: string; leads: string[]; leadId: string | null; reportsTo: string | null; folder: string; repo: string | null; members: { agentId: string; role: string }[] }[]>("GET", "/api/teams");
   }
@@ -127,25 +131,17 @@ export class WarrenClient {
     try {
       return await this.request("GET", "/api/computers/mine");
     } catch (err) {
-      if (err instanceof WarrenError && err.status === 404) return null;
+      if (err instanceof WispError && err.status === 404) return null;
       throw err;
     }
   }
   /** Do something on this agent's computer (screenshots come back as base64 JPEG). */
-  computer<T = any>(action: ComputerAction, device?: string) {
-    return this.request<T>("POST", "/api/computers/mine/act", { action, ...(device ? { computer: device } : {}) });
+  computer<T = any>(action: ComputerAction) {
+    return this.request<T>("POST", "/api/computers/mine/act", { action });
   }
-  /** Devices this agent could ask to borrow, and whether each can be asked right now. */
-  borrowableDevices() {
-    return this.request<{ name: string; owner: string; available: boolean; note: string }[]>("GET", "/api/computers/borrowable");
-  }
-  /** Ask a device's owner to let this agent use its screen; the answer arrives as a message that wakes the agent. */
-  requestDevice(device: string, reason: string) {
-    return this.request<{ ok: boolean; approvalId: string; deviceName: string }>("POST", "/api/computers/loans", { device, reason });
-  }
-  /** Hand a borrowed device back. */
-  returnDevice(device?: string) {
-    return this.request<{ ok: boolean; deviceName: string }>("POST", "/api/computers/loans/return", { device });
+  /** Sign in to a website on this agent's own computer with a login from the person's password manager; may ask them first. */
+  fillLogin(site: string, account?: string) {
+    return this.request<{ status: "filled" | "not_filled" | "asked"; message: string; approvalId?: string }>("POST", "/api/logins/fill", { site, ...(account ? { account } : {}) });
   }
   /** Ask a person to do something on this agent's computer (sign in, enter a code). */
   computerHelp(request: string) {
@@ -211,8 +207,8 @@ export class WarrenClient {
     });
   }
   async downloadFile(id: string): Promise<{ data: Uint8Array; name: string; mime: string }> {
-    const res = await (this.opts.fetch ?? fetch)(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-warren-agent": this.opts.agentId } : {}) } });
-    if (!res.ok) throw new WarrenError(`download failed: ${res.status}`, res.status);
+    const res = await (this.opts.fetch ?? fetch)(`${this.url}/api/files/${id}`, { headers: { authorization: `Bearer ${this.opts.token}`, ...(this.opts.agentId ? { "x-wisp-agent": this.opts.agentId } : {}) } });
+    if (!res.ok) throw new WispError(`download failed: ${res.status}`, res.status);
     const cd = res.headers.get("content-disposition") ?? "";
     const name = decodeURIComponent(cd.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? id);
     return { data: new Uint8Array(await res.arrayBuffer()), name, mime: res.headers.get("content-type") ?? "application/octet-stream" };

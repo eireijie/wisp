@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Phone } from "lucide-react";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api, connectEvents, getToken } from "../api.ts";
 import { buddyNoticeWithRoot, completedTasks, unlessMuted, type BuddyNotice, type BuddyTask } from "../buddy.ts";
 import type { BuddySettings } from "../desktop.ts";
@@ -12,7 +12,7 @@ import { Ghost } from "../components/Ghost.tsx";
 import { agentVar } from "../components/ui.tsx";
 import "./buddy.css";
 
-const desktop = window.warrenDesktop?.buddy;
+const desktop = window.wispDesktop?.buddy;
 
 export function BuddyView() {
   const agents = useStore((s) => s.agents);
@@ -40,21 +40,21 @@ export function BuddyView() {
     const unsubscribe = desktop?.onSettings(update);
     void desktop?.settings().then(update);
     const storage = (e: StorageEvent) => {
-      if (e.key === "warren.token" || e.key === null) setSession(getToken());
+      if (e.key === "wisp.token" || e.key === null) setSession(getToken());
       // Setters update this renderer's theme state and notify reduced-motion subscribers.
-      if (e.key === "warren.mode" || e.key === null) {
-        const v = localStorage.getItem("warren.mode");
+      if (e.key === "wisp.mode" || e.key === null) {
+        const v = localStorage.getItem("wisp.mode");
         setMode(v === "light" || v === "dark" ? v : "system");
       }
-      if (e.key === "warren.theme" || e.key === null) {
-        const v = localStorage.getItem("warren.theme");
+      if (e.key === "wisp.theme" || e.key === null) {
+        const v = localStorage.getItem("wisp.theme");
         setTheme(THEMES.find((t) => t.id === v)?.id ?? "mono");
       }
-      if (e.key === "warren.textSize" || e.key === null) {
-        const v = localStorage.getItem("warren.textSize");
+      if (e.key === "wisp.textSize" || e.key === null) {
+        const v = localStorage.getItem("wisp.textSize");
         setTextSize(v === "small" || v === "large" ? v : "default");
       }
-      if (e.key === "warren.motion" || e.key === null) setReduceMotion(localStorage.getItem("warren.motion") === "reduce");
+      if (e.key === "wisp.motion" || e.key === null) setReduceMotion(localStorage.getItem("wisp.motion") === "reduce");
     };
     window.addEventListener("storage", storage);
     return () => {
@@ -242,7 +242,7 @@ export function BuddyView() {
       <button
         data-buddy-hit
         className="buddy-ghost"
-        aria-label={`Open ${agent?.name ?? "Warren"}${connected ? "" : " (hub offline)"}`}
+        aria-label={`Open ${agent?.name ?? "Wisp"}${connected ? "" : " (hub offline)"}`}
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}

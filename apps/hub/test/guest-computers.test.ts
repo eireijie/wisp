@@ -5,7 +5,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import type { WebSocket } from "ws";
 import type { FastifyInstance } from "fastify";
-import type { ClientEvent, Computer, MessagePart } from "@warren/core";
+import type { ClientEvent, Computer, MessagePart } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 
@@ -25,7 +25,7 @@ async function api(method: "GET" | "POST" | "PUT", url: string, token = owner, p
 }
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-guest-computers-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-guest-computers-"));
   ({ app, hub } = await buildHub({ dataDir: dir, setupCode: false }));
   const setup = await api("POST", "/api/setup", "", { email: "owner@example.com", name: "Owner", password: "password123", features: "everything" });
   owner = setup.json().token;
@@ -51,7 +51,7 @@ afterAll(async () => {
 
 describe("guests and computers", () => {
   it("forbids every computer read and live-view ticket for guests", async () => {
-    for (const url of ["/api/computers", `/api/computers/${computer.id}`, `/api/computers/${computer.id}/screen`, `/api/computers/${computer.id}/log`, `/api/computers/${computer.id}/clipboard`, `/api/computers/${computer.id}/files`, `/api/computers/${computer.id}/files/download?path=secret`, "/api/computers/mine", "/api/computers/borrowable", "/api/settings/computers", `/ws/computers/${computer.id}/frames`, `/ws/computers/${computer.id}/vnc`])
+    for (const url of ["/api/computers", `/api/computers/${computer.id}`, `/api/computers/${computer.id}/screen`, `/api/computers/${computer.id}/log`, `/api/computers/${computer.id}/clipboard`, `/api/computers/${computer.id}/files`, `/api/computers/${computer.id}/files/download?path=secret`, "/api/computers/mine", "/api/settings/computers", `/ws/computers/${computer.id}/frames`, `/ws/computers/${computer.id}/vnc`])
       expect((await api("GET", url, guest)).statusCode, url).toBe(403);
     expect((await api("POST", `/api/computers/${computer.id}/view`, guest, {})).statusCode).toBe(403);
   });
@@ -70,7 +70,7 @@ describe("guests and computers", () => {
   it("keeps agents and chat while removing computer data from REST payloads", async () => {
     const parts: MessagePart[] = [
       { type: "computer", computerId: computer.id },
-      { type: "tool_call", name: "mcp__warren__computer_screenshot", input: {}, output: { image: "secret-screen" } },
+      { type: "tool_call", name: "mcp__wisp__computer_screenshot", input: {}, output: { image: "secret-screen" } },
       { type: "tool_call", name: "read_file", input: { path: "readme" }, output: "ordinary agent data" },
     ];
     const message = hub.postMessage({ channelId, author: { kind: "agent", id: agentId }, body: "Screen result", parts, route: false });

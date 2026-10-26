@@ -2,13 +2,14 @@ import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { harnessInfo, type UserPrefs } from "@warren/core";
+import { harnessInfo, type UserPrefs } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { bearer, hashPassword, issueToken, revokeSubjectTokens, verifyPassword } from "./auth.ts";
 import { ComputerError } from "./computers.ts";
 import type { Hub } from "./hub.ts";
 import { ASK_BEFORE, agentPolicy } from "./policy.ts";
 import { DEFAULT_TOPIC } from "./apns.ts";
+import { parseServiceAccount } from "./fcm.ts";
 import { registerHarnessSettingsApi } from "./api-harness-settings.ts";
 import { featureOn } from "./features.ts";
 
@@ -115,28 +116,33 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return { signedOut: n };
   });
 
-  // --- push notifications to Warren's iOS app ---------------------------------------------------------
+  // --- push notifications to Wisp's iOS app ---------------------------------------------------------
 
   /** Whether this hub can send pushes, and the phones you get them on. */
   app.get("/api/me/push", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    return { available: !!hub.apns.config(c.workspaceId), devices: hub.apns.devices(c.actor.id).length };
+    // `android` is what the Android app starts Firebase with (null when this hub has no Firebase set up)
+    const firebase = hub.fcm.client(c.workspaceId);
+    return { available: !!hub.apns.config(c.workspaceId), devices: hub.apns.devices(c.actor.id).length, android: { available: !!firebase, firebase } };
   });
 
-  /** The iOS app sends its APNs device token here after you allow notifications. */
+  /** The iOS app sends its APNs device token here after you allow notifications; the Android app its FCM token (platform "android"). */
   app.post("/api/me/push", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
     const body = parse(
-      z.object({ token: z.string().regex(/^[0-9a-fA-F]{32,200}$/, "an APNs device token in hex"), bundleId: z.string().max(200).nullish(), environment: z.enum(["production", "sandbox"]).nullish() }),
-      req.body,
+      z.discriminatedUnion("platform", [
+        z.object({ platform: z.literal("ios").default("ios"), token: z.string().regex(/^[0-9a-fA-F]{32,200}$/, "an APNs device token in hex"), bundleId: z.string().max(200).nullish(), environment: z.enum(["production", "sandbox"]).nullish() }),
+        z.object({ platform: z.literal("android"), token: z.string().regex(/^[A-Za-z0-9:_-]{20,4096}$/, "an FCM registration token"), bundleId: z.string().max(200).nullish() }),
+      ]),
+      { platform: "ios", ...(req.body as object) },
       reply,
     );
     if (!body) return;
     if (c.principal.kind !== "session") return reply.code(403).send({ error: "only a signed-in app can get pushes" });
     hub.apns.register(sha(bearer(req.headers.authorization) ?? ""), c.actor.id, c.workspaceId, body);
-    return { ok: true, available: !!hub.apns.config(c.workspaceId) };
+    return { ok: true, available: body.platform === "android" ? !!hub.fcm.config(c.workspaceId) : !!hub.apns.config(c.workspaceId) };
   });
 
   /** Stop pushes to this sign-in (or one of its phones). Signing out does this too. */
@@ -151,8 +157,8 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.post("/api/me/push/test", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;
-    if (!hub.apns.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key first" });
-    return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Warren", body: "Notifications work on this phone." } }, warren: { kind: "test", category: "other" } });
+    if (!hub.apns.config(c.workspaceId) && !hub.fcm.config(c.workspaceId)) return reply.code(409).send({ error: "push isn't set up on this hub; add an APNs key (iPhone) or a Firebase service account (Android) first" });
+    return hub.apns.sendTo(c.workspaceId, c.actor.id, { aps: { alert: { title: "Wisp", body: "Notifications work on this phone." } }, wisp: { kind: "test", category: "other" } });
   });
 
   /** The APNs key, without the key itself. */
@@ -196,6 +202,47 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     hub.apns.saveConfig(c.workspaceId, null);
     return pushSettings(c.workspaceId);
+  });
+
+  /** The Firebase setup for Android push, without the service account's key. */
+  const androidSettings = (workspaceId: string) => {
+    const cfg = hub.fcm.config(workspaceId);
+    return cfg ? { configured: true, source: cfg.source, projectId: cfg.serviceAccount.project_id, clientEmail: cfg.serviceAccount.client_email, applicationId: cfg.applicationId, apiKey: cfg.apiKey, senderId: cfg.senderId } : { configured: false };
+  };
+
+  app.get("/api/settings/push/android", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    return androidSettings(c.workspaceId);
+  });
+
+  app.put("/api/settings/push/android", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    const body = parse(
+      z.object({
+        serviceAccount: z.string().trim().max(20_000),
+        applicationId: z.string().trim().regex(/^\d+:\d+:android:[0-9a-f]+$/, "the Android app id, like 1:1234567890:android:abc123"),
+        apiKey: z.string().trim().min(10).max(200),
+        senderId: z.string().trim().regex(/^\d+$/, "the numeric sender id (project number)"),
+      }),
+      req.body,
+      reply,
+    );
+    if (!body) return;
+    try {
+      hub.fcm.saveConfig(c.workspaceId, { ...body, serviceAccount: parseServiceAccount(body.serviceAccount) });
+    } catch {
+      return reply.code(400).send({ error: "that isn't a Firebase service account key; paste the whole JSON file" });
+    }
+    return androidSettings(c.workspaceId);
+  });
+
+  app.delete("/api/settings/push/android", async (req, reply) => {
+    const c = need(req, reply, { owner: true });
+    if (!c) return;
+    hub.fcm.saveConfig(c.workspaceId, null);
+    return androidSettings(c.workspaceId);
   });
 
   // --- the workspace and its people ------------------------------------------------------------------
@@ -299,7 +346,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
   app.get("/api/invites/check", async (req, reply) => {
     const i = usable((req.query as { code?: string }).code);
     if (!i) return reply.code(404).send({ error: "This invite link has expired or was already used. Ask for a new one." });
-    return { workspace: store.workspace(i.workspaceId)?.name ?? "Warren", role: i.role, expiresAt: i.expiresAt };
+    return { workspace: store.workspace(i.workspaceId)?.name ?? "Wisp", role: i.role, expiresAt: i.expiresAt };
   });
 
   app.post("/api/invites/accept", async (req, reply) => {
@@ -406,7 +453,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!n) return;
     const body = parse(z.object({ harness: z.string().max(60) }), req.body, reply);
     if (!body) return;
-    if (!harnessInfo(body.harness)?.install?.npm) return reply.code(400).send({ error: "Warren can't install that one for you; use its installer on the device" });
+    if (!harnessInfo(body.harness)?.install?.npm) return reply.code(400).send({ error: "Wisp can't install that one for you; use its installer on the device" });
     try {
       return await hub.computers.nodeRequest(n.id, (requestId) => ({ type: "install_harness", requestId, harness: body.harness }), 16 * 60_000);
     } catch (err) {
@@ -437,7 +484,7 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply, { owner: true });
     if (!c) return;
     const child = spawn("git", ["-C", hub.vault(c.workspaceId).root, "archive", "--format=zip", "--prefix=memory/", "HEAD"], { stdio: ["ignore", "pipe", "ignore"] });
-    reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="warren-memory-${new Date().toISOString().slice(0, 10)}.zip"`);
+    reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="wisp-memory-${new Date().toISOString().slice(0, 10)}.zip"`);
     return reply.send(child.stdout);
   });
 
@@ -453,9 +500,9 @@ export function registerSettingsApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       topic: ch.topic,
       messages: (db.prepare("SELECT id, thread_id, author_kind, author_id, body, created_at FROM messages WHERE channel_id = ? ORDER BY created_at").all(ch.id) as { id: string; thread_id: string | null; author_kind: string; author_id: string; body: string; created_at: string }[])
         .filter((m) => m.body)
-        .map((m) => ({ id: m.id, thread: m.thread_id, at: m.created_at, from: m.author_kind === "agent" ? (agents[m.author_id] ?? "agent") : (members[m.author_id] ?? (m.author_id === "system" ? "Warren" : "someone")), text: m.body })),
+        .map((m) => ({ id: m.id, thread: m.thread_id, at: m.created_at, from: m.author_kind === "agent" ? (agents[m.author_id] ?? "agent") : (members[m.author_id] ?? (m.author_id === "system" ? "Wisp" : "someone")), text: m.body })),
     }));
-    reply.header("content-disposition", `attachment; filename="warren-conversations-${new Date().toISOString().slice(0, 10)}.json"`);
+    reply.header("content-disposition", `attachment; filename="wisp-conversations-${new Date().toISOString().slice(0, 10)}.json"`);
     return { workspace: store.workspace(c.workspaceId)?.name, exportedAt: new Date().toISOString(), channels: out };
   });
 }

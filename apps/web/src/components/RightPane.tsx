@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cx } from "./ui.tsx";
 
-const KEY = "warren.rightPaneWidth";
+const KEY = "wisp.rightPaneWidth";
 export const PANE_DEFAULT = 380;
 const PANE_MIN = 300;
 const PANE_MAX = 720;

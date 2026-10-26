@@ -1,10 +1,11 @@
+import { migrateMcpConfig } from "./mcp-migration.ts";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { type ConfigSummary, type TomlDoc, type TomlEntry, asObject, boolish, deepEqual, findSkills, mcpItem, parseToml, readJson, safeWrite, sameKey, setPath, str, strings, tomlSet, tomlString, yamlSetList, yamlSetScalar } from "./harness-formats.ts";
 import { MORE_HARNESSES, configFileFor, type HarnessSpec, type SpecDirs } from "./harness-more.ts";
-import { SETTING_NAME, frontMatter, shortDescription, type HarnessSettingItem, type HarnessSettings, type HarnessSettingsChange, type HarnessSkillFile } from "@warren/core";
+import { SETTING_NAME, frontMatter, shortDescription, type HarnessSettingItem, type HarnessSettings, type HarnessSettingsChange, type HarnessSkillFile } from "@wisp/core";
 
 /**
  * A harness's own settings, straight from its config file: Hermes's ~/.hermes/config.yaml, Codex's
@@ -57,10 +58,8 @@ const BUILTIN: Record<string, HarnessSpec> = {
   },
 };
 
-/** Every harness Warren reads and changes the settings of, by id. */
+/** Every harness Wisp reads and changes the settings of, by id. */
 export const HARNESS_SPECS: Record<string, HarnessSpec> = { ...BUILTIN, ...MORE_HARNESSES };
-/** Where each harness keeps its things, and the variable that moves all of it (older name for HARNESS_SPECS). */
-export const HARNESS_HOME = HARNESS_SPECS;
 
 /** Gemini's variable names the folder above .gemini, Goose's the folder above config/. */
 const FROM_ENV: Record<string, (v: string) => string> = { gemini: (v) => path.join(v, ".gemini"), goose: (v) => path.join(v, "config") };
@@ -86,7 +85,7 @@ export function harnessDir(harness: string, h?: HarnessHomes): string | null {
   return HARNESS_SPECS[harness] ? homes({ home: h?.home }).dir(harness) : null;
 }
 
-/** The file Warren reads and changes for a harness, or null for one it doesn't know. */
+/** The file Wisp reads and changes for a harness, or null for one it doesn't know. */
 export function harnessConfigPath(harness: string, h?: HarnessHomes): string | null {
   return HARNESS_SPECS[harness] ? path.join(homes(h).dir(harness), HARNESS_SPECS[harness].config) : null;
 }
@@ -106,7 +105,7 @@ const specDirs = (harness: string, h?: HarnessHomes): SpecDirs => {
 
 export async function readHarnessSettings(harness: string, h?: HarnessHomes): Promise<HarnessSettings> {
   const spec = HARNESS_SPECS[harness];
-  if (!spec) throw new Error(`Warren can't change ${harness}'s settings yet`);
+  if (!spec) throw new Error(`Wisp can't change ${harness}'s settings yet`);
   const d = specDirs(harness, h);
   const file = await configFileFor(harness, d.dir, path.join(d.dir, spec.config));
   const empty: HarnessSettings = { harness, account: "default", accounts: [], multiAccount: false, agentAccounts: {}, configPath: file, model: null, provider: null, providers: null, apps: [], plugins: [], skills: [] };
@@ -120,7 +119,7 @@ export async function readHarnessSettings(harness: string, h?: HarnessHomes): Pr
 /** Apply `changes` to a harness's config file and read the settings back. */
 export async function changeHarnessSettings(harness: string, changes: HarnessSettingsChange[], h?: HarnessHomes): Promise<HarnessSettings> {
   const spec = HARNESS_SPECS[harness];
-  if (!spec) throw new Error(`Warren can't change ${harness}'s settings yet`);
+  if (!spec) throw new Error(`Wisp can't change ${harness}'s settings yet`);
   for (const c of changes) if (c.op !== "toggle") SETTING_NAME.parse(c.op === "model" ? c.model : c.provider);
   const d = specDirs(harness, h);
   const file = await configFileFor(harness, d.dir, path.join(d.dir, spec.config));
@@ -131,7 +130,7 @@ export async function changeHarnessSettings(harness: string, changes: HarnessSet
   });
   const current = await readHarnessSettings(harness, h);
   if (current.error) throw new Error(current.error);
-  if (current.fixed?.includes("file")) throw new Error(`${path.basename(file)} has comments in it, so Warren leaves it as it is; change it on the device`);
+  if (current.fixed?.includes("file")) throw new Error(`${path.basename(file)} has comments in it, so Wisp leaves it as it is; change it on the device`);
   for (const c of changes) {
     if (c.op !== "toggle" && current.fixed?.includes(c.op)) throw new Error(`${harness}'s ${c.op} is changed on the device`);
     if (c.op === "provider" && current.providers === null) throw new Error(`${harness} has no provider setting`);
@@ -142,7 +141,7 @@ export async function changeHarnessSettings(harness: string, changes: HarnessSet
     if (!item.canToggle) throw new Error(`${harness} has no off switch for ${item.name}; change it on the device`);
   }
   if (harness === "hermes") changes = hermesModelChoices(changes, current);
-  const after = await spec.edit(before, changes, d);
+  const after = migrateMcpConfig(await spec.edit(before, changes, d), harness);
   if (after !== before) await safeWrite(real, before, after);
   return readHarnessSettings(harness, h);
 }
@@ -166,7 +165,7 @@ function hermesModelChoices(changes: HarnessSettingsChange[], current: HarnessSe
 /** A skill's SKILL.md, found by its id among the harness's own skills (never a path someone sent). */
 export async function readHarnessSkill(harness: string, id: string, h?: HarnessHomes): Promise<HarnessSkillFile> {
   const spec = HARNESS_SPECS[harness];
-  if (!spec) throw new Error(`Warren can't share ${harness}'s skills yet`);
+  if (!spec) throw new Error(`Wisp can't share ${harness}'s skills yet`);
   for (const root of spec.skillRoots(specDirs(harness, h))) {
     const found = (await findSkills(root)).find((s) => s.id === id);
     if (!found) continue;

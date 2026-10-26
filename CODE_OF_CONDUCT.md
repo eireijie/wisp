@@ -1,6 +1,6 @@
 # Code of conduct
 
-Warren is built in the open by people with different backgrounds, skills and opinions. To keep it a good place to work:
+Wisp is built in the open by people with different backgrounds, skills and opinions. To keep it a good place to work:
 
 - Be kind and assume good intent. Critique ideas and code, never people.
 - Welcome newcomers and questions, including basic ones.

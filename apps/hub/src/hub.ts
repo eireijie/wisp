@@ -1,9 +1,11 @@
 import type { WebSocket } from "ws";
-import { BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, activeLoan, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@warren/core";
+import { DEFAULT_ROUNDS, hasSteps, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
+import { Logins } from "./logins.ts";
 import { Discussions } from "./discussions.ts";
 import { Apns } from "./apns.ts";
+import { Fcm } from "./fcm.ts";
 import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
@@ -13,7 +15,7 @@ import { Logos } from "./logos.ts";
 import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
-import type { Vault } from "@warren/vault";
+import type { Vault } from "@wisp/vault";
 import type { Vaults } from "./vaults.ts";
 import { MemoryAccess } from "./access.ts";
 import { ASK_BEFORE_TEXT, agentPolicy } from "./policy.ts";
@@ -21,6 +23,7 @@ import { AgentMemory } from "./memory.ts";
 import { failTaskOfRun, leadSection, taskInstructions } from "./lead.ts";
 import { spawnSection } from "./spawn.ts";
 import { foldTeams } from "./fold-teams.ts";
+import { TeamFlows } from "./team-flows.ts";
 import type { Store } from "./store.ts";
 import { guestEvent } from "./guest-computers.ts";
 
@@ -56,13 +59,17 @@ export class Hub {
   private nodes = new Map<string, NodeConn>();
   private live = new Map<string, LiveRun>();
   private taskReplies = new Map<string, { messageId: string; result: string }>();
-  /** devices whose owner ran `warren node pause` there */
+  /** devices whose owner ran `wisp node pause` there */
   private pausedNodes = new Set<string>();
   readonly guard = new LoopGuard();
   readonly access: MemoryAccess;
   readonly memory: AgentMemory;
   readonly discussions: Discussions;
+  /** stepped teams: requests going through a channel team's roles and steps */
+  readonly flows: TeamFlows;
   readonly computers: Computers;
+  /** logins agents fill from the person's password manager */
+  readonly logins: Logins;
   readonly routines: Routines;
   readonly background: Background;
   readonly push: Push;
@@ -76,6 +83,8 @@ export class Hub {
   readonly skills: SkillStore;
   /** iOS push notifications (optional; needs an APNs key) */
   readonly apns: Apns;
+  /** Android push notifications (optional; needs a Firebase service account) */
+  readonly fcm: Fcm;
   /** how people and devices reach this hub from elsewhere (home network, Tailscale) */
   reach = new Reach(Number(process.env.PORT ?? 4747));
   /** how the hub reaches outside services (Orgo); tests swap it */
@@ -92,7 +101,9 @@ export class Hub {
     this.access = new MemoryAccess(store);
     this.memory = new AgentMemory(store, (wsId) => this.vault(wsId), this.access);
     this.discussions = new Discussions(this);
+    this.flows = new TeamFlows(this);
     this.computers = new Computers(this);
+    this.logins = new Logins(this);
     this.routines = new Routines(this);
     this.background = new Background(this);
     this.push = new Push(this);
@@ -103,6 +114,7 @@ export class Hub {
     this.connectors = new ConnectorStore(store.db);
     this.skills = new SkillStore(store.db);
     this.apns = new Apns(this);
+    this.fcm = new Fcm(this);
   }
 
   /** An organization's memory vault (each organization has its own). */
@@ -118,7 +130,7 @@ export class Hub {
       const vault = this.vault(t.workspaceId);
       if (!vault.list((p) => p.toLowerCase() === brief.toLowerCase()).length) {
         await vault
-          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Warren", email: "warren@localhost" }, `Brief for #${t.name}`)
+          .write(brief, `# Team #${t.name}\n\nWhat this team is for, what it's working on, and how it works. The lead keeps this up to date.\n`, { name: "Wisp", email: "wisp@localhost" }, `Brief for #${t.name}`)
           .catch(() => undefined);
       }
     }
@@ -126,7 +138,7 @@ export class Hub {
 
   /**
    * Every agent has the built-in skills in its folder. Missing copies are put back (they can't be
-   * removed); `refresh` also rewrites copies that differ, so a new Warren version reaches them.
+   * removed); `refresh` also rewrites copies that differ, so a new Wisp version reaches them.
    */
   async ensureBuiltinSkills(agentIds?: string[], refresh = false) {
     const rows = this.store.db.prepare("SELECT id, workspace_id AS workspaceId FROM agents").all() as { id: string; workspaceId: string }[];
@@ -137,7 +149,7 @@ export class Hub {
         const file = skillFile({ slug: s.id, name: s.name, description: s.description, content: s.content });
         const have = await vault.read(p).then((n) => n.content, () => null);
         if (have === file || (have !== null && !refresh)) continue;
-        await vault.write(p, file, { name: "Warren", email: "warren@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
+        await vault.write(p, file, { name: "Wisp", email: "wisp@localhost" }, `Built-in skill "${s.name}"`).catch(() => undefined);
       }
     }
   }
@@ -233,7 +245,7 @@ export class Hub {
     return !!nodeId && this.nodes.has(nodeId);
   }
 
-  /** Paused at the device itself (`warren node pause`): it takes no work until it's resumed there. */
+  /** Paused at the device itself (`wisp node pause`): it takes no work until it's resumed there. */
   isNodePaused(nodeId: string | null): boolean {
     return !!nodeId && this.pausedNodes.has(nodeId);
   }
@@ -603,6 +615,17 @@ export class Hub {
     const tidy = fromPerson && (channel?.settings.replyInThread || !!channel?.settings.team);
     // a hand-off asks for its own thread, even inside another thread (a sub-thread)
     const threadId = replyInThread ? msg.id : (msg.threadId ?? (tidy ? msg.id : null));
+    // a stepped team takes a person's new message through its steps instead of waking the leads
+    if (fromPerson && !msg.threadId && !parseMentions(msg.body).length && this.flows.runsSteps(channel)) {
+      const policy = agentPolicy(this, workspaceId);
+      const verdict = this.guard.allow(msg.channelId, msg.hop, Date.now(), { maxHops: policy.maxHops, maxRunsPerWindow: policy.maxRunsPerMinute });
+      if (!verdict.ok) {
+        this.postSystem(msg, `Not starting the team: ${verdict.reason}.`);
+        return;
+      }
+      this.flows.start(msg, workspaceId, requestedBy);
+      return;
+    }
     let targets = this.targets(msg, workspaceId);
     // two or more leads read a new request: they plan it together before anyone starts
     const leads = channel && fromPerson && !msg.threadId && !parseMentions(msg.body).length ? this.leads(channel) : [];
@@ -640,8 +663,8 @@ export class Hub {
         this.postSystem(msg, `Not waking ${this.handleOf(agentId)}: ${verdict.reason}.`);
         continue;
       }
-      // commands Warren answers itself don't wake the agent
-      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "warren") {
+      // commands Wisp answers itself don't wake the agent
+      if (msg.author.kind === "user" && this.commandFor(agent, msg.body)?.via === "wisp") {
         this.answerCommand(agent, msg, threadId);
         continue;
       }
@@ -653,7 +676,7 @@ export class Hub {
     }
   }
 
-  /** What follows "/" for this agent: its harness's commands on its device, its Warren skills, and Warren's own. */
+  /** What follows "/" for this agent: its harness's commands on its device, its Wisp skills, and Wisp's own. */
   commands(agent: Agent): AgentCommand[] {
     const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
     return agentCommands(catalog?.commands, this.skills.forAgent(agent.id));
@@ -869,7 +892,7 @@ export class Hub {
       `\n## Your computer`,
       `You have a computer: "${c.name}", ${what}. Use it like a person would: computer_screenshot to look, then computer_click, computer_type, computer_key, computer_scroll and computer_drag; computer_open opens a link, file or app${c.kind === "device" ? "" : "; computer_run runs a shell command on it"}. Each action returns a fresh screenshot; coordinates are pixels in the latest screenshot.`,
       `It keeps its files, browser and sign-ins between runs${sharing.length ? `, and you share it with ${sharing.join(", ")}` : ""}. People can watch it live and take control.`,
-      `When you need a person (to sign in, enter a code, solve a captcha, or confirm something on screen), call computer_ask_human with exactly what you need and end your turn; you'll be woken when they hand the computer back. Never ask for passwords in chat.`,
+      `When you need a person (to sign in, enter a code, solve a captcha, or confirm something on screen), call computer_ask_human with exactly what you need and end your turn; you'll be woken when they hand the computer back. For a website sign-in, try login_fill first when you have it: it fills a login from the person's password manager without you seeing it. Never ask for passwords in chat.`,
     ];
     if (this.runsInComputer(agent)) {
       lines.push(
@@ -884,31 +907,12 @@ export class Hub {
     }
     if (c.kind === "device") {
       const owner = node?.ownerId ? (this.store.user(node.ownerId)?.name ?? "its owner") : "its owner";
+      const away = this.computers.whyNotOnDevice(c, agent.id);
       lines.push(
-        `This is ${owner}'s own computer. You can use it only while ${owner} lends it to you, and only for things ${owner} asked for. Don't close their windows, change settings or read private things unless the task needs it.`,
+        away ?? `This is ${owner}'s own computer, and you run on it. Use it only for things ${owner} asked for. Don't close their windows, change settings or read private things unless the task needs it.`,
       );
     }
     return lines.join("\n");
-  }
-
-  /** How an agent borrows a person's device when a task needs one, and what it has on loan now. */
-  borrowSection(agentId: string): string {
-    const agent = this.store.agent(agentId);
-    if (!agent || agent.settings.headless) return "";
-    const loans = this.store
-      .loanedComputers()
-      .filter((c) => c.workspaceId === agent.workspaceId && activeLoan(c)?.agentId === agentId)
-      .map((c) => `"${c.name}" until ${new Date(activeLoan(c)!.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}`);
-    const devices = this.computers.borrowable(agent.workspaceId, agentId).filter((d) => d.available);
-    if (!loans.length && !devices.length) return "";
-    return [
-      `\n## Borrowing a person's device`,
-      `Your own computer is your default: every computer_* tool acts on it. Only when a task needs an app or file that lives on a person's own device (say, the POS app on the shop PC), ask for its screen with device_request, say why, and end your turn; its owner decides how long you get and you'll be woken with the answer. Once you have it, add computer: "<device name>" to a computer_* tool to act on the device; leave it out to act on your own computer. Stay on what you asked for: it's their personal computer. Call device_return the moment you're done. The loan also ends when its time runs out or the owner takes it back, and you'll be told.`,
-      loans.length ? `You're borrowing right now: ${loans.join(", ")}.` : "",
-      devices.length ? `Devices you could ask for (device_list has the latest): ${devices.map((d) => `"${d.name}" (${d.owner}'s)`).join(", ")}.` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
   }
 
   /** A message as an agent reads it in its history; an approval card shows the draft it was about and the answer. */
@@ -948,6 +952,7 @@ export class Hub {
    */
   teamSection(channel: { name: string; settings: { team: ChannelTeam | null } }, agentId: string): string {
     const team = channel.settings.team;
+    if (team && hasSteps(team)) return this.stepsSection(channel.name, team, agentId);
     const me = team?.nodes.find((n) => n.agentId === agentId);
     if (!team || !me) return "";
     const live = team.nodes.filter((n) => this.store.agent(n.agentId));
@@ -979,6 +984,35 @@ export class Hub {
         ];
     const role = me.role?.trim() ? `Your role here: ${me.role.trim()}.${me.roleNotes?.trim() ? ` ${me.roleNotes.trim()}` : ""}` : "";
     return [`## Your team in #${channel.name}`, role, ...job.filter(Boolean), `The whole team:\n${chart}`].filter(Boolean).join("\n");
+  }
+
+  /**
+   * A stepped team, as one of its agents sees it: its roles and what they mean, the steps in order,
+   * and who fills every role. Wisp hands out each step as a task, so agents don't chase each other.
+   */
+  stepsSection(channelName: string, team: ChannelTeam, agentId: string): string {
+    const roles = team.roles ?? [];
+    const mine = roles.filter((r) => r.agentId === agentId);
+    if (!mine.length) return "";
+    const order = stepOrder(team.steps ?? []);
+    const num = (id: string | null | undefined) => order.findIndex((s) => s.id === id) + 1;
+    const steps = order.map((s, i) => {
+      const extra =
+        s.kind === "review"
+          ? ` Approves, or sends it back to step ${num(s.sendBackTo)} (up to ${s.maxRounds ?? DEFAULT_ROUNDS} rounds).`
+          : s.kind === "hand_out"
+            ? ` Hands pieces to ${(s.handTo ?? []).map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean).join(", ")}${s.reviewBy ? `; ${roles.find((x) => x.id === s.reviewBy)?.name} checks each piece` : ""}.`
+            : "";
+      return `${i + 1}. ${stepLabel(s, roles)}.${extra}`;
+    });
+    const people = roles.filter((r) => r.agentId && this.store.agent(r.agentId)).map((r) => `- ${r.name}: ${this.handleOf(r.agentId!)}${r.agentId === agentId ? " (you)" : ""}`);
+    return [
+      `## Your team in #${channelName}`,
+      ...mine.map((r) => `You are the ${r.name}. ${r.description.trim()}`),
+      `How this team works. A new message in the channel starts at step 1; Wisp hands each step to whoever fills its role as a task, with what the step before produced. When you're handed a step, do it and finish the task with task_update; the next step starts on its own.\n${steps.join("\n")}`,
+      `Who fills each role:\n${people.join("\n")}`,
+      "Ask a teammate something with an @mention in the thread. Don't hand the steps themselves to anyone: Wisp does that. Use task_delegate only when your step tells you to hand out pieces.",
+    ].join("\n");
   }
 
   /**
@@ -1044,7 +1078,7 @@ export class Hub {
       : "As you learn who you are, you may refine it with memory_write on me/SOUL.md. Keep it short.";
 
     return [
-      `You are @${agent.handle} ("${agent.name}"), an agent in the Warren workspace "${store.workspace(agent.workspaceId)?.name}".`,
+      `You are @${agent.handle} ("${agent.name}"), an agent in the Wisp workspace "${store.workspace(agent.workspaceId)?.name}".`,
       // models often don't know their exact version, so say what this agent actually runs on
       `You run in ${harnessLabel(agent.harness)} with ${agent.model ? `the model "${agent.model}"` : "its default model"}${agent.settings.effort ? ` at ${agent.settings.effort} reasoning effort` : ""}. If asked what model you are, say exactly that.`,
       soul ? `\n## Your soul (me/SOUL.md): who you are\n${soul}\n\n${soulNote}` : "",
@@ -1057,16 +1091,15 @@ export class Hub {
       background ? `Other agents in the workspace: ${others.join(", ") || "none yet"}.` : `You are replying in ${where}. Other agents you can bring in by @mentioning them: ${others.join(", ") || "none yet"}.`,
       channelNotes ? `\n## This channel\n${channelNotes}` : "",
       teamNotes ? `\n${teamNotes}` : "",
-      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the warren MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
+      `Your memory vault: your private notes live under agents/${agent.id}/ (shorthand me/), shared notes under shared/, and people may give you other folders. Use the wisp MCP tools (memory_search, memory_read, memory_write, memory_remember, memory_share) when they are available, and follow your memory skill (me/skills/memory/SKILL.md) whenever you save something.`,
       background ? "" : `Reply with the message you want posted. Keep it conversational; only @mention another agent when you actually need them to act.`,
       asks.length
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
       background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
-      background ? "" : `When someone asks you to change how Warren works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
+      background ? "" : `When someone asks you to change how Wisp works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
       localTime,
       this.computerSection(agent.id),
-      this.borrowSection(agent.id),
       skills ? `\n${skills}` : "",
       connectors ? `\n${connectors}` : "",
       routines ? `\n${routines}` : "",

@@ -1,12 +1,15 @@
 #!/bin/sh
-# Install Wisp without questions: curl -fsSL https://wisp.pages.dev/install | sh
+# Install Wisp without questions: curl -fsSL https://raw.githubusercontent.com/eireijie/wisp/main/install.sh | sh
 # Join instead: ... | sh -s join [invite-link]
 # Legacy: --hub-server, --hub URL --token VALUE, --name NAME, --dir DIR,
 # --yes, --no-service, --no-device and --no-open are still accepted.
 set -eu
 
-WARREN_REPO="${WARREN_REPO:-https://github.com/eireijie/warren.git}"
-DIR="${WARREN_DIR:-$HOME/warren}"
+GITHUB_REPO="eireijie/wisp"
+WISP_REPO="${WISP_REPO-${WARREN_REPO-https://github.com/$GITHUB_REPO.git}}"
+DIR="${WISP_DIR-${WARREN_DIR-$HOME/wisp}}"
+# Reuse an existing checkout so an update never installs a second hub.
+if [ -z "${WISP_DIR+x}${WARREN_DIR+x}" ] && [ ! -e "$DIR" ] && [ -d "$HOME/warren/.git" ]; then DIR="$HOME/warren"; fi
 MODE=hub HUB= TOKEN= NAME= INVITE= SERVICE=1 DEVICE=1 OPEN=1
 fail() { printf '%s\n' "✗ $*" >&2; exit 1; }
 value() { [ -n "$2" ] || fail "$1 needs a value."; }
@@ -33,13 +36,16 @@ if [ "$MODE" = device ]; then [ -n "$HUB" ] && [ -n "$TOKEN" ] || fail 'Use join
 printf '%s\n' 'Wisp'
 command -v git >/dev/null 2>&1 || fail 'Install Git, then run this installer again.'
 command -v curl >/dev/null 2>&1 || fail 'Install curl, then run this installer again.'
-mkdir -p "$HOME/.warren/runtime"
-LOG="$HOME/.warren/install.log"
+STATE="$HOME/.wisp"
+# An older Warren home moves to ~/.wisp with `wisp migrate` below; until then it stays in use.
+if [ ! -e "$STATE" ] && [ -d "$HOME/.warren" ] && [ ! -L "$HOME/.warren" ]; then STATE="$HOME/.warren"; fi
+mkdir -p "$STATE/runtime"
+LOG="$STATE/install.log"
 TEMP=$(mktemp -d "${TMPDIR:-/tmp}/wisp-install.XXXXXX")
 trap 'rm -rf "$TEMP"' EXIT HUP INT TERM
 quiet() { "$@" >>"$LOG" 2>&1 || fail "Couldn't finish getting ready; check $LOG and run wisp doctor."; }
 node_major() { "$1" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
-RUNTIME="$HOME/.warren/runtime/node"
+RUNTIME="$STATE/runtime/node"
 if command -v node >/dev/null 2>&1 && [ "$(node_major "$(command -v node)")" -ge 22 ]; then
   NODE=$(command -v node)
 elif [ -x "$RUNTIME/bin/node" ] && [ "$(node_major "$RUNTIME/bin/node")" -ge 22 ]; then
@@ -67,10 +73,12 @@ fi
 export PATH="$(dirname "$NODE"):$PATH"
 # Update only a clean checkout; never discard someone's local changes.
 if [ -d "$DIR/.git" ]; then
+  origin=$(git -C "$DIR" remote get-url origin)
+  case "$origin" in https://github.com/eireijie/warren|https://github.com/eireijie/warren.git|git@github.com:eireijie/warren.git) git -C "$DIR" remote set-url origin "$WISP_REPO" ;; esac
   quiet git -C "$DIR" pull --ff-only
 else
   [ ! -e "$DIR" ] || fail "$DIR exists; choose another folder with --dir."
-  quiet git clone "$WARREN_REPO" "$DIR"
+  quiet git clone "$WISP_REPO" "$DIR"
 fi
 cd "$DIR"
 DIR=$(pwd -P)
@@ -79,6 +87,13 @@ quiet npm ci --no-audit --no-fund --loglevel=error
 quiet npm ci --prefix bin --no-audit --no-fund --loglevel=error
 if [ "$MODE" = hub ]; then quiet npm run build --silent; fi
 printf '%s\n' '✓ Downloaded Wisp'
+# Move an older Warren home and services to Wisp before starting anything under the new name.
+quiet "$NODE" "$DIR/bin/wisp.mjs" migrate
+if [ "$STATE" = "$HOME/.warren" ] && [ -d "$HOME/.wisp" ]; then
+  case "$NODE" in "$HOME/.warren/"*) NODE="$HOME/.wisp/${NODE#"$HOME/.warren/"}" ;; esac
+  STATE="$HOME/.wisp"
+  LOG="$STATE/install.log"
+fi
 BIN="$HOME/.local/bin"
 mkdir -p "$BIN"
 # Wrappers keep using the selected runtime in new terminals without a system Node.
@@ -87,10 +102,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const [bin, dir, node] = process.argv.slice(2);
 const quote = s => "'" + s.replace(/'/g, "'\\''") + "'";
-for (const name of ['wisp', 'warren', 'warren-mcp', 'warren-hub']) {
+for (const name of ['wisp', 'wisp-mcp', 'wisp-hub']) {
   const file = path.join(bin, name);
   try { fs.unlinkSync(file); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  fs.writeFileSync(file, '#!/bin/sh\nexec ' + quote(node) + ' ' + quote(path.join(dir, 'bin', (name === 'wisp' ? 'warren' : name) + '.mjs')) + ' "$@"\n', { mode: 0o755 });
+  fs.writeFileSync(file, '#!/bin/sh\nexec ' + quote(node) + ' ' + quote(path.join(dir, 'bin', name + '.mjs')) + ' "$@"\n', { mode: 0o755 });
+}
+// the old Warren commands, when they belong to this checkout or the old ~/warren one
+const ours = [path.join(dir, 'bin'), path.join(process.env.HOME || '', 'warren', 'bin')];
+for (const name of ['warren', 'warren-mcp', 'warren-hub']) {
+  const file = path.join(bin, name);
+  try {
+    const target = fs.lstatSync(file).isSymbolicLink() ? fs.readlinkSync(file) : fs.readFileSync(file, 'utf8');
+    if (ours.some((d) => target.includes(d + path.sep))) fs.unlinkSync(file);
+  } catch {}
 }
 JS
 export PATH="$BIN:$PATH"
@@ -109,7 +133,8 @@ elif [ "$MODE" = device ]; then
   else printf '%s\n' '✓ Installed Wisp; use the existing connection flags with wisp node start'; fi
 elif [ -n "$SERVICE" ]; then
   quiet wisp service install hub
-  P="${PORT:-4747}"
+  P=$(wisp service status hub --json 2>/dev/null | "$NODE" -pe 'JSON.parse(require("node:fs").readFileSync(0, "utf8"))[0].port || ""' 2>/dev/null || true)
+  [ -n "$P" ] || P="${PORT:-4747}"
   up=
   for _ in $(seq 1 30); do
     if curl -fsS --max-time 2 "http://127.0.0.1:$P/healthz" >/dev/null 2>&1; then up=1; break; fi

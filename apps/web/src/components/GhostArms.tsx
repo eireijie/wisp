@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import type { GhostShape } from "@warren/core";
+import type { GhostShape } from "@wisp/core";
 import type { GhostMood } from "./Ghost.tsx";
 
 /*

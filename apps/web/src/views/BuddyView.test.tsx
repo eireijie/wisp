@@ -20,7 +20,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); fixture.effects.len
 describe("open buddy appearance", () => {
   it("applies later appearance changes and clears them when storage is cleared", async () => {
     const window = new EventTarget();
-    const values = new Map([["warren.mode", "dark"], ["warren.theme", "iris"], ["warren.textSize", "large"], ["warren.motion", "reduce"]]);
+    const values = new Map([["wisp.mode", "dark"], ["wisp.theme", "iris"], ["wisp.textSize", "large"], ["wisp.motion", "reduce"]]);
     vi.stubGlobal("window", window);
     vi.stubGlobal("localStorage", { getItem: (key: string) => values.get(key) ?? null });
     vi.stubGlobal("document", { documentElement: { classList: { add: vi.fn(), remove: vi.fn() } } });
@@ -42,7 +42,7 @@ describe("open buddy appearance", () => {
       expect(fixture.setReduceMotion).toHaveBeenLastCalledWith(false);
     } finally { dispose?.(); }
     vi.clearAllMocks();
-    storage("warren.theme");
+    storage("wisp.theme");
     expect(fixture.setTheme).not.toHaveBeenCalled();
   });
 });

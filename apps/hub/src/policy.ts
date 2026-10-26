@@ -12,12 +12,12 @@ export const ASK_BEFORE_DEFAULT: readonly AskBefore[] = ASK_BEFORE;
 
 /** How each rule reads in an agent's prompt. */
 export const ASK_BEFORE_TEXT: Record<AskBefore, string> = {
-  send: "sending email or messages outside Warren",
+  send: "sending email or messages outside Wisp",
   spend: "buying or paying for anything",
   delete: "deleting files, data or accounts",
   post: "posting publicly (social media, reviews, comments)",
   signup: "signing up for new accounts or services",
-  share: "sharing files or private information outside Warren",
+  share: "sharing files or private information outside Wisp",
 };
 
 export function agentPolicy(hub: Hub, workspaceId: string) {
@@ -36,7 +36,7 @@ export function agentPolicy(hub: Hub, workspaceId: string) {
     maxHops: num("agents.maxHops", 6, 1, 30),
     maxRunsPerMinute: num("agents.maxRunsPerMinute", 20, 1, 200),
     defaultAccess: ((a) => (a === "read-only" || a === "full" ? a : "edit"))(get("agents.defaultAccess")) as "read-only" | "edit" | "full",
-    /** leads (of a channel's team, a team, or the organization) may create agents; off unless an owner turns it on */
+    /** leads (of a channel's team or the organization) may create agents; off unless an owner turns it on */
     leadsCreateAgents: get("agents.leadsCreateAgents") === "true",
     /** agents a lead made may make sub-agents of their own (up to MAX_MADE_DEPTH down) */
     subAgents: get("agents.subAgents") === "true",

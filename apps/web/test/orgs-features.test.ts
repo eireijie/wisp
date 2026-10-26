@@ -1,16 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { FEATURE_KEYS, FEATURE_PRESETS } from "@warren/core";
+import { FEATURE_PRESETS } from "@wisp/core";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
 const { inviteCode, orgInitials, orgSummary, orgTone, ORG_TONES } = await import("../src/orgs.ts");
-const { featurePreset, featuresIn, FEATURE_GROUPS } = await import("../src/features.ts");
 const { featuresForExperience } = await import("../src/onboarding.ts");
 
 describe("organizations", () => {
   it("reads the code from a pasted invite link or a bare code", () => {
-    expect(inviteCode("https://warren.example/#/join/abc123")).toBe("abc123");
+    expect(inviteCode("https://wisp.example/#/join/abc123")).toBe("abc123");
     expect(inviteCode("  http://localhost:7777/join/x-y_z?ref=1 ")).toBe("x-y_z");
-    expect(inviteCode("https://warren.example/?code=q9")).toBe("q9");
+    expect(inviteCode("https://wisp.example/?code=q9")).toBe("q9");
     expect(inviteCode("plaincode")).toBe("plaincode");
   });
 
@@ -30,16 +29,6 @@ describe("organizations", () => {
 });
 
 describe("features", () => {
-  it("names the Quick start choice a set of features matches", () => {
-    expect(featurePreset(FEATURE_PRESETS.simple)).toBe("simple");
-    expect(featurePreset(FEATURE_PRESETS.everything)).toBe("everything");
-    expect(featurePreset({ ...FEATURE_PRESETS.simple, voice: true })).toBe("custom");
-  });
-
-  it("puts every feature in exactly one group", () => {
-    expect(FEATURE_GROUPS.flatMap((g) => featuresIn(g.id)).sort()).toEqual([...FEATURE_KEYS].sort());
-  });
-
   it("maps the onboarding choice to a preset", () => {
     expect(featuresForExperience("simple")).toEqual(FEATURE_PRESETS.simple);
     expect(featuresForExperience("advanced")).toEqual(FEATURE_PRESETS.everything);

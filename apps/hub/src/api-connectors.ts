@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@warren/core";
+import { SETTINGS_HARNESSES, agentSkillPath, catalogSkill, skillBody, skillFile, skillSlug, skillTitle, type HarnessSkillFile, type Skill } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 import { CALLBACK_PATH } from "./connector-auth.ts";
@@ -123,7 +123,7 @@ export function registerConnectorApi(app: FastifyInstance, hub: Hub, h: Helpers)
     }
   });
 
-  /** Where the sign-in page sends the browser back. No Warren token here: the state ties it to the sign-in that started it. */
+  /** Where the sign-in page sends the browser back. No Wisp token here: the state ties it to the sign-in that started it. */
   app.get(CALLBACK_PATH, async (req, reply) => {
     const q = req.query as { state?: string; code?: string; error?: string; error_description?: string };
     const back = (msg?: string) => reply.redirect(`/?signin=${msg ? encodeURIComponent(msg) : "ok"}#/connectors`);

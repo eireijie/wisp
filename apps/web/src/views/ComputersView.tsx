@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ChevronLeft, ChevronRight, ClipboardList, Cloud, Eye, FolderOpen, Hand, Info, Laptop, Loader2, Lock, Minimize2, Monitor, MoreHorizontal, Play, Plus, Power, Server, Trash2, Upload, Video, X } from "lucide-react";
-import { activeLoan, lentNow, type Actor, type Agent, type PageElement } from "@warren/core";
+import { type Actor, type Agent, type PageElement } from "@wisp/core";
 import { api, uploadFile } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go, href } from "../router.ts";
-import { computerKindLabel, lendLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
-import { CodeInput, codeLabel, codeReady } from "../components/ScreenCode.tsx";
+import { computerKindLabel, osName, usableDevices, useDevices, vmAvailabilityNote, type DeviceInfo } from "../devices.ts";
 import { LiveScreen, ScreenThumb, WorkingBadge, type LiveScreenHandle, type ScreenInput } from "../components/Screen.tsx";
 import { Advanced, useSimple } from "../experience.tsx";
 import { ClipboardPanel, FilesPanel, remotePlatform, saveScreenshot, sendFiles, useClipboardSync } from "../components/ComputerSync.tsx";
@@ -21,8 +20,6 @@ export function computerState(c: ComputerInfo, meId: string | undefined, agents:
   const recent = c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000;
   const busy = agents.some((a) => c.agents.includes(a.id) && a.status === "busy");
   if (recent || (busy && c.activity)) return { label: "Working", tone: "warn", working: true };
-  const loan = activeLoan(c);
-  if (loan) return { label: `Lent to @${agents.find((a) => a.id === loan.agentId)?.handle ?? "an agent"}`, tone: "accent", working: false };
   return { label: c.status === "stopped" ? "Stopped" : "Ready", tone: "ok", working: false };
 }
 
@@ -253,7 +250,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
             <div role="radiogroup" aria-labelledby="cap-q" className="space-y-2">
               {card(capability === "chat", () => pickCapability("chat"), <Hand size={18} />, "Answer questions only", "No desktop needed")}
               {card(capability === "vm", () => pickCapability("vm"), <Monitor size={18} />, "Use apps in its own desktop", "A separate desktop with a web browser, a terminal and files. Your own computer stays untouched.", vmAvailabilityNote(usable))}
-              {mineOnly.length > 0 && card(capability === "device", () => pickCapability("device"), <Lock size={18} />, "Use apps on my screen", "Uses your real screen, apps and files while you watch. You lend it for a while, and it only does what you ask.")}
+              {mineOnly.length > 0 && card(capability === "device", () => pickCapability("device"), <Lock size={18} />, "Use apps on my screen", "Runs on your computer and uses your real screen and apps while you watch. It only does what you ask.")}
             </div>
             <Advanced title="Cloud computer (Orgo)">
               <div role="radiogroup" aria-label="Cloud computer" className="space-y-2">
@@ -265,7 +262,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
         ) : (
           <div role="radiogroup" aria-label="Kind of computer" className="space-y-2">
             {option("vm", <Monitor size={18} />, "A VM on one of your devices", "A Debian desktop with Google Chrome, a terminal and files, separate from everything on the device. Agents get their own screen, and your computer stays yours.", vmAvailabilityNote(usable))}
-            {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. You lend it to agents for a while when a task needs an app that only lives on your computer, and they use it only for things you ask.")}
+            {mineOnly.length > 0 && option("device", <Lock size={18} />, "Your own screen", "Only you can see it. Agents that run on this device can use it, for things you ask, when a task needs an app that only lives on your computer.")}
             {orgoOption}
             {orgoNeedsKey}
           </div>
@@ -298,7 +295,7 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
           <p className={cx("text-xs", (kind === "vm" ? device.capabilities.vm.ok : device.capabilities.screen.ok) ? "text-muted" : "text-bad")}>
             {kind === "device" && device.capabilities.screen.off ? (
               <>
-                {device.name}'s screen is off. Only you can turn it on, at that computer: <code>warren node screen on</code>
+                {device.name}'s screen is off. Only you can turn it on, at that computer: <code>wisp node screen on</code>
               </>
             ) : kind === "vm" ? (
               device.capabilities.vm.detail
@@ -496,7 +493,6 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             {mine && <span className="text-xs text-muted">When you're done, press Hand back and @{agents.find((a) => a.id === c.help!.agentId)?.handle} picks up from there.</span>}
           </div>
         )}
-        {activeLoan(c) && canEdit && <LoanBanner computer={c} />}
       </div>
       {error && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{error}</p>}
       {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 md:mx-5 mb-2 text-sm text-bad">{c.statusText}</p>}
@@ -561,7 +557,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
                 <X size={16} />
               </button>
             </div>
-            {c.kind === "device" && <LendPanel computer={c} />}
+            {c.kind === "device" && <OwnScreen computer={c} />}
             <section className="rounded-xl border border-line p-3 space-y-1.5">
               <div className="text-xs text-muted">{computerKindLabel(c, devices)}</div>
               <p className="text-muted text-xs">
@@ -570,7 +566,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
                   : c.controller
                     ? "Someone has control; agents are waiting."
                     : c.kind === "device"
-                      ? "Take control to use it from here. Agents use it only while you lend it."
+                      ? "Take control to use it from here. Agents that run on this device use it for things you ask."
                       : "Agents use it on their own. Take control to use it yourself; they pause until you hand it back."}
               </p>
             </section>
@@ -637,103 +633,16 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   );
 }
 
-/** "Lent to @hermes until 3:40 PM · Take back": an agent is borrowing this screen. */
-function LoanBanner({ computer: c }: { computer: ComputerInfo }) {
+/** Your own screen: only you, and agents that run on its device, for things you ask them. */
+function OwnScreen({ computer: c }: { computer: ComputerInfo }) {
   const agents = useStore((s) => s.agents);
-  const loan = activeLoan(c);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [, tick] = useState(0);
-  // the banner goes away the moment the time is up
-  useEffect(() => {
-    if (!loan) return;
-    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, new Date(loan.until).getTime() - Date.now()) + 100);
-    return () => clearTimeout(t);
-  }, [loan?.until]);
-  if (!loan) return null;
-  const agent = agents.find((a) => a.id === loan.agentId);
-  const takeBack = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api("POST", `/api/computers/${c.id}/loan/end`);
-      await useStore.getState().refreshComputers();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const here = agents.filter((a) => a.computerId === c.id && a.nodeId === c.nodeId);
   return (
-    <div className="shrink-0 mx-3 md:mx-5 mb-3 rounded-xl border border-accent/40 bg-accent-soft px-4 py-2.5 flex flex-wrap items-center gap-3">
-      {agent && <AgentAvatar agent={agent} size={26} badge={false} />}
-      <div className="min-w-0 flex-1 text-sm">
-        <span className="font-medium">Lent to @{agent?.handle ?? "an agent"}</span> {lendLabel(loan.until)}
-        <span className="text-muted"> · it uses your screen only until then</span>
-        {error && <span className="text-bad"> · {error}</span>}
-      </div>
-      <Button disabled={busy} onClick={takeBack}>
-        Take back
-      </Button>
-    </div>
-  );
-}
-
-const LEND_FOR = [
-  { label: "1 hour", minutes: 60 },
-  { label: "4 hours", minutes: 240 },
-  { label: "Today", minutes: null as number | null, today: true },
-  { label: "Until I stop it", minutes: null as number | null },
-];
-
-/** Your own screen: lend it to agents for a while. They use it only for things you ask them. */
-function LendPanel({ computer: c }: { computer: ComputerInfo }) {
-  const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const lent = lentNow(c);
-  const lend = async (body: object) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api("POST", `/api/computers/${c.id}/lend`, body);
-      setCode("");
-      await useStore.getState().refreshComputers();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const untilTonight = () => {
-    const end = new Date();
-    end.setHours(23, 59, 0, 0);
-    return Math.max(1, Math.round((end.getTime() - Date.now()) / 60_000));
-  };
-  return (
-    <section className="rounded-xl border border-line p-3 space-y-2">
+    <section className="rounded-xl border border-line p-3 space-y-1">
       <h3 className="font-semibold text-sm flex items-center gap-1.5">
         <Lock size={13} /> Your own screen
       </h3>
-      <p className="text-xs text-muted">Only you can see it. {lent ? `Agents can use it ${lendLabel(c.config.lend?.until ?? null)}, and only for things you ask them.` : "Agents can't use it right now; they work on their own VMs."}</p>
-      {lent ? (
-        <Button disabled={busy} onClick={() => lend({ off: true })}>
-          Stop lending it
-        </Button>
-      ) : (
-        <div className="space-y-1.5">
-          {c.code && <CodeInput kind={c.code} value={code} onChange={setCode} className="max-w-48" />}
-          <div className="text-xs font-medium">Lend it to agents for</div>
-          <div className="flex flex-wrap gap-1.5">
-            {LEND_FOR.map((o) => (
-              <Button key={o.label} disabled={busy || !codeReady(c.code, code)} title={codeReady(c.code, code) ? undefined : `Enter its ${codeLabel(c.code)} first`} onClick={() => lend({ minutes: o.today ? untilTonight() : o.minutes, ...(c.code ? { code } : {}) })}>
-                {o.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-      {error && <p className="text-xs text-bad">{error}</p>}
+      <p className="text-xs text-muted">Only you can see it. {here.length ? `${here.map((a) => a.name).join(", ")} ${here.length === 1 ? "runs" : "run"} on this device and can use it for things you ask.` : "Only agents that run on this device can use it."}</p>
     </section>
   );
 }
@@ -746,7 +655,7 @@ function ActivityLog({ computer: c }: { computer: ComputerInfo }) {
   const activityAt = c.activity?.at;
   useEffect(() => {
     api<{ actor: Actor; text: string; at: string }[]>("GET", `/api/computers/${c.id}/log`).then(setLog, () => setLog([]));
-  }, [c.id, activityAt, c.controller?.id, c.config.lend?.until]);
+  }, [c.id, activityAt, c.controller?.id]);
   const who = (a: Actor) => (a.kind === "agent" ? (agents.find((x) => x.id === a.id)?.name ?? "An agent") : (members.find((m) => m.id === a.id)?.name ?? "Someone"));
   if (!log?.length) return null;
   return (
@@ -758,7 +667,7 @@ function ActivityLog({ computer: c }: { computer: ComputerInfo }) {
             <span className="text-faint shrink-0 tabular-nums w-14">{timeAgo(l.at)}</span>
             <span className="min-w-0">
               {l.actor.id === "system" ? (
-                // things that happened on their own (a loan running out, wrong codes) read as a sentence
+                // things that happened on their own (wrong codes) read as a sentence
                 <span className="text-muted">{l.text}</span>
               ) : (
                 <>
@@ -934,9 +843,4 @@ export function ComputerMini({ computer, request, showOpen = true, quiet }: { co
       {showOpen && <div className="mt-2 text-xs text-accent-text font-medium">{request && !computer.help ? "Handled ✓" : request ? "Open and take control →" : `Watch ${computer.name} →`}</div>}
     </a>
   );
-}
-
-export function useComputer(id: string | null | undefined) {
-  const computers = useStore((s) => s.computers);
-  return useMemo(() => computers.find((c) => c.id === id), [computers, id]);
 }

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type { JoinRequestView } from "@warren/core";
+import type { JoinRequestView } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { issueToken, revokeToken } from "./auth.ts";
 import type { Hub } from "./hub.ts";

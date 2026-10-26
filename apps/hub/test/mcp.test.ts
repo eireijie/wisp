@@ -4,31 +4,31 @@ import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { WarrenClient } from "@warren/sdk";
-import { createWarrenMcp } from "@warren/mcp/src/server.ts";
+import { WispClient } from "@wisp/sdk";
+import { createWispMcp } from "@wisp/mcp/src/server.ts";
 import { buildHub } from "../src/app.ts";
 
 let dir: string;
 let close: () => Promise<void>;
 let mcp: Client;
-let owner: WarrenClient;
+let owner: WispClient;
 let agentId: string;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-mcp-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-mcp-"));
   const { app } = await buildHub({ dataDir: dir, setupCode: false });
   await app.listen({ port: 0, host: "127.0.0.1" });
   const url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
 
   const setup = await (await fetch(url + "/api/setup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: "me@example.com", name: "Me", password: "password123", features: "everything" }) })).json();
-  owner = new WarrenClient({ url, token: setup.token });
+  owner = new WispClient({ url, token: setup.token });
   const agent = await owner.request("POST", "/api/agents", { handle: "scout", name: "Scout", harness: "claude-code" });
   await owner.request("POST", "/api/agents", { handle: "helper", name: "Helper", harness: "codex" });
   agentId = agent.id;
   const { token } = await owner.request("POST", `/api/agents/${agent.id}/token`);
 
-  const server = await createWarrenMcp(new WarrenClient({ url, token }));
+  const server = await createWispMcp(new WispClient({ url, token }));
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(a);
   mcp = new Client({ name: "test", version: "0" });
@@ -46,7 +46,7 @@ const call = async (name: string, args: Record<string, unknown> = {}) => {
   return { text: r.content.map((c) => c.text).join("\n"), isError: !!r.isError };
 };
 
-describe("warren-mcp", () => {
+describe("wisp-mcp", () => {
   it("exposes the tool set", async () => {
     const names = (await mcp.listTools()).tools.map((t) => t.name).sort();
     expect(names).toEqual([
@@ -58,18 +58,6 @@ describe("warren-mcp", () => {
       "chat_react",
       "chat_read",
       "chat_send",
-      "computer_click",
-      "computer_drag",
-      "computer_key",
-      "computer_move",
-      "computer_open",
-      "computer_screenshot",
-      "computer_scroll",
-      "computer_type",
-      "computer_wait",
-      "device_list",
-      "device_request",
-      "device_return",
       "discussion_start",
       "file_download",
       "file_upload",
@@ -97,6 +85,7 @@ describe("warren-mcp", () => {
       "task_delegate",
       "task_list",
       "task_update",
+      "team_setup",
       "teams_list",
     ]);
   });
@@ -132,7 +121,7 @@ describe("warren-mcp", () => {
     expect(saved).toMatch(/^---\ntype: project\ncreated: \d{4}-\d\d-\d\d\nupdated: \d{4}-\d\d-\d\d\n---\n\n# Apollo launch/);
     expect((await call("memory_append", { path: "me/journal/2026-10-17", text: "- Planned the Apollo launch" })).text).toBe(`Appended to agents/${agentId}/journal/2026-10-17.\nMentions you could link: [[apollo-launch]], [[apollo]]`);
 
-    // a person's edit in Warren is saved exactly as typed
+    // a person's edit in Wisp is saved exactly as typed
     await owner.writeNote("shared/projects/apollo.md", "# Apollo\nEdited by hand.");
     expect((await owner.readNote("shared/projects/apollo.md")).content).toBe("# Apollo\nEdited by hand.");
   });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { HarnessChoice, makeFirstAgent, ReadyChecklist, SETUP_LABELS } from "./WelcomeView.tsx";
 import type { DeviceInfo } from "../devices.ts";

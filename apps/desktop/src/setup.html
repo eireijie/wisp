@@ -139,7 +139,7 @@
       <strong>Start Wisp with Hetzner</strong>
       <span>Your Wisp stays on in your own Hetzner account.</span>
       </button>
-      <p>For Docker, follow the <a href="https://github.com/eireijie/warren/blob/main/docs/deploy.md#docker" target="_blank">Docker instructions</a>.</p>
+      <p>For Docker, follow the <a href="https://github.com/eireijie/wisp/blob/main/docs/deploy.md#docker" target="_blank">Docker instructions</a>.</p>
     </details>
   </div>
 
@@ -254,7 +254,7 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const state = JSON.parse(new URLSearchParams(location.search).get("state") || "{}");
-  const setup = window.warrenSetup;
+  const setup = window.wispSetup;
   const SCREENS = ["welcome", "create", "join", "cloud", "waiting", "starting", "unreachable"];
   const show = (id) => SCREENS.forEach((s) => ($(s).hidden = s !== id));
   const err = (id, msg) => { $(id).hidden = !msg; $(id).textContent = msg || ""; };

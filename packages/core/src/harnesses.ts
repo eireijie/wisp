@@ -1,7 +1,7 @@
 /**
- * The agent harnesses Warren knows. "native" harnesses have their own adapter; "acp" ones are
+ * The agent harnesses Wisp knows. "native" harnesses have their own adapter; "acp" ones are
  * driven through the Agent Client Protocol (JSON-RPC over stdio), which most agent CLIs speak;
- * "mcp" ones join through warren-mcp from wherever they already run.
+ * "mcp" ones join through wisp-mcp from wherever they already run.
  *
  * A device can override how a harness starts, or add its own ACP agents, in its node.json:
  *   "harnesses": { "qwen": { "args": ["--experimental-acp"] }, "acp:my-bot": { "label": "My bot", "command": "my-bot", "args": ["acp"] } }
@@ -9,7 +9,7 @@
 export interface HarnessInfo {
   id: string;
   label: string;
-  /** binary looked up on the device (`warren doctor`) */
+  /** binary looked up on the device (`wisp doctor`) */
   binary: string;
   protocol: "native" | "acp" | "mcp";
   /** arguments that start it in ACP mode */
@@ -20,12 +20,12 @@ export interface HarnessInfo {
   blurb?: string;
   /** what sign-in or account it needs, in plain words */
   account?: string;
-  /** where to get an account, for the harnesses Warren recommends */
+  /** where to get an account, for the harnesses Wisp recommends */
   signup?: string;
   /** how to sign it in on a device, when it needs that before it can run */
   login?: string;
   /**
-   * How to install it on a device. `npm` packages Warren can install itself when the device's owner
+   * How to install it on a device. `npm` packages Wisp can install itself when the device's owner
    * presses Install (the device runs `npm install -g <npm>`; the hub only names the harness).
    * Others show `command` to copy, or `docs`.
    */
@@ -43,13 +43,13 @@ export const HARNESSES: HarnessInfo[] = [
   { id: "qwen", label: "Qwen Code", binary: "qwen", protocol: "acp", acpArgs: ["--acp"], note: "Alibaba's agent", blurb: "Made by Alibaba. Works with Qwen models.", account: "Sign in with the account Qwen Code asks for on the device.", login: "qwen (then sign in)", install: { npm: "@qwen-code/qwen-code" } },
   { id: "cursor", label: "Cursor", binary: "cursor-agent", protocol: "acp", acpArgs: ["acp"], note: "Cursor's agent CLI", blurb: "Made by Cursor, the code editor company.", account: "Needs a Cursor account, signed in on the device.", login: "cursor-agent login", install: { command: "curl https://cursor.com/install -fsS | bash", docs: "https://cursor.com/cli" } },
   { id: "openclaw", label: "OpenClaw", binary: "openclaw", protocol: "acp", acpArgs: ["acp"], note: "Needs its gateway running", blurb: "An open-source assistant that runs through its own gateway.", account: "Set up and sign in inside OpenClaw first; its gateway must be running.", login: "openclaw onboard", install: { npm: "openclaw" } },
-  { id: "grok", label: "Grok", binary: "grok", protocol: "mcp", note: "Connects through warren-mcp", blurb: "Made by xAI. Works with Grok models.", account: "Set up where it already runs. It connects to Warren through warren-mcp." },
-  { id: "custom", label: "Custom", binary: "", protocol: "mcp", note: "Your own agent, through the API or MCP", blurb: "Your own agent, or one Warren doesn't list.", account: "Set up where it already runs. It connects to Warren through the API or warren-mcp." },
+  { id: "grok", label: "Grok", binary: "grok", protocol: "mcp", note: "Connects through wisp-mcp", blurb: "Made by xAI. Works with Grok models.", account: "Set up where it already runs. It connects to Wisp through wisp-mcp." },
+  { id: "custom", label: "Custom", binary: "", protocol: "mcp", note: "Your own agent, through the API or MCP", blurb: "Your own agent, or one Wisp doesn't list.", account: "Set up where it already runs. It connects to Wisp through the API or wisp-mcp." },
 ];
 
 export const HARNESS_IDS = HARNESSES.map((h) => h.id);
 
-/** Harnesses that come with Warren's VM image, so an agent can run entirely inside its VM. */
+/** Harnesses that come with Wisp's VM image, so an agent can run entirely inside its VM. */
 export const VM_HARNESSES = ["claude-code", "codex", "hermes", "kimi"];
 
 export function runsInVm(harness: string): boolean {

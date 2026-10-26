@@ -4,8 +4,10 @@
 // - tables get a scrolling wrapper so they never widen the page on a phone
 // It has no dependencies: it walks the HTML tree itself.
 
-const REPO_BLOB = "https://github.com/eireijie/warren/blob/main/";
-const DOC_PAGES = new Set(["install", "deploy", "computers", "adapters"]);
+import { DOC_ORDER, REPO } from "./site.ts";
+
+const REPO_BLOB = `${REPO}/blob/main/`;
+const DOC_PAGES = new Set(DOC_ORDER.map((doc) => doc.slug));
 
 function rewrite(href) {
   if (/^([a-z]+:|#|\/)/i.test(href)) return href;

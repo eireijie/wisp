@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Copy, Loader2, MoreHorizontal, Plus, RefreshCw } from "lucide-react";
-import { HARNESSES, harnessInfo, harnessLabel, runsInVm, type HarnessInfo } from "@warren/core";
+import { HARNESSES, harnessInfo, harnessLabel, runsInVm, type HarnessInfo } from "@wisp/core";
 import { api } from "../../api.ts";
 import { usableDevices, useDevices, type DeviceInfo } from "../../devices.ts";
 import { href } from "../../router.ts";
@@ -8,7 +8,7 @@ import { Button, CopyBlock, Menu, Modal, Pill, cx } from "../../components/ui.ts
 import { Card, PageHeader, Section, Select } from "./parts.tsx";
 import { HarnessLogo, hasHarnessLogo } from "../../components/HarnessLogo.tsx";
 
-/** A harness's brand mark on a tile, or a plain line icon when Warren has no logo for it (never a letter tile). */
+/** A harness's brand mark on a tile, or a plain line icon when Wisp has no logo for it (never a letter tile). */
 function Mark({ id }: { id: string; label?: string }) {
   return (
     <span className={cx("size-9 shrink-0 rounded-lg bg-chip border border-line grid place-items-center", hasHarnessLogo(id) ? "text-ink" : "text-muted")}>
@@ -19,7 +19,7 @@ function Mark({ id }: { id: string; label?: string }) {
 
 /**
  * The agent tools (harnesses) each device can run, like a runtime manager: which are ready, which
- * need installing (Warren installs npm ones itself, on its owner's say-so), and how to sign them in.
+ * need installing (Wisp installs npm ones itself, on its owner's say-so), and how to sign them in.
  */
 export function RuntimesPage() {
   const devices = useDevices(4000);
@@ -141,7 +141,7 @@ export function RuntimesPage() {
           ))}
         </Card>
       </Section>
-      <Section title="Connect from anywhere" description="Agents that run somewhere Warren doesn't start them join through warren-mcp: add the agent, then make a connection token on its Connect tab.">
+      <Section title="Connect from anywhere" description="Agents that run somewhere Wisp doesn't start them join through wisp-mcp: add the agent, then make a connection token on its Connect tab.">
         <Card>
           {anywhere.map((h) => (
             <div key={h.id} className="px-4 py-3 flex items-center gap-3">
@@ -247,11 +247,11 @@ function AddRuntime({ device, onClose }: { device: DeviceInfo | undefined; onClo
   return (
     <Modal title="Add a runtime" onClose={onClose} wide>
       <div className="space-y-4 text-sm">
-        <p>Any agent that speaks the Agent Client Protocol (ACP) can run in Warren. Add it on {device?.name ?? "the device"}, in <code>~/.warren/node.json</code>:</p>
+        <p>Any agent that speaks the Agent Client Protocol (ACP) can run in Wisp. Add it on {device?.name ?? "the device"}, in <code>~/.wisp/node.json</code>:</p>
         <CopyBlock text={snippet} />
-        <p className="text-muted">Then restart <code>warren node</code> (or press Check again). It shows up here and in Add agent. It's added at the device on purpose: nobody can make a device run a new program from Warren.</p>
+        <p className="text-muted">Then restart <code>wisp node</code> (or press Check again). It shows up here and in Add agent. It's added at the device on purpose: nobody can make a device run a new program from Wisp.</p>
         <p className="text-muted">
-          Running an agent somewhere else entirely? Add it as an agent and connect it with warren-mcp from its Connect tab.
+          Running an agent somewhere else entirely? Add it as an agent and connect it with wisp-mcp from its Connect tab.
         </p>
         <div className="flex justify-end">
           <Button variant="primary" onClick={onClose}>

@@ -1,11 +1,13 @@
-// `warren service`: keep the hub or this device running with the system's own service manager:
+import { migrateServices } from "./migrate-services.ts";
+import { envVar } from "@wisp/core";
+// `wisp service`: keep the hub or this device running with the system's own service manager:
 // a LaunchAgent on macOS, systemd on Linux, and a task at sign-in on Windows (not a Windows
 // service, which runs outside the desktop session, so agents couldn't use the screen).
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { REPO_ROOT } from "@warren/update";
+import { REPO_ROOT } from "@wisp/update";
 
 export type ServiceKind = "hub" | "node";
 
@@ -21,14 +23,14 @@ interface Spec {
 const isRoot = () => process.getuid?.() === 0;
 
 export function spec(kind: ServiceKind, dir: string): Spec {
-  const script = path.join(REPO_ROOT, "bin", kind === "hub" ? "warren-hub.mjs" : "warren.mjs");
+  const script = path.join(REPO_ROOT, "bin", kind === "hub" ? "wisp-hub.mjs" : "wisp.mjs");
   // service managers start programs with a minimal PATH, so keep this terminal's: the device needs
   // it to find `claude`, `codex` and the VM engine
-  // WARREN_SERVICE tells `warren node start` it's the service itself, not a second copy started by hand
-  const env: Record<string, string> = { PATH: process.env.PATH ?? "", WARREN_SERVICE: "1" };
-  if (kind === "hub") for (const k of ["WARREN_DATA_DIR", "PORT", "HOST", "WARREN_WEB_DIR"]) if (process.env[k]) env[k] = process.env[k]!;
-  if (kind === "node" && dir !== path.join(os.homedir(), ".warren")) env.WARREN_NODE_DIR = dir;
-  const name = process.platform === "darwin" ? `ai.warren.${kind}` : process.platform === "win32" ? `Warren ${kind}` : kind === "hub" ? "warren" : "warren-node";
+  // WISP_SERVICE tells `wisp node start` it's the service itself, not a second copy started by hand
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "", WISP_SERVICE: "1" };
+  if (kind === "hub") for (const k of ["WISP_DATA_DIR", "PORT", "HOST", "WISP_WEB_DIR"])  { const value = k.startsWith("WISP_") ? envVar(k.slice(5)) : process.env[k]; if (value !== undefined) env[k] = value; }
+  if (kind === "node" && dir !== path.join(os.homedir(), ".wisp")) env.WISP_NODE_DIR = dir;
+  const name = process.platform === "darwin" ? `ai.wisp.${kind}` : process.platform === "win32" ? `Wisp ${kind}` : kind === "hub" ? "wisp" : "wisp-node";
   return { kind, name, args: [process.execPath, script, ...(kind === "node" ? ["node", "start"] : [])], env, log: path.join(dir, `${kind}.log`) };
 }
 
@@ -66,7 +68,7 @@ function launchdPlist(s: Spec) {
 export function systemdUnit(s: Spec, system: boolean) {
   const q = (a: string) => (/[\s"\\]/.test(a) ? `"${a.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : a);
   return `[Unit]
-Description=Warren ${s.kind === "hub" ? "hub" : "device"}
+Description=Wisp ${s.kind === "hub" ? "hub" : "device"}
 After=network-online.target
 Wants=network-online.target
 
@@ -93,14 +95,16 @@ function linux(s: Spec) {
 }
 
 export function installService(kind: ServiceKind, dir: string): Spec {
+  const migrated = migrateServices({ home: os.homedir(), kinds: [kind], log: console.log });
   const s = spec(kind, dir);
+  if (migrated.length) return s;
   fs.mkdirSync(path.dirname(s.log), { recursive: true });
   if (process.platform === "darwin") {
     const file = path.join(os.homedir(), "Library/LaunchAgents", `${s.name}.plist`);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const domain = `gui/${process.getuid!()}`;
     attempt("launchctl", ["bootout", `${domain}/${s.name}`]);
-    fs.writeFileSync(file, launchdPlist(s));
+    if (!fs.existsSync(file)) fs.writeFileSync(file, launchdPlist(s));
     // bootout returns before launchd lets go of the old job; bootstrapping too soon fails with
     // "5: Input/output error", so give it a few seconds before reporting the failure
     for (let tries = 1; ; tries++) {
@@ -116,7 +120,7 @@ export function installService(kind: ServiceKind, dir: string): Spec {
     if (!attempt("systemctl", ["--version"])) throw new Error("This system doesn't use systemd. Run it in a terminal instead, or with your own service manager.");
     const { system, file, ctl } = linux(s);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, systemdUnit(s, system));
+    if (!fs.existsSync(file)) fs.writeFileSync(file, systemdUnit(s, system));
     run("systemctl", ctl("daemon-reload"));
     run("systemctl", ctl("enable", s.name));
     run("systemctl", ctl("restart", s.name));
@@ -124,6 +128,10 @@ export function installService(kind: ServiceKind, dir: string): Spec {
     if (!system && !attempt("loginctl", ["enable-linger", os.userInfo().username]))
       console.log(`To keep it running after you log out: sudo loginctl enable-linger ${os.userInfo().username}`);
   } else if (process.platform === "win32") {
+    if (attempt("powershell.exe", ["-NoProfile", "-Command", `$ErrorActionPreference = 'Stop'; Get-ScheduledTask -TaskName ${ps(s.name)} | Out-Null`])) {
+      run("powershell.exe", ["-NoProfile", "-Command", `Start-ScheduledTask -TaskName ${ps(s.name)}`]);
+      return s;
+    }
     const [exe, ...rest] = s.args;
     const env = Object.entries(s.env)
       .filter(([k]) => k !== "PATH")
@@ -141,12 +149,13 @@ export function installService(kind: ServiceKind, dir: string): Spec {
     ].join("; ");
     run("powershell.exe", ["-NoProfile", "-Command", script]);
   } else {
-    throw new Error(`Starting Warren automatically isn't supported on ${process.platform}. Run it in a terminal instead.`);
+    throw new Error(`Starting Wisp automatically isn't supported on ${process.platform}. Run it in a terminal instead.`);
   }
   return s;
 }
 
 export function uninstallService(kind: ServiceKind, dir: string) {
+  migrateServices({ home: os.homedir(), kinds: [kind], removeOnly: true, log: console.log });
   const s = spec(kind, dir);
   if (process.platform === "darwin") {
     attempt("launchctl", ["bootout", `gui/${process.getuid!()}/${s.name}`]);
@@ -164,17 +173,44 @@ export function uninstallService(kind: ServiceKind, dir: string) {
 
 /**
  * Whether this process is the service itself (or the keeper's child it runs), not a second copy
- * started by hand. Services installed before WARREN_SERVICE existed don't set it, so this also
+ * started by hand. Services installed before WISP_SERVICE existed don't set it, so this also
  * matches the service's own process id, and on macOS the job label launchd hands its jobs.
  */
 export function isService(status: { name: string; pid?: number }): boolean {
-  if (process.env.WARREN_SERVICE) return true;
+  if (envVar("SERVICE")) return true;
   if (status.pid && (status.pid === process.pid || status.pid === process.ppid)) return true;
   return process.platform === "darwin" && process.env.XPC_SERVICE_NAME === status.name;
 }
 
+/** Parse only the listen port; status never exposes a service's token/environment. */
+export function servicePortFromDefinition(text: string): number | undefined {
+  const value = text.match(/<key>PORT<\/key>\s*<string>(\d+)<\/string>/)?.[1]
+    ?? text.match(/\bEnvironment=["']?PORT=(\d+)\b/)?.[1]
+    ?? text.match(/\$env:PORT\s*=\s*(?:'|"|&quot;|&apos;)?(\d+)\b/i)?.[1];
+  const port = Number(value);
+  return port > 0 && port <= 65535 ? port : undefined;
+}
+
+export function servicePort(kind: ServiceKind, dir: string): number {
+  const s = spec(kind, dir);
+  try {
+    const definition = process.platform === "darwin" ? fs.readFileSync(path.join(os.homedir(), "Library/LaunchAgents", `${s.name}.plist`), "utf8")
+      : process.platform === "linux" ? fs.readFileSync(linux(s).file, "utf8")
+      : process.platform === "win32" ? run("powershell.exe", ["-NoProfile", "-Command", `Export-ScheduledTask -TaskName ${ps(s.name)}`], true) : "";
+    return servicePortFromDefinition(definition) ?? Number(process.env.PORT ?? 4747);
+  } catch { return Number(process.env.PORT ?? 4747); }
+}
+
 export function serviceStatus(kind: ServiceKind, dir: string): { installed: boolean; running: boolean; name: string; log: string; pid?: number } {
   const s = spec(kind, dir);
+  const legacy = process.platform === "darwin" ? `ai.warren.${kind}` : process.platform === "win32" ? `Warren ${kind}` : kind === "hub" ? "warren" : "warren-node";
+  if (process.platform === "darwin") {
+    const folder = path.join(os.homedir(), "Library/LaunchAgents");
+    if (!fs.existsSync(path.join(folder, `${s.name}.plist`)) && fs.existsSync(path.join(folder, `${legacy}.plist`))) s.name = legacy;
+  } else if (process.platform === "linux") {
+    const { file } = linux(s);
+    if (!fs.existsSync(file) && fs.existsSync(path.join(path.dirname(file), `${legacy}.service`))) s.name = legacy;
+  }
   const base = { name: s.name, log: s.log };
   if (process.platform === "darwin") {
     const installed = fs.existsSync(path.join(os.homedir(), "Library/LaunchAgents", `${s.name}.plist`));
@@ -200,6 +236,7 @@ export function serviceStatus(kind: ServiceKind, dir: string): { installed: bool
     try {
       state = run("powershell.exe", ["-NoProfile", "-Command", `(Get-ScheduledTask -TaskName ${ps(s.name)}).State`], true).trim();
     } catch {}
+    if (!state) { try { state = run("powershell.exe", ["-NoProfile", "-Command", `(Get-ScheduledTask -TaskName ${ps(legacy)}).State`], true).trim(); if (state) base.name = legacy; } catch {} }
     return { ...base, installed: !!state, running: state === "Running" };
   }
   return { ...base, installed: false, running: false };

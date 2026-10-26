@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import type { HubToNode, NodeToHub } from "@warren/core";
+import type { HubToNode, NodeToHub } from "@wisp/core";
 import { buildHub } from "../src/app.ts";
 import type { Hub } from "../src/hub.ts";
 
@@ -55,7 +55,7 @@ async function device(commit: string, answer: (requestId: string) => NodeToHub) 
 const nodeInfo = async () => (await api<any[]>("GET", "/api/nodes")).data.find((n) => n.id === nodeId);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-updates-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-updates-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   // not a git checkout, so the hub's own update is explained rather than run
@@ -63,7 +63,7 @@ beforeAll(async () => {
   await built.app.listen({ port: 0, host: "127.0.0.1" });
   base = `http://127.0.0.1:${(built.app.server.address() as { port: number }).port}`;
   close = () => built.app.close();
-  token = (await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Test" })).data.token;
+  token = (await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Test" })).data.token;
   const n = await api("POST", "/api/nodes", { name: "box" });
   nodeId = n.data.node.id;
   nodeToken = n.data.token;

@@ -1,4 +1,4 @@
-// Draws Warren's ghost icons (the same ghost as apps/web/public/icon.svg) as PNGs:
+// Draws Wisp's ghost icons (the same ghost as apps/web/public/icon.svg) as PNGs:
 //   swift apps/ios/scripts/icons.swift
 // writes the desktop app icon, the menu bar template icons and the iOS app icon.
 import AppKit
@@ -53,7 +53,7 @@ func tile(_ ctx: CGContext, _ s: CGFloat, inset: CGFloat, radius: CGFloat) {
 // macOS/Windows/Linux app icon: a rounded tile with the usual margin
 png(1024, "\(root)/desktop/build/icon.png") { ctx, s in tile(ctx, s, inset: 100, radius: 185) }
 // iOS app icon: full bleed, the system rounds it
-png(1024, "\(root)/ios/Warren/Assets.xcassets/AppIcon.appiconset/icon-1024.png") { ctx, s in
+png(1024, "\(root)/ios/Wisp/Assets.xcassets/AppIcon.appiconset/icon-1024.png") { ctx, s in
   ctx.setFillColor(ink); ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
   let g = ghost(in: CGRect(x: s * 0.22, y: s * 0.17, width: s * 0.56, height: s * 0.66))
   ctx.addPath(g.body); ctx.setFillColor(paper); ctx.fillPath()

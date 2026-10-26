@@ -2,20 +2,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { WarrenClient } from "@warren/sdk";
-import type { Screenshot } from "@warren/core";
+import { WispClient } from "@wisp/sdk";
+import { SETTINGS_HARNESSES, type Screenshot } from "@wisp/core";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 const text = (t: string): { content: Content[] } => ({ content: [{ type: "text" as const, text: t }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
 
 /**
- * The Warren MCP server: gives any MCP-capable harness (Claude Code, Codex,
+ * The Wisp MCP server: gives any MCP-capable harness (Claude Code, Codex,
  * Kimi, Hermes, OpenClaw, ...) chat, task, memory-vault and file tools.
  */
-export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?: boolean } = {}) {
+export async function createWispMcp(client: WispClient, opts: { localFiles?: boolean } = {}) {
   const me = await client.me();
-  if (me.kind !== "agent" || !me.agent) throw new Error("warren-mcp needs an agent token (or a node token with WARREN_AGENT)");
+  if (me.kind !== "agent" || !me.agent) throw new Error("wisp-mcp needs an agent token (or a node token with WISP_AGENT)");
   const self = me.agent;
   const myDir = `agents/${self.id}`;
 
@@ -108,6 +108,33 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
     }),
   );
 
+  server.registerTool(
+    "team_setup",
+    {
+      description:
+        "Set up how a channel's team works, when a person describes it (\"Opus plans, GPT challenges it until it approves, then Opus hands out the work\"). Give each role a name, a description every agent on the team will read, and the agent who fills it; then the steps in order. A new message in the channel goes through the steps: Wisp hands each step to its role's agent. Kinds: do (does it, passes the result on), review (approves, or sends it back to an earlier step, up to max_rounds before asking a person), hand_out (splits the work into pieces for hand_to roles; review_by checks each piece). Replaces the channel's roles and steps. Only the workspace's lead or the channel's lead can.",
+      inputSchema: {
+        channel: z.string().describe("e.g. #launch-site"),
+        roles: z.array(z.object({ name: z.string(), description: z.string(), agent: z.string().describe("agent handle") })),
+        steps: z.array(
+          z.object({
+            role: z.string().describe("a role name from roles"),
+            kind: z.enum(["do", "review", "hand_out"]).optional(),
+            action: z.string().describe("what the role does in this step, e.g. Draft a thorough plan"),
+            send_back_to: z.number().int().optional().describe("review: step number (1-based) that gets the work back"),
+            max_rounds: z.number().int().optional(),
+            hand_to: z.array(z.string()).optional().describe("hand_out: role names the pieces go to"),
+            review_by: z.string().optional().describe("hand_out: role name that checks each piece"),
+          }),
+        ),
+      },
+    },
+    safe(async ({ channel, roles, steps }) => {
+      await client.setTeamSteps(channel, { roles, steps });
+      return text(`#${channel.replace(/^#/, "")} now works in ${steps.length} step${steps.length === 1 ? "" : "s"} with ${roles.length} role${roles.length === 1 ? "" : "s"}. Tell the person it's set up; they can change it in the channel's Team tab.`);
+    }),
+  );
+
   // --- tasks ------------------------------------------------------------------
 
   server.registerTool(
@@ -151,9 +178,9 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
 
   server.registerTool(
     "task_update",
-    { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason. A task you split into subtasks isn't finished on its own: mark it done once its subtasks are in (results of subtasks come back to you with how many are done).", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional() } },
-    safe(async ({ task_id, status, result }) => {
-      await client.updateTask(task_id, status, result);
+    { description: "Update a task assigned to you. Mark it done (with the result) when finished, or failed with the reason. A task you split into subtasks isn't finished on its own: mark it done once its subtasks are in (results of subtasks come back to you with how many are done). For a review, say whether it's approved or needs changes with verdict.", inputSchema: { task_id: z.string(), status: z.enum(["in_progress", "done", "failed"]), result: z.string().optional(), verdict: z.enum(["approved", "changes"]).optional().describe("for a review: approved moves the work on, changes sends it back with your result as the notes") } },
+    safe(async ({ task_id, status, result, verdict }) => {
+      await client.updateTask(task_id, status, result, verdict);
       return text(`Task ${task_id} is now ${status}.`);
     }),
   );
@@ -233,7 +260,7 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
         "Remember something about a person so every agent knows it later. kind: 'preference' (how they like things), 'plan' (something they intend to do; add due as YYYY-MM-DD if there is one), 'did' (something they did; goes in a dated journal), or 'detail' (a fact about them, their setup, people, tools). One fact per call, in plain words. Defaults to the person you're working with. If a similar memory exists you'll get it back: pass its path as replaces to update it, e.g. to mark a plan done with status 'done'. Never save passwords, keys or secrets.",
       inputSchema: {
         kind: z.enum(["preference", "plan", "did", "detail"]),
-        text: z.string().optional().describe("the fact; optional only when replacing to change status/due/pinned"),
+        text: z.string().optional().describe("the fact; optional only when replacing to change status/due"),
         about: z.string().optional().describe("person's name; default: who you're working with"),
         status: z.enum(["active", "done", "dropped"]).optional(),
         due: z.string().optional(),
@@ -293,11 +320,7 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
   // --- computer -----------------------------------------------------------------
 
   const computer = await client.myComputer().catch(() => null);
-  // an agent set up without a computer (headless) can't borrow a screen either
-  if (computer || !self.settings?.headless) {
-    registerComputerTools(server, client, computer, safe);
-    registerDeviceTools(server, client, safe);
-  }
+  if (computer) registerComputerTools(server, client, computer, safe);
 
   // --- reaching the person, and coming back to things -------------------------------------------
 
@@ -458,7 +481,7 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
 
   server.registerTool(
     "harness_settings",
-    { description: "See your harness's own settings on your device (its config file): the model and provider it uses by default, its apps (MCP servers), plugins and skills, and which are on. Give harness to see another harness on the same device (hermes, codex, claude-code).", inputSchema: { harness: z.string().optional() } },
+    { description: `See your harness's own settings on your device (its config file): the model and provider it uses by default, its apps (MCP servers), plugins and skills, and which are on. Give harness to see another harness on the same device (${SETTINGS_HARNESSES.join(", ")}).`, inputSchema: { harness: z.string().optional() } },
     safe(async ({ harness }) => text(settingsLine(await client.harnessSettings(harness)))),
   );
 
@@ -468,7 +491,7 @@ export async function createWarrenMcp(client: WarrenClient, opts: { localFiles?:
       description:
         "Change your harness's own settings on your device when its owner asks (\"switch Hermes to GPT-5\", \"turn off the GitHub plugin\", \"use my work account\"): its default model, provider, which of its accounts you use, and turning apps, plugins and skills on or off. Only works while you're doing something the device's owner asked for. Names come from harness_settings. The change applies from your next reply on.",
       inputSchema: {
-        harness: z.string().optional().describe("hermes, codex or claude-code; default: your own"),
+        harness: z.string().optional().describe(`${SETTINGS_HARNESSES.join(", ")}; default: your own`),
         model: z.string().optional(),
         provider: z.string().optional(),
         turn_on: z.array(z.object({ kind: z.enum(["app", "plugin", "skill"]), name: z.string() })).optional(),
@@ -545,158 +568,125 @@ type Safe = <A>(fn: (a: A) => Promise<{ content: Content[] }>) => (a: A) => Prom
 /**
  * Computer use: look at the screen and use the mouse and keyboard, like a person. Coordinates are
  * pixels in the latest screenshot; each action returns a fresh one so the agent sees what happened.
- *
- * Every tool acts on the agent's own computer unless `computer` names a device it is borrowing
- * (see device_request), so borrowing never changes what the tools do by default.
  */
-function registerComputerTools(server: McpServer, client: WarrenClient, own: { name: string; kind: string } | null, safe: Safe) {
-  // each screen has its own size, so remember it per target
-  const spaces = new Map<string, { width: number; height: number }>();
-  const look = async (device: string | undefined, note: string, settleMs = 600): Promise<{ content: Content[] }> => {
+function registerComputerTools(server: McpServer, client: WispClient, own: { name: string; kind: string }, safe: Safe) {
+  // the screen's size, for scaling coordinates
+  let space: { width: number; height: number } | null = null;
+  const look = async (note: string, settleMs = 600): Promise<{ content: Content[] }> => {
     if (settleMs) await new Promise((r) => setTimeout(r, settleMs));
-    const s = await client.computer<Screenshot>({ action: "screenshot" }, device);
-    spaces.set(device ?? "", { width: s.width, height: s.height });
-    return { content: [{ type: "image", data: s.image, mimeType: s.mime }, { type: "text", text: `${device ? `[${device}] ` : ""}${note}${note ? " " : ""}Screen is ${s.width}x${s.height}; coordinates are pixels in this image.` }] };
+    const s = await client.computer<Screenshot>({ action: "screenshot" });
+    space = { width: s.width, height: s.height };
+    return { content: [{ type: "image", data: s.image, mimeType: s.mime }, { type: "text", text: `${note}${note ? " " : ""}Screen is ${s.width}x${s.height}; coordinates are pixels in this image.` }] };
   };
-  const at = async (device: string | undefined) => {
-    if (!spaces.has(device ?? "")) await look(device, "", 0);
-    return spaces.get(device ?? "")!;
+  const at = async () => {
+    if (!space) await look("", 0);
+    return space!;
   };
-  const after = (device: string | undefined, shot: boolean | undefined, note: string, settleMs?: number) => (shot === false ? text(note) : look(device, note, settleMs));
+  const after = (shot: boolean | undefined, note: string, settleMs?: number) => (shot === false ? text(note) : look(note, settleMs));
   const xy = { x: z.number().describe("pixels from the left of the latest screenshot"), y: z.number().describe("pixels from the top") };
   const shot = z.boolean().optional().describe("return a screenshot afterwards (default true)");
-  const on = {
-    computer: z
-      .string()
-      .optional()
-      .describe(own ? `leave out to act on your own computer "${own.name}"; or the name of a device you're borrowing (device_request)` : "the name of the device you're borrowing (device_request); you have no computer of your own"),
-  };
-  const mine = own ? `your computer "${own.name}"` : "a device you're borrowing";
 
   server.registerTool(
     "computer_screenshot",
-    { description: `See the screen of ${mine}. By default that's your own computer; pass \`computer\` to look at a device you're borrowing.`, inputSchema: { ...on } },
-    safe(async ({ computer }) => look(computer, "", 0)),
+    { description: `See the screen of your computer "${own.name}".`, inputSchema: {} },
+    safe(async () => look("", 0)),
   );
   server.registerTool(
     "computer_click",
-    { description: "Click at a point on the screen.", inputSchema: { ...xy, button: z.enum(["left", "right", "middle"]).optional(), double: z.boolean().optional(), screenshot: shot, ...on } },
-    safe(async ({ x, y, button, double, screenshot, computer }) => {
-      await client.computer({ action: "click", x, y, button, double, space: await at(computer) }, computer);
-      return after(computer, screenshot, `Clicked (${x}, ${y}).`);
+    { description: "Click at a point on the screen.", inputSchema: { ...xy, button: z.enum(["left", "right", "middle"]).optional(), double: z.boolean().optional(), screenshot: shot } },
+    safe(async ({ x, y, button, double, screenshot }) => {
+      await client.computer({ action: "click", x, y, button, double, space: await at() });
+      return after(screenshot, `Clicked (${x}, ${y}).`);
     }),
   );
   server.registerTool(
     "computer_type",
-    { description: "Type text where the keyboard focus is (click the field first). Set enter to press Enter after.", inputSchema: { text: z.string(), enter: z.boolean().optional(), screenshot: shot, ...on } },
-    safe(async ({ text: t, enter, screenshot, computer }) => {
-      await client.computer({ action: "type", text: t }, computer);
-      if (enter) await client.computer({ action: "key", keys: "Enter" }, computer);
-      return after(computer, screenshot, `Typed ${t.length} characters${enter ? " and pressed Enter" : ""}.`);
+    { description: "Type text where the keyboard focus is (click the field first). Set enter to press Enter after.", inputSchema: { text: z.string(), enter: z.boolean().optional(), screenshot: shot } },
+    safe(async ({ text: t, enter, screenshot }) => {
+      await client.computer({ action: "type", text: t });
+      if (enter) await client.computer({ action: "key", keys: "Enter" });
+      return after(screenshot, `Typed ${t.length} characters${enter ? " and pressed Enter" : ""}.`);
     }),
   );
   server.registerTool(
     "computer_key",
-    { description: "Press a key or shortcut, e.g. 'Enter', 'Escape', 'Tab', 'ctrl+l', 'cmd+t' (Mac), 'ctrl+shift+t', 'PageDown'.", inputSchema: { keys: z.string(), screenshot: shot, ...on } },
-    safe(async ({ keys, screenshot, computer }) => {
-      await client.computer({ action: "key", keys }, computer);
-      return after(computer, screenshot, `Pressed ${keys}.`);
+    { description: "Press a key or shortcut, e.g. 'Enter', 'Escape', 'Tab', 'ctrl+l', 'cmd+t' (Mac), 'ctrl+shift+t', 'PageDown'.", inputSchema: { keys: z.string(), screenshot: shot } },
+    safe(async ({ keys, screenshot }) => {
+      await client.computer({ action: "key", keys });
+      return after(screenshot, `Pressed ${keys}.`);
     }),
   );
   server.registerTool(
     "computer_scroll",
-    { description: "Scroll at a point (the mouse moves there first).", inputSchema: { ...xy, direction: z.enum(["up", "down", "left", "right"]), amount: z.number().int().min(1).max(30).optional().describe("wheel clicks, default 3"), screenshot: shot, ...on } },
-    safe(async ({ x, y, direction, amount, screenshot, computer }) => {
-      await client.computer({ action: "scroll", x, y, direction, amount, space: await at(computer) }, computer);
-      return after(computer, screenshot, `Scrolled ${direction}.`, 400);
+    { description: "Scroll at a point (the mouse moves there first).", inputSchema: { ...xy, direction: z.enum(["up", "down", "left", "right"]), amount: z.number().int().min(1).max(30).optional().describe("wheel clicks, default 3"), screenshot: shot } },
+    safe(async ({ x, y, direction, amount, screenshot }) => {
+      await client.computer({ action: "scroll", x, y, direction, amount, space: await at() });
+      return after(screenshot, `Scrolled ${direction}.`, 400);
     }),
   );
   server.registerTool(
     "computer_drag",
-    { description: "Press at one point, drag to another, and release.", inputSchema: { ...xy, to_x: z.number(), to_y: z.number(), screenshot: shot, ...on } },
-    safe(async ({ x, y, to_x, to_y, screenshot, computer }) => {
-      await client.computer({ action: "drag", x, y, toX: to_x, toY: to_y, space: await at(computer) }, computer);
-      return after(computer, screenshot, `Dragged to (${to_x}, ${to_y}).`);
+    { description: "Press at one point, drag to another, and release.", inputSchema: { ...xy, to_x: z.number(), to_y: z.number(), screenshot: shot } },
+    safe(async ({ x, y, to_x, to_y, screenshot }) => {
+      await client.computer({ action: "drag", x, y, toX: to_x, toY: to_y, space: await at() });
+      return after(screenshot, `Dragged to (${to_x}, ${to_y}).`);
     }),
   );
   server.registerTool(
     "computer_move",
-    { description: "Move the mouse without clicking (to hover).", inputSchema: { ...xy, screenshot: shot, ...on } },
-    safe(async ({ x, y, screenshot, computer }) => {
-      await client.computer({ action: "move", x, y, space: await at(computer) }, computer);
-      return after(computer, screenshot, `Moved to (${x}, ${y}).`, 400);
+    { description: "Move the mouse without clicking (to hover).", inputSchema: { ...xy, screenshot: shot } },
+    safe(async ({ x, y, screenshot }) => {
+      await client.computer({ action: "move", x, y, space: await at() });
+      return after(screenshot, `Moved to (${x}, ${y}).`, 400);
     }),
   );
   server.registerTool(
     "computer_open",
-    { description: "Open a URL in the browser, or a file or app, the way double-clicking it would.", inputSchema: { target: z.string().describe("a URL, a path, or an app name"), screenshot: shot, ...on } },
-    safe(async ({ target, screenshot, computer }) => {
-      await client.computer({ action: "open", target }, computer);
-      return after(computer, screenshot, `Opened ${target}.`, 2500);
+    { description: "Open a URL in the browser, or a file or app, the way double-clicking it would.", inputSchema: { target: z.string().describe("a URL, a path, or an app name"), screenshot: shot } },
+    safe(async ({ target, screenshot }) => {
+      await client.computer({ action: "open", target });
+      return after(screenshot, `Opened ${target}.`, 2500);
     }),
   );
   server.registerTool(
     "computer_wait",
-    { description: "Wait for something to load, then look again.", inputSchema: { seconds: z.number().min(0.5).max(30), ...on } },
-    safe(async ({ seconds, computer }) => look(computer, `Waited ${seconds}s.`, seconds * 1000)),
+    { description: "Wait for something to load, then look again.", inputSchema: { seconds: z.number().min(0.5).max(30) } },
+    safe(async ({ seconds }) => look(`Waited ${seconds}s.`, seconds * 1000)),
   );
-  if (own && own.kind !== "device") {
+  if (own.kind !== "device") {
     server.registerTool(
       "computer_run",
-      { description: `Run a shell command on your computer "${own.name}" (bash) and get its output. Use it for files, installs and scripts; use the screen for apps and websites. Only works on your own computer: a borrowed device lends its screen, not a shell.`, inputSchema: { command: z.string(), timeout_s: z.number().int().min(1).max(600).optional() } },
+      { description: `Run a shell command on your computer "${own.name}" (bash) and get its output. Use it for files, installs and scripts; use the screen for apps and websites.`, inputSchema: { command: z.string(), timeout_s: z.number().int().min(1).max(600).optional() } },
       safe(async ({ command, timeout_s }) => {
         const r = await client.computer<{ exitCode: number; output: string }>({ action: "run", command, timeout: timeout_s });
         return text(`exit ${r.exitCode}\n${r.output || "(no output)"}`);
       }),
     );
   }
-  if (own) {
+  if (own.kind === "vm") {
     server.registerTool(
-      "computer_ask_human",
+      "login_fill",
       {
         description:
-          "Ask a person to do something on your own computer that you shouldn't or can't: sign in to a site, enter a 2FA code, solve a captcha, approve a prompt. Shows them the screen with your request. End your turn after calling it; you'll be woken when they hand the computer back.",
-        inputSchema: { request: z.string().describe('what you need, e.g. "Sign in to Zendesk so I can work the support queue."') },
+          "Sign in to a website in your computer's browser with a login from the person's password manager. Open the site's sign-in page first, then call this with the site. Wisp fills the boxes and presses sign in; the password isn't given to you, and don't try to read it from the page. The first time, the person may be asked: then end your turn and you'll get a message once they answer. If there's no saved login, use computer_ask_human instead. Never ask for passwords in chat.",
+        inputSchema: {
+          site: z.string().describe('the website, e.g. "zendesk.com"'),
+          account: z.string().optional().describe("which account, when there's more than one login for the site"),
+        },
       },
-      safe(async ({ request }) => {
-        await client.computerHelp(request);
-        return text("Asked. End your turn now; you'll get a message when they hand the computer back.");
-      }),
+      safe(async ({ site, account }) => text((await client.fillLogin(site, account)).message)),
     );
   }
-}
-
-/**
- * Borrowing a person's device mid-task: an agent works on its own computer and asks for a device's
- * screen only when the task needs something that lives there (an app that only exists on the shop PC).
- */
-function registerDeviceTools(server: McpServer, client: WarrenClient, safe: Safe) {
   server.registerTool(
-    "device_list",
-    { description: "Devices belonging to people in the workspace whose screen you could ask to borrow with device_request, and whether each can be asked right now (a device whose screen is off has to be turned on by its owner at the device).", inputSchema: {} },
-    safe(async () => {
-      const list = await client.borrowableDevices();
-      return text(list.map((d) => `"${d.name}" (${d.owner}'s): ${d.available ? "can be asked" : d.note}`).join("\n") || "No devices.");
-    }),
-  );
-  server.registerTool(
-    "device_request",
+    "computer_ask_human",
     {
       description:
-        "Ask to use a person's own device for a while, when the task needs an app or file that only lives on it (say, the POS app on the shop PC). Use your own computer for everything else. Posts an Approve / Deny card to the device's owner, and only they can say yes; they pick how long you get. End your turn after calling it: you'll be woken with the answer. If it's yes, add computer: \"<device name>\" to the computer_* tools to act on the device (without it they still act on your own computer), and call device_return when you're done. The loan ends by itself when time runs out and the owner can take it back at any time; you'll be told. A device whose screen is off can't be asked: its owner has to turn it on at the device.",
-      inputSchema: { device: z.string().describe('the device\'s name, e.g. "Shop PC" (see device_list)'), reason: z.string().describe('what you need it for, in a sentence the owner can judge: "Enter today\'s sales in the POS app"') },
+        "Ask a person to do something on your own computer that you shouldn't or can't: sign in to a site, enter a 2FA code, solve a captcha, approve a prompt. Shows them the screen with your request. End your turn after calling it; you'll be woken when they hand the computer back.",
+      inputSchema: { request: z.string().describe('what you need, e.g. "Sign in to Zendesk so I can work the support queue."') },
     },
-    safe(async ({ device, reason }) => {
-      const r = await client.requestDevice(device, reason);
-      return text(`Asked for ${r.deviceName}. End your turn now; you'll get a message with the answer.`);
-    }),
-  );
-  server.registerTool(
-    "device_return",
-    { description: "Hand a borrowed device back when you're done with it, so its owner has it to themselves again. Say which if you're borrowing more than one.", inputSchema: { device: z.string().optional() } },
-    safe(async ({ device }) => {
-      const r = await client.returnDevice(device);
-      return text(`Handed ${r.deviceName} back.`);
+    safe(async ({ request }) => {
+      await client.computerHelp(request);
+      return text("Asked. End your turn now; you'll get a message when they hand the computer back.");
     }),
   );
 }

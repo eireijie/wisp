@@ -9,9 +9,9 @@ import { basename, normalizeTarget, parseNote, withoutCode } from "./markdown.ts
 
 const exec = promisify(execFile);
 
-/** Who edits made outside Warren (in Obsidian, an editor, a git pull on the hub's machine) are credited to. */
+/** Who edits made outside Wisp (in Obsidian, an editor, a git pull on the hub's machine) are credited to. */
 export const OUTSIDE_AUTHOR: CommitAuthor = { name: "Edited in Obsidian", email: "obsidian@localhost" };
-const WARREN_AUTHOR: CommitAuthor = { name: "Warren", email: "warren@localhost" };
+const WISP_AUTHOR: CommitAuthor = { name: "Wisp", email: "wisp@localhost" };
 
 /** Folders that belong to tools (.git, .obsidian, .trash), never notes. */
 export const isHiddenPath = (p: string) => p.replace(/\\/g, "/").split("/").some((s) => s.startsWith("."));
@@ -76,7 +76,7 @@ export interface Change {
  */
 export class Vault {
   private gitQueue: Promise<unknown> = Promise.resolve();
-  /** notes Warren is in the middle of saving: the watcher must not mistake them for outside edits */
+  /** notes Wisp is in the middle of saving: the watcher must not mistake them for outside edits */
   private pending = new Map<string, number>();
   /** the commit the search index is up to date with */
   private indexedHead: string | null = null;
@@ -114,9 +114,9 @@ export class Vault {
     const ignoreChanged = await this.ensureIgnore();
     if (!started) {
       const existing = (await walk(this.root)).length;
-      await this.commitAll(WARREN_AUTHOR, existing ? "Start tracking this folder" : "Initialize vault");
+      await this.commitAll(WISP_AUTHOR, existing ? "Start tracking this folder" : "Initialize vault");
     } else if (ignoreChanged) {
-      await this.commit([".gitignore"], WARREN_AUTHOR, "Keep Obsidian settings and trash out of memory");
+      await this.commit([".gitignore"], WISP_AUTHOR, "Keep Obsidian settings and trash out of memory");
     }
     await this.reindex();
   }
@@ -455,9 +455,9 @@ export class Vault {
   }
 
   /**
-   * Pick up changes made outside Warren (Obsidian, another editor, a git pull on this machine):
+   * Pick up changes made outside Wisp (Obsidian, another editor, a git pull on this machine):
    * commit them to git as `author`, then re-index just the notes that changed. Returns how many
-   * notes changed. Notes Warren is saving this moment are left to the save.
+   * notes changed. Notes Wisp is saving this moment are left to the save.
    */
   syncFromDisk(author: CommitAuthor = OUTSIDE_AUTHOR, message = "Edited in Obsidian"): Promise<number> {
     return this.serial(() => this.syncNow(author, message));
@@ -548,7 +548,7 @@ export class Vault {
     };
   }
 
-  /** Mark commits as made by someone (pushes from Obsidian carry the person's own git name; Activity shows who they are in Warren). */
+  /** Mark commits as made by someone (pushes from Obsidian carry the person's own git name; Activity shows who they are in Wisp). */
   attribute(hashes: string[], name: string) {
     const ins = this.db.prepare("INSERT OR REPLACE INTO vault_authors (hash, name) VALUES (?, ?)");
     this.db.transaction(() => hashes.forEach((h) => ins.run(h, name)))();
@@ -620,7 +620,7 @@ export class Vault {
     try {
       await this.git(["merge", "--ff-only", "-q", to]);
     } catch {
-      throw new VaultError("Warren is saving changes to the same notes right now; try again in a moment", 409);
+      throw new VaultError("Wisp is saving changes to the same notes right now; try again in a moment", 409);
     }
     const paths = await this.changedPaths(from, to);
     const commits = (await this.git(["rev-list", `${from}..${to}`])).stdout.split("\n").filter(Boolean);
@@ -630,7 +630,7 @@ export class Vault {
     return paths;
   }
 
-  /** Mark notes as being saved by Warren while `fn` runs. */
+  /** Mark notes as being saved by Wisp while `fn` runs. */
   private async saving<T>(paths: string[], fn: () => Promise<T>): Promise<T> {
     for (const p of paths) this.pending.set(p, (this.pending.get(p) ?? 0) + 1);
     try {
@@ -688,7 +688,7 @@ export class Vault {
     if (!stdout.trim()) return;
     const before = await this.head();
     await this.git(["-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", message, "--author", `${author.name} <${author.email}>`, ...(paths ? ["--", ...paths] : [])], author);
-    // Warren's own saves are already in the index; edits found on disk are not
+    // Wisp's own saves are already in the index; edits found on disk are not
     if (indexed && this.indexedHead === before) this.indexedHead = await this.head();
   }
 
@@ -700,7 +700,7 @@ export class Vault {
   }
 
   private git(args: string[], author?: CommitAuthor) {
-    const who = author ?? { name: "Warren", email: "warren@localhost" };
+    const who = author ?? { name: "Wisp", email: "wisp@localhost" };
     return exec("git", args, {
       cwd: this.root,
       maxBuffer: 32 * 1024 * 1024,
@@ -713,7 +713,7 @@ export class Vault {
 export interface VaultTx {
   head(): Promise<string | null>;
   branch(): Promise<string | null>;
-  /** commit and index edits made outside Warren first, so the vault is up to date */
+  /** commit and index edits made outside Wisp first, so the vault is up to date */
   sync(): Promise<number>;
   adopt(source: string, branch: string, from: string, to: string, who: string): Promise<string[]>;
 }

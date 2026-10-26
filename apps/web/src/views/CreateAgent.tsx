@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bot, Check, ChevronRight, Cloud, Download, Laptop, Loader2, Lock, Monitor, Plus, Search, Shuffle, UserPlus, X } from "lucide-react";
-import { GHOST_WHITE, randomAppearance, type GhostAppearance } from "@warren/core/src/appearance.ts";
+import { GHOST_WHITE, randomAppearance, type GhostAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost } from "../components/Ghost.tsx";
 import { GhostColors } from "../components/GhostColors.tsx";
 import { HarnessLogo } from "../components/HarnessLogo.tsx";
 import { ConnectionInstructions } from "../components/ConnectionInstructions.tsx";
 import { prettyModel } from "../components/EffortSlider.tsx";
-import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@warren/core";
+import { HARNESSES, runsInVm, type Agent, type Connector, type DiscoveredAgent, type Skill } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
 import { go } from "../router.ts";
@@ -16,17 +16,7 @@ import { defaultComputer, resolveComputer, vmOnDevice, withComputer, type Comput
 import { Advanced, useSimple } from "../experience.tsx";
 import { useFeature } from "../features.ts";
 import { LookEditorScreen } from "./LookEditor.tsx";
-import { Button, Field, HARNESS_LABELS, Input, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
-
-/** The jobs a person at home would give a helper; the rest are business roles. */
-export const EVERYDAY_TEMPLATES = ["chief", "inbox", "research"];
-
-export function splitTemplates<T extends { id: string }>(list: T[]): { everyday: T[]; business: T[] } {
-  return {
-    everyday: EVERYDAY_TEMPLATES.map((id) => list.find((t) => t.id === id)).filter((t): t is T => !!t),
-    business: list.filter((t) => !EVERYDAY_TEMPLATES.includes(t.id)),
-  };
-}
+import { Button, Field, harnessLabel, Input, Modal, Pill, Textarea, cx } from "../components/ui.tsx";
 
 export function ComputerPicker({
   value,
@@ -114,12 +104,12 @@ export function ComputerPicker({
             <Lock size={15} />,
             simple ? "My own screen" : "Your own screen",
             node.capabilities?.screen.off
-              ? `Off. Turn it on at ${node.name}: warren node screen on`
+              ? `Off. Turn it on at ${node.name}: wisp node screen on`
               : node.capabilities?.screen.ok === false
                 ? node.capabilities.screen.detail
                 : simple
-                  ? "Only while you lend it."
-                  : "Only while you lend it, and only for things you ask.",
+                  ? "It runs on this computer."
+                  : "It runs on this computer and only does things you ask.",
             node.capabilities?.screen.ok !== true,
           )}
         {computers.map((c) =>
@@ -182,15 +172,6 @@ const slug = (s: string) =>
     .replace(/-+$/, "")
     .slice(0, 32);
 
-/** The harnesses a beginner is shown first, in this order. */
-export const RECOMMENDED_HARNESSES = ["claude-code", "codex", "gemini"];
-
-/** Splits the catalog into the recommended few (in recommended order, only those present) and the rest. */
-export function splitHarnesses<T extends { id: string }>(list: T[]): { recommended: T[]; more: T[] } {
-  const recommended = RECOMMENDED_HARNESSES.flatMap((id) => list.filter((h) => h.id === id));
-  return { recommended, more: list.filter((h) => !RECOMMENDED_HARNESSES.includes(h.id)) };
-}
-
 type HarnessChoice = { id: string; label: string; blurb?: string; account?: string; signup?: string; protocol?: string };
 
 /** ACP harnesses can't use HTTP MCP connectors (Gmail etc.); native ones can. */
@@ -220,87 +201,6 @@ function HarnessGrid({ list, harness, onPick, label }: { list: HarnessChoice[]; 
   );
 }
 
-/** The body of the harness step. Simple mode asks "which AI do you use?" with a few explained cards. */
-export function HarnessStep({ harnesses, harness, onPick, invite, name }: { harnesses: HarnessChoice[]; harness: string; onPick: (id: string) => void; invite: boolean; name: string }) {
-  const simple = useSimple();
-  if (!simple || invite) {
-    return (
-      <>
-        <div className="agent-wizard-hero compact">
-          <h1 tabIndex={-1}>Choose a harness</h1>
-          <p>How should {name} work?</p>
-        </div>
-        {invite && (
-          <p className="mb-5 text-sm text-muted">
-            Choose the harness your existing agent uses. You'll get an
-            invitation to connect its session.
-          </p>
-        )}
-        <HarnessGrid list={harnesses} harness={harness} onPick={onPick} label="Agent harness" />
-      </>
-    );
-  }
-  const { recommended, more } = splitHarnesses(harnesses);
-  // the chosen one is listed too, so it stays visible when "More harnesses" folds up again
-  const shown = [...recommended, ...more.filter((h) => h.id === harness)];
-  const signups = recommended.filter((h) => h.signup);
-  return (
-    <>
-      <div className="agent-wizard-hero compact">
-        <h1 tabIndex={-1}>Which AI do you use?</h1>
-        <p>A harness is the AI program that does the work. You need an account with it; it may charge separately.</p>
-      </div>
-      <div className="grid grid-cols-1 gap-2" role="group" aria-label="Recommended harnesses">
-        {shown.map((h) => (
-          <button
-            type="button"
-            key={h.id}
-            aria-pressed={harness === h.id}
-            onClick={() => onPick(h.id)}
-            className={cx("agent-harness-card", harness === h.id && "selected")}
-          >
-            {harness === h.id && <Check size={14} className="agent-harness-check" />}
-            <HarnessLogo harness={h.id} size={28} />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">{h.label}</span>
-              {h.blurb && <span className="block text-xs text-muted">{h.blurb}</span>}
-              {h.account && <span className="block text-xs text-muted">{h.account}</span>}
-              <span className="block text-xs text-muted">
-                {canUseConnectedApps(h) ? "Can use connected apps like Gmail" : "Can't use connected apps like Gmail yet"}
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
-      <details className="mt-4 rounded-lg border border-line px-3 py-2 text-sm">
-        <summary className="cursor-pointer font-medium">I'm not sure</summary>
-        <div className="mt-2 space-y-2 text-muted">
-          <p>If you don't pay for any AI yet: Gemini CLI has a free tier (but can't use connected apps yet). Claude Code and Codex need a paid plan (Claude Pro, ChatGPT Plus) and can use connected apps. You install the one you pick on your device and sign in there once; Warren walks you through it on the Device step.</p>
-          {signups.length > 0 && (
-            <p>
-              Get an account:{" "}
-              {signups.map((h, i) => (
-                <span key={h.id}>
-                  {i > 0 && ", "}
-                  <a href={h.signup} target="_blank" rel="noreferrer" className="text-accent-text hover:underline">
-                    {h.id === "codex" ? "ChatGPT (for Codex)" : h.id === "gemini" ? "Google (for Gemini CLI)" : "Claude (for Claude Code)"}
-                  </a>
-                </span>
-              ))}
-              .
-            </p>
-          )}
-        </div>
-      </details>
-      {more.length > 0 && (
-        <Advanced title="More harnesses" className="mt-4">
-          <HarnessGrid list={more} harness={harness} onPick={onPick} label="More harnesses" />
-        </Advanced>
-      )}
-    </>
-  );
-}
-
 /** What "Use my defaults" means, from GET /api/settings/agent-defaults. */
 export interface AgentDefaults {
   harness: string | null;
@@ -312,11 +212,9 @@ export interface AgentDefaults {
 type View = "form" | "look" | "external" | "discover" | "invitation";
 type RespondTo = "me" | "anyone" | "people";
 
-/** The palettes offered right on the New agent screen; the rest are in the full look editor. */
-
 /** "Claude Code · Sonnet 5.5" and "Its own computer on my-mac": the defaults in a line each. */
 export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "name">[]): { ai: string; computer: string } {
-  const harness = d.harness ? (HARNESS_LABELS[d.harness] ?? d.harness) : "Not picked yet";
+  const harness = d.harness ? (harnessLabel(d.harness) ?? d.harness) : "Not picked yet";
   const node = nodes.find((n) => n.id === d.nodeId);
   return {
     ai: `${harness} · ${d.model ? prettyModel(d.model) : "Automatic model"}`,
@@ -331,8 +229,8 @@ export function defaultsSummary(d: AgentDefaults, nodes: Pick<NodeInfo, "id" | "
  * are under Advanced, open from the start in the Advanced experience. Agents that already run
  * somewhere come in through the link at the bottom.
  */
-/** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. */
-export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void }) {
+/** `onCreated`: hand the new agent back (to a team being built, say) instead of opening its page. `nodeId`: start on this device. */
+export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn }: { nodes: NodeInfo[]; onClose: () => void; onCreated?: (agent: Agent) => void; nodeId?: string }) {
   const refreshAgents = useStore((s) => s.refreshAgents);
   const agents = useStore((s) => s.agents);
   const computers = useStore((s) => s.computers);
@@ -359,11 +257,12 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
 
   // which AI and computer
   const [defaults, setDefaults] = useState<AgentDefaults | null | "error">(null);
-  const [mode, setMode] = useState<"defaults" | "custom">("defaults");
+  // a device picked already (its page's "Add an agent here") overrides the default device
+  const [mode, setMode] = useState<"defaults" | "custom">(startOn ? "custom" : "defaults");
   const [harness, setHarness] = useState("claude-code");
   const [model, setModel] = useState("");
   const usable = usableDevices(nodes);
-  const [nodeId, setNodeId] = useState(usable.find((n) => n.online)?.id ?? usable[0]?.id ?? "");
+  const [nodeId, setNodeId] = useState((startOn && usable.some((n) => n.id === startOn) ? startOn : null) ?? usable.find((n) => n.online)?.id ?? usable[0]?.id ?? "");
   const [computer, setComputer] = useState<ComputerChoice>(() => defaultComputer(nodes.find((n) => n.id === nodeId), computers));
   const createdVm = useRef<{ id: string; nodeId: string } | null>(null);
   const [invite, setInvite] = useState(false);
@@ -378,7 +277,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
         if (touched.current) return;
         if (d.harness) setHarness(d.harness);
         if (d.model) setModel(d.model);
-        if (d.nodeId && usable.some((n) => n.id === d.nodeId)) {
+        if (d.nodeId && !startOn && usable.some((n) => n.id === d.nodeId)) {
           setNodeId(d.nodeId);
           setComputer(d.computer === "none" ? { kind: "headless" } : defaultComputer(nodes.find((n) => n.id === d.nodeId), computers));
         }
@@ -611,7 +510,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
                   <div className="space-y-2.5">
                     <span className="block text-sm font-semibold">Harness it runs on</span>
                     <HarnessGrid list={harnesses} harness={harness} onPick={setHarness} label="Agent harness" />
-                    <p className="text-xs text-muted">The invitation gives its session Warren's chat, tasks, memory and file tools. You can give it a computer on its Computer tab afterward.</p>
+                    <p className="text-xs text-muted">The invitation gives its session Wisp's chat, tasks, memory and file tools. You can give it a computer on its Computer tab afterward.</p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
@@ -924,7 +823,7 @@ export function CreateAgent({ nodes, onClose, onCreated }: { nodes: NodeInfo[]; 
               <Ghost look={look} size={72} trackPointer />
               <div>
                 <h1 tabIndex={-1} className="text-2xl font-semibold">
-                  Invite {cleanName} to Warren
+                  Invite {cleanName} to Wisp
                 </h1>
                 <p className="text-sm text-muted mt-1">Add this connection to its existing session.</p>
               </div>
@@ -1116,7 +1015,7 @@ export function ImportAgent({
       <div className="rounded-xl border border-line p-5 space-y-4 text-sm">
         <p className="font-medium">No saved setups found yet</p>
         <p className="text-muted">
-          Warren checks known configuration folders on your connected devices.
+          Wisp checks known configuration folders on your connected devices.
           Custom locations and other profiles may not appear; it doesn't search
           for running processes.
         </p>
@@ -1261,7 +1160,7 @@ export function ImportAgent({
                 <span className="block text-sm font-medium truncate">
                   {x.d.name}{" "}
                   <span className="font-normal text-muted">
-                    · {HARNESS_LABELS[x.d.harness]} on {x.node.name}
+                    · {harnessLabel(x.d.harness)} on {x.node.name}
                   </span>
                 </span>
                 <span className="block text-xs text-muted truncate">
@@ -1327,7 +1226,7 @@ export function ImportAgent({
         >
           <Field
             label="Handle"
-            hint={`Its soul, instructions and notes are copied into Warren's memory. ${pick.d.path}`}
+            hint={`Its soul, instructions and notes are copied into Wisp's memory. ${pick.d.path}`}
           >
             <Input
               value={handle}

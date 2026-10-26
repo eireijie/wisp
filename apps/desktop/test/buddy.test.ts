@@ -30,7 +30,7 @@ function fixture(config: Record<string, any> = {}, platform = "darwin") {
     getCursorScreenPoint: () => cursor,
   });
   const filename = fileURLToPath(new URL("../src/buddy.cjs", import.meta.url));
-  const require = createRequire(import.meta.url);
+  const require = createRequire(filename);
   const module = { exports: null as any };
   runInNewContext(readFileSync(filename, "utf8"), { module, URL, process: { ...process, platform }, __dirname: filename.slice(0, filename.lastIndexOf("/")), setTimeout, clearTimeout, setInterval, clearInterval, require: (name: string) => name === "electron" ? { BrowserWindow: Window, ipcMain: ipc, screen } : require(name) });
   const main = new Window({});

@@ -1,5 +1,3 @@
 #!/usr/bin/env node
-// `warren-hub`: run the hub server (API, realtime, vault, and the web app), restarting it after updates.
-import { keep } from "./keeper.mjs";
-
-keep(new URL("../apps/hub/src/main.ts", import.meta.url));
+// `warren-hub` from before the rename: shims, services and harness configs made by older installs still run this.
+await import("./wisp-hub.mjs");

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { deviceAdapters } from "@warren/adapters";
+import { deviceAdapters } from "@wisp/adapters";
 import { Reach } from "../../hub/src/reach.ts";
 import { commandExists, type NodeConfig } from "./daemon.ts";
 import { detectEngine } from "./computers/index.ts";

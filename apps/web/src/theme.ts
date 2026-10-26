@@ -21,10 +21,10 @@ export const THEMES = [
   { id: "sky", name: "Sky", blurb: "Clear blue, bright and simple.", swatch: ["#1aa3e8", "#38bdf8"] },
 ] as const;
 
-const MODE_KEY = "warren.mode";
-const THEME_KEY = "warren.theme";
-const TEXT_KEY = "warren.textSize";
-const MOTION_KEY = "warren.motion";
+const MODE_KEY = "wisp.mode";
+const THEME_KEY = "wisp.theme";
+const TEXT_KEY = "wisp.textSize";
+const MOTION_KEY = "wisp.motion";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const listeners = new Set<() => void>();
 
@@ -43,7 +43,7 @@ function write(key: string, value: string | null) {
 }
 
 function storedMode(): ModeChoice {
-  // warren.theme used to hold the light/dark choice; carry it over once
+  // wisp.theme used to hold the light/dark choice; carry it over once
   const legacy = read(THEME_KEY);
   if (legacy === "light" || legacy === "dark") {
     write(MODE_KEY, legacy);

@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost } from "../src/components/Ghost.tsx";
 const motion = vi.hoisted(() => ({ reduced: false }));
 vi.mock("../src/theme.ts", () => ({ useMotionReduced: () => motion.reduced }));

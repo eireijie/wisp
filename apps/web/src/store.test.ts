@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentEvent, Approval, Message } from "@warren/core";
+import type { AgentEvent, Approval, Message } from "@wisp/core";
 import { api } from "./api.ts";
 import { conversationKey, useStore, type DiscussionInfo, type LiveRun } from "./store.ts";
 

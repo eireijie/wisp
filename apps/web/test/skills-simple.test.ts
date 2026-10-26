@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { catalogSkill, everydaySkills } from "@warren/core";
+import { catalogSkill } from "@wisp/core";
 import { plainSkill, whatItsFor } from "../src/views/SkillsView.tsx";
 
 vi.mock("../src/api.ts", () => ({ api: vi.fn() }));
@@ -23,12 +23,5 @@ describe("plainSkill", () => {
     const skill = { description: "Use when asked to water the plants.", content: "# Plants", catalogId: null };
     expect(plainSkill(skill, undefined)).toEqual({ does: "When asked to water the plants.", needs: null, example: null });
     expect(plainSkill(skill, meal).needs).toBeNull();
-  });
-});
-
-describe("everyday skills", () => {
-  it("all carry plain text", () => {
-    expect(everydaySkills().length).toBeGreaterThan(0);
-    for (const s of everydaySkills()) expect(s.plain?.does).toBeTruthy();
   });
 });

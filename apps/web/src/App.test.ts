@@ -23,7 +23,7 @@ describe("logout badges", () => {
     });
     if (kind === "clear" || kind === "failure") vi.stubGlobal("navigator", { clearAppBadge: badge });
     if (kind === "fallback") vi.stubGlobal("navigator", { setAppBadge: badge });
-    if (kind === "desktop") vi.stubGlobal("window", { warrenDesktop: { setBadge: badge } });
+    if (kind === "desktop") vi.stubGlobal("window", { wispDesktop: { setBadge: badge } });
     await logout();
     if (kind !== "unsupported") expect(badge).toHaveBeenCalledOnce();
     if (kind === "fallback" || kind === "desktop") expect(badge).toHaveBeenCalledWith(0);

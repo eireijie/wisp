@@ -1,13 +1,14 @@
 import { AddDeviceDialog } from "../components/AddDevice.tsx";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
-import type { DeviceCapabilities, DeviceRole } from "@warren/core";
+import { ChevronLeft, ChevronRight, Download, Lock, Monitor, MoreHorizontal, Pause, Plus, Server, Trash2, Users } from "lucide-react";
+import type { DeviceCapabilities, DeviceRole, OwnRemoteDesktop } from "@wisp/core";
 import { api } from "../api.ts";
+import { href } from "../router.ts";
 import { useStore } from "../store.ts";
 import { Toggle } from "./settings/parts.tsx";
 import { AgentAvatar, Button, Empty, Menu, Pill, cx, timeAgo } from "../components/ui.tsx";
 
-interface NodeInfo {
+export interface NodeInfo {
   id: string;
   name: string;
   ownerName: string | null;
@@ -23,6 +24,8 @@ interface NodeInfo {
   /** the Wisp version it runs; null for devices from before updates */
   version: { commit: string | null; date: string | null } | null;
   update: { state: "idle" | "updating" | "restarting" | "failed"; message: string } | null;
+  /** the remote desktop app its owner uses to reach it; only they get it */
+  remoteDesktop?: OwnRemoteDesktop | null;
 }
 
 /** "Connected" while online; otherwise when it was last seen. Never both, so it can't contradict the pill. */
@@ -41,10 +44,7 @@ export function screenLine(n: { online: boolean; capabilities: DeviceCapabilitie
   return `${base} (Last time: ${last.ok ? "on" : "off"}.)`;
 }
 
-/** Opened on the computer running the hub itself, so the address only works there. */
-export function isLocalOnlyHost(hostname: string): boolean {
-  return ["localhost", "127.0.0.1", "[::1]"].includes(hostname) || hostname.endsWith(".localhost");
-}
+export { isLocalOnlyHost } from "../loopback.ts";
 
 /** What to tell someone about a device that is not connected; null while it is connected. */
 export function notConnectedLine(n: { online: boolean; lastSeen: string | null }): string | null {
@@ -53,13 +53,13 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
 }
 
 /** Offline computers keep their approval; a fresh install asks to join again. */
-function ConnectDevice({ node }: { node: NodeInfo }) {
+export function ConnectDevice({ node }: { node: NodeInfo; onChange?: () => void }) {
   if (node.online) return null;
   return <p className="mt-3 rounded-xl bg-hover/60 px-3 py-2.5 text-sm text-muted">{node.lastSeen ? "Open Wisp on that computer to bring it back." : "Open Wisp on that computer and pick Join my Wisp."}</p>;
 }
 
 /** The device's tile: a server that lights up and pulses while it's connected. */
-function DeviceIcon({ online }: { online: boolean }) {
+export function DeviceIcon({ online }: { online: boolean }) {
   return (
     <div className={cx("relative size-11 shrink-0 rounded-xl grid place-items-center transition-colors", online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
       <Server size={19} />
@@ -167,7 +167,9 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                     <DeviceIcon online={n.online} />
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium truncate">{n.name}</span>
+                        <a href={href({ view: "nodes", nodeId: n.id })} className="font-medium truncate hover:underline">
+                          {n.name}
+                        </a>
                         {n.paused && (
                           <Pill tone="warn">
                             <Pause size={11} /> Paused
@@ -184,6 +186,9 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                         <Download size={15} /> {busy ? "Updating…" : "Update"}
                       </Button>
                     )}
+                    <a href={href({ view: "nodes", nodeId: n.id })} className="p-1.5 rounded-md text-faint hover:bg-hover hover:text-ink" aria-label={`Open ${n.name}`}>
+                      <ChevronRight size={16} />
+                    </a>
                     {menu.length > 0 && (
                       <Menu
                         align="right"
@@ -198,7 +203,6 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
                   </div>
                   <DeviceAgents handles={n.agents} online={n.online} />
                   {(n.mine || isOwner) && <ConnectDevice node={n} />}
-                  <DeviceAccess node={n} onChange={refresh} />
                   {n.update?.message && (
                     <p className={cx("mt-3 text-xs whitespace-pre-wrap", n.update.state === "failed" ? "text-bad" : "text-muted")}>
                       {n.update.state !== "idle" && (
@@ -228,19 +232,19 @@ export function NodesView({ onBack }: { onBack?: () => void }) {
 }
 
 /** What the device does for agents. */
-const ROLES: Record<DeviceRole, string> = { vms: "Runs agents' VMs", screen: "Lends agents its screen", headless: "Runs agents headless" };
+const ROLES: Record<DeviceRole, string> = { vms: "Runs agents' VMs", screen: "Lets its agents use its screen", headless: "Runs agents headless" };
 
 /** The device's own screen in two words; the full story goes in the tooltip. */
 function screenSummary(n: NodeInfo): { short: string; long: string } {
   const screen = n.capabilities?.screen;
   if (!screen || !n.online) return { short: n.online ? "Screen not checked" : "Screen unknown", long: screenLine(n) };
-  if (screen.ok) return { short: "Screen on", long: n.mine ? "Only you can see it, and agents only while you lend it to them (Computers)." : `It's ${n.ownerName ?? "its owner"}'s alone.` };
-  if (screen.off) return { short: "Screen off", long: n.mine ? `Agents use VMs instead. To use it yourself from Wisp, run "warren node screen on" on ${n.name}.` : "Its own screen is off." };
+  if (screen.ok) return { short: "Screen on", long: n.mine ? "Only you can see it, and only agents that run on it can use it." : `It's ${n.ownerName ?? "its owner"}'s alone.` };
+  if (screen.off) return { short: "Screen off", long: n.mine ? `Agents use VMs instead. To use it yourself from Wisp, run "wisp node screen on" on ${n.name}.` : "Its own screen is off." };
   return { short: "No screen", long: `Its own screen can't be used: ${screen.detail}` };
 }
 
 /** One quiet row of settings: its job, its screen, and who else can use it. Explanations live in tooltips. */
-function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
+export function DeviceAccess({ node: n, onChange }: { node: NodeInfo; onChange: () => void }) {
   const screen = screenSummary(n);
   const patch = async (body: object) => {
     await api("PATCH", `/api/nodes/${n.id}`, body).catch((err) => alert((err as Error).message));

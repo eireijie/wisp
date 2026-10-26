@@ -1,4 +1,4 @@
-// Runs a long-lived Warren process (the hub, or `warren node start`) as a child, and starts it
+// Runs a long-lived Wisp process (the hub, or `wisp node start`) as a child, and starts it
 // again when it exits with RESTART_CODE, which it does after an update. Terminals and service
 // managers (systemd, launchd, Task Scheduler) only ever see this process, so an update takes
 // effect the same way everywhere.
@@ -20,11 +20,11 @@ export function keep(entry, args = process.argv.slice(2)) {
     // the IPC channel lets the child notice if this process dies, so it never runs on its own
     child = spawn(process.execPath, ["--import", loader, fileURLToPath(entry), ...args], {
       stdio: ["inherit", "inherit", "inherit", "ipc"],
-      env: { ...process.env, WARREN_KEEPER: "1" },
+      env: { ...process.env, WISP_KEEPER: "1" },
     });
     child.on("exit", (code, signal) => {
       if (code === RESTART_CODE) {
-        console.log("[warren] restarting with the update");
+        console.log("[wisp] restarting with the update");
         start();
       } else {
         process.exit(code ?? (signal ? 1 : 0));

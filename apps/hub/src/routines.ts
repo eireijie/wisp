@@ -1,8 +1,8 @@
-import { cronMatches, describeCron, parseCron, zonedParts, type Actor, type RecordedStep, type Routine } from "@warren/core";
+import { cronMatches, describeCron, parseCron, zonedParts, type Actor, type RecordedStep, type Routine } from "@wisp/core";
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
-const WARREN = { name: "Warren", email: "warren@localhost" };
+const WISP = { name: "Wisp", email: "wisp@localhost" };
 
 export function routineSlug(name: string): string {
   return (
@@ -57,7 +57,7 @@ export class Routines {
   async tick(at = new Date()) {
     const minute = new Date(Math.floor(at.getTime() / 60_000) * 60_000);
     for (const r of this.hub.store.scheduledRoutines()) {
-      // schedules rest while the organization has Routines switched off (Settings → Features)
+      // schedules rest while the organization has Routines switched off (Settings → General → Mods)
       if (!featureOn(this.hub.store, r.workspaceId, "routines")) continue;
       try {
         if (!cronMatches(parseCron(r.schedule!), zonedParts(minute, r.timezone))) continue;
@@ -134,11 +134,11 @@ export class Routines {
       ...o.steps.map(stepLine),
       "",
     ].join("\n");
-    await this.hub.vault(o.workspaceId).write(`${base}.recording.md`, recording, WARREN, `Recording for routine "${o.name}"`);
+    await this.hub.vault(o.workspaceId).write(`${base}.recording.md`, recording, WISP, `Recording for routine "${o.name}"`);
     await this.hub.vault(o.workspaceId).write(
       `${base}.md`,
       `# ${o.name}\n\n@${agent.handle} is learning this from [[${base.split("/").pop()}.recording]]. The steps will appear here.\n`,
-      WARREN,
+      WISP,
       `New routine "${o.name}"`,
     );
     const routine = this.hub.store.createRoutine({

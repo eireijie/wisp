@@ -17,7 +17,7 @@ const DOWNLOAD: Record<string, string> = {
 };
 
 /**
- * Settings → Access and the "Use Warren from anywhere" setup step: the hub's addresses and its
+ * Settings → Access and the "Use Wisp from anywhere" setup step: the hub's addresses and its
  * Tailscale status, and (owners) turning Tailscale's https address on or off.
  */
 export function registerReachApi(app: FastifyInstance, hub: Hub, h: Helpers) {

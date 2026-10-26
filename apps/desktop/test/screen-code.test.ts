@@ -27,5 +27,5 @@ describe("the desktop app's screen code", () => {
 });
 
 function fsTmp() {
-  return `/tmp/warren-screen-code-${crypto.randomUUID()}`; // ScreenLock ignores a folder it can't write
+  return `/tmp/wisp-screen-code-${crypto.randomUUID()}`; // ScreenLock ignores a folder it can't write
 }

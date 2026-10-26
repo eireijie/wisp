@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Bot, Eye, Pencil, Pin, RotateCcw, Users } from "lucide-react";
-import { atLeast, type AccessRule, type Agent, type MemoryLevel, type Subject } from "@warren/core";
+import { atLeast, type AccessRule, type Agent, type MemoryLevel, type Subject } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type Member } from "../store.ts";
 import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
@@ -19,7 +19,7 @@ export const LEVEL_LABEL: Record<MemoryLevel, string> = { none: "No access", rea
 
 const key = (s: Subject) => (s.kind === "user" || s.kind === "agent" ? `${s.kind}:${s.id}` : s.kind === "team" ? `team:${s.name}` : s.kind === "role" ? `role:${s.team}/${s.role}` : s.kind);
 
-/** "agents/agt_x/notes" → "@atlas/notes", "people/usr_x/plans" → "Yug/plans"; "" → "the whole vault". */
+/** "agents/agt_x/notes" → "@atlas/notes", "people/usr_x/plans" → "Alex/plans"; "" → "the whole vault". */
 export function pathLabel(path: string, agents: Pick<Agent, "id" | "handle">[], members: Pick<Member, "id" | "name">[] = []): string {
   if (!path) return "the whole vault";
   const m = path.match(/^(agents|people)\/([^/]+)(.*)$/);

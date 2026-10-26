@@ -1,4 +1,4 @@
-import { channelTeams, cleanRulePath, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type BackgroundWork, type Followup, type Change } from "@warren/core";
+import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -221,6 +221,16 @@ export class Store {
     this.db.prepare("UPDATE nodes SET shared = ? WHERE id = ?").run(shared ? 1 : 0, nodeId);
   }
 
+  /** The remote desktop app the device's owner already uses, or null. */
+  nodeRemoteDesktop(nodeId: string): OwnRemoteDesktop | null {
+    const r = this.db.prepare("SELECT remote_desktop_json FROM nodes WHERE id = ?").get(nodeId) as { remote_desktop_json: string | null } | undefined;
+    return r?.remote_desktop_json ? JSON.parse(r.remote_desktop_json) : null;
+  }
+
+  setNodeRemoteDesktop(nodeId: string, remote: OwnRemoteDesktop | null) {
+    this.db.prepare("UPDATE nodes SET remote_desktop_json = ? WHERE id = ?").run(remote ? JSON.stringify(remote) : null, nodeId);
+  }
+
   setNodeRole(nodeId: string, role: DeviceRole | null) {
     this.db.prepare("UPDATE nodes SET role = ? WHERE id = ?").run(role, nodeId);
   }
@@ -342,11 +352,6 @@ export class Store {
     return (this.db.prepare("SELECT * FROM computers WHERE node_id = ?").all(nodeId) as ComputerRow[]).map(toComputer);
   }
 
-  /** Device screens someone is borrowing. */
-  loanedComputers(): Computer[] {
-    return (this.db.prepare(`SELECT * FROM computers WHERE kind = 'device' AND config_json LIKE '%"loan"%'`).all() as ComputerRow[]).map(toComputer);
-  }
-
   updateComputer(computerId: string, patch: Partial<{ name: string; config: ComputerConfig; status: ComputerStatus; statusText: string; help: Computer["help"] }>) {
     const cur = this.computer(computerId);
     if (!cur) return undefined;
@@ -386,11 +391,11 @@ export class Store {
 
   // --- approvals ------------------------------------------------------------
 
-  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; loan?: Approval["loan"] }): Approval {
+  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; login?: Approval["login"] }): Approval {
     const approvalId = id("apr");
     this.db
-      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, loan_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)")
-      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.loan ? JSON.stringify(a.loan) : null);
+      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, login_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)")
+      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.login ? JSON.stringify(a.login) : null);
     return this.approval(approvalId)!;
   }
 
@@ -575,7 +580,11 @@ export class Store {
       if (!settings) continue;
       if (settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
       const team = settings.team;
-      if (team?.nodes.some((n) => n.agentId === agentId)) {
+      if (hasSteps(team) && team!.roles!.some((r) => r.agentId === agentId)) {
+        // a team with roles and steps keeps them; the agent's roles just need someone new
+        const roles = team!.roles!.map((r) => (r.agentId === agentId ? { ...r, agentId: null } : r));
+        this.updateChannel(r.id, { settings: { team: { ...team!, roles, ...chartFromSteps({ roles, steps: team!.steps }, team!.nodes) } } });
+      } else if (team?.nodes.some((n) => n.agentId === agentId)) {
         const above = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
         const below = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
         const edges = [...team.edges.filter((e) => e.from !== agentId && e.to !== agentId), ...above.flatMap((from) => below.map((to) => ({ from, to })))];
@@ -1146,11 +1155,6 @@ export class Store {
     return r && this.toBackground(r);
   }
 
-  /** Every person an agent works in the background for (turned on or not). */
-  backgroundFor(agentId: string): BackgroundWork[] {
-    return (this.db.prepare(`${this.backgroundSql} WHERE b.agent_id = ?`).all(agentId) as Record<string, unknown>[]).map(this.toBackground);
-  }
-
   /** Background work that's on, across every workspace. */
   activeBackground(): BackgroundWork[] {
     return (this.db.prepare(`${this.backgroundSql} WHERE b.enabled = 1`).all() as Record<string, unknown>[]).map(this.toBackground);
@@ -1310,7 +1314,7 @@ type ApprovalRow = {
   note: string;
   created_at: string;
   decided_at: string | null;
-  loan_json: string | null;
+  login_json: string | null;
 };
 
 function toApproval(r: ApprovalRow): Approval {
@@ -1327,7 +1331,7 @@ function toApproval(r: ApprovalRow): Approval {
     note: r.note,
     createdAt: r.created_at,
     decidedAt: r.decided_at,
-    loan: r.loan_json ? JSON.parse(r.loan_json) : null,
+    login: r.login_json ? JSON.parse(r.login_json) : null,
   };
 }
 

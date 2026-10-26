@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MemoryLevel } from "@warren/core";
+import type { MemoryLevel } from "@wisp/core";
 import { accessSummary, isShared } from "../src/components/AccessDialog.tsx";
 
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false }));
@@ -10,17 +10,17 @@ const opts = { myId: "u1", agentName: (id: string) => (id === "a1" ? "Everyday H
 
 describe("accessSummary", () => {
   it("lists you first, then people and helpers by name", () => {
-    const info = { people: [person("u2", "Alex", "read"), person("u1", "Yug", "manage"), person("u3", "Sam", "none")], agents: [agent("a1", "helper", "edit"), agent("a2", "res", "none")] };
+    const info = { people: [person("u2", "Alex", "read"), person("u1", "Alex", "manage"), person("u3", "Sam", "none")], agents: [agent("a1", "helper", "edit"), agent("a2", "res", "none")] };
     expect(accessSummary(info, opts)).toEqual({ read: "you, Alex, Everyday Helper", change: "you, Everyday Helper" });
   });
 
   it("uses plain group words when everyone / every helper is included", () => {
-    const info = { people: [person("u1", "Yug", "manage"), person("u2", "Alex", "edit")], agents: [agent("a1", "helper", "edit"), agent("a2", "res", "read")] };
+    const info = { people: [person("u1", "Alex", "manage"), person("u2", "Alex", "edit")], agents: [agent("a1", "helper", "edit"), agent("a2", "res", "read")] };
     expect(accessSummary(info, opts)).toEqual({ read: "everyone in the organization, all helpers", change: "everyone in the organization, Everyday Helper" });
   });
 
   it("follows an inherited folder rule and an override on the note", () => {
-    const people = [person("u1", "Yug", "manage")];
+    const people = [person("u1", "Alex", "manage")];
     // the folder rule gives the helper edit, so the note inherits it
     expect(accessSummary({ people, agents: [agent("a1", "helper", "edit")] }, opts).change).toBe("you, Everyday Helper");
     // a rule set on the note drops the helper to read only

@@ -57,7 +57,7 @@ function mockCloud({ hubAfter = 2, ipCert = false, token = "good-token", readOnl
       return json({ needsSetup: true });
     }
     if (url.pathname === "/api/setup" && method === "POST") {
-      if (headers["x-warren-setup-key"] !== setupKey) return json("This Warren is being set up by the app that created it.", 403);
+      if (headers["x-wisp-setup-key"] !== setupKey) return json("This Wisp is being set up by the app that created it.", 403);
       return json({ token: "session-token", user: { name: body.name } });
     }
     if (url.pathname === "/api/me") return json({ ok: true });
@@ -81,13 +81,6 @@ describe("Hetzner sizes and prices", () => {
     expect(calls.every((c) => c.method === "GET" && c.headers.authorization === "Bearer good-token")).toBe(true);
   });
 
-  it("suggests the cheapest size with 4 GB", async () => {
-    const { fetchImpl } = mockCloud();
-    const r = await cloud.plans("good-token", { fetchImpl });
-    expect(cloud.recommended(r.plans, "fsn1")).toMatchObject({ type: "cax11" });
-    expect(cloud.recommended(r.plans, "nowhere")).toBeNull();
-  });
-
   it("follows the API's pages", async () => {
     let n = 0;
     const fetchImpl = async (url: URL) => {
@@ -105,18 +98,18 @@ describe("Hetzner sizes and prices", () => {
   });
 });
 
-describe("creating a Warren in the person's Hetzner project", () => {
+describe("creating a Wisp in the person's Hetzner project", () => {
   it("creates the server with the cloud-init script, waits for HTTPS, then makes the account with the setup key", async () => {
     const mock = mockCloud({ hubAfter: 3 });
     const steps: string[] = [];
-    const r = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s) });
+    const r = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s) });
 
     expect(steps).toEqual(["create", "boot", "https", "account"]);
     expect(r).toMatchObject({ url: "https://203-0-113-7.sslip.io", session: "session-token", server: { id: 42, ip: "203.0.113.7", location: "fsn1", type: "cx23" } });
 
     const create = mock.calls.find((c) => c.method === "POST" && c.url.endsWith("/v1/servers"))!;
-    expect(create.body).toMatchObject({ server_type: "cx23", location: "fsn1", image: "ubuntu-24.04", labels: { "managed-by": "warren" }, public_net: { enable_ipv4: true } });
-    expect(create.body.name).toMatch(/^warren-[0-9a-f]{6}$/);
+    expect(create.body).toMatchObject({ server_type: "cx23", location: "fsn1", image: "ubuntu-24.04", labels: { "managed-by": "wisp" }, public_net: { enable_ipv4: true } });
+    expect(create.body.name).toMatch(/^wisp-[0-9a-f]{6}$/);
     expect(create.body.user_data.startsWith("#cloud-config\n")).toBe(true);
     expect(create.body.user_data).not.toContain(`content: "${cloud.PLACEHOLDER}"`);
     expect(new TextEncoder().encode(create.body.user_data).length).toBeLessThan(32 * 1024); // Hetzner's limit
@@ -127,28 +120,28 @@ describe("creating a Warren in the person's Hetzner project", () => {
     expect(hubGets.slice(0, 2)).toEqual(["203.0.113.7", "203-0-113-7.sslip.io"]);
 
     const setup = mock.calls.find((c) => c.method === "POST" && c.url.endsWith("/api/setup"))!;
-    expect(setup.headers["x-warren-setup-key"]).toBe(mock.key());
-    expect(setup.body).toEqual({ ...account, workspaceName: "Warren" });
+    expect(setup.headers["x-wisp-setup-key"]).toBe(mock.key());
+    expect(setup.body).toEqual({ ...account, workspaceName: "Wisp" });
     // the Hetzner token never goes to the new server
     expect(mock.calls.filter((c) => !c.url.includes("api.hetzner.cloud")).some((c) => JSON.stringify(c).includes("good-token"))).toBe(false);
   });
 
   it("uses the IP address itself when its certificate is there", async () => {
     const mock = mockCloud({ hubAfter: 1, ipCert: true });
-    const r = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep });
+    const r = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep });
     expect(r.url).toBe("https://203.0.113.7");
   });
 
   it("says when the token can only read, before anything is created", async () => {
     const mock = mockCloud({ readOnly: true });
-    const err = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep }).catch((e: Error) => e);
+    const err = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep }).catch((e: Error) => e);
     expect(err.message).toMatch(/Read & Write/);
     expect(err.server).toBeUndefined();
   });
 
-  it("hands back the server when Warren never answers, so it can be deleted", async () => {
+  it("hands back the server when Wisp never answers, so it can be deleted", async () => {
     const mock = mockCloud({ hubAfter: Infinity });
-    const err = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
+    const err = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
     expect(err.message).toMatch(/didn't answer over HTTPS/);
     expect(err.server).toMatchObject({ id: 42, ip: "203.0.113.7" });
     await cloud.deleteServer("good-token", err.server.id, { fetchImpl: mock.fetchImpl });
@@ -157,12 +150,12 @@ describe("creating a Warren in the person's Hetzner project", () => {
 
   it("keeps the setup key of a server that didn't finish, so the same server can be picked up again", async () => {
     const mock = mockCloud({ hubAfter: Infinity });
-    const err = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
+    const err = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, httpsMs: 30 }).catch((e: Error) => e);
     expect(err.key).toBe(mock.key());
 
     mock.comeUp();
     const steps: string[] = [];
-    const r = await cloud.createWarren({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s), resume: { server: err.server, key: err.key } });
+    const r = await cloud.createWisp({ token: "good-token", type: "cx23", location: "fsn1", account }, { fetchImpl: mock.fetchImpl, sleep, onStep: (s: string) => steps.push(s), resume: { server: err.server, key: err.key } });
     expect(steps).toEqual(["boot", "https", "account"]);
     expect(r).toMatchObject({ session: "session-token", server: { id: 42 } });
     expect(mock.calls.filter((c) => c.method === "POST" && c.url.endsWith("/v1/servers"))).toHaveLength(1);
@@ -182,7 +175,7 @@ describe("creating a Warren in the person's Hetzner project", () => {
 describe("cloud request deadlines", () => {
   it("makes an account timeout retryable and preserves the pending server and key", async () => {
     const server = { id: 42, name: "existing", ip: "203.0.113.7", location: "fsn1", type: "cx23" };
-    const err = await cloud.createWarren({ token: "good-token", account }, {
+    const err = await cloud.createWisp({ token: "good-token", account }, {
       resume: { server, key: "saved-key" }, sleep,
       fetchImpl: async (url: URL, init: RequestInit) => {
         expect(init.signal).toBeInstanceOf(AbortSignal);

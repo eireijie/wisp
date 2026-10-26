@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Brain, Building2, CornerDownLeft, FileText, Ghost, Hash, Inbox, LifeBuoy, ListTodo, MessageSquare, Monitor, Plug, Plus, Search, Server, Settings, SquarePen, Wand2 } from "lucide-react";
-import type { Agent, Channel, Message } from "@warren/core";
+import type { Agent, Channel, Message } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, useTeams } from "../store.ts";
 import { go } from "../router.ts";

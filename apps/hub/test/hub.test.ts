@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import WebSocket from "ws";
-import { MAX_MODEL_ID_LENGTH, type HubToNode, type Message, type NodeToHub } from "@warren/core";
+import { MAX_MODEL_ID_LENGTH, type HubToNode, type Message, type NodeToHub } from "@wisp/core";
 import Database from "better-sqlite3";
 import { fileName, limitParam } from "../src/api.ts";
 import { buildHub } from "../src/app.ts";
@@ -12,7 +12,7 @@ import type { Hub } from "../src/hub.ts";
 import { Store } from "../src/store.ts";
 import { workspaceLead } from "../src/lead.ts";
 import { foldTeams } from "../src/fold-teams.ts";
-import { teamProblem } from "@warren/core";
+import { teamProblem } from "@wisp/core";
 
 let dir: string;
 let base: string;
@@ -108,7 +108,7 @@ let nodeToken: string;
 let node: FakeNode;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-hub-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-hub-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
   const { app } = built;
   hub = built.hub;
@@ -117,7 +117,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${addr.port}`;
   close = () => app.close();
 
-  const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Yug", password: "password123", features: "everything", workspaceName: "Test" }, "");
+  const setup = await api("POST", "/api/setup", { email: "me@example.com", name: "Alex", password: "password123", features: "everything", workspaceName: "Test" }, "");
   token = setup.data.token;
   general = (await api<any[]>("GET", "/api/channels")).data.find((c) => c.name === "general").id;
 
@@ -166,7 +166,7 @@ describe("hub", () => {
     expect(o.computers).toEqual([]);
     expect(o.firstReply).toBeNull();
     expect(o.memoryNotes).toEqual([]);
-    expect((await api("GET", "/api/onboarding", undefined, nodeToken, { "x-warren-agent": atlas.id })).status).toBe(403);
+    expect((await api("GET", "/api/onboarding", undefined, nodeToken, { "x-wisp-agent": atlas.id })).status).toBe(403);
   });
 
   it("setup only works once and requires auth", async () => {
@@ -207,7 +207,12 @@ describe("hub", () => {
   });
 
   it("enforces vault scopes for agents", async () => {
-    const asAtlas = { "x-warren-agent": atlas.id };
+    const legacy = await api<any>("GET", "/api/me", undefined, nodeToken, { "x-warren-agent": atlas.id });
+    expect(legacy.status).toBe(200);
+    expect(legacy.data.agent.id).toBe(atlas.id);
+    const preferred = await api<any>("GET", "/api/me", undefined, nodeToken, { "x-wisp-agent": atlas.id, "x-warren-agent": "invalid" });
+    expect(preferred.status).toBe(200);
+    const asAtlas = { "x-wisp-agent": atlas.id };
     expect((await api("PUT", "/api/vault/note", { path: `agents/${atlas.id}/plan.md`, content: "# Plan\nsee [[Welcome]]" }, nodeToken, asAtlas)).status).toBe(200);
     expect((await api("PUT", "/api/vault/note", { path: `agents/${nova.id}/hack.md`, content: "x" }, nodeToken, asAtlas)).status).toBe(403);
     expect((await api("GET", `/api/vault/note?path=agents/${nova.id}/SOUL.md`, undefined, nodeToken, asAtlas)).status).toBe(403);
@@ -229,15 +234,15 @@ describe("hub", () => {
 
   it("a node cannot act as an agent it doesn't host", async () => {
     const other = await api("POST", "/api/nodes", { name: "other" });
-    expect((await api("GET", "/api/vault/notes", undefined, other.data.token, { "x-warren-agent": atlas.id })).status).toBe(401);
+    expect((await api("GET", "/api/vault/notes", undefined, other.data.token, { "x-wisp-agent": atlas.id })).status).toBe(401);
   });
 
   it("delegates tasks between agents and reports back", async () => {
-    const asAtlas = { "x-warren-agent": atlas.id };
+    const asAtlas = { "x-wisp-agent": atlas.id };
     const task = (await api("POST", "/api/tasks", { to: "nova", title: "Run tests", brief: "run the suite" }, nodeToken, asAtlas)).data;
     expect(task.status).toBe("open");
     await waitFor(async () => (await channelMessages(task.threadId)).find((m) => m.author.id === nova.id));
-    const done = await api("PATCH", `/api/tasks/${task.id}`, { status: "done", result: "all green" }, nodeToken, { "x-warren-agent": nova.id });
+    const done = await api("PATCH", `/api/tasks/${task.id}`, { status: "done", result: "all green" }, nodeToken, { "x-wisp-agent": nova.id });
     expect(done.data.status).toBe("done");
     const report = await waitFor(async () => (await channelMessages(task.threadId)).find((m) => m.body.includes("all green")));
     expect(report.body).toContain("@atlas");
@@ -256,11 +261,11 @@ describe("hub security", () => {
     let last = 0;
     for (let i = 0; i < 11; i++) last = (await api("POST", "/api/auth/login", { email: "me@example.com", password: "nope-nope" }, "")).status;
     expect(last).toBe(429);
-    expect((await api("GET", "/api/members", undefined, nodeToken, { "x-warren-agent": atlas.id })).status).toBe(403);
+    expect((await api("GET", "/api/members", undefined, nodeToken, { "x-wisp-agent": atlas.id })).status).toBe(403);
   });
 
   it("blocks vault path tricks", async () => {
-    const asAtlas = { "x-warren-agent": atlas.id };
+    const asAtlas = { "x-wisp-agent": atlas.id };
     expect((await api("PUT", "/api/vault/note", { path: `shared/../agents/${nova.id}/x.md`, content: "x" }, nodeToken, asAtlas)).status).toBe(400);
     expect((await api("PUT", "/api/vault/note", { path: ".obsidian/x.md", content: "x" }, nodeToken, asAtlas)).status).toBe(400);
     // case tricks still hit nova's folder rules (macOS and Windows ignore case)
@@ -270,7 +275,7 @@ describe("hub security", () => {
 });
 
 describe("memory access rules", () => {
-  const as = (agent: any) => ({ "x-warren-agent": agent.id });
+  const as = (agent: any) => ({ "x-wisp-agent": agent.id });
   const paths = async (agent: any) => (await api<any[]>("GET", "/api/vault/notes", undefined, nodeToken, as(agent))).data.map((n) => n.path);
   const rule = (path: string, subject: object, level: string, startup = false, auth = token) => api("PUT", "/api/access", { path, subject, level, startup }, auth);
 
@@ -377,7 +382,7 @@ describe("memory access rules", () => {
 });
 
 describe("teams and layered memory", () => {
-  const as = (agent: any) => ({ "x-warren-agent": agent.id });
+  const as = (agent: any) => ({ "x-wisp-agent": agent.id });
   let boss: any;
   let solo: any;
   let owner: any;
@@ -432,7 +437,7 @@ describe("teams and layered memory", () => {
     expect(dup.data.similar[0].path).toBe(first.data.path);
     expect((await remember({ kind: "preference", text: "Prefers short, direct answers with examples", replaces: first.data.path }, nova)).data.saved).toBe(true);
     await remember({ kind: "did", text: "Deployed the hub" });
-    const plan = (await remember({ kind: "plan", text: "Rename the repo folder to warren", due: "2026-11-01" })).data;
+    const plan = (await remember({ kind: "plan", text: "Rename the repo folder to wisp", due: "2026-11-01" })).data;
     await remember({ kind: "detail", text: "Uses a Proxmox home lab" });
 
     const profile = (await api<any>("GET", "/api/memory/profile")).data;
@@ -444,7 +449,7 @@ describe("teams and layered memory", () => {
     // finishing a plan takes it out of what agents load
     expect((await remember({ kind: "plan", replaces: plan.path, status: "done" })).data.saved).toBe(true);
     const ctx = (await api<any>("GET", "/api/memory/context?q=answers", undefined, nodeToken, as(atlas))).data.text;
-    expect(ctx).toContain("## What you know about Yug");
+    expect(ctx).toContain("## What you know about Alex");
     expect(ctx).toContain("Prefers short, direct answers with examples");
     expect(ctx).toContain("Deployed the hub");
     expect(ctx).not.toContain("Rename the repo folder");
@@ -461,7 +466,7 @@ describe("teams and layered memory", () => {
     await api("POST", `/api/channels/${general}/messages`, { body: "@nova layered check about answers" });
     const run = await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.prompt.includes("layered check")));
     const prompt = run.type === "run" ? run.run.prompt : "";
-    expect(prompt).toContain("## What you know about Yug");
+    expect(prompt).toContain("## What you know about Alex");
     expect(prompt).toContain("Prefers short, direct answers with examples");
     expect(prompt).toContain('### Team "web"; your role: reviewer');
     expect(prompt).toContain("Channel: #web · Team memory: teams/web/");
@@ -481,7 +486,7 @@ describe("teams and layered memory", () => {
     const samSees = (await api<any[]>("GET", "/api/vault/changes?limit=50", undefined, sam)).data;
     expect(samSees.some((ch) => ch.files.some((f: any) => f.path.startsWith(`people/${owner.id}/`)))).toBe(false);
     const blame = (await api<any[]>("GET", "/api/vault/blame?path=teams/web/README.md")).data;
-    expect(blame[0].author).toBe("Yug");
+    expect(blame[0].author).toBe("Alex");
     const note = (await api<any>("GET", "/api/vault/note?path=teams/web/notes.md")).data;
     expect(note.editedBy).toBe("@nova");
   });
@@ -501,17 +506,17 @@ describe("team chart", () => {
   it("tells agents who hands them work and who they hand it to", async () => {
     const x = (await api("POST", "/api/agents", { handle: "xena", name: "Xena", harness: "codex" })).data;
     await makeTeam({ name: "chart", leadId: nova.id, folder: "teams/chart", members: [{ agentId: atlas.id, role: "builder" }, { agentId: x.id, managerId: atlas.id }] });
-    const ctx = (await api<any>("GET", "/api/memory/context", undefined, nodeToken, { "x-warren-agent": atlas.id })).data.text;
+    const ctx = (await api<any>("GET", "/api/memory/context", undefined, nodeToken, { "x-wisp-agent": atlas.id })).data.text;
     expect(ctx).toContain('### Team "chart"; your role: builder');
     expect(ctx).toContain("You report to @nova. @xena reports to you.");
-    const lead = (await api<any>("GET", "/api/memory/context", undefined, nodeToken, { "x-warren-agent": nova.id })).data.text;
+    const lead = (await api<any>("GET", "/api/memory/context", undefined, nodeToken, { "x-wisp-agent": nova.id })).data.text;
     expect(lead).toContain('### Team "chart", which you lead');
     expect(lead).toContain("@atlas reports to you.");
   });
 });
 
 describe("discussions", () => {
-  const as = (agent: any) => ({ "x-warren-agent": agent.id });
+  const as = (agent: any) => ({ "x-wisp-agent": agent.id });
   let team: any;
   beforeAll(async () => {
     team = await makeTeam({ name: "core", leadId: atlas.id, folder: "teams/core", members: [{ agentId: nova.id, role: "reviewer" }] });
@@ -578,7 +583,7 @@ describe("discussions", () => {
 });
 
 describe("coding together", () => {
-  const as = (agent: any) => ({ "x-warren-agent": agent.id });
+  const as = (agent: any) => ({ "x-wisp-agent": agent.id });
   let team: any;
   beforeAll(async () => {
     team = await makeTeam({ name: "app", leadId: atlas.id, members: [{ agentId: nova.id }], repo: "/srv/app", baseBranch: "main" });
@@ -586,7 +591,7 @@ describe("coding together", () => {
 
   it("gives a coding task its own branch, then a review, then merges it", async () => {
     const task = (await api<any>("POST", "/api/tasks", { to: "nova", title: "Add login page", brief: "Build it", channelId: team.channelId }, nodeToken, as(atlas))).data;
-    expect(task.branch).toMatch(/^warren\/nova\/add-login-page-[a-z0-9x]{5}$/);
+    expect(task.branch).toMatch(/^wisp\/nova\/add-login-page-[a-z0-9x]{5}$/);
     expect(task.teamId).toBe(team.id);
     const workRun = await waitFor(async () => node.runs.find((r) => r.type === "run" && r.run.threadId === task.threadId && r.run.agentId === nova.id));
     expect(workRun.type === "run" && workRun.run.workspace).toEqual({ repo: "/srv/app", branch: task.branch, base: "main", mode: "work" });
@@ -613,7 +618,7 @@ describe("coding together", () => {
     expect(general.branch).toBeNull();
     const fromLead = (await api<any>("POST", "/api/tasks", { to: "nova", title: "Fix footer", brief: "x" }, nodeToken, as(atlas))).data;
     expect(fromLead.channelId).toBe(team.channelId);
-    expect(fromLead.branch).toMatch(/^warren\/nova\/fix-footer-/);
+    expect(fromLead.branch).toMatch(/^wisp\/nova\/fix-footer-/);
   });
 });
 
@@ -744,7 +749,7 @@ describe("agent settings", () => {
   });
 
   it("lets an agent refine its own soul unless the owner locks it", async () => {
-    const asAtlas = { "x-warren-agent": atlas.id };
+    const asAtlas = { "x-wisp-agent": atlas.id };
     const soul = `agents/${atlas.id}/SOUL.md`;
     expect((await api("PUT", "/api/vault/note", { path: soul, content: "# Atlas\nCurious." }, nodeToken, asAtlas)).status).toBe(200);
     await api("PATCH", `/api/agents/${atlas.id}`, { settings: { soulLocked: true } });
@@ -803,7 +808,7 @@ describe("workspace features", () => {
   it("toggles reactions and rejects non-emoji", async () => {
     const msg = (await api("POST", `/api/channels/${general}/messages`, { body: "react to me" })).data;
     expect((await api("POST", `/api/messages/${msg.id}/reactions`, { emoji: "🎉" })).data.added).toBe(true);
-    expect((await api("POST", `/api/messages/${msg.id}/reactions`, { emoji: "🎉" }, nodeToken, { "x-warren-agent": atlas.id })).data.reactions[0].actors).toHaveLength(2);
+    expect((await api("POST", `/api/messages/${msg.id}/reactions`, { emoji: "🎉" }, nodeToken, { "x-wisp-agent": atlas.id })).data.reactions[0].actors).toHaveLength(2);
     expect((await api("POST", `/api/messages/${msg.id}/reactions`, { emoji: "🎉" })).data.added).toBe(false);
     expect((await api("POST", `/api/messages/${msg.id}/reactions`, { emoji: "<img>" })).status).toBe(400);
     expect((await api("POST", `/api/messages/${msg.id}/reactions`, { emoji: "42" })).status).toBe(400);
@@ -812,7 +817,7 @@ describe("workspace features", () => {
   it("tracks unread messages per person", async () => {
     const ch = (await api("POST", "/api/channels", { name: "unread-test" })).data.id;
     await api("POST", `/api/channels/${ch}/messages`, { body: "mine doesn't count" });
-    const node2 = { "x-warren-agent": nova.id };
+    const node2 = { "x-wisp-agent": nova.id };
     await api("POST", `/api/channels/${ch}/messages`, { body: "from nova" }, nodeToken, node2);
     await api("POST", `/api/channels/${ch}/messages`, { body: "again" }, nodeToken, node2);
     const find = async () => (await api<any[]>("GET", "/api/channels")).data.find((c) => c.id === ch);
@@ -904,9 +909,9 @@ describe("agent context", () => {
 describe("agents inside their computers", () => {
   it("runs a harness that comes with the VM inside it, and then takes requests from anyone", async () => {
     const sam = (await api("POST", "/api/auth/login", { email: "sam@example.com", password: "password123" }, "")).data.token;
-    // running directly on Yug's device, Atlas only works for Yug
+    // running directly on Alex's device, Atlas only works for Alex
     await api("POST", `/api/channels/${general}/messages`, { body: "@atlas hi from sam" }, sam);
-    await waitFor(async () => (await channelMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("only Yug can ask it"))));
+    await waitFor(async () => (await channelMessages()).find((m) => m.parts.some((p) => p.type === "status" && p.text.includes("only Alex can ask it"))));
 
     const vm = (await api("POST", "/api/computers", { kind: "vm", nodeId: atlas.nodeId, name: "Atlas desk" })).data;
     await api("PATCH", `/api/agents/${atlas.id}`, { computerId: vm.id, settings: { runIn: "computer" } });
@@ -916,7 +921,7 @@ describe("agents inside their computers", () => {
     expect(run.type === "run" && run.run).toMatchObject({ inComputer: true, computer: { id: vm.id, kind: "vm" } });
     expect(run.type === "run" && run.run.prompt).toContain("You run inside this computer");
 
-    // a member can't put it back onto Yug's device
+    // a member can't put it back onto Alex's device
     expect((await api("PATCH", `/api/agents/${atlas.id}`, { settings: { runIn: "device" } }, sam)).status).toBe(403);
     expect((await api("PATCH", `/api/agents/${atlas.id}`, { settings: { runIn: "device" } })).status).toBe(200);
   });
@@ -964,11 +969,11 @@ describe("the lead", () => {
     expect(prompt).toContain("@tess (Tess, kimi): Frontend & design. Owns how it looks.");
 
     // what the lead hands out while working the task becomes its subtask
-    const file = path.join(dir, "warren.db");
+    const file = path.join(dir, "wisp.db");
     const db = openDb(file);
     const runId = run.type === "run" ? run.run.runId : "";
     db.prepare("UPDATE runs SET status = 'running' WHERE id = ?").run(runId);
-    const asAtlas = { "x-warren-agent": atlas.id };
+    const asAtlas = { "x-wisp-agent": atlas.id };
     const sub = (await api<any>("POST", "/api/tasks", { to: "nova", title: "Run the release build", brief: "build it" }, nodeToken, asAtlas)).data;
     db.prepare("UPDATE runs SET status = 'done' WHERE id = ?").run(runId);
     db.close();
@@ -979,7 +984,7 @@ describe("the lead", () => {
     expect((await api("POST", "/api/tasks", { to: "nova", title: "x", brief: "x", parentTaskId: "task_nope" }, nodeToken, asAtlas)).status).toBe(404);
 
     // a finished subtask tells the lead how far along the whole thing is
-    await api("PATCH", `/api/tasks/${sub.id}`, { status: "done", result: "built" }, nodeToken, { "x-warren-agent": nova.id });
+    await api("PATCH", `/api/tasks/${sub.id}`, { status: "done", result: "built" }, nodeToken, { "x-wisp-agent": nova.id });
     const report = await waitFor(async () => (await channelMessagesIn(sub.channelId, sub.threadId)).find((m) => m.body.includes("subtasks done")));
     expect(report.body).toContain("1/2 subtasks done");
     expect(report.body).toContain("@atlas");
@@ -1010,7 +1015,7 @@ describe("the lead", () => {
 });
 
 describe("review by someone else", () => {
-  const as = (agent: any) => ({ "x-warren-agent": agent.id });
+  const as = (agent: any) => ({ "x-wisp-agent": agent.id });
   const mk = async (handle: string, harness: string) => (await api<any>("POST", "/api/agents", { handle, name: handle, harness, nodeId: atlas.nodeId })).data;
   const reviewFor = (teamId: string, taskId: string) => waitFor(async () => (await api<any[]>("GET", `/api/tasks?team=${teamId}`)).data.find((t) => t.reviewOf === taskId));
 
@@ -1131,7 +1136,7 @@ describe("privacy", () => {
 
 describe("runs that go wrong", () => {
   it("fails the task a failed run was working on and tells whoever handed it out", async () => {
-    const asAtlas = { "x-warren-agent": atlas.id };
+    const asAtlas = { "x-wisp-agent": atlas.id };
     const before = node.runs.length;
     const task = (await api("POST", "/api/tasks", { to: "nova", title: "Crash test", brief: "please crash" }, nodeToken, asAtlas)).data;
     const failed = await waitFor(async () => (await api<any[]>("GET", "/api/tasks")).data.find((t) => t.id === task.id && t.status === "failed"));

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Agents work on computers, like people do. A computer is one of:
- *   device  the screen of a device running `warren node` (a laptop, a desktop, a server with a display)
+ *   device  the screen of a device running `wisp node` (a laptop, a desktop, a server with a display)
  *   vm      a virtual computer that a device runs for its agents (a Linux desktop in Docker)
  *   orgo    a cloud computer from orgo.ai
  * Several agents can share one computer (its files, browser and sign-ins), and people can watch
@@ -11,7 +11,7 @@ import { z } from "zod";
 export type ComputerKind = "device" | "vm" | "orgo";
 
 export interface VmConfig {
-  /** container image; default is the one Warren builds from docker/computer */
+  /** container image; default is the one Wisp builds from docker/computer */
   image?: string;
   /** screen size, e.g. "1280x800" */
   resolution?: string;
@@ -31,47 +31,6 @@ export interface OrgoConfig {
 export interface DeviceConfig {
   /** a VNC server already running on the device (e.g. macOS Screen Sharing), for smoother live view */
   vncPort?: number;
-  /**
-   * A device's own screen is its owner's. Agents may use it only while the owner lends it to them
-   * (until `until`, or until they stop when `until` is null), and only for things the owner asked for.
-   */
-  lend?: { until: string | null };
-  /**
-   * An agent borrowing this screen (a person approved its request). Only that agent can use it,
-   * only until `until`; the owner can take it back at any moment.
-   */
-  loan?: DeviceLoan;
-}
-
-/** The longest a screen is lent to one agent, even when the owner picks "until it hands it back". */
-export const LOAN_MAX_MINUTES = 12 * 60;
-
-export interface DeviceLoan {
-  agentId: string;
-  /** when it ends; a loan never outlives this */
-  until: string;
-  since: string;
-  /** who approved it (the device's owner) */
-  approvedBy: string;
-  approvalId: string;
-  /** where the agent was working, so it can be told when the loan ends */
-  channelId: string;
-  threadId: string | null;
-  /** the person the agent was working for */
-  requestedBy: string | null;
-}
-
-/** What an agent asked for with `device_request`; kept on the approval card. */
-export interface DeviceLoanRequest {
-  nodeId: string;
-  deviceName: string;
-  /** the device's owner: the only one who can decide */
-  ownerId: string;
-  /** what the agent needs it for */
-  reason: string;
-  channelId: string;
-  threadId: string | null;
-  requestedBy: string | null;
 }
 
 export type ComputerConfig = VmConfig & Partial<OrgoConfig> & DeviceConfig;
@@ -112,7 +71,7 @@ export const DeviceCapabilities = z.object({
     off: z.boolean().optional(),
     /** Remote Desktop is set up at the device: live view goes through its own VNC server */
     remote: z.boolean().optional(),
-    /** opening the screen from Warren needs the code picked at the device (a 6-digit PIN or a password) */
+    /** opening the screen from Wisp needs the code picked at the device (a 6-digit PIN or a password) */
     code: z.enum(["pin", "password"]).optional(),
   }),
   /** can this device run VMs for its agents? `engine`: what runs them; `image`: whether the VM image is here yet */
@@ -122,7 +81,11 @@ export const DeviceCapabilities = z.object({
     engine: z.string().max(60).optional(),
     image: z.enum(["ready", "preparing", "missing", "failed"]).optional(),
   }),
-  /** someone ran `warren node pause` on the device: no agent runs and no computer use until they resume */
+  /** RustDesk is set up for this device (`wisp node rustdesk`): its ID, for its owner to connect with. Its password stays in RustDesk */
+  rustdesk: z.object({ id: z.string().max(40) }).optional(),
+  /** other remote desktop apps found here (installed, or a VNC or Remote Desktop server answering), to suggest on the device's page */
+  remoteApps: z.array(z.string().max(40)).max(10).optional(),
+  /** someone ran `wisp node pause` on the device: no agent runs and no computer use until they resume */
   paused: z.boolean().optional(),
   /** which commands connectors need are on the device's PATH (npx, uvx, docker…), so a connector that can't start is caught before it's enabled */
   commands: z.record(z.string().max(100), z.boolean()).optional(),
@@ -169,6 +132,11 @@ export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("harness_status"), harness: z.string().max(60) }),
   /** open a terminal on the VM's screen that signs this harness in; a person finishes it there */
   z.object({ action: z.literal("signin"), harness: z.string().max(60) }),
+  /**
+   * Sign in on the page open in the VM's browser, only if it's on `site`: the hub sends this with
+   * a login from the password manager, never an agent. → LoginFillResult
+   */
+  z.object({ action: z.literal("fill_login"), site: z.string().min(1).max(253), username: z.string().max(1000), password: z.string().max(1000), otp: z.string().max(20).optional() }),
   /** the web page element at a point on the screen (VMs' browser), for recordings → { element: PageElement | null } */
   z.object({ action: z.literal("inspect"), x: coord, y: coord, space: Space.optional() }),
   // --- keeping a computer in step with yours: its clipboard and files ---
@@ -185,6 +153,18 @@ export const ComputerAction = z.discriminatedUnion("action", [
   z.object({ action: z.literal("file_mkdir"), folder: z.string().max(4000), name: FileName }),
 ]);
 export type ComputerAction = z.infer<typeof ComputerAction>;
+
+/** What filling a login did: which boxes it filled and whether it pressed sign in. */
+export interface LoginFillResult {
+  filled: ("username" | "password" | "otp")[];
+  submitted: boolean;
+  /** the page's site, when it isn't the login's (nothing was filled) */
+  wrongSite?: string;
+  /** why nothing was filled */
+  problem?: string;
+  /** the password was taken out of its box again: nothing pressed sign in, or the page didn't move on after it */
+  cleared?: boolean;
+}
 
 export interface Screenshot {
   /** base64 JPEG */
@@ -270,19 +250,61 @@ export interface RunOutput {
   output: string;
 }
 
-/** Is a device's screen lent to agents right now? */
-export function lentNow(c: Pick<Computer, "kind" | "config">, at = Date.now()): boolean {
-  if (c.kind !== "device") return true;
-  const lend = (c.config as DeviceConfig).lend;
-  if (!lend) return false;
-  return lend.until === null || new Date(lend.until).getTime() > at;
+/**
+ * Remote desktop apps a person may already use to reach a device (besides RustDesk, which Wisp sets
+ * up). They paste the app's ID, address or link on the device's page; Wisp only keeps that and opens
+ * the app with it, never a password. `field`: what identifies the device in that app.
+ */
+export const REMOTE_APPS = {
+  teamviewer: { label: "TeamViewer", field: "id" },
+  anydesk: { label: "AnyDesk", field: "id" },
+  chrome: { label: "Chrome Remote Desktop", field: "link" },
+  rdp: { label: "Windows Remote Desktop", field: "address" },
+  "screen-sharing": { label: "Screen Sharing (Mac)", field: "address" },
+  vnc: { label: "VNC", field: "address" },
+  other: { label: "Another app", field: "link" },
+} as const;
+export type RemoteApp = keyof typeof REMOTE_APPS;
+export const REMOTE_APP_IDS = Object.keys(REMOTE_APPS) as RemoteApp[];
+
+/** The pattern each kind of field must match: an app's ID, a host[:port], or an https link. */
+const REMOTE_FIELD = {
+  id: /^[A-Za-z0-9@._-]{3,60}$/,
+  address: /^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/,
+  link: /^https:\/\/[^\s<>"']{4,500}$/,
+};
+
+/** The remote desktop app a device's owner already uses, saved on the hub for them only. */
+export const OwnRemoteDesktop = z
+  .object({ app: z.enum(REMOTE_APP_IDS as [RemoteApp, ...RemoteApp[]]), value: z.string().trim(), name: z.string().trim().max(60).optional() })
+  .superRefine((r, ctx) => {
+    const field = REMOTE_APPS[r.app].field;
+    if (!REMOTE_FIELD[field].test(r.value)) ctx.addIssue({ code: "custom", path: ["value"], message: field === "id" ? "That doesn't look like an ID." : field === "address" ? "Enter a computer name or address, like shop-pc.local or 192.168.1.20." : "Paste a link that starts with https://" });
+  });
+export type OwnRemoteDesktop = z.infer<typeof OwnRemoteDesktop>;
+
+/** A link that opens the app on this device, or null when the app has none (copy the ID instead). */
+export function remoteDesktopLink(r: OwnRemoteDesktop): string | null {
+  const v = r.value;
+  switch (r.app) {
+    case "anydesk":
+      return `anydesk:${v}`;
+    case "teamviewer":
+      return /^\d+$/.test(v) ? `teamviewer10://control?device=${v}` : null;
+    case "rdp":
+      return `rdp://full%20address=s:${v}`;
+    case "screen-sharing":
+    case "vnc":
+      return `vnc://${v}`;
+    case "chrome":
+    case "other":
+      return REMOTE_FIELD.link.test(v) ? v : null;
+  }
 }
 
-/** The loan on a device's screen if it is still running, else null. */
-export function activeLoan(c: Pick<Computer, "kind" | "config">, at = Date.now()): DeviceLoan | null {
-  if (c.kind !== "device") return null;
-  const loan = (c.config as DeviceConfig).loan;
-  return loan && new Date(loan.until).getTime() > at ? loan : null;
+/** "482117903" → "482 117 903", the way RustDesk shows an ID. */
+export function formatRustdeskId(id: string): string {
+  return /^\d+$/.test(id) ? id.replace(/\B(?=(\d{3})+(?!\d))/g, " ") : id;
 }
 
 /** Screenshots for agents are scaled to fit this box: big enough to read, small enough to be cheap. */

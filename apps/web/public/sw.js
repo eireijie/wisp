@@ -1,11 +1,11 @@
-// Minimal service worker: makes Warren installable and keeps the app shell available offline.
-const SHELL = "warren-shell-v2";
+// Minimal service worker: makes Wisp installable and keeps the app shell available offline.
+const SHELL = "wisp-shell-v2";
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg"])));
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg", "/storage-migration.js"])));
   self.skipWaiting();
 });
 self.addEventListener("activate", (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k)))));
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => (k.startsWith("wisp-") || k.startsWith("warren-")) && k !== SHELL).map((k) => caches.delete(k)))));
   self.clients.claim();
 });
 self.addEventListener("fetch", (e) => {
@@ -34,7 +34,7 @@ self.addEventListener("push", (e) => {
   } catch {
     n = { body: e.data ? e.data.text() : "" };
   }
-  e.waitUntil(self.registration.showNotification(n.title || "Warren", { body: n.body || "", tag: n.tag, icon: "/icon-192.png", badge: "/icon-192.png", data: { url: n.url || "/" } }));
+  e.waitUntil(self.registration.showNotification(n.title || "Wisp", { body: n.body || "", tag: n.tag, icon: "/icon-192.png", badge: "/icon-192.png", data: { url: n.url || "/" } }));
 });
 
 self.addEventListener("notificationclick", (e) => {

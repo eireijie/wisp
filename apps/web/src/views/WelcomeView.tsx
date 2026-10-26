@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Bot, Check, Circle, Loader2, Monitor, Plus } from "lucide-react";
-import { HARNESSES, harnessLabel, runsInVm, type Agent, type HarnessSettings } from "@warren/core";
+import { HARNESSES, harnessLabel, runsInVm, type Agent, type HarnessSettings } from "@wisp/core";
 import { api } from "../api.ts";
 import { useAccess } from "../access.ts";
 import { completeSetupStep, nextStep, setDismissed, STEPS, useOnboarding, type StepId } from "../onboarding.ts";

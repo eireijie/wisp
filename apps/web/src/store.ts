@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@warren/core";
+import { channelTeams, type Agent, type AgentEvent, type Approval, type Channel, type ChannelNotify, type ClientEvent, type Computer, type Discussion, type Features, type Message, type LeadStatus, type Reaction, type Section, type Team, type User, type UserPrefs } from "@wisp/core";
 import { api } from "./api.ts";
 import { notifyOn } from "./notifications.ts";
 import { agentColor } from "./components/ui.tsx";
@@ -9,7 +9,7 @@ import { listOrgs, type Org } from "./orgs.ts";
 export interface Me {
   kind: "user";
   user: User;
-  /** how Warren behaves for this person, on every device (Settings → Preferences) */
+  /** how Wisp behaves for this person, on every device (Settings → Preferences) */
   prefs: UserPrefs;
   role: "owner" | "member" | "guest";
   workspace: { id: string; name: string };
@@ -106,7 +106,9 @@ interface State {
   changesVersion: number;
   /** bumps when tasks change, so the Tasks page refetches */
   tasksVersion: number;
-  /** bumps when notes change outside Warren, so Memory reloads */
+  /** bumps when a stepped team's request moves on */
+  flowsVersion: number;
+  /** bumps when notes change outside Wisp, so Memory reloads */
   memoryVersion: number;
   /** the New task dialog is open */
   newTaskOpen: boolean;
@@ -176,6 +178,7 @@ export const useStore = create<State>((set, get) => ({
   backgroundVersion: 0,
   changesVersion: 0,
   tasksVersion: 0,
+  flowsVersion: 0,
   memoryVersion: 0,
   newTaskOpen: false,
   lead: null,
@@ -315,7 +318,7 @@ export const useStore = create<State>((set, get) => ({
     // after a reconnect, catch up on anything missed
     if (connected && !wasConnected) {
       const { activeChannel, threadChannels } = get();
-      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, memoryVersion: s.memoryVersion + 1 }));
+      set((s) => ({ live: {}, routinesVersion: s.routinesVersion + 1, backgroundVersion: s.backgroundVersion + 1, changesVersion: s.changesVersion + 1, tasksVersion: s.tasksVersion + 1, flowsVersion: s.flowsVersion + 1, memoryVersion: s.memoryVersion + 1 }));
       if (activeChannel) get().loadChannel(activeChannel).catch(() => {});
       for (const [rootId, channelId] of Object.entries(threadChannels)) get().loadThread(channelId, rootId).catch(() => {});
       get().refreshAgents().catch(() => {});
@@ -332,7 +335,7 @@ export const useStore = create<State>((set, get) => ({
 
   handle(e, notify = true) {
     const before = get();
-    // features changed for this organization (an owner flipped one in Settings → Features)
+    // features changed for this organization (an owner flipped one in Settings → General → Mods)
     if (e.type === "features") {
       set((s) => (s.me ? { me: { ...s.me, features: e.features } } : {}));
       return;
@@ -413,6 +416,8 @@ export const useStore = create<State>((set, get) => ({
       set((s) => ({ changesVersion: s.changesVersion + 1 }));
     } else if (e.type === "tasks_changed") {
       set((s) => ({ tasksVersion: s.tasksVersion + 1 }));
+    } else if (e.type === "flows_changed") {
+      set((s) => ({ flowsVersion: s.flowsVersion + 1 }));
     } else if (e.type === "memory_changed") {
       set((s) => ({ memoryVersion: s.memoryVersion + 1 }));
     } else if (e.type === "run_event") {
@@ -533,7 +538,7 @@ export function useHandleColors(): Map<string, string> {
   return useMemo(() => new Map(agents.map((a) => [a.handle, agentColor(a)])), [agents]);
 }
 
-/** What agents are waiting on you for: approvals (a device loan only for its owner) and help on their computers. Guests answer none. */
+/** What agents are waiting on you for: approvals and help on their computers. Guests answer none. */
 export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[] } {
   const me = useStore((s) => s.me);
   const approvals = useStore((s) => s.approvals);
@@ -541,7 +546,7 @@ export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[]
   return useMemo(() => {
     if (!me || me.role === "guest") return { approvals: [], help: [] };
     return {
-      approvals: Object.values(approvals).filter((a) => a.status === "pending" && (!a.loan || a.loan.ownerId === me.user.id)),
+      approvals: Object.values(approvals).filter((a) => a.status === "pending"),
       help: computers.filter((c) => c.help),
     };
   }, [me, approvals, computers]);

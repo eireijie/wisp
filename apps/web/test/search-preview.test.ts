@@ -21,7 +21,7 @@ describe("cleanPreview", () => {
     expect(out).toContain("user_preferences");
   });
   it("drops internal task instructions and bracketed meta lines", () => {
-    const out = cleanPreview("[system]\nWrite the menu\n\nThis is task `tsk_9Kd82hQ1x`.\n\nWhen finished, report back with the task result (warren tool `task_update`, status done).");
+    const out = cleanPreview("[system]\nWrite the menu\n\nThis is task `tsk_9Kd82hQ1x`.\n\nWhen finished, report back with the task result (wisp tool `task_update`, status done).");
     expect(out).toBe("Write the menu");
   });
   it("collapses whitespace and caps length with an ellipsis", () => {

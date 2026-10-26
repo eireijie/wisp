@@ -1,8 +1,9 @@
+import { isLocalOnlyHost } from "./loopback.ts";
 import { useEffect } from "react";
 import { create } from "zustand";
 import { api } from "./api.ts";
 
-/** Tailscale on the hub's computer, as GET /api/access reports it (owners get every field). */
+/** Tailscale on the hub's computer, as GET /api/reach reports it (owners get every field). */
 export interface TailscaleInfo {
   state: "missing" | "needs-login" | "stopped" | "starting" | "running" | "error";
   dnsName: string | null;
@@ -31,11 +32,10 @@ export interface AccessInfo {
   };
 }
 
-const isLoopback = (host: string) => /^(localhost|127\.|\[?::1\]?$)/i.test(host);
 
 /** The page is already open at an address other computers can use over https (a cloud hub, a domain, Tailscale). */
 export function onPublicAddress(loc: Pick<Location, "protocol" | "hostname"> | undefined = typeof location === "undefined" ? undefined : location): boolean {
-  if (!loc || loc.protocol !== "https:" || isLoopback(loc.hostname)) return false;
+  if (!loc || loc.protocol !== "https:" || isLocalOnlyHost(loc.hostname)) return false;
   const host = loc.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (host.endsWith(".local") || host.endsWith(".localhost")) return false;
   if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(host)) return false;
@@ -78,7 +78,7 @@ export function useAccess(everyMs = 0): AccessInfo | null {
  */
 export function shareOrigin(info: AccessInfo | null = useAccessStore.getState().info, loc: Pick<Location, "origin" | "hostname"> = location): string {
   if (info?.publicUrl) return info.publicUrl;
-  if (!isLoopback(loc.hostname)) return loc.origin;
+  if (!isLocalOnlyHost(loc.hostname)) return loc.origin;
   return info?.lan[0] ?? loc.origin;
 }
 
@@ -86,7 +86,7 @@ export function shareOrigin(info: AccessInfo | null = useAccessStore.getState().
 export function originReach(origin: string): "anywhere" | "network" | "this-computer" {
   try {
     const u = new URL(origin);
-    if (isLoopback(u.hostname)) return "this-computer";
+    if (isLocalOnlyHost(u.hostname)) return "this-computer";
     if (u.protocol === "https:") return "anywhere";
     return "network";
   } catch {
@@ -110,7 +110,7 @@ export function linkReach(url: string | null | undefined, info: AccessInfo | nul
   return u.hostname.endsWith(".ts.net") && !info?.tailscale.funnel ? "tailscale" : "anywhere";
 }
 
-const SKIP_KEY = "warren.access.skipped";
+const SKIP_KEY = "wisp.access.skipped";
 /** "Only on this Wi-Fi for now": the setup step counts as done on this browser. */
 export function accessSkipped(): boolean {
   try {

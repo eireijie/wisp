@@ -13,7 +13,7 @@ let hub: Hub;
 let close: () => Promise<void>;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-local-device-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-local-device-"));
   const built = await buildHub({ dataDir: dir, setupCode: false });
   hub = built.hub;
   await built.app.listen({ port: 0, host: "127.0.0.1" });
@@ -28,7 +28,7 @@ afterAll(async () => {
 
 describe("the hub's own computer as a device", () => {
   it("names the computer without its .local suffix", () => {
-    expect(localName("Yugs-MacBook-Air.local")).toBe("Yugs-MacBook-Air");
+    expect(localName("Alexs-MacBook-Air.local")).toBe("Alexs-MacBook-Air");
     expect(localName("")).toBe("This computer");
   });
 

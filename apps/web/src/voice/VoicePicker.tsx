@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Agent, AgentSettings } from "@warren/core";
+import type { Agent, AgentSettings } from "@wisp/core";
 import { Play, Square } from "lucide-react";
 import { api } from "../api.ts";
 import { Advanced } from "../experience.tsx";

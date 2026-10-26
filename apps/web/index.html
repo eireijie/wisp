@@ -6,18 +6,19 @@
     <meta name="theme-color" content="#ffffff" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Warren" />
+    <meta name="apple-mobile-web-app-title" content="Wisp" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>Wisp</title>
+    <script src="/storage-migration.js"></script>
     <script>
       // pick the mode and theme before first paint (theme.ts takes over once the app loads)
       (function () {
         var m, t;
         try {
-          m = localStorage.getItem("warren.mode");
-          t = localStorage.getItem("warren.theme");
+          m = localStorage.getItem("wisp.mode");
+          t = localStorage.getItem("wisp.theme");
         } catch (e) {}
         if (t === "light" || t === "dark") (m = t), (t = null); // older choice, migrated by theme.ts
         if (m !== "light" && m !== "dark") m = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -25,9 +26,9 @@
         root.dataset.mode = m;
         root.dataset.theme = t || "mono";
         try {
-          var s = localStorage.getItem("warren.textSize");
+          var s = localStorage.getItem("wisp.textSize");
           root.dataset.text = s === "small" || s === "large" ? s : "default";
-          if (localStorage.getItem("warren.motion") === "reduce") root.dataset.motion = "reduce";
+          if (localStorage.getItem("wisp.motion") === "reduce") root.dataset.motion = "reduce";
         } catch (e) {}
         if (m === "dark") document.querySelector('meta[name="theme-color"]').setAttribute("content", "#0d0d0d");
       })();

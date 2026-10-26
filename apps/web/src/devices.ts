@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { Agent, DeviceCapabilities, DeviceRole, DiscoveredAgent } from "@warren/core";
-import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
+import type { Agent, DeviceCapabilities, DeviceRole, DiscoveredAgent } from "@wisp/core";
+import { harnessInfo, harnessLabel, runsInVm } from "@wisp/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import type { ComputerInfo } from "./store.ts";
 
@@ -15,9 +15,9 @@ export interface DeviceInfo {
   mine?: boolean;
   /** its owner lets others put agents and VMs on it */
   shared?: boolean;
-  /** what it does for agents: runs their VMs, lends its own screen, or neither (headless); null until chosen */
+  /** what it does for agents: runs their VMs, lets agents that run on it use its screen, or neither (headless); null until chosen */
   role?: DeviceRole | null;
-  /** paused at the device (`warren node pause`) */
+  /** paused at the device (`wisp node pause`) */
   paused?: boolean;
   online: boolean;
   lastSeen?: string | null;
@@ -60,14 +60,6 @@ export function computerKindLabel(c: Pick<ComputerInfo, "kind" | "nodeId">, devi
 /** Devices this person can put agents and VMs on: their own, and ones others shared. */
 export function usableDevices(devices: DeviceInfo[]): DeviceInfo[] {
   return devices.filter((d) => d.mine || d.shared);
-}
-
-/** "until 5:30 PM", "until tomorrow 9:00 AM", "until you stop it". */
-export function lendLabel(until: string | null): string {
-  if (until === null) return "until you stop it";
-  const d = new Date(until);
-  const today = d.toDateString() === new Date().toDateString();
-  return `until ${today ? "" : `${d.toLocaleDateString(undefined, { weekday: "short" })} `}${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
 /**

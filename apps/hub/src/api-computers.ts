@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { ComputerAction, DEVICE_HARNESS, FileName, LOAN_MAX_MINUTES, MAX_TRANSFER_BYTES, activeLoan, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type FileData, type FolderListing, type RecordedStep } from "@warren/core";
+import { ComputerAction, DEVICE_HARNESS, FileName, MAX_TRANSFER_BYTES, HARNESS_IDS, parseCron, runsInVm, soulPath, soulTemplate, type Computer, type DiscoveredAgent, type FileData, type FolderListing, type RecordedStep } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import { ComputerError } from "./computers.ts";
 import { OrgoClient, OrgoError } from "./orgo.ts";
@@ -22,7 +22,7 @@ interface Helpers {
 }
 
 const NAME = z.string().trim().min(1).max(80);
-/** A screen's code, passed straight to its device to check; Warren never keeps it. */
+/** A screen's code, passed straight to its device to check; Wisp never keeps it. */
 const SCREEN_CODE = z.string().min(1).max(200);
 const TIMEZONE = z.string().max(64).refine((tz) => {
   try {
@@ -59,7 +59,7 @@ const STEP = z.object({
     .optional(),
 });
 
-const WARREN = { name: "Warren", email: "warren@localhost" };
+const WISP = { name: "Wisp", email: "wisp@localhost" };
 
 /**
  * Routes for computers (devices' screens, VMs, Orgo), approvals, routines, harness settings and
@@ -153,7 +153,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
       const owner = node.ownerId ? (store.user(node.ownerId)?.name ?? "its owner") : "its owner";
       if (body.kind === "device") {
         if (node.ownerId !== c.actor.id) return reply.code(403).send({ error: `${node.name} is ${owner}'s device; only ${owner} can use its screen` });
-        if (caps?.screen.off) return reply.code(400).send({ error: `${node.name}'s screen is off. Turn it on at the device itself: \`warren node screen on\`` });
+        if (caps?.screen.off) return reply.code(400).send({ error: `${node.name}'s screen is off. Turn it on at the device itself: \`wisp node screen on\`` });
         // one computer per device screen; asking again returns it
         const existing = store.computersOnNode(node.id).find((x) => x.kind === "device");
         if (existing) return computers.view(existing);
@@ -196,23 +196,6 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!canRemove(c, comp)) return reply.code(403).send({ error: "only its device's owner or a workspace owner can delete this VM" });
     await computers.remove(comp);
     return { ok: true };
-  });
-
-  /** Lend your own screen to agents (for `minutes`, or until you stop with null), or stop lending it. */
-  app.post("/api/computers/:id/lend", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const comp = own(c, (req.params as { id: string }).id);
-    if (!comp) return reply.code(404).send({ error: "computer not found" });
-    if (comp.kind !== "device") return reply.code(400).send({ error: "only a device's own screen is lent; agents can always use VMs and cloud computers" });
-    const body = parse(z.union([z.object({ off: z.literal(true) }), z.object({ minutes: z.number().int().min(1).max(7 * 24 * 60).nullable(), code: SCREEN_CODE.optional() })]), req.body, reply);
-    if (!body) return;
-    try {
-      await computers.lend(comp, c.actor.id, "off" in body ? false : body.minutes, "code" in body ? body.code : undefined);
-    } catch (err) {
-      return fail(reply, err);
-    }
-    return computers.view(store.computer(comp.id)!);
   });
 
   /** What people and agents did on a computer, newest first. */
@@ -303,6 +286,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!comp) return reply.code(404).send({ error: "computer not found" });
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
+    if (action.action === "fill_login") return reply.code(403).send({ error: "Wisp fills logins itself, from the password manager" });
     try {
       return await computers.act(comp, action, c.actor);
     } catch (err) {
@@ -454,7 +438,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const agent = store.agent(c.actor.id);
     const comp = agent?.computerId ? store.computer(agent.computerId) : undefined;
     if (!comp) {
-      reply.code(404).send({ error: "you don't have a computer; a person can give you one on your page in Warren (Agents → Computer)" });
+      reply.code(404).send({ error: "you don't have a computer; a person can give you one on your page in Wisp (Agents → Computer)" });
       return null;
     }
     return comp;
@@ -472,76 +456,17 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     const c = need(req, reply);
     if (!c) return;
     if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    // `computer` names a device the agent is borrowing; without it the action is on its own computer
-    const borrowed = (req.body as { computer?: unknown })?.computer;
-    let comp: Computer | null;
-    if (typeof borrowed === "string" && borrowed.trim() && !/^(mine|my vm|my computer)$/i.test(borrowed.trim())) {
-      const want = borrowed.trim().toLowerCase();
-      const own = store.agent(c.actor.id)?.computerId;
-      comp = store.computers(c.workspaceId).find((x) => x.kind === "device" && (x.id === borrowed || x.name.toLowerCase() === want) && (x.config as { loan?: { agentId: string } }).loan?.agentId === c.actor.id && x.id !== own) ?? null;
-      if (!comp) return reply.code(403).send({ error: `You aren't borrowing "${borrowed}". Ask its owner with device_request (it may also have run out or been taken back); leave the computer argument out to use your own computer.` });
-    } else {
-      comp = myComputer(c, reply);
-      if (!comp) return;
-    }
+    const comp = myComputer(c, reply);
+    if (!comp) return;
     const action = parse(ComputerAction, (req.body as { action?: unknown })?.action, reply);
     if (!action) return;
-    if (["destroy", "stop", "signin"].includes(action.action)) return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : "only people can stop or remove a computer" });
+    if (["destroy", "stop", "signin", "fill_login"].includes(action.action))
+      return reply.code(403).send({ error: action.action === "signin" ? "people sign harnesses in; use computer_ask_human" : action.action === "fill_login" ? "use login_fill: Wisp fills logins from the password manager" : "only people can stop or remove a computer" });
     try {
       return await computers.act(comp, action, c.actor, { requester: h.requesterOf(c) });
     } catch (err) {
       return fail(reply, err);
     }
-  });
-
-  // --- borrowing a device -----------------------------------------------------------------------
-
-  /** Devices this agent could ask to borrow, and whether each can be asked right now. */
-  app.get("/api/computers/borrowable", async (req, reply) => {
-    const c = need(req, reply);
-    if (!c) return;
-    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    return computers.borrowable(c.workspaceId, c.actor.id);
-  });
-
-  /** An agent asks to use a device's screen; the device's owner gets an Approve / Deny card. */
-  app.post("/api/computers/loans", async (req, reply) => {
-    const c = need(req, reply);
-    if (!c) return;
-    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents ask to borrow a device; people lend it on the Computers page" });
-    const body = parse(z.object({ device: z.string().trim().min(1).max(200), reason: z.string().trim().min(1).max(1000) }), req.body, reply);
-    if (!body) return;
-    try {
-      const approval = computers.requestLoan(c.workspaceId, c.actor.id, body.device, body.reason);
-      return { ok: true, approvalId: approval.id, deviceName: approval.loan!.deviceName };
-    } catch (err) {
-      return fail(reply, err);
-    }
-  });
-
-  /** An agent hands a borrowed device back. */
-  app.post("/api/computers/loans/return", async (req, reply) => {
-    const c = need(req, reply);
-    if (!c) return;
-    if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    const body = parse(z.object({ device: z.string().max(200).optional() }), req.body ?? {}, reply);
-    if (!body) return;
-    try {
-      return { ok: true, deviceName: computers.returnLoan(c.workspaceId, c.actor.id, body.device).name };
-    } catch (err) {
-      return fail(reply, err);
-    }
-  });
-
-  /** The owner takes the device back from the agent borrowing it. */
-  app.post("/api/computers/:id/loan/end", async (req, reply) => {
-    const c = need(req, reply, { member: true });
-    if (!c) return;
-    const comp = own(c, (req.params as { id: string }).id);
-    if (!comp) return reply.code(404).send({ error: "computer not found" });
-    if (!activeLoan(comp)) return reply.code(409).send({ error: "nobody is borrowing it" });
-    computers.endLoan(comp, "taken back", c.actor);
-    return computers.view(store.computer(comp.id)!);
   });
 
   app.post("/api/computers/mine/help", async (req, reply) => {
@@ -597,29 +522,22 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!c) return;
     const a = store.approval((req.params as { id: string }).id);
     if (!a || !canSeeApproval(c, a)) return reply.code(404).send({ error: "not found" });
-    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), minutes: z.number().int().min(1).max(LOAN_MAX_MINUTES).nullable().optional(), code: SCREEN_CODE.optional() }), req.body, reply);
+    const body = parse(z.object({ approve: z.boolean(), note: z.string().max(4000).default(""), always: z.boolean().optional() }), req.body, reply);
     if (!body) return;
     if (a.status !== "pending") return reply.code(409).send({ error: `already ${a.status}` });
     const agent = store.agent(a.agentId);
     const note = body.note.trim() ? ` ${body.note.trim()}` : "";
-    if (a.loan) {
-      // lending a device is its owner's call alone
-      const owner = store.user(a.loan.ownerId)?.name ?? "its owner";
-      if (c.actor.id !== a.loan.ownerId) return reply.code(403).send({ error: `Only ${owner} can lend ${a.loan.deviceName}` });
-      let verdict: string;
-      if (body.approve) {
-        try {
-          const loan = await computers.startLoan(a, c.actor.id, body.minutes === undefined ? 60 : body.minutes, body.code);
-          const mins = Math.round((new Date(loan.until).getTime() - Date.now()) / 60_000);
-          verdict = `Approved: you can use "${a.loan.deviceName}" for ${mins >= 60 && mins % 60 === 0 ? `${mins / 60} hour${mins === 60 ? "" : "s"}` : `${mins} minutes`} (until ${new Date(loan.until).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" })}). Pass computer: "${a.loan.deviceName}" to the computer_* tools to act on it; without it they still act on your own computer. When you're done, call device_return.`;
-        } catch (err) {
-          return fail(reply, err);
-        }
-      } else verdict = `Denied: ${owner} didn't lend you "${a.loan.deviceName}". Carry on without it, or ask in chat.`;
+    if (a.login) {
+      // a login from the password manager is the call of whoever connected it
+      const ask = a.login;
+      const owner = store.user(ask.ownerId)?.name ?? "whoever connected the password manager";
+      if (c.actor.id !== ask.ownerId) return reply.code(403).send({ error: `Only ${owner} can let agents use the ${ask.title} login` });
       const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
       hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
-      // the agent is woken where it was working, for the person it was working for
-      if (agent && store.channel(a.loan.channelId)) hub.postMessage({ channelId: a.loan.channelId, threadId: a.loan.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}`, onBehalfOf: a.loan.requestedBy ?? c.actor.id });
+      // filling happens after answering, so the card doesn't wait on the computer
+      void hub.logins.decide(a, body.approve, !!body.always).then((verdict) => {
+        if (agent && store.channel(a.channelId)) hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}`, onBehalfOf: ask.requestedBy ?? c.actor.id });
+      });
       return decided;
     }
     const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
@@ -727,7 +645,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     if (!r && !body.name) return reply.code(400).send({ error: "name a new routine" });
     const notePath = r?.notePath ?? `agents/${agent.id}/routines/${routineSlug(body.name!)}-${Date.now().toString(36)}.md`;
     const name = body.name ?? r!.name;
-    await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${name}\n\n${body.steps}\n`, { name: `@${agent.handle}`, email: `${agent.handle}@agents.warren` }, `Routine "${name}"`);
+    await hub.vault(c.workspaceId).write(notePath, body.steps.trim().startsWith("#") ? body.steps : `# ${name}\n\n${body.steps}\n`, { name: `@${agent.handle}`, email: `${agent.handle}@agents.wisp` }, `Routine "${name}"`);
     if (r) r = store.updateRoutine(r.id, { name, status: "ready", ...(body.schedule !== undefined ? { schedule: body.schedule } : {}), ...(body.timezone ? { timezone: body.timezone } : {}) })!;
     else r = store.createRoutine({ workspaceId: c.workspaceId, agentId: agent.id, name, notePath, schedule: body.schedule ?? null, timezone: body.timezone ?? "UTC", channelId: null, status: "ready", createdBy: c.actor });
     hub.broadcast(c.workspaceId, { type: "routines_changed" });
@@ -783,7 +701,7 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     return { ok: true };
   });
 
-  /** Make a Warren agent from one that already exists on a device: its soul, instructions and notes come along. */
+  /** Make a Wisp agent from one that already exists on a device: its soul, instructions and notes come along. */
   app.post("/api/agents/import", async (req, reply) => {
     const c = need(req, reply, { member: true });
     if (!c) return;

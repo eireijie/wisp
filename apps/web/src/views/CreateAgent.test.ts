@@ -11,7 +11,7 @@ import { BackgroundPanel } from "./AgentBackground.tsx";
 import { AgentsPolicyPage } from "./settings/workspace.tsx";
 import { LiveScreen, ScreenThumb } from "../components/Screen.tsx";
 import { mayLeave } from "../router.ts";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 
 // Run component handlers and effects without adding a DOM/test-renderer dependency.
 // Child elements stay unrendered; each mounted component has its own hook state.

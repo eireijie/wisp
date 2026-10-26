@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Bell, BellOff, Blocks, BookOpen, ChevronDown, ChevronLeft, ChevronRight, CircleUser, FolderPlus, Ghost, Hand, Inbox, LifeBuoy, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Palette, Pencil, Plus, Search, Server, Settings, ShieldQuestion, SlidersHorizontal, Sparkles, Store, Sun, SunMoon, Trash2, UserPlus } from "lucide-react";
-import type { Agent, Section } from "@warren/core";
+import type { Agent, Section } from "@wisp/core";
 import { api } from "../api.ts";
 import { useInboxCount, useStore, useWaitingOnYou, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
@@ -13,7 +13,7 @@ import { OrgSwitcher } from "./OrgSwitcher.tsx";
 import { AgentAvatar, Menu, StatusDot, UserAvatar, agentVar, cx } from "./ui.tsx";
 import { openDm } from "../openDm.ts";
 
-const COLLAPSE_KEY = "warren.sidebar.collapsed";
+const COLLAPSE_KEY = "wisp.sidebar.collapsed";
 const loadCollapsed = (): Record<string, boolean> => {
   try {
     return JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? "{}");
@@ -98,7 +98,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
   );
 
   return (
-    <nav className={cx("h-full flex flex-col", !page && "safe-top")} aria-label="Warren">
+    <nav className={cx("h-full flex flex-col", !page && "safe-top")} aria-label="Wisp">
       {!page && (
         <div className="shrink-0 px-2 pt-2 flex items-center gap-0.5">
           <div className="flex-1 min-w-0">
@@ -262,7 +262,7 @@ export function Sidebar({ route, variant = "sidebar" }: { route: Route; variant?
         </Group>
       </div>
 
-      {/* the rest of Warren: a short list, and everything else under More */}
+      {/* the rest of Wisp: a short list, and everything else under More */}
       {!page && (
         <div className="shrink-0 pt-2 space-y-px border-t border-line">
           {!isGuest && (

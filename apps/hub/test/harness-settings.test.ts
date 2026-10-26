@@ -2,8 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { HarnessAdapter } from "@warren/adapters";
-import { WarrenClient } from "@warren/sdk";
+import type { HarnessAdapter } from "@wisp/adapters";
+import { WispClient } from "@wisp/sdk";
 import { NodeDaemon } from "../../node/src/daemon.ts";
 import { buildHub } from "../src/app.ts";
 
@@ -12,8 +12,8 @@ let home: string;
 let url: string;
 let close: () => Promise<void>;
 let daemon: NodeDaemon;
-let owner: WarrenClient;
-let sam: WarrenClient;
+let owner: WispClient;
+let sam: WispClient;
 let nodeId: string;
 let atlasId: string;
 /** what the agent's harness got back when it tried to change its settings */
@@ -23,7 +23,7 @@ const envs: Record<string, string>[] = [];
 
 const config = () => fs.readFile(path.join(home, ".hermes", "config.yaml"), "utf8");
 
-/** Hermes as far as the device can tell: installed, and during a run it asks Warren to switch its model. */
+/** Hermes as far as the device can tell: installed, and during a run it asks Wisp to switch its model. */
 const hermes: HarnessAdapter = {
   id: "hermes",
   label: "Hermes",
@@ -36,17 +36,17 @@ const hermes: HarnessAdapter = {
     // what it does depends on the message that woke it (the prompt's last line), not the history
     const last = input.prompt.trim().split("\n").pop() ?? "";
     if (last.includes("use the research account")) {
-      const res = await fetch(`${input.mcp!.env!.WARREN_URL}/api/agent/harness-settings`, {
+      const res = await fetch(`${input.mcp!.env!.WISP_URL}/api/agent/harness-settings`, {
         method: "PATCH",
-        headers: { "content-type": "application/json", authorization: `Bearer ${input.mcp!.env!.WARREN_TOKEN}` },
+        headers: { "content-type": "application/json", authorization: `Bearer ${input.mcp!.env!.WISP_TOKEN}` },
         body: JSON.stringify({ useAccount: "Research" }),
       });
       attempts.push({ status: res.status, body: await res.json() });
     }
     if (last.includes("switch to gpt-5")) {
-      const res = await fetch(`${input.mcp!.env!.WARREN_URL}/api/agent/harness-settings`, {
+      const res = await fetch(`${input.mcp!.env!.WISP_URL}/api/agent/harness-settings`, {
         method: "PATCH",
-        headers: { "content-type": "application/json", authorization: `Bearer ${input.mcp!.env!.WARREN_TOKEN}` },
+        headers: { "content-type": "application/json", authorization: `Bearer ${input.mcp!.env!.WISP_TOKEN}` },
         body: JSON.stringify({ changes: [{ op: "model", model: "gpt-5" }] }),
       });
       attempts.push({ status: res.status, body: await res.json() });
@@ -67,7 +67,7 @@ const waitFor = async <T>(fn: () => Promise<T | undefined>, ms = 6000): Promise<
 const status = (p: Promise<unknown>) => p.then(() => 200, (e) => e.status as number);
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), "warren-harness-settings-"));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), "wisp-harness-settings-"));
   home = path.join(dir, "home");
   await fs.mkdir(path.join(home, ".hermes", "skills", "notes"), { recursive: true });
   await fs.writeFile(path.join(home, ".hermes", "config.yaml"), "model:\n  default: claude-sonnet-5.5\n  provider: openrouter\n");
@@ -77,10 +77,10 @@ beforeAll(async () => {
   url = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   close = () => app.close();
   const post = (p: string, body: unknown) => fetch(url + p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
-  owner = new WarrenClient({ url, token: (await post("/api/setup", { email: "me@example.com", name: "Me", password: "password123" })).token });
+  owner = new WispClient({ url, token: (await post("/api/setup", { email: "me@example.com", name: "Me", password: "password123" })).token });
   await owner.request("PUT", "/api/features", { invite: true });
   const inv = await owner.request<{ code: string }>("POST", "/api/invites", { role: "member", days: 1 });
-  sam = new WarrenClient({ url, token: (await post("/api/invites/accept", { code: inv.code, name: "Sam", email: "sam@example.com", password: "password123" })).token });
+  sam = new WispClient({ url, token: (await post("/api/invites/accept", { code: inv.code, name: "Sam", email: "sam@example.com", password: "password123" })).token });
   const { node, token } = await owner.request("POST", "/api/nodes", { name: "box" });
   nodeId = node.id;
   // answers anyone, so Sam can ask it too (and be refused by the device check, not by who it answers)
@@ -174,7 +174,7 @@ describe("harness settings", () => {
     expect(await status(sam.request("POST", `/api/nodes/${nodeId}/harness-accounts/hermes`, { op: "add", label: "Mine" }))).toBe(403);
   });
 
-  it("says how to sign in where it can't from Warren", async () => {
+  it("says how to sign in where it can't from Wisp", async () => {
     expect(await status(owner.request("POST", `/api/nodes/${nodeId}/harness-accounts/goose`, { op: "add", label: "Two" }))).toBe(422);
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { FEATURE_PRESETS, type Agent, type DeviceRole, type Features } from "@warren/core";
-import { harnessInfo, harnessLabel, runsInVm } from "@warren/core/src/harnesses.ts";
+import { FEATURE_PRESETS, type Agent, type DeviceRole, type Features } from "@wisp/core";
+import { harnessInfo, harnessLabel, runsInVm } from "@wisp/core/src/harnesses.ts";
 import { api } from "./api.ts";
 import { accessSkipped, onPublicAddress } from "./access.ts";
 import { useStore } from "./store.ts";
@@ -24,7 +24,7 @@ export const STEPS = ["ready", "agent", "anywhere", "devices"] as const;
 export type StepId = (typeof STEPS)[number];
 export type SetupChoices = Partial<Record<StepId, boolean>>;
 const useSetupRevision = create<{ revision: number }>(() => ({ revision: 0 }));
-const setupKey = (workspaceId: string) => `warren.setup.v2.${workspaceId}`;
+const setupKey = (workspaceId: string) => `wisp.setup.v2.${workspaceId}`;
 
 export function savedSetup(workspaceId: string): SetupChoices {
   try { return JSON.parse(localStorage.getItem(setupKey(workspaceId)) ?? "{}") ?? {}; } catch { return {}; }
@@ -45,7 +45,7 @@ export function stepsDone(s: OnboardingState | null, choices: SetupChoices = {})
   };
 }
 
-const DISMISS_KEY = "warren.onboarding.dismissed";
+const DISMISS_KEY = "wisp.onboarding.dismissed";
 
 export function isDismissed(): boolean {
   try {
@@ -176,9 +176,9 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
     return out;
   }
   out.push({ id: "helper", status: "ok", label: `You have a helper: ${agent.name}`, fix: null, to: null });
-  // helpers that join from outside Warren don't need a device here
+  // helpers that join from outside Wisp don't need a device here
   if (harnessInfo(agent.harness)?.protocol === "mcp") {
-    out.push({ id: "device", status: "ok", label: `${agent.name} runs outside Warren and needs no device here`, fix: null, to: null });
+    out.push({ id: "device", status: "ok", label: `${agent.name} runs outside Wisp and needs no device here`, fix: null, to: null });
     return out;
   }
   const agentRoute = (tab: "device" | "model"): Route => ({ view: "agents", agentId: agent.id, tab });
@@ -199,7 +199,7 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
       id: "online",
       status: "bad",
       label: `${device.name} is on and connected`,
-      fix: device.paused ? `${device.name} is paused. Resume Warren on it.` : `Turn on ${device.name} and make sure Warren is running there.`,
+      fix: device.paused ? `${device.name} is paused. Resume Wisp on it.` : `Turn on ${device.name} and make sure Wisp is running there.`,
       to: { view: "nodes" },
     });
     out.push(unknown("harness", "Its AI is installed there"));
@@ -215,11 +215,7 @@ export function helperChecklist(agents: AgentLike[], devices: DeviceInfo[] | nul
   return out;
 }
 
-/** True when the page is served from this computer only, so its address won't work from another computer. */
-export function isLocalOnlyHost(hostname: string): boolean {
-  const h = hostname.trim().toLowerCase();
-  return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
-}
+export { isLocalOnlyHost } from "./loopback.ts";
 
 /** The features an owner's Simple or Advanced choice sets for the organization: Simple keeps the extras off, Advanced turns them all on. */
 export function featuresForExperience(choice: "simple" | "advanced"): Features {

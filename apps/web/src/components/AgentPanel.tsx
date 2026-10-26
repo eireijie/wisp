@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Activity, BookOpen, Check, MessageSquare, ChevronRight, Square, Cpu, Eye, ExternalLink, Ghost as GhostIcon, Hand, LayoutGrid, ListChecks, Loader2, Maximize2, Minimize2, Monitor, Phone, Plug, Radar, ScrollText, Server, Shield, Sparkles, Video, X } from "lucide-react";
-import { harnessLabel, type Agent } from "@warren/core";
-import { soulPath } from "@warren/core/src/soul.ts";
-import { defaultAppearance } from "@warren/core/src/appearance.ts";
+import { harnessLabel, type Agent } from "@wisp/core";
+import { soulPath } from "@wisp/core/src/soul.ts";
+import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { api } from "../api.ts";
 import { useStore, useTeams, type ComputerInfo, type LiveRun } from "../store.ts";
 import { useFeature } from "../features.ts";
@@ -14,7 +14,7 @@ import { useComputerState } from "../views/ComputersView.tsx";
 import { LiveScreen, WorkingBadge } from "./Screen.tsx";
 import { Ghost } from "./Ghost.tsx";
 import { prettyModel, effortName } from "./EffortSlider.tsx";
-import { AgentAvatar, AGENT_STATUS, Button, HARNESS_LABELS, Pill, cx, timeAgo } from "./ui.tsx";
+import { AgentAvatar, AGENT_STATUS, Button, Pill, cx, timeAgo } from "./ui.tsx";
 import { RightPane } from "./RightPane.tsx";
 import { runActivity, stopRuns } from "./ActivityPill.tsx";
 import { minutesSince, runStartedAt, workSteps } from "./agentActivity.ts";
@@ -157,7 +157,7 @@ function Details({ agent, onCall, runs, inDm }: { agent: Agent; onCall: () => vo
   const statusRow: Row = ["Status", <span className="inline-flex flex-wrap items-center justify-end gap-1.5"><span className="capitalize">{status.label}</span>{!readiness.ready && <SetupIncomplete problem={readiness.problem} />}</span>];
   const deviceRow: Row = ["Device", device ? device.name : "None yet"];
   const computerRow: Row = ["Computer", computer ? computer.name : agent.settings.headless ? "None (headless)" : "None yet"];
-  const harnessRow: Row = ["Harness", HARNESS_LABELS[agent.harness]];
+  const harnessRow: Row = ["Harness", harnessLabel(agent.harness)];
   const modelRow: Row = ["Model", agent.model ? `${prettyModel(agent.model)}${agent.settings.effort ? ` · ${effortName(agent.settings.effort)}` : ""}${agent.settings.fast ? " · Fast" : ""}` : "Default"];
   const accessRow: Row = ["Access", ACCESS_LABEL[agent.settings.access ?? "edit"]];
   const onTeams = teams.filter((t) => t.members.some((m) => m.agentId === agent.id)).map((t) => `#${t.name}`);
@@ -274,7 +274,7 @@ export function setupNextStep(agent: Pick<Agent, "id" | "nodeId" | "harness" | "
   if (!agent.nodeId) return { text: `Choose the computer that runs ${agent.name}.`, href: href({ view: "agents", agentId: agent.id, tab: "device" }), action: "Choose a device" };
   const device = devices?.find((d) => d.id === agent.nodeId);
   if (!device) return null;
-  if (!device.online) return { text: `Open Warren on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "nodes" }), action: "See devices" };
+  if (!device.online) return { text: `Open Wisp on ${device.name} so it reconnects. Messages wait until then.`, href: href({ view: "nodes" }), action: "See devices" };
   if (device.paused) return { text: `${device.name} is paused. Resume it on that computer.`, href: href({ view: "nodes" }), action: "See devices" };
   return { text: `Install ${harnessLabel(agent.harness)} on ${device.name}.`, href: href({ view: "settings", page: "runtimes" }), action: "Install it" };
 }

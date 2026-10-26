@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type { Agent, LeadStatus } from "@warren/core";
+import type { Agent, LeadStatus } from "@wisp/core";
 import type { Caller } from "./api.ts";
 import type { Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
@@ -32,7 +32,7 @@ export function taskInstructions(store: Store, agentId: string, trigger: { parts
       ? `\n\nCode: you'll work in your own checkout of \`${team.repo}\` on branch \`${task.branch}\` (from \`${team.baseBranch}\`). Commit your work on that branch${isRemote(team.repo) ? " and push it" : ""}.`
       : "";
   const solo = store.agents(task.workspaceId).length === 1 ? "\n\nYou're the only agent so far, so this one's yours to do." : "";
-  return `\n\nThis is task \`${task.id}\`.${code}${solo}\n\nWhen finished, report back with the task result (warren tool \`task_update\`, status done).`;
+  return `\n\nThis is task \`${task.id}\`.${code}${solo}\n\nWhen finished, report back with the task result (wisp tool \`task_update\`, status done).`;
 }
 
 /**
@@ -49,6 +49,7 @@ export function failTaskOfRun(hub: Hub, run: { agentId: string; channelId: strin
   const result = `${agent?.name ?? "The agent"}'s run failed: ${reason.trim().replace(/\.+$/, "")}`;
   store.updateTask(task.id, "failed", result);
   hub.broadcast(task.workspaceId, { type: "tasks_changed" });
+  hub.flows.taskFinished(store.task(task.id)!, null);
   const from = task.from.kind === "agent" ? store.agent(task.from.id) : undefined;
   const parent = task.parentId ? store.task(task.parentId) : undefined;
   hub.postMessage({

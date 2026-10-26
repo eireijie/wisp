@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
+import { pairingLink } from "../../pairing.ts";
 import { Check, Copy, Smartphone } from "lucide-react";
 import { api } from "../../api.ts";
 import { Button, cx } from "../../components/ui.tsx";
@@ -55,11 +56,12 @@ export function PhonePairing({ autoStart = false, compact = false }: { autoStart
     setError(null);
     setBusy(true);
     try {
-      const s = await api<Started>("POST", "/api/pair", { origin: window.location.origin });
+      const response = await api<Started>("POST", "/api/pair", { origin: window.location.origin });
       if (current !== generation.current) {
-        void api("POST", `/api/pair/${s.id}/cancel`).catch(() => {});
+        void api("POST", `/api/pair/${response.id}/cancel`).catch(() => {});
         return;
       }
+      const s = { ...response, link: pairingLink(response.link) };
       live.current = s.id;
       setStarted(s);
       setPairing(s);
@@ -114,15 +116,29 @@ export function PhonePairing({ autoStart = false, compact = false }: { autoStart
   };
   const reject = async () => {
     if (!pairing) return;
-    await api("POST", `/api/pair/${pairing.id}/cancel`).catch(() => {});
-    live.current = null;
-    setPairing({ ...pairing, state: "rejected" });
+    setBusy(true);
+    setError(null);
+    try {
+      await api("POST", `/api/pair/${pairing.id}/cancel`);
+      live.current = null;
+      setPairing({ ...pairing, state: "rejected" });
+    } catch (e) {
+      setError(`Couldn't cancel pairing: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
   };
   const copy = async () => {
     if (!started) return;
-    await navigator.clipboard.writeText(started.link).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setCopied(false);
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(started.link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (e) {
+      setError(`Couldn't copy pairing link: ${(e as Error).message}`);
+    }
   };
 
   const step = state === "claimed" ? 2 : state === "approved" ? 3 : 1;
@@ -173,7 +189,7 @@ export function PhonePairing({ autoStart = false, compact = false }: { autoStart
                   <Button variant="primary" onClick={confirm} disabled={busy}>
                     Yes, pair it
                   </Button>
-                  <Button variant="ghost" onClick={reject}>
+                  <Button variant="ghost" onClick={reject} disabled={busy}>
                     No, cancel
                   </Button>
                 </div>

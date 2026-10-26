@@ -1,3 +1,4 @@
+import { envVar } from "@wisp/core";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -5,7 +6,7 @@ import path from "node:path";
 /**
  * Where the memory vault lives. By default it's `<data>/vault`. The owner can point it at any
  * folder on the hub's machine, such as an existing Obsidian vault, with Settings → Memory or the
- * WARREN_VAULT_DIR environment variable (which wins). The choice is saved in
+ * WISP_VAULT_DIR environment variable (which wins). The choice is saved in
  * `<data>/vault-location.json`, next to the database, and read once when the hub starts.
  */
 export interface VaultLocation {
@@ -51,7 +52,7 @@ export function expandPath(p: string): string {
 
 export function resolveVaultLocation(dataDir: string, env: NodeJS.ProcessEnv = process.env): VaultLocation {
   const saved = readSaved(dataDir);
-  const fromEnv = env.WARREN_VAULT_DIR?.trim();
+  const fromEnv = envVar("VAULT_DIR", env)?.trim();
   const setting = saved.path ? expandPath(saved.path) : null;
   const chosen = fromEnv ? expandPath(fromEnv) : (setting ?? defaultVaultDir(dataDir));
   const last = saved.lastUsed ?? (fs.existsSync(defaultVaultDir(dataDir)) ? defaultVaultDir(dataDir) : null);
@@ -78,15 +79,15 @@ const real = (p: string) => {
 
 /** Why a folder can't be the vault, in words for the owner; null when it's fine. */
 export function vaultDirProblem(raw: string, dataDir: string): string | null {
-  if (!raw.trim()) return "Enter a folder on the machine that runs Warren.";
+  if (!raw.trim()) return "Enter a folder on the machine that runs Wisp.";
   const p = expandPath(raw);
   if (!path.isAbsolute(p)) return "Enter the full path of the folder.";
   if (p === path.parse(p).root) return "Pick a folder, not the whole drive.";
   if (real(p) === real(os.homedir())) return "Pick a folder inside your home folder, not the home folder itself.";
   const data = real(dataDir);
   const target = real(p);
-  if (inside(data, target)) return "That folder contains Warren's own data (the database), so it can't hold memory. Pick a different one.";
-  if (inside(target, path.join(data, "files"))) return "That folder is where Warren keeps uploaded files.";
+  if (inside(data, target)) return "That folder contains Wisp's own data (the database), so it can't hold memory. Pick a different one.";
+  if (inside(target, path.join(data, "files"))) return "That folder is where Wisp keeps uploaded files.";
   try {
     const st = fs.statSync(p);
     if (!st.isDirectory()) return "That is a file, not a folder.";
@@ -96,7 +97,7 @@ export function vaultDirProblem(raw: string, dataDir: string): string | null {
   return null;
 }
 
-/** Save the owner's choice (null goes back to the default). It takes effect the next time Warren starts. */
+/** Save the owner's choice (null goes back to the default). It takes effect the next time Wisp starts. */
 export function saveVaultLocation(dataDir: string, raw: string | null): { ok: true } | { ok: false; error: string } {
   if (raw === null || raw.trim() === "") {
     writeSaved(dataDir, { ...readSaved(dataDir), path: null });
@@ -107,11 +108,11 @@ export function saveVaultLocation(dataDir: string, raw: string | null): { ok: tr
   const p = expandPath(raw);
   try {
     fs.mkdirSync(p, { recursive: true });
-    const probe = path.join(p, `.warren-write-test-${process.pid}`);
+    const probe = path.join(p, `.wisp-write-test-${process.pid}`);
     fs.writeFileSync(probe, "");
     fs.rmSync(probe);
   } catch {
-    return { ok: false, error: "Warren can't write to that folder. Check that it exists and that this account may change it." };
+    return { ok: false, error: "Wisp can't write to that folder. Check that it exists and that this account may change it." };
   }
   writeSaved(dataDir, { ...readSaved(dataDir), path: p });
   return { ok: true };

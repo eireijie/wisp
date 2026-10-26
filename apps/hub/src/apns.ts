@@ -1,16 +1,17 @@
+import { envVar } from "@wisp/core";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http2 from "node:http2";
-import { parseMentions, type ClientEvent, type Message } from "@warren/core";
+import { parseMentions, type ClientEvent, type Message } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 /**
- * Push notifications to Warren's iOS app through Apple's push service (APNs), so people hear about
+ * Push notifications to Wisp's iOS app through Apple's push service (APNs), so people hear about
  * agent replies, @mentions, approvals and "needs you on its computer" while the app is closed.
  *
  * Optional: a hub without an APNs key keeps device tokens but sends nothing. The key is the
  * self-hoster's own (Apple Developer → Keys → a .p8 with Apple Push Notifications), from env vars
- * (WARREN_APNS_*) or, if those aren't set, from Settings (an owner's PUT /api/settings/push).
+ * (WISP_APNS_*) or, if those aren't set, from Settings (an owner's PUT /api/settings/push).
  */
 export interface ApnsConfig {
   keyId: string;
@@ -29,11 +30,12 @@ export interface PushDevice {
   workspaceId: string;
   bundleId: string | null;
   environment: "production" | "sandbox" | null;
+  platform: "ios" | "android";
 }
 
 export interface PushPayload {
   aps: { alert: { title: string; body: string }; sound?: string; badge?: number; "thread-id"?: string };
-  warren: { kind: "message" | "approval" | "computer" | "test"; category: "dm" | "reply" | "mention" | "channel" | "approval" | "help" | "other"; channelId?: string; threadId?: string | null; approvalId?: string; computerId?: string };
+  wisp: { kind: "message" | "approval" | "computer" | "test"; category: "dm" | "reply" | "mention" | "channel" | "approval" | "help" | "other"; channelId?: string; threadId?: string | null; approvalId?: string; computerId?: string };
 }
 
 /** What a send came back with: APNs' status and reason ("BadDeviceToken", "Unregistered"…). */
@@ -44,7 +46,7 @@ export interface PushResult {
 
 export type PushTransport = (origin: string, path: string, headers: Record<string, string>, body: string) => Promise<PushResult>;
 
-export const DEFAULT_TOPIC = "ai.warren.ios";
+export const DEFAULT_TOPIC = "ai.wisp.ios";
 const SETTING = "push.apns";
 const ORIGINS = { production: "https://api.push.apple.com", sandbox: "https://api.sandbox.push.apple.com" };
 /** APNs refuses provider tokens older than an hour and too-frequent new ones; 50 minutes sits between. */
@@ -72,14 +74,16 @@ export class Apns {
   /** The APNs key in use: env vars win over Settings. Null when push isn't set up. */
   config(workspaceId: string): (ApnsConfig & { source: "env" | "settings" }) | null {
     const env = process.env;
-    const envKey = env.WARREN_APNS_KEY ?? (env.WARREN_APNS_KEY_FILE ? readKey(env.WARREN_APNS_KEY_FILE) : undefined);
-    if (env.WARREN_APNS_KEY_ID && env.WARREN_APNS_TEAM_ID && envKey)
+    const keyFile = envVar("APNS_KEY_FILE", env);
+    const envKey = envVar("APNS_KEY", env) ?? (keyFile ? readKey(keyFile) : undefined);
+    const keyId = envVar("APNS_KEY_ID", env), teamId = envVar("APNS_TEAM_ID", env);
+    if (keyId && teamId && envKey)
       return {
-        keyId: env.WARREN_APNS_KEY_ID,
-        teamId: env.WARREN_APNS_TEAM_ID,
+        keyId,
+        teamId,
         key: envKey.replace(/\\n/g, "\n"),
-        topic: env.WARREN_APNS_TOPIC || DEFAULT_TOPIC,
-        environment: env.WARREN_APNS_ENV === "sandbox" ? "sandbox" : "production",
+        topic: envVar("APNS_TOPIC", env) || DEFAULT_TOPIC,
+        environment: envVar("APNS_ENV", env) === "sandbox" ? "sandbox" : "production",
         source: "env",
       };
     const saved = this.hub.store.setting(workspaceId, SETTING);
@@ -100,26 +104,28 @@ export class Apns {
   // --- devices ----------------------------------------------------------------------------------
 
   /** Remember a phone for this sign-in. Signing out deletes the sign-in, and the phone with it. */
-  register(sessionHash: string, userId: string, workspaceId: string, d: { token: string; bundleId?: string | null; environment?: "production" | "sandbox" | null }) {
+  register(sessionHash: string, userId: string, workspaceId: string, d: { token: string; bundleId?: string | null; environment?: "production" | "sandbox" | null; platform?: "ios" | "android" }) {
+    const platform = d.platform ?? "ios";
     const at = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO push_devices (token, session_hash, user_id, workspace_id, bundle_id, environment, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (token) DO UPDATE SET session_hash = excluded.session_hash, user_id = excluded.user_id, workspace_id = excluded.workspace_id,
+        `INSERT INTO push_devices (token, session_hash, user_id, workspace_id, platform, bundle_id, environment, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (token) DO UPDATE SET session_hash = excluded.session_hash, user_id = excluded.user_id, workspace_id = excluded.workspace_id, platform = excluded.platform,
            bundle_id = excluded.bundle_id, environment = excluded.environment, updated_at = excluded.updated_at`,
       )
-      .run(d.token.toLowerCase(), sessionHash, userId, workspaceId, d.bundleId ?? null, d.environment ?? null, at, at);
+      // APNs tokens are hex (case doesn't matter); FCM tokens are case-sensitive
+      .run(platform === "ios" ? d.token.toLowerCase() : d.token, sessionHash, userId, workspaceId, platform, d.bundleId ?? null, d.environment ?? null, at, at);
   }
 
   /** Forget one phone, or every phone on this sign-in. */
   unregister(sessionHash: string, token?: string) {
-    if (token) return this.db.prepare("DELETE FROM push_devices WHERE token = ? AND session_hash = ?").run(token.toLowerCase(), sessionHash).changes;
+    if (token) return this.db.prepare("DELETE FROM push_devices WHERE (token = ? OR token = ?) AND session_hash = ?").run(token, token.toLowerCase(), sessionHash).changes;
     return this.db.prepare("DELETE FROM push_devices WHERE session_hash = ?").run(sessionHash).changes;
   }
 
   devices(userId: string): PushDevice[] {
     return this.db
-      .prepare("SELECT token, user_id AS userId, workspace_id AS workspaceId, bundle_id AS bundleId, environment FROM push_devices WHERE user_id = ?")
+      .prepare("SELECT token, user_id AS userId, workspace_id AS workspaceId, bundle_id AS bundleId, environment, platform FROM push_devices WHERE user_id = ?")
       .all(userId) as PushDevice[];
   }
 
@@ -149,7 +155,7 @@ export class Apns {
       const members = store.channelMembers(ch.id).filter((a) => a.kind === "user" && !(m.author.kind === "user" && a.id === m.author.id));
       const from = m.author.kind === "agent" ? agentName(m.author.id) : this.personName(m.author.id);
       const where = { kind: "message" as const, channelId: ch.id, threadId: m.threadId };
-      const push = (userId: string, title: string, category: PushPayload["warren"]["category"]) => out.has(userId) || out.set(userId, { aps: { alert: { title, body: preview(m) }, "thread-id": ch.id }, warren: { ...where, category } });
+      const push = (userId: string, title: string, category: PushPayload["wisp"]["category"]) => out.has(userId) || out.set(userId, { aps: { alert: { title, body: preview(m) }, "thread-id": ch.id }, wisp: { ...where, category } });
 
       // an agent wrote to you in a DM
       if (ch.kind === "dm" && m.author.kind === "agent") for (const u of members) push(u.id, from, "dm");
@@ -174,7 +180,7 @@ export class Apns {
     if (e.type === "approval" && e.approval.status === "pending" && this.once(`approval:${e.approval.id}`)) {
       const a = e.approval;
       for (const u of store.channelMembers(a.channelId))
-        if (u.kind === "user") out.set(u.id, { aps: { alert: { title: `${agentName(a.agentId)} wants your OK`, body: a.summary } }, warren: { kind: "approval", category: "approval", approvalId: a.id, channelId: a.channelId, threadId: a.threadId } });
+        if (u.kind === "user") out.set(u.id, { aps: { alert: { title: `${agentName(a.agentId)} wants your OK`, body: a.summary } }, wisp: { kind: "approval", category: "approval", approvalId: a.id, channelId: a.channelId, threadId: a.threadId } });
     }
 
     if (e.type === "computer") {
@@ -182,7 +188,7 @@ export class Apns {
       if (!c.help) this.seen.delete(`help:${c.id}`);
       else if (this.once(`help:${c.id}`))
         for (const p of store.members(workspaceId))
-          out.set(p.id, { aps: { alert: { title: `${agentName(c.help.agentId)} needs you on ${c.name}`, body: c.help.request } }, warren: { kind: "computer", category: "help", computerId: c.id } });
+          out.set(p.id, { aps: { alert: { title: `${agentName(c.help.agentId)} needs you on ${c.name}`, body: c.help.request } }, wisp: { kind: "computer", category: "help", computerId: c.id } });
     }
     return [...out];
   }
@@ -191,12 +197,20 @@ export class Apns {
 
   /** Push to this person's phones in the event's workspace, with that workspace's unread badge. */
   async sendTo(workspaceId: string, userId: string, payload: PushPayload): Promise<{ sent: number; failed: { status: number; reason?: string }[] }> {
-    const devices = this.devices(userId).filter((d) => d.workspaceId === workspaceId);
+    const all = this.devices(userId).filter((d) => d.workspaceId === workspaceId);
     const result = { sent: 0, failed: [] as { status: number; reason?: string }[] };
-    if (!devices.length) return result;
-    const cfg = this.config(workspaceId);
+    if (!all.length) return result;
+    const badge = this.unread(userId, workspaceId);
+    // Android phones go through Firebase (fcm.ts)
+    if (all.some((d) => d.platform === "android")) {
+      const android = await this.hub.fcm.sendTo(workspaceId, userId, payload, badge);
+      result.sent += android.sent;
+      result.failed.push(...android.failed);
+    }
+    const devices = all.filter((d) => d.platform !== "android");
+    const cfg = devices.length ? this.config(workspaceId) : null;
     if (!cfg) return result;
-    const body = JSON.stringify({ ...payload, aps: { sound: "default", badge: this.unread(userId, workspaceId), ...payload.aps } });
+    const body = JSON.stringify({ ...payload, aps: { sound: "default", badge, ...payload.aps } });
     for (const d of devices) {
       const env = d.environment ?? cfg.environment;
       let r = await this.post(cfg, env, d, body).catch((err: Error) => ({ status: 0, reason: err.message }) as PushResult);
@@ -265,7 +279,7 @@ export class Apns {
   }
 }
 
-/** "@yug", "@yugal": what people are @mentioned as (their preferred name and first name). */
+/** "@alex", "@alexandra": what people are @mentioned as (their preferred name and first name). */
 function handlesOf(p: { name: string; preferredName: string | null }) {
   return [p.preferredName, p.name.split(/\s+/)[0]].filter((x): x is string => !!x).map((x) => x.toLowerCase());
 }

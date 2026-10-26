@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { MAX_TRANSFER_BYTES, POSIX_FILES, expandHome, parseListing, sortEntries, type FileEntry, type FolderListing } from "@warren/core";
+import { MAX_TRANSFER_BYTES, POSIX_FILES, expandHome, parseListing, sortEntries, type FileEntry, type FolderListing } from "@wisp/core";
 import { ActionError, exec, has, type ExecResult } from "./driver.ts";
 
 /** A computer's clipboard (text). */
@@ -81,7 +81,7 @@ export function localFiles(home = os.homedir()): Files {
     }
     const homeReal = await fs.realpath(home);
     const rel = path.relative(homeReal, real);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new ActionError("Only files in your home folder can be reached from Warren");
+    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new ActionError("Only files in your home folder can be reached from Wisp");
     return real;
   };
   return {

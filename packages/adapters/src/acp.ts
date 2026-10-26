@@ -2,13 +2,13 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { shortDescription, type AccessLevel, type AgentEvent, type CommandOption, type ConnectorSpec, type HarnessCatalog, type ModelOption } from "@warren/core";
+import { shortDescription, type AccessLevel, type AgentEvent, type CommandOption, type ConnectorSpec, type HarnessCatalog, type ModelOption } from "@wisp/core";
 import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
 import { commandVersion, launched, spawnCommand, stopProcess } from "./process.ts";
 
 /**
  * Agent Client Protocol (https://agentclientprotocol.com): JSON-RPC 2.0 over stdio, one JSON
- * object per line. Warren is the client; the harness is the agent. One run is: initialize,
+ * object per line. Wisp is the client; the harness is the agent. One run is: initialize,
  * session/new (or session/load to resume), then session/prompt while session/update
  * notifications stream what the agent does.
  */
@@ -137,7 +137,7 @@ export class AcpError extends Error {
 /** ACP wants MCP server env as a list of {name, value}. Exported for tests. */
 export function acpMcpServers(mcp: McpServerSpec | undefined, browser?: McpServerSpec, connectors: ConnectorSpec[] = []): Json[] {
   const out: Json[] = [];
-  for (const [name, s] of [["warren", mcp], ["browser", browser]] as [string, McpServerSpec | undefined][]) {
+  for (const [name, s] of [["wisp", mcp], ["browser", browser]] as [string, McpServerSpec | undefined][]) {
     if (s) out.push({ name, command: s.command, args: s.args, env: Object.entries(s.env).map(([n, value]) => ({ name: n, value })) });
   }
   // every ACP agent must accept stdio servers; http ones are optional in the protocol, so they're left out
@@ -150,7 +150,7 @@ export function acpMcpServers(mcp: McpServerSpec | undefined, browser?: McpServe
 
 /**
  * Answer a permission request from the agent. Read-only agents may look but not change or run
- * anything; "edit" and "full" agents may go ahead (headless runs have nobody to ask, and Warren's
+ * anything; "edit" and "full" agents may go ahead (headless runs have nobody to ask, and Wisp's
  * own tools are checked by the hub). Exported for tests.
  */
 export function permissionOutcome(params: Json, access: AccessLevel): Json {
@@ -176,7 +176,7 @@ function contentText(c: Json): string {
 }
 
 /**
- * Translate one session/update into Warren events. `tools` remembers each tool call's name so
+ * Translate one session/update into Wisp events. `tools` remembers each tool call's name so
  * results can be matched to it. Exported for tests.
  */
 export function parseAcpUpdate(update: Json, tools = new Map<string, string>()): AdapterEvent[] {
@@ -208,14 +208,14 @@ export function parseAcpUpdate(update: Json, tools = new Map<string, string>()):
   }
 }
 
-/** A tool call's name: MCP tools keep their server-qualified name so Warren can recognize its own. */
+/** A tool call's name: MCP tools keep their server-qualified name so Wisp can recognize its own. */
 function toolName(u: Json): string {
   const title = String(u.title ?? "").trim();
   const raw = u._meta?.toolName ?? u.rawInput?.tool ?? null;
   if (typeof raw === "string" && raw) return raw;
-  // agents title MCP calls like "warren/chat_send", "mcp__warren__chat_send" or "chat_send (warren MCP Server)"
-  const m = title.match(/^(?:mcp__)?warren(?:__|\/|\.|:)\s*([a-z_]+)/i) ?? title.match(/^([a-z][a-z_]+)\s*\(warren/i);
-  if (m) return `warren.${m[1]}`;
+  // agents title MCP calls like "wisp/chat_send", "mcp__wisp__chat_send" or "chat_send (wisp MCP Server)"
+  const m = title.match(/^(?:mcp__)?wisp(?:__|\/|\.|:)\s*([a-z_]+)/i) ?? title.match(/^([a-z][a-z_]+)\s*\(wisp/i);
+  if (m) return `wisp.${m[1]}`;
   if (u.kind && u.kind !== "other") return title ? `${u.kind}: ${title}`.slice(0, 120) : u.kind;
   return (title || "tool").slice(0, 120);
 }
@@ -289,8 +289,8 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
         },
         async (method, params) => {
           if (method === "session/request_permission") return permissionOutcome(params, input.access ?? "edit");
-          // Warren doesn't offer files or terminals to the agent; it uses its own
-          throw new Error(`${method} is not supported by Warren`);
+          // Wisp doesn't offer files or terminals to the agent; it uses its own
+          throw new Error(`${method} is not supported by Wisp`);
         },
       );
       const onAbort = () => {
@@ -300,7 +300,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
       input.signal?.addEventListener("abort", onAbort, { once: true });
 
       try {
-        const init = await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "warren", version: "0.1.0" } }, 60_000);
+        const init = await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "wisp", version: "0.1.0" } }, 60_000);
         const mcpServers = acpMcpServers(input.mcp, input.browser, input.connectors);
         let session: Json = null;
         if (input.sessionId && init?.agentCapabilities?.loadSession) {
@@ -315,9 +315,9 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
           try {
             session = await conn.request("session/new", { cwd: input.cwd, mcpServers }, 120_000);
           } catch (err) {
-            // some agents (OpenClaw) refuse per-session MCP servers; run without Warren's tools rather than not at all
+            // some agents (OpenClaw) refuse per-session MCP servers; run without Wisp's tools rather than not at all
             if (!mcpServers.length || !/mcp/i.test((err as Error).message)) throw err;
-            onEvent({ type: "status", text: `${info.label} doesn't accept Warren's tools per session; add warren-mcp to its own MCP settings to give it chat, memory and computer tools.` });
+            onEvent({ type: "status", text: `${info.label} doesn't accept Wisp's tools per session; add wisp-mcp to its own MCP settings to give it chat, memory and computer tools.` });
             session = await conn.request("session/new", { cwd: input.cwd, mcpServers: [] }, 120_000);
           }
           sessionId = session?.sessionId;
@@ -354,7 +354,7 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
       const version = await commandVersion(info.binary);
       const base: HarnessCatalog = { harness: info.id, version, models: [], efforts: [] };
       if (version === null) return base;
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "warren-acp-"));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-acp-"));
       const cmd = command();
       const child = spawnCommand(cmd.command, cmd.args, { cwd: dir, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
       // agents announce their "/" commands in a session/update right after the session starts

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Bot, ChevronLeft, ChevronRight, Hand, ListTodo, Loader2, MessageSquare, Plus, ShieldQuestion } from "lucide-react";
-import type { Actor, Agent } from "@warren/core";
+import type { Actor, Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, useTeams, useWaitingOnYou, type LiveRun } from "../store.ts";
 import { useFeatures } from "../features.ts";

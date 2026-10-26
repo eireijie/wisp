@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { Vault } from "@warren/vault";
+import { Vault } from "@wisp/vault";
 import type { Store } from "./store.ts";
 
 interface Opened {

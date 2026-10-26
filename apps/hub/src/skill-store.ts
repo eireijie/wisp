@@ -1,4 +1,4 @@
-import { frontMatter, linkedSkillContent, skillBody, skillLicense, skillTitle, type StoreSkill } from "@warren/core";
+import { frontMatter, linkedSkillContent, skillBody, skillLicense, skillTitle, type StoreSkill } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 /** Public SKILL.md repos the store reads live. Each skill links back to its folder there. */
@@ -29,7 +29,7 @@ export class PublicSkills {
   constructor(private hub: Hub) {}
 
   private async fetch(url: string, json: boolean): Promise<any> {
-    const res = await this.hub.fetchImpl(url, { headers: { accept: json ? "application/vnd.github+json" : "text/plain", "user-agent": "warren-hub" }, signal: AbortSignal.timeout(20_000) });
+    const res = await this.hub.fetchImpl(url, { headers: { accept: json ? "application/vnd.github+json" : "text/plain", "user-agent": "wisp-hub" }, signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
     return json ? res.json() : res.text();
   }
@@ -105,7 +105,7 @@ export class PublicSkills {
   async installable(id: string): Promise<{ skill: StoreSkill; name: string; description: string; content: string; tags: string[] } | undefined> {
     const f = (await this.load()).found.find((x) => x.skill.id === id);
     if (!f) return undefined;
-    if (!f.skill.license.open) throw Object.assign(new Error(`${f.skill.name} isn't open source (${f.skill.license.label}), so Warren links to it instead of copying it: ${f.skill.url}`), { status: 403 });
+    if (!f.skill.license.open) throw Object.assign(new Error(`${f.skill.name} isn't open source (${f.skill.license.label}), so Wisp links to it instead of copying it: ${f.skill.url}`), { status: 403 });
     return {
       skill: f.skill,
       name: f.skill.name,

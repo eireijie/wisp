@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { HARNESSES } from "@warren/core";
+import { HARNESSES } from "@wisp/core";
 import { api, ApiError } from "../../api.ts";
 import { useStore } from "../../store.ts";
 import { usableDevices, useDevices } from "../../devices.ts";

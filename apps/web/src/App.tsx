@@ -13,6 +13,7 @@ import { ChannelView } from "./views/ChannelView.tsx";
 import { VaultView } from "./views/VaultView.tsx";
 import { AgentsView } from "./views/AgentsView.tsx";
 import { NodesView } from "./views/NodesView.tsx";
+import { DevicePage } from "./views/DevicePage.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
 import { JoinApproval } from "./components/JoinApproval.tsx";
@@ -38,7 +39,7 @@ export function App() {
   const [authed, setAuthed] = useState(() => !!getToken());
   const route = useRoute();
   useEffect(() => {
-    if (!authed && route.view !== "buddy") window.warrenDesktop?.buddy.agents([], null);
+    if (!authed && route.view !== "buddy") window.wispDesktop?.buddy.agents([], null);
   }, [authed, route.view]);
   if (route.view === "buddy") return <BuddyView />;
   if (!authed)
@@ -67,11 +68,11 @@ function useIsPhone() {
   return phone;
 }
 
-/** Unread messages on the app icon: the Dock in Warren's desktop app, or the installed PWA's badge. */
+/** Unread messages on the app icon: the Dock in Wisp's desktop app, or the installed PWA's badge. */
 function useUnreadBadge() {
   const unread = useStore((s) => s.channels.reduce((n, c) => n + (c.unread || 0), 0));
   useEffect(() => {
-    const desktop = (window as { warrenDesktop?: { setBadge(n: number): void } }).warrenDesktop;
+    const desktop = (window as { wispDesktop?: { setBadge(n: number): void } }).wispDesktop;
     if (desktop) return desktop.setBadge(unread);
     const nav = navigator as Navigator & { setAppBadge?(n: number): Promise<void>; clearAppBadge?(): Promise<void> };
     (unread ? nav.setAppBadge?.(unread) : nav.clearAppBadge?.())?.catch(() => {});
@@ -113,7 +114,7 @@ function Workspace() {
     return (
       <div className="h-full grid place-items-center p-6 text-center text-sm">
         <div className="space-y-3">
-          <p>Couldn't reach the Warren hub: {error}</p>
+          <p>Couldn't reach the Wisp hub: {error}</p>
           <button className="underline" onClick={() => location.reload()}>
             Retry
           </button>
@@ -154,7 +155,7 @@ function Workspace() {
       case "computers":
         return <ComputersView computerId={route.computerId} teach={route.teach ?? null} />;
       case "nodes":
-        return <NodesView onBack={phone ? toYou : undefined} />;
+        return route.nodeId ? <DevicePage nodeId={route.nodeId} /> : <NodesView onBack={phone ? toYou : undefined} />;
       case "settings":
         return <SettingsView page={route.page ?? null} onBack={toYou} />;
       case "welcome":
@@ -225,7 +226,7 @@ function UpdatedBanner() {
   return (
     <div role="status" className="shrink-0 flex items-center gap-3 px-4 py-2 border-b border-line bg-accent/10 text-sm safe-top">
       <RefreshCw size={15} className="text-accent-text shrink-0" />
-      <span className="flex-1 min-w-0">Warren was updated. Reload to get the new version.</span>
+      <span className="flex-1 min-w-0">Wisp was updated. Reload to get the new version.</span>
       <button className="h-7 px-3 rounded-lg bg-accent text-accent-ink text-xs font-medium shrink-0" onClick={() => location.reload()}>
         Reload
       </button>
@@ -335,7 +336,7 @@ function YouPage() {
           {row(<BookOpen size={17} strokeWidth={2.4} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your helpers share", "#af52de")}
           {row(<Brain size={17} strokeWidth={2.4} />, "About you", href({ view: "about" }), undefined, "What helpers should know about you", "#ff2d55")}
           {row(<Store size={17} strokeWidth={2.4} />, "Marketplace", href({ view: "marketplace" }), undefined, "Apps and skills for your helpers", "#ff9500")}
-          {row(<Server size={17} strokeWidth={2.4} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Warren", "#64748b")}
+          {row(<Server size={17} strokeWidth={2.4} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Wisp", "#64748b")}
         </div>
         <div className="rounded-3xl bg-bg overflow-hidden">
           {row(<LifeBuoy size={17} strokeWidth={2.4} />, "Help", href({ view: "help" }), undefined, "Answers, setup, and what words mean", "#32ade6")}
@@ -371,7 +372,7 @@ function ModePicker() {
 
 export async function logout() {
   await api("POST", "/api/auth/logout").catch(() => {});
-  window.warrenDesktop?.setBadge(0);
+  window.wispDesktop?.setBadge(0);
   const nav = navigator as Navigator & { clearAppBadge?(): Promise<void>; setAppBadge?(n: number): Promise<void> };
   await (nav.clearAppBadge ? nav.clearAppBadge() : nav.setAppBadge?.(0))?.catch(() => {});
   setToken(null);

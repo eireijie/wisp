@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageSquare, PanelRight, Square } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import type { Agent } from "@warren/core";
+import type { Agent } from "@wisp/core";
 import { api } from "../api.ts";
 import { useStore, type LiveRun } from "../store.ts";
 import { describeTool } from "./AgentCards.tsx";

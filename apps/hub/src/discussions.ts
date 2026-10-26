@@ -1,4 +1,4 @@
-import type { Actor, Discussion } from "@warren/core";
+import type { Actor, Discussion } from "@wisp/core";
 import { id } from "./auth.ts";
 import type { Hub } from "./hub.ts";
 
@@ -160,7 +160,7 @@ export class Discussions {
       `tags: [${d.kind === "plan" ? "plan" : "decision"}]`,
     ];
     const body = `---\n${fm.join("\n")}\n---\n# ${d.topic}\n\n${text.trim() || "(The moderator didn't write a summary.)"}\n`;
-    await vault.write(path, body, moderator ? { name: `@${moderator.handle}`, email: `${moderator.handle}@agents.warren` } : { name: "Warren", email: "warren@localhost" }, `Decision: ${d.topic.slice(0, 60)}`);
+    await vault.write(path, body, moderator ? { name: `@${moderator.handle}`, email: `${moderator.handle}@agents.wisp` } : { name: "Wisp", email: "wisp@localhost" }, `Decision: ${d.topic.slice(0, 60)}`);
     return path;
   }
 

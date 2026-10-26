@@ -1,12 +1,12 @@
 import webpush from "web-push";
-import type { Message } from "@warren/core";
+import type { Message } from "@wisp/core";
 import type { Hub } from "./hub.ts";
 
 const KEY = "push_vapid";
 type PushCategory = "approval" | "dm" | "reply" | "channel" | "other";
 
 /**
- * Web push: notifications that reach a person's phone or computer while Warren is closed, from an
+ * Web push: notifications that reach a person's phone or computer while Wisp is closed, from an
  * agent writing to them in a DM or asking for their OK. Each workspace gets its own VAPID keys
  * the first time someone turns push on.
  */
@@ -24,7 +24,6 @@ export class Push {
     return keys;
   }
 
-  /** Who a new message should reach by push, if anyone: people in a DM an agent wrote in, or whoever an approval asks. */
   /**
    * Who hears about an agent's message: in a DM, its person; in a channel, whoever it's answering
    * (and anyone it asks for an OK), plus people who asked for every message there. Muting a
@@ -49,7 +48,7 @@ export class Push {
     if (!to.length) return;
     const agent = this.hub.store.agent(msg.author.id);
     const asks = msg.parts.some((p) => p.type === "approval");
-    const title = asks ? `${agent?.name ?? "An agent"} wants your OK` : (agent?.name ?? "Warren");
+    const title = asks ? `${agent?.name ?? "An agent"} wants your OK` : (agent?.name ?? "Wisp");
     const body = (msg.body || "").replace(/\s+/g, " ").trim().slice(0, 200);
     if (!body) return;
     for (const userId of to) {
@@ -69,7 +68,7 @@ export class Push {
     const { publicKey, privateKey } = this.keys(workspaceId);
     const owner = this.hub.store.members(workspaceId).find((m) => m.role === "owner");
     // push services want a contact; Apple rejects made-up ones, so it's the owner's address
-    const subject = `mailto:${owner?.email ?? "warren@example.com"}`;
+    const subject = `mailto:${owner?.email ?? "wisp@example.com"}`;
     let sent = 0;
     await Promise.all(
       subs.map(async (s) => {
