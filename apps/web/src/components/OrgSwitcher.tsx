@@ -1,29 +1,19 @@
-import { useState, type CSSProperties } from "react";
-import { Check, ChevronDown, Link2, Plus } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Building2, Check, Link2, Plus } from "lucide-react";
 import { useStore } from "../store.ts";
-import { createOrg, joinOrg, orgInitials, orgSummary, orgTone, switchOrg, type Org } from "../orgs.ts";
-import { Button, Field, GhostMark, Input, Modal, Popover, cx } from "./ui.tsx";
+import { createOrg, joinOrg, orgSummary, switchOrg, type Org } from "../orgs.ts";
+import { Button, Field, Input, Modal, Popover, cx } from "./ui.tsx";
 
-/**
- * An organization's tile: Wisp's ghost for your first (personal) one, initials on a tile in a
- * color that comes from its id for the rest.
- */
-export function OrgTile({ org, home, size = 40, round }: { org: Pick<Org, "id" | "name">; home?: boolean; size?: number; round?: boolean }) {
-  const style: CSSProperties = { width: size, height: size, borderRadius: round ? size / 2 : size * 0.35, fontSize: Math.max(10, size * 0.36) };
-  if (home)
-    return (
-      <span className="shrink-0 grid place-items-center bg-ink text-panel" style={style} aria-hidden>
-        <GhostMark size={size * 0.55} />
-      </span>
-    );
+/** An organization's tile: a neutral rounded square with a line building, never a colored letter. */
+export function OrgTile({ size = 36 }: { org?: Pick<Org, "id" | "name">; home?: boolean; size?: number; round?: boolean }) {
   return (
-    <span className="shrink-0 grid place-items-center font-extrabold text-white" style={{ ...style, background: `var(--org-${orgTone(org.id)})` }} aria-hidden>
-      {orgInitials(org.name)}
+    <span className="shrink-0 grid place-items-center bg-chip text-muted" style={{ width: size, height: size, borderRadius: size * 0.3 }} aria-hidden>
+      <Building2 size={size * 0.55} strokeWidth={1.7} />
     </span>
   );
 }
 
-/** Your organizations and which one is open; the first one the hub lists is your own (it gets the ghost). */
+/** Your organizations and which one is open; the first one the hub lists is your own. */
 export function useOrgs(): { orgs: Org[]; current: Org | null; homeId: string | null } {
   const orgs = useStore((s) => s.orgs) ?? [];
   const me = useStore((s) => s.me);
@@ -31,22 +21,26 @@ export function useOrgs(): { orgs: Org[]; current: Org | null; homeId: string | 
   return { orgs, current, homeId: orgs[0]?.id ?? null };
 }
 
-/**
- * The organization's name at the top of the sidebar (or the Chats screen on phones). It opens a
- * menu of every organization you're in, plus New organization and Join with an invite link.
- */
-export function OrgSwitcher({ large }: { large?: boolean }) {
-  const me = useStore((s) => s.me)!;
-  const agents = useStore((s) => s.agents);
-  const members = useStore((s) => s.members);
-  const connected = useStore((s) => s.connected);
-  const { orgs, current, homeId } = useOrgs();
-  const [dialog, setDialog] = useState<"new" | "join" | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const sub = orgSummary({ members: Math.max(1, members.length), agents: agents.length });
+const ROLE = { owner: "Owner", member: "Member", guest: "Guest" } as const;
 
-  const pick = async (o: Org, close: () => void) => {
-    if (o.current || o.id === me.workspace.id) return close();
+/**
+ * Every organization you're in (the open one has a blue check), New organization, and a field to
+ * join one with an invite link or code. Shown as a popover beside the rail on desktops and as a
+ * sheet on phones.
+ */
+export function OrgList({ onDone }: { onDone: () => void }) {
+  const me = useStore((s) => s.me)!;
+  const { orgs } = useOrgs();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [newOrg, setNewOrg] = useState(false);
+  const [code, setCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // a hub without organizations lists none: then it's just this one
+  const list: Pick<Org, "id" | "name" | "role" | "current" | "unread">[] = orgs.length ? orgs : [{ id: me.workspace.id, name: me.workspace.name, role: me.role, current: true, unread: false }];
+
+  const pick = async (o: (typeof list)[number]) => {
+    if (o.current || o.id === me.workspace.id) return onDone();
     setBusy(o.id);
     try {
       await switchOrg(o.id);
@@ -55,57 +49,71 @@ export function OrgSwitcher({ large }: { large?: boolean }) {
       alert(`Couldn't switch: ${(e as Error).message}`);
     }
   };
+  const join = async () => {
+    if (!code.trim() || joining) return;
+    setJoining(true);
+    setError(null);
+    try {
+      await joinOrg(code);
+    } catch (e) {
+      setJoining(false);
+      setError((e as Error).message);
+    }
+  };
 
+  const row = "w-full flex items-center gap-3 min-h-11 px-3.5 rounded-xl text-left text-[15px] hover:bg-hover";
   return (
-    <>
-      <Popover
-        up={false}
-        className="w-72 p-1.5"
-        trigger={(open, toggle) => (
-          <button onClick={toggle} aria-expanded={open} aria-haspopup="menu" className={cx("w-full min-w-0 flex items-center gap-2 rounded-xl px-2 text-left hover:bg-side-hover", large ? "h-12" : "h-11", open && "bg-side-active")}>
-            {large && current && <OrgTile org={current} home={current.id === homeId} size={32} />}
-            <span className="flex-1 min-w-0">
-              <span className={cx("block font-extrabold truncate", large ? "text-xl leading-tight" : "text-[15px]")}>{me.workspace.name}</span>
-              <span className="flex items-center gap-1.5 text-xs text-muted">
-                {!connected && <span className="size-1.5 rounded-full bg-faint animate-pulse" title="Reconnecting…" />}
-                <span className="truncate">{connected ? sub : "Reconnecting…"}</span>
-              </span>
+    <div role="menu" aria-label="Switch organization" className="py-1.5">
+      <div className="px-3.5 pt-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">Organizations</div>
+      {list.map((o) => {
+        const isCurrent = o.current || o.id === me.workspace.id;
+        return (
+          <button key={o.id} role="menuitem" disabled={!!busy} onClick={() => void pick(o)} className={cx(row, "min-h-[54px] disabled:opacity-60")}>
+            <span className="relative">
+              <OrgTile size={36} />
+              {o.unread && !isCurrent && <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-badge ring-2 ring-panel" aria-label="New messages" />}
             </span>
-            <ChevronDown size={14} className="shrink-0 text-muted" />
+            <span className="flex-1 min-w-0">
+              <span className="block font-semibold truncate">{o.name}</span>
+              <span className="block text-xs text-faint truncate">{busy === o.id ? "Switching…" : ROLE[o.role]}</span>
+            </span>
+            {isCurrent && <Check size={18} strokeWidth={2.2} className="shrink-0 text-badge" aria-label="Current" />}
           </button>
-        )}
+        );
+      })}
+      <div className="h-px bg-line mx-2 my-1.5" />
+      <button role="menuitem" onClick={() => setNewOrg(true)} className={row}>
+        <Plus size={20} strokeWidth={1.7} className="text-muted" />
+        <span className="flex-1">New organization</span>
+      </button>
+      <div className={cx(row, "hover:bg-transparent pointer-events-none")}>
+        <Link2 size={20} strokeWidth={1.7} className="text-muted" />
+        <span className="flex-1">Join with an invite link</span>
+      </div>
+      <form
+        className="px-2.5 pb-1.5 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void join();
+        }}
       >
-        {(close) => (
-          <div role="menu" aria-label="Switch organization" className="flex flex-col gap-0.5">
-            {orgs.map((o) => {
-              const isCurrent = o.current || o.id === me.workspace.id;
-              return (
-                <button key={o.id} role="menuitem" disabled={!!busy} onClick={() => void pick(o, close)} className="flex items-center gap-2.5 h-12 px-2.5 rounded-xl text-left hover:bg-hover disabled:opacity-60">
-                  <span className="relative">
-                    <OrgTile org={o} home={o.id === homeId} size={30} />
-                    {o.unread && !isCurrent && <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-bad ring-2 ring-panel" aria-label="New messages" />}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-bold truncate">{o.name}</span>
-                    <span className="block text-xs text-muted truncate">{busy === o.id ? "Switching…" : orgSummary(o)}</span>
-                  </span>
-                  {isCurrent && <Check size={16} strokeWidth={2.4} className="shrink-0" aria-label="Current" />}
-                </button>
-              );
-            })}
-            <div className="h-px bg-line mx-1.5 my-1" />
-            <button role="menuitem" onClick={() => (close(), setDialog("new"))} className="flex items-center gap-2.5 h-10 px-2.5 rounded-xl text-sm font-bold text-left hover:bg-hover">
-              <Plus size={16} /> New organization
-            </button>
-            <button role="menuitem" onClick={() => (close(), setDialog("join"))} className="flex items-center gap-2.5 h-10 px-2.5 rounded-xl text-sm font-bold text-left hover:bg-hover">
-              <Link2 size={16} /> Join with an invite link
-            </button>
-          </div>
-        )}
-      </Popover>
-      {dialog === "new" && <NewOrgDialog onClose={() => setDialog(null)} />}
-      {dialog === "join" && <JoinOrgDialog onClose={() => setDialog(null)} />}
-    </>
+        <input value={code} onChange={(e) => setCode(e.target.value)} aria-label="Invite link or code" placeholder="https://…/#/join/…" className="flex-1 min-w-0 h-10 rounded-full bg-chip px-4 text-sm outline-none placeholder:text-faint border border-control-line focus:border-ring" />
+        <button disabled={!code.trim() || joining} className="h-10 px-5 rounded-full bg-accent text-accent-ink text-sm font-semibold disabled:opacity-50">
+          {joining ? "Joining…" : "Join"}
+        </button>
+      </form>
+      {error && <p className="px-3.5 pb-2 text-sm text-bad">{error}</p>}
+      {newOrg && <NewOrgDialog onClose={() => setNewOrg(false)} />}
+    </div>
+  );
+}
+
+/** The popover version, for the Wisp ghost at the top of the desktop rail. */
+export function OrgSwitcher({ trigger }: { trigger: (open: boolean, toggle: () => void) => ReactNode }) {
+  return (
+    <Popover up={false} className="w-[22rem] max-w-[calc(100vw-1rem)] !rounded-[20px]" trigger={trigger}>
+      {(close) => <OrgList onDone={close} />}
+    </Popover>
   );
 }
 
@@ -131,7 +139,7 @@ export function NewOrgDialog({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        <p className="text-sm text-muted">A separate place with its own agents, channels and memory. You can switch between organizations any time.</p>
+        <p className="text-sm text-muted">A separate place with its own agents, teams and memory. You can switch between organizations any time.</p>
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Studio" maxLength={60} />
         </Field>

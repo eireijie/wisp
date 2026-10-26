@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { useStore, type Me } from "../src/store.ts";
-import { Sidebar } from "../src/components/Sidebar.tsx";
+import { Rail } from "../src/components/Rail.tsx";
 import { ComputersView } from "../src/views/ComputersView.tsx";
 
 vi.mock("../src/api.ts", () => ({ api: vi.fn(() => new Promise(() => {})), uploadFile: vi.fn() }));
 vi.mock("../src/App.tsx", () => ({ logout: vi.fn() }));
-vi.mock("../src/components/OrgSwitcher.tsx", () => ({ OrgSwitcher: () => null }));
+vi.mock("../src/components/OrgSwitcher.tsx", () => ({ OrgSwitcher: () => null, useOrgs: () => ({ orgs: [], current: null, homeId: null }) }));
 vi.mock("../src/theme.ts", () => ({ motionReduced: () => false, useAppearance: () => ({ resolvedMode: "light", mode: "light", setMode: vi.fn(), toggleMode: vi.fn() }) }));
 vi.mock("../src/onboarding.ts", () => ({
   useOnboarding: () => ({ done: {} }),
@@ -26,10 +26,10 @@ function role(role: Me["role"]) {
 describe("guest computer UI", () => {
   it.each(["guest", "member", "owner"] as const)("shows computer navigation only to members and owners (%s)", (viewer) => {
     role(viewer);
-    const html = renderToStaticMarkup(createElement(Sidebar, { route: { view: "dashboard" } }));
+    const html = renderToStaticMarkup(createElement(Rail, { route: { view: "dashboard" } }));
     expect(html.includes('href="#/computers"')).toBe(viewer !== "guest");
-    // the owner's agents are "Your agents"; someone else's are just "Agents"
-    expect(html).toContain(viewer === "owner" ? "Your agents" : ">Agents<");
+    // everyone gets the other places on the rail
+    for (const place of ["Inbox", "Chats", "Agents"]) expect(html).toContain(place);
   });
 
   it.each([null, "private-screen"])("hides the computers page from guests, including a cached detail (%s)", (computerId) => {

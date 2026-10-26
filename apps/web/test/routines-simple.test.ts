@@ -29,7 +29,6 @@ describe("routineName", () => {
 });
 
 describe("routineProblem", () => {
-  it("needs a result in Simple", () => expect(routineProblem(true, "", "")).toBeTruthy());
-  it("derives the name in Simple", () => expect(routineProblem(true, "", "Do it")).toBeNull());
-  it("needs a name in Advanced", () => expect(routineProblem(false, " ", "")).toBeTruthy());
+  it("needs a result", () => expect(routineProblem("", "")).toBeTruthy());
+  it("derives the name from the result", () => expect(routineProblem("", "Do it")).toBeNull());
 });

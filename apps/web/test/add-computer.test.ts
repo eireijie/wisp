@@ -30,16 +30,12 @@ describe("add computer choices", () => {
     expect(orgoStatus({ configured: true })).toBe("ready");
   });
 
-  const render = (experience: "simple" | "advanced") => {
-    // zustand renders the initial state on the server, so set it there
-    (useStore.getInitialState() as { me: unknown }).me = { prefs: { experience } };
-    return renderToStaticMarkup(createElement(AddComputer, { devices: [], onClose: () => {}, onCreated: () => {} }));
-  };
+  const render = () => renderToStaticMarkup(createElement(AddComputer, { devices: [], onClose: () => {}, onCreated: () => {} }));
 
-  it("asks the question in Simple mode only", () => {
-    expect(render("simple")).toContain("What should the helper be able to do?");
-    expect(render("simple")).toContain("Answer questions only");
-    expect(render("advanced")).not.toContain("What should the helper be able to do?");
-    expect(render("advanced")).toContain("A VM on one of your devices");
+  it("asks what the helper should be able to do, with the cloud computer under More options", () => {
+    const html = render();
+    expect(html).toContain("What should the helper be able to do?");
+    expect(html).toContain("Answer questions only");
+    expect(html).toContain("More options");
   });
 });
