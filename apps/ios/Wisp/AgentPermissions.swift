@@ -1,9 +1,9 @@
 import SwiftUI
 
 /**
- * What an agent may do: files and commands on its device (read only, edit files, full access),
- * and, read-only, which memory folders it can use, who its own folder is shared with, and
- * whether it may refine its own personality.
+ * Permissions (agent-Permissions.dc.html): what an agent may do with files and commands on its
+ * device (Read, Edit, Full access), what it asks you before doing (the organization's list), and,
+ * read-only, which memory folders it can use and who its own folder is shared with.
  */
 struct AgentPermissions: View {
   @Environment(Store.self) private var store
@@ -14,83 +14,98 @@ struct AgentPermissions: View {
   @State private var memoryError: String?
   @State private var action = FormAction()
 
+  static let askBefore: [(key: String, title: String)] = [
+    ("send", "Sending email or messages outside Wisp"), ("spend", "Buying or paying for anything"), ("delete", "Deleting files, data or accounts"),
+    ("post", "Posting publicly"), ("signup", "Signing up for new accounts or services"), ("share", "Sharing files or private information outside Wisp"),
+  ]
+
   private var current: Agent { store.agent(agent.id) ?? agent }
   private var saved: AgentAccess { AgentAccess.from(current.settings?.access) }
   private var device: AgentNode? { store.nodes.first { $0.id == current.nodeId } }
 
   var body: some View {
-    Form {
-      Section {
-        ForEach(AgentAccess.allCases) { level in
-          Button { access = level } label: {
-            HStack(alignment: .top, spacing: 12) {
-              Image(systemName: access == level ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(access == level ? Color.accentColor : .secondary)
-              VStack(alignment: .leading, spacing: 3) {
-                Text(level.label).foregroundStyle(level == .full ? Color.red : Color.primary)
-                Text(level.body).font(.caption).foregroundStyle(.secondary)
-              }
-              Spacer(minLength: 0)
-            }.contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .accessibilityAddTraits(access == level ? .isSelected : [])
-        }
-      } header: { Text("On its device") } footer: {
-        Text(access.scope(name: current.name, handle: current.handle, device: device?.name))
-      }
-      .disabled(!store.canManage || action.busy)
-
+    AgentFrame(title: "Permissions", subtitle: current.name) {
+      CardCaption("On its device")
+      Segments(options: AgentAccess.allCases.map { ($0, AgentLine.accessChip($0)) }, selection: Binding(get: { access }, set: { choose($0) }), id: "permissions-access")
+        .disabled(!store.canManage || action.busy)
+      CardCaption(access == .full ? "Full access lets it change anything on the computer." : "\(access.label). \(access.body)")
+      CardCaption(access.scope(name: current.name, handle: current.handle, device: device?.name))
       if access == .full {
-        Section {
+        AgentCard {
           Label("The agent can run any command as the device's user. The device must opt in with wisp node start --allow-full-access; otherwise it runs with edit access.", systemImage: "exclamationmark.shield")
-            .font(.footnote).foregroundStyle(.red)
+            .font(.system(size: 14)).foregroundStyle(Palette.red)
         }
       }
+      AgentError(text: action.error)
 
-      if store.canManage {
-        Section {
-          InlineError(error: action.error)
-          Button(action.busy ? "Saving…" : "Save") { save() }
-            .disabled(access == saved || action.busy)
-        } footer: { Text("Applies from the next message.") }
+      CardCaption("Ask me before")
+      if let policy = store.agentPolicy {
+        CardGroup {
+          ForEach(Self.askBefore, id: \.key) { item in
+            SwitchRow(title: item.title, isOn: Binding(get: { policy.askBefore.contains(item.key) }, set: { setAsk(item.key, $0) }), id: "ask-\(item.key)")
+          }
+        }.disabled(!store.isOwner || action.busy)
+        CardCaption(store.isOwner ? "These apply to every agent here. Asks show up in your Inbox and as a card in chat." : "Only owners can change these. Asks show up in your Inbox and as a card in chat.")
+      } else {
+        AgentCard { Text("Asks show up in your Inbox and as a card in chat.").font(.system(size: 15)).foregroundStyle(Palette.muted) }
       }
 
-      Section {
-        if let memory {
-          let rules = memory.rules.sorted { $0.path.lowercased() < $1.path.lowercased() }
+      CardCaption("In memory")
+      if let memory {
+        let rules = memory.rules.sorted { $0.path.lowercased() < $1.path.lowercased() }
+        CardGroup {
           ForEach(rules, id: \.rowId) { rule in ruleRow(rule) }
-          LabeledContent("Its folder is shared with", value: sharedWith(memory))
-        } else if let memoryError {
-          Text(memoryError).font(.footnote).foregroundStyle(.red)
-          Button("Try again") { Task { await loadMemory() } }
-        } else {
-          ProgressView()
+          RowLabel(title: "Its folder is shared with", subtitle: sharedWith(memory), chevron: false)
+          RowLabel(title: "Personality", subtitle: current.settings?.soulLocked == true ? "Locked: only people can edit it" : "It can refine its own personality", chevron: false)
+          RowLabel(title: "Instructions", subtitle: "Only people can edit them", chevron: false)
         }
-        LabeledContent("Personality", value: current.settings?.soulLocked == true ? "Locked: only people can edit it" : "It can refine its own personality")
-        LabeledContent("Instructions", value: "Only people can edit them")
-      } header: { Text("In memory") } footer: {
-        Text("Which folders and notes @\(current.handle) can use, and why. Change them with the share button on a folder or note in Memory.")
+        CardCaption("Which folders and notes @\(current.handle) can use, and why. Change them with the share button on a folder or note in Memory.")
+      } else if let memoryError {
+        AgentError(text: memoryError)
+        PillButton(title: "Try again", kind: .secondary) { Task { await loadMemory() } }
+      } else {
+        ProgressView().frame(maxWidth: .infinity)
       }
     }
-    .navigationTitle("Permissions")
-    .navigationBarTitleDisplayMode(.inline)
-    .task { if !loaded { access = saved; loaded = true }; await loadMemory() }
+    .task {
+      if !loaded { access = saved; loaded = true }
+      try? await store.refreshAgentPolicy()
+      await loadMemory()
+    }
     .onChange(of: current.settings?.access) { old, new in
       // follow a change made elsewhere, unless this screen has its own edit pending
       if access == AgentAccess.from(old) { access = AgentAccess.from(new) }
     }
   }
 
+  private func choose(_ level: AgentAccess) {
+    guard level != access else { return }
+    let before = access
+    access = level
+    action.run {
+      do { _ = try await store.updateAgent(current.id, ["settings": AnyEncodable(["access": level.rawValue])]) }
+      catch { access = before; throw error }
+    }
+  }
+
+  private func setAsk(_ key: String, _ on: Bool) {
+    guard var policy = store.agentPolicy else { return }
+    policy.askBefore.removeAll { $0 == key }
+    if on { policy.askBefore.append(key) }
+    let next = policy
+    action.run { try await store.saveAgentPolicy(next) }
+  }
+
   private func ruleRow(_ rule: AgentMemoryRule) -> some View {
     VStack(alignment: .leading, spacing: 3) {
-      Text(AccessText.path(rule.path, agents: store.agents, members: store.members))
+      Text(AccessText.path(rule.path, agents: store.agents, members: store.members)).font(.system(size: 17)).foregroundStyle(Palette.text)
       HStack(spacing: 6) {
-        Text(AccessText.level(rule.level)).foregroundStyle(rule.level == "none" ? .secondary : .primary)
-        if let via = via(rule) { Text(via).foregroundStyle(.secondary) }
-        if rule.startup == true { Label("loads at startup", systemImage: "pin").labelStyle(.titleAndIcon).foregroundStyle(.secondary) }
-      }.font(.caption)
+        Text(AccessText.level(rule.level)).foregroundStyle(rule.level == "none" ? Palette.faint : Palette.muted)
+        if let via = via(rule) { Text(via).foregroundStyle(Palette.faint) }
+        if rule.startup == true { Label("loads at startup", systemImage: "pin").foregroundStyle(Palette.faint) }
+      }.font(.system(size: 14))
     }
+    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.vertical, 10)
   }
 
   private func via(_ rule: AgentMemoryRule) -> String? {
@@ -114,11 +129,5 @@ struct AgentPermissions: View {
   private func loadMemory() async {
     do { memory = try await store.agentMemoryAccess(agent.id); memoryError = nil }
     catch { memoryError = error.localizedDescription }
-  }
-
-  private func save() {
-    action.run {
-      try await store.updateAgent(current.id, ["settings": AnyEncodable(["access": access.rawValue])])
-    }
   }
 }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/** Setup text for a connection token: pick the client's format, then copy it. Used when adding an outside agent too. */
+/** Setup text for a connection token: pick the client's format, then copy it. Used when inviting an outside agent too. */
 struct ConnectionInstructions: View {
   @Environment(Store.self) private var store
   var token: String
@@ -18,31 +18,41 @@ struct ConnectionInstructions: View {
   private var config: String { format.config(hub: hub, token: token) }
 
   var body: some View {
-    Group {
-      Section {
-        Text("On the agent's computer, install Wisp from its repository and run npm install && npm link to get wisp-mcp. Then add this to its MCP settings and restart the session.")
-          .font(.subheadline)
-        Picker("Format", selection: $format) {
-          ForEach(ConnectionFormat.allCases) { Text($0.label).tag($0) }
-        }.pickerStyle(.segmented)
-        Text(config)
-          .font(.system(.footnote, design: .monospaced))
-          .textSelection(.enabled)
-          .frame(maxWidth: .infinity, alignment: .leading)
-        Button(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") {
-          UIPasteboard.general.string = config
-          copied = true
-          Task { try? await Task.sleep(for: .seconds(2)); copied = false }
-        }
-      } footer: {
-        Text("This contains the agent's connection token. Copy it before leaving; you can make a new one under Connect.")
-      }
+    VStack(alignment: .leading, spacing: 14) {
+      CardCaption("On the agent's computer, install Wisp from its repository and run npm install && npm link to get wisp-mcp. Then add this to its MCP settings and restart the session.")
+      Segments(options: ConnectionFormat.allCases.map { ($0, $0.label) }, selection: $format, id: "connect-format")
+      CodeCard(text: config, copied: $copied)
+      CardCaption("This contains the agent's connection token. Copy it before leaving; you can make a new one under Connect via MCP.")
     }
     .task { if hub.isEmpty { hub = await store.shareAddress() } }
   }
 }
 
-/** Connect an existing session to an agent (a token), and see or disconnect the apps signed in as it. */
+/** Code in a card with a Copy button. */
+struct CodeCard: View {
+  var text: String
+  @Binding var copied: Bool
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text(text).font(.system(size: 13, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      Button {
+        UIPasteboard.general.string = text
+        copied = true
+        Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+      } label: {
+        Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text)
+          .padding(.horizontal, 14).frame(height: 34).background(Capsule().fill(Color(light: 0xE3E3EA, dark: 0x2E2E32)))
+      }.buttonStyle(.plain).accessibilityIdentifier("code-copy")
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(16)
+    .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
+  }
+}
+
+/** Connect (agent-Connect.dc.html): connect an existing session to an agent (a token), by address, and see or disconnect the apps signed in as it. */
 struct AgentConnect: View {
   @Environment(Store.self) private var store
   var agent: Agent
@@ -51,6 +61,7 @@ struct AgentConnect: View {
   @State private var appsError: String?
   @State private var hub = ""
   @State private var revoking: ConnectedApp?
+  @State private var copiedAddress = false
   @State private var action = FormAction()
 
   private var current: Agent { store.agent(agent.id) ?? agent }
@@ -58,50 +69,57 @@ struct AgentConnect: View {
   private var label: String { HarnessChoice.label(current.harness) }
 
   var body: some View {
-    Form {
-      Section {
-        Text(runsText).font(.subheadline)
-      } header: { Text("Runs on a device") }
-
+    AgentFrame(title: "Connect", subtitle: current.name) {
+      CardGroup {
+        RowLabel(title: harnessRunsOnDevice(current.harness) ? "Runs on a device" : "Runs where it already is", subtitle: runsText, value: device?.name, chevron: false, leading: { rowIcon("desktopcomputer") })
+      }
+      CardCaption("Connect an outside session")
+      CardCaption("Any MCP-capable session can act as \(current.name). Make a connection token and paste it in.")
       if store.canManage {
         if let token {
           ConnectionInstructions(token: token, harness: current.harness)
         } else {
-          Section {
-            Button(action.busy ? "Creating…" : "Create connection token", systemImage: "key") {
-              action.run { token = try await store.createAgentToken(current.id) }
-            }.disabled(action.busy)
-            InlineError(error: action.error)
-          } header: { Text("Connect an existing session (MCP)") } footer: {
-            Text("Give any MCP-capable session this agent's identity, memory, chat and task tools. The token is shown once.")
-          }
+          PillButton(title: "Make a connection token", busy: action.busy, id: "connect-token") {
+            action.run { token = try await store.createAgentToken(current.id) }
+          }.disabled(action.busy)
+          CardCaption("The token is shown once.")
         }
       }
-
-      Section {
-        Text(hub + "/mcp").font(.system(.footnote, design: .monospaced)).textSelection(.enabled)
-        Button("Copy address", systemImage: "doc.on.doc") { UIPasteboard.general.string = hub + "/mcp" }
-      } header: { Text("Connect by address") } footer: {
-        Text("Add it as a custom connector in Grok, ChatGPT or Claude, then pick @\(current.handle) when you sign in. It needs an https address that works from anywhere.")
+      CardCaption("Connect by address")
+      AgentCard {
+        Text(hub + "/mcp").font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled)
+        Button {
+          UIPasteboard.general.string = hub + "/mcp"
+          copiedAddress = true
+          Task { try? await Task.sleep(for: .seconds(2)); copiedAddress = false }
+        } label: {
+          Label(copiedAddress ? "Copied" : "Copy address", systemImage: copiedAddress ? "checkmark" : "doc.on.doc").font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text)
+        }.buttonStyle(.plain)
       }
+      CardCaption("Add it as a custom connector in Grok, ChatGPT or Claude, then pick @\(current.handle) when you sign in. It needs an https address that works from anywhere.")
 
-      Section {
-        if apps.isEmpty && appsError == nil { Text("No apps are connected as @\(current.handle).").foregroundStyle(.secondary) }
-        ForEach(apps) { app in
-          HStack {
-            VStack(alignment: .leading, spacing: 2) {
-              Text(app.name)
-              Text(detail(app)).font(.caption).foregroundStyle(.secondary)
+      CardCaption("Connected")
+      if apps.isEmpty && appsError == nil {
+        AgentCard { Text("No apps are connected as @\(current.handle).").font(.system(size: 15)).foregroundStyle(Palette.muted) }
+      } else {
+        CardGroup {
+          ForEach(apps) { app in
+            HStack(spacing: 12) {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(app.name).font(.system(size: 17)).foregroundStyle(Palette.text)
+                Text(detail(app)).font(.system(size: 14)).foregroundStyle(Palette.faint)
+              }
+              Spacer(minLength: 8)
+              if store.canManage {
+                Button("Disconnect") { revoking = app }.font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.red).buttonStyle(.plain).disabled(action.busy)
+              }
             }
-            Spacer()
-            if store.canManage { Button("Disconnect", role: .destructive) { revoking = app }.buttonStyle(.borderless).disabled(action.busy) }
+            .padding(.horizontal, 18).padding(.vertical, 8).frame(minHeight: 60)
           }
         }
-        InlineError(error: appsError)
-      } header: { Text("Apps signed in as @\(current.handle)") }
+      }
+      AgentError(text: appsError ?? action.error)
     }
-    .navigationTitle("Connect")
-    .navigationBarTitleDisplayMode(.inline)
     .task { hub = await store.shareAddress(); await loadApps() }
     .refreshable { await loadApps() }
     .confirmationDialog("Disconnect \(revoking?.name ?? "this app")?", isPresented: Binding(get: { revoking != nil }, set: { if !$0 { revoking = nil } }), titleVisibility: .visible) {
@@ -113,7 +131,6 @@ struct AgentConnect: View {
         }
       }
     } message: { Text("It stops acting as @\(current.handle) until someone signs it in again.") }
-    .managementAlert(action)
   }
 
   private var runsText: String {
