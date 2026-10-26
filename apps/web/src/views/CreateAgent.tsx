@@ -253,6 +253,14 @@ export function CreateAgent({ nodes, onClose, onCreated, nodeId: startOn, bringI
   const createdVm = useRef<{ id: string; nodeId: string } | null>(null);
   const [invite, setInvite] = useState(false);
   const touched = useRef(false);
+  // devices can arrive after the dialog opened with none: settle on one then
+  const firstUsable = usable.find((n) => n.online)?.id ?? usable[0]?.id;
+  useEffect(() => {
+    if (nodeId || !firstUsable) return;
+    setNodeId(firstUsable);
+    setComputer(defaultComputer(nodes.find((n) => n.id === firstUsable), computers));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstUsable]);
   useEffect(() => {
     let live = true;
     api<AgentDefaults>("GET", "/api/settings/agent-defaults").then(
