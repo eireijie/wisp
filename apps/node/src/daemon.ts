@@ -18,6 +18,7 @@ import { HarnessLogins } from "./harness-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
+import { agentFolder } from "./agent-dir.ts";
 import { bringBack, mergeBranch, prepareCheckout, prepareClone } from "./git.ts";
 
 const MCP_BIN = fileURLToPath(new URL("../../../bin/wisp-mcp.mjs", import.meta.url));
@@ -513,12 +514,12 @@ export class NodeDaemon {
     }
 
     // an agent with a VM here works in the folder it shares with the VM, so files go both ways
-    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agent.handle);
+    let cwd = (run.computer && this.computers.vmFiles(run.computer)) || path.join(this.cfg.dir, "agents", agentFolder(this.cfg.dir, agent));
     fs.mkdirSync(cwd, { recursive: true });
     // coding tasks run in their own checkout of the team repo, on the task's branch
     if (run.workspace) {
       try {
-        cwd = inside ? await prepareClone(this.cfg.dir, vm!.filesDir, run.workspace) : await prepareCheckout(this.cfg.dir, agent.handle, run.workspace);
+        cwd = inside ? await prepareClone(this.cfg.dir, vm!.filesDir, run.workspace) : await prepareCheckout(this.cfg.dir, agentFolder(this.cfg.dir, agent), run.workspace);
         this.send({ type: "run_event", runId: run.runId, event: { type: "status", text: `Working in ${run.workspace.mode === "work" ? "" : "a read-only checkout of "}branch ${run.workspace.branch}` } });
       } catch (err) {
         return this.send({ type: "run_failed", runId: run.runId, error: `couldn't set up the repo: ${(err as Error).message}` });
