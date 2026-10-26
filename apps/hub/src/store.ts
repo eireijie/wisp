@@ -144,6 +144,8 @@ export class Store {
       this.db.prepare("DELETE FROM oauth_grants WHERE workspace_id = ?").run(wsId);
       this.db.prepare("DELETE FROM changes WHERE workspace_id = ?").run(wsId);
       this.db.prepare("DELETE FROM push_devices WHERE workspace_id = ?").run(wsId);
+      // team requests: their table is made by TeamFlows, so it may not be there
+      if (this.db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'team_flows'").get()) this.db.prepare("DELETE FROM team_flows WHERE workspace_id = ?").run(wsId);
       this.db.prepare("DELETE FROM workspaces WHERE id = ?").run(wsId);
       // an account that belonged only here would have nowhere to sign in to: it goes too, as in removeMember
       for (const p of people) if (!this.db.prepare("SELECT 1 FROM memberships WHERE user_id = ? LIMIT 1").get(p.id)) this.db.prepare("DELETE FROM users WHERE id = ?").run(p.id);

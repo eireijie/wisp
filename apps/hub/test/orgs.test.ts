@@ -303,6 +303,8 @@ describe("organizations", () => {
     await api("PUT", "/api/vault/note", { path: "shared/gone.md", content: "bye" }, tok);
     const folder = path.join(dir, "orgs", made.org.id);
     await expect(fs.stat(folder)).resolves.toBeTruthy();
+    // a team request has no foreign key to the organization
+    hub.store.db.prepare("INSERT INTO team_flows (id, workspace_id, channel_id, thread_id, status, state_json, created_at, updated_at) VALUES ('flow_x', ?, 'ch_x', 't_x', 'done', '{}', 'now', 'now')").run(made.org.id);
 
     // members can't, the name has to match, and the first organization stays
     await api("PUT", "/api/features", { invite: true }, tok);
@@ -322,6 +324,7 @@ describe("organizations", () => {
     expect((await api("GET", "/api/me", undefined, sam)).status).toBe(401);
     expect((await api<any[]>("GET", "/api/orgs", undefined, r.data.token)).data.map((o) => o.id)).not.toContain(made.org.id);
     expect(hub.store.agent(a.id)).toBeUndefined();
+    expect(hub.store.db.prepare("SELECT 1 FROM team_flows WHERE workspace_id = ?").get(made.org.id)).toBeUndefined();
     await expect(fs.stat(folder)).rejects.toThrow();
     // deleting another organization than the one you're in keeps your sign-in
     const other = (await api("POST", "/api/orgs", { name: "Other" }, r.data.token)).data;
