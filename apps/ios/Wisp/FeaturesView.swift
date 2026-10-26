@@ -1,59 +1,46 @@
 import SwiftUI
 
-/** Settings → Mods: the optional parts of Wisp; turn on only what you use. Owners change it; everyone sees what's on. */
+/** Settings → Mods (set-Mods.dc.html): the optional parts of Wisp; turn on only what you use. Owners change it; everyone sees what's on. */
 struct FeaturesView: View {
   @Environment(Store.self) private var store
   @State private var action = FormAction()
 
+  private var on: [FeatureKey] { FeatureKey.allCases.filter { store.features[$0] } }
+  private var off: [FeatureKey] { FeatureKey.allCases.filter { !store.features[$0] } }
+
   var body: some View {
-    Form {
-      Section {
-        Picker("Quick start", selection: Binding(get: { store.features.preset }, set: { value in
-          switch value {
-          case "simple": save(.simple)
-          case "everything": save(.everything)
-          default: break
-          }
-        })) {
-          Text("Simple").tag("simple")
-          Text("Everything").tag("everything")
-          Text("Custom").tag("custom")
-        }
-        .pickerStyle(.segmented)
+    SettingsPage("Mods", subtitle: "Feature switches for the whole organization. Only owners can change them.", id: "mods") {
+      SegmentedPicker(options: [("simple", "Simple"), ("everything", "Everything"), ("custom", "Custom")],
+                      selection: Binding(get: { store.features.preset }, set: { value in
+                        switch value {
+                        case "simple": save(.simple)
+                        case "everything": save(.everything)
+                        default: break
+                        }
+                      }), label: "Quick start", id: "mods-preset")
         .disabled(!store.isOwner || action.busy)
-      } header: {
-        Text("Quick start")
-      } footer: {
-        Text("Turn on only what you use. Simple turns everything below off. Everything turns it all on. You can change it any time.")
+      CardHint("Turn on only what you use. Simple turns everything off. Everything turns it all on. You can change it any time.")
+      if !on.isEmpty {
+        CardLabel("On")
+        CardGroup { ForEach(on) { row($0) } }
       }
-      ForEach(FeatureKey.Group.allCases, id: \.self) { group in
-        Section(group.title) {
-          ForEach(group.keys) { key in
-            Toggle(isOn: Binding(get: { store.features[key] }, set: { on in
-              var next = store.features
-              next[key] = on
-              save(next)
-            })) {
-              HStack(spacing: 12) {
-                IconTile(symbol: key.symbol, color: key.tint, size: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(key.name)
-                  Text(key.detail).font(.caption).foregroundStyle(.secondary)
-                }
-              }.padding(.vertical, 2)
-            }
-            .disabled(!store.isOwner || action.busy)
-            .accessibilityIdentifier("feature-\(key.rawValue)")
-          }
-        }
+      if !off.isEmpty {
+        CardLabel(on.isEmpty ? "Mods" : "More mods")
+        CardGroup { ForEach(off) { row($0) } }
       }
-      if !store.isOwner {
-        Section { Text("Only owners can turn mods on or off.").font(.footnote).foregroundStyle(.secondary) }
-      }
+      if !store.isOwner { OwnersOnlyNote() }
+      StatusLine(error: action.error)
     }
-    .sectionScreen("Mods", id: "mods")
     .task { await store.refreshFeatures() }
-    .managementAlert(action)
+  }
+
+  private func row(_ key: FeatureKey) -> some View {
+    ToggleRow(title: key.name, subtitle: key.detail, isOn: Binding(get: { store.features[key] }, set: { on in
+      var next = store.features
+      next[key] = on
+      save(next)
+    }), id: "feature-\(key.rawValue)")
+    .disabled(!store.isOwner || action.busy)
   }
 
   private func save(_ next: Features) {
@@ -76,7 +63,7 @@ extension FeatureKey {
   }
 }
 
-/** Settings → Agent defaults: what "Use my defaults" gives a new agent. */
+/** Settings → Agent defaults (set-AgentDefaults.dc.html): what "Use my defaults" gives a new agent. */
 struct AgentDefaultsView: View {
   @Environment(Store.self) private var store
   @State private var harness = "claude-code"
@@ -88,54 +75,48 @@ struct AgentDefaultsView: View {
   @State private var action = FormAction()
 
   private var harnesses: [HarnessChoice] { HarnessChoice.all.filter { $0.protocolName != "mcp" } }
+  @State private var rules = 0
 
   var body: some View {
-    Form {
+    SettingsPage("Agent defaults", subtitle: "What a new agent starts with when you pick Use my defaults.", id: "agent-defaults") {
       if loaded && store.agentDefaults == nil {
-        Section {
-          Text("This Wisp doesn't have agent defaults yet. Update Wisp on your computer to use them.").foregroundStyle(.secondary)
-        }
+        CardHint("This Wisp doesn't have agent defaults yet. Update Wisp on your computer to use them.")
       }
-      Section {
-        Picker("Runs on", selection: $harness) {
-          ForEach(harnesses) { Text($0.label).tag($0.id) }
-        }
-        TextField("Model", text: $model, prompt: Text("Automatic"))
-          .textInputAutocapitalization(.never).autocorrectionDisabled()
-      } header: { Text("AI") } footer: { Text("Leave the model blank to let \(HarnessChoice.label(harness)) pick.") }
-      Section("Computer") {
-        Picker("Computer", selection: $computer) {
-          Text("Its own VM").tag("own-vm")
-          Text("No computer").tag("none")
-        }
+      if !store.isOwner { OwnersOnlyNote() }
+      CardLabel("New agents start with")
+      CardGroup {
+        PickerRow(title: "AI tool", subtitle: "The program that does the work", options: harnesses.map { ($0.id, $0.label) }, selection: $harness, id: "defaults-harness")
+        FieldRow(title: "Model", text: $model, prompt: "Automatic", id: "defaults-model")
+        NavigationLink { DefaultModelsView() } label: { RowLabel(title: "Default model per tool", value: "\(harnesses.count) tools") }.accessibilityIdentifier("defaults-models")
+      }
+      CardHint("Leave the model blank to let \(HarnessChoice.label(harness)) pick.")
+      CardLabel("Computer")
+      CardGroup {
+        PickerRow(title: "New agents get", subtitle: computer == "own-vm" ? "Open apps and browse the web" : "Chat and their tools only", options: [("own-vm", "Their own computer"), ("none", "No computer")], selection: $computer, id: "defaults-computer")
         if computer == "own-vm" {
-          Picker("On", selection: $nodeId) {
-            Text("Automatic").tag("")
-            ForEach(store.nodes.filter(\.usable)) { Text($0.name).tag($0.id) }
-          }
+          PickerRow(title: "Device", options: [("", "Pick one automatically")] + store.nodes.filter(\.usable).map { ($0.id, $0.name) }, selection: $nodeId, id: "defaults-device")
         }
       }
+      CardLabel("Memory")
+      CardGroup {
+        NavigationLink { MemoryRulesView() } label: { RowLabel(title: "Memory rules", subtitle: "Who can see and edit what", value: rules > 0 ? "\(rules) \(rules == 1 ? "rule" : "rules")" : nil) }.accessibilityIdentifier("defaults-memory-rules")
+      }
+      StatusLine(error: action.error, saved: saved ? "Saved. New agents start with these." : nil)
       if store.isOwner {
-        Section {
-          Button("Save") {
-            action.run {
-              try await store.saveAgentDefaults(AgentDefaults(harness: harness, model: model.trimmed.isEmpty ? nil : model.trimmed,
-                computer: computer, nodeId: computer == "own-vm" && !nodeId.isEmpty ? nodeId : nil))
-              saved = true
-            }
-          }.disabled(action.busy || model.count > 100 || (loaded && store.agentDefaults == nil))
-          if saved { Text("Saved. New agents start with these.").foregroundStyle(.green) }
-        }
-      } else {
-        Section { Text("Only owners can change agent defaults.").font(.footnote).foregroundStyle(.secondary) }
+        Button("Save") {
+          action.run {
+            try await store.saveAgentDefaults(AgentDefaults(harness: harness, model: model.trimmed.isEmpty ? nil : model.trimmed,
+              computer: computer, nodeId: computer == "own-vm" && !nodeId.isEmpty ? nodeId : nil, models: store.agentDefaults?.models))
+            saved = true
+          }
+        }.buttonStyle(.pill(.primary)).disabled(action.busy || model.count > 100 || (loaded && store.agentDefaults == nil)).accessibilityIdentifier("defaults-save")
       }
-      InlineError(error: action.error)
     }
     .disabled(!store.isOwner)
-    .sectionScreen("Agent defaults", id: "agent-defaults")
     .task {
       await store.refreshAgentDefaults()
       try? await store.refreshNodes()
+      rules = ((try? await store.connection().get("/api/access/rules")) as [MemoryRule]?)?.count ?? 0
       let d = store.agentDefaults
       harness = d?.harness ?? "claude-code"
       model = d?.model ?? ""
@@ -147,5 +128,41 @@ struct AgentDefaultsView: View {
     .onChange(of: model) { saved = false }
     .onChange(of: computer) { saved = false }
     .onChange(of: nodeId) { saved = false }
+  }
+}
+
+/** One default model for each AI tool (set-DefaultModels.dc.html). */
+struct DefaultModelsView: View {
+  @Environment(Store.self) private var store
+  @State private var models: [String: String] = [:]
+  @State private var editing: HarnessChoice?
+  @State private var action = FormAction()
+
+  private var harnesses: [HarnessChoice] { HarnessChoice.all.filter { $0.protocolName != "mcp" } }
+
+  var body: some View {
+    SettingsPage("Default model", subtitle: "One default per AI tool.", id: "default-models") {
+      if !store.isOwner { OwnersOnlyNote() }
+      CardGroup {
+        ForEach(harnesses) { h in
+          FieldRow(title: h.label, text: Binding(get: { models[h.id] ?? "" }, set: { models[h.id] = $0 }), prompt: "Automatic", id: "model-\(h.id)")
+        }
+      }
+      CardHint("Leave a tool on Automatic to use its own default. You can still pick a model per agent.")
+      StatusLine(error: action.error)
+      if store.isOwner {
+        Button("Save") {
+          action.run {
+            var next = store.agentDefaults ?? AgentDefaults(harness: nil, model: nil, computer: nil, nodeId: nil, models: nil)
+            next.models = models.mapValues { $0.trimmed }.filter { !$0.value.isEmpty }
+            // a tool whose box was emptied is sent as an empty name so the hub forgets it
+            for h in harnesses where (models[h.id] ?? "").trimmed.isEmpty && store.agentDefaults?.models?[h.id] != nil { next.models?[h.id] = "" }
+            try await store.saveAgentDefaults(next)
+            models = store.agentDefaults?.models ?? [:]
+          }
+        }.buttonStyle(.pill(.primary)).disabled(action.busy).accessibilityIdentifier("models-save")
+      }
+    }
+    .task { await store.refreshAgentDefaults(); models = store.agentDefaults?.models ?? [:] }
   }
 }

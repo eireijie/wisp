@@ -8,15 +8,13 @@ const { SETTINGS_PAGES } = await import("../src/router.ts");
 const ids = (sections: ReturnType<typeof settingsNav>) => sections.map((s) => [s.section, s.pages.map((p) => p.id)]);
 
 describe("settings navigation", () => {
-  it("keeps every page in seven sections, technical ones under Advanced", () => {
+  it("groups every page under You, Workspace, Agents, Devices and More", () => {
     expect(ids(settingsNav(false, FEATURE_PRESETS.everything))).toEqual([
-      ["General", ["general", "profile", "preferences", "features"]],
-      ["Usage", ["usage"]],
-      ["People", ["people", "agents"]],
-      ["Notifications", ["notifications", "voice"]],
-      ["Appearance", ["appearance"]],
-      ["Devices", ["devices", "computers", "logins", "mobile", "access"]],
-      ["Advanced", ["agent-defaults", "memory", "apps", "runtimes", "harnesses", "connections", "security", "data", "updates"]],
+      ["You", ["profile", "notifications", "appearance", "preferences", "voice", "security"]],
+      ["Workspace", ["general", "people", "usage", "features"]],
+      ["Agents", ["agents", "agent-defaults", "harnesses", "runtimes", "logins", "apps", "connections", "memory"]],
+      ["Devices", ["devices", "computers", "access", "mobile"]],
+      ["More", ["data", "updates"]],
     ]);
   });
 
@@ -27,7 +25,7 @@ describe("settings navigation", () => {
 
   it("leaves out pages guests can't use", () => {
     const pages = settingsNav(true, FEATURE_PRESETS.everything).flatMap((s) => s.pages.map((p) => p.id));
-    for (const id of ["agents", "agent-defaults", "computers", "logins", "apps", "runtimes", "connections"]) expect(pages).not.toContain(id);
+    for (const id of ["agents", "agent-defaults", "computers", "logins", "apps", "runtimes", "connections", "voice", "people", "general"]) expect(pages).not.toContain(id);
   });
 
   it("hides pages for features that are off, and a section left empty", () => {
@@ -37,7 +35,7 @@ describe("settings navigation", () => {
     expect(pages).not.toContain("voice");
     expect(pages).not.toContain("people");
     expect(pages).toContain("features");
-    expect(nav.map((s) => s.section)).not.toContain("Usage");
+    expect(pages).not.toContain("usage");
   });
 });
 

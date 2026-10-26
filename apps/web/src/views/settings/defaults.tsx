@@ -4,6 +4,7 @@ import { api, ApiError } from "../../api.ts";
 import { useStore } from "../../store.ts";
 import { usableDevices, useDevices } from "../../devices.ts";
 import { Button, Input } from "../../components/ui.tsx";
+import { MemoryRules } from "./workspace.tsx";
 import { Card, OwnersOnly, PageHeader, Row, SavedNote, Section, Segmented, Select, useSavedFlash } from "./parts.tsx";
 
 /** GET/PUT /api/settings/agent-defaults: what "Use my defaults" fills in for a new agent. */
@@ -12,6 +13,8 @@ export interface AgentDefaults {
   model: string | null;
   computer: "own-vm" | "none";
   nodeId: string | null;
+  /** a default model for each AI tool (harness id to model id) */
+  models: Record<string, string>;
 }
 
 /** Harnesses a new agent can run with on a device (the ones that join from outside aren't picked here). */
@@ -47,7 +50,13 @@ export function AgentDefaultsPage() {
     setBusy(true);
     setError(null);
     try {
-      const next = await api<AgentDefaults>("PUT", "/api/settings/agent-defaults", { ...form, model: form.model?.trim() || null });
+      // a tool whose box was emptied is sent as null so the hub forgets it
+      const models: Record<string, string | null> = {};
+      for (const h of CHOICES) {
+        const v = form.models?.[h.id]?.trim() ?? "";
+        if (v || saved?.models?.[h.id]) models[h.id] = v || null;
+      }
+      const next = await api<AgentDefaults>("PUT", "/api/settings/agent-defaults", { ...form, model: form.model?.trim() || null, models });
       setSaved(next);
       setForm(next);
       showFlash();
@@ -79,6 +88,22 @@ export function AgentDefaultsPage() {
           </Row>
         </Card>
       </Section>
+      <Section title="Default model per AI tool" description="Leave a tool empty to use its own default. You can still pick a model per agent.">
+        <Card>
+          {CHOICES.map((h) => (
+            <Row key={h.id} label={h.label}>
+              <Input
+                className="w-56"
+                value={form.models?.[h.id] ?? ""}
+                disabled={!isOwner}
+                placeholder="Automatic"
+                aria-label={`Default model for ${h.label}`}
+                onChange={(e) => setForm({ ...form, models: { ...form.models, [h.id]: e.target.value } })}
+              />
+            </Row>
+          ))}
+        </Card>
+      </Section>
       <Section title="Computer" description="Agents with their own computer can open apps and browse the web. Without one they only chat and use their tools.">
         <Card>
           <Row label="New agents get" hint={form.computer === "own-vm" && devices && !vmDevices.length ? "None of your devices can run a computer for an agent yet." : undefined}>
@@ -108,14 +133,15 @@ export function AgentDefaultsPage() {
         </Card>
       </Section>
       {isOwner && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-10">
           <Button variant="primary" disabled={!dirty || busy} onClick={save}>
             {busy ? "Saving…" : "Save"}
           </Button>
           <SavedNote shown={flash} />
         </div>
       )}
-      {error && <p className="mt-3 text-sm text-bad">{error}</p>}
+      {error && <p className="-mt-6 mb-6 text-sm text-bad">{error}</p>}
+      <MemoryRules />
     </>
   );
 }

@@ -1100,7 +1100,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const defaults = useDefaults ? agentDefaults(store, c.workspaceId) : null;
     if (defaults) {
       fields.harness ??= defaults.harness ?? undefined;
-      if (fields.model === undefined && fields.harness === defaults.harness) fields.model = defaults.model;
+      if (fields.model === undefined) fields.model = defaults.models[fields.harness ?? ""] ?? (fields.harness === defaults.harness ? defaults.model : undefined);
       if (fields.nodeId === undefined && defaults.nodeId && canUseDevice(c, defaults.nodeId)) fields.nodeId = defaults.nodeId;
     }
     const harness = fields.harness;

@@ -16,6 +16,8 @@ import { VaultView } from "./views/VaultView.tsx";
 import { AgentsView } from "./views/AgentsView.tsx";
 import { NodesView } from "./views/NodesView.tsx";
 import { DevicePage } from "./views/DevicePage.tsx";
+import { logout } from "./logout.ts";
+import { YouPage } from "./views/YouPage.tsx";
 import { SettingsView } from "./views/SettingsView.tsx";
 import { AuthScreen } from "./views/AuthScreen.tsx";
 import { JoinApproval } from "./components/JoinApproval.tsx";
@@ -182,7 +184,7 @@ function Workspace() {
       case "nodes":
         return route.nodeId ? <DevicePage nodeId={route.nodeId} /> : <NodesView onBack={phone ? toYou : undefined} />;
       case "settings":
-        return <SettingsView page={route.page ?? null} onBack={toYou} />;
+        return <SettingsView page={route.page ?? null} onBack={toYou} fullWindow={!phone} />;
       case "welcome":
         return <WelcomeView intro={route.intro} />;
       case "help":
@@ -199,8 +201,6 @@ function Workspace() {
   })();
   // conversations use the whole screen on phones; everything else keeps the tab bar
   const showTabs = phone && !(route.view === "chat" && route.channelId) && route.view !== "vault";
-  // on larger screens Settings takes the whole window: its own list replaces the rail
-  const fullSettings = !phone && route.view === "settings";
   const dialogs = (
     <>
       <CommandPalette />
@@ -212,16 +212,6 @@ function Workspace() {
       {channelBrowser && <ChannelBrowser sectionId={channelBrowser.sectionId} create={channelBrowser.create} onClose={() => useStore.setState({ channelBrowser: null })} />}
     </>
   );
-
-  if (fullSettings)
-    return (
-      <div className="h-full flex flex-col overflow-hidden bg-app">
-        <div className="flex-1 min-h-0 flex">
-          <SettingsView page={route.page ?? null} fullWindow />
-        </div>
-        {dialogs}
-      </div>
-    );
 
   // desktops: Chats is a column and the open chat side by side, like one panel split in two
   const withColumn = !phone && (route.view === "chat" || route.view === "chats");
@@ -297,118 +287,4 @@ function ChatsPage({ route }: { route: Route }) {
   );
 }
 
-/** Phones: you, your organizations, memory, marketplace, devices, help and settings in one place. */
-function YouPage() {
-  const me = useStore((s) => s.me)!;
-  const { done } = useOnboarding();
-  const dismissed = useDismissed();
-  const features = useFeatures();
-  const { current } = useOrgs();
-  const [orgs, setOrgs] = useState(false);
-  const { progress, steps, complete } = setupProgress(done);
-  const isGuest = me.role === "guest";
-  /** a row with a plain line icon, like iOS Settings */
-  const row = (icon: ReactNode, label: string, to: string | (() => void), hint?: string, desc?: string) => {
-    const cls = "w-full text-left flex items-center gap-3.5 px-4 min-h-14 py-2 border-b border-line last:border-0 hover:bg-hover";
-    const inner = (
-      <>
-        <span className="size-5 shrink-0 grid place-items-center text-muted">{icon}</span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-[17px]">{label}</span>
-          {desc && <span className="block text-[13px] text-muted">{desc}</span>}
-        </span>
-        {hint && <span className="text-sm text-muted tabular-nums">{hint}</span>}
-        <ChevronRight size={16} className="text-faint" />
-      </>
-    );
-    return typeof to === "string" ? (
-      <a href={to} className={cls}>
-        {inner}
-      </a>
-    ) : (
-      <button onClick={to} className={cls}>
-        {inner}
-      </button>
-    );
-  };
-  return (
-    <div className="flex-1 overflow-y-auto safe-top">
-      <div className="p-[18px] space-y-5">
-        <div className="flex items-center gap-3.5 pt-2">
-          <span className="circle" style={{ width: 56, height: 56 }}>
-            {initialsOf(me.user.name)}
-          </span>
-          <div className="min-w-0">
-            <div className="text-xl font-bold truncate">{me.user.name}</div>
-            <div className="text-sm text-muted truncate">
-              {me.user.email} · {me.role}
-            </div>
-          </div>
-        </div>
-        {!complete && <div className="rounded-3xl bg-card overflow-hidden">{row(<Sparkles size={20} strokeWidth={1.8} />, dismissed ? "Finish setup" : "Get started", href({ view: "welcome" }), dismissed ? `${progress} of ${steps}` : `${progress}/${steps}`)}</div>}
-        <div className="rounded-3xl bg-card overflow-hidden">
-          {row(<Building2 size={20} strokeWidth={1.8} />, current?.name ?? me.workspace.name, () => setOrgs(true), undefined, "Switch organization")}
-        </div>
-        <div className="rounded-3xl bg-card overflow-hidden">
-          {features.tasks && row(<ListTodo size={20} strokeWidth={1.8} />, "Tasks", href({ view: "tasks" }), undefined, "Work you handed to an agent")}
-          {features.tasks && !isGuest && row(<SquarePen size={20} strokeWidth={1.8} />, "New task", () => useStore.setState({ newTaskOpen: true }))}
-          {row(<BookOpen size={20} strokeWidth={1.8} />, "Memory", href({ view: "vault", path: null }), undefined, "Notes you and your agents share")}
-          {row(<Brain size={20} strokeWidth={1.8} />, "About you", href({ view: "about" }), undefined, "What agents should know about you")}
-          {row(<Store size={20} strokeWidth={1.8} />, "Marketplace", href({ view: "marketplace" }), undefined, "Apps and skills for your agents")}
-          {row(<Server size={20} strokeWidth={1.8} />, "Devices", href({ view: "nodes" }), undefined, "Computers running Wisp")}
-          {row(<Blocks size={20} strokeWidth={1.8} />, "Mods", href({ view: "mods" }), undefined, "Optional parts of Wisp")}
-        </div>
-        <div className="rounded-3xl bg-card overflow-hidden">
-          {row(<LifeBuoy size={20} strokeWidth={1.8} />, "Help", href({ view: "help" }), undefined, "Answers, setup, and what words mean")}
-          {row(<Settings size={20} strokeWidth={1.8} />, "Settings", href({ view: "settings" }))}
-        </div>
-        <ModePicker />
-        <button onClick={logout} className="w-full h-12 rounded-full bg-card text-bad text-[15px] font-medium inline-flex items-center justify-center gap-2">
-          <LogOut size={17} /> Sign out
-        </button>
-      </div>
-      {orgs && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && setOrgs(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Organizations" className="w-full bg-panel border-t border-line rounded-t-[38px] pb-6 safe-bottom">
-            <div className="flex justify-end p-3.5 pb-0">
-              <button onClick={() => setOrgs(false)} aria-label="Close" className="circle">
-                <X size={20} />
-              </button>
-            </div>
-            <OrgList onDone={() => setOrgs(false)} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Light, dark, or whatever the device uses. Color themes live in Settings. */
-function ModePicker() {
-  const { mode, setMode } = useAppearance();
-  const options: [ModeChoice, string, ReactNode][] = [
-    ["system", "System", <SunMoon key="s" size={16} />],
-    ["light", "Light", <Sun key="l" size={16} />],
-    ["dark", "Dark", <Moon key="d" size={16} />],
-  ];
-  return (
-    <div className="flex rounded-full bg-card p-1" role="radiogroup" aria-label="Mode">
-      {options.map(([value, label, icon]) => (
-        <button key={value} role="radio" aria-checked={mode === value} onClick={() => setMode(value)} className={cx("flex-1 h-10 rounded-full text-[15px] inline-flex items-center justify-center gap-2 transition-colors", mode === value ? "bg-control border border-control-line text-ink font-medium" : "text-muted")}>
-          {icon} {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-export async function logout() {
-  await api("POST", "/api/auth/logout").catch(() => {});
-  window.wispDesktop?.setBadge(0);
-  const nav = navigator as Navigator & { clearAppBadge?(): Promise<void>; setAppBadge?(n: number): Promise<void> };
-  await (nav.clearAppBadge ? nav.clearAppBadge() : nav.setAppBadge?.(0))?.catch(() => {});
-  setToken(null);
-  location.hash = "";
-  location.reload();
-}
-
+export { logout };

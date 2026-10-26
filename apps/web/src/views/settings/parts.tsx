@@ -5,9 +5,9 @@ import { cx } from "../../components/ui.tsx";
 /** The top of a settings page: its name and what it's for. */
 export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="mb-8">
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-      {children && <p className="mt-1 text-sm text-muted max-w-xl">{children}</p>}
+    <div className="mb-6">
+      <h2 className="text-[28px] leading-tight font-bold tracking-tight">{title}</h2>
+      {children && <p className="mt-1.5 text-[15px] leading-snug text-muted max-w-xl">{children}</p>}
     </div>
   );
 }
@@ -15,11 +15,11 @@ export function PageHeader({ title, children }: { title: string; children?: Reac
 /** A group of settings with a small heading, like Linear's and Slack's. */
 export function Section({ title, description, action, children }: { title: string; description?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="mb-10">
-      <div className="mb-3 flex items-end justify-between gap-3">
+    <section className="mb-7">
+      <div className="mb-2 px-1 flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
+          <h3 className="text-[13px] font-semibold text-faint tracking-wide">{title}</h3>
+          {description && <p className="mt-0.5 text-[13px] leading-snug text-faint">{description}</p>}
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
@@ -30,16 +30,16 @@ export function Section({ title, description, action, children }: { title: strin
 
 /** Rows in a bordered card. */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx("rounded-xl border border-line divide-y divide-line", className)}>{children}</div>;
+  return <div className={cx("rounded-[20px] bg-card border border-line divide-y divide-line overflow-hidden", className)}>{children}</div>;
 }
 
 /** One setting: what it is on the left, the control on the right (stacked on phones). */
 export function Row({ label, hint, children, className }: { label: ReactNode; hint?: ReactNode; children?: ReactNode; className?: string }) {
   return (
-    <div className={cx("px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6", className)}>
+    <div className={cx("px-[18px] py-2.5 min-h-[54px] md:min-h-[52px] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6", className)}>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{label}</div>
-        {hint && <div className="mt-0.5 text-xs text-muted">{hint}</div>}
+        <div className="text-[15px]">{label}</div>
+        {hint && <div className="mt-0.5 text-[13px] leading-snug text-faint">{hint}</div>}
       </div>
       {children !== undefined && <div className="shrink-0 flex items-center gap-2">{children}</div>}
     </div>
@@ -55,9 +55,9 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!on)}
-      className={cx("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-40", on ? "bg-accent" : "bg-chip border border-line")}
+      className={cx("relative inline-flex h-[30px] w-[52px] shrink-0 items-center rounded-full transition-colors disabled:opacity-40", on ? "bg-badge" : "bg-control border border-control-line")}
     >
-      <span className={cx("inline-block size-4 rounded-full shadow transition-transform", on ? "translate-x-[18px] bg-accent-ink" : "translate-x-0.5 bg-white")} />
+      <span className={cx("inline-block size-6 rounded-full shadow bg-white transition-transform", on ? "translate-x-[25px]" : "translate-x-[3px]")} />
     </button>
   );
 }
@@ -65,7 +65,7 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
 /** Pick one of a few options, inline. */
 export function Segmented<T extends string>({ value, options, onChange, label, disabled }: { value: T; options: [T, ReactNode][]; onChange: (v: T) => void; label: string; disabled?: boolean }) {
   return (
-    <div className="inline-flex rounded-lg border border-line p-0.5 bg-bg" role="radiogroup" aria-label={label}>
+    <div className="inline-flex rounded-[14px] border border-control-line p-[3px] bg-control" role="radiogroup" aria-label={label}>
       {options.map(([v, text]) => (
         <button
           key={v}
@@ -74,7 +74,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, d
           aria-checked={value === v}
           disabled={disabled}
           onClick={() => onChange(v)}
-          className={cx("h-7 px-2.5 rounded-md text-[13px] inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50", value === v ? "bg-panel text-ink font-medium shadow-sm" : "text-muted hover:text-ink")}
+          className={cx("h-[34px] px-3.5 rounded-[11px] text-sm inline-flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50", value === v ? "bg-ink/15 text-ink font-semibold" : "text-muted hover:text-ink")}
         >
           {text}
         </button>
@@ -85,7 +85,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, d
 
 export function Select({ value, onChange, children, label, disabled, className }: { value: string; onChange: (v: string) => void; children: ReactNode; label: string; disabled?: boolean; className?: string }) {
   return (
-    <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cx("h-8 rounded-lg border border-line bg-panel px-2 text-sm disabled:opacity-60", className)}>
+    <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cx("h-9 rounded-xl border border-control-line bg-control px-2.5 text-sm disabled:opacity-60", className)}>
       {children}
     </select>
   );

@@ -186,7 +186,7 @@ export function registerOrgApi(app: FastifyInstance, hub: Hub, h: Helpers) {
     if (!c) return;
     const body = parse(
       z
-        .object({ harness: HARNESS.nullable(), model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), computer: z.enum(["own-vm", "none"]), nodeId: z.string().nullable() })
+        .object({ harness: HARNESS.nullable(), model: z.string().max(MAX_MODEL_ID_LENGTH).nullable(), computer: z.enum(["own-vm", "none"]), nodeId: z.string().nullable(), models: z.record(HARNESS, z.string().max(MAX_MODEL_ID_LENGTH).nullable()) })
         .partial()
         .strict(),
       req.body,

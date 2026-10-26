@@ -27,7 +27,8 @@ extension EnvironmentValues {
 struct SettingsSheet: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
-  @AppStorage(ThemeSettings.modeKey, store: WispPreferences.standard) private var mode = ThemeSettings.defaultMode
+  @AppStorage(ThemeSettings.themeKey, store: WispPreferences.standard) private var theme = "mono"
+  @Environment(\.openURL) private var openURL
   @State private var confirmSignOut = false
   @State private var newTask = false
   @State private var orgs = false
@@ -42,23 +43,32 @@ struct SettingsSheet: View {
         ScrollView {
           VStack(spacing: 14) {
             primary
+            if store.role == "guest" {
+              guestNote
+            }
             if store.canManage {
               CardCaption("Agents")
               CardGroup {
-                NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Ask before risky actions", subtitle: "Shell, apps and computer use") }
-                  .accessibilityIdentifier("you-ask-before")
+                if store.isOwner {
+                  ToggleRow(title: "Ask before risky actions", subtitle: "Shell, apps and computer use", isOn: askBefore, id: "you-ask-before")
+                } else {
+                  NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Ask before risky actions", subtitle: "Shell, apps and computer use") }
+                    .accessibilityIdentifier("you-ask-before")
+                }
                 NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Default model", value: store.agentDefaults?.model ?? "Each harness") }
                   .accessibilityIdentifier("settings-agent-defaults")
               }
             }
             CardGroup {
-              NavigationLink { NotificationSettingsView() } label: {
-                RowLabel(title: "Notifications", value: store.notificationStatus == .authorized ? "On" : "Off")
-              }.accessibilityIdentifier("you-notifications")
-              NavigationLink { AppearanceSettingsView() } label: { RowLabel(title: "Appearance", value: modeName) }
+              ToggleRow(title: "Notifications", isOn: notifications, id: "you-notifications")
+              NavigationLink { AppearanceSettingsView() } label: { RowLabel(title: "Appearance", value: themeName) }
                 .accessibilityIdentifier("settings-appearance")
-              NavigationLink { HelpView() } label: { RowLabel(title: "Help", subtitle: "Setup, fixes and plain words") }.accessibilityIdentifier("you-help")
-              NavigationLink { NativeSettingsView() } label: { RowLabel(title: "All settings") }.accessibilityIdentifier("you-settings")
+              NavigationLink { HelpView() } label: { RowLabel(title: "Help") }.accessibilityIdentifier("you-help")
+              if store.role != "guest" {
+                NavigationLink { NativeSettingsView() } label: { RowLabel(title: "All settings") }.accessibilityIdentifier("you-settings")
+              } else {
+                NavigationLink { NativeSettingsView() } label: { RowLabel(title: "Settings") }.accessibilityIdentifier("you-settings")
+              }
             }
             CardGroup {
               Button { confirmSignOut = true } label: { RowLabel(title: "Sign out", chevron: false, tint: Palette.red) }
@@ -78,14 +88,38 @@ struct SettingsSheet: View {
     .presentationDragIndicator(.hidden)
     .sheet(isPresented: $newTask) { NewTaskView() }
     .sheet(isPresented: $orgs) { OrgSwitcherSheet().environment(store) }
-    .confirmationDialog("Sign out of Wisp on this iPhone?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-      Button("Sign out", role: .destructive) { dismiss(); store.signOut() }
+    .confirmCard($confirmSignOut, title: "Sign out of Wisp on this iPhone?", message: "Your agents keep working. To come back, scan your Wisp's QR code or sign in again.", confirm: "Sign out") {
+      dismiss(); store.signOut()
     }
+    .task { try? await store.refreshAgentPolicy(); await store.refreshAgentDefaults(); await store.setUpPush() }
   }
 
-  private var modeName: String { mode == "light" ? "Light" : mode == "system" ? "System" : "Dark" }
+  private var themeName: String { AppTheme.named(theme).name }
 
-  /** profile, organization, computers, apps, memory, tasks */
+  /** the switch for "Ask before risky actions": on when any action asks first */
+  private var askBefore: Binding<Bool> {
+    Binding(get: { !(store.agentPolicy?.askBefore.isEmpty ?? true) }, set: { on in
+      guard var next = store.agentPolicy else { return }
+      next.askBefore = on ? ["send", "spend", "delete", "post", "signup", "share"] : []
+      store.agentPolicy = next
+      Task { try? await store.saveAgentPolicy(next) }
+    })
+  }
+
+  /** notifications on this phone: turning them on asks iOS; turning them off opens the iPhone's own settings */
+  private var notifications: Binding<Bool> {
+    Binding(get: { store.notificationStatus == .authorized || store.notificationStatus == .provisional }, set: { on in
+      if on { Task { await store.enableNotifications() } }
+      else if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+    })
+  }
+
+  private var guestNote: some View {
+    Text("You're a guest in \(store.workspace?.name ?? "this organization"). You can chat in the teams you're added to and use the shared folder in memory. Agents, computers and settings belong to the owner.")
+      .font(.system(size: 15)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
+  }
+
+  /** profile, organization, computers, apps, memory, tasks (a guest sees their profile and the shared folder) */
   private var primary: some View {
     CardGroup {
       if store.me != nil {
@@ -95,23 +129,27 @@ struct SettingsSheet: View {
           }
         }.accessibilityIdentifier("you-profile")
       }
-      Button { orgs = true } label: { RowLabel(title: "Organization", value: store.workspace?.name) }
-        .buttonStyle(.plain).accessibilityIdentifier("you-organizations")
-      NavigationLink { DevicesView() } label: {
-        RowLabel(title: "Computers and devices", value: online > 0 ? "\(online) online" : nil)
-      }.accessibilityIdentifier("you-devices")
-      NavigationLink { MarketplaceView() } label: { RowLabel(title: "Connect apps", subtitle: "Tools and skills for your agents") }
-        .accessibilityIdentifier("you-marketplace")
-      NavigationLink { MemoryView() } label: { RowLabel(title: "Memory", subtitle: "Notes you and your agents share") }
+      if store.role != "guest" {
+        Button { orgs = true } label: { RowLabel(title: "Organization", value: store.workspace?.name) }
+          .buttonStyle(.plain).accessibilityIdentifier("you-organizations")
+        NavigationLink { DevicesView() } label: {
+          RowLabel(title: "Computers and devices", value: online > 0 ? "\(online) online" : nil)
+        }.accessibilityIdentifier("you-devices")
+        NavigationLink { MarketplaceView() } label: { RowLabel(title: "Connect apps", subtitle: "Tools and skills for your agents") }
+          .accessibilityIdentifier("you-marketplace")
+      }
+      NavigationLink { MemoryView() } label: { RowLabel(title: "Memory", subtitle: store.role == "guest" ? nil : "Notes you and your agents share", value: store.role == "guest" ? "Shared folder" : nil) }
         .accessibilityIdentifier("you-memory")
-      NavigationLink { AboutYouView() } label: { RowLabel(title: "About you", subtitle: "What agents should know about you") }
-        .accessibilityIdentifier("you-about")
-      if store.features.tasks {
-        NavigationLink { TasksView() } label: { RowLabel(title: "Tasks", subtitle: "Work you handed to an agent") }
-          .accessibilityIdentifier("you-tasks")
-        if store.canManage {
-          Button { newTask = true } label: { RowLabel(title: "New task", chevron: false) }
-            .buttonStyle(.plain).accessibilityIdentifier("you-new-task")
+      if store.role != "guest" {
+        NavigationLink { AboutYouView() } label: { RowLabel(title: "About you", subtitle: "What agents should know about you") }
+          .accessibilityIdentifier("you-about")
+        if store.features.tasks {
+          NavigationLink { TasksView() } label: { RowLabel(title: "Tasks", subtitle: "Work you handed to an agent") }
+            .accessibilityIdentifier("you-tasks")
+          if store.canManage {
+            Button { newTask = true } label: { RowLabel(title: "New task", chevron: false) }
+              .buttonStyle(.plain).accessibilityIdentifier("you-new-task")
+          }
         }
       }
     }

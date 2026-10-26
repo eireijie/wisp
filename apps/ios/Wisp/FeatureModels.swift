@@ -140,6 +140,8 @@ struct OrgSummary: Decodable, Identifiable, Hashable {
   var agents: Int?
   var current: Bool?
   var unread: Bool?
+  /** you own it, it is not the first organization, and you are in another one */
+  var canDelete: Bool?
 
   var subtitle: String {
     let people = members ?? 1, bots = agents ?? 0
@@ -162,4 +164,6 @@ struct AgentDefaults: Codable, Hashable {
   var model: String?
   var computer: String? // "own-vm" | "none"
   var nodeId: String?
+  /** a default model for each AI tool (harness id to model id) */
+  var models: [String: String]?
 }
