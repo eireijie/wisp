@@ -963,7 +963,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const ch = channelVisible(c, (req.params as { id: string }).id);
     if (!ch) return reply.code(404).send({ error: "channel not found" });
     if (ch.archivedAt) return reply.code(409).send({ error: `#${ch.name} is archived; unarchive it to post here` });
-    const body = parse(z.object({ body: z.string().max(40_000), voice: z.boolean().optional(), threadId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
+    const body = parse(z.object({ body: z.string().max(40_000), voice: z.boolean().optional(), threadId: z.string().nullable().optional(), replyToId: z.string().nullable().optional(), fileIds: z.array(z.string()).max(20).default([]) }), req.body, reply);
     if (!body) return;
     const files = body.fileIds.map((fid) => store.file(fid)).filter((f) => f && f.workspaceId === c.workspaceId);
     if (!body.body.trim() && !files.length) return reply.code(400).send({ error: "empty message" });
@@ -973,6 +973,9 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       const root = store.message(threadId);
       if (!root || root.channelId !== ch.id) return reply.code(400).send({ error: "thread not in channel" });
     }
+    // a reply quotes a message from the same channel
+    const replyToId = body.replyToId ?? null;
+    if (replyToId && store.message(replyToId)?.channelId !== ch.id) return reply.code(400).send({ error: "reply target not in channel" });
     // An agent posting mid-run continues that run's hop count so loops stay bounded.
     let hop = 0;
     if (c.actor.kind === "agent") {
@@ -980,7 +983,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       hop = (running?.hop ?? 0) + 1;
     }
     store.addChannelMember(ch.id, c.actor);
-    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
+    return hub.postMessage({ channelId: ch.id, threadId, author: c.actor, body: body.body, replyToId, parts: [...files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name })), ...(body.voice ? [{ type: "status" as const, text: "Voice message" }] : [])], hop, onBehalfOf: requesterOf(c) });
   });
 
   app.post("/api/runs/:id/cancel", async (req, reply) => {

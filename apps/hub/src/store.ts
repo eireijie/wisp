@@ -765,12 +765,12 @@ export class Store {
 
   // --- messages -------------------------------------------------------------
 
-  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number }): Message {
-    const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now() };
+  insertMessage(m: { channelId: string; threadId?: string | null; author: Actor; body: string; parts?: MessagePart[]; hop?: number; replyToId?: string | null }): Message {
+    const msg: Message = { id: id("msg"), channelId: m.channelId, threadId: m.threadId ?? null, author: m.author, body: m.body, parts: m.parts ?? [], hop: m.hop ?? 0, createdAt: now(), ...(m.replyToId ? { replyToId: m.replyToId } : {}) };
     this.db
-      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt);
-    return msg;
+      .prepare("INSERT INTO messages (id, channel_id, thread_id, author_kind, author_id, body, parts_json, hop, created_at, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(msg.id, msg.channelId, msg.threadId, msg.author.kind, msg.author.id, msg.body, JSON.stringify(msg.parts), msg.hop, msg.createdAt, msg.replyToId ?? null);
+    return this.withReplyQuote(msg);
   }
 
   deleteMessage(messageId: string) {
@@ -857,10 +857,20 @@ export class Store {
     return out;
   }
 
-  /** Messages with their reactions attached. */
+  /** A reply with the message it quotes attached, as that message reads now. */
+  withReplyQuote(m: Message): Message {
+    if (!m.replyToId) return m;
+    const q = this.message(m.replyToId);
+    if (!q || q.channelId !== m.channelId) return m;
+    const file = q.parts.find((p) => p.type === "file");
+    const text = q.body.replace(/\s+/g, " ").trim() || (file && file.type === "file" ? file.name : "");
+    return { ...m, replyTo: { id: q.id, author: q.author, snippet: q.deletedAt ? "" : text.length > 140 ? `${text.slice(0, 140)}…` : text, ...(q.deletedAt ? { deleted: true } : {}) } };
+  }
+
+  /** Messages with their reactions and the messages they quote attached. */
   withReactions(messages: Message[]): Message[] {
     const r = this.reactions(messages.map((m) => m.id));
-    return messages.map((m) => ({ ...m, reactions: r[m.id] ?? [] }));
+    return messages.map((m) => this.withReplyQuote({ ...m, reactions: r[m.id] ?? [] }));
   }
 
   // --- search ---------------------------------------------------------------
@@ -1410,6 +1420,7 @@ type MessageRow = {
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  reply_to_id: string | null;
 };
 
 function toMessage(r: MessageRow): Message {
@@ -1424,6 +1435,7 @@ function toMessage(r: MessageRow): Message {
     createdAt: r.created_at,
     ...(r.edited_at ? { editedAt: r.edited_at } : {}),
     ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
+    ...(r.reply_to_id ? { replyToId: r.reply_to_id } : {}),
   };
 }
 
