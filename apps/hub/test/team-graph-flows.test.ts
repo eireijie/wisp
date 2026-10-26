@@ -541,7 +541,7 @@ describe("an agent drawing a team from a sentence", () => {
     expect(draft.status).toBe("ready");
     expect(draft.name).toBe("Release crew");
     expect(draft.problem).toBeUndefined();
-    expect(draft.steps!.map((s) => [s.id, s.kind, s.agentId === null ? null : hub.store.agent(s.agentId)?.handle])).toEqual([
+    expect(draft.steps!.map((s) => [s.id, s.kind, s.agentId ? hub.store.agent(s.agentId)?.handle : null])).toEqual([
       ["s1", "do", "atlas"],
       ["s2", "do", "sol"],
       ["s3", "do", "forge"],
