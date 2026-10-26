@@ -70,7 +70,7 @@ struct RoutinesView: View {
         Text(routine.name).font(.system(size: 17)).foregroundStyle(Palette.text).multilineTextAlignment(.leading)
         Text(RoutineWords.when(routine, channel: routine.channelId.flatMap { id in store.channels.first { $0.id == id }.map { store.title(of: $0) } }))
           .font(.system(size: 14)).foregroundStyle(Palette.faint).multilineTextAlignment(.leading)
-        if routine.enabled == false { Text("Only when someone runs it").font(.system(size: 14)).foregroundStyle(Palette.faint) }
+        if routine.enabled == false && routine.schedule != nil { Text("Only when someone runs it").font(.system(size: 14)).foregroundStyle(Palette.faint) }
         else if let last = routine.lastCompletedAt.flatMap(Wire.date) { Text("Last done \(last, format: .relative(presentation: .named))").font(.system(size: 13)).foregroundStyle(Palette.faint) }
       }
       Spacer(minLength: 8)
