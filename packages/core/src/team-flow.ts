@@ -235,7 +235,7 @@ export function migrateTeam<T extends Pick<ChannelTeam, "roles" | "steps">>(team
   return { ...team, steps };
 }
 
-export function isGraphTeam(team: Pick<ChannelTeam, "steps">): boolean {
+export function isGraphTeam(team: { steps?: Pick<TeamStep, "nexts" | "inputs">[] }): boolean {
   return !!team.steps?.every((s) => s.nexts !== undefined && s.inputs !== undefined);
 }
 

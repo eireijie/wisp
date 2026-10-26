@@ -314,7 +314,9 @@ export class TeamFlows {
   private handOffToTeam(f: TeamFlow, team: ChannelTeam & { steps: TeamStep[] }, step: TeamStep, lane: FlowLane) {
     const target = step.handoffTo ? this.hub.store.channel(step.handoffTo) : undefined;
     const mine = this.hub.store.channel(f.channelId);
-    if (!target || target.workspaceId !== f.workspaceId || target.kind !== "channel" || target.archivedAt || target.id === f.channelId)
+    // a private team only takes work from people who can see it (the same rule as the REST API: its members and owners)
+    const seen = !!target && (!target.private || (!!f.requestedBy && !!this.hub.audience(target.id)?.(f.requestedBy)));
+    if (!target || !seen || target.workspaceId !== f.workspaceId || target.kind !== "channel" || target.archivedAt || target.id === f.channelId)
       return this.waitLane(f, lane, `“${this.title(team, step)}” hands the work to a team that isn't there any more. Pick another team in the steps, then try again.`, "retry");
     if ((f.depth ?? 0) >= MAX_DEPTH) return this.waitLane(f, lane, `Teams have handed this work on ${MAX_DEPTH} times in a row. Stopping here so it doesn't go round forever.`, "retry");
     const body = [`From the ${mine?.name} team${f.request ? `, who were asked:\n> ${f.request.trim().replace(/\n/g, "\n> ")}` : ""}`, step.prompt?.trim() ?? "", lane.carry?.text?.trim() ? `Their work so far:\n${lane.carry.text.trim()}` : ""].filter(Boolean).join("\n\n");
@@ -327,6 +329,10 @@ export class TeamFlows {
     lane.handoff = { channelId: target.id, flowId: child?.id ?? null };
     f.rounds[step.id] = (f.rounds[step.id] ?? 0) + 1;
     if (step.waitForReply && child) {
+      // a team that finished before this was linked has already sent its news: take the answer now
+      const now = this.flow(child.id);
+      if (now?.status === "done") return this.complete(f, lane, now.result || `#${target.name} finished.`);
+      if (now?.status === "failed") return this.waitLane(f, lane, `The team this step handed work to stopped before it finished. Try again to hand it over again, or approve to go on without an answer.`, "retry");
       this.save(f);
       return;
     }
@@ -409,7 +415,7 @@ export class TeamFlows {
   }
 
   /** A step finished with this result: its lane is done, and whatever was waiting on it can go. */
-  private complete(f: TeamFlow, lane: FlowLane, result: string): void {
+  private complete(f: TeamFlow, lane: FlowLane, result: string, leaveLoop = false): void {
     const team = this.team(f);
     lane.status = "done";
     lane.result = result;
@@ -418,8 +424,16 @@ export class TeamFlows {
     if (!team || !step) return this.finish(f, "failed", "The team's steps were removed, so this stopped.");
     const g = stepGraph(team.steps);
     if (step.kind === "branch") {
-      const to = lane.chose === "no" ? step.ifFalse : step.ifTrue;
-      const back = to && g.back.get(step.id)?.includes(to);
+      let to = lane.chose === "no" ? step.ifFalse : step.ifTrue;
+      let back = to && g.back.get(step.id)?.includes(to);
+      if (back && leaveLoop) {
+        // a person approved it anyway: take the other way out, or end here if that goes back too
+        const other = lane.chose === "no" ? step.ifTrue : step.ifFalse;
+        const forward = !!other && !g.back.get(step.id)?.includes(other);
+        if (forward) lane.chose = lane.chose === "no" ? "yes" : "no";
+        to = forward ? other : null;
+        back = false;
+      }
       if (back) {
         // going back round: bounded by the if/else's rounds, then a person decides
         const max = step.maxRounds ?? DEFAULT_ROUNDS;
@@ -432,7 +446,8 @@ export class TeamFlows {
         this.resetFrom(f, team, to!);
         return this.runStep(f, team.steps.find((s) => s.id === to)!, { from: this.who(team, step), text: result || "(no notes given)", sentBack: true });
       }
-      for (const o of g.outs.get(step.id) ?? []) if (o !== to) this.skip(f, team, o);
+      // the other way's steps are skipped once nothing else leads to them either (the chosen path may still reach them)
+      for (const o of g.outs.get(step.id) ?? []) if (o !== to) this.ready(f, team, o);
       if (to) this.ready(f, team, to);
     } else {
       for (const o of g.outs.get(step.id) ?? []) this.ready(f, team, o);
@@ -871,6 +886,6 @@ export class TeamFlows {
     if (step.kind === "branch" && !lane.chose) lane.chose = "yes";
     lane.status = "running";
     f.status = "running";
-    this.complete(f, lane, result);
+    this.complete(f, lane, result, wasRounds && step.kind === "branch");
   }
 }

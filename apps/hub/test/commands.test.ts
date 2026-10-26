@@ -121,4 +121,28 @@ describe("/ commands", () => {
     expect(hub.store.agent(codexer.id)?.model).toBeNull();
     expect(hub.store.activeRuns(codexer.id)).toHaveLength(0);
   });
+  it("drops an effort the harness's own default model doesn't offer when going back to default", async () => {
+    hub.store.updateAgent(codexer.id, { model: "gpt-6.1-sol", settings: { effort: "max" } });
+    expect(hub.store.agent(codexer.id)?.settings.effort).toBe("max");
+    await post("@codexer /model default");
+    expect(hub.store.agent(codexer.id)).toMatchObject({ model: null, settings: { effort: null } });
+  });
+
+  it("lets a guest ask which model an agent uses, but not change it", async () => {
+    await api("POST", "/api/members", { email: "gus@example.com", name: "Gus", password: "password123", role: "guest" });
+    const gus = (await api("POST", "/api/auth/login", { email: "gus@example.com", password: "password123" }, "")).data.token;
+    const say = (body: string) => api("POST", `/api/channels/${general.id}/messages`, { body }, gus);
+    const notes = () => hub.store.messages(general.id, { limit: 50 }).flatMap((m) => m.parts.flatMap((p) => (p.type === "status" ? [p.text] : [])));
+    hub.store.updateAgent(codexer.id, { model: "gpt-6-astra", settings: { respondTo: "anyone" } });
+    // on a device its owner shared with everyone, anyone may ask it things
+    hub.store.db.prepare("UPDATE nodes SET shared = 1 WHERE id = ?").run(codexer.nodeId);
+    expect((await say("@codexer /model gpt-6.1-sol")).status).toBe(200);
+    expect(hub.store.agent(codexer.id)?.model).toBe("gpt-6-astra");
+    expect(notes().at(-1)).toMatch(/Guests can't change/);
+    await say("@codexer /model");
+    expect(notes().at(-1)).toContain("gpt-6-astra");
+    // a member still can
+    await post("@codexer /model sol 6.1");
+    expect(hub.store.agent(codexer.id)?.model).toBe("gpt-6.1-sol");
+  });
 });

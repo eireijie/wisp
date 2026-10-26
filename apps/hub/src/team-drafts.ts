@@ -56,7 +56,7 @@ export function draftBrief(description: string, agents: { handle: string; name: 
 }
 
 /** An agent's JSON as steps; null when it isn't JSON with steps. Unknown agents become the drafting agent; unknown teams are left empty (the draft's problem says so). */
-export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: string, text: string): { name?: string; steps: TeamStep[] } | null {
+export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: string, text: string, canSee: (channelId: string) => boolean = () => true): { name?: string; steps: TeamStep[] } | null {
   const a = text.indexOf("{");
   const b = text.lastIndexOf("}");
   if (a < 0 || b <= a) return null;
@@ -66,9 +66,12 @@ export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: strin
   } catch {
     return null;
   }
-  const raw = (json.steps ?? []).filter((s) => s && typeof s === "object").slice(0, 40);
+  // an agent's answer can be any shape: anything that isn't a list of steps with their own ids is not a flowchart
+  if (!json || !Array.isArray(json.steps)) return null;
+  const raw = json.steps.filter((s) => s && typeof s === "object" && !Array.isArray(s)).slice(0, 40);
   if (!raw.length) return null;
   const ids = raw.map((s, i) => (typeof s.id === "string" && s.id.trim() ? s.id.trim() : `s${i + 1}`));
+  if (new Set(ids).size !== ids.length) return null;
   const known = new Set(ids);
   const ref = (x: unknown) => (typeof x === "string" && known.has(x) ? x : null);
   const agents = hub.store.agents(workspaceId);
@@ -76,7 +79,7 @@ export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: strin
     const k = (n ?? "").replace(/^@/, "").trim().toLowerCase();
     return k ? (agents.find((x) => x.handle.toLowerCase() === k) ?? agents.find((x) => x.name.toLowerCase() === k)) : undefined;
   };
-  const channels = hub.store.channels(workspaceId).filter((c) => c.kind === "channel" && !c.archivedAt);
+  const channels = hub.store.channels(workspaceId).filter((c) => c.kind === "channel" && !c.archivedAt && canSee(c.id));
   const steps: TeamStep[] = raw.map((s, i) => {
     const kind = KINDS[(s.kind ?? "do").toLowerCase().replace(/[^a-z_]/g, "")] ?? "do";
     const needsAgent = kind !== "ask" && kind !== "handoff";
@@ -86,7 +89,7 @@ export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: strin
       kind,
       action: String(s.title ?? "").trim().slice(0, 200) || `Step ${i + 1}`,
       next: null,
-      inputs: [...new Set((s.inputs ?? []).map(ref).filter((x): x is string => !!x && x !== ids[i]))],
+      inputs: [...new Set((Array.isArray(s.inputs) ? s.inputs : []).map(ref).filter((x): x is string => !!x && x !== ids[i]))],
       agentId: needsAgent ? (agentByName(s.agent)?.id ?? drafter) : null,
       prompt: typeof s.prompt === "string" ? s.prompt.slice(0, 8000) : "",
       x: 0,
@@ -113,7 +116,11 @@ export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: strin
     }
     return step;
   });
-  return { name: typeof json.name === "string" ? json.name.trim().slice(0, 60) : undefined, steps: layoutSteps(normalizeSteps(steps)) };
+  try {
+    return { name: typeof json.name === "string" ? json.name.trim().slice(0, 60) : undefined, steps: layoutSteps(normalizeSteps(steps)) };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -124,14 +131,24 @@ export function stepsFromDraftJson(hub: Hub, workspaceId: string, drafter: strin
 export function registerTeamDraftApi(app: FastifyInstance, hub: Hub, h: Helpers) {
   const { store } = hub;
 
-  const view = (workspaceId: string, taskId: string): TeamDraft | null => {
+  /** A private team or a DM is for its members and the organization's owners, as everywhere else. */
+  const sees = (c: Caller, channelId: string) => {
+    const ch = store.channel(channelId);
+    if (!ch || ch.workspaceId !== c.workspaceId) return false;
+    return (ch.kind !== "dm" && !ch.private) || c.viewer.role === "owner" || store.isMember(ch.id, c.actor);
+  };
+
+  const view = (c: Caller, taskId: string): TeamDraft | null => {
+    const workspaceId = c.workspaceId;
     const task = store.task(taskId);
     if (!task || task.workspaceId !== workspaceId || task.title !== DRAFT_TITLE || !task.toAgentId) return null;
+    // the draft lives in its asker's chat with the agent: only people who can see that chat can see the draft
+    if (task.channelId && !sees(c, task.channelId)) return null;
     const description = (/(?:^> .*\n?)+/m.exec(task.brief)?.[0] ?? "").replace(/^> /gm, "").trim();
     const base = { id: task.id, description, agentId: task.toAgentId };
     if (task.status === "open" || task.status === "in_progress") return { ...base, status: "working" };
     if (task.status !== "done") return { ...base, status: "failed", problem: (task.result ?? "The agent could not finish.").slice(0, 300) };
-    const drawn = stepsFromDraftJson(hub, workspaceId, task.toAgentId, task.result ?? "");
+    const drawn = stepsFromDraftJson(hub, workspaceId, task.toAgentId, task.result ?? "", (cid) => sees(c, cid));
     if (!drawn) return { ...base, status: "failed", problem: "The agent's answer wasn't a flowchart I could read. Try again, or build it yourself." };
     const team = { roles: [], steps: drawn.steps };
     const names = (id: string | null) => (id ? (store.agent(id)?.name ?? "Someone") : "Someone");
@@ -148,7 +165,7 @@ export function registerTeamDraftApi(app: FastifyInstance, hub: Hub, h: Helpers)
     const agent = body.agentId ? store.agent(body.agentId) : (workspaceLead(store, c.workspaceId) ?? all[0]);
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: all.length ? "agent not found" : "Add an agent first: an agent draws the flowchart." });
     if (!hub.flows.delegate) return reply.code(503).send({ error: "not ready yet" });
-    const teams = store.channels(c.workspaceId).filter((x) => x.kind === "channel" && !x.archivedAt).map((x) => x.name);
+    const teams = store.channels(c.workspaceId).filter((x) => x.kind === "channel" && !x.archivedAt && sees(c, x.id)).map((x) => x.name);
     const dm = store.dmChannel(c.workspaceId, c.actor.id, agent.id);
     const task = hub.flows.delegate({
       workspaceId: c.workspaceId,
@@ -161,13 +178,13 @@ export function registerTeamDraftApi(app: FastifyInstance, hub: Hub, h: Helpers)
       hop: 1,
       onBehalfOf: c.actor.id,
     });
-    return view(c.workspaceId, task.id);
+    return view(c, task.id);
   });
 
   app.get("/api/team-drafts/:id", async (req, reply) => {
     const c = h.need(req, reply, { notGuest: true });
     if (!c) return;
-    const d = view(c.workspaceId, (req.params as { id: string }).id);
+    const d = view(c, (req.params as { id: string }).id);
     if (!d) return reply.code(404).send({ error: "draft not found" });
     return d;
   });

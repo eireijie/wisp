@@ -342,6 +342,40 @@ describe("organizations", () => {
     expect((await api("DELETE", `/api/orgs/${own.org.id}`, { name: "Solo's" }, own.token)).status).toBe(409);
   });
 
+  it("deleting an organization removes accounts that were only in it, so their email is free again", async () => {
+    const doomed = (await api("POST", "/api/orgs", { name: "Doomed" }, await login("me@example.com"))).data;
+    const only = (await api("POST", "/api/members", { email: "only-here@example.com", name: "Only", password: "password123" }, doomed.token)).data;
+    const both = (await api("POST", "/api/members", { email: "both@example.com", name: "Both", password: "password123" }, doomed.token)).data;
+    hub.store.addMember(firstOrg, both.id, "member");
+    expect((await api("DELETE", `/api/orgs/${doomed.org.id}`, { name: "Doomed" }, doomed.token)).status).toBe(200);
+    // not stuck with an account that can't sign in anywhere
+    expect(hub.store.user(only.id)).toBeUndefined();
+    expect((await api("POST", "/api/auth/login", { email: "only-here@example.com", password: "password123" }, "")).status).toBe(401);
+    const home = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, await login("me@example.com"))).data.token;
+    expect((await api("POST", "/api/members", { email: "only-here@example.com", name: "Only", password: "password123" }, home)).status).toBe(200);
+    // someone who is in another organization too keeps their account
+    expect(hub.store.user(both.id)).toBeTruthy();
+    expect((await api("POST", "/api/auth/login", { email: "both@example.com", password: "password123" }, "")).status).toBe(200);
+  });
+
+  it("gives someone who was removed and invited back their old chats with agents", async () => {
+    const t = await login("me@example.com");
+    const home = (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, t)).data.token;
+    const bot = (await api("POST", "/api/agents", { handle: "dmbot", name: "DM Bot", harness: "custom" }, home)).data;
+    const dee = (await api("POST", "/api/members", { email: "dee@example.com", name: "Dee", password: "password123" }, home)).data;
+    // in another organization too, so the account outlives being removed from this one
+    hub.store.addMember(second.id, dee.id, "member");
+    const deeHome = async () => (await api("POST", `/api/orgs/${firstOrg}/switch`, undefined, await login("dee@example.com"))).data.token;
+    const dm = (await api("POST", `/api/dm/${bot.id}`, undefined, await deeHome())).data;
+    expect((await api("POST", `/api/channels/${dm.id}/messages`, { body: "hello" }, await deeHome())).status).toBe(200);
+    hub.store.removeMember(firstOrg, dee.id);
+    hub.store.addMember(firstOrg, dee.id, "member");
+    const again = (await api("POST", `/api/dm/${bot.id}`, undefined, await deeHome())).data;
+    expect(again.id).toBe(dm.id);
+    expect((await api("GET", `/api/channels/${dm.id}/messages`, undefined, await deeHome())).status).toBe(200);
+    expect((await api("POST", `/api/channels/${dm.id}/messages`, { body: "back again" }, await deeHome())).status).toBe(200);
+  });
+
   it("opens every organization's memory again after a restart", async () => {
     await close();
     await start();
