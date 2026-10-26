@@ -36,7 +36,7 @@ struct AgentFrame<Trailing: View, Content: View>: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 14) { content }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 34)
+            .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 120)
         }
         .scrollDismissesKeyboard(.interactively)
       } else {

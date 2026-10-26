@@ -72,7 +72,7 @@ struct AgentPage: View {
           notifications
           AgentError(text: action.error)
         }
-        .padding(.horizontal, 18).padding(.bottom, 34)
+        .padding(.horizontal, 18).padding(.bottom, 120)
       }
       .refreshable { await reload() }
     }
