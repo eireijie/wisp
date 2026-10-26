@@ -9,6 +9,8 @@ struct AppBanners: View {
   /** the connection has been down long enough to say so (a blip at launch isn't worth a banner) */
   @State private var offline = false
   @State private var dismissedUpdate = false
+  /** a sheet or full-screen page is up: the banners belong to the main screens, so they stay out of its way */
+  @State private var covered = false
 
   var body: some View {
     VStack(spacing: 10) {
@@ -27,6 +29,12 @@ struct AppBanners: View {
     .padding(.horizontal, 18)
     .padding(.top, 66)
     .frame(maxWidth: .infinity)
+    .opacity(covered ? 0 : 1)
+    .onReceive(Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()) { _ in
+      let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first { $0.activationState == .foregroundActive }
+      let now = scene?.keyWindow?.rootViewController?.presentedViewController != nil
+      if now != covered { covered = now }
+    }
     .animation(.snappy, value: offline && !store.connected)
     .animation(.snappy, value: store.hubUpdated)
     .task(id: store.connected) {
@@ -35,7 +43,7 @@ struct AppBanners: View {
       if !Task.isCancelled { offline = true }
     }
     .onChange(of: store.hubUpdated) { _, now in if !now { dismissedUpdate = false } }
-    .allowsHitTesting(offline || store.hubUpdated || store.syncError != nil)
+    .allowsHitTesting(!covered && (offline || store.hubUpdated || store.syncError != nil))
   }
 }
 
