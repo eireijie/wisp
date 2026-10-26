@@ -63,13 +63,13 @@ export function JoinApproval() {
     }
   };
   return (
-    <Modal title={`${request.name} wants to join`} onClose={later} headerless label={`${request.name} wants to join`} className="z-60 sm:max-w-[520px] rounded-t-[38px]! sm:rounded-[28px]!" contentClassName="p-6 sm:p-9">
+    <Modal title={`${request.name} wants to join`} onClose={later} headerless label={`${request.name} wants to join`} className="z-60 sm:max-w-[520px] rounded-t-[16px]! sm:rounded-xl!" contentClassName="p-6 sm:p-9">
       <div className="flex items-center gap-3.5">
-        <span className="size-12 shrink-0 rounded-[15px] bg-chip grid place-items-center text-ink/85" aria-hidden>
+        <span className="size-12 shrink-0 rounded-xl bg-chip grid place-items-center text-ink/85" aria-hidden>
           <Monitor size={24} strokeWidth={1.8} />
         </span>
         <div className="min-w-0">
-          <h2 className="text-[22px] leading-tight font-bold">{request.name} wants to join</h2>
+          <h2 className="t-title">{request.name} wants to join</h2>
           <p className="mt-0.5 text-sm text-muted">Another computer asked to join {workspaceName ?? "your Wisp"}.</p>
         </div>
       </div>

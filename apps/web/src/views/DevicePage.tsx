@@ -66,7 +66,7 @@ export function DevicePage({ nodeId }: { nodeId: string }) {
         <BackToComputers />
         <DeviceIcon online={n.online} />
         <div className="flex-1 min-w-0">
-          <h1 className="text-[22px] font-bold tracking-tight truncate">{n.name}</h1>
+          <h1 className="t-title truncate">{n.name}</h1>
           <div className="text-[13px] text-faint truncate">{[n.mine ? "You" : n.ownerName ? `${n.ownerName}'s` : null, n.capabilities ? osName(n.capabilities.platform) : null].filter(Boolean).join(" · ")}</div>
         </div>
         <Pill tone={st.tone}>
@@ -187,7 +187,7 @@ function OfflineHelp({ node: n, onChanged }: { node: NodeInfo; onChanged: () => 
       <ol className="space-y-2">
         {steps.map((s, i) => (
           <li key={s} className="flex items-center gap-3 rounded-2xl bg-panel border border-line px-3.5 py-2.5 text-sm">
-            <span className="size-6 shrink-0 rounded-full bg-chip grid place-items-center text-xs font-semibold">{i + 1}</span>
+            <span className="size-6 shrink-0 rounded-full bg-chip grid place-items-center text-xs font-medium">{i + 1}</span>
             {s}
           </li>
         ))}

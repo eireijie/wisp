@@ -30,7 +30,7 @@ export function AppDetail({ app, have, canEdit, onConnect, onManage }: { app: Ap
       <header className="flex items-start gap-4">
         <AppTile name={app.name} category={app.category} size={56} />
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h2 className="text-2xl font-bold tracking-tight">{app.name}</h2>
+          <h2 className="">{app.name}</h2>
           <div className="flex flex-wrap items-center gap-2">
             {trust ? <TrustPill t={trust} /> : <Badge tone="blue" title="On Wisp's list of well-known apps">On Wisp's list</Badge>}
             {registry && <span className="text-sm text-faint">by {registry.publisher}</span>}

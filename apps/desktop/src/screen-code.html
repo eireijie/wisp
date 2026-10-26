@@ -24,29 +24,29 @@
   html, body { margin: 0; }
   body {
     background: var(--panel); color: var(--ink); padding: 28px 30px 22px;
-    font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased;
   }
   form { display: flex; flex-direction: column; gap: 14px; }
   .head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
-  .tile { width: 52px; height: 52px; border-radius: 16px; background: var(--tile); display: grid; place-items: center; }
+  .tile { width: 52px; height: 52px; border-radius: 12px; background: var(--tile); display: grid; place-items: center; }
   .tile svg { width: 26px; height: 26px; }
-  h1 { font-size: 22px; font-weight: 700; margin: 4px 0 0; letter-spacing: -0.01em; }
+  h1 { font-size: 22px; font-weight: 600; margin: 4px 0 0; letter-spacing: -0.02em; }
   .head p { margin: 0; color: var(--muted); }
   .kinds { display: flex; gap: 4px; background: var(--card); border-radius: 999px; padding: 4px; }
   .kinds button { flex: 1; border: 0; background: none; color: var(--muted); height: 34px; border-radius: 999px; box-shadow: none; font-weight: 500; }
   .kinds button[aria-pressed="true"] { background: var(--control); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.18); }
-  button { font: inherit; font-weight: 600; cursor: pointer; }
+  button { font: inherit; font-weight: 500; cursor: pointer; }
   label { display: grid; gap: 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
   label span { padding-left: 6px; }
   input {
-    font: inherit; font-size: 15px; width: 100%; height: 48px; padding: 0 18px; border-radius: 16px;
+    font: inherit; font-size: 15px; width: 100%; height: 44px; padding: 0 16px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); color: var(--ink); outline: none;
   }
   input::placeholder { color: var(--faint); }
   input:focus { border-color: var(--faint); }
   :focus-visible { outline: 2px solid #0a84ff; outline-offset: 3px; }
   .error { color: var(--bad); min-height: 20px; margin: -4px 6px 0; }
-  .primary { height: 52px; border-radius: 26px; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 16px; }
+  .primary { height: 46px; border-radius: 23px; border: 0; background: var(--accent); color: var(--accent-ink); font-size: 15px; }
   .link { background: none; border: 0; color: var(--link); font-weight: 500; font-size: 15px; height: 40px; }
   .link:hover { text-decoration: underline; }
   .actions { display: flex; flex-direction: column; gap: 2px; }

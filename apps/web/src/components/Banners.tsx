@@ -47,7 +47,7 @@ export function OfflineBanner({ phone }: { phone: boolean }) {
           reconnectNow();
           setTimeout(() => setTrying(false), 1500);
         }}
-        className="h-8 px-4 rounded-full bg-accent text-accent-ink text-[13px] font-semibold inline-flex items-center gap-1.5"
+        className="h-8 px-4 rounded-full bg-accent text-accent-ink text-[13px] font-medium inline-flex items-center gap-1.5"
       >
         <RefreshCw size={14} strokeWidth={2.2} className={trying ? "animate-spin" : undefined} aria-hidden />
         Retry
@@ -64,13 +64,13 @@ export function UpdatedBanner({ phone }: { phone: boolean }) {
   return (
     <div
       role="status"
-      className={phone ? "glass fixed inset-x-[18px] top-[122px] z-50 rounded-[26px] pl-[18px] pr-3.5 py-3.5 flex items-center gap-3" : "glass fixed right-6 bottom-6 z-50 w-[380px] rounded-3xl pl-5 pr-4 py-4 flex items-center gap-2.5"}
+      className={phone ? "glass fixed inset-x-[18px] top-[122px] z-50 rounded-xl pl-[18px] pr-3.5 py-3.5 flex items-center gap-3" : "glass fixed right-6 bottom-6 z-50 w-[380px] rounded-3xl pl-5 pr-4 py-4 flex items-center gap-2.5"}
     >
       <span className={phone ? "flex-1 text-base font-medium" : "flex-1 text-[15px] font-medium"}>Wisp was updated</span>
       <button className="h-11 px-3.5 rounded-full text-muted text-[15px] font-medium hover:text-ink" onClick={() => setLater(true)}>
         Not now
       </button>
-      <button className="h-11 px-[18px] rounded-full bg-accent text-accent-ink text-[15px] font-semibold" onClick={() => location.reload()}>
+      <button className="h-11 px-[18px] rounded-full bg-accent text-accent-ink text-[15px] font-medium" onClick={() => location.reload()}>
         Reload
       </button>
     </div>

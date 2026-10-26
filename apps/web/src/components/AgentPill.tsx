@@ -45,7 +45,7 @@ export function AgentPill({ agent, open, onClick }: { agent: Agent; open?: boole
         <Ghost look={look} size={46} mood={mood} trackPointer interactive label={agent.name} />
       </span>
       <span className="flex flex-col items-start leading-tight">
-        <span className={cx("font-semibold text-base", mood === "asleep" && "text-muted")}>{agent.name}</span>
+        <span className={cx("font-medium text-base", mood === "asleep" && "text-muted")}>{agent.name}</span>
         {note && <span className={cx("text-[11px]", mood === "waiting" || mood === "error" ? "text-accent-text" : "text-muted")}>{note}</span>}
       </span>
       <span className="agent-pill-arrow text-muted">

@@ -76,7 +76,7 @@ export function ActionSheet({ actions, preview, onClose }: { actions: MessageAct
               onClose();
               a.run();
             }}
-            className={cx("w-full h-12 px-4 rounded-2xl flex items-center gap-3 text-[16px] hover:bg-hover", a.danger && "text-bad")}
+            className={cx("w-full h-12 px-4 rounded-2xl flex items-center gap-3 text-[15px] hover:bg-hover", a.danger && "text-bad")}
           >
             <span className="flex-1 text-left">{a.label}</span>
             {a.icon}
@@ -126,7 +126,7 @@ export function DeleteMessageDialog({ m, onClose }: { m: Message; onClose: () =>
       {m.body && <p className="mt-3 line-clamp-2 rounded-2xl bg-card px-3.5 py-2.5 text-sm">{m.body}</p>}
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
       <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button onClick={onClose} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-semibold">
+        <button onClick={onClose} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-medium">
           Cancel
         </button>
         <button
@@ -141,7 +141,7 @@ export function DeleteMessageDialog({ m, onClose }: { m: Message; onClose: () =>
               setBusy(false);
             }
           }}
-          className="h-11 rounded-full bg-bad px-5 text-[15px] font-semibold text-white disabled:opacity-50"
+          className="h-11 rounded-full bg-bad px-5 text-[15px] font-medium text-white disabled:opacity-50"
         >
           Delete message
         </button>
@@ -184,15 +184,15 @@ export function EditMessageDialog({ m, onClose }: { m: Message; onClose: () => v
             void save();
           }
         }}
-        className="block w-full resize-none rounded-2xl border border-control-line bg-control px-4 py-3 text-[16px] outline-none focus:border-ring"
+        className="block w-full resize-none rounded-2xl border border-control-line bg-control px-4 py-3 text-[15px] outline-none focus:border-ring"
       />
       {error && <p className="mt-2 text-sm text-bad">{error}</p>}
       <div className="mt-3 flex items-center gap-2">
         <p className="mr-auto text-xs text-faint">Others will see “(edited)” next to the time.</p>
-        <button onClick={onClose} disabled={busy} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-semibold">
+        <button onClick={onClose} disabled={busy} className="h-11 rounded-full border border-control-line bg-control px-5 text-[15px] font-medium">
           Cancel
         </button>
-        <button onClick={() => void save()} disabled={busy || !canSave} className="h-11 rounded-full bg-accent px-5 text-[15px] font-semibold text-accent-ink disabled:opacity-50">
+        <button onClick={() => void save()} disabled={busy || !canSave} className="h-11 rounded-full bg-accent px-5 text-[15px] font-medium text-accent-ink disabled:opacity-50">
           Save
         </button>
       </div>

@@ -13,7 +13,7 @@ export function AuthPage({ children, themeToggle = true, wide }: { children: Rea
   return (
     <div className="relative min-h-full bg-panel md:bg-app flex md:items-center md:justify-center safe-top">
       {themeToggle && <ThemeToggle />}
-      <div className={cx("w-full mx-auto px-[22px] pt-20 pb-8 md:my-8 md:rounded-[28px] md:bg-panel md:border md:border-line md:p-9", wide ? "md:max-w-[560px]" : "md:max-w-[440px]")}>{children}</div>
+      <div className={cx("w-full mx-auto px-[22px] pt-20 pb-8 md:my-8 md:rounded-xl md:bg-panel md:border md:border-line md:p-9", wide ? "md:max-w-[560px]" : "md:max-w-[440px]")}>{children}</div>
     </div>
   );
 }
@@ -36,7 +36,7 @@ export function AuthHero({ title, children, ghost = true }: { title: ReactNode; 
           <WispGhost size={84} />
         </span>
       )}
-      <h1 className="text-[30px] leading-tight font-bold tracking-[-0.4px] mt-2.5">{title}</h1>
+      <h1 className="t-title mt-2.5">{title}</h1>
       {children && <p className="text-base text-muted leading-[1.45] max-w-[320px]">{children}</p>}
     </div>
   );
@@ -54,7 +54,7 @@ export function AuthField({ label, hint, children }: { label?: string; hint?: Re
 }
 
 export function AuthInput({ className, ...p }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx("h-14 w-full rounded-[18px] border border-line bg-card px-[18px] text-[17px] text-ink outline-none placeholder:text-faint focus:border-ring", className)} />;
+  return <input {...p} className={cx("h-12 w-full rounded-xl border border-line bg-card px-[18px] text-[15px] text-ink outline-none placeholder:text-faint focus:border-ring", className)} />;
 }
 
 /** The big pill: filled (primary) or a raised control (secondary). */
@@ -63,7 +63,7 @@ export function AuthButton({ variant = "primary", className, ...p }: ButtonHTMLA
     <button
       {...p}
       className={cx(
-        "h-14 w-full inline-flex items-center justify-center gap-2.5 rounded-full px-[22px] text-[17px] font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
+        "h-12 w-full inline-flex items-center justify-center gap-2.5 rounded-full px-[22px] text-[15px] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/40 disabled:opacity-50 disabled:pointer-events-none",
         variant === "primary" ? "bg-accent text-accent-ink hover:bg-accent/90" : "bg-control border border-control-line text-ink hover:bg-hover",
         className,
       )}

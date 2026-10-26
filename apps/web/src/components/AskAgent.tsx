@@ -31,7 +31,7 @@ export function AskAgent({ placeholder, className }: { placeholder: string; clas
           e.preventDefault();
           void send();
         }}
-        className="flex items-center gap-2 min-h-14 rounded-full border border-line bg-panel pl-2 pr-1.5 py-1.5 shadow-[var(--shadow)]"
+        className="flex items-center gap-2 min-h-12 rounded-full border border-line bg-panel pl-2 pr-1.5 py-1.5 shadow-[var(--shadow)]"
       >
         {agents.length > 1 ? (
           <label className="relative shrink-0 size-10 grid place-items-center rounded-full hover:bg-hover cursor-pointer" title={`Ask ${agent.name}`}>

@@ -113,7 +113,7 @@ export function LoginsPage() {
                           <Globe size={19} strokeWidth={1.7} />
                         </Tile>
                         <span className="min-w-0">
-                          <span className="block truncate text-[17px] font-medium">{l.site}</span>
+                          <span className="block truncate text-[15px] font-medium">{l.site}</span>
                           <span className="block truncate text-sm text-faint md:hidden">{l.username || l.title}</span>
                         </span>
                       </span>

@@ -89,7 +89,7 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
       ) : (
         <div className="flex flex-col gap-5">
           <div className="flex items-center justify-center gap-3.5">
-            <span className="size-[60px] rounded-[18px] bg-chip grid place-items-center text-ink/85" aria-hidden>
+            <span className="size-[60px] rounded-xl bg-chip grid place-items-center text-ink/85" aria-hidden>
               <Globe size={28} strokeWidth={1.8} />
             </span>
             <ArrowRight size={22} className="text-faint" aria-hidden />
@@ -97,16 +97,16 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
             <span className="sr-only">Wisp</span>
           </div>
           <div className="text-center space-y-1.5">
-            <h1 className="text-[26px] leading-tight font-bold">Let {info.client} act as an agent?</h1>
+            <h1 className="t-title">Let {info.client} act as an agent?</h1>
             <p className="text-[15px] text-muted">Pick the agent it acts as.</p>
           </div>
           <div className="rounded-3xl bg-card overflow-hidden divide-y divide-line" role="radiogroup">
             {agents.map((a) => (
-              <label key={a.id} className="flex items-center gap-3.5 px-[18px] min-h-16 cursor-pointer hover:bg-hover">
+              <label key={a.id} className="flex items-center gap-3.5 px-[18px] min-h-14 cursor-pointer hover:bg-hover">
                 <input type="radio" name="agent" className="sr-only" checked={pick === a.id} onChange={() => setPick(a.id)} />
                 <AgentAvatar agent={a} size={34} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[17px] font-medium truncate">{a.name}</span>
+                  <span className="block text-[15px] font-medium truncate">{a.name}</span>
                   <span className="block text-xs text-muted truncate">@{a.handle}</span>
                 </span>
                 {pick === a.id && (
@@ -116,13 +116,13 @@ export function AuthorizeView({ requestId }: { requestId: string }) {
                 )}
               </label>
             ))}
-            <label className="block px-[18px] py-3 min-h-16 cursor-pointer hover:bg-hover space-y-2">
+            <label className="block px-[18px] py-3 min-h-14 cursor-pointer hover:bg-hover space-y-2">
               <span className="flex items-center gap-3.5 min-h-10">
                 <input type="radio" name="agent" className="sr-only" checked={pick === NEW} onChange={() => setPick(NEW)} />
                 <span className="size-[38px] rounded-xl bg-chip grid place-items-center text-ink/85" aria-hidden>
                   <Plus size={20} />
                 </span>
-                <span className="flex-1 text-[17px] font-medium">New agent</span>
+                <span className="flex-1 text-[15px] font-medium">New agent</span>
                 {pick === NEW && (
                   <span className="size-6 rounded-full bg-badge text-badge-ink grid place-items-center" aria-hidden>
                     <Check size={14} strokeWidth={3} />

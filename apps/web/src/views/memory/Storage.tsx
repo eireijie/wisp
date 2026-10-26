@@ -165,7 +165,7 @@ function Obsidian({ storage, reload }: { storage: MemoryStorage; reload: () => v
       <div className="rounded-3xl bg-card px-4 py-3 flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <div className="text-xs text-muted">Branch</div>
-          <div className="font-semibold">{storage.sync.branch ?? "main"}</div>
+          <div className="font-medium">{storage.sync.branch ?? "main"}</div>
         </div>
         {storage.path && local ? (
           <a href={obsidianLink(storage.path)} className={pill}>
@@ -197,7 +197,7 @@ function Obsidian({ storage, reload }: { storage: MemoryStorage; reload: () => v
           {error && <p className="mt-2 text-sm text-bad">{error}</p>}
           {fresh && (
             <div className="mt-3 rounded-3xl bg-card p-4 space-y-2">
-              <p className="text-sm font-semibold">Your new token. You only see it once.</p>
+              <p className="text-sm font-medium">Your new token. You only see it once.</p>
               <CopyBlock text={fresh.token} />
               <p className="text-xs text-muted">Then, in a terminal in the folder where you keep your vaults:</p>
               <CopyBlock text={`git clone "${remoteUrl(fresh.token)}" "Wisp memory"`} />
@@ -241,7 +241,7 @@ function Obsidian({ storage, reload }: { storage: MemoryStorage; reload: () => v
             {storage.tokens.map((t) => (
               <div key={t.id} className="px-4 py-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{t.label || "Obsidian"}</div>
+                  <div className="font-medium truncate">{t.label || "Obsidian"}</div>
                   <div className="text-xs text-muted">
                     Created {timeAgo(t.createdAt)} · {t.lastUsed ? `last used ${timeAgo(t.lastUsed)}` : "never used"}
                   </div>

@@ -44,10 +44,10 @@ export function AccessRulesDialog({ onClose }: { onClose: () => void }) {
   const row = (s: Subject, avatar: React.ReactNode, name: string) => {
     const { hint, level } = summary(s);
     return (
-      <button key={subjKey(s)} onClick={() => open(s)} className="w-full text-left min-h-16 px-4 py-2.5 flex items-center gap-3 hover:bg-hover/60">
+      <button key={subjKey(s)} onClick={() => open(s)} className="w-full text-left min-h-14 px-4 py-2.5 flex items-center gap-3 hover:bg-hover/60">
         {avatar}
         <span className="flex-1 min-w-0">
-          <span className="block text-[16px] font-semibold truncate">{name}</span>
+          <span className="block text-[15px] font-medium truncate">{name}</span>
           <span className="block text-xs text-muted truncate">{hint}</span>
         </span>
         <span className="text-[15px] text-muted">{level}</span>
@@ -89,7 +89,7 @@ export function AccessRulesDialog({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="rounded-3xl bg-card px-4 py-3.5">
-        <p className="font-semibold text-[15px]">How these rules work</p>
+        <p className="font-medium text-[15px]">How these rules work</p>
         <p className="mt-1 text-[13px] text-muted leading-relaxed">
           Everyone shares the Shared folder. Each helper has a private folder. A rule on a folder or note changes who can read or write it. A rule for one helper beats one for its team or all helpers.
         </p>
@@ -190,9 +190,9 @@ function RuleEditor({
       <MemoryDialog title={`Rules for ${name}`} onClose={onClose}>
         <Cards>
           {rules.map((r) => (
-            <button key={r.id} onClick={() => onPickRule(r)} className="w-full text-left min-h-14 px-4 flex items-center gap-3 hover:bg-hover/60">
+            <button key={r.id} onClick={() => onPickRule(r)} className="w-full text-left min-h-12 px-4 flex items-center gap-3 hover:bg-hover/60">
               <Folder size={19} strokeWidth={1.7} className="text-muted" />
-              <span className="flex-1 truncate text-[16px]">{pathLabel(r.path, agents, members) || "Everything"}</span>
+              <span className="flex-1 truncate text-[15px]">{pathLabel(r.path, agents, members) || "Everything"}</span>
               <span className="text-muted text-[15px]">{SHORT[r.level]}</span>
               <ChevronRight size={16} className="text-faint" />
             </button>
@@ -238,9 +238,9 @@ function RuleEditor({
         </>
       )}
       <Overline>Folder or note</Overline>
-      <label className="flex items-center gap-3 rounded-3xl bg-card px-4 min-h-14 relative">
+      <label className="flex items-center gap-3 rounded-3xl bg-card px-4 min-h-12 relative">
         <Folder size={19} strokeWidth={1.7} className="text-muted shrink-0" />
-        <select value={path} onChange={(e) => setPath(e.target.value)} disabled={!canChange || !!rule} aria-label="Folder or note" className="flex-1 bg-transparent text-[16px] outline-none h-14 appearance-none">
+        <select value={path} onChange={(e) => setPath(e.target.value)} disabled={!canChange || !!rule} aria-label="Folder or note" className="flex-1 bg-transparent text-[15px] outline-none h-14 appearance-none">
           {paths.map((p) => (
             <option key={p} value={p}>
               {p ? pathLabel(p, agents, members) : "Everything"}
@@ -251,9 +251,9 @@ function RuleEditor({
       <Overline>Access</Overline>
       <Cards>
         {levels.map((l) => (
-          <button key={l} disabled={!canChange} onClick={() => setLevel(l)} aria-pressed={level === l} className="w-full text-left min-h-16 px-4 py-2 flex items-center gap-3 hover:bg-hover/60">
+          <button key={l} disabled={!canChange} onClick={() => setLevel(l)} aria-pressed={level === l} className="w-full text-left min-h-14 px-4 py-2 flex items-center gap-3 hover:bg-hover/60">
             <span className="flex-1">
-              <span className="block text-[16px]">{l === "none" ? "No access" : l === "read" ? "Read" : l === "edit" ? "Edit" : "Manage"}</span>
+              <span className="block text-[15px]">{l === "none" ? "No access" : l === "read" ? "Read" : l === "edit" ? "Edit" : "Manage"}</span>
               <span className="block text-xs text-muted">{desc[l]}</span>
             </span>
             <Radio on={level === l} />
@@ -261,9 +261,9 @@ function RuleEditor({
         ))}
       </Cards>
       {isAgent && atLeast(level, "read") && (
-        <div className="mt-3 rounded-3xl bg-card px-4 min-h-16 py-2 flex items-center gap-3">
+        <div className="mt-3 rounded-3xl bg-card px-4 min-h-14 py-2 flex items-center gap-3">
           <span className="flex-1">
-            <span className="block text-[16px]">Always remind this helper of this note</span>
+            <span className="block text-[15px]">Always remind this helper of this note</span>
             <span className="block text-xs text-muted">Loads at startup</span>
           </span>
           <button role="switch" aria-checked={startup} disabled={!canChange} onClick={() => setStartup(!startup)} className={cx("w-[52px] h-8 rounded-full p-1 transition-colors shrink-0", startup ? "bg-info" : "bg-chip")}>
@@ -274,7 +274,7 @@ function RuleEditor({
       {error && <p className="mt-3 text-sm text-bad">{error}</p>}
       {rule?.id && canChange && (
         <div className="mt-6 text-center">
-          <button onClick={remove} disabled={busy} className="text-[16px] font-semibold text-bad">
+          <button onClick={remove} disabled={busy} className="text-[15px] font-medium text-bad">
             Remove rule
           </button>
           <p className="mt-2 text-xs text-muted">Removing it goes back to what the folder already allows.</p>

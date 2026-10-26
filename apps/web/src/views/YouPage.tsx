@@ -48,12 +48,12 @@ export function YouPage() {
 
   /** a row with a plain line icon, like the iPhone sheet */
   const row = (icon: ReactNode, label: string, to: string | (() => void), hint?: string, desc?: string) => {
-    const cls = "w-full text-left flex items-center gap-3.5 px-4 min-h-14 py-2 border-b border-line last:border-0 hover:bg-hover";
+    const cls = "w-full text-left flex items-center gap-3.5 px-4 min-h-12 py-2 border-b border-line last:border-0 hover:bg-hover";
     const inner = (
       <>
         <span className="size-5 shrink-0 grid place-items-center text-muted">{icon}</span>
         <span className="flex-1 min-w-0">
-          <span className="block text-[17px]">{label}</span>
+          <span className="block text-[15px]">{label}</span>
           {desc && <span className="block text-[13px] text-muted">{desc}</span>}
         </span>
         {hint && <span className="text-sm text-muted tabular-nums">{hint}</span>}
@@ -71,19 +71,19 @@ export function YouPage() {
     );
   };
   const card = (children: ReactNode) => <div className="rounded-3xl bg-card overflow-hidden">{children}</div>;
-  const label = (text: string) => <div className="px-4 -mb-2.5 text-[13px] font-semibold text-faint">{text}</div>;
+  const label = (text: string) => <div className="px-4 -mb-2.5 text-[13px] font-medium text-faint">{text}</div>;
 
   return (
     <div className="flex-1 overflow-y-auto safe-top">
       <div className="p-[18px] space-y-5">
         <h1 className="sr-only">You</h1>
         {card(
-          <a href={href({ view: "settings", page: "profile" })} className="flex items-center gap-3.5 px-4 min-h-[72px] hover:bg-hover">
+          <a href={href({ view: "settings", page: "profile" })} className="flex items-center gap-3.5 px-4 min-h-14 hover:bg-hover">
             <span className="circle shrink-0" style={{ width: 48, height: 48 }}>
               {initialsOf(me.user.name)}
             </span>
             <span className="flex-1 min-w-0">
-              <span className="block text-[17px] font-semibold truncate">{me.user.name}</span>
+              <span className="block text-[15px] font-medium truncate">{me.user.name}</span>
               <span className="block text-[13px] text-muted truncate">
                 {roleName} · {orgName}
               </span>
@@ -105,12 +105,12 @@ export function YouPage() {
             {label("Agents")}
             {card(
               <>
-                <div className="flex items-center gap-3.5 px-4 min-h-14 py-2 border-b border-line">
+                <div className="flex items-center gap-3.5 px-4 min-h-12 py-2 border-b border-line">
                   <span className="size-5 shrink-0 grid place-items-center text-muted">
                     <Bot {...ICON} />
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-[17px]">Ask before risky actions</span>
+                    <span className="block text-[15px]">Ask before risky actions</span>
                     <span className="block text-[13px] text-muted">Shell, apps and computer use</span>
                   </span>
                   <Toggle on={askOn} onChange={setAsk} label="Ask before risky actions" disabled={!isOwner || !policy} />
@@ -140,11 +140,11 @@ export function YouPage() {
             </>,
           )}
         {card(row(<Settings {...ICON} />, "All settings", href({ view: "settings" })))}
-        <SignOutButton icon={false} className="w-full min-h-14 rounded-3xl bg-card text-bad text-[17px] font-medium" />
+        <SignOutButton icon={false} className="w-full min-h-12 rounded-3xl bg-card text-bad text-[15px] font-medium" />
       </div>
       {orgs && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/50" onMouseDown={(e) => e.target === e.currentTarget && setOrgs(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Organizations" className="w-full bg-panel border-t border-line rounded-t-[38px] pb-6 safe-bottom">
+          <div role="dialog" aria-modal="true" aria-label="Organizations" className="w-full bg-panel border-t border-line rounded-t-[16px] pb-6 safe-bottom">
             <div className="flex justify-end p-3.5 pb-0">
               <button onClick={() => setOrgs(false)} aria-label="Close" className="circle">
                 <X size={20} />

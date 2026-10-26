@@ -82,7 +82,7 @@ export function MemoryHome({
     <div className="h-full overflow-y-auto @container">
       <div className="max-w-[1000px] mx-auto px-4 md:px-10 pt-2 md:pt-6 pb-32 md:pb-12">
         {actions && <div className="hidden md:flex items-center justify-end gap-2 mb-2">{actions}</div>}
-        <h2 className="text-[28px] md:text-[34px] font-bold tracking-tight">What your team remembers</h2>
+        <h2 className="t-title">What your team remembers</h2>
         <div className="relative mt-4">
           <Search size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-faint" />
           <input
@@ -129,7 +129,7 @@ export function MemoryHome({
               {folders.slice(0, 8).map((f) => (
                 <button key={f.path} onClick={() => onFolder(f.path)} className="text-left rounded-3xl bg-card p-4 hover:bg-hover/60 transition-colors min-h-[104px] flex flex-col">
                   <Folder size={18} strokeWidth={1.8} className="text-muted" />
-                  <span className="mt-auto pt-3 font-semibold truncate">{label(f.name)}</span>
+                  <span className="mt-auto pt-3 font-medium truncate">{label(f.name)}</span>
                   <span className="text-xs text-muted">
                     {f.count} {f.count === 1 ? "note" : "notes"}
                   </span>
@@ -138,9 +138,9 @@ export function MemoryHome({
             </div>
             <Cards className="md:hidden">
               {folders.map((f) => (
-                <button key={f.path} onClick={() => onFolder(f.path)} className="w-full text-left px-4 min-h-14 flex items-center gap-3 hover:bg-hover/60">
+                <button key={f.path} onClick={() => onFolder(f.path)} className="w-full text-left px-4 min-h-12 flex items-center gap-3 hover:bg-hover/60">
                   <Folder size={20} strokeWidth={1.7} className="text-muted shrink-0" />
-                  <span className="flex-1 truncate text-[16px]">{label(f.name)}</span>
+                  <span className="flex-1 truncate text-[15px]">{label(f.name)}</span>
                   <span className="text-muted text-[15px] tabular-nums">{f.count}</span>
                   <ChevronRight size={16} className="text-faint" />
                 </button>
@@ -186,7 +186,7 @@ export function MemoryHome({
                     <button key={c.hash} disabled={f.change === "deleted"} onClick={() => onOpen(f.path)} className="w-full text-left rounded-3xl bg-card px-4 py-3 flex items-center gap-3 hover:bg-hover/60 transition-colors">
                       {w.avatar}
                       <span className="flex-1 min-w-0">
-                        <span className="block truncate font-semibold text-[15px]">
+                        <span className="block truncate font-medium text-[15px]">
                           {title(f.path)}
                           {c.files.length > 1 && <span className="text-faint font-normal"> +{c.files.length - 1}</span>}
                         </span>

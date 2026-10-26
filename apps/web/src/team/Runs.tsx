@@ -77,7 +77,7 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
     <div className="space-y-2.5 border-b border-line px-4 py-2.5" aria-label="Team steps">
       <div className="flex flex-wrap items-center gap-1.5">
         {order.map(pill)}
-        {flow.status === "failed" && <span className="ml-1 text-[11px] font-semibold text-bad">Stopped</span>}
+        {flow.status === "failed" && <span className="ml-1 text-[11px] font-medium text-bad">Stopped</span>}
         {/* a running request can be stopped too: the hub cancels the work still open */}
         {flow.status === "running" && (
           <button type="button" disabled={busy} onClick={() => void decide("stop")} className="ml-auto text-[12px] text-faint hover:text-ink">
@@ -92,7 +92,7 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
         const inbox = lane.approvalId ?? Object.values(approvals).find((a) => a.flow?.flowId === flow.id && a.flow?.stepId === s.id && a.status === "pending")?.id;
         return (
           <div key={s.id} className="space-y-1.5 rounded-2xl bg-warn/10 px-3 py-2.5" aria-label={`${s.action || "A step"}, waiting`}>
-            <div className="text-[12px] font-semibold">{s.action || "A step"}</div>
+            <div className="text-[12px] font-medium">{s.action || "A step"}</div>
             {ask ? (
               <div className="flex items-center gap-1.5 text-[13px] font-medium text-warn">
                 <Hand size={14} aria-hidden /> Waiting for you

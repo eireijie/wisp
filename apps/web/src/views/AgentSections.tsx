@@ -38,7 +38,7 @@ export function RowCard({ children }: { children: ReactNode }) {
 
 export function NavRow({ to, label, value, danger }: { to: string; label: string; value?: ReactNode; danger?: boolean }) {
   return (
-    <a href={to} className={cx("flex items-center gap-3.5 min-h-14 px-[18px] text-[17px] hover:bg-hover", danger && "text-bad")}>
+    <a href={to} className={cx("flex items-center gap-3.5 min-h-12 px-[18px] text-[15px] hover:bg-hover", danger && "text-bad")}>
       <span className="flex-1 min-w-0 truncate">{label}</span>
       {value != null && value !== "" && <span className="text-muted text-[15px] truncate max-w-[55%]">{value}</span>}
       <ChevronRight size={18} className="text-faint shrink-0" aria-hidden />
@@ -59,9 +59,9 @@ export function ChoiceRows<T extends string>({ value, onChange, options }: { val
   return (
     <RowCard>
       {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)} className="w-full flex items-center gap-3.5 min-h-14 px-[18px] py-2 text-left hover:bg-hover">
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)} className="w-full flex items-center gap-3.5 min-h-12 px-[18px] py-2 text-left hover:bg-hover">
           <span className="flex-1 min-w-0">
-            <span className="block text-[17px]">{o.title}</span>
+            <span className="block text-[15px]">{o.title}</span>
             {o.body && <span className="block text-sm text-muted">{o.body}</span>}
           </span>
           {value === o.value && <Check size={20} className="text-accent-text shrink-0" aria-hidden />}
@@ -74,7 +74,7 @@ export function ChoiceRows<T extends string>({ value, onChange, options }: { val
 export function PageHead({ title, sub }: { title: string; sub: string }) {
   return (
     <div className="mb-4 hidden md:block">
-      <h2 className="text-[22px] font-bold tracking-tight">{title}</h2>
+      <h2 className="t-title">{title}</h2>
       <p className="text-sm text-muted">{sub}</p>
     </div>
   );
@@ -123,8 +123,8 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
       </RowCard>
       </div>
       <RowCard>
-        <div className="flex items-center justify-between min-h-[60px] px-[18px]">
-          <span className="text-[17px]">Notifications</span>
+        <div className="flex items-center justify-between min-h-14 px-[18px]">
+          <span className="text-[15px]">Notifications</span>
           <Toggle label={`Notifications from ${agent.name}`} on={dm ? dm.notify !== "mute" : true} disabled={!dm} onChange={(v) => dm && void setChannelPrefs(dm, { notify: v ? "default" : "mute" })} />
         </div>
       </RowCard>
@@ -171,9 +171,9 @@ export function AccessPanel({ agent, device }: { agent: Agent; device: ReactNode
               {others.map((p) => {
                 const on = picked.includes(p.id);
                 return (
-                  <button key={p.id} type="button" role="checkbox" aria-checked={on} onClick={() => void save({ respondPeople: on ? picked.filter((x) => x !== p.id) : [...picked, p.id] })} className="w-full flex items-center gap-3.5 min-h-14 px-[18px] text-left hover:bg-hover">
+                  <button key={p.id} type="button" role="checkbox" aria-checked={on} onClick={() => void save({ respondPeople: on ? picked.filter((x) => x !== p.id) : [...picked, p.id] })} className="w-full flex items-center gap-3.5 min-h-12 px-[18px] text-left hover:bg-hover">
                     <span className="flex-1 min-w-0">
-                      <span className="block text-[17px]">{p.name}</span>
+                      <span className="block text-[15px]">{p.name}</span>
                       <span className="block text-sm text-muted capitalize">{p.role}</span>
                     </span>
                     {on && <Check size={20} className="text-accent-text" aria-hidden />}
@@ -231,7 +231,7 @@ export function MemoryPanel({ agent }: { agent: Agent }) {
           <NavRow to={href({ view: "agents", agentId: agent.id, tab: "permissions" })} label="Who can edit its notes" value={agent.settings.soulLocked ? "Only people" : "People and it"} />
         </RowCard>
       </section>
-      <a href={`#/vault/${soulPath(agent.id).replace(/\/SOUL\.md$/, "")}`} className="h-14 rounded-full border border-control-line bg-control inline-flex items-center justify-center gap-2 w-full text-[17px] font-medium hover:bg-hover">
+      <a href={`#/vault/${soulPath(agent.id).replace(/\/SOUL\.md$/, "")}`} className="h-14 rounded-full border border-control-line bg-control inline-flex items-center justify-center gap-2 w-full text-[15px] font-medium hover:bg-hover">
         <BookOpen size={18} /> Open in Memory
       </a>
     </div>
@@ -263,9 +263,9 @@ function SwitchList<T extends { id: string; name: string; agentIds: string[] }>(
       ) : (
         <RowCard>
           {items.map((i) => (
-            <div key={i.id} className="flex items-center gap-3.5 min-h-14 px-[18px] py-2">
+            <div key={i.id} className="flex items-center gap-3.5 min-h-12 px-[18px] py-2">
               <span className="flex-1 min-w-0">
-                <span className="block text-[17px] truncate">{i.name}</span>
+                <span className="block text-[15px] truncate">{i.name}</span>
                 <span className="block text-sm text-muted truncate">{body(i)}</span>
               </span>
               <Toggle label={`${i.name} for ${agent.name}`} on={isOn(i)} onChange={(v) => void flip(i, v)} />
@@ -274,7 +274,7 @@ function SwitchList<T extends { id: string; name: string; agentIds: string[] }>(
         </RowCard>
       )}
       {error && <p className="text-sm text-bad">{error}</p>}
-      <a href={browseTo} className="h-14 rounded-full border border-control-line bg-control inline-flex items-center justify-center w-full text-[17px] font-medium hover:bg-hover">
+      <a href={browseTo} className="h-14 rounded-full border border-control-line bg-control inline-flex items-center justify-center w-full text-[15px] font-medium hover:bg-hover">
         {browse}
       </a>
     </div>
@@ -323,14 +323,14 @@ export function RemovePanel({ agent }: { agent: Agent }) {
   return (
     <div className="max-w-md mx-auto md:mx-0 flex flex-col items-center md:items-start gap-3 text-center md:text-left pt-4">
       <AgentAvatar agent={agent} size={96} />
-      <h3 className="text-[26px] font-bold">Remove {agent.name}?</h3>
+      <h3 className="t-title">Remove {agent.name}?</h3>
       <p className="text-[15px] text-muted">Its memory notes and personality stay in the vault. Its routines and chats with you stop.</p>
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="w-full flex flex-col gap-2.5 mt-2">
-        <button onClick={remove} disabled={busy} className="h-14 rounded-full bg-bad text-white text-[17px] font-semibold disabled:opacity-60 inline-flex items-center justify-center gap-2">
+        <button onClick={remove} disabled={busy} className="h-14 rounded-full bg-bad text-white text-[15px] font-medium disabled:opacity-60 inline-flex items-center justify-center gap-2">
           <Trash2 size={18} /> Remove {agent.name}
         </button>
-        <a href={href({ view: "agents", agentId: agent.id, tab: "overview" })} className="h-14 rounded-full border border-control-line bg-control text-[17px] font-medium inline-flex items-center justify-center hover:bg-hover">
+        <a href={href({ view: "agents", agentId: agent.id, tab: "overview" })} className="h-14 rounded-full border border-control-line bg-control text-[15px] font-medium inline-flex items-center justify-center hover:bg-hover">
           Cancel
         </a>
       </div>
@@ -370,9 +370,9 @@ export function EditAgent({ agent, onClose }: { agent: Agent; onClose: () => voi
     }
   };
   const row = (label: string, value: string, onClick: () => void) => (
-    <button type="button" onClick={onClick} className="w-full flex items-center gap-3.5 min-h-14 px-[18px] text-left hover:bg-hover">
+    <button type="button" onClick={onClick} className="w-full flex items-center gap-3.5 min-h-12 px-[18px] text-left hover:bg-hover">
       <span className="flex-1 min-w-0">
-        <span className="block text-[17px]">{label}</span>
+        <span className="block text-[15px]">{label}</span>
         <span className="block text-sm text-muted truncate">{value}</span>
       </span>
       <ChevronRight size={18} className="text-faint" aria-hidden />
@@ -380,12 +380,12 @@ export function EditAgent({ agent, onClose }: { agent: Agent; onClose: () => voi
   );
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 md:p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={`Edit ${agent.name}`} className="w-full md:max-w-[520px] max-h-[94vh] overflow-y-auto bg-panel rounded-t-[38px] md:rounded-[28px] shadow-panel p-5 pb-8 safe-bottom">
+      <div role="dialog" aria-modal="true" aria-label={`Edit ${agent.name}`} className="w-full md:max-w-[520px] max-h-[94vh] overflow-y-auto bg-panel rounded-t-[16px] md:rounded-xl shadow-panel p-5 pb-8 safe-bottom">
         <div className="flex items-center gap-3 mb-4">
           <button className="circle" onClick={onClose} aria-label="Close">
             <X size={20} />
           </button>
-          <h2 className="flex-1 text-center text-[19px] font-semibold mr-[42px]">Edit {agent.name}</h2>
+          <h2 className="flex-1 text-center t-title mr-[42px]">Edit {agent.name}</h2>
         </div>
         <div className="flex flex-col items-center gap-3 mb-5">
           <AgentAvatar agent={agent} size={88} />
@@ -396,12 +396,12 @@ export function EditAgent({ agent, onClose }: { agent: Agent; onClose: () => voi
         <div className="space-y-3.5">
           <label className="block rounded-3xl bg-card border border-line/60 px-[18px] py-3">
             <span className="block text-[13px] text-muted">Display name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} aria-label="Display name" className="w-full bg-transparent outline-none text-[17px]" />
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} aria-label="Display name" className="w-full bg-transparent outline-none text-[15px]" />
           </label>
           <div>
             <label className="block rounded-3xl bg-card border border-line/60 px-[18px] py-3">
               <span className="block text-[13px] text-muted">Handle</span>
-              <input value={handle} onChange={(e) => setHandle(e.target.value.replace(/^@/, ""))} aria-label="Handle" className="w-full bg-transparent outline-none text-[17px]" />
+              <input value={handle} onChange={(e) => setHandle(e.target.value.replace(/^@/, ""))} aria-label="Handle" className="w-full bg-transparent outline-none text-[15px]" />
             </label>
             <p className={cx("px-[18px] pt-1.5 text-sm", badHandle || taken ? "text-bad" : "text-muted")}>{taken ? `@${clean} is already taken.` : badHandle ? "Include a letter a to z." : "Letters a to z. Teammates type this to mention it."}</p>
           </div>
@@ -411,7 +411,7 @@ export function EditAgent({ agent, onClose }: { agent: Agent; onClose: () => voi
             {row("Voice", "Pick how it sounds", open("look"))}
           </RowCard>
           {error && <p className="px-[18px] text-sm text-bad">{error}</p>}
-          <button onClick={save} disabled={busy || !dirty || !name.trim() || badHandle || taken} className="h-14 w-full rounded-full bg-accent text-accent-ink text-[17px] font-semibold disabled:opacity-50">
+          <button onClick={save} disabled={busy || !dirty || !name.trim() || badHandle || taken} className="h-14 w-full rounded-full bg-accent text-accent-ink text-[15px] font-medium disabled:opacity-50">
             {busy ? "Saving…" : "Save"}
           </button>
           <p className="text-center text-xs text-faint">{harnessLabel(agent.harness)}</p>
