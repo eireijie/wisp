@@ -86,13 +86,13 @@ export function NewAgentForTeam({ onClose, onCreated }: { onClose: () => void; o
 }
 
 /** "Add a channel": one box to search, join, or create (Buzz-style). Creating is two steps: what it's for, then its team. */
-export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => void; sectionId?: string | null }) {
+export function ChannelBrowser({ onClose, sectionId = null, create: startCreating = false }: { onClose: () => void; sectionId?: string | null; create?: boolean }) {
   const channels = useStore((s) => s.channels).filter((c) => c.kind === "channel");
   const sections = useStore((s) => s.sections);
   const refreshChannels = useStore((s) => s.refreshChannels);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "joined" | "archived">("all");
-  const [step, setStep] = useState<"browse" | "about" | "team">("browse");
+  const [step, setStep] = useState<"browse" | "about" | "team">(startCreating ? "about" : "browse");
   const [topic, setTopic] = useState("");
   const [section, setSection] = useState<string | null>(sectionId);
   const [isPrivate, setPrivate] = useState(false);
@@ -208,9 +208,9 @@ export function ChannelBrowser({ onClose, sectionId = null }: { onClose: () => v
             <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" />
           </label>
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" onClick={() => setStep("browse")}>
-              Back
-            </Button>
+            <button type="button" className="mr-auto text-sm text-accent-text hover:underline" onClick={() => setStep("browse")}>
+              Browse existing channels
+            </button>
             <Button variant="primary" disabled={!name || exists}>
               Next: its team <ArrowRight size={15} />
             </Button>

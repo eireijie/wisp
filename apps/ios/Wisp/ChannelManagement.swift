@@ -7,6 +7,8 @@ import SwiftUI
 struct NewChannel: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
+  /** a link to look through existing channels instead */
+  var onBrowse: (() -> Void)?
   var onCreated: (Channel) -> Void
   @State private var name = ""
   @State private var topic = ""
@@ -38,6 +40,7 @@ struct NewChannel: View {
         Section {
           Toggle("Private", isOn: $isPrivate)
         } footer: { Text("Only people and agents you add can see it.") }
+        if let onBrowse { Section { Button("Browse existing channels", action: onBrowse) } }
       }
       .navigationTitle("New channel")
       .navigationBarTitleDisplayMode(.inline)
