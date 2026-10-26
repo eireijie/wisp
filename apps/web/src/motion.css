@@ -1,0 +1,201 @@
+/*
+ * Wisp motion language: springy, quick, purposeful. Durations stay between 180 and 320ms.
+ * Only transform, opacity (and colors) animate. Easing tokens come from the approved spec:
+ *   --pop     overshoot: press release, bubbles, menus, toasts, indicators
+ *   --soft    tiny overshoot: sheets (large surfaces must not reveal their edges)
+ *   --settle  no overshoot: page pushes, panes, row stagger, panels
+ * motion.ts holds the same tokens for the few things that run from script (Web Animations).
+ * Reduced motion (the OS setting, or Settings > Appearance) swaps each movement for a 120ms fade
+ * or nothing, per the spec's table: see the block at the bottom.
+ */
+:root {
+  --pop: cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  --soft: cubic-bezier(0.2, 0.9, 0.25, 1.05);
+  --settle: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- hover: backgrounds fade instead of snapping (a base default; utilities still win) ---------- */
+@layer base {
+  a,
+  button,
+  summary,
+  label,
+  [role="menuitem"],
+  [role="option"],
+  [class*="hover:bg-"] {
+    transition: background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out;
+  }
+}
+
+/* ---------- press feedback: scale to .94 at once, spring back with Pop ---------- */
+button.rounded-full,
+a.rounded-full,
+.circle,
+.m-press {
+  transition: transform 300ms var(--pop), scale 300ms var(--pop), rotate 300ms var(--pop), translate 300ms var(--pop), background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out, opacity 160ms ease-out;
+}
+:is(button.rounded-full, a.rounded-full, .circle, .m-press):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.94);
+  transition-duration: 90ms, 90ms, 90ms, 90ms, 160ms, 160ms, 160ms, 160ms;
+}
+
+/* ---------- the sliding selection indicator (rail on desktops, tab bar on phones) ---------- */
+.m-ind {
+  position: absolute;
+  pointer-events: none;
+  transition: transform 300ms var(--pop), opacity 160ms ease-out;
+}
+.m-tab-icon {
+  display: inline-flex;
+}
+
+/* ---------- list rows and panes enter from script (motion.ts); these are the CSS-only ones ---------- */
+@keyframes m-fade { from { opacity: 0; } }
+@keyframes m-scrim-in { from { background-color: transparent; } }
+@keyframes m-pop-in { from { opacity: 0; scale: 0.9; } }
+@keyframes m-pop-out { to { opacity: 0; scale: 0.9; } }
+@keyframes m-zoom-in { from { opacity: 0; transform: scale(0.96) translateY(-8px); } }
+@keyframes m-zoom-out { to { opacity: 0; transform: scale(0.96) translateY(-8px); } }
+@keyframes m-sheet-up { from { transform: translateY(110%); } }
+@keyframes m-slide-in { from { opacity: 0; transform: translateX(40px); } }
+@keyframes m-toast-in { from { opacity: 0; transform: translateY(24px) scale(0.96); } }
+@keyframes m-toast-top { from { opacity: 0; transform: translateY(-24px) scale(0.96); } }
+@keyframes m-push-in { from { transform: translateX(100%); } }
+@keyframes m-push-out { to { transform: translateX(100%); } }
+@keyframes m-rise { from { opacity: 0; transform: translateY(32px) scale(0.9); } 55% { opacity: 1; } }
+@keyframes m-popl { from { opacity: 0; transform: translateY(8px) scale(0.7); } }
+@keyframes m-work { from { opacity: 0; transform: translateY(6px); } }
+@keyframes m-swap { from { opacity: 0; transform: scale(0.5); } }
+@media (max-width: 767px) {
+  @keyframes m-rise { from { opacity: 0; transform: translateY(40px) scale(0.86); } 55% { opacity: 1; } }
+  @keyframes m-popl { from { opacity: 0; transform: translateY(8px) scale(0.6); } }
+}
+
+/* messages: yours rises from the composer, a reply pops from its corner, the working bubble fades in */
+.m-bubble-me { animation: m-rise 340ms var(--pop) backwards; transform-origin: 100% 100%; }
+.m-bubble-them { animation: m-popl 300ms var(--pop) backwards; transform-origin: 0 100%; }
+.m-work { animation: m-work 220ms ease-out backwards; }
+.m-swap { animation: m-swap 300ms var(--pop) backwards; }
+
+/* the message hover toolbar slides in (visibility keeps it out of the tab order and the reader's way until shown) */
+.m-toolbar {
+  display: flex;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px) scale(0.96);
+  transition: opacity 120ms ease-out, transform 200ms var(--pop), visibility 0s 200ms;
+}
+.group:hover > .m-toolbar,
+.group:focus-within > .m-toolbar,
+.m-toolbar:hover {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+  transition-delay: 0s;
+}
+.m-toolbar[data-side="right"] { transform-origin: 100% 100%; }
+.m-toolbar[data-side="left"] { transform-origin: 0 100%; }
+
+/* menus and popovers spring from their trigger: 280ms in, 180ms out (origin is set where they open) */
+.m-menu { animation: m-pop-in 280ms var(--pop) backwards; }
+.m-menu[data-closing="true"] { animation: m-pop-out 180ms ease-in both; pointer-events: none; }
+
+/* dialogs: a zoom on larger screens, a sheet from the bottom on phones; the scrim fades */
+.m-scrim { animation: m-scrim-in 200ms ease-out backwards; }
+.m-dialog { animation: m-sheet-up 320ms var(--soft) backwards; }
+.m-drawer { animation: m-slide-in 320ms var(--settle) backwards; }
+@media (min-width: 640px) {
+  .m-dialog { animation: m-zoom-in 280ms var(--pop) backwards; transform-origin: 50% 50%; }
+}
+/* the command palette zooms from the top */
+.m-palette-scrim { animation: m-scrim-in 200ms ease-out backwards; }
+.m-palette-card { animation: m-fade 200ms ease-out backwards; }
+@media (min-width: 768px) {
+  .m-palette-card { animation: m-zoom-in 280ms var(--pop) backwards; transform-origin: 50% 0; }
+}
+[data-closing="true"].m-palette-scrim { animation: m-scrim-in 180ms ease-in reverse both; pointer-events: none; }
+[data-closing="true"] .m-palette-card { animation: m-fade 180ms ease-in reverse both; }
+@media (min-width: 768px) {
+  [data-closing="true"] .m-palette-card { animation: m-zoom-out 180ms ease-in both; }
+}
+
+/* side panels slide in; toasts slide in */
+.m-panel { animation: m-slide-in 320ms var(--settle) backwards; }
+.m-toast { animation: m-toast-in 320ms var(--pop) backwards; }
+.m-toast-top { animation: m-toast-top 320ms var(--pop) backwards; }
+
+/* phone: a chat slides in over the list, which shifts back 96px and dims; the tab bar slips away */
+.m-under { transition: transform 320ms var(--settle); }
+.m-under[data-open="true"] { transform: translateX(-96px); }
+.m-dim { position: absolute; inset: 0; z-index: 5; background: #000; opacity: 0; pointer-events: none; transition: opacity 320ms ease-out; }
+.m-dim[data-open="true"] { opacity: 0.45; }
+.m-chat-layer { box-shadow: -14px 0 36px rgb(0 0 0 / 0.45); animation: m-push-in 320ms var(--settle) backwards; }
+.m-chat-layer[data-skip="true"] { animation: none; }
+.m-chat-layer[data-state="out"] { animation: m-push-out 320ms var(--settle) both; pointer-events: none; }
+.m-tabs { transition: transform 320ms var(--settle), opacity 200ms ease-out; }
+.m-tabs[data-away="true"] { transform: translateY(110px); opacity: 0; pointer-events: none; }
+
+/* phone: while a sheet is open the app behind it scales back and rounds off, under the dimmed scrim */
+@media (max-width: 639px) {
+  #root { transition: transform 320ms var(--settle), border-radius 320ms var(--settle); transform-origin: 50% 0; }
+  html[data-sheet] #root { transform: scale(0.96) translateY(6px); border-radius: 30px; overflow: hidden; }
+}
+
+/* switches: the knob springs across and stretches while pressed (positions come from translate) */
+.m-knob {
+  transition: translate 260ms var(--pop), scale 160ms var(--settle), background-color 160ms ease-out;
+  transform-origin: left center;
+}
+[aria-checked="true"] > .m-knob,
+[aria-checked="true"] .m-knob { transform-origin: right center; }
+button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
+
+/* badges pop when the count changes (from script); a badge with nothing in it shrinks away */
+.m-badge { transition: transform 240ms var(--pop), opacity 160ms ease-out; }
+.m-badge[data-zero="true"] { transform: scale(0); opacity: 0; }
+
+/*
+ * Reduced motion: no movement. Menus, sheets, panes and bubbles fade in over 120ms instead;
+ * press feedback and the knob spring keep to color only; badges and bounces do nothing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  button.rounded-full,
+  a.rounded-full,
+  .circle,
+  .m-press,
+  .m-ind,
+  .m-under,
+  .m-dim,
+  .m-tabs,
+  .m-badge,
+  .m-knob,
+  .m-toolbar {
+    transition-property: opacity, background-color, color, border-color !important;
+    transition-duration: 120ms !important;
+    transition-delay: 0s !important;
+    transition-timing-function: ease-out !important;
+  }
+  :is(button.rounded-full, a.rounded-full, .circle, .m-press):active:not(:disabled) { transform: none; }
+  button[role="switch"]:active:not(:disabled) .m-knob { scale: 1; }
+  .m-toolbar { transform: none; }
+  .m-under[data-open="true"] { transform: none; }
+  .m-tabs[data-away="true"] { transform: none; }
+  .m-badge[data-zero="true"] { transform: none; }
+  .m-bubble-me, .m-bubble-them, .m-work, .m-swap, .m-menu, .m-dialog, .m-drawer, .m-palette-card,
+  .m-panel, .m-toast, .m-toast-top, .m-chat-layer { animation: m-fade 120ms ease-out backwards !important; }
+  .m-scrim, .m-palette-scrim { animation: m-scrim-in 120ms ease-out backwards !important; }
+  .m-menu[data-closing="true"], [data-closing="true"] .m-palette-card { animation: m-fade 120ms ease-out reverse both !important; }
+  [data-closing="true"].m-palette-scrim { animation: m-scrim-in 120ms ease-out reverse both !important; }
+  .m-chat-layer[data-skip="true"] { animation: none !important; }
+  .m-chat-layer[data-state="out"] { animation: m-fade 120ms ease-out reverse both !important; }
+  html[data-sheet] #root { transform: none; border-radius: 0; }
+}
+/* the same, when the person turns motion down in Settings (the app's rule already makes it instant) */
+:root[data-motion="reduce"] .m-toolbar,
+:root[data-motion="reduce"] .m-under[data-open="true"],
+:root[data-motion="reduce"] .m-tabs[data-away="true"],
+:root[data-motion="reduce"] .m-badge[data-zero="true"] { transform: none; }
+:root[data-motion="reduce"] :is(button.rounded-full, a.rounded-full, .circle, .m-press):active { transform: none; }
+:root[data-motion="reduce"][data-sheet] #root { transform: none; border-radius: 0; }

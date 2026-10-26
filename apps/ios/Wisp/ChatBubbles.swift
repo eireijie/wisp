@@ -94,7 +94,7 @@ struct TimeDivider: View {
 /** Three dots that pulse while something works. */
 struct PulseDots: View {
   @State private var on = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   var body: some View {
     HStack(spacing: 4) {
@@ -259,6 +259,6 @@ struct CardButtonStyle: ButtonStyle {
       .frame(height: 44)
       .background(Capsule().fill(prominent ? Palette.text : Palette.control))
       .overlay(Capsule().strokeBorder(Palette.hairline, lineWidth: prominent ? 0 : 1))
-      .opacity(configuration.isPressed ? 0.7 : 1)
+      .pressFeedback(configuration.isPressed)
   }
 }

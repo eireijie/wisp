@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Maximize2, Minus, Plus } from "lucide-react";
+import { Maximize2, Minus, Plus, Trash2 } from "lucide-react";
 import { DEFAULT_ROUNDS, stepGraph, stepOrder, type ChannelTeam, type TeamStep } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { AgentAvatar, cx } from "../components/ui.tsx";
@@ -52,6 +52,7 @@ export function StepCanvas({
   selected,
   problems,
   onSelect,
+  onDelete,
   onMove,
   onAdd,
   fitKey,
@@ -61,6 +62,8 @@ export function StepCanvas({
   selected: string | null;
   problems: Map<string, string>;
   onSelect: (id: string | null) => void;
+  /** delete a step (the trash on a box, the right-click menu) */
+  onDelete: (id: string) => void;
   /** a box was dragged to a new place (stored coordinates) */
   onMove: (id: string, pos: Pt) => void;
   onAdd: (kind: AddKind, at: AddAt) => void;
@@ -75,6 +78,29 @@ export function StepCanvas({
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [drag, setDrag] = useState<{ id: string; pos: Pt } | null>(null);
   const [menu, setMenu] = useState<{ at: AddAt; title: string; pos: Pt } | null>(null);
+  const [ctx, setCtx] = useState<{ id: string; pos: Pt } | null>(null);
+  // an open menu closes on Escape (the builder's own Escape steps aside for open menus) and on a click anywhere outside it
+  const menuOpen = !!(menu || ctx);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMenu(null);
+      setCtx(null);
+    };
+    const away = (e: Event) => {
+      if (!(e.target as HTMLElement | null)?.closest?.('[role="menu"]')) {
+        setMenu(null);
+        setCtx(null);
+      }
+    };
+    window.addEventListener("keydown", esc);
+    window.addEventListener("pointerdown", away);
+    return () => {
+      window.removeEventListener("keydown", esc);
+      window.removeEventListener("pointerdown", away);
+    };
+  }, [menuOpen]);
   const pointers = useRef(new Map<number, Pt>());
   const gesture = useRef<{ kind: "pan"; start: Pt; view: typeof view } | { kind: "move"; id: string; start: Pt; from: Pt; moved: boolean } | { kind: "pinch"; dist: number; mid: Pt; view: typeof view } | null>(null);
 
@@ -188,6 +214,7 @@ export function StepCanvas({
     el.current!.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, local(e));
     setMenu(null);
+    setCtx(null);
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       gesture.current = { kind: "pinch", dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, view };
@@ -259,7 +286,14 @@ export function StepCanvas({
   const unscale = Math.min(2, 1 / view.k);
 
   return (
-    <div ref={el} className="absolute inset-0 touch-none select-none overflow-hidden" style={{ backgroundColor: "var(--app)", backgroundImage: "radial-gradient(color-mix(in oklab, var(--ink) 12%, transparent) 1.2px, transparent 1.3px)", backgroundSize: `${24 * view.k}px ${24 * view.k}px`, backgroundPosition: `${view.x}px ${view.y}px` }} onPointerDown={down} onPointerMove={moveP} onPointerUp={up} onPointerCancel={up} aria-label="Steps chart" role="application">
+    <div ref={el} className="absolute inset-0 touch-none select-none overflow-hidden" style={{ backgroundColor: "var(--app)", backgroundImage: "radial-gradient(color-mix(in oklab, var(--ink) 12%, transparent) 1.2px, transparent 1.3px)", backgroundSize: `${24 * view.k}px ${24 * view.k}px`, backgroundPosition: `${view.x}px ${view.y}px` }} onPointerDown={down} onPointerMove={moveP} onPointerUp={up} onPointerCancel={up} onContextMenu={(e) => {
+        const id = (e.target as HTMLElement).closest<HTMLElement>("[data-step]")?.dataset.step;
+        if (!id) return;
+        e.preventDefault();
+        onSelect(id);
+        setMenu(null);
+        setCtx({ id, pos: local(e) });
+      }} aria-label="Steps chart" role="application">
       <div className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
         <svg className="pointer-events-none absolute overflow-visible" style={{ left: 0, top: 0, width: 1, height: 1 }} aria-hidden>
           <defs>
@@ -289,7 +323,7 @@ export function StepCanvas({
           ))}
 
         {steps.map((s) => (
-          <Box key={s.id} step={s} team={team} at={pos.get(s.id)!} selected={selected === s.id} problem={problems.get(s.id)} dragging={drag?.id === s.id} agents={agents} onKey={() => onSelect(s.id)} />
+          <Box key={s.id} step={s} team={team} at={pos.get(s.id)!} selected={selected === s.id} problem={problems.get(s.id)} dragging={drag?.id === s.id} agents={agents} onKey={() => onSelect(s.id)} onDelete={() => onDelete(s.id)} />
         ))}
 
         {/* a + on every arrow, and after the last steps */}
@@ -317,6 +351,24 @@ export function StepCanvas({
           );
         })}
       </div>
+
+      {ctx && (
+        <div data-ui role="menu" aria-label="Step actions" className="absolute z-20 w-[180px] rounded-2xl border border-line bg-card p-1.5 shadow-panel" style={{ left: Math.max(8, Math.min(size.w - 188, ctx.pos.x)), top: Math.max(8, Math.min(size.h - 56, ctx.pos.y)) }}>
+          <button
+            type="button"
+            role="menuitem"
+            autoFocus
+            onClick={() => {
+              const id = ctx.id;
+              setCtx(null);
+              onDelete(id);
+            }}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-body text-bad hover:bg-hover"
+          >
+            <Trash2 size={15} aria-hidden /> Delete step
+          </button>
+        </div>
+      )}
 
       {menu && (
         <div data-ui data-scroll role="menu" aria-label={menu.title} className="absolute z-20 w-[300px] overflow-y-auto rounded-3xl border border-line bg-card p-2 shadow-panel" style={{ left: Math.max(8, Math.min(size.w - 308, menu.pos.x + 12)), top: Math.max(8, Math.min(size.h - (menuKinds.length * 54 + 44) - 8, menu.pos.y - 24)), maxHeight: size.h - 16 }}>
@@ -364,7 +416,7 @@ export function StepCanvas({
   );
 }
 
-function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { step: TeamStep; team: ChannelTeam; at: Pt; selected: boolean; problem?: string; dragging: boolean; agents: ReturnType<typeof useStore.getState>["agents"]; onKey: () => void }) {
+function Box({ step, team, at, selected, problem, dragging, agents, onKey, onDelete }: { step: TeamStep; team: ChannelTeam; at: Pt; selected: boolean; problem?: string; dragging: boolean; agents: ReturnType<typeof useStore.getState>["agents"]; onKey: () => void; onDelete: () => void }) {
   const agentId = step.agentId || team.roles?.find((r) => r.id === step.roleId)?.agentId || null;
   const agent = agents.find((a) => a.id === agentId);
   const mark = KIND_MARK[step.kind];
@@ -378,10 +430,13 @@ function Box({ step, team, at, selected, problem, dragging, agents, onKey }: { s
       tabIndex={0}
       aria-pressed={selected}
       aria-label={`Step ${n}, ${titleOf(step)}${problem ? `. ${problem}` : ""}`}
-      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onKey())}
-      className={cx("absolute cursor-grab rounded-xl border text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring", dragging && "cursor-grabbing shadow-panel", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card", selected && "border-ink/60 ring-2 ring-ink/25")}
+      onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onKey())}
+      className={cx("group absolute cursor-grab rounded-xl border text-left outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring", dragging && "cursor-grabbing shadow-panel", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card", selected && "border-ink/60 ring-2 ring-ink/25")}
       style={{ left: at.x, top: at.y, width: BOX_W, height: BOX_H }}
     >
+      <button type="button" data-ui aria-label={`Delete step ${n}`} title="Delete step" onClick={onDelete} className={cx("absolute -right-2.5 -top-2.5 z-[1] grid size-7 place-items-center rounded-full border border-control-line bg-control text-bad shadow-panel hover:bg-hover focus-visible:opacity-100 group-hover:opacity-100", selected ? "opacity-100" : "pointer-events-none opacity-0 group-hover:pointer-events-auto focus-visible:pointer-events-auto")}>
+        <Trash2 size={14} />
+      </button>
       <div className="flex items-start gap-2 px-3.5 pt-3">
         <StepNum n={n} />
         <div className="min-w-0 flex-1">

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { toBody, useOverlay } from "../overlays.ts";
 import { Monitor } from "lucide-react";
 import { useStore } from "../store.ts";
 import { ComputerFullscreen } from "./AgentPanel.tsx";
@@ -19,6 +20,8 @@ export function HelpPopup() {
   const [opened, setOpened] = useState<string | null>(null);
   const c = help.find((x) => !seen.includes(helpKey(x)) || helpKey(x) === opened);
   const agent = c && agents.find((a) => a.id === c.help!.agentId);
+  const id = useRef(Symbol("help")).current;
+  useOverlay(id, "help", !!c && !!agent && opened !== helpKey(c));
   if (!c || !agent) return null;
   if (opened === helpKey(c)) {
     return (
@@ -33,7 +36,7 @@ export function HelpPopup() {
       />
     );
   }
-  return (
+  return toBody(
     <div className="fixed inset-0 z-50 bg-black/60 flex items-start md:items-center justify-center px-3.5 pt-[150px] md:pt-0" role="presentation">
       <div role="dialog" aria-modal="true" aria-label={`${agent.name} needs your help`} className="w-full max-w-[460px] rounded-xl bg-card border border-control-line shadow-panel p-5 flex flex-col gap-3.5">
         <div className="flex items-center gap-3">
@@ -62,6 +65,6 @@ export function HelpPopup() {
           Not now
         </CardButton>
       </div>
-    </div>
+    </div>,
   );
 }

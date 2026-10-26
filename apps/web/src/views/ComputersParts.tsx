@@ -251,7 +251,7 @@ export function ComputersHome() {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[1120px] mx-auto px-4 md:px-7 pt-6 md:pt-8 pb-8 space-y-5">
+        <div data-stagger className="max-w-[1120px] mx-auto px-4 md:px-7 pt-6 md:pt-8 pb-8 space-y-5">
           <header className="flex items-center gap-3.5 safe-top">
             <h1 className="t-title">Computers</h1>
             <span className="text-sm text-faint flex-1">{devices ? `${count.online} of ${count.total} online` : ""}</span>

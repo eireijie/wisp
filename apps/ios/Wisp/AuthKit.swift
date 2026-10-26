@@ -34,7 +34,7 @@ struct WispMark: View {
   var size: CGFloat = 84
   var bobbing = true
   @State private var up = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
 
   var body: some View {
     ZStack {

@@ -94,7 +94,7 @@ struct ChatsView: View {
       }
       .background(Palette.ground.ignoresSafeArea())
       .toolbar(.hidden, for: .navigationBar)
-      .animation(.snappy, value: searchMode)
+      .animation(Motion.settle, value: searchMode)
       .task(id: query) { await runSearch() }
       .chatDestinations()
       .sheet(isPresented: Binding(get: { sheet != nil }, set: { if !$0 { sheet = nil } })) {
@@ -124,7 +124,7 @@ struct ChatsView: View {
   private var header: some View {
     TopBar {
       Button { openSettings() } label: { ProfileCircle() }
-        .buttonStyle(.plain)
+        .buttonStyle(.press)
         .accessibilityIdentifier("profile-button")
         .contextMenu {
           Button("Switch organization", systemImage: "building.2") { openOrganizations() }
@@ -208,19 +208,20 @@ struct ChatsView: View {
   @ViewBuilder private var chatRows: some View {
     let all = entries
     let loose = all.filter { e in e.sectionId == nil || !store.sections.contains { $0.id == e.sectionId } }
-    ForEach(loose) { rowView($0) }
+    ForEach(Array(loose.enumerated()), id: \.element.id) { i, e in rowView(e, i) }
     ForEach(store.sections) { section in
       let rows = all.filter { $0.sectionId == section.id }
       Section {
-        if !collapsed.contains(section.id) { ForEach(rows) { rowView($0) } }
+        if !collapsed.contains(section.id) { ForEach(Array(rows.enumerated()), id: \.element.id) { i, e in rowView(e, i) } }
       } header: {
         sectionHeader(section, count: rows.count)
       }
     }
   }
 
-  private func rowView(_ entry: ChatEntry) -> some View {
+  private func rowView(_ entry: ChatEntry, _ index: Int = 0) -> some View {
     ChatRow(entry: entry, open: { openEntry(entry) }, path: $path)
+      .rowEntrance(index)
       .listRowInsets(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18))
       .listRowSeparator(.hidden)
       .listRowBackground(Color.clear)
@@ -229,7 +230,7 @@ struct ChatsView: View {
   private func sectionHeader(_ section: ChannelSection, count: Int) -> some View {
     let open = !collapsed.contains(section.id)
     return Button {
-      withAnimation(.snappy) { if open { collapsed.insert(section.id) } else { collapsed.remove(section.id) } }
+      withAnimation(Motion.settle) { if open { collapsed.insert(section.id) } else { collapsed.remove(section.id) } }
     } label: {
       HStack(spacing: 8) {
         Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).rotationEffect(.degrees(open ? 0 : -90))
@@ -385,7 +386,7 @@ struct ChatRow: View {
       .opacity(muted ? 0.6 : 1)
       .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.pressRow)
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier(entry.isTeam ? "team-row" : "chat-row")
     .contextMenu { menu }
@@ -588,6 +589,7 @@ struct NewChatSheet: View {
 /** The blue count on a chat or tab with new messages. */
 struct UnreadBadge: View {
   var count: Int
+  @ReduceMotion private var reduceMotion
   var body: some View {
     if count > 0 {
       Text(count > 99 ? "99+" : "\(count)")
@@ -596,6 +598,8 @@ struct UnreadBadge: View {
         .padding(.horizontal, 6)
         .frame(minWidth: 20, minHeight: 20)
         .background(Capsule().fill(Palette.blue))
+        .badgePop(count)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.4).combined(with: .opacity))
     }
   }
 }

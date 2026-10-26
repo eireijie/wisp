@@ -93,9 +93,9 @@ function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (on:
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!on)}
-      className={cx("shrink-0 w-[46px] h-7 rounded-full p-[3px] flex transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed outline-none focus-visible:ring-3 focus-visible:ring-ring/40", on ? "bg-accent justify-end" : "bg-input justify-start")}
+      className={cx("shrink-0 w-[46px] h-7 rounded-full p-[3px] flex transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed outline-none focus-visible:ring-3 focus-visible:ring-ring/40", on ? "bg-accent" : "bg-input")}
     >
-      <span className={cx("size-[22px] rounded-full shadow", on ? "bg-accent-ink" : "bg-white")} />
+      <span className={cx("m-knob size-[22px] rounded-full shadow", on ? "bg-accent-ink translate-x-[18px]" : "bg-white")} />
     </button>
   );
 }

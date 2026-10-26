@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
 import { useInboxCount, useStore } from "./store.ts";
@@ -29,7 +29,8 @@ import { MarketplaceView } from "./views/MarketplaceView.tsx";
 import { ModsPage } from "./views/settings/features.tsx";
 import { HelpView } from "./views/HelpView.tsx";
 import { primeTasks } from "./notifications.ts";
-import { Loader, cx } from "./components/ui.tsx";
+import { Loader, PopBadge, cx } from "./components/ui.tsx";
+import { enterDeskPane, enterPane, staggerRows, useBounce, usePresence } from "./motion.ts";
 import { setupProgress, useDismissed, useOnboarding } from "./onboarding.ts";
 import { useFeatures } from "./features.ts";
 import { BuddyView } from "./views/BuddyView.tsx";
@@ -92,6 +93,35 @@ function newestChat(): string | null {
   return best?.id ?? null;
 }
 
+/** Which tab or page a route belongs to. Moving between groups animates; moving within one doesn't. */
+function tabGroup(route: Route): string {
+  switch (route.view) {
+    case "dashboard":
+      return "0";
+    case "chat":
+    case "chats":
+      return "1";
+    case "agents":
+      return "2";
+    case "computers":
+      return "3";
+    default:
+      return route.view;
+  }
+}
+const tabOrder = (group: string) => (/^\d$/.test(group) ? Number(group) : 4);
+
+/** Phones: the open chat, a layer that slides in over the list (and out again when it leaves). */
+function ChatLayer({ leaving, instant, children }: { leaving: boolean; instant: boolean; children: ReactNode }) {
+  // a chat that's already open when the app loads is simply there, it doesn't slide in
+  const [skip] = useState(instant);
+  return (
+    <div className="m-chat-layer absolute inset-0 z-10 flex flex-col bg-panel" data-state={leaving ? "out" : "in"} data-skip={skip || undefined}>
+      {children}
+    </div>
+  );
+}
+
 function Workspace() {
   const me = useStore((s) => s.me);
   const load = useStore((s) => s.load);
@@ -116,6 +146,41 @@ function Workspace() {
   }, [userId]);
   useUnreadBadge();
   useDesktopAgents();
+
+  // --- motion: tabs cross-fade, lists stagger, a chat slides in over the list on phones ---------------
+  const shellRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const baseRef = useRef<HTMLDivElement>(null);
+  const started = useRef(false);
+  const heldChat = useRef<ReactNode>(null);
+  useEffect(() => {
+    if (me) started.current = true;
+  }, [me]);
+  const group = tabGroup(route);
+  const chatKey = route.view === "chat" ? route.channelId : null;
+  const chatOpen = phone && route.view === "chat" && !!route.channelId;
+  const chatPresence = usePresence(chatOpen, 320);
+  const was = useRef({ group, chatKey });
+  // runs when the tab or the open chat changes, never on a plain re-render
+  useLayoutEffect(() => {
+    const before = was.current;
+    was.current = { group, chatKey };
+    if (!started.current) return;
+    const groupChanged = before.group !== group;
+    if (!groupChanged && before.chatKey === chatKey) return;
+    if (phone) {
+      if (groupChanged) {
+        enterPane(baseRef.current, tabOrder(group) > tabOrder(before.group) ? 8 : -8);
+        staggerRows(shellRef.current);
+      }
+      return;
+    }
+    const panes = Array.from(mainRef.current?.children ?? []);
+    if (groupChanged) {
+      enterDeskPane(panes, 8, 180);
+      staggerRows(shellRef.current);
+    } else enterDeskPane(panes, 6, 160);
+  }, [group, chatKey, phone]);
 
   useEffect(() => {
     if (route.view === "chat") rememberChat(route.channelId);
@@ -195,8 +260,10 @@ function Workspace() {
         );
     }
   })();
-  // conversations use the whole screen on phones; everything else keeps the tab bar
-  const showTabs = phone && !(route.view === "chat" && route.channelId) && route.view !== "vault";
+  // the tab bar stays on phones (it slips away while a chat is open), except in the vault
+  const showTabs = phone && route.view !== "vault";
+  if (chatOpen) heldChat.current = page;
+  const chatLayer = chatOpen || chatPresence.mounted;
   const dialogs = (
     <>
       <CommandPalette />
@@ -213,21 +280,36 @@ function Workspace() {
   const withColumn = !phone && (route.view === "chat" || route.view === "chats");
 
   return (
-    <div className="h-full flex overflow-hidden bg-app">
+    <div ref={shellRef} className="h-full flex overflow-hidden bg-app">
       {!phone && <Rail route={route} />}
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="relative flex-1 min-h-0 flex">
           {withColumn && (
-            <aside className="w-[300px] shrink-0 my-2 rounded-xl border border-edge bg-panel overflow-hidden">
+            <aside className="w-[300px] shrink-0 my-2 rounded-xl border border-edge bg-panel overflow-hidden" data-pane>
               <ChatList route={route} />
             </aside>
           )}
           {/* the floating tab bar sits over the page, so pages leave room for it at the bottom */}
-          <main className={cx("flex-1 min-w-0 min-h-0 flex flex-col bg-panel overflow-hidden", showTabs && "[&_.overflow-y-auto]:pb-28", !phone && "my-2 mr-2 rounded-xl border border-edge", !phone && withColumn && "ml-2")}>
+          <main ref={mainRef} className={cx("flex-1 min-w-0 min-h-0 flex flex-col bg-panel overflow-hidden", !phone && "my-2 mr-2 rounded-xl border border-edge", !phone && withColumn && "ml-2")}>
             <OfflineBanner phone={phone} />
-            {page}
+            {phone ? (
+              // phones: the page, and over it the open chat. The page shifts back 96px and dims as the chat slides in
+              <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden">
+                <div ref={baseRef} data-open={chatOpen} inert={chatOpen} className={cx("m-under absolute inset-0 flex flex-col", showTabs && "[&_.overflow-y-auto]:pb-28")}>
+                  {chatOpen ? <ChatsPage route={route} /> : page}
+                </div>
+                <div className="m-dim" data-open={chatOpen} aria-hidden />
+                {chatLayer && heldChat.current && (
+                  <ChatLayer leaving={!chatOpen} instant={!started.current}>
+                    {heldChat.current}
+                  </ChatLayer>
+                )}
+              </div>
+            ) : (
+              page
+            )}
           </main>
-          {showTabs && <TabBar route={route} />}
+          {showTabs && <TabBar route={route} away={chatOpen} />}
         </div>
       </div>
       {dialogs}
@@ -247,27 +329,37 @@ function EmptyChat() {
   );
 }
 
-/** Phones: the floating glass bar with the four places. */
-function TabBar({ route }: { route: Route }) {
+/** One place in the tab bar: its icon bounces when it becomes the selected one. */
+function Tab({ active, label, icon, target, badge, dot }: { active: boolean; label: string; icon: ReactNode; target: string; badge?: number; dot?: boolean }) {
+  const iconRef = useRef<HTMLSpanElement>(null);
+  useBounce(iconRef, active);
+  return (
+    <a href={target} aria-current={active ? "page" : undefined} className={cx("relative z-[1] flex-1 flex flex-col items-center justify-center gap-[2px] h-[48px] rounded-full text-xs", active ? "text-ink font-medium" : "text-muted font-normal")}>
+      <span ref={iconRef} className="m-tab-icon">{icon}</span>
+      {label}
+      {badge !== undefined && <PopBadge count={badge} label={badge > 99 ? "99+" : String(badge)} className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums" />}
+      {dot && <span className="absolute top-2 left-[calc(50%+10px)] size-2 rounded-full bg-ok" aria-label="An agent is working" />}
+    </a>
+  );
+}
+
+/** Phones: the floating glass bar with the four places. `away` slips it down while a chat is open. */
+function TabBar({ route, away }: { route: Route; away: boolean }) {
   const isGuest = useStore((s) => s.me?.role === "guest");
   const computers = useStore((s) => s.computers);
   const inbox = useInboxCount();
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
-  const tab = (active: boolean, label: string, icon: ReactNode, target: string, badge?: number, dot?: boolean) => (
-    <a href={target} aria-current={active ? "page" : undefined} className={cx("relative flex-1 flex flex-col items-center justify-center gap-[2px] h-[48px] rounded-full text-xs transition-colors", active ? "bg-ink/10 text-ink font-medium" : "text-muted font-normal")}>
-      {icon}
-      {label}
-      {!!badge && <span className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>}
-      {dot && <span className="absolute top-2 left-[calc(50%+10px)] size-2 rounded-full bg-ok" aria-label="An agent is working" />}
-    </a>
-  );
+  const count = isGuest ? 3 : 4;
+  const index = route.view === "dashboard" ? 0 : route.view === "chats" || route.view === "chat" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 px-6 pb-6 pointer-events-none safe-bottom">
-      <nav className="glass pointer-events-auto mx-auto max-w-md h-[60px] flex items-center justify-between p-1.5 rounded-[30px]" aria-label="Main">
-        {tab(route.view === "dashboard", "Inbox", <InboxIcon size={22} />, href({ view: "dashboard" }), inbox)}
-        {tab(route.view === "chats" || route.view === "chat", "Chats", <ChatsIcon size={22} />, href({ view: "chats" }))}
-        {tab(route.view === "agents", "Agents", <AgentsIcon size={22} />, href({ view: "agents", agentId: null }))}
-        {!isGuest && tab(route.view === "computers", "Computers", <ComputersIcon size={22} />, href({ view: "computers", computerId: null }), undefined, working)}
+    <div data-away={away} inert={away} className="m-tabs absolute inset-x-0 bottom-0 z-30 px-6 pb-6 pointer-events-none safe-bottom">
+      <nav className="glass pointer-events-auto relative mx-auto max-w-md h-[60px] flex items-center justify-between p-1.5 rounded-[30px]" aria-label="Main">
+        {/* the selection slides from tab to tab with a little overshoot */}
+        <span aria-hidden className="m-ind left-1.5 top-[5px] h-12 rounded-full bg-ink/10" style={{ width: `calc((100% - 12px) / ${count})`, transform: `translateX(${Math.max(index, 0) * 100}%)`, opacity: index < 0 ? 0 : 1 }} />
+        <Tab active={index === 0} label="Inbox" icon={<InboxIcon size={22} />} target={href({ view: "dashboard" })} badge={inbox} />
+        <Tab active={index === 1} label="Chats" icon={<ChatsIcon size={22} />} target={href({ view: "chats" })} />
+        <Tab active={index === 2} label="Agents" icon={<AgentsIcon size={22} />} target={href({ view: "agents", agentId: null })} />
+        {!isGuest && <Tab active={index === 3} label="Computers" icon={<ComputersIcon size={22} />} target={href({ view: "computers", computerId: null })} dot={working} />}
       </nav>
     </div>
   );

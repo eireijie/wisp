@@ -150,8 +150,9 @@ struct CardPill: ButtonStyle {
         case .ghost: Color.clear
         }
       }
-      .opacity(!enabled ? 0.5 : configuration.isPressed ? 0.75 : 1)
+      .opacity(enabled ? 1 : 0.5)
       .contentShape(Capsule())
+      .pressFeedback(configuration.isPressed)
   }
 }
 

@@ -81,7 +81,7 @@ export function RightPane({ label, children, className }: { label: string; child
     <aside
       aria-label={label}
       style={{ "--pane-w": `${width}px` } as CSSProperties}
-      className={cx("fixed inset-0 z-40 bg-bg flex flex-col min-h-0 safe-top lg:relative lg:inset-auto lg:z-auto lg:w-(--pane-w) lg:shrink-0 lg:border-l lg:border-line", dragging && "select-none", className)}
+      className={cx("m-panel fixed inset-0 z-40 bg-bg flex flex-col min-h-0 safe-top lg:relative lg:inset-auto lg:z-auto lg:w-(--pane-w) lg:shrink-0 lg:border-l lg:border-line", dragging && "select-none", className)}
     >
       <div
         role="separator"

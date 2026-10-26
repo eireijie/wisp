@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useOverlay } from "../overlays.ts";
+import { builderCovered } from "./escape.ts";
 import { AlertCircle, ChevronDown, ChevronLeft, Loader2, MoreHorizontal, Plus, Workflow, X } from "lucide-react";
 import { stepOrder, type ChannelTeam, type TeamTemplate } from "@wisp/core";
 import { api } from "../api.ts";
@@ -12,7 +14,7 @@ import { StepForm, stepHeading } from "./StepForm.tsx";
 import { TemplateBrowser } from "./Templates.tsx";
 import { KindIcon, TeamGhosts, useIsPhone } from "./parts.tsx";
 import { CreateAgentContext, NewAgentForTeam } from "./NewAgent.tsx";
-import { addStep, fillTemplate, relayout, removingStep, stepById, stepProblems, teamAgentIds, updating, withChart, type AddAt, type AddKind } from "./flow.ts";
+import { addStep, fillTemplate, relayout, removingStep, isStepDeleteKey, stepById, stepNeedsConfirm, stepProblems, teamAgentIds, updating, withChart, type AddAt, type AddKind } from "./flow.ts";
 
 type Tab = "canvas" | "how";
 
@@ -52,6 +54,8 @@ const iconKind = (k: AddKind) => (k === "agent" ? "do" : k === "handOut" ? "hand
  */
 export function TeamBuilder({ team, onChange, name, channelId, saving = false, error = null, doneLabel = "Save", onBack, onDone }: BuilderProps) {
   const phone = useIsPhone();
+  const overlayId = useRef(Symbol("builder")).current;
+  useOverlay(overlayId, "builder");
   const agents = useStore((s) => s.agents);
   const [tab, setTab] = useState<Tab>("canvas");
   const [sel, setSel] = useState<string | null>(null);
@@ -62,6 +66,8 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   const [naming, setNaming] = useState(false);
   const [newAgent, setNewAgent] = useState<((id: string) => void) | null>(null);
   const [fitKey, setFitKey] = useState(0);
+  const [holding, setHolding] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const manual = useRef(new Set<string>());
 
   const steps = team.steps ?? [];
@@ -99,6 +105,26 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
     setSel(null);
     setEditing(null);
   };
+
+  /** Delete straight away, unless the step has a prompt or arrows: then ask first. */
+  const askRemove = (id: string) => {
+    if (stepNeedsConfirm(team, id)) setConfirmDelete(id);
+    else remove(id);
+  };
+
+  // Delete or Backspace takes off the picked step (on a desktop, when not typing in a field)
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyRef.current = (e) => {
+    if (phone || tab !== "canvas") return;
+    if (!isStepDeleteKey(e, sel && stepById(team, sel) ? sel : null, builderCovered())) return;
+    e.preventDefault();
+    askRemove(sel!);
+  };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => keyRef.current(e);
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
 
   const useTemplate = (t: TeamTemplate) => {
     manual.current.clear();
@@ -163,11 +189,11 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
   );
 
   const selected = sel ? stepById(team, sel) : undefined;
-  const form = (id: string) => <StepForm team={team} stepId={id} onChange={commit} onDelete={() => remove(id)} channelId={channelId} />;
+  const form = (id: string) => <StepForm team={team} stepId={id} onChange={commit} onDelete={() => askRemove(id)} channelId={channelId} />;
 
   return createPortal(
     <CreateAgentContext.Provider value={(done) => setNewAgent(() => done)}>
-    <div role="dialog" aria-label={`How ${name} works`} className="fixed inset-0 z-50 flex flex-col bg-panel text-ink md:left-[84px]">
+    <div role="dialog" data-team-builder aria-label={`How ${name} works`} className="fixed inset-0 z-50 flex flex-col bg-panel text-ink md:left-[84px]">
       <header className="flex h-[72px] shrink-0 items-center gap-3 px-4 md:px-6">
         <div className="flex min-w-0 flex-1 basis-0 items-center gap-3">
           <button type="button" onClick={onBack} aria-label="Back" className="circle circle-sm shrink-0">
@@ -227,7 +253,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
             {steps.length === 0 ? (
               <EmptyState onAdd={() => setAdding({})} onTemplates={() => setTemplates(true)} />
             ) : (
-              <PhoneFlow team={team} problems={problems.byStep} banner={banner ? <div className="mb-4 w-full">{banner}</div> : null} onOpen={open} onAdd={setAdding} />
+              <PhoneFlow team={team} problems={problems.byStep} banner={banner ? <div className="mb-4 w-full">{banner}</div> : null} onOpen={open} onHold={setHolding} onAdd={setAdding} />
             )}
           </div>
         ) : (
@@ -239,6 +265,7 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
                 problems={problems.byStep}
                 fitKey={fitKey}
                 onSelect={setSel}
+                onDelete={askRemove}
                 onMove={(id, pos) => {
                   manual.current.add(id);
                   onChange(updating(team, id, pos));
@@ -290,6 +317,31 @@ export function TeamBuilder({ team, onChange, name, channelId, saving = false, e
       {phone && editing && stepById(team, editing) && (
         <Modal title={stepHeading(team, stepById(team, editing)!)} onClose={() => setEditing(null)} label="Step">
           {form(editing)}
+        </Modal>
+      )}
+      {holding && stepById(team, holding) && (
+        <Modal title={stepHeading(team, stepById(team, holding)!)} onClose={() => setHolding(null)} label="Step actions">
+          <div className="space-y-2">
+            <Button type="button" className="h-12 w-full text-body" onClick={() => { const id = holding; setHolding(null); setEditing(id); }}>
+              Edit step
+            </Button>
+            <Button type="button" variant="danger" className="h-12 w-full text-body" onClick={() => { const id = holding; setHolding(null); askRemove(id); }}>
+              Delete step
+            </Button>
+          </div>
+        </Modal>
+      )}
+      {confirmDelete && stepById(team, confirmDelete) && (
+        <Modal title="Delete this step?" onClose={() => setConfirmDelete(null)}>
+          <p className="text-body text-muted">What led to it will lead to what came after it.</p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="danger" onClick={() => { const id = confirmDelete; setConfirmDelete(null); remove(id); }}>
+              Delete step
+            </Button>
+          </div>
         </Modal>
       )}
       {adding && <AddStepSheet team={team} at={adding} onPick={(kind, a) => add(kind, adding.between ? adding : { after: a })} onClose={() => setAdding(null)} />}

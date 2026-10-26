@@ -227,6 +227,30 @@ export function removingStep(team: ChannelTeam, id: string): ChannelTeam {
   return next;
 }
 
+/** Whether taking a step off loses something worth a second look: its prompt, or arrows to or from it. */
+export function stepNeedsConfirm(team: ChannelTeam, id: string): boolean {
+  const s = stepById(team, id);
+  if (!s) return false;
+  const g = stepGraph(stepsOf(team));
+  // anything the person filled in counts, not just the prompt
+  const typed = [s.prompt, s.show, s.condition, s.handoffTo, s.reviewBy, s.sendBackTo, s.ifTrue, s.ifFalse].some((v) => !!(v ?? "").trim()) || !!s.rule || !!s.handTo?.length;
+  return typed || (g.ins.get(id) ?? []).length > 0 || (g.outs.get(id) ?? []).length > 0 || (g.back.get(id) ?? []).length > 0;
+}
+
+/** Whether a key press should delete the picked step: Delete or Backspace, not while typing, not with a dialog open. */
+export function isStepDeleteKey(e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; defaultPrevented?: boolean; target: EventTarget | null }, picked: string | null, dialogOpen = false): boolean {
+  if (!picked || dialogOpen || e.defaultPrevented) return false;
+  if (e.key !== "Delete" && e.key !== "Backspace") return false;
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  const t = e.target as { tagName?: string; isContentEditable?: boolean } | null;
+  const tag = (t?.tagName ?? "").toUpperCase();
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return false;
+  // a menu, list or switch has the focus: Delete belongs to it, not to the picked step
+  const c = (e.target as { closest?: (s: string) => unknown } | null)?.closest;
+  if (typeof c === "function" && (e.target as Element).closest('[role="menu"],[role="listbox"],[role="combobox"],[role="switch"],summary')) return false;
+  return true;
+}
+
 /** Move a step to sit right after `target` (null = first). It leaves its place and takes `target`'s followers. */
 export function movingAfter(team: ChannelTeam, id: string, target: string | null): ChannelTeam {
   const moved = stepById(team, id);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Flag, Plus } from "lucide-react";
 import { stepOrder, type ChannelTeam, type TeamStep } from "@wisp/core";
 import { useStore } from "../store.ts";
@@ -29,14 +29,38 @@ function Connector({ from, to, plus, onAdd }: { from: number; to: number; plus: 
   );
 }
 
-function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; step: TeamStep; wide: boolean; problem?: string; onOpen: () => void }) {
+function StepCard({ team, step, wide, problem, onOpen, onHold }: { team: ChannelTeam; step: TeamStep; wide: boolean; problem?: string; onOpen: () => void; onHold: () => void }) {
+  // a long press offers Delete; the tap that ends it must not also open the step
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const held = useRef(false);
+  const stop = () => clearTimeout(timer.current);
   const agents = useStore((s) => s.agents);
   const agent = agentOfStep(team, agents, step);
   const mark = KIND_MARK[step.kind];
   const handoff = useHandoffName(step.handoffTo);
   const uses = (step.inputs ?? []).length > 1 ? `Uses ${(step.inputs ?? []).map((i) => numberOf(team, i)).sort((a, b) => a - b).join(" and ")}` : null;
   return (
-    <button type="button" onClick={onOpen} aria-label={`Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 rounded-xl border p-3.5 text-left", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
+    <button
+      type="button"
+      onClick={() => (held.current ? (held.current = false) : onOpen())}
+      onPointerDown={() => {
+        held.current = false;
+        stop();
+        timer.current = setTimeout(() => {
+          held.current = true;
+          onHold();
+        }, 550);
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        stop();
+        held.current = true;
+        onHold();
+      }}
+      aria-label={`Step ${numberOf(team, step.id)}, ${titleOf(step)}`} className={cx("min-w-0 select-none rounded-xl border p-3.5 text-left [-webkit-touch-callout:none]", wide ? "w-full" : "flex-1", problem ? "border-bad/40 bg-bad/10" : "border-line bg-card")}>
       <div className="flex items-start gap-2.5">
         <StepNum n={numberOf(team, step.id)} />
         <div className="min-w-0 flex-1">
@@ -72,7 +96,7 @@ function StepCard({ team, step, wide, problem, onOpen }: { team: ChannelTeam; st
 }
 
 /** The flow at phone width: top to bottom, steps that run together side by side. */
-export function PhoneFlow({ team, problems, banner, onOpen, onAdd }: { team: ChannelTeam; problems: Map<string, string>; banner: React.ReactNode; onOpen: (id: string) => void; onAdd: (at: AddAt) => void }) {
+export function PhoneFlow({ team, problems, banner, onOpen, onHold, onAdd }: { team: ChannelTeam; problems: Map<string, string>; banner: React.ReactNode; onOpen: (id: string) => void; onHold: (id: string) => void; onAdd: (at: AddAt) => void }) {
   const rows = stepRows(team.steps ?? []);
   const last = rows.at(-1) ?? [];
   return (
@@ -86,7 +110,7 @@ export function PhoneFlow({ team, problems, banner, onOpen, onAdd }: { team: Cha
             <Connector from={before} to={row.length} plus={row.length === 1} onAdd={() => onAdd({ between: { from: rowInputs(row), to: row.map((s) => s.id) } })} />
             <div className="flex w-full items-start gap-2.5">
               {row.map((s) => (
-                <StepCard key={s.id} team={team} step={s} wide={row.length === 1} problem={problems.get(s.id)} onOpen={() => onOpen(s.id)} />
+                <StepCard key={s.id} team={team} step={s} wide={row.length === 1} problem={problems.get(s.id)} onOpen={() => onOpen(s.id)} onHold={() => onHold(s.id)} />
               ))}
             </div>
           </div>

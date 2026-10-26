@@ -207,7 +207,7 @@ struct CallGhost: View {
   var facts: CallFacts
   var size: CGFloat
   var ring: CGFloat
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ReduceMotion private var reduceMotion
   @State private var breathe = false
   @State private var spin = false
   @State private var bob = false
@@ -515,7 +515,7 @@ struct CallBar: View {
         Button { call.hangUp(store: store) } label: {
           Image(systemName: "xmark").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
             .frame(width: 44, height: 44).background(Circle().fill(CallScreen.endRed))
-        }.buttonStyle(.plain).accessibilityLabel("End call").accessibilityIdentifier("call-bar-end")
+        }.buttonStyle(.press).accessibilityLabel("End call").accessibilityIdentifier("call-bar-end")
       }
       .contentShape(Rectangle())
       .onTapGesture { call.expanded = true }
@@ -546,7 +546,7 @@ struct CallBar: View {
     Button(action: action) {
       Image(systemName: symbol).font(.system(size: 17)).foregroundStyle(Palette.text)
         .frame(width: 44, height: 44).background(Circle().fill(Color(light: 0xE8E8EE, dark: 0x38383E)))
-    }.buttonStyle(.plain).disabled(disabled).opacity(disabled ? 0.4 : 1)
+    }.buttonStyle(.press).disabled(disabled).opacity(disabled ? 0.4 : 1)
       .accessibilityLabel(label).accessibilityIdentifier(id)
   }
 }

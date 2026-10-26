@@ -7,6 +7,9 @@ import { defaultAppearance } from "@wisp/core/src/appearance.ts";
 import { Ghost, type GhostMood } from "./Ghost.tsx";
 import { useStore } from "../store.ts";
 import { agentMood } from "../ghostMood.ts";
+import { EASE, play, useOnChange, usePresence, useSheetBackdrop } from "../motion.ts";
+import { motionReduced } from "../theme.ts";
+import { isTopOverlay, useOverlay } from "../overlays.ts";
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
@@ -78,9 +81,13 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  const id = useRef(Symbol("modal")).current;
+  useOverlay(id, "modal");
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const k = (e: KeyboardEvent) => {
+      // overlays stack (a New agent dialog over a step sheet, the search palette over a dialog): only the one on top answers Escape and Tab
+      if (!isTopOverlay(id)) return;
       if (e.key === "Escape") { e.stopPropagation(); close.current(); }
       if (e.key !== "Tab" || !ref.current) return;
       const focusable = [...ref.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], summary, [tabindex="0"]')].filter((el) => el.getClientRects().length > 0);
@@ -94,9 +101,11 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
     if (headerless) ref.current?.focus();
     return () => { window.removeEventListener("keydown", k); previous?.focus(); };
   }, []);
-  return (
-    <div className={drawer ? "fixed inset-0 z-50 flex justify-end" : "fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "w-full bg-panel border border-line rounded-t-[16px] sm:rounded-3xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
+  // on phones the app behind a sheet scales back; the sheet lives in <body> so that scale doesn't touch it
+  useSheetBackdrop(!drawer);
+  const dialog = (
+    <div className={drawer ? "fixed inset-0 z-50 flex justify-end" : "m-scrim fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cx(drawer ? "m-drawer w-full max-w-[480px] h-dvh bg-panel border-l border-line overflow-y-auto safe-bottom" : "m-dialog w-full bg-panel border border-line rounded-t-[16px] sm:rounded-3xl shadow-panel max-h-[92vh] overflow-y-auto safe-bottom", !drawer && (wide ? "sm:max-w-2xl" : "sm:max-w-md"), className)}>
         {!headerless && <div className="flex items-center justify-between px-5 pt-4 pb-2">
           {typeof title === "string" ? <h2 className="text-base font-semibold">{title}</h2> : <div className="text-base font-semibold">{title}</div>}
           <button onClick={onClose} className="size-8 grid place-items-center rounded-full bg-chip hover:bg-hover text-muted" aria-label="Close">
@@ -107,6 +116,7 @@ export function Modal({ title, onClose, children, wide, drawer = false, headerle
       </div>
     </div>
   );
+  return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }
 
 export { harnessLabel } from "@wisp/core";
@@ -281,6 +291,8 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
   const [pos, setPos] = useState<CSSProperties | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // it springs from its trigger on open and shrinks back on close
+  const { mounted, closing } = usePresence(open, 180);
   // The menu is drawn on the page itself (fixed, in a portal) so cards and scroll areas that clip
   // their contents can't cut it off. It opens upward when there's no room below.
   useLayoutEffect(() => {
@@ -288,7 +300,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
     const r = ref.current.getBoundingClientRect();
     const h = menuRef.current?.offsetHeight ?? 0;
     const goUp = up || (h > 0 && r.bottom + 4 + h > window.innerHeight - 8 && r.top - 4 - h > 8);
-    const style: CSSProperties = { position: "fixed", maxWidth: "min(22rem, calc(100vw - 16px))" };
+    const style: CSSProperties = { position: "fixed", maxWidth: "min(22rem, calc(100vw - 16px))", transformOrigin: `${goUp ? "bottom" : "top"} ${align === "right" ? "right" : "left"}` };
     if (goUp) style.bottom = window.innerHeight - r.top + 4;
     else style.top = r.bottom + 4;
     if (align === "right") style.right = Math.max(8, window.innerWidth - r.right);
@@ -317,12 +329,12 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
   return (
     <div ref={ref} className="relative">
       {trigger(open, () => {
-        setPos(null);
+        if (!open) setPos(null); // opening measures afresh; closing keeps the spot so the menu can shrink away
         setOpen((o) => !o);
       })}
-      {open &&
+      {mounted &&
         createPortal(
-          <div ref={menuRef} role="menu" style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="glass z-[100] min-w-56 rounded-xl p-1.5">
+          <div ref={menuRef} role="menu" data-closing={closing || undefined} style={pos ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }} className="m-menu glass z-[100] min-w-56 rounded-xl p-1.5">
             {items.map((it, i) =>
               it === "divider" ? (
                 <div key={i} className="-mx-1 my-1 h-px bg-line" />
@@ -345,6 +357,24 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
           document.body,
         )}
     </div>
+  );
+}
+
+/**
+ * An unread count. It stays in place (scaled to nothing at zero) so a new count can pop in:
+ * .4, 1.3, 1 whenever the number changes. `className` carries the size and color.
+ */
+export function PopBadge({ count, label, className }: { count: number; label: string; className: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const shown = useRef(label);
+  if (count > 0) shown.current = label;
+  useOnChange(count > 0 ? label : "", () => {
+    if (count > 0 && !motionReduced()) play(ref.current, [{ transform: "scale(.4)" }, { transform: "scale(1.3)", offset: 0.55 }, { transform: "scale(1)" }], { duration: 320, easing: EASE.pop });
+  });
+  return (
+    <span ref={ref} aria-hidden={count > 0 ? undefined : true} data-zero={count > 0 ? undefined : true} className={cx("m-badge", className)}>
+      {shown.current}
+    </span>
   );
 }
 
@@ -383,6 +413,7 @@ export function EmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
 /** An anchored panel with any content. Closes on outside click or Escape; opens upward by default (composer). */
 export function Popover({ trigger, children, align = "left", up = true, className, inline }: { trigger: (open: boolean, toggle: () => void) => ReactNode; children: (close: () => void) => ReactNode; align?: "left" | "right"; up?: boolean; className?: string; inline?: boolean }) {
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = usePresence(open, 180);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -400,7 +431,8 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
   const panel = useRef<HTMLDivElement>(null);
   const [shift, setShift] = useState(0);
   useLayoutEffect(() => {
-    if (!open || !panel.current) {
+    if (!open) return; // closing: the panel stays where it was while it shrinks away
+    if (!panel.current) {
       setShift(0);
       return;
     }
@@ -413,8 +445,8 @@ export function Popover({ trigger, children, align = "left", up = true, classNam
   return (
     <div ref={ref} className={inline ? "relative inline-block" : "relative"}>
       {trigger(open, () => setOpen((o) => !o))}
-      {open && (
-        <div ref={panel} role="dialog" style={shift ? { transform: `translateX(${shift}px)` } : undefined} className={cx("glass absolute z-50 max-w-[calc(100vw-1rem)] rounded-2xl", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-2" : "top-full mt-2", className)}>
+      {mounted && (
+        <div ref={panel} role="dialog" data-closing={closing || undefined} style={{ transformOrigin: `${up ? "bottom" : "top"} ${align === "right" ? "right" : "left"}`, ...(shift ? { transform: `translateX(${shift}px)` } : null) }} className={cx("m-menu glass absolute z-50 max-w-[calc(100vw-1rem)] rounded-2xl", align === "right" ? "right-0" : "left-0", up ? "bottom-full mb-2" : "top-full mt-2", className)}>
           {children(() => setOpen(false))}
         </div>
       )}
