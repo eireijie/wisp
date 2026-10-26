@@ -3,7 +3,7 @@ import { Check, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
 import { catalogSkill, type Agent, type CatalogSkill, type Skill } from "@wisp/core";
 import { api } from "../api.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { openDm } from "../openDm.ts";
 import { AgentAvatar, Button, Field, Input, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 import { AgentPicker, Group, CatalogIcon } from "../components/ShopParts.tsx";
@@ -110,8 +110,7 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
   const plain = plainSkill(skill, entry);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const simple = useSimple();
-  const who = simple ? "helper" : "agent";
+  const who = "helper";
 
   async function toggle(agentId: string, on: boolean) {
     if (!skill) return;
@@ -152,19 +151,18 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
     >
       <div className="space-y-5">
         <div className="space-y-2">
-          {!(simple && plain.does) && <p className="text-sm text-muted">{description}</p>}
+          {!plain.does && <p className="text-sm text-muted">{description}</p>}
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
             {skill ? <Pill tone={skill.source === "custom" && !skill.catalogId ? "accent" : "neutral"}>{skillOrigin(skill)}</Pill> : <Pill>In the library</Pill>}
-            {skill && simple && <span>{helperLine(agents, skill.agentIds)}</span>}
-            {skill && !simple && <span className="font-mono">me/skills/{skill.slug}/SKILL.md</span>}
-            {skill && <span>{simple ? "" : "· "}updated {timeAgo(skill.updatedAt)}</span>}
+            {skill && <span>{helperLine(agents, skill.agentIds)}</span>}
+            {skill && <span>updated {timeAgo(skill.updatedAt)}</span>}
           </div>
-          {skill && simple && (
-            <Advanced title="Details">
+          {skill && (
+            <MoreOptions about="details">
               <p className="text-xs text-muted">
                 Instruction file: <span className="font-mono">me/skills/{skill.slug}/SKILL.md</span>
               </p>
-            </Advanced>
+            </MoreOptions>
           )}
         </div>
 
@@ -189,7 +187,7 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
           </div>
         )}
 
-        {simple && plain.does && (
+        {plain.does && (
           <section className="space-y-2" aria-label="In plain words">
             <dl className="space-y-3 text-sm">
               <div>
@@ -218,7 +216,7 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
 
         {skill && (
           <section className="space-y-2">
-            <h3 className="text-[13px] font-semibold text-muted">{simple ? "Helpers" : "Agents"} with this skill</h3>
+            <h3 className="text-[13px] font-semibold text-muted">Helpers with this skill</h3>
             {agents.length === 0 ? (
               <p className="text-sm text-muted">No {who}s yet.</p>
             ) : (
@@ -247,12 +245,12 @@ export function SkillPanel({ open, agents, canEdit, onClose, onInstall, onEdit, 
         )}
         {error && <p className="text-sm text-bad">{error}</p>}
 
-        <Advanced title="Full instructions">
+        <MoreOptions title="Full instructions">
           <section className="space-y-2">
-            <h3 className="text-[13px] font-semibold text-muted">{simple ? "How your helper does it" : "SKILL.md"}</h3>
+            <h3 className="text-[13px] font-semibold text-muted">How your helper does it</h3>
             <div className="prose-w rounded-lg border border-line p-4 text-sm" dangerouslySetInnerHTML={{ __html: html }} />
           </section>
-        </Advanced>
+        </MoreOptions>
       </div>
     </Modal>
   );
@@ -331,7 +329,7 @@ export function InstallModal({ entry, body, agents, onClose, onDone }: { entry: 
   const [agentIds, setAgentIds] = useState<string[]>(agents.length === 1 ? [agents[0].id] : []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const who = useSimple() ? "helper" : "agent";
+  const who = "helper";
   async function install() {
     setBusy(true);
     setError(null);
@@ -369,8 +367,7 @@ const GUIDE_HINTS = {
 };
 
 export function SkillEditor({ skill, agents, onClose, onSaved }: { skill: Skill | null; agents: Agent[]; onClose: () => void; onSaved: (s: Skill) => void }) {
-  const simple = useSimple();
-  const guided = simple && !skill;
+  const guided = !skill;
   const ids = useId();
   const [name, setName] = useState(skill?.name ?? "");
   const [description, setDescription] = useState(skill?.description ?? "");
@@ -419,7 +416,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved }: { skill: Skill 
       <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="code, deploy" />
     </Field>
   );
-  const who = simple ? "helpers" : "agents";
+  const who = "helpers";
 
   return (
     <Modal title={skill ? `Edit "${skill.name}"` : "Create a skill"} onClose={onClose} wide>
@@ -444,7 +441,7 @@ export function SkillEditor({ skill, agents, onClose, onSaved }: { skill: Skill 
             <Field label="What does a good result look like?">
               <Textarea rows={3} value={result} onChange={(e) => setResult(e.target.value)} placeholder={GUIDE_HINTS.result} />
             </Field>
-            <Advanced title="Edit the instructions directly">
+            <MoreOptions title="Edit the instructions directly">
               <div className="space-y-2">
                 <Field label="Instructions (markdown)" hint={rawEdit === null ? "Made from your answers above. If you change this text, this text is what gets saved." : "You edited this text, so the answers above no longer change it."}>
                   <Textarea className="font-mono text-[13px] min-h-48" rows={10} value={finalContent} onChange={(e) => setRawEdit(e.target.value)} />
@@ -455,8 +452,8 @@ export function SkillEditor({ skill, agents, onClose, onSaved }: { skill: Skill 
                   </Button>
                 )}
               </div>
-            </Advanced>
-            <Advanced title="Tags">{tagsField}</Advanced>
+            </MoreOptions>
+            <MoreOptions title="Tags">{tagsField}</MoreOptions>
           </>
         ) : (
           <>

@@ -695,6 +695,17 @@ export class Store {
     return out;
   }
 
+  /** The newest top-level message in each channel, for the chats list's preview line and its order. */
+  lastMessages(channelIds: string[]): Record<string, { at: string; body: string; author: { kind: string; id: string } }> {
+    const out: Record<string, { at: string; body: string; author: { kind: string; id: string } }> = {};
+    const stmt = this.db.prepare("SELECT body, author_kind, author_id, created_at FROM messages WHERE channel_id = ? AND thread_id IS NULL AND deleted_at IS NULL AND NOT (author_kind = 'user' AND author_id = 'system') ORDER BY created_at DESC LIMIT 1");
+    for (const id of channelIds) {
+      const r = stmt.get(id) as { body: string; author_kind: string; author_id: string; created_at: string } | undefined;
+      if (r) out[id] = { at: r.created_at, body: r.body.slice(0, 400), author: { kind: r.author_kind, id: r.author_id } };
+    }
+    return out;
+  }
+
   // --- sections -------------------------------------------------------------
 
   sections(workspaceId: string): Section[] {

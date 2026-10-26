@@ -80,6 +80,12 @@ export function observeEvents(listener: (event: ClientEvent) => void): () => voi
 }
 
 /** Realtime events with automatic reconnect. Returns a disposer. */
+/** Try the live connection again now instead of waiting for the next automatic retry (the offline banner's Retry). */
+export function reconnectNow() {
+  reconnect?.();
+}
+let reconnect: (() => void) | null = null;
+
 export function connectEvents(onEvent: (e: ClientEvent) => void, onStatus: (connected: boolean) => void): () => void {
   let ws: WebSocket | null = null;
   let stopped = false;
@@ -113,9 +119,17 @@ export function connectEvents(onEvent: (e: ClientEvent) => void, onStatus: (conn
       delay = Math.min(delay * 2, 10_000);
     };
   };
+  reconnect = () => {
+    clearTimeout(retry);
+    if (!ws || ws.readyState === WebSocket.CLOSED) {
+      delay = 500;
+      open();
+    }
+  };
   open();
   return () => {
     stopped = true;
+    reconnect = null;
     clearTimeout(retry);
     ws?.close();
   };

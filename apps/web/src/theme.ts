@@ -71,7 +71,7 @@ function apply() {
   if (reduceMotion) root.dataset.motion = "reduce";
   else delete root.dataset.motion;
   // the browser bar matches the content surface
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved() === "dark" ? "#0d0d0d" : "#ffffff");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved() === "dark" ? "#111113" : "#ffffff");
   listeners.forEach((l) => l());
 }
 

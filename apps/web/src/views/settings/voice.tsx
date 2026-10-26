@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api.ts";
 import { Button, Input } from "../../components/ui.tsx";
-import { Advanced } from "../../experience.tsx";
+import { MoreOptions } from "../../components/MoreOptions.tsx";
 import { href } from "../../router.ts";
 import { useStore } from "../../store.ts";
 import { canRecognize, createSpeaker, DEFAULT_VOICE, effectiveListen, inDesktopApp, type VoiceSettings, type VoiceSpeaker } from "../../voice/providers.ts";
@@ -125,10 +125,10 @@ export function VoicePage() {
       </Card>
     </Section>
     {neededRows.length > 0 && <Section title="One more thing" description="The voices you picked need a key from the company that provides them. They bill you directly."><Card>{neededRows}</Card></Section>}
-    <Advanced className="mb-8" title="Advanced: API keys and troubleshooting">
+    <MoreOptions className="mb-8" about="API keys and troubleshooting">
       {otherRows.length > 0 && <Section title="API keys" description="Optional. Keys stay on your hub and are hidden when shown again. Clear a key and save to remove it."><Card>{otherRows}</Card></Section>}
       <p className="mb-8 text-xs text-muted">Calls need a secure connection (HTTPS, or localhost on this computer). Headphones help when you interrupt, and stop your speakers from echoing into the microphone.</p>
-    </Advanced>
+    </MoreOptions>
     <Button variant="primary" disabled={!loaded || saving} onClick={save}>{saving ? "Saving…" : "Save voice settings"}</Button>
     {message && <p role="status" className="text-sm text-muted mt-3">{message}</p>}
 

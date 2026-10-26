@@ -69,7 +69,7 @@ function DeleteOrgSection() {
   // a hub without organizations, or still loading
   if (!orgs || !current) return null;
   return (
-    <Section title="Delete organization" description="Removes its agents, channels, messages, devices, computers and memory for everyone in it. This can't be undone.">
+    <Section title="Delete organization" description="Removes its agents, teams, messages, devices, computers and memory for everyone in it. This can't be undone.">
       {current.canDelete ? (
         <Button variant="danger" onClick={() => setOpen(true)}>
           <Trash2 size={14} /> Delete {current.name}
@@ -103,7 +103,7 @@ function DeleteOrg({ org, onClose }: { org: Org; onClose: () => void }) {
         }}
       >
         <p className="text-sm text-muted">
-          {org.agents} agent{org.agents === 1 ? "" : "s"}, every channel and all of its memory are deleted, and {org.members > 1 ? `the ${org.members - 1} other ${org.members === 2 ? "person" : "people"} in it lose access` : "nobody else is affected"}. You'll move to another organization.
+          {org.agents} agent{org.agents === 1 ? "" : "s"}, every team and all of its memory are deleted, and {org.members > 1 ? `the ${org.members - 1} other ${org.members === 2 ? "person" : "people"} in it lose access` : "nobody else is affected"}. You'll move to another organization.
         </p>
         <Field label={`Type ${org.name} to confirm`}>
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
@@ -482,7 +482,7 @@ export function AgentsPolicyPage() {
       </Section>
       <Section title="Agents making agents" description="Let agents add helpers when the work needs more hands. Both are off until you turn them on.">
         <Card>
-          <Row label="Leads can create agents" hint="A channel's lead can create an agent its team is missing. It joins the team chart under the lead.">
+          <Row label="Leads can create agents" hint="A team's lead can create an agent its team is missing. It joins the team chart under the lead.">
             <Toggle on={p.leadsCreateAgents} onChange={(v) => save({ leadsCreateAgents: v })} label="Leads can create agents" disabled={!isOwner} />
           </Row>
           <Row label="Those agents can make sub-agents" hint={p.leadsCreateAgents ? "An agent a lead made can make sub-agents for pieces of its own work, up to 3 levels down." : "Needs “Leads can create agents” on first."}>
@@ -510,8 +510,8 @@ export function AgentsPolicyPage() {
               ))}
             </Select>
           </Row>
-          <Row label="Agent runs per channel per minute" hint="A ceiling on how busy one conversation can get.">
-            <Select label="Agent runs per channel per minute" value={String(p.maxRunsPerMinute)} disabled={!isOwner} onChange={(v) => save({ maxRunsPerMinute: Number(v) })}>
+          <Row label="Agent runs per team per minute" hint="A ceiling on how busy one conversation can get.">
+            <Select label="Agent runs per team per minute" value={String(p.maxRunsPerMinute)} disabled={!isOwner} onChange={(v) => save({ maxRunsPerMinute: Number(v) })}>
               {[5, 10, 20, 40, 60, 100, 200].map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -945,7 +945,7 @@ export function DataPage() {
               <Row label="What is inside" hint={`${info.notes} notes, ${info.messages} messages, ${info.files} files and ${info.agents} agents.`} />
             </Card>
             <ul className="mt-3 list-disc pl-5 text-sm text-muted space-y-1">
-              <li><code className="text-xs">wisp.db</code>: people, channels, messages, agents, tasks, routines and settings.</li>
+              <li><code className="text-xs">wisp.db</code>: people, teams, messages, agents, tasks, routines and settings.</li>
               <li><code className="text-xs">vault/</code>: your memory notes.</li>
               <li><code className="text-xs">files/</code>: files people uploaded.</li>
             </ul>
@@ -994,7 +994,7 @@ export function DataPage() {
               </Button>
             </Row>
           )}
-          <Row label="Download conversations (JSON, for developers)" hint="Every channel and DM you can see. JSON is a data format for programs, not for reading.">
+          <Row label="Download conversations (JSON, for developers)" hint="Every team and chat you can see. JSON is a data format for programs, not for reading.">
             <Button disabled={!!busy} onClick={() => download("/api/export/conversations.json", `wisp-conversations-${day}.json`)}>
               <Download size={14} /> {busy === "/api/export/conversations.json" ? "Preparing…" : "Download"}
             </Button>

@@ -42,12 +42,12 @@ describe("settings navigation", () => {
 });
 
 describe("agent settings navigation", () => {
-  it("groups the technical tabs under Advanced in Simple, and keeps every tab", async () => {
+  it("groups the technical tabs under More options, and keeps every tab", async () => {
     const { agentNav } = await import("../src/views/AgentSettings.tsx");
-    const simple = agentNav(true);
-    expect(simple.map((g) => g.group)).toEqual(["Agent", "Runtime", "Activity", "Advanced"]);
-    expect(simple.at(-1)!.items.map((i) => i.id)).toEqual(["model", "permissions", "connect", "background", "look"]);
-    expect(simple.slice(0, 3).flatMap((g) => g.items.map((i) => i.id))).toEqual(["overview", "soul", "instructions", "device", "computer", "routines", "runs"]);
-    expect(agentNav(false).flatMap((g) => g.items).length).toBe(simple.flatMap((g) => g.items).length);
+    const nav = agentNav();
+    expect(nav.map((g) => g.group)).toEqual(["Agent", "Runtime", "Activity", "More options"]);
+    expect(nav.at(-1)!.items.map((i) => i.id)).toEqual(["model", "permissions", "connect", "background", "look"]);
+    expect(nav.slice(0, 3).flatMap((g) => g.items.map((i) => i.id))).toEqual(["overview", "soul", "instructions", "device", "computer", "routines", "runs"]);
+    expect(nav.flatMap((g) => g.items).length).toBe(12);
   });
 });

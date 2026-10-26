@@ -7,7 +7,7 @@ import { go, guardLeaving, href, mayLeave } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
 import { Button, Empty, Field, Input, Menu, Modal, cx, timeAgo } from "../components/ui.tsx";
 import { AccessDialog, pathLabel } from "../components/AccessDialog.tsx";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { obsidianLink, onHubMachine, useMemoryStorage } from "../obsidian.ts";
 import { MemoryGraph, kindColor, kindLabel, neighbourhood, type GraphData, type GraphKind } from "../components/MemoryGraph.tsx";
 import { MemoryGraphView } from "./MemoryGraphView.tsx";
@@ -59,7 +59,6 @@ const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-w
 const norm = (s: string) => s.trim().replace(/\.md$/i, "").toLowerCase();
 
 export function VaultView({ path, onBack }: { path: string | null; onBack?: () => void }) {
-  const simple = useSimple();
   const [notes, setNotes] = useState<NoteMeta[] | null>(null);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Hit[] | null>(null);
@@ -149,7 +148,7 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
   const where = (p: string) => {
     const dir = p.split("/").slice(0, -1);
     // short names: "My notes", "Atlas's notes"; Shared stays "Shared" here
-    return (simple && dir.join("/") !== "shared" && friendlyDir(dir.join("/"), meId, agents)) || dir.map((seg, i) => folderLabel(seg, dir[i - 1] ?? "")).join(" / ") || "Top folder";
+    return (dir.join("/") !== "shared" && friendlyDir(dir.join("/"), meId, agents)) || dir.map((seg, i) => folderLabel(seg, dir[i - 1] ?? "")).join(" / ") || "Top folder";
   };
   const show = (next: typeof panel) => mayLeave() && (setPanel(next), next && isPhone() && setShowTree(false));
   const goHome = () => {
@@ -280,26 +279,17 @@ export function VaultView({ path, onBack }: { path: string | null; onBack?: () =
               onActivity={() => show({ view: "activity" })}
               onNew={viewAs ? undefined : () => setCreating({ dir: newNoteDir })}
               footer={
-                simple ? (
-                  <>
-                    <p>Every helper has a private folder and everyone shares <b className="text-ink">Shared</b>. Use the share button on a folder or note to choose who can read or change it.</p>
-                    <Advanced title="Use another notes app">
-                      <p className="text-xs">
-                        You can open this memory in <a href={href({ view: "settings", page: "memory" })} className="underline hover:text-ink">Obsidian</a> too.
-                      </p>
-                    </Advanced>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      Every agent has a private folder and everyone shares <b className="text-ink">Shared</b>. Use the share button on a folder or note to choose which agents and people can use it, and which agents load it every time they work.
-                    </p>
-                    <p className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <span className="flex-1 min-w-48">It's plain markdown in git, so you can also write in Obsidian.</span>
+                <>
+                  <p>Every helper has a private folder and everyone shares <b className="text-ink">Shared</b>. Use the share button on a folder or note to choose who can read or change it.</p>
+                  <MoreOptions about="use another notes app">
+                    <p className="text-xs flex flex-wrap items-center gap-x-3 gap-y-2">
+                      <span className="flex-1 min-w-48">
+                        It's plain markdown in git. You can open this memory in <a href={href({ view: "settings", page: "memory" })} className="underline hover:text-ink">Obsidian</a> too.
+                      </span>
                       <OpenInObsidian className="h-8" />
                     </p>
-                  </>
-                )
+                  </MoreOptions>
+                </>
               }
             />
           )}
@@ -448,7 +438,6 @@ function NoteReader({
   const [saving, setSaving] = useState(false);
   const agents = useStore((s) => s.agents);
   const memoryVersion = useStore((s) => s.memoryVersion);
-  const simple = useSimple();
   const meId = useStore((s) => s.me?.user.id);
   const storage = useMemoryStorage();
   const handles = useMemo(() => new Set(agents.map((a) => a.handle)), [agents]);
@@ -536,9 +525,9 @@ function NoteReader({
 
   const crumbs = path.split("/");
   const dirName = friendlyDir(crumbs.slice(0, -1).join("/"), meId, agents);
-  // In Simple mode a folder with a friendly name replaces the whole raw path ("My notes / Title")
+  // a folder with a friendly name replaces the whole raw path ("My notes / Title")
   const shown: { key: number; text: string; last: boolean }[] =
-    simple && dirName
+    dirName
       ? [{ key: 0, text: dirName, last: false }, { key: 1, text: base(crumbs[crumbs.length - 1]!), last: true }]
       : crumbs.map((c, i) => ({ key: i, text: i === crumbs.length - 1 ? base(c) : folderLabel(c, crumbs[i - 1] ?? ""), last: i === crumbs.length - 1 }));
   const openObsidian = () => {
@@ -583,7 +572,6 @@ function NoteReader({
             </>
           ) : (
             <>
-              {!simple && <OpenInObsidian note={path} className="h-8 hidden md:inline-flex border-0 px-2 text-muted hover:text-ink" />}
               {canEdit && !viewing && (
                 <Button variant="ghost" className="h-8" onClick={() => setDraft(note.content)} title="Edit this note here">
                   <Pencil size={15} /> <span>Edit</span>
@@ -699,7 +687,6 @@ function NoteReader({
 
 /** The note's front matter, laid out as properties: tags as chips, [[links]] you can follow. */
 function Properties({ frontmatter, kind, resolve }: { frontmatter: Record<string, string | string[]>; kind: GraphKind | null; resolve: (t: string) => string | null }) {
-  const simple = useSimple();
   const entries = Object.entries(frontmatter).filter(([k, v]) => k !== "title" && (Array.isArray(v) ? v.length : v !== ""));
   if (!entries.length) return null;
   const value = (v: string) => {
@@ -723,7 +710,7 @@ function Properties({ frontmatter, kind, resolve }: { frontmatter: Record<string
           <dd className="min-w-0 flex flex-wrap items-center gap-1.5">
             {k === "type" && typeof v === "string" ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-chip px-2 h-6 text-xs font-medium">
-                {kind && <span className="size-2 rounded-full" style={{ background: kindColor(kind) }} title={kindLabel(kind, simple)} />}
+                {kind && <span className="size-2 rounded-full" style={{ background: kindColor(kind) }} title={kindLabel(kind)} />}
                 {v}
               </span>
             ) : k === "tags" ? (
@@ -750,7 +737,6 @@ function Properties({ frontmatter, kind, resolve }: { frontmatter: Record<string
 
 /** Beside the note: a small map of the notes it's linked with, and the lists of what links here and where it points. */
 function Connected({ path, graph, backlinks, where }: { path: string; graph: GraphData | null; backlinks: string[]; where: (p: string) => string }) {
-  const simple = useSimple();
   const local = useMemo(() => {
     if (!graph) return null;
     // a sparsely linked note also shows its neighbours' neighbours, while that stays small enough to read
@@ -768,7 +754,7 @@ function Connected({ path, graph, backlinks, where }: { path: string; graph: Gra
       <button disabled={!n.path} onClick={() => open(n.path)} className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-hover disabled:hover:bg-transparent flex items-center gap-2 min-w-0">
         <span className={cx("size-2 rounded-full shrink-0", n.kind === "ghost" && "border border-dashed")} style={n.kind === "ghost" ? { borderColor: "var(--faint)" } : { background: kindColor(n.kind) }} />
         <span className={cx("truncate text-sm", !n.path && "text-muted")}>{n.title}</span>
-        <span className="ml-auto text-xs text-faint truncate max-w-[45%] shrink-0">{n.path ? where(n.path) : kindLabel("ghost", simple).toLowerCase()}</span>
+        <span className="ml-auto text-xs text-faint truncate max-w-[45%] shrink-0">{n.path ? where(n.path) : kindLabel("ghost").toLowerCase()}</span>
       </button>
     </li>
   );
@@ -812,7 +798,6 @@ function NewNote({ initial, initialName = "", folders, onClose, onCreated }: { i
   const [dir, setDir] = useState(initial);
   const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | null>(null);
-  const simple = useSimple();
   const choices = [
     ...(meId ? [{ value: personDir(meId), label: "My notes" }] : []),
     { value: "shared", label: "Shared with everyone" },
@@ -857,12 +842,11 @@ function NewNote({ initial, initialName = "", folders, onClose, onCreated }: { i
                 {c.label}
               </option>
             ))}
-            {!simple && <option value="__other">Other folder…</option>}
-            {simple && other && <option value="__other">{friendlyDir(dir, meId, agents) ?? dir}</option>}
+            <option value="__other">{other ? (friendlyDir(dir, meId, agents) ?? dir) : "Other folder…"}</option>
           </select>
         </Field>
         {other && (
-          <Advanced title="Other folder…">
+          <>
             <Field label="Folder path" hint="Pick one or type a new name to make a folder.">
               <Input value={dir} onChange={(e) => setDir(e.target.value)} list="vault-folders" placeholder="shared" />
               <datalist id="vault-folders">
@@ -871,7 +855,7 @@ function NewNote({ initial, initialName = "", folders, onClose, onCreated }: { i
                 ))}
               </datalist>
             </Field>
-          </Advanced>
+          </>
         )}
         <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Meeting notes" required autoFocus />

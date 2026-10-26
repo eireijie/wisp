@@ -150,21 +150,6 @@ export function PreferencesPage() {
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
       </div>
-      <Section title="How much to show" description="Simple keeps the advanced parts (teams, harness details, VM sizes, tokens, raw files) behind “Advanced” so the everyday ones stand out. Nothing is removed; you can switch any time.">
-        <Card>
-          <Row label="Experience" hint={prefs.experience === "simple" ? "The everyday parts first; advanced options a click away." : "Everything, all the time."}>
-            <Segmented
-              label="Experience"
-              value={prefs.experience}
-              onChange={(v) => set({ experience: v })}
-              options={[
-                ["simple", "Simple"],
-                ["advanced", "Advanced"],
-              ]}
-            />
-          </Row>
-        </Card>
-      </Section>
       <Section title="Messages">
         <Card>
           <Row label="Sending a message" hint={prefs.sendWith === "enter" ? "Shift + Enter starts a new line." : "Enter starts a new line, for longer messages."}>

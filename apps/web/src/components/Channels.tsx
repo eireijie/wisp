@@ -175,7 +175,7 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
 
   if (step === "about")
     return (
-      <Modal title="New channel" onClose={onClose} wide>
+      <Modal title="New team" onClose={onClose} wide>
         <form
           className="space-y-4"
           onSubmit={(e) => {
@@ -190,7 +190,7 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
               <Input value={name} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="e.g. launch" className="pl-8" />
             </div>
           </Field>
-          <Field label="Description" hint="The agents read this too, so say what the channel is for.">
+          <Field label="Description" hint="The agents read this too, so say what the team is for.">
             <Textarea value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} maxLength={250} placeholder="e.g. Plan and ship the new website" />
           </Field>
           {sections.length > 0 && (
@@ -205,11 +205,11 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
               </span>
               <span className="block text-xs text-muted">Only people and agents you add can see it.</span>
             </span>
-            <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" />
+            <Toggle on={isPrivate} onChange={setPrivate} label="Private team" />
           </label>
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" className="mr-auto text-sm text-accent-text hover:underline" onClick={() => setStep("browse")}>
-              Browse existing channels
+              Browse existing teams
             </button>
             <Button variant="primary" disabled={!name || exists}>
               Next: its team <ArrowRight size={15} />
@@ -271,14 +271,14 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
     );
 
   return (
-    <Modal title="Add a channel" onClose={onClose} wide>
+    <Modal title="Add a team" onClose={onClose} wide>
       <div className="space-y-4">
         <div className="relative">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search or create a channel"
+            placeholder="Search or create a team"
             className="pl-9 h-10"
             onKeyDown={(e) => {
               if (e.key === "Enter" && name && !exists) setStep("about");
@@ -288,7 +288,7 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
         <div className="flex gap-4 border-b border-line text-sm" role="tablist">
           {(["all", "joined", ...(archivedCount ? ["archived" as const] : [])] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx("pb-2 -mb-px border-b-2", tab === t ? "border-ink text-ink font-medium" : "border-transparent text-muted hover:text-ink")}>
-              {t === "all" ? "All channels" : t === "joined" ? "Joined" : `Archived · ${archivedCount}`}
+              {t === "all" ? "All teams" : t === "joined" ? "Joined" : `Archived · ${archivedCount}`}
             </button>
           ))}
         </div>
@@ -297,11 +297,11 @@ export function ChannelBrowser({ onClose, sectionId = null, create: startCreatin
           <span className="size-7 rounded-lg bg-panel border border-line grid place-items-center">
             <Plus size={15} />
           </span>
-          {name && !exists ? `Create #${name}` : "Create a new channel"}
+          {name && !exists ? `Create #${name}` : "Create a new team"}
         </button>
 
         <div className="rounded-xl border border-line divide-y divide-line max-h-[50vh] overflow-y-auto">
-          {list.length === 0 && <p className="px-4 py-6 text-sm text-muted text-center">No channels match.</p>}
+          {list.length === 0 && <p className="px-4 py-6 text-sm text-muted text-center">No teams match.</p>}
           {list.map((c) => (
             <button key={c.id} onClick={() => open(c.id, c.joined)} className="w-full text-left px-4 py-3 hover:bg-hover flex items-center gap-3">
               <div className="min-w-0 flex-1">
@@ -349,7 +349,7 @@ function Steps({ at }: { at: 1 | 2 }) {
 export function SectionSelect({ sections, value, onChange }: { sections: Section[]; value: string | null; onChange: (v: string | null) => void }) {
   return (
     <select value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} className="h-9 w-full rounded-lg border border-line bg-panel px-2 text-sm">
-      <option value="">Channels (no section)</option>
+      <option value="">No section</option>
       {sections.map((s) => (
         <option key={s.id} value={s.id}>
           {s.emoji} {s.name}
@@ -359,23 +359,22 @@ export function SectionSelect({ sections, value, onChange }: { sections: Section
   );
 }
 
-const SECTION_EMOJI = ["🐇", "🛠️", "🚀", "📣", "🎨", "🧪", "📊", "💬", "🌱", "🔒", "🤖", "⭐"];
 
 /** Create or rename a sidebar section. */
 export function SectionDialog({ section, onClose }: { section?: Section; onClose: () => void }) {
   const [name, setName] = useState(section?.name ?? "");
-  const [emoji, setEmoji] = useState(section?.emoji ?? "🐇");
   const [error, setError] = useState<string | null>(null);
   const refresh = useStore((s) => s.refreshSections);
   return (
-    <Modal title={section ? "Edit section" : "New section"} onClose={onClose}>
+    <Modal title={section ? "Rename section" : "New section"} onClose={onClose}>
       <form
         className="space-y-4"
         onSubmit={async (e) => {
           e.preventDefault();
           try {
-            if (section) await api("PATCH", `/api/sections/${section.id}`, { name, emoji });
-            else await api("POST", "/api/sections", { name, emoji });
+            // sections are plain names; an emoji an older version gave one is kept as it was
+            if (section) await api("PATCH", `/api/sections/${section.id}`, { name, emoji: section.emoji });
+            else await api("POST", "/api/sections", { name, emoji: "" });
             await refresh();
             onClose();
           } catch (err) {
@@ -384,21 +383,8 @@ export function SectionDialog({ section, onClose }: { section?: Section; onClose
         }}
       >
         <Field label="Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product" required maxLength={40} />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Launch" required maxLength={40} />
         </Field>
-        <div>
-          <div className="text-sm font-medium mb-1.5">Emoji</div>
-          <div className="flex flex-wrap gap-1">
-            {SECTION_EMOJI.map((x) => (
-              <button type="button" key={x} onClick={() => setEmoji(x)} className={cx("size-9 rounded-lg text-lg", emoji === x ? "bg-accent-soft ring-2 ring-accent" : "hover:bg-hover")} aria-pressed={emoji === x}>
-                {x}
-              </button>
-            ))}
-            <button type="button" onClick={() => setEmoji("")} className={cx("h-9 px-2 rounded-lg text-xs text-muted", !emoji ? "bg-accent-soft ring-2 ring-accent" : "hover:bg-hover")}>
-              None
-            </button>
-          </div>
-        </div>
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end">
           <Button variant="primary">{section ? "Save" : "Create section"}</Button>
@@ -529,14 +515,14 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
       }}
     >
       <fieldset disabled={!canManage} className="space-y-4">
-      <Field label="Name" hint={channel.name === "general" ? "Everyone in the organization lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the channel keep working after a rename."}>
+      <Field label="Name" hint={channel.name === "general" ? "Everyone in the organization lands in #general, so it keeps its name." : "Lowercase, no spaces. Links to the team keep working after a rename."}>
         <div className="relative">
           <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
           <Input value={name} onChange={(e) => setName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} required maxLength={80} className="pl-8" disabled={channel.name === "general"} />
         </div>
       </Field>
       <Field label="Topic">
-        <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this channel for?" maxLength={250} />
+        <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this team for?" maxLength={250} />
       </Field>
       <Field label="Sidebar section">
         <SectionSelect sections={sections} value={section} onChange={setSection} />
@@ -549,11 +535,11 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
             </span>
             <span className="block text-xs text-muted">{isPrivate ? "Only its members (and organization owners) can see it." : "Anyone in the organization can find and join it."}</span>
           </span>
-          <Toggle on={isPrivate} onChange={setPrivate} label="Private channel" disabled={!canManage} />
+          <Toggle on={isPrivate} onChange={setPrivate} label="Private team" disabled={!canManage} />
         </label>
       )}
       </fieldset>
-      {!canManage && <p className="text-xs text-muted">Guests can't change channels.</p>}
+      {!canManage && <p className="text-xs text-muted">Guests can't change teams.</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex items-center justify-between gap-2 pt-1">
         {channel.joined && channel.name !== "general" ? (
@@ -565,7 +551,7 @@ function AboutChannel({ channel, canManage, onClose }: { channel: ChannelInfo; c
               onClose();
             }}
           >
-            <LogOut size={14} /> Leave channel
+            <LogOut size={14} /> Leave team
           </Button>
         ) : (
           <span />
@@ -724,7 +710,7 @@ export function ChannelMembers({ channel, canManage, onClose }: { channel: Chann
         </div>
       )}
       <p className="text-xs text-muted">
-        Agents here answer when someone @mentions them{channel.settings.defaultAgentId ? "; the channel's own agent answers everything else (see Agents)" : ""}.{" "}
+        Agents here answer when someone @mentions them{channel.settings.defaultAgentId ? "; the team's own agent answers everything else (see Agents)" : ""}.{" "}
         {channel.private ? `Only the people and agents listed can see #${channel.name}.` : `Anyone in the organization can still read and join #${channel.name}.`}
       </p>
     </div>
@@ -810,7 +796,7 @@ function ChannelTeamTab({ channel, team, onChange, canManage, onCreateAgent, onC
         </>
       )}
       {team.nodes.length > 0 && !(picking && canManage) && <TeamMore team={team} onChange={onChange} canManage={canManage} />}
-      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This channel is archived." : "Guests can't change channels."}</p>}
+      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This team is archived." : "Guests can't change teams."}</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       {canManage && (
         <div className="flex items-center justify-between gap-2">
@@ -938,7 +924,7 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
               ? undefined
               : answerer
               ? `${answerer.name} answers anything nobody @mentions, and joins #${channel.name} to do it. @mention another agent to ask them instead.`
-              : "Right now a message only reaches an agent when someone @mentions it. Pick an agent to make this its channel."
+              : "Right now a message only reaches an agent when someone @mentions it. Pick an agent to answer here."
           }
         >
           {channel.settings.team?.nodes.length ? (
@@ -952,16 +938,16 @@ function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; 
         <label className="flex items-center justify-between gap-3 text-sm">
           <span>
             <span className="font-medium">Answer in a thread</span>
-            <span className="block text-xs text-muted">Agents reply under the message they're answering, so the channel stays easy to read.</span>
+            <span className="block text-xs text-muted">Agents reply under the message they're answering, so the chat stays easy to read.</span>
           </span>
           <Toggle on={rules.replyInThread} onChange={(v) => setRules({ ...rules, replyInThread: v })} label="Agents answer in a thread" disabled={!canManage} />
         </label>
-        <Field label="Notes for agents here" hint="Every agent reads these when it works in this channel, e.g. which repo to use or how long replies should be.">
+        <Field label="Notes for agents here" hint="Every agent reads these when it works in this team, e.g. which repo to use or how long replies should be.">
           <Textarea value={rules.instructions} onChange={(e) => setRules({ ...rules, instructions: e.target.value })} rows={4} maxLength={4000} placeholder={`e.g. "This is where we plan the launch. Keep answers short and link the doc in shared/launch.md."`} />
         </Field>
         <p className="text-xs text-muted">In a thread, a plain reply goes back to the agent already talking there; no @mention needed.</p>
       </fieldset>
-      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This channel is archived." : "Guests can't change channels."}</p>}
+      {!canManage && <p className="text-xs text-muted">{channel.archivedAt ? "This team is archived." : "Guests can't change teams."}</p>}
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex justify-end">
         <Button variant="primary" disabled={!canManage || !changed || saving}>
@@ -1061,7 +1047,7 @@ function ArchiveOrDelete({ channel, onClose }: { channel: ChannelInfo; onClose: 
             }
           }}
         >
-          {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
+          {channel.archivedAt ? "Unarchive team" : "Archive team"}
         </Button>
       </div>
       <form
@@ -1085,13 +1071,13 @@ function ArchiveOrDelete({ channel, onClose }: { channel: ChannelInfo; onClose: 
         <div className="font-medium flex items-center gap-2 text-bad">
           <Trash2 size={15} /> Delete #{channel.name}
         </div>
-        <p className="text-sm text-muted">Every message, thread and discussion in it is deleted for everyone, and agents working here are stopped. Tasks and routines that pointed here keep going without a channel. This can't be undone.</p>
+        <p className="text-sm text-muted">Every message, thread and discussion in it is deleted for everyone, and agents working here are stopped. Tasks and routines that pointed here keep going without a team. This can't be undone.</p>
         <Field label={`Type ${channel.name} to confirm`}>
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={channel.name} autoComplete="off" />
         </Field>
         <div className="flex justify-end">
           <Button variant="danger" disabled={typed !== channel.name || busy}>
-            Delete channel
+            Delete team
           </Button>
         </div>
       </form>
@@ -1121,7 +1107,7 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           ))
         }
         items={[
-          { label: channel.starred ? "Unstar" : "Star", icon: <Star size={14} />, onSelect: () => void setChannelPrefs(channel, { starred: !channel.starred }) },
+          { label: channel.starred ? "Unpin" : "Pin to top", icon: <Pin size={14} />, onSelect: () => void setChannelPrefs(channel, { starred: !channel.starred }) },
           channel.notify === "mute"
             ? { label: "Unmute", icon: <Bell size={14} />, onSelect: () => void setChannelPrefs(channel, { notify: "default" }) }
             : { label: "Mute", icon: <BellOff size={14} />, onSelect: () => void setChannelPrefs(channel, { notify: "mute" }) },
@@ -1129,7 +1115,7 @@ export function ChannelMenu({ channel, trigger, align = "right" }: { channel: Ch
           ...(role !== "guest" ? [{ label: "Rename…", icon: <Pencil size={14} />, onSelect: () => setSettings("about") }] : []),
           { label: "Agents", icon: <Bot size={14} />, onSelect: () => setSettings("agents") },
           { label: "Members", icon: <Users size={14} />, onSelect: () => setSettings("members") },
-          ...(channel.joined && channel.name !== "general" ? ["divider" as const, { label: "Leave channel", icon: <LogOut size={14} />, onSelect: () => void leaveChannel(channel), danger: true }] : []),
+          ...(channel.joined && channel.name !== "general" ? ["divider" as const, { label: "Leave team", icon: <LogOut size={14} />, onSelect: () => void leaveChannel(channel), danger: true }] : []),
           ...(role !== "guest" && !channel.archivedAt ? [{ label: "Archive…", icon: <Archive size={14} />, onSelect: () => setSettings("danger"), danger: true }] : []),
         ]}
       />

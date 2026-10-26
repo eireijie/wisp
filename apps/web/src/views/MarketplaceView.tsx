@@ -48,7 +48,6 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { href, type MarketSection } from "../router.ts";
 import { renderMarkdown } from "../markdown.ts";
-import { useSimple } from "../experience.tsx";
 import { Button, Loader, Menu, Modal, Pill, cx } from "../components/ui.tsx";
 import { AgentPicker, AppLogo, CatalogIcon, Group, SkillTile } from "../components/ShopParts.tsx";
 import { ConnectedRow, ConnectorForm, MarketAdd, type ConnectSummary } from "./ConnectorsView.tsx";
@@ -142,7 +141,6 @@ const readyAsIs = (i: ShelfItem) => i.kind === "mcp" && !(i.secrets ?? []).lengt
 export function MarketplaceView({ section, onBack }: { section: MarketSection; onBack?: () => void }) {
   const me = useStore((s) => s.me);
   const agents = useStore((s) => s.agents);
-  const simple = useSimple();
   const canEdit = !!me && me.role !== "guest";
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<AppCategory | "All">("All");
@@ -262,7 +260,7 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
         entry: shelfConnector(d.nodeId, i),
         presetEnv: i.env,
         summary: {
-          can: `Your ${simple ? "helpers" : "agents"} will be able to use ${i.name}: read and act on what it allows.`,
+          can: `Your helpers will be able to use ${i.name}: read and act on what it allows.`,
           runBy: i.transport === "http" ? `It connects to ${new URL(i.url ?? "https://x").host}, as it did in ${harnessName(i.harness)}.` : `It runs on each agent's own device, as it did in ${harnessName(i.harness)}.`,
           caution: null,
         },
@@ -376,7 +374,7 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
                   <Plus size={20} />
                 </button>
               )}
-              items={[{ label: "Create a skill", icon: <Wand2 size={15} />, onSelect: () => setEditing("new") }, ...(simple ? [] : [{ label: "Add your own app", icon: <Plus size={15} />, onSelect: () => setForm({}) }])]}
+              items={[{ label: "Create a skill", icon: <Wand2 size={15} />, onSelect: () => setEditing("new") }, ...([{ label: "Add your own app", icon: <Plus size={15} />, onSelect: () => setForm({}) }])]}
             />
           )}
         </div>
@@ -481,7 +479,7 @@ export function MarketplaceView({ section, onBack }: { section: MarketSection; o
                     {skills
                       .filter((s) => match(s.name, s.description))
                       .map((s) => (
-                        <Row key={s.id} icon={<SkillTile icon={catalogSkill(s.catalogId ?? "") ? <CatalogIcon name={catalogSkill(s.catalogId ?? "")!.icon} fallback={Wand2} size={22} /> : skillIcon(`${s.slug} ${s.name}`)} />} title={s.name} sub={`${skillOrigin(s)} · ${s.agentIds.length ? `${s.agentIds.length} ${simple ? "helper" : "agent"}${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`} onOpen={() => setSkillOpen({ skill: s })} />
+                        <Row key={s.id} icon={<SkillTile icon={catalogSkill(s.catalogId ?? "") ? <CatalogIcon name={catalogSkill(s.catalogId ?? "")!.icon} fallback={Wand2} size={22} /> : skillIcon(`${s.slug} ${s.name}`)} />} title={s.name} sub={`${skillOrigin(s)} · ${s.agentIds.length ? `${s.agentIds.length} helper${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`} onOpen={() => setSkillOpen({ skill: s })} />
                       ))}
                   </RowGrid>
                 )}
@@ -727,7 +725,7 @@ function BringAll({ pending, agents, onClose, onDone, onSetUp }: { pending: Pend
   const [agentIds, setAgentIds] = useState<string[]>(agents.length === 1 ? [agents[0].id] : []);
   const [busy, setBusy] = useState<number | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
-  const who = useSimple() ? "helpers" : "agents";
+  const who = "helpers";
 
   async function go() {
     const failed: string[] = [];

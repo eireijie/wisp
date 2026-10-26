@@ -43,6 +43,8 @@ export interface ChannelInfo extends Channel {
   /** your own settings for it */
   notify: ChannelNotify;
   starred: boolean;
+  /** the newest top-level message: the chats list's preview and what it sorts by (missing from older hubs) */
+  last?: { at: string; body: string; author: { kind: string; id: string } } | null;
   /** pinned messages, newest pin first */
   pinnedIds: string[];
 }
@@ -112,10 +114,14 @@ interface State {
   memoryVersion: number;
   /** the New task dialog is open */
   newTaskOpen: boolean;
+  /** the New chat picker (the + menu, ⌘K) is open */
+  newChatOpen: boolean;
   /** who takes tasks nobody assigned, and the lead an owner picked (if any); null until loaded */
   lead: LeadStatus | null;
   activeChannel: string | null;
   paletteOpen: boolean;
+  /** text to start the ⌘K search with (the chats list's search field hands its text over) */
+  paletteSeed: string;
   /** every organization you're in; null until loaded. A hub without organizations gives just this one. */
   orgs: Org[] | null;
   /** the New agent screen should open (sidebar +, ⌘K); the Agents page picks it up */
@@ -181,9 +187,11 @@ export const useStore = create<State>((set, get) => ({
   flowsVersion: 0,
   memoryVersion: 0,
   newTaskOpen: false,
+  newChatOpen: false,
   lead: null,
   activeChannel: null,
   paletteOpen: false,
+  paletteSeed: "",
   orgs: null,
   newAgentOpen: false,
   channelBrowser: null,
@@ -294,7 +302,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setPalette(open) {
-    set({ paletteOpen: open });
+    set({ paletteOpen: open, ...(open ? {} : { paletteSeed: "" }) });
   },
 
   async setPrefs(patch) {
@@ -357,7 +365,11 @@ export const useStore = create<State>((set, get) => ({
         const mine = m.author.kind === "user" && (m.author.id === get().me?.user.id || m.author.id === "system");
         set((s) => ({
           messages: s.messages[m.channelId] ? { ...s.messages, [m.channelId]: dedupe([...s.messages[m.channelId], m]) } : s.messages,
-          channels: s.channels.map((c) => (c.id === m.channelId && !mine && s.activeChannel !== m.channelId && c.notify !== "mute" ? { ...c, unread: c.unread + 1 } : c)),
+          channels: s.channels.map((c) => {
+            if (c.id !== m.channelId) return c;
+            const last = { at: m.createdAt, body: m.body.slice(0, 400), author: m.author };
+            return !mine && s.activeChannel !== m.channelId && c.notify !== "mute" ? { ...c, last, unread: c.unread + 1 } : { ...c, last };
+          }),
         }));
         if (get().activeChannel === m.channelId && !mine) get().markRead(m.channelId);
       }

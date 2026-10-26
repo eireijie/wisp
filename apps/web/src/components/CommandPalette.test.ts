@@ -14,7 +14,6 @@ vi.mock("react", async (original) => ({
 }));
 vi.mock("../api.ts", () => ({ api: vi.fn() }));
 vi.mock("../theme.ts", () => ({ motionReduced: () => false }));
-vi.mock("../experience.tsx", () => ({ useSimple: () => false }));
 vi.mock("../features.ts", () => ({ useFeatures: () => ({ tasks: true }) }));
 vi.mock("../store.ts", () => ({
   useStore: (select: (s: unknown) => unknown) => select({ paletteOpen: true, me: { user: { id: "me" }, role: "owner" }, channels: [], agents: [], members: [] }),

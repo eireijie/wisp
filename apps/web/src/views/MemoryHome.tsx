@@ -4,7 +4,6 @@ import { api } from "../api.ts";
 import { useStore } from "../store.ts";
 import { AgentAvatar, GhostMark, UserAvatar, cx, timeAgo } from "../components/ui.tsx";
 import { GRAPH_KINDS, MemoryGraph, kindColor, kindLabel, type GraphData, type GraphKind } from "../components/MemoryGraph.tsx";
-import { useSimple } from "../experience.tsx";
 
 interface Change {
   hash: string;
@@ -44,7 +43,6 @@ export function MemoryHome({
   onNew?: () => void;
   footer: ReactNode;
 }) {
-  const simple = useSimple();
   const agents = useStore((s) => s.agents);
   const memoryVersion = useStore((s) => s.memoryVersion);
   const [query, setQuery] = useState("");
@@ -76,7 +74,7 @@ export function MemoryHome({
   /** Who made a change: an agent (by its @handle), Obsidian, Wisp itself, or a person. */
   const who = (author: string) => {
     const agent = author.startsWith("@") ? agents.find((a) => `@${a.handle}` === author) : undefined;
-    if (agent) return { name: agent.name, kind: simple ? "helper" : "agent", avatar: <AgentAvatar agent={agent} size={28} interactive={false} /> };
+    if (agent) return { name: agent.name, kind: "helper", avatar: <AgentAvatar agent={agent} size={28} interactive={false} /> };
     if (author === "Edited in Obsidian") return { name: "Obsidian", kind: "on disk", avatar: <span className="size-7 rounded-full bg-chip grid place-items-center text-muted"><PencilLine size={14} /></span> };
     if (author === "Wisp" || author === "Warren") return { name: "Wisp", kind: null, avatar: <span className="size-7 rounded-full bg-chip grid place-items-center text-muted"><GhostMark size={16} /></span> };
     return { name: author, kind: "person", avatar: <UserAvatar name={author} size={28} /> };
@@ -136,9 +134,9 @@ export function MemoryHome({
         {graph && notes.length > 0 && (
           <section className="flex flex-wrap gap-2" aria-label="Folders">
             {GRAPH_KINDS.filter((k) => counts.get(k)).map((k) => (
-              <button key={k} onClick={() => onGraph(k)} className="group inline-flex items-center gap-2 h-9 rounded-full border border-line bg-panel pl-3 pr-3.5 text-sm hover:border-input hover:bg-hover transition-colors" title={`See ${kindLabel(k, simple).toLowerCase()} in the graph`}>
+              <button key={k} onClick={() => onGraph(k)} className="group inline-flex items-center gap-2 h-9 rounded-full border border-line bg-panel pl-3 pr-3.5 text-sm hover:border-input hover:bg-hover transition-colors" title={`See ${kindLabel(k).toLowerCase()} in the graph`}>
                 <span className="size-2.5 rounded-full" style={{ background: kindColor(k) }} />
-                <span className="font-medium">{kindLabel(k, simple)}</span>
+                <span className="font-medium">{kindLabel(k)}</span>
                 <span className="text-muted tabular-nums">{counts.get(k)}</span>
               </button>
             ))}
@@ -158,7 +156,7 @@ export function MemoryHome({
               <p className="text-sm text-muted">Loading…</p>
             ) : recent.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-muted space-y-3">
-                <p>Nothing written yet. Notes you and your {simple ? "helpers" : "agents"} write show up here.</p>
+                <p>Nothing written yet. Notes you and your helpers write show up here.</p>
                 {onNew && (
                   <button onClick={onNew} className="inline-flex items-center gap-1.5 text-ink font-medium hover:underline">
                     <FilePlus size={15} /> Write the first note

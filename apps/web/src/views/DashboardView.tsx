@@ -7,7 +7,7 @@ import { useFeatures } from "../features.ts";
 import { allowanceText, useAllowance } from "../changes.ts";
 import { go, href } from "../router.ts";
 import { AgentAvatar, Button, Pill, StatusChip, cx, timeAgo } from "../components/ui.tsx";
-import { Advanced, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { NEXT_STEP, homeReadiness, useOnboarding } from "../onboarding.ts";
 import { agentReadiness, useDevices } from "../devices.ts";
 import { openDm as openHelperDm } from "../openDm.ts";
@@ -33,7 +33,7 @@ const EXAMPLE_PROMPTS = ["Plan dinners for this week and make a shopping list", 
 
 /**
  * The Inbox (route: dashboard): what's waiting on you first, then what agents are doing, then new
- * replies in your chats; in Advanced also teams and tasks (when those features are on).
+ * replies in your chats; under More options also every agent, teams and tasks (when those features are on).
  * Everything here is fed live by the store's websocket events.
  */
 export function DashboardView({ onBack }: { onBack?: () => void }) {
@@ -60,7 +60,6 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
     };
   }, [version, features.tasks]);
 
-  const simple = useSimple();
   const isGuest = me.role === "guest";
   const waiting = useWaitingOnYou();
   const pending = waiting.approvals;
@@ -156,10 +155,10 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
 
-          {!isGuest && <ReadinessCard advanced={!simple} />}
+          {!isGuest && <ReadinessCard />}
 
-          {/* Simple: only the agents at work, one line each (Advanced shows every agent below) */}
-          {simple && activeAgents.length > 0 && (
+          {/* only the agents at work, one line each (every agent is under More options below) */}
+          {activeAgents.length > 0 && (
             <Section title="What agents are doing" count={activeAgents.length}>
               <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
                 {activeAgents.map((a) => {
@@ -192,9 +191,9 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
           )}
 
           {/* guests only see conversations here, so say so rather than leave the page blank */}
-          {simple && isGuest && recentChats.length === 0 && <Blank>Conversations you're invited to show up here.</Blank>}
+          {isGuest && recentChats.length === 0 && <Blank>Conversations you're invited to show up here.</Blank>}
 
-          {simple && unreadChats.length === 0 && recentChats.length > 0 && (
+          {unreadChats.length === 0 && recentChats.length > 0 && (
             <Section title="Recent conversations">
               <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
                 {recentChats.map((c) => (
@@ -207,7 +206,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
 
-          {simple && !isGuest && features.tasks && mineToCheck.length > 0 && (
+          {!isGuest && features.tasks && mineToCheck.length > 0 && (
             <Section title="Tasks to check" count={mineToCheck.length}>
               <div className="rounded-xl border border-line bg-panel divide-y divide-line overflow-hidden">
                 {mineToCheck.map((t) => (
@@ -228,7 +227,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
           )}
 
           {/* the rest is for people who run teams of agents */}
-          <Advanced hide>
+          <MoreOptions about="every agent, teams and tasks">
             <div className="space-y-8">
           <Section title="What agents are doing" count={agents.length} more={{ label: "All agents", to: href({ view: "agents", agentId: null }) }}>
             {agents.length === 0 ? (
@@ -345,29 +344,21 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
             </Section>
           )}
             </div>
-          </Advanced>
+          </MoreOptions>
         </div>
       </div>
     </div>
   );
 }
 
-/** Simple mode's lead card: finish setup, see what a helper is waiting on, or try a first question. */
-function ReadinessCard({ advanced }: { advanced?: boolean }) {
+/** The lead card: finish setup, see what a helper is waiting on, or try a first question. */
+function ReadinessCard() {
   const agents = useStore((s) => s.agents);
   const { done } = useOnboarding();
   const devices = useDevices();
   // devices are null while loading; show a quiet placeholder instead of guessing a state
-  if (devices === null) return advanced ? null : <div className="h-24 rounded-xl border border-line bg-chip animate-pulse" aria-hidden />;
-  let r: ReturnType<typeof homeReadiness<Agent>> = homeReadiness(done, agents, devices);
-  if (advanced) {
-    // Advanced only needs this when something is wrong: setup unfinished, or any helper not ready
-    if (r.kind === "ready") {
-      const bad = agents.map((agent) => ({ agent, ...agentReadiness(agent, devices) })).find((x) => !x.ready);
-      if (!bad) return null;
-      r = { kind: "waiting", agent: bad.agent, problem: bad.problem ?? "Not ready yet", deviceName: devices.find((d) => d.id === bad.agent.nodeId)?.name ?? null };
-    }
-  }
+  if (devices === null) return <div className="h-24 rounded-xl border border-line bg-chip animate-pulse" aria-hidden />;
+  const r: ReturnType<typeof homeReadiness<Agent>> = homeReadiness(done, agents, devices);
 
   const box = "rounded-xl border border-line bg-accent-soft p-4 space-y-3";
   if (r.kind === "setup") {

@@ -15,7 +15,7 @@ import { AgentAvatar, Button, CopyBlock, Field, harnessLabel, Input, Pill, Statu
 import { LEVEL_LABEL, pathLabel, subjectLabel } from "../components/AccessDialog.tsx";
 import { ComputerPanel, RoutinesPanel, runsOnDevice } from "./AgentComputer.tsx";
 import { BackgroundPanel } from "./AgentBackground.tsx";
-import { Advanced, SimpleOnly, useSimple } from "../experience.tsx";
+import { MoreOptions } from "../components/MoreOptions.tsx";
 import { agentReadiness, computerKindLabel, useDevices, type DeviceInfo } from "../devices.ts";
 import { setupNextStep } from "../components/AgentPanel.tsx";
 import { openDm } from "../openDm.ts";
@@ -55,16 +55,15 @@ const NAV: { group: string; items: { id: AgentTab; label: string; icon: ReactNod
   { group: "Activity", items: [{ id: "runs", label: "Activity", icon: <Activity size={16} /> }] },
 ];
 
-/** The nav groups for the mode. Simple keeps the everyday tabs on top and gathers the technical ones under "Advanced" (still one click away). */
-export function agentNav(simple: boolean): typeof NAV {
-  if (!simple) return NAV;
+/** The nav groups: the everyday tabs on top, the technical ones gathered under "More options" (still one click away). */
+export function agentNav(): typeof NAV {
   const all = new Map(NAV.flatMap((g) => g.items).map((i) => [i.id, i] as const));
   const pick = (ids: AgentTab[]) => ids.map((id) => all.get(id)!);
   return [
     { group: "Agent", items: pick(["overview", "soul", "instructions"]) },
     { group: "Runtime", items: pick(["device", "computer", "routines"]) },
     { group: "Activity", items: pick(["runs"]) },
-    { group: "Advanced", items: pick(["model", "permissions", "connect", "background", "look"]) },
+    { group: "More options", items: pick(["model", "permissions", "connect", "background", "look"]) },
   ];
 }
 
@@ -75,7 +74,7 @@ export function agentNav(simple: boolean): typeof NAV {
  */
 export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: NodeInfo[]; tab: AgentTab | null }) {
   const channels = useStore((s) => s.channels);
-  const nav = agentNav(useSimple());
+  const nav = agentNav();
   const active = tab ?? "overview";
   const [dirty, setDirty] = useState<Partial<Record<AgentTab, boolean>>>({});
   const hasDirty = Object.values(dirty).some(Boolean);
@@ -208,11 +207,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
 function Panel({ show, hint, children }: { show: boolean; hint?: string; children: ReactNode }) {
   return (
     <div role="tabpanel" hidden={!show} className="max-w-4xl">
-      {hint && (
-        <SimpleOnly>
-          <p className="mb-3 text-sm text-muted">{hint}</p>
-        </SimpleOnly>
-      )}
+      {hint && <p className="mb-3 text-sm text-muted">{hint}</p>}
       {children}
     </div>
   );
@@ -497,7 +492,6 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const headless = runsOnDevice(agent.harness);
-  const simple = useSimple();
 
   useEffect(() => {
     if (active) api("GET", `/api/agents/${agent.id}/models`).then(setInfo, () => setInfo({ device: null, catalog: null }));
@@ -580,7 +574,6 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             )}
           </p>
         </Intro>
-        {why && !simple && <p className="mb-2.5 max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
         <div className="max-w-sm space-y-2">
           <select
             aria-label="Model"
@@ -661,8 +654,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
 
   return (
     <div className="space-y-6">
-      {simple && (
-        <section className="rounded-xl border border-accent bg-accent-soft p-3 text-sm">
+      <section className="rounded-xl border border-accent bg-accent-soft p-3 text-sm">
           <div className="font-medium">{isAuto ? "Automatic (recommended)" : `Custom: ${form.model ? prettyModel(form.model) : "your own settings"}`}</div>
           <p className="mt-0.5 text-muted">
             {isAuto ? `Wisp lets ${hLabel} pick the model and effort. That's right for most people.` : `You chose the model or effort yourself. Automatic lets ${hLabel} pick for you.`}
@@ -673,10 +665,9 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
             </Button>
           )}
         </section>
-      )}
-      {/* in Simple the controls are folded, so why there are no models to pick sits by the Automatic card */}
-      {simple && !deviceGone && why && <p className="max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
-      {simple && deviceGone ? (
+      {/* the controls are folded, so why there are no models to pick sits by the Automatic card */}
+      {!deviceGone && why && <p className="max-w-sm rounded-lg bg-hover px-3 py-2 text-xs text-muted">{why}</p>}
+      {deviceGone ? (
         <p className="text-sm text-muted">
           {agent.nodeId ? (
             `Connect ${info?.device?.name ?? "its device"} to see available models.`
@@ -690,7 +681,7 @@ function ModelPanel({ agent, onDirty, active }: { agent: FullAgent; onDirty: (d:
           )}
         </p>
       ) : (
-        <Advanced title="Choose the model yourself">{controls}</Advanced>
+        <MoreOptions title="Choose the model yourself">{controls}</MoreOptions>
       )}
 
       {error && <p className="text-sm text-bad">{error}</p>}
@@ -1027,7 +1018,6 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   const bossOf = teams.filter((t) => t.reportsTo === agent.id);
   const device = nodes.find((n) => n.id === agent.nodeId);
   const soulHtml = useMemo(() => (soul ? renderMarkdown(soul.slice(0, 1500), { stripFrontmatter: true }) : ""), [soul]);
-  const simple = useSimple();
 
   useEffect(() => {
     if (!active) return;
@@ -1050,12 +1040,12 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
   const deviceCard: Card = { label: "Device", value: device ? `${device.name} · ${device.online ? "online" : "offline"}` : "None", to: "device" };
   const computerCard: Card = { label: "Computer", value: computer ? `${computer.name} · ${computerKindLabel(computer, nodes)}` : agent.settings.headless ? "Headless" : <span className="text-warn">None yet</span>, to: "computer" };
   const accessCard: Card = { label: "Access", value: ACCESS[agent.settings.access ?? "edit"].label, to: "permissions" };
-  // Simple leads with where it runs; the model and access settings fold under "Technical details".
-  const cards: Card[] = simple ? [deviceCard, computerCard] : [modelCard, deviceCard, computerCard, accessCard];
+  // lead with where it runs; the model and access settings fold under "Technical details".
+  const cards: Card[] = [deviceCard, computerCard];
   const technicalCards: Card[] = [modelCard, { label: "Harness", value: harnessLabel(agent.harness), to: "device" }, accessCard];
   const devices = useDevices();
   const readiness = agentReadiness(agent, devices);
-  const next = simple ? setupNextStep(agent, devices) : null;
+  const next = setupNextStep(agent, devices);
   const cardGrid = (list: Card[]) => (
     <section className="grid grid-cols-2 lg:grid-cols-4 gap-2">
       {list.map((c) => (
@@ -1150,8 +1140,7 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
         </section>
       )}
 
-      {simple && (
-        <section className="rounded-xl border border-line p-4 space-y-3 text-sm">
+      <section className="rounded-xl border border-line p-4 space-y-3 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-muted">Status</span>
             <StatusChip status={agent.status} />
@@ -1174,10 +1163,9 @@ function OverviewPanel({ agent, nodes, active }: { agent: FullAgent; nodes: Node
             <MessageSquare size={15} /> Send a test message
           </Button>
         </section>
-      )}
 
       {cardGrid(cards)}
-      {simple && <Advanced title="Technical details">{cardGrid(technicalCards)}</Advanced>}
+      <MoreOptions title="Technical details">{cardGrid(technicalCards)}</MoreOptions>
 
       <section>
         <div className="flex items-center justify-between mb-2">

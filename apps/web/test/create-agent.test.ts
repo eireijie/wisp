@@ -12,7 +12,7 @@ const initial = useStore.getState();
 afterEach(() => useStore.setState(initial, true));
 
 describe("add agent onboarding", () => {
-  it("is one screen: ghost, name, job, instructions, AI and computer, with Advanced and Bring it in", () => {
+  it("is one screen: ghost, name, job, instructions, AI and computer, with More options and Bring it in", () => {
     const html = renderToStaticMarkup(
       createElement(CreateAgent, { nodes: [], onClose() {} }),
     );
@@ -27,7 +27,7 @@ describe("add agent onboarding", () => {
     expect(html).toContain("AI and computer");
     expect(html).toContain("Use my defaults");
     expect(html).toContain("Customize");
-    expect(html).toContain("Advanced");
+    expect(html).toContain("More options");
     expect(html).toContain("Already running somewhere? Bring it in");
     // nothing to create until it has a name
     expect(html).toMatch(/disabled=""[^>]*>(<!-- -->)?Create agent/);

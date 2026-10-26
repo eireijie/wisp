@@ -6,7 +6,7 @@ import { Button, CopyBlock, Input, Pill, timeAgo } from "../../components/ui.tsx
 import { obsidianLink, onHubMachine, type MemoryStorage } from "../../obsidian.ts";
 import { Card, OwnersOnly, PageHeader, Row, Section } from "./parts.tsx";
 import { MemoryRules } from "./workspace.tsx";
-import { Advanced, useSimple } from "../../experience.tsx";
+import { MoreOptions } from "../../components/MoreOptions.tsx";
 
 const Code = ({ children }: { children: ReactNode }) => <code className="rounded bg-code px-1 py-0.5 text-[12px] break-all">{children}</code>;
 
@@ -19,25 +19,15 @@ export function MemoryPage() {
     load();
   }, [load]);
 
-  const simple = useSimple();
   return (
     <>
-      <PageHeader title="Memory">
-        {simple ? (
-          <>What your helpers and people remember, and who can see each note.</>
-        ) : (
-          <>
-            Plain markdown notes in one folder. Open them in <b>Obsidian</b> if you like.
-          </>
-        )}
-      </PageHeader>
-      {!simple && storage && isOwner && <Location storage={storage} reload={load} />}
+      <PageHeader title="Memory">What your helpers and people remember, and who can see each note.</PageHeader>
       <MemoryRules />
       {storage && (
-        <Advanced title="Use another notes app (Obsidian) and sync">
-          {simple && isOwner && <Location storage={storage} reload={load} />}
+        <MoreOptions about="use another notes app (Obsidian) and sync">
+          {isOwner && <Location storage={storage} reload={load} />}
           <ObsidianSteps storage={storage} reload={load} />
-        </Advanced>
+        </MoreOptions>
       )}
     </>
   );
