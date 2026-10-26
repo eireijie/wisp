@@ -224,7 +224,7 @@ describe("/ commands", () => {
     expect(parseCommand("@nova /review 42", "poopy")).toBeNull();
     expect(parseCommand("@poopyx /review", "poopy")).toBeNull();
     expect(parseCommand("look at /etc")).toBeNull();
-    expect(agentCommands([{ name: "context", kind: "command", via: "raw" }], [{ slug: "pdf", description: "PDFs" }]).map((c) => c.kind)).toEqual(["wisp", "wisp-skill"]);
+    expect(agentCommands([{ name: "context", kind: "command", via: "raw" }], [{ slug: "pdf", description: "PDFs" }]).map((c) => c.kind)).toEqual(["wisp", "wisp", "wisp-skill"]);
   });
 
   it("reads front matter, block values included", async () => {

@@ -680,8 +680,42 @@ export class Hub {
     return cmd ? { ...cmd, args: parsed.args } : null;
   }
 
-  /** /context: how full the agent's conversation here is, from its last reply's usage. */
+  /** /model: say which model the agent runs on, or switch it ("default" goes back to the harness's own). */
+  private answerModel(agent: Agent, msg: Message, threadId: string | null, ask: string) {
+    const near = { ...msg, threadId };
+    const catalog = agent.nodeId ? this.store.nodeCatalog(agent.nodeId).find((h) => h.harness === agent.harness) : undefined;
+    const models = catalog?.models ?? [];
+    const handle = this.handleOf(agent.id);
+    const list = models.length ? ` It offers ${models.map((m) => m.id).join(", ")}.` : "";
+    const using = agent.model ?? catalog?.defaultModel;
+    if (!ask) return void this.postSystem(near, `${handle} is on ${agent.model ? agent.model : using ? `${using} (the default)` : "its default model"}.${list} Switch with /model <name>, or /model default.`);
+    // an agent on someone's own device is theirs to change
+    const node = agent.nodeId && this.harnessOnDevice(agent) ? this.store.node(agent.nodeId) : undefined;
+    if (node && !node.shared && node.ownerId && node.ownerId !== msg.author.id) return void this.postSystem(near, `${handle} runs directly on ${this.store.user(node.ownerId)?.name ?? "its owner"}'s device, so only they can change its model.`);
+    let model: string | null;
+    if (/^(default|auto|reset)$/i.test(ask)) model = null;
+    else if (!models.length) model = ask;
+    else {
+      // an exact id, else the one model whose id or name has every word typed ("sol 6.1" finds gpt-6.1-sol)
+      const words = ask.toLowerCase().split(/\s+/);
+      const exact = models.filter((m) => m.id === ask);
+      const hits = exact.length ? exact : models.filter((m) => words.every((w) => `${m.id} ${m.label}`.toLowerCase().includes(w)));
+      if (hits.length !== 1) return void this.postSystem(near, `${hits.length ? "That fits more than one model" : `${handle} can't use "${ask}"`}.${list}`);
+      model = hits[0].id;
+    }
+    // an effort the new model doesn't offer is dropped, as in the model menu
+    const efforts = models.find((m) => m.id === model)?.efforts;
+    const effort = agent.settings.effort;
+    const dropEffort = !!effort && !!efforts && !efforts.includes(effort);
+    this.store.updateAgent(agent.id, { model, ...(dropEffort ? { settings: { effort: null } } : {}) });
+    this.broadcast(agent.workspaceId, { type: "agents_changed" });
+    this.postSystem(near, `${handle} will use ${model ?? "its default model"} from the next message.`);
+  }
+
+  /** Commands Wisp answers itself: /context (how full the conversation is) and /model. */
   private answerCommand(agent: Agent, msg: Message, threadId: string | null) {
+    const parsed = parseCommand(msg.body, agent.handle);
+    if (parsed?.name === "model") return this.answerModel(agent, msg, threadId, parsed.args);
     const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
     this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
