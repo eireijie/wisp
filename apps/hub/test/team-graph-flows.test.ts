@@ -541,7 +541,7 @@ describe("an agent drawing a team from a sentence", () => {
     expect(draft.status).toBe("ready");
     expect(draft.name).toBe("Release crew");
     expect(draft.problem).toBeUndefined();
-    expect(draft.steps!.map((s) => [s.id, s.kind, s.agentId === null ? null : hub.store.agent(s.agentId)?.handle])).toEqual([
+    expect(draft.steps!.map((s) => [s.id, s.kind, s.agentId ? hub.store.agent(s.agentId)?.handle : null])).toEqual([
       ["s1", "do", "atlas"],
       ["s2", "do", "sol"],
       ["s3", "do", "forge"],
@@ -601,5 +601,115 @@ describe("an agent setting up a flow chart in words", () => {
     await say(r.data);
     expect(openIn("atlas", ch.id)).toBeDefined();
     expect(openIn("sol", ch.id)).toBeDefined();
+  });
+});
+
+describe("branches, loops and hand-offs in odd shapes", () => {
+  it("an if/else keeps a step the chosen path still leads to, instead of skipping it", async () => {
+    const ch = await channel("branch-rejoin", [
+      step("a", "atlas"),
+      step("gate", null, { kind: "branch", inputs: ["a"], rule: { op: "contains", value: "PASS" }, ifTrue: "build", ifFalse: "report" }),
+      step("build", "forge"),
+      step("report", "sol", { inputs: ["build"] }),
+    ]);
+    await say(ch);
+    await finish("atlas", openIn("atlas", ch.id)!.id, "PASS");
+    let flow = await flowIn(ch.id);
+    expect(flow.lanes!.report).toBeUndefined();
+    await finish("forge", openIn("forge", ch.id)!.id, "Built");
+    expect(openIn("sol", ch.id)!.brief).toMatch(/Built/);
+    await finish("sol", openIn("sol", ch.id)!.id, "Reported");
+    flow = await flowIn(ch.id);
+    expect(flow.status).toBe("done");
+    expect(flow.lanes!.report.status).toBe("done");
+  });
+
+  it("approving a loop that ran out of rounds leaves it, instead of asking the same question again", async () => {
+    const ch = await channel("loop-approve", [
+      step("build", "forge"),
+      step("gate", null, { kind: "branch", inputs: ["build"], rule: { op: "contains", value: "PASS" }, ifTrue: "ship", ifFalse: "build", maxRounds: 1 }),
+      step("ship", "atlas"),
+    ]);
+    await say(ch);
+    await finish("forge", openIn("forge", ch.id)!.id, "FAIL");
+    let flow = await flowIn(ch.id);
+    expect(flow.waitingFor?.options).toBe("rounds");
+    flow = (await decide(flow.id, "approve")).data;
+    expect(flow.waitingFor ?? null).toBeNull();
+    expect(openIn("atlas", ch.id)!.brief).toMatch(/FAIL/);
+    await finish("atlas", openIn("atlas", ch.id)!.id, "Shipped");
+    expect((await flowIn(ch.id)).status).toBe("done");
+  });
+
+  it("goes on when the team it handed work to finished before the hand-off was saved", async () => {
+    // an if/else that says no with nothing after it: this team's request ends as soon as it starts
+    const quick = await channel("instant", [step("gate", null, { kind: "branch", rule: { op: "contains", value: "zzz-never" }, ifTrue: "w", ifFalse: null }), step("w", "pixel")]);
+    const ch = await channel("hand-off-instant", [step("tell", null, { kind: "handoff", handoffTo: quick.id, waitForReply: true }), step("after", "atlas", { inputs: ["tell"] })]);
+    await say(ch);
+    expect((await flowIn(quick.id)).status).toBe("done");
+    const flow = await flowIn(ch.id);
+    expect(flow.lanes!.tell.status).toBe("done");
+    expect(openIn("atlas", ch.id)).toBeDefined();
+  });
+});
+
+describe("what people can reach", () => {
+  let alice: string;
+  let bob: string;
+  let guest: string;
+  let privateTeam: { id: string };
+
+  beforeAll(async () => {
+    for (const [name, role] of [["alice", "member"], ["bob", "member"], ["gus", "guest"]] as const)
+      await api("POST", "/api/members", { email: `${name}@example.com`, name, password: "password123", role });
+    const login = async (name: string) => (await api("POST", "/api/auth/login", { email: `${name}@example.com`, password: "password123" }, "")).data.token;
+    [alice, bob, guest] = await Promise.all([login("alice"), login("bob"), login("gus")]);
+    privateTeam = (await api("POST", "/api/channels", { name: "alice-only", private: true, settings: { team: team([step("p", "pixel")]) } }, alice)).data;
+  });
+
+  it("a private team can't be handed work by someone who can't see it, when saving or when running", async () => {
+    const mk = (name: string, token: string) => api("POST", "/api/channels", { name, settings: { team: team([step("a", "atlas"), step("tell", null, { kind: "handoff", inputs: ["a"], handoffTo: privateTeam.id, waitForReply: true })]) } }, token);
+    expect((await mk("bob-hands-over", bob)).status).toBe(400);
+    expect((await mk("alice-hands-over", alice)).status).toBe(200);
+    // an owner sees everything, so they may save one; but a request from someone who can't see the team doesn't reach it
+    const ch = (await mk("owner-hands-over", owner)).data;
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "Please do it" }, bob);
+    await finish("atlas", openIn("atlas", ch.id)!.id, "Done");
+    const flow = await flowIn(ch.id);
+    expect(flow.status).toBe("waiting");
+    expect(await flowsOf(privateTeam.id)).toHaveLength(0);
+    await api("POST", `/api/channels/${ch.id}/messages`, { body: "And me too" }, alice);
+    await finish("atlas", openIn("atlas", ch.id)!.id, "Done");
+    expect((await flowsOf(privateTeam.id)).length).toBe(1);
+  });
+
+  it("a draft is only for people who can see the chat it was asked in, and the brief leaves out private teams", async () => {
+    const started = (await api<TeamDraft>("POST", "/api/team-drafts", { description: "Pixel does a thing", agentId: agents.pixel.id }, alice)).data;
+    expect(hub.store.task(started.id)!.brief).toMatch(/alice-only/);
+    await finish("pixel", started.id, JSON.stringify({ name: "Thing", steps: [{ id: "s1", title: "Do it", agent: "pixel" }, { id: "s2", kind: "handoff", title: "Tell", team: "alice-only", inputs: ["s1"] }] }));
+    expect((await api("GET", `/api/team-drafts/${started.id}`, undefined, bob)).status).toBe(404);
+    expect((await api("GET", `/api/team-drafts/${started.id}`, undefined, guest)).status).toBe(403);
+    const mine = await api<TeamDraft>("GET", `/api/team-drafts/${started.id}`, undefined, alice);
+    expect(mine.data.status).toBe("ready");
+    expect(mine.data.steps![1].handoffTo).toBe(privateTeam.id);
+    expect((await api<TeamDraft>("GET", `/api/team-drafts/${started.id}`)).data.status).toBe("ready");
+    const bobs = (await api<TeamDraft>("POST", "/api/team-drafts", { description: "Something else", agentId: agents.pixel.id }, bob)).data;
+    expect(hub.store.task(bobs.id)!.brief).not.toMatch(/alice-only/);
+    // a draft that names a team he can't see leaves it empty
+    await finish("pixel", bobs.id, JSON.stringify({ steps: [{ id: "s1", kind: "handoff", title: "Tell", team: "alice-only" }] }));
+    expect((await api<TeamDraft>("GET", `/api/team-drafts/${bobs.id}`, undefined, bob)).data.steps![0].handoffTo).toBeNull();
+  });
+
+  it("a draft that isn't well formed fails instead of breaking every poll", async () => {
+    for (const answer of [`{"steps":{}}`, `{"steps":[{"id":"a","title":"One"},{"id":"a","title":"Two"}]}`, `{"steps":[{"id":"a","inputs":"b"},null,7]}`, `{"steps":"nope"}`]) {
+      const d = (await api<TeamDraft>("POST", "/api/team-drafts", { description: "Something odd", agentId: agents.sol.id })).data;
+      await finish("sol", d.id, answer);
+      const got = await api<TeamDraft>("GET", `/api/team-drafts/${d.id}`);
+      expect(got.status, answer).toBe(200);
+      expect(["failed", "ready"], answer).toContain(got.data.status);
+    }
+    const dup = (await api<TeamDraft>("POST", "/api/team-drafts", { description: "Same ids", agentId: agents.sol.id })).data;
+    await finish("sol", dup.id, `{"steps":[{"id":"a","title":"One"},{"id":"a","title":"Two"}]}`);
+    expect((await api<TeamDraft>("GET", `/api/team-drafts/${dup.id}`)).data.status).toBe("failed");
   });
 });

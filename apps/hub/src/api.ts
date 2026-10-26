@@ -567,7 +567,7 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     const team = settings?.team;
     if (!team) return null;
     if (team.nodes.some((n) => !ours(c, n.agentId)) || (team.reportsTo && !ours(c, team.reportsTo)) || team.roles?.some((r) => r.agentId && !ours(c, r.agentId)) || team.steps?.some((s) => s.agentId && !ours(c, s.agentId))) return "agent not found";
-    const handoff = team.steps?.find((s) => s.handoffTo && store.channel(s.handoffTo)?.workspaceId !== c.workspaceId);
+    const handoff = team.steps?.find((s) => s.handoffTo && !channelVisible(c, s.handoffTo!));
     if (handoff) return "a step hands work to a team that isn't here";
     return team.nodes.length || !(team.folder || team.repo) ? teamProblem(team) : null;
   };

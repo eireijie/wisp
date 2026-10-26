@@ -699,6 +699,8 @@ export class Hub {
     const list = models.length ? ` It offers ${models.map((m) => m.id).join(", ")}.` : "";
     const using = agent.model ?? catalog?.defaultModel;
     if (!ask) return void this.postSystem(near, `${handle} is on ${agent.model ? agent.model : using ? `${using} (the default)` : "its default model"}.${list} Switch with /model <name>, or /model default.`);
+    // guests can ask, but changing an agent is for members and owners (as in the agent settings)
+    if (this.store.role(agent.workspaceId, msg.author.id) === "guest") return void this.postSystem(near, `Guests can't change ${handle}'s model.`);
     // an agent on someone's own device is theirs to change
     const node = agent.nodeId && this.harnessOnDevice(agent) ? this.store.node(agent.nodeId) : undefined;
     if (node && !node.shared && node.ownerId && node.ownerId !== msg.author.id) return void this.postSystem(near, `${handle} runs directly on ${this.store.user(node.ownerId)?.name ?? "its owner"}'s device, so only they can change its model.`);
@@ -714,7 +716,7 @@ export class Hub {
       model = hits[0].id;
     }
     // an effort the new model doesn't offer is dropped, as in the model menu
-    const efforts = models.find((m) => m.id === model)?.efforts;
+    const efforts = models.find((m) => m.id === (model ?? catalog?.defaultModel))?.efforts;
     const effort = agent.settings.effort;
     const dropEffort = !!effort && !!efforts && !efforts.includes(effort);
     this.store.updateAgent(agent.id, { model, ...(dropEffort ? { settings: { effort: null } } : {}) });

@@ -137,6 +137,7 @@ export class Store {
   /** Delete an organization; nearly everything in it goes with it (ON DELETE CASCADE). */
   deleteWorkspace(wsId: string) {
     this.db.transaction(() => {
+      const people = this.db.prepare("SELECT user_id AS id FROM memberships WHERE workspace_id = ?").all(wsId) as { id: string }[];
       // these aren't tied to the organization by a foreign key
       this.db.prepare("DELETE FROM tokens WHERE workspace_id = ?").run(wsId);
       this.db.prepare("DELETE FROM vault_tokens WHERE workspace_id = ?").run(wsId);
@@ -144,6 +145,8 @@ export class Store {
       this.db.prepare("DELETE FROM changes WHERE workspace_id = ?").run(wsId);
       this.db.prepare("DELETE FROM push_devices WHERE workspace_id = ?").run(wsId);
       this.db.prepare("DELETE FROM workspaces WHERE id = ?").run(wsId);
+      // an account that belonged only here would have nowhere to sign in to: it goes too, as in removeMember
+      for (const p of people) if (!this.db.prepare("SELECT 1 FROM memberships WHERE user_id = ? LIMIT 1").get(p.id)) this.db.prepare("DELETE FROM users WHERE id = ?").run(p.id);
     })();
   }
 
@@ -787,7 +790,12 @@ export class Store {
   dmChannel(workspaceId: string, userId: string, agentId: string): Channel {
     const name = `dm:${userId}:${agentId}`;
     const existing = this.channelByName(workspaceId, name);
-    if (existing) return existing;
+    if (existing) {
+      // someone who was removed and invited back is in their old DM again
+      if (this.role(workspaceId, userId)) this.addChannelMember(existing.id, { kind: "user", id: userId });
+      if (this.agent(agentId)?.workspaceId === workspaceId) this.addChannelMember(existing.id, { kind: "agent", id: agentId });
+      return existing;
+    }
     const c = this.createChannel(workspaceId, name, "dm");
     this.addChannelMember(c.id, { kind: "user", id: userId });
     this.addChannelMember(c.id, { kind: "agent", id: agentId });
