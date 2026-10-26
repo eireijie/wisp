@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { escapeAction } from "./escape.ts";
 import { createPortal } from "react-dom";
 import { api } from "../api.ts";
 import { useStore, type ChannelInfo } from "../store.ts";
@@ -17,6 +18,23 @@ export function TeamEditSession({ channel, onClose }: { channel: ChannelInfo; on
   const [error, setError] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const changed = JSON.stringify(team) !== JSON.stringify(original);
+
+  // The builder sits over a modal that closes on Escape. Take Escape first (before that modal sees it) so it can't drop unsaved edits.
+  const latest = useRef({ discarding, changed, onClose });
+  latest.current = { discarding, changed, onClose };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      const what = escapeAction(latest.current);
+      if (what === "keep-editing") setDiscarding(false);
+      else if (what === "ask") setDiscarding(true);
+      else latest.current.onClose();
+    };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, []);
 
   const save = async () => {
     setBusy(true);

@@ -5,7 +5,7 @@ import { useCreateAgent } from "./NewAgent.tsx";
 import { AgentAvatar, cx } from "../components/ui.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { AgentField, FieldBox, InputsField, KindIcon, PickBox, TextBox } from "./parts.tsx";
-import { freeStepId, insertingBefore, numberOf, possibleInputs, retype, roleById, settingInputs, stepById, titleOf, updating, disconnecting } from "./flow.ts";
+import { freeStepId, handoffCanWait,insertingBefore, numberOf, possibleInputs, retype, roleById, settingInputs, stepById, titleOf, updating, disconnecting } from "./flow.ts";
 
 const KIND_NAME: Record<TeamStepKind, string> = {
   do: "Agent",
@@ -117,7 +117,9 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
 
   const setBranch = (yes: boolean, target: string | null) => {
     const old = yes ? step.ifTrue : step.ifFalse;
-    let next = old ? disconnecting(team, stepId, old) : team;
+    const other = yes ? step.ifFalse : step.ifTrue;
+    // the arrow to the old step goes only when the other outcome doesn't use it too
+    let next = old && old !== other && old !== target ? disconnecting(team, stepId, old) : team;
     next = updating(next, stepId, yes ? { ifTrue: target } : { ifFalse: target });
     onChange(next);
   };
@@ -168,7 +170,11 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
           {title("e.g. Tell support")}
           <HandoffTeams value={step.handoffTo ?? null} onPick={(handoffTo) => set({ handoffTo })} except={channelId} channels={channels} />
           <TextBox label="What it does" value={step.prompt ?? ""} onChange={(v) => set({ prompt: v })} placeholder="Tell them what to do with it." rows={3} maxLength={4000} />
-          <Toggle label="Wait for their answer" on={step.waitForReply ?? true} onChange={(waitForReply) => set({ waitForReply })} note={step.waitForReply ?? true ? "The next step gets what they send back." : undefined} />
+          {handoffCanWait(channels.find((c) => c.id === step.handoffTo)) ? (
+            <Toggle label="Wait for their answer" on={step.waitForReply ?? true} onChange={(waitForReply) => set({ waitForReply })} note={step.waitForReply ?? true ? "The next step gets what they send back." : undefined} />
+          ) : (
+            <p className="px-2 text-xs text-muted">That team has no steps, so it can't send an answer back. The next step starts as soon as the work is handed over.</p>
+          )}
           {inputs("Hands over the result of")}
           {when}
         </>

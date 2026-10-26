@@ -128,6 +128,14 @@ export class TeamFlows {
     return r && this.row(r);
   }
 
+  /** An ask-me step set to "Tell me on my phone: off" keeps its approval in the Inbox but sends no notification. */
+  silentApproval(approval: { flow?: { flowId: string; stepId: string } | null }): boolean {
+    const ref = approval.flow;
+    const f = ref && this.flow(ref.flowId);
+    const team = f ? this.team(f) : null;
+    return team?.steps.find((s) => s.id === ref!.stepId)?.notifyPhone === false;
+  }
+
   /** A channel's flows, newest first. */
   flows(channelId: string, limit = 50): TeamFlow[] {
     return (this.hub.store.db.prepare("SELECT * FROM team_flows WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?").all(channelId, limit) as Row[]).map((r) => this.row(r));

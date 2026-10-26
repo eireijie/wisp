@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Archive, ArchiveRestore, Bell, BellOff, Bot, Check, Hash, Lock, LogOut, MoreHorizontal, Pencil, Pin, Plus, Search, Star, Trash2, UserPlus, Users, X } from "lucide-react";
-import { hasSteps, teamProblem, type Agent, type ChannelNotify, type ChannelSettings as AgentRules, type ChannelTeam, type Section } from "@wisp/core";
+import { hasSteps, teamProblem, type Agent, type ChannelNotify, type ChannelTeam, type Section } from "@wisp/core";
 import { EMPTY_TEAM, TeamChart, TeamRules, addToTeam, liveTeam } from "./TeamChart.tsx";
 import { NewTeamFlow } from "../team/Create.tsx";
 import { HowLines } from "../team/How.tsx";
@@ -9,6 +9,7 @@ import { useFlowLines } from "../team/How.tsx";
 import { NewAgentForTeam } from "../team/NewAgent.tsx";
 import { TeamEditSession } from "../team/Session.tsx";
 import { withChart } from "../team/flow.ts";
+import { agentRulesOf, type AgentRules } from "./channel-rules.ts";
 import { api } from "../api.ts";
 import { useNames, useStore, type ChannelInfo } from "../store.ts";
 import { go, href } from "../router.ts";
@@ -718,10 +719,10 @@ function TeamMore({ team, onChange, canManage }: { team: ChannelTeam; onChange: 
 export function ChannelAgents({ channel, canManage, onClose }: { channel: ChannelInfo; canManage: boolean; onClose: () => void }) {
   const agents = useStore((s) => s.agents);
   const refreshChannels = useStore((s) => s.refreshChannels);
-  const [rules, setRules] = useState<AgentRules>(channel.settings);
+  const [rules, setRules] = useState<AgentRules>(() => agentRulesOf(channel.settings));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const changed = JSON.stringify(rules) !== JSON.stringify(channel.settings);
+  const changed = JSON.stringify(rules) !== JSON.stringify(agentRulesOf(channel.settings));
   const answerer = agents.find((a) => a.id === rules.defaultAgentId);
   return (
     <form
@@ -731,7 +732,7 @@ export function ChannelAgents({ channel, canManage, onClose }: { channel: Channe
         setError(null);
         setSaving(true);
         try {
-          await api("PATCH", `/api/channels/${channel.id}`, { settings: rules });
+          await api("PATCH", `/api/channels/${channel.id}`, { settings: agentRulesOf(rules) });
           await refreshChannels();
           onClose();
         } catch (err) {

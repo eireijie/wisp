@@ -192,6 +192,18 @@ describe("repeat until approved", () => {
 });
 
 describe("ask me", () => {
+  it("keeps the Inbox card but sends no notification when 'Tell me on my phone' is off", async () => {
+    for (const [name, notifyPhone] of [["quiet", false], ["loud", true]] as const) {
+      const ch = await channel(name, [step("build", "forge"), step("approve", null, { kind: "ask", action: "Approve", inputs: ["build"], notifyPhone })]);
+      await say(ch);
+      await finish("forge", openIn("forge", ch.id)!.id, "Done");
+      const card = (await pending()).find((a) => a.channelId === ch.id)!;
+      expect(card).toBeTruthy();
+      expect(hub.flows.silentApproval(card)).toBe(!notifyPhone);
+    }
+    expect(hub.flows.silentApproval({ flow: null })).toBe(false);
+  });
+
   it("shows up in the Inbox, goes on when approved, and goes back with a note when you ask for changes", async () => {
     const ch = await channel("ask", [
       step("build", "forge", { action: "Build it" }),

@@ -100,6 +100,16 @@ export function disconnecting(team: ChannelTeam, a: string, b: string): ChannelT
   );
 }
 
+/** An if/else's Yes and No arrows live on the step, so cutting its arrow clears them: put back the ones that led to `from`, now leading to `to`. */
+function redirecting(next: ChannelTeam, before: ChannelTeam, a: string, from: string, to: string): ChannelTeam {
+  const src = stepById(before, a);
+  if (!src || src.kind !== "branch" || (src.ifTrue !== from && src.ifFalse !== from)) return next;
+  return updating(next, a, { ...(src.ifTrue === from ? { ifTrue: to } : {}), ...(src.ifFalse === from ? { ifFalse: to } : {}) });
+}
+
+/** Only a team with steps starts its own request that a hand-off can wait on; a plain chart takes the work and that's all. Not picked yet = no reason to say no. */
+export const handoffCanWait = (target: { settings: { team: Pick<ChannelTeam, "steps"> | null } } | undefined): boolean => !target || !!target.settings.team?.steps?.length;
+
 /** The steps a step can take its input from: every step that doesn't come after it. */
 export function possibleInputs(team: ChannelTeam, id: string): TeamStep[] {
   const after = stepsAfter(stepsOf(team), id);
@@ -141,6 +151,7 @@ export function inserting(team: ChannelTeam, step: TeamStep, where: { after?: st
     for (const f of followers) next = disconnecting(next, after.id, f);
     next = connecting(next, after.id, fresh.id);
     for (const f of followers) if (f !== fresh.id) next = connecting(next, fresh.id, f);
+    for (const f of followers) next = redirecting(next, team, after.id, f, fresh.id);
   } else if (beside) {
     for (const i of inputIds(beside)) next = connecting(next, i, fresh.id);
     for (const n of beside.nexts ?? []) next = connecting(next, fresh.id, n);
@@ -158,7 +169,7 @@ export function insertingBefore(team: ChannelTeam, step: TeamStep, id: string): 
   if (!anchor) return team;
   const fresh = blank(step);
   let next = appending(team, fresh);
-  for (const i of inputIds(anchor)) next = connecting(disconnecting(next, i, id), i, fresh.id);
+  for (const i of inputIds(anchor)) next = redirecting(connecting(disconnecting(next, i, id), i, fresh.id), team, i, id, fresh.id);
   return connecting(next, fresh.id, id);
 }
 
@@ -172,6 +183,7 @@ export function insertingBetween(team: ChannelTeam, step: TeamStep, from: string
     next = connecting(next, a, fresh.id);
   }
   for (const b of live) next = connecting(next, fresh.id, b);
+  for (const a of from) for (const b of live) next = redirecting(next, team, a, b, fresh.id);
   return next;
 }
 
@@ -187,12 +199,18 @@ export function removingStep(team: ChannelTeam, id: string): ChannelTeam {
   next = edit(next, (all) =>
     all
       .filter((s) => s.id !== id)
-      .map((s) => ({
-        ...s,
-        sendBackTo: s.sendBackTo === id ? null : s.sendBackTo,
-        ifTrue: s.ifTrue === id ? null : s.ifTrue,
-        ifFalse: s.ifFalse === id ? null : s.ifFalse,
-      })),
+      .map((s) => {
+        // cutting the arrows above already cleared an if/else's Yes/No, so read them from before
+        const was = stepById(team, s.id) ?? s;
+        const onward = after.find((x) => x !== s.id) ?? null;
+        return {
+          ...s,
+          sendBackTo: s.sendBackTo === id ? null : s.sendBackTo,
+          // an if/else's arrow to the step now goes to whatever followed it
+          ifTrue: was.ifTrue === id ? onward : s.ifTrue,
+          ifFalse: was.ifFalse === id ? onward : s.ifFalse,
+        };
+      }),
   );
   for (const a of before) for (const b of after) if (a !== b) next = connecting(next, a, b);
   return next;
@@ -204,12 +222,22 @@ export function movingAfter(team: ChannelTeam, id: string, target: string | null
   if (!moved || target === id) return team;
   let next = removingStep(team, id);
   const fresh = blank(moved);
-  if (target && stepById(next, target)) return inserting(next, fresh, { after: target });
-  // first: the steps that started before now wait for it
-  const starts = startSteps(stepsOf(next)).map((s) => s.id);
-  next = appending(next, fresh);
-  for (const s of starts) next = connecting(next, fresh.id, s);
-  return next;
+  if (target && stepById(next, target)) next = inserting(next, fresh, { after: target });
+  else {
+    // first: the steps that started before now wait for it
+    const starts = startSteps(stepsOf(next)).map((s) => s.id);
+    next = appending(next, fresh);
+    for (const s of starts) next = connecting(next, fresh.id, s);
+  }
+  // it is the same step in a new place: whatever pointed at it (send-backs, if/else arrows) still does
+  const was = new Map(stepsOf(team).map((s) => [s.id, s]));
+  return edit(next, (all) =>
+    all.map((s) => {
+      const old = was.get(s.id);
+      if (!old || s.id === id) return s;
+      return { ...s, ...(old.sendBackTo === id ? { sendBackTo: id } : {}), ...(old.ifTrue === id ? { ifTrue: id } : {}), ...(old.ifFalse === id ? { ifFalse: id } : {}) };
+    }),
+  );
 }
 
 // --- new steps ----------------------------------------------------------------------------
