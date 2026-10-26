@@ -260,7 +260,9 @@ struct StepEditor: View {
             case .handOut: splitStep(step)
             }
             Field(title: "Kind of step") { kindMenu(step) }
-            Button(role: .destructive) { confirmDelete = true } label: {
+            Button(role: .destructive) {
+              if team.deleteNeedsConfirm(stepId) { confirmDelete = true } else { team = team.removingStep(stepId); close() }
+            } label: {
               Label("Delete step", systemImage: "trash").font(.system(size: 15)).foregroundStyle(Palette.red)
                 .frame(maxWidth: .infinity, minHeight: 54)
                 .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))

@@ -811,6 +811,14 @@ extension ChannelTeam {
     }
   }
 
+  /** Whether taking a step off loses something worth a second look: its prompt, or arrows to or from it. */
+  func deleteNeedsConfirm(_ id: String) -> Bool {
+    guard let s = step(id) else { return false }
+    if !(s.prompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+    if !s.inputIds.isEmpty || !(s.nexts ?? []).isEmpty || s.next != nil { return true }
+    return (steps ?? []).contains { $0.inputIds.contains(id) || ($0.nexts ?? []).contains(id) || $0.next == id || $0.sendBackTo == id }
+  }
+
   /** Take a step off. Whatever led to it now leads to whatever followed it, and arrows that pointed at it are cleared. */
   func removingStep(_ id: String) -> ChannelTeam {
     guard let gone = step(id) else { return self }
