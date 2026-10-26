@@ -42,6 +42,8 @@ const BUILTIN: Record<string, HarnessSpec> = {
     dir: (home) => path.join(home, ".codex"),
     config: "config.toml",
     accounts: true,
+    // a ChatGPT login keeps its token in auth.json and leaves config.toml out until something sets a value
+    missingOk: true,
     read: (d) => readCodex(legacy(d, "codex")),
     edit: (text, changes) => editCodex(text, changes),
     skillRoots: (d) => [path.join(d.dir, "skills"), path.join(d.home, ".agents", "skills")],
@@ -235,7 +237,7 @@ async function hermesPlugins(d: Homes): Promise<{ id: string; name: string; desc
 }
 
 async function readCodex(d: Homes): Promise<Summary> {
-  const doc = parseToml(await fs.readFile(path.join(d.codex, "config.toml"), "utf8"));
+  const doc = parseToml(await fs.readFile(path.join(d.codex, "config.toml"), "utf8").catch((e: NodeJS.ErrnoException) => (e.code === "ENOENT" ? "" : Promise.reject(e))));
   const get = (table: string[], key: string) => doc.entries.find((e) => sameKey(e.table, table) && e.key === key && !e.arrayIndex)?.value;
   const provider = str(get([], "model_provider"));
   const configured = doc.tables.filter((t) => t.path.length === 2 && t.path[0] === "model_providers").map((t) => t.path[1]);

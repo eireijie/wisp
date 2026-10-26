@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { changeHarnessSettings, editCodex, editHermes, parseToml, readHarnessSettings, readHarnessSkill } from "../src/index.ts";
+import { changeHarnessSettings, codexArgs, editCodex, editHermes, parseToml, readHarnessSettings, readHarnessSkill } from "../src/index.ts";
 
 const HERMES = `# Hermes settings
 model:
@@ -225,6 +225,34 @@ describe("Codex settings", () => {
       ["review-pr", true],
       ["deploy", true],
     ]);
+  });
+
+  it("lets a ChatGPT login with no config.toml pick a model, and the run passes it to codex", async () => {
+    fs.rmSync(path.join(home, ".codex/config.toml"));
+    write(".codex/auth.json", "{}");
+    const s = await readHarnessSettings("codex", { home });
+    expect(s.error).toBeUndefined();
+    expect(s.model).toBeNull();
+    const after = await changeHarnessSettings("codex", [{ op: "model", model: "gpt-6.1-sol" }], { home });
+    expect(after.model).toBe("gpt-6.1-sol");
+    expect(read(".codex/config.toml")).toContain('model = "gpt-6.1-sol"');
+    expect(codexArgs({ prompt: "", cwd: "/", model: "gpt-6.1-sol", effort: "high", fast: true } as any)).toEqual(
+      expect.arrayContaining(["-m", "gpt-6.1-sol", 'model_reasoning_effort="high"', 'service_tier="priority"']),
+    );
+  });
+
+  it("changes the model in a config Codex's app wrote (service tier, notify array, project tables)", async () => {
+    write(
+      ".codex/config.toml",
+      'model = "gpt-6-astra"\nmodel_reasoning_effort = "high"\n\nnotify = ["node", "hook.js", "turn-ended"]\nservice_tier = "priority"\n\n[marketplaces.openai-bundled]\nsource_type = "local"\n\n[plugins."github@openai-curated"]\nenabled = true\n\n[projects."/Users/me/Documents/My project"]\ntrust_level = "trusted"\n',
+    );
+    const s = await readHarnessSettings("codex", { home });
+    expect(s.error).toBeUndefined();
+    expect(s.fixed).toBeUndefined();
+    expect(s.model).toBe("gpt-6-astra");
+    const after = await changeHarnessSettings("codex", [{ op: "model", model: "gpt-6.1-sol" }], { home });
+    expect(after.model).toBe("gpt-6.1-sol");
+    expect(read(".codex/config.toml")).toContain('notify = ["node", "hook.js", "turn-ended"]');
   });
 
   it("edits values in place and adds what's missing", async () => {

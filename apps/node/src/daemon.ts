@@ -83,6 +83,7 @@ export class NodeDaemon {
   private sessions: Record<string, string>;
   private api: WispClient;
   private catalog: Promise<HarnessCatalog[]> | null = null;
+  private catalogIncomplete = false;
   private registry: Record<string, HarnessAdapter>;
   readonly computers: ComputerHost;
   private tunnels = new Map<string, Tunnel>();
@@ -685,6 +686,10 @@ export class NodeDaemon {
     };
     const withAccounts = (s: HarnessSettings, account = "default"): HarnessSettings => ({ ...s, account, accounts: this.accounts.list(s.harness), multiAccount: HarnessAccounts.supports(s.harness), agentAccounts: this.accounts.agentAccounts() });
     if (msg.type === "harness_settings") {
+      if (this.catalogIncomplete) {
+        this.catalog = null;
+        void this.harnessCatalog().then((catalog) => this.send({ type: "catalog", catalog }));
+      }
       const installed = new Set((await this.harnessCatalog()).map((c) => c.harness));
       const here = await Promise.all(SETTINGS_HARNESSES.map(async (id) => installed.has(id) || (await harnessConfigured(id, base))));
       const ids = SETTINGS_HARNESSES.filter((id, i) => (msg.harness ? id === msg.harness : here[i]));
@@ -747,7 +752,12 @@ export class NodeDaemon {
           return null;
         }
       }),
-    ).then((list) => list.filter((c): c is HarnessCatalog => !!c && c.version !== null));
+    ).then((list) => {
+      const found = list.filter((c): c is HarnessCatalog => !!c && c.version !== null);
+      // Codex listing no models (offline or not signed in at start-up) is asked again when settings are opened
+      this.catalogIncomplete = found.some((c) => c.models.length === 0 && c.harness === "codex");
+      return found;
+    });
     return this.catalog;
   }
 
