@@ -105,7 +105,7 @@ struct ChatToolSheet: View {
         .disabled(!store.canManage || action.busy)
       }
       if catalog == nil { CardCaption("Its device hasn't reported models yet. Start the device to see them.") }
-      Button("Use the default model") { setModel(""); setEffort("") }
+      Button("Use the default model") { setModel("", effort: "") }
         .secondaryButton().frame(maxWidth: .infinity).padding(.top, 6)
         .disabled(!store.canManage || action.busy)
     }
@@ -118,11 +118,11 @@ struct ChatToolSheet: View {
     }.buttonStyle(.plain)
   }
 
-  private func setModel(_ id: String) {
+  /** `effort` overrides the agent's current effort, so a reset can clear both in one update. */
+  private func setModel(_ id: String, effort: String? = nil) {
     guard let agent else { return }
     action.run {
-      var fields: Fields = ["model": .nullable(id)]
-      if let settings = models?.settings(model: id, effort: agent.settings?.effort ?? "", fast: agent.settings?.fast ?? false) { fields["settings"] = AnyEncodable(settings) }
+      let fields = AgentModels.modelFields(models, model: id, effort: effort ?? agent.settings?.effort ?? "", fast: agent.settings?.fast ?? false)
       try await store.updateAgent(agent.id, fields)
     }
   }

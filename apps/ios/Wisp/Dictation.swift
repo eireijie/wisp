@@ -12,10 +12,14 @@ final class Dictation {
   @ObservationIgnored private let engine = AVAudioEngine()
   @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
   @ObservationIgnored private var task: SFSpeechRecognitionTask?
+  /** a start is waiting on permissions or the microphone; another tap must not begin a second one */
+  @ObservationIgnored private var starting = false
 
   func toggle(_ onText: @escaping (String) -> Void) {
     if active { stop(); return }
-    Task { await start(onText) }
+    guard !starting else { return }
+    starting = true
+    Task { await start(onText); starting = false }
   }
 
   private func start(_ onText: @escaping (String) -> Void) async {
@@ -36,6 +40,7 @@ final class Dictation {
       request.shouldReportPartialResults = true
       self.request = request
       let input = engine.inputNode
+      input.removeTap(onBus: 0)
       input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in request.append(buffer) }
       engine.prepare()
       try engine.start()

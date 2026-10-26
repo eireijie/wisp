@@ -116,6 +116,8 @@ final class VoiceCallSession {
   @ObservationIgnored private var streamRun = ""
   /** the first sentence of the reply, spoken while the agent is still working */
   @ObservationIgnored private var early = ""
+  /** the first sentence being spoken while the agent works; the finished reply waits for it to end */
+  @ObservationIgnored private var earlyTask: Task<Void, Never>?
   @ObservationIgnored private var spokenAt = Date.distantPast
   @ObservationIgnored private var filler: Task<Void, Never>?
   @ObservationIgnored private var long: Task<Void, Never>?
@@ -245,7 +247,7 @@ final class VoiceCallSession {
     if text.isEmpty || stopped { return }
     interrupt()
     pending += 1
-    streamed = ""; streamRun = ""; early = ""
+    streamed = ""; streamRun = ""; early = ""; earlyTask = nil
     update { $0.userCaption = text; $0.agentCaption = ""; $0.activity = ""; $0.talking = false; $0.waiting = true; $0.longWork = false; $0.error = "" }
     startTimers()
     do { try await sendText(text) }
@@ -306,12 +308,13 @@ final class VoiceCallSession {
   private func sayReply(_ text: String) {
     let said = early; early = ""
     let rest = !said.isEmpty && text.hasPrefix(said) ? String(text.dropFirst(said.count)).trimmingCharacters(in: .whitespacesAndNewlines) : text
-    if !rest.isEmpty { Task { await self.say(rest) } }
+    let first = earlyTask; earlyTask = nil
+    if !rest.isEmpty { Task { await first?.value; await self.say(rest) } }
   }
 
   /** The agent's run while it happens: what tool it is using, and its first sentence as soon as it is whole. */
   func event(_ e: CallRunEvent) {
-    if stopped || !state.ready || pending == 0 || e.agentId != agentId || e.threadId != nil { return }
+    if stopped || !state.ready || pending == 0 || e.agentId != agentId || e.channelId != channelId || e.threadId != nil { return }
     switch e.type {
     case "tool_call": update { $0.activity = CallActivity.line(tool: e.tool ?? "", file: e.file) }
     case "tool_result": update { $0.activity = "" }
@@ -321,7 +324,7 @@ final class VoiceCallSession {
       let excerpt = VoiceText.spokenReply(streamed)
       if early.isEmpty, !state.talking, !state.speaking, let first = VoiceText.firstSentence(excerpt) {
         early = first
-        Task { await self.say(first) }
+        earlyTask = Task { await self.say(first) }
       } else if !state.speaking { update { $0.agentCaption = excerpt; $0.activity = "" } }
     default: break
     }

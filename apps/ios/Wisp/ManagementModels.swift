@@ -61,6 +61,14 @@ struct AgentModels: Decodable {
     let efforts = selected?.efforts ?? catalog.efforts
     return ["effort": .nullable(efforts.contains(effort) ? effort : ""), "fast": AnyEncodable(fast && selected?.fast != nil)]
   }
+
+  /** The update that sets a model with its effort and fast mode; without a catalog, resetting to the default model still clears the effort. */
+  static func modelFields(_ models: AgentModels?, model: String, effort: String, fast: Bool) -> Fields {
+    var fields: Fields = ["model": .nullable(model)]
+    if let settings = models?.settings(model: model, effort: effort, fast: fast) { fields["settings"] = AnyEncodable(settings) }
+    else if model.isEmpty && effort.isEmpty { fields["settings"] = AnyEncodable(["effort": AnyEncodable.nullable("")]) }
+    return fields
+  }
 }
 
 struct ModelOption: Decodable, Identifiable {

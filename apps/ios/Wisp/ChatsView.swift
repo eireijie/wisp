@@ -7,6 +7,8 @@ struct ChatEntry: Identifiable, Hashable {
   /** the agent's direct chat (nil until the first message makes it) or the team's chat */
   var channel: Channel?
   var last: Message?
+  /** when it was last active: its newest loaded message, else what the channel list says */
+  var lastAt: Date? { last?.date ?? channel?.last.flatMap { Wire.date($0.at) } }
 
   var id: String {
     switch kind {
@@ -40,7 +42,7 @@ enum ChatList {
     }
     return out.sorted { a, b in
       if a.pinned != b.pinned { return a.pinned }
-      let (da, db) = (a.last?.date, b.last?.date)
+      let (da, db) = (a.lastAt, b.lastAt)
       if da != db { return (da ?? .distantPast) > (db ?? .distantPast) }
       return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
     }
@@ -369,7 +371,7 @@ struct ChatRow: View {
             Text(entry.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
             Spacer(minLength: 8)
             if entry.pinned { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).accessibilityLabel("Pinned") }
-            if let last = entry.last { Text(ChatList.timeText(last.date)).font(.system(size: 14)).foregroundStyle(Palette.faint) }
+            if let at = entry.lastAt { Text(ChatList.timeText(at)).font(.system(size: 14)).foregroundStyle(Palette.faint) }
           }
           HStack(spacing: 8) {
             subtitle
