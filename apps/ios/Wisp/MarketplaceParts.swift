@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /** A chat to open, with the request to start it with. */
 struct ChatTarget: Hashable {
@@ -6,122 +7,281 @@ struct ChatTarget: Hashable {
   var draft: String
 }
 
-/** After a skill is added: a request ready in a chat with a helper that has it. */
-struct TryItSection: View {
-  @Environment(Store.self) private var store
-  var skill: HelperSkill
-  @State private var pick = ""
-  @State private var action = FormAction()
-  @State private var target: ChatTarget?
-  @State private var copied = false
-  private var holders: [Agent] { store.agents.filter { skill.agentIds?.contains($0.id) == true } }
+/** The look of "Add" without being a button, for the end of a row that is itself a link. */
+struct AddLabel: View {
+  var title: String
+  var muted = false
   var body: some View {
-    let helper = holders.first { $0.id == pick } ?? holders.first
-    Group {
-      if let helper {
-        let text = MarketText.trySuggestion(name: skill.name, description: skill.description ?? "")
-        Section("Try it") {
-          Text("Start a chat with this request ready. Add your own details, then send.").font(.footnote).foregroundStyle(.secondary)
-          Text(text).textSelection(.enabled)
-          if holders.count > 1 {
-            Picker("Agent", selection: Binding(get: { helper.id }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }
-          }
-          Button("Open chat with \(helper.name)", systemImage: "bubble.left") {
-            action.run { target = ChatTarget(channel: try await store.dm(with: helper), draft: text) }
-          }.disabled(action.busy)
-          Button(copied ? "Copied" : "Copy request", systemImage: "doc.on.doc") { UIPasteboard.general.string = text; copied = true }
-          InlineError(error: action.error)
-        }
-      }
-    }.navigationDestination(item: $target) { ChannelView(channel: $0.channel, draft: $0.draft) }
+    Text(title)
+      .font(.system(size: 15, weight: .medium))
+      .foregroundStyle(muted ? Palette.faint : Palette.text)
+      .padding(.horizontal, 18)
+      .frame(height: 38)
+      .background(Capsule().fill(MarketColor.chip))
   }
 }
 
-/** A public skill before it's added: who made it, its license, its instructions, and its source. */
-struct StoreSkillDetail: View {
+// MARK: - Sharing a skill without a server in between
+
+/** A skill as it travels in a link or a file. */
+struct SharedSkill: Equatable {
+  var name: String
+  var description: String
+  var content: String
+  var tags: [String]
+}
+
+/**
+ * A skill is small, so "a link" carries the skill itself ("wisp-skill:" and the text, encoded: the same
+ * as the web's), and a file is the SKILL.md anyone's harness reads. Bringing one in reads either back.
+ */
+enum SkillShare {
+  static let prefix = "wisp-skill:"
+
+  static func link(_ s: SharedSkill) -> String {
+    let object: [String: Any] = ["n": s.name, "d": s.description, "c": s.content, "t": s.tags]
+    let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+    return prefix + data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+  }
+
+  /** The skill inside a link made by `link`, or nil when the text isn't one. */
+  static func read(link text: String) -> SharedSkill? {
+    guard let at = text.range(of: prefix) else { return nil }
+    var body = String(text[at.upperBound...]).split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+    body = body.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    while body.count % 4 != 0 { body += "=" }
+    guard let data = Data(base64Encoded: body),
+          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let name = object["n"] as? String, let content = object["c"] as? String,
+          !name.trimmed.isEmpty, !content.trimmed.isEmpty else { return nil }
+    return SharedSkill(name: String(name.prefix(60)), description: String(((object["d"] as? String) ?? "").prefix(500)), content: content, tags: Array(((object["t"] as? [Any]) ?? []).compactMap { $0 as? String }.prefix(10)))
+  }
+
+  /** A SKILL.md (front matter with a name and description, then instructions) as a skill. */
+  static func read(file text: String, name fileName: String = "") -> SharedSkill {
+    let source = text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
+    var fields: [String: String] = [:]
+    var body = source
+    if let match = source.range(of: #"^---\r?\n([\s\S]*?)\r?\n---\r?\n?"#, options: .regularExpression) {
+      for line in source[match].split(whereSeparator: \.isNewline) {
+        guard let colon = line.firstIndex(of: ":"), line.first != "-" else { continue }
+        let key = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+        let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        fields[key] = unquote(value)
+      }
+      body = String(source[match.upperBound...])
+    }
+    body = body.trimmed
+    let heading = body.range(of: #"(?m)^#\s+(.+)$"#, options: .regularExpression).map { String(String(body[$0]).dropFirst(1)).trimmed }
+    let title = fields["title"].flatMap { $0.isEmpty ? nil : $0 }
+      ?? fields["name"].flatMap { $0.isEmpty ? nil : MarketText.skillTitle($0) }
+      ?? heading ?? nameFromFile(fileName)
+    let tags = (fields["tags"] ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "[]")).split(separator: ",").map { String($0).trimmed.lowercased() }.filter { !$0.isEmpty }
+    let description = (fields["description"] ?? "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return SharedSkill(name: String((title.isEmpty ? "New skill" : title).prefix(60)), description: String(description.prefix(500)), content: body, tags: Array(tags.prefix(10)))
+  }
+
+  /** The SKILL.md Wisp writes for a skill. */
+  static func file(_ skill: HelperSkill) -> String {
+    func quoted(_ v: String) -> String {
+      let flat = v.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+      let data = (try? JSONEncoder().encode(flat)) ?? Data()
+      return String(data: data, encoding: .utf8) ?? "\"\""
+    }
+    let slug = skill.slug ?? MarketText.slug(skill.name)
+    return "---\nname: \(slug)\ntitle: \(quoted(skill.name))\ndescription: \(quoted(skill.description ?? ""))\n---\n\n\((skill.content ?? "").trimmed)\n"
+  }
+
+  private static func unquote(_ raw: String) -> String {
+    if raw.hasPrefix("\""), let data = "[\(raw)]".data(using: .utf8), let list = try? JSONSerialization.jsonObject(with: data) as? [String], let first = list.first { return first }
+    if raw.count >= 2, raw.hasPrefix("'"), raw.hasSuffix("'") { return String(raw.dropFirst().dropLast()) }
+    return raw
+  }
+
+  private static func nameFromFile(_ fileName: String) -> String {
+    var parts = fileName.replacingOccurrences(of: "\\", with: "/").split(separator: "/").map(String.init)
+    var base = parts.popLast() ?? ""
+    if base.lowercased() == "skill.md", let parent = parts.last { base = parent }
+    if base.lowercased().hasSuffix(".md") { base = String(base.dropLast(3)) }
+    let words = base.replacingOccurrences(of: "[_-]+", with: " ", options: .regularExpression).trimmed
+    return words.isEmpty ? "New skill" : words.prefix(1).uppercased() + words.dropFirst()
+  }
+}
+
+// MARK: - Try it
+
+/** "Try it": a request to start a chat with, or to copy. */
+struct TryItSheet: View {
   @Environment(Store.self) private var store
   @Environment(\.dismiss) private var dismiss
-  var skill: StoreSkill
-  @State private var content: String?
-  @State private var loaded = false
-  @State private var adding = false
-  private var instructions: String? {
-    content.map { $0.replacingOccurrences(of: #"^---\r?\n[\s\S]*?\r?\n---\r?\n?"#, with: "", options: .regularExpression) }
-  }
-  var body: some View {
-    List {
-      Section { Text(skill.name).font(.title2.bold()); Text(skill.description) }
-      Section {
-        LabeledContent("From", value: skill.source.label)
-        LabeledContent("License", value: skill.license.label)
-        if let url = URL(string: skill.url) { Link("Source", destination: url) }
-      }
-      if skill.license.open {
-        if store.canManage { Button("Add") { adding = true }.primaryButton() }
-      } else {
-        Section { Text("Its license doesn't allow copying it, so read it where it lives: \(skill.source.label)'s repo.").font(.footnote) }
-      }
-      if let instructions, !instructions.isEmpty {
-        Section { TechnicalDetails(title: "Full instructions") { NoteMarkdown(text: instructions) } }
-      } else if !loaded && skill.license.open {
-        Section { ProgressView() }
-      }
-    }.sectionScreen(skill.name, id: "store-skill")
-      .sheet(isPresented: $adding) { SkillInstallSheet(title: "Add \(skill.name)", request: ["storeId": AnyEncodable(skill.id)]) { _ in dismiss() } }
-      .task { content = try? await store.skillStoreContent(skill.id); loaded = true }
-  }
-}
+  var name: String
+  var description: String
+  var agentIds: [String]
+  var onOpenChat: (ChatTarget) -> Void
+  @State private var pick = ""
+  @State private var action = FormAction()
+  @State private var copied = false
+  private var holders: [Agent] { store.agents.filter { agentIds.contains($0.id) } }
+  private var helper: Agent? { holders.first { $0.id == pick } ?? holders.first }
 
-/** The registry's word on who publishes an app. */
-struct TrustBadge: View {
-  var trust: TrustLabel
   var body: some View {
-    Label(trust.text, systemImage: trust.kind == .unverified ? "questionmark.shield" : "checkmark.seal")
-      .font(.caption).foregroundStyle(trust.kind == .unverified ? Color.secondary : Color.accentColor)
-      .accessibilityLabel("\(trust.text). \(trust.explanation)")
-  }
-}
-
-/** One app or skill in a list. */
-struct MarketRow: View {
-  var symbol: String
-  var title: String
-  var sub: String
-  var badge: String?
-  var body: some View {
-    HStack(spacing: 12) {
-      IconTile(symbol: symbol, color: .secondary, size: 38)
-      VStack(alignment: .leading, spacing: 2) {
-        Text(title).font(.body.weight(.semibold)).lineLimit(1)
-        Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+    let text = MarketText.trySuggestion(name: name, description: description)
+    MarketSheet(title: "Try it", subtitle: name) {
+      Text(helper == nil ? "Install the skill first so a helper can use it. Meanwhile, this is a request to try." : "Start a chat with this request ready. Add your own details, then send.")
+        .font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      Text(text).font(.system(size: 16)).textSelection(.enabled).padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.control, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.hairline))
+      if holders.count > 1 {
+        Picker("Which helper?", selection: Binding(get: { helper?.id ?? "" }, set: { pick = $0 })) { ForEach(holders) { Text($0.name).tag($0.id) } }.pickerStyle(.menu)
       }
-      Spacer(minLength: 4)
-      if let badge { Text(badge).font(.footnote).foregroundStyle(.secondary) }
-    }.accessibilityElement(children: .combine)
-  }
-}
-
-/** A row of pills to narrow a list, or pick a tab. */
-struct ChipRow: View {
-  var options: [String]
-  var selection: String
-  var counts: [String: Int] = [:]
-  var onPick: (String) -> Void
-  var body: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: 8) {
-        ForEach(options, id: \.self) { option in
-          let on = option == selection
-          Button { onPick(option) } label: {
-            HStack(spacing: 5) {
-              Text(option)
-              if let n = counts[option], n > 0 { Text("\(n)").foregroundStyle(on ? Color(.systemBackground).opacity(0.7) : .secondary) }
-            }.font(.subheadline.weight(on ? .semibold : .regular)).padding(.horizontal, 14).padding(.vertical, 7)
-              .foregroundStyle(on ? Color(.systemBackground) : Color.primary)
-              .background(Capsule().fill(on ? Color.primary : Color(.secondarySystemFill)))
-          }.buttonStyle(.plain).accessibilityAddTraits(on ? .isSelected : [])
+      InlineError(error: action.error)
+      HStack(spacing: 10) {
+        Button { UIPasteboard.general.string = text; copied = true } label: { Text(copied ? "Copied" : "Copy request").frame(maxWidth: .infinity) }.secondaryButton()
+        if let helper {
+          Button {
+            action.run { let channel = try await store.dm(with: helper); dismiss(); onOpenChat(ChatTarget(channel: channel, draft: text)) }
+          } label: { Text("Open chat with \(helper.name)").frame(maxWidth: .infinity) }.primaryButton().disabled(action.busy)
         }
-      }.padding(.horizontal, 16)
-    }.listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+      }
+    }
+  }
+}
+
+// MARK: - Share and bring in
+
+/**
+ * Share a skill (a link, a file, or a copy for another helper) and bring one in (a pasted link, a
+ * .md file, or the ones your devices' harnesses already have). Without a skill it is only "Bring one in".
+ */
+struct SkillShareSheet: View {
+  @Environment(Store.self) private var store
+  @Environment(\.dismiss) private var dismiss
+  var skill: HelperSkill?
+  var onBrought: (HelperSkill) -> Void
+  var onDevices: () -> Void
+  enum Page { case home, agents, paste, found }
+  @State private var page = Page.home
+  @State private var picked: Set<String> = []
+  @State private var pasted = ""
+  @State private var found: SharedSkill?
+  @State private var note: String?
+  @State private var fileURL: URL?
+  @State private var importing = false
+  @State private var action = FormAction()
+
+  private var used: [String] { skill.map { s in store.agents.filter { s.agentIds?.contains($0.id) == true }.map(\.name) } ?? [] }
+  private var title: String {
+    switch page {
+    case .home: skill == nil ? "Bring one in" : "Share a skill"
+    case .agents: "Share with another helper"
+    case .paste: "Paste a link"
+    case .found: "Bring it in"
+    }
+  }
+
+  var body: some View {
+    MarketSheet(title: title, busy: action.busy) {
+      switch page {
+      case .home: home
+      case .agents: agentsPage
+      case .paste: pastePage
+      case .found: foundPage
+      }
+      if let note { Text(note).font(.system(size: 14)).foregroundStyle(Palette.green).padding(.horizontal, 4) }
+      InlineError(error: action.error)
+    }
+    .onAppear {
+      picked = Set(skill?.agentIds ?? [])
+      if let skill { fileURL = Self.write(skill) }
+    }
+    .fileImporter(isPresented: $importing, allowedContentTypes: [.plainText, UTType(filenameExtension: "md") ?? .plainText]) { result in
+      guard case .success(let url) = result else { return }
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+      if let text = try? String(contentsOf: url, encoding: .utf8) { found = SkillShare.read(file: text, name: url.lastPathComponent); page = .found }
+      else { action.error = "Couldn't read that file." }
+    }
+  }
+
+  @ViewBuilder private var home: some View {
+    if let skill {
+      CardGroup {
+        MarketRow(symbol: "wand.and.stars", tile: 50, title: skill.name, subtitle: used.isEmpty ? "No helper has it yet" : "Used by \(ShelfLogic.sentence(used))")
+      }
+      CardGroup {
+        Button { UIPasteboard.general.string = SkillShare.link(SharedSkill(name: skill.name, description: skill.description ?? "", content: skill.content ?? "", tags: skill.tags ?? [])); note = "Link copied. Anyone with it can paste it into Bring one in." } label: {
+          MarketRow(symbol: "link", title: "Copy a link", subtitle: "Anyone with it can bring the skill in")
+        }.buttonStyle(.plain)
+        if let fileURL {
+          ShareLink(item: fileURL) { MarketRow(symbol: "arrow.down.doc", title: "Save as a file", subtitle: "A .md file you can send") }.buttonStyle(.plain)
+        }
+        if store.canManage && !store.agents.isEmpty {
+          Button { page = .agents } label: { MarketRow(symbol: "person.2", title: "Share with another agent", subtitle: "Pick who gets a copy") }.buttonStyle(.plain)
+        }
+      }
+    }
+    if store.canManage {
+      if skill != nil { MarketLabel("Bring one in") }
+      CardGroup {
+        Button { page = .paste } label: { MarketRow(symbol: "link", title: "Paste a link", subtitle: "From a shared skill") }.buttonStyle(.plain)
+        Button { importing = true } label: { MarketRow(symbol: "doc.text", title: "Choose a file", subtitle: "A .md skill file") }.buttonStyle(.plain)
+        Button { dismiss(); onDevices() } label: { MarketRow(symbol: "laptopcomputer", title: "From your devices", subtitle: "Skills found in your harnesses") }.buttonStyle(.plain)
+      }
+    }
+  }
+
+  @ViewBuilder private var agentsPage: some View {
+    CardGroup {
+      ForEach(store.agents) { agent in
+        MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { picked.contains(agent.id) }, set: { if $0 { picked.insert(agent.id) } else { picked.remove(agent.id) } })) {
+          AgentAvatar(agent: agent, size: 30, showStatus: false)
+        }
+      }
+    }
+    HStack(spacing: 10) {
+      Button { page = .home } label: { Text("Back").frame(maxWidth: .infinity) }.secondaryButton()
+      Button {
+        guard let skill else { return }
+        action.run {
+          let have = Set(skill.agentIds ?? [])
+          for id in picked.subtracting(have) { try await store.setSkillAgent(skill.id, agent: id, on: true) }
+          for id in have.subtracting(picked) { try await store.setSkillAgent(skill.id, agent: id, on: false) }
+          dismiss()
+        }
+      } label: { Text("Share").frame(maxWidth: .infinity) }.primaryButton().disabled(action.busy)
+    }
+  }
+
+  @ViewBuilder private var pastePage: some View {
+    MarketField(label: nil, placeholder: "wisp-skill:…", text: $pasted, mono: true, lines: 3...6, plain: true)
+    HStack(spacing: 10) {
+      Button { page = .home } label: { Text("Back").frame(maxWidth: .infinity) }.secondaryButton()
+      Button {
+        if let s = SkillShare.read(link: pasted) ?? (pasted.contains("---") || pasted.contains("#") ? SkillShare.read(file: pasted) : nil) { found = s; action.error = nil; page = .found }
+        else { action.error = "That isn't a Wisp skill link or a SKILL.md file." }
+      } label: { Text("Continue").frame(maxWidth: .infinity) }.primaryButton().disabled(pasted.trimmed.isEmpty)
+    }
+  }
+
+  @ViewBuilder private var foundPage: some View {
+    if let found {
+      CardGroup { MarketRow(symbol: "wand.and.stars", tile: 50, title: found.name, subtitle: found.description.isEmpty ? "No description" : found.description) }
+      Text("It comes into your skills. Then pick which helpers have it.").font(.system(size: 14)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
+      HStack(spacing: 10) {
+        Button { page = .home } label: { Text("Back").frame(maxWidth: .infinity) }.secondaryButton()
+        Button {
+          action.run {
+            let made = try await store.saveSkill(nil, ["name": AnyEncodable(found.name), "description": AnyEncodable(found.description), "content": AnyEncodable(found.content), "tags": AnyEncodable(found.tags), "agentIds": AnyEncodable([String]())])
+            dismiss(); onBrought(made)
+          }
+        } label: { Text("Bring it in").frame(maxWidth: .infinity) }.primaryButton().disabled(action.busy)
+      }
+    }
+  }
+
+  private static func write(_ skill: HelperSkill) -> URL? {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(skill.slug ?? MarketText.slug(skill.name)).md")
+    do { try SkillShare.file(skill).write(to: url, atomically: true, encoding: .utf8); return url } catch { return nil }
   }
 }

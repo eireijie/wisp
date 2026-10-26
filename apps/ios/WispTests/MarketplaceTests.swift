@@ -12,6 +12,32 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertNil(try decode(SkillStoreDetail.self, ##"{"skill":{"id":"a:b","name":"B","description":"","source":{"id":"a","label":"A"},"url":"https://x.test","license":{"label":"Proprietary","open":false}},"content":null}"##).content)
   }
 
+  func testSkillLinkAndFileRoundTrip() throws {
+    let skill = SharedSkill(name: "Weekly report — Fridays", description: "Use when asked for a Friday update.", content: "# Weekly report\n\n1. Read the chats.\n2. Write five lines. ✓\n", tags: ["reports", "weekly"])
+    let link = SkillShare.link(skill)
+    XCTAssertTrue(link.hasPrefix("wisp-skill:"))
+    XCTAssertFalse(link.contains(" "))
+    XCTAssertEqual(SkillShare.read(link: "Here you go: \(link) (from Sam)"), skill)
+    XCTAssertNil(SkillShare.read(link: "https://example.com"))
+    XCTAssertNil(SkillShare.read(link: "wisp-skill:not-base64!!"))
+    let file = SkillShare.read(file: "---\nname: pdf-tools\ndescription: Work with PDFs\n---\nUse them.\n")
+    XCTAssertEqual(file.name, "PDF tools"); XCTAssertEqual(file.description, "Work with PDFs"); XCTAssertEqual(file.content, "Use them.")
+    XCTAssertEqual(SkillShare.read(file: "# Standup summary\n\nOne paragraph.", name: "notes.md").name, "Standup summary")
+    XCTAssertEqual(SkillShare.read(file: "Just words.", name: "my-skill/SKILL.md").name, "My skill")
+    let made = try decode(HelperSkill.self, ##"{"id":"s1","name":"Weekly report","slug":"weekly-report","description":"Use when asked.","content":"# Weekly report\n"}"##)
+    let written = SkillShare.file(made)
+    XCTAssertEqual(SkillShare.read(file: written).name, "Weekly report")
+  }
+
+  func testHarnessEffortAndLogins() throws {
+    let codex = try decode(HarnessSettings.self, ##"{"harness":"codex","configPath":"/c","model":null,"provider":"openai","providers":[],"apps":[],"plugins":[],"skills":[],"effort":"high"}"##)
+    XCTAssertTrue(codex.hasEffort); XCTAssertEqual(codex.effort, "high")
+    let claude = try decode(HarnessSettings.self, ##"{"harness":"claude-code","configPath":"/c","model":null,"provider":null,"providers":null,"apps":[],"plugins":[],"skills":[]}"##)
+    XCTAssertFalse(claude.hasEffort)
+    let logins = try decode(LoginsResponse.self, ##"{"source":{"kind":"1password","label":"1Password","vaultName":"Agents","connectedBy":"u1","connectedAt":"2026-10-25T00:00:00Z"},"logins":[{"id":"i1","title":"GitHub","site":"github.com","username":"yug","always":["a1"]}],"problem":null}"##)
+    XCTAssertEqual(logins.logins.first?.site, "github.com"); XCTAssertEqual(logins.source?.vaultName, "Agents")
+  }
+
   func testShelfDecodesAndRules() throws {
     let shelves = try decode([DeviceShelf].self, ##"[{"nodeId":"n1","nodeName":"MacBook","online":true,"items":[{"key":"claude-code:skill:pdf","harness":"claude-code","kind":"skill","name":"pdf","description":"Read PDFs","path":"/x"},{"key":"codex:mcp:github","harness":"codex","kind":"mcp","name":"github","path":"/y","transport":"http","url":"https://api.example.com/mcp","headers":["Authorization"]},{"key":"codex:mcp:db","harness":"codex","kind":"mcp","name":"db","path":"/z","transport":"stdio","command":"npx","args":["db"],"secrets":["DB_KEY"]}]}]"##)
     let items = shelves[0].items

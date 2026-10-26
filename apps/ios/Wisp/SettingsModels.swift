@@ -110,9 +110,12 @@ struct HarnessSettings: Decodable, Equatable {
   var skills: [HarnessSettingItem]
   var fixed: [String]?
   var modelChoices: [String]?
+  /** the reasoning effort it thinks with by default; only harnesses whose config has one Wisp can change send it */
+  var effort: String?
+  var hasEffort = false
   var error: String?
 
-  enum CodingKeys: String, CodingKey { case harness, account, accounts, multiAccount, agentAccounts, configPath, model, provider, providers, apps, plugins, skills, fixed, modelChoices, error }
+  enum CodingKeys: String, CodingKey { case harness, account, accounts, multiAccount, agentAccounts, configPath, model, provider, providers, apps, plugins, skills, fixed, modelChoices, effort, error }
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     harness = try c.decode(String.self, forKey: .harness)
@@ -129,6 +132,8 @@ struct HarnessSettings: Decodable, Equatable {
     skills = try c.decodeIfPresent([HarnessSettingItem].self, forKey: .skills) ?? []
     fixed = try c.decodeIfPresent([String].self, forKey: .fixed)
     modelChoices = try c.decodeIfPresent([String].self, forKey: .modelChoices)
+    hasEffort = c.contains(.effort)
+    effort = try c.decodeIfPresent(String.self, forKey: .effort)
     error = try c.decodeIfPresent(String.self, forKey: .error)
   }
   var currentAccount: HarnessAccount? { accounts.first { $0.id == account } ?? accounts.first }
@@ -139,7 +144,7 @@ struct HarnessSettings: Decodable, Equatable {
 struct HarnessesResponse: Decodable {
   struct Device: Decodable { var id: String; var name: String }
   struct User: Decodable, Identifiable { var id: String; var handle: String; var name: String; var harness: String }
-  struct Catalog: Decodable { var harness: String; var models: [ModelOption]; var defaultModel: String? }
+  struct Catalog: Decodable { var harness: String; var models: [ModelOption]; var defaultModel: String?; var efforts: [String]? }
   var device: Device
   var harnesses: [HarnessSettings]
   var agents: [User]
@@ -151,6 +156,7 @@ struct HarnessChange: Encodable {
   var op: String
   var model: String?
   var provider: String?
+  var effort: String?
   var kind: String?
   var id: String?
   var enabled: Bool?

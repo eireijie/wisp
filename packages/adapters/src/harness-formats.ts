@@ -498,6 +498,8 @@ export interface ConfigSummary {
   /** what Wisp shows but can't change for this harness ("model", "provider"), or everything ("file") */
   fixed?: ("model" | "provider" | "file")[];
   modelChoices?: string[];
+  /** the default reasoning effort, for harnesses whose config has one Wisp can change */
+  effort?: string | null;
 }
 
 /** Skills under each root, in order, the first of a name winning; `on` says which are on and `canToggle` whether that can change. */

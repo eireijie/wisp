@@ -40,6 +40,7 @@ struct NativeSettingsView: View {
   @ViewBuilder private var advanced: some View {
     NavigationLink("Agent runtimes") { AgentRuntimesView() }
     NavigationLink("Harnesses") { HarnessesView() }.accessibilityIdentifier("settings-harnesses")
+    NavigationLink("Logins") { LoginsView() }.accessibilityIdentifier("settings-logins")
     NavigationLink("Connections") { ConnectionsSettingsView() }
   }
 }
