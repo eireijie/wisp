@@ -67,6 +67,7 @@ struct TeamBuilder: View {
   var onDone: () -> Void
   @State private var tab = Tab.steps
   @State private var editing: StepRef?
+  @State private var deleting: StepRef?
   @State private var adding: AddRequest?
   @State private var reordering = false
   @State private var templates = false
@@ -92,6 +93,12 @@ struct TeamBuilder: View {
       StepEditor(team: $team, stepId: ref.id, channelId: channelId) { editing = nil }
         .presentationDetents([.large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
     }
+    .confirmationDialog("Delete this step?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+      Button("Delete step", role: .destructive) {
+        if let id = deleting?.id { team = team.removingStep(id) }
+        deleting = nil
+      }
+    } message: { Text("What led to it will lead to what came after it.") }
     .sheet(item: $adding) { request in
       AddStepSheet(team: team, request: request) { kind, anchor in add(kind, request: request, anchor: anchor) }
         .presentationDetents([.medium, .large]).presentationDragIndicator(.visible).presentationBackground(Palette.sheet).presentationCornerRadius(Corner.sheet)
@@ -210,7 +217,9 @@ struct TeamBuilder: View {
           }
           HStack(alignment: .top, spacing: 10) {
             ForEach(row) { s in
-              StepCard(team: team, step: s, wide: row.count == 1, problem: team.problem(of: s)) { editing = StepRef(id: s.id) } onGrip: { reordering = true }
+              StepCard(team: team, step: s, wide: row.count == 1, problem: team.problem(of: s)) { editing = StepRef(id: s.id) } onGrip: { reordering = true } onDelete: {
+                if team.deleteNeedsConfirm(s.id) { deleting = StepRef(id: s.id) } else { team = team.removingStep(s.id) }
+              }
             }
           }
           .padding(.horizontal, 18)
@@ -381,6 +390,7 @@ private struct StepCard: View {
   var problem: String?
   var open: () -> Void
   var onGrip: () -> Void
+  var onDelete: () -> Void
 
   private var agent: Agent? { team.agentId(of: step).flatMap { store.agent($0) } }
   private var number: Int { team.number(of: step.id) }
@@ -436,6 +446,11 @@ private struct StepCard: View {
       .contentShape(RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     }
     .buttonStyle(.plain)
+    .contextMenu {
+      Button(action: open) { Label("Edit step", systemImage: "pencil") }
+      Button(role: .destructive, action: onDelete) { Label("Delete step", systemImage: "trash") }
+    }
+    .accessibilityAction(named: "Delete step", onDelete)
     .accessibilityElement(children: .combine)
     .accessibilityLabel("Step \(number), \(title), \(who)")
     .accessibilityHint("Edit this step")

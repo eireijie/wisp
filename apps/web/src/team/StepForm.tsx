@@ -282,7 +282,7 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
         </>
       )}
 
-      <MoreOptions about="kind of step, delete" className="pt-1">
+      <MoreOptions about="kind of step" className="pt-1">
         <div className="space-y-3">
           <PickBox
             label="Kind of step"
@@ -291,12 +291,15 @@ export function StepForm({ team, stepId, onChange, onDelete, channelId }: { team
             options={(Object.keys(KIND_NAME) as TeamStepKind[]).map((k) => ({ value: k, label: KIND_NAME[k] }))}
             onPick={(k) => onChange(retype(team, stepId, k as TeamStepKind, agents))}
           />
-          <button type="button" onClick={onDelete} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-card text-body text-bad hover:bg-hover">
-            <Trash2 size={16} aria-hidden /> Delete step
-          </button>
-          <p className="px-2 text-xs text-faint">What led to it will lead to what came after it.</p>
         </div>
       </MoreOptions>
+
+      <div className="space-y-1.5 pt-2">
+        <button type="button" onClick={onDelete} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-card text-body text-bad hover:bg-hover">
+          <Trash2 size={16} aria-hidden /> Delete step
+        </button>
+        <p className="px-2 text-xs text-faint">What led to it will lead to what came after it.</p>
+      </div>
     </div>
   );
 }
