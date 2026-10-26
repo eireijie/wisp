@@ -176,62 +176,6 @@ struct ChannelTeam: Codable, Hashable {
       try c.encodeIfPresent(harness, forKey: .harness)
     }
   }
-
-  /** One box on a team's flow chart (TeamStep in packages/core). */
-  struct Step: Codable, Hashable, Identifiable {
-    enum Kind: String, Codable, CaseIterable { case `do`, review, handOut = "hand_out" }
-    var id: String
-    var roleId: String
-    var kind: Kind
-    /** what the role does here, e.g. "Draft a thorough plan" */
-    var action: String
-    /** the step after this one (after approval, for a review); nil = the flow ends here */
-    var next: String?
-    /** review: where the work goes back with the notes */
-    var sendBackTo: String? = nil
-    /** rounds of changes before it asks a person */
-    var maxRounds: Int? = nil
-    /** hand-out: the roles the pieces go to, and the role that checks each piece */
-    var handTo: [String]? = nil
-    var reviewBy: String? = nil
-    var x: Double = 0
-    var y: Double = 0
-
-    private enum K: String, CodingKey { case id, roleId, kind, action, next, sendBackTo, maxRounds, handTo, reviewBy, x, y }
-    init(id: String, roleId: String, kind: Kind, action: String, next: String?, sendBackTo: String? = nil, maxRounds: Int? = nil, handTo: [String]? = nil, reviewBy: String? = nil, x: Double = 0, y: Double = 0) {
-      self.id = id; self.roleId = roleId; self.kind = kind; self.action = action; self.next = next
-      self.sendBackTo = sendBackTo; self.maxRounds = maxRounds; self.handTo = handTo; self.reviewBy = reviewBy; self.x = x; self.y = y
-    }
-    init(from decoder: Decoder) throws {
-      let c = try decoder.container(keyedBy: K.self)
-      id = try c.decode(String.self, forKey: .id)
-      roleId = try c.decode(String.self, forKey: .roleId)
-      kind = (try? c.decode(Kind.self, forKey: .kind)) ?? .do
-      action = (try? c.decode(String.self, forKey: .action)) ?? ""
-      next = try c.decodeIfPresent(String.self, forKey: .next)
-      sendBackTo = try c.decodeIfPresent(String.self, forKey: .sendBackTo)
-      maxRounds = try c.decodeIfPresent(Int.self, forKey: .maxRounds)
-      handTo = try c.decodeIfPresent([String].self, forKey: .handTo)
-      reviewBy = try c.decodeIfPresent(String.self, forKey: .reviewBy)
-      x = (try? c.decode(Double.self, forKey: .x)) ?? 0
-      y = (try? c.decode(Double.self, forKey: .y)) ?? 0
-    }
-    // the hub wants next even when the flow ends here
-    func encode(to encoder: Encoder) throws {
-      var c = encoder.container(keyedBy: K.self)
-      try c.encode(id, forKey: .id)
-      try c.encode(roleId, forKey: .roleId)
-      try c.encode(kind, forKey: .kind)
-      try c.encode(action, forKey: .action)
-      try c.encode(next, forKey: .next)
-      try c.encodeIfPresent(sendBackTo, forKey: .sendBackTo)
-      try c.encodeIfPresent(maxRounds, forKey: .maxRounds)
-      try c.encodeIfPresent(handTo, forKey: .handTo)
-      try c.encodeIfPresent(reviewBy, forKey: .reviewBy)
-      try c.encode(x, forKey: .x)
-      try c.encode(y, forKey: .y)
-    }
-  }
 }
 
 struct Reaction: Codable, Hashable {
@@ -426,6 +370,9 @@ struct Approval: Codable, Identifiable, Hashable {
     var source: String?
     var ownerId: String
   }
+  /** set when it's an ask-me step of a team's flow: deciding it moves that request on */
+  var flow: Flow? = nil
+  struct Flow: Codable, Hashable { var flowId: String; var stepId: String }
 }
 
 struct Frame { var image: Data; var width: Int; var height: Int }

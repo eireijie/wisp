@@ -1,4 +1,4 @@
-import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
+import { channelTeams, chartFromSteps, cleanRulePath, hasSteps, isGraphTeam, migrateTeam, parseSubjectKey, subjectKey, teamOf, type AccessRule, type Actor, type Agent, type AgentSettings, type Approval, type Channel, type ChannelNotify, type ChannelSettings, DEFAULT_CHANNEL_SETTINGS, type Computer, type ComputerConfig, type ComputerKind, type ComputerStatus, type ContextUsage, type DeviceCapabilities, type Discussion, type DiscoveredAgent, type HarnessCatalog, type Team, type HarnessId, type MemoryLevel, type Message, type MessagePart, type Reaction, type Role, type Routine, type Section, type Subject, type User, type UserPrefs, type DeviceRole, type OwnRemoteDesktop, type BackgroundWork, type Followup, type Change } from "@wisp/core";
 import { id, now } from "./auth.ts";
 import type { Db } from "./db.ts";
 
@@ -394,11 +394,11 @@ export class Store {
 
   // --- approvals ------------------------------------------------------------
 
-  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; login?: Approval["login"] }): Approval {
+  createApproval(a: { workspaceId: string; agentId: string; channelId: string; threadId: string | null; summary: string; details: string; login?: Approval["login"]; flow?: Approval["flow"] }): Approval {
     const approvalId = id("apr");
     this.db
-      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, login_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)")
-      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.login ? JSON.stringify(a.login) : null);
+      .prepare("INSERT INTO approvals (id, workspace_id, agent_id, channel_id, thread_id, summary, details, status, created_at, login_json, flow_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)")
+      .run(approvalId, a.workspaceId, a.agentId, a.channelId, a.threadId, a.summary, a.details, now(), a.login ? JSON.stringify(a.login) : null, a.flow ? JSON.stringify(a.flow) : null);
     return this.approval(approvalId)!;
   }
 
@@ -540,6 +540,24 @@ export class Store {
     return { ...rest, private: !!r.private, settings: { ...DEFAULT_CHANNEL_SETTINGS, ...settings } };
   }
 
+  /**
+   * Teams that run on a single chain of steps (and the roles that hold their prompts) become flow
+   * charts: every step gets its prompt and all its arrows spelled out. Nothing is removed, and
+   * teams already in the new form are left alone.
+   */
+  migrateTeamSteps(): number {
+    const rows = this.db.prepare("SELECT id, settings_json FROM channels WHERE settings_json LIKE '%\"steps\"%'").all() as { id: string; settings_json: string }[];
+    let n = 0;
+    for (const r of rows) {
+      const team = this.channel(r.id)?.settings.team;
+      if (!team?.steps?.length || isGraphTeam(team)) continue;
+      const migrated = migrateTeam(team);
+      this.updateChannel(r.id, { settings: { team: { ...migrated, ...chartFromSteps(migrated, team.nodes) } } });
+      n++;
+    }
+    return n;
+  }
+
   channel(channelId: string): Channel | undefined {
     return this.toChannel(this.db.prepare(`SELECT ${Store.CHANNEL_COLS} FROM channels WHERE id = ?`).get(channelId) as never);
   }
@@ -583,10 +601,11 @@ export class Store {
       if (!settings) continue;
       if (settings.defaultAgentId === agentId) this.updateChannel(r.id, { settings: { defaultAgentId: null } });
       const team = settings.team;
-      if (hasSteps(team) && team!.roles!.some((r) => r.agentId === agentId)) {
-        // a team with roles and steps keeps them; the agent's roles just need someone new
-        const roles = team!.roles!.map((r) => (r.agentId === agentId ? { ...r, agentId: null } : r));
-        this.updateChannel(r.id, { settings: { team: { ...team!, roles, ...chartFromSteps({ roles, steps: team!.steps }, team!.nodes) } } });
+      if (hasSteps(team) && (team!.roles?.some((r) => r.agentId === agentId) || team!.steps!.some((s) => s.agentId === agentId))) {
+        // a team with steps keeps them; the agent's steps (and roles) just need someone new
+        const roles = (team!.roles ?? []).map((r) => (r.agentId === agentId ? { ...r, agentId: null } : r));
+        const steps = team!.steps!.map((s) => (s.agentId === agentId ? { ...s, agentId: null } : s));
+        this.updateChannel(r.id, { settings: { team: { ...team!, roles, steps, ...chartFromSteps({ roles, steps }, team!.nodes) } } });
       } else if (team?.nodes.some((n) => n.agentId === agentId)) {
         const above = team.edges.filter((e) => e.to === agentId).map((e) => e.from);
         const below = team.edges.filter((e) => e.from === agentId).map((e) => e.to);
@@ -1346,6 +1365,7 @@ type ApprovalRow = {
   created_at: string;
   decided_at: string | null;
   login_json: string | null;
+  flow_json: string | null;
 };
 
 function toApproval(r: ApprovalRow): Approval {
@@ -1363,6 +1383,7 @@ function toApproval(r: ApprovalRow): Approval {
     createdAt: r.created_at,
     decidedAt: r.decided_at,
     login: r.login_json ? JSON.parse(r.login_json) : null,
+    flow: r.flow_json ? JSON.parse(r.flow_json) : null,
   };
 }
 

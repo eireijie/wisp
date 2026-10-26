@@ -542,6 +542,11 @@ export function registerComputerApi(app: FastifyInstance, hub: Hub, h: Helpers) 
     }
     const decided = store.decideApproval(a.id, body.approve ? "approved" : "denied", c.actor.id, body.note)!;
     hub.broadcast(c.workspaceId, { type: "approval", approval: decided }, hub.audience(a.channelId));
+    if (a.flow) {
+      // an ask-me step of a team's flow: the team moves on (or goes back with your note) instead of an agent being told
+      hub.flows.askDecided(a, body.approve, body.note, c.actor.id);
+      return decided;
+    }
     if (agent && store.channel(a.channelId)) {
       const verdict = body.approve ? `Approved: go ahead with "${a.summary}".` : `Don't do "${a.summary}".`;
       hub.postMessage({ channelId: a.channelId, threadId: a.threadId, author: c.actor, body: `@${agent.handle} ${verdict}${note}` });

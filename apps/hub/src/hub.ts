@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import { DEFAULT_ROUNDS, hasSteps, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
+import { DEFAULT_ROUNDS, hasSteps, migrateTeam, stepAgentId, stepGraph, stepLabel, stepOrder, BUILTIN_SKILLS, HubToNode, agentSkillPath, skillFile, LoopGuard, NodeToHub, agentCommands, parseCommand, skillRequest, type AgentCommand, type ChannelTeam, harnessLabel, runsInVm, signInProblem, type Agent, parseMentions, readTunnelFrame, soulPath, type Actor, type AgentEvent, type ClientEvent, type Computer, type ComputerSpec, type Message, type MessagePart, type RunWorkspace, type ShelfItem } from "@wisp/core";
 import { id } from "./auth.ts";
 import { Computers } from "./computers.ts";
 import { Logins } from "./logins.ts";
@@ -1019,30 +1019,42 @@ export class Hub {
   }
 
   /**
-   * A stepped team, as one of its agents sees it: its roles and what they mean, the steps in order,
-   * and who fills every role. Wisp hands out each step as a task, so agents don't chase each other.
+   * A team that runs on steps, as one of its agents sees it: the steps (what happens, in order, and
+   * what runs at the same time), who does each, and the instructions for the ones it does. Wisp
+   * hands out each step as a task, so agents don't chase each other.
    */
   stepsSection(channelName: string, team: ChannelTeam, agentId: string): string {
-    const roles = team.roles ?? [];
-    const mine = roles.filter((r) => r.agentId === agentId);
-    if (!mine.length) return "";
-    const order = stepOrder(team.steps ?? []);
+    const t = migrateTeam(team);
+    const roles = t.roles ?? [];
+    const all = t.steps ?? [];
+    const mineRoles = roles.filter((r) => r.agentId === agentId);
+    const mineSteps = all.filter((s) => stepAgentId(t, s) === agentId);
+    if (!mineRoles.length && !mineSteps.length) return "";
+    const order = stepOrder(all);
+    const g = stepGraph(all);
     const num = (id: string | null | undefined) => order.findIndex((s) => s.id === id) + 1;
+    const nameOf = (s: (typeof all)[number]) => roles.find((r) => r.id === s.roleId)?.name ?? this.store.agent(stepAgentId(t, s) ?? "")?.name ?? "";
     const steps = order.map((s, i) => {
-      const extra =
-        s.kind === "review"
-          ? ` Approves, or sends it back to step ${num(s.sendBackTo)} (up to ${s.maxRounds ?? DEFAULT_ROUNDS} rounds).`
-          : s.kind === "hand_out"
-            ? ` Hands pieces to ${(s.handTo ?? []).map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean).join(", ")}${s.reviewBy ? `; ${roles.find((x) => x.id === s.reviewBy)?.name} checks each piece` : ""}.`
-            : "";
-      return `${i + 1}. ${stepLabel(s, roles)}.${extra}`;
+      const ins = g.ins.get(s.id) ?? [];
+      const bits: string[] = [];
+      if (ins.length) bits.push(`Uses the result${ins.length > 1 ? "s" : ""} of step${ins.length > 1 ? "s" : ""} ${ins.map(num).join(" and ")}${ins.length > 1 ? " (waits for all of them)" : ""}.`);
+      if (s.kind === "review") bits.push(`Approves, or sends it back to step ${num(s.sendBackTo)} (up to ${s.maxRounds ?? DEFAULT_ROUNDS} rounds).`);
+      if (s.kind === "hand_out") bits.push(`Hands pieces to ${(s.handTo ?? []).map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean).join(", ")}${s.reviewBy ? `; ${roles.find((x) => x.id === s.reviewBy)?.name} checks each piece` : ""}.`);
+      if (s.kind === "ask") bits.push("A person approves it first.");
+      if (s.kind === "handoff") bits.push(`Hands the work to #${this.store.channel(s.handoffTo ?? "")?.name ?? "another team"}.`);
+      if (s.kind === "branch") bits.push(`Decides: ${s.rule ? `result ${s.rule.op.replace("_", " ")} “${s.rule.value}”` : (s.condition ?? "").trim()}.`);
+      const label = `${s.kind === "ask" ? "A person" : s.kind === "handoff" ? "Another team" : nameOf(s) || "Step"}: ${s.action.trim() || stepLabel(s, roles)}`;
+      return `${i + 1}. ${label}.${bits.length ? ` ${bits.join(" ")}` : ""}`;
     });
-    const people = roles.filter((r) => r.agentId && this.store.agent(r.agentId)).map((r) => `- ${r.name}: ${this.handleOf(r.agentId!)}${r.agentId === agentId ? " (you)" : ""}`);
+    const agents = [...new Set(all.map((s) => stepAgentId(t, s)).filter((a): a is string => !!a && !!this.store.agent(a)))];
+    const people = agents.map((a) => `- ${this.store.agent(a)!.name}: ${this.handleOf(a)}${a === agentId ? " (you)" : ""}`);
+    const own = mineSteps.filter((s) => (s.prompt ?? "").trim() && !mineRoles.some((r) => r.id === s.roleId && r.description.trim() === (s.prompt ?? "").trim()));
     return [
       `## Your team in #${channelName}`,
-      ...mine.map((r) => `You are the ${r.name}. ${r.description.trim()}`),
-      `How this team works. A new message in the channel starts at step 1; Wisp hands each step to whoever fills its role as a task, with what the step before produced. When you're handed a step, do it and finish the task with task_update; the next step starts on its own.\n${steps.join("\n")}`,
-      `Who fills each role:\n${people.join("\n")}`,
+      ...mineRoles.map((r) => `You are the ${r.name}. ${r.description.trim()}`),
+      ...own.map((s) => `Your instructions for step ${num(s.id)} (${s.action.trim() || "no title"}): ${(s.prompt ?? "").trim()}`),
+      `How this team works. A new message in the channel starts every step nothing comes before, all at once; a step with several inputs waits for all of them. Wisp hands each step to its agent as a task, with what the steps before produced. When you're handed a step, do it and finish the task with task_update; the next steps start on their own.\n${steps.join("\n")}`,
+      `Who is on the team:\n${people.join("\n")}`,
       "Ask a teammate something with an @mention in the thread. Don't hand the steps themselves to anyone: Wisp does that. Use task_delegate only when your step tells you to hand out pieces.",
     ].join("\n");
   }
