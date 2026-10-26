@@ -172,14 +172,14 @@ struct MemoryHome: View {
       }
     }
     SectionCaption("Recent changes", trailing: AnyView(
-      Button { route = .activity } label: { Text("All activity").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)).underline() }
+      Button { route = .activity } label: { Text("All activity").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }
         .buttonStyle(.plain).accessibilityIdentifier("memory-all-activity")))
     if browse.changes == nil { ProgressView().frame(maxWidth: .infinity).padding() }
     else if recent.isEmpty {
       CardGroup {
         VStack(alignment: .leading, spacing: 8) {
           Text("Nothing written yet. Notes you and your agents write show up here.").foregroundStyle(Palette.muted)
-          if store.canManage && browse.viewAs == nil { Button("Write the first note") { creating = true }.buttonStyle(.borderless) }
+          if store.canManage && browse.viewAs == nil { Button { creating = true } label: { Text("Write the first note").font(.system(size: 15, weight: .medium)).foregroundStyle(Color(light: 0x0A64D6, dark: 0x9EC5FF)) }.buttonStyle(.plain) }
         }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
       }
     } else {
