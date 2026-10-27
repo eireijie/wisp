@@ -50,10 +50,60 @@ enum Palette {
   static let cardBorder = Color(light: 0x000000, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.08)
   static let blue = Color(hex: 0x0A84FF)
   /** text that says an agent is working */
-  static let green = Color(light: 0x1E9E52, dark: 0x5BD68A)
+  static let green = Color(light: 0x1E9E52, dark: 0x30D158)
   /** online dots */
-  static let online = Color(hex: 0x34C759)
+  static let online = Color(light: 0x1E9E52, dark: 0x30D158)
   static let red = Color(light: 0xD92D3A, dark: 0xFF6B6B)
+
+  // MARK: small pops of color (pop-Palette). A pop is a solid icon or dot, usually on a 16% tint of itself; never a fill behind text.
+
+  /** each tab's accent: its icon and highlight while you are on it */
+  static let tabInbox = Color(light: 0xC77700, dark: 0xFF9F0A)
+  static let tabChats = Color(light: 0x0A6FE0, dark: 0x0A84FF)
+  static let tabAgents = Color(light: 0x9B3FD0, dark: 0xBF5AF2)
+  static let tabComputers = Color(light: 0x0A8FB8, dark: 0x64D2FF)
+  /** online and done: dots, checks, "handed back" */
+  static let statusOnline = Color(light: 0x1E9E52, dark: 0x30D158)
+  /** working: pulsing dots and the working line */
+  static let statusWorking = Color(light: 0x0A6FE0, dark: 0x0A84FF)
+  /** needs you: approvals, help requests, "took control" */
+  static let statusNeeds = Color(light: 0xC77700, dark: 0xFF9F0A)
+  /** a problem, or recording */
+  static let statusProblem = Color(light: 0xD92D3A, dark: 0xFF453A)
+  /** offline and idle stay gray on purpose */
+  static let statusOffline = Color(light: 0x7C7C86, dark: 0x8E8E96)
+  /** @mentions */
+  static let mention = tabAgents
+  /** computer and device icons */
+  static let computer = tabComputers
+  /** the tools while you are in control of a computer */
+  static let toolTeach = statusProblem
+  static let toolClipboard = Color(light: 0xB38F00, dark: 0xFFD60A)
+  static let toolFiles = Color(light: 0x0A6FE0, dark: 0x0A84FF)
+  static let toolKeys = tabComputers
+  static let toolScreenshot = tabAgents
+  /** the call button's icon */
+  static let call = statusOnline
+}
+
+extension Color {
+  /** The 16% tint that sits behind a solid pop. */
+  var tint16: Color { opacity(0.16) }
+}
+
+/** A solid line icon on a 16% tint of its own color: the pop. */
+struct PopIcon: View {
+  var symbol: String
+  var color: Color
+  var size: CGFloat = 40
+  var body: some View {
+    Image(systemName: symbol)
+      .font(.system(size: size * 0.42, weight: .regular))
+      .foregroundStyle(color)
+      .frame(width: size, height: size)
+      .background(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(color.tint16))
+      .accessibilityHidden(true)
+  }
 }
 
 extension View {

@@ -245,7 +245,7 @@ extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
 
 /** Dots that pulse while an agent works. */
 struct WorkingDots: View {
-  var color: Color = Palette.green
+  var color: Color = Palette.statusWorking
   @State private var on = false
   @ReduceMotion private var reduceMotion
 

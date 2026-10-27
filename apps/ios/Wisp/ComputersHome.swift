@@ -22,33 +22,32 @@ struct ComputerPill: View {
 
   private var fg: Color {
     switch tone {
-    case .online: Palette.green
-    case .working: Color(light: 0x0A66CC, dark: 0x5EA8FF)
-    case .neutral: Palette.muted
-    case .warn: Color(light: 0xB26A00, dark: 0xFFB454)
-    case .bad: Palette.red
+    case .online: Palette.statusOnline
+    case .working: Palette.statusWorking
+    case .neutral: Palette.statusOffline
+    case .warn: Palette.statusNeeds
+    case .bad: Palette.statusProblem
     }
   }
   private var bg: Color {
     switch tone {
-    case .online: Palette.online.opacity(0.14)
-    case .working: Palette.blue.opacity(0.16)
-    case .neutral: Palette.control
-    case .warn: Color.orange.opacity(0.16)
-    case .bad: Palette.red.opacity(0.14)
+    case .online: Palette.statusOnline.tint16
+    case .working: Palette.statusWorking.tint16
+    case .neutral: Palette.statusOffline.tint16
+    case .warn: Palette.statusNeeds.tint16
+    case .bad: Palette.statusProblem.tint16
     }
   }
 
   var body: some View {
     HStack(spacing: 6) {
-      if dot { Circle().fill(tone == .online ? Palette.online : fg).frame(width: 7, height: 7) }
+      if dot { Circle().fill(fg).frame(width: 7, height: 7) }
       Text(text).font(.system(size: 12, weight: .semibold)).lineLimit(1)
     }
     .foregroundStyle(fg)
     .padding(.horizontal, 10)
     .frame(height: 24)
     .background(Capsule().fill(bg))
-    .overlay(Capsule().strokeBorder(tone == .neutral ? Palette.hairline : .clear))
     .fixedSize()
   }
 }
@@ -317,7 +316,7 @@ struct ComputersView: View {
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Palette.card))
-    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.blue.opacity(0.5)))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.statusNeeds.opacity(0.6)))
     .accessibilityIdentifier("computers-help")
   }
 }
@@ -341,9 +340,9 @@ struct GroupIcon: View {
   var body: some View {
     Image(systemName: symbol)
       .font(.system(size: 16, weight: .regular))
-      .foregroundStyle(dim ? Palette.faint : Palette.text)
+      .foregroundStyle(dim ? Palette.statusOffline : Palette.computer)
       .frame(width: 40, height: 40)
-      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
+      .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill((dim ? Palette.statusOffline : Palette.computer).tint16))
       .accessibilityHidden(true)
   }
 }
@@ -360,16 +359,17 @@ struct ComputerRow: View {
       VStack(alignment: .leading, spacing: 3) {
         HStack(spacing: 6) {
           if let a = computer.agentIds.first.flatMap({ store.agent($0) }) { AgentAvatar(agent: a, size: 20, showStatus: false) }
-          else { Image(systemName: computer.kind == "device" ? "lock" : "display").font(.system(size: 13)).foregroundStyle(Palette.faint) }
+          else { Image(systemName: computer.kind == "device" ? "lock" : "display").font(.system(size: 13)).foregroundStyle(Palette.computer) }
           Text(computer.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
         }
-        Text(store.doing(computer)).font(.system(size: 13)).foregroundStyle(computer.help != nil ? Palette.blue : Palette.muted).lineLimit(1)
+        Text(store.doing(computer)).font(.system(size: 13)).foregroundStyle(computer.help != nil ? Palette.statusNeeds : Palette.muted).lineLimit(1)
       }
       Spacer(minLength: 6)
       ComputerPill(text: s.label, tone: s.tone)
     }
     .padding(.horizontal, 14)
     .frame(minHeight: 70)
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.statusNeeds, lineWidth: 1.5).opacity(computer.help != nil ? 1 : 0))
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
     .accessibilityIdentifier("computer-\(computer.id)")
