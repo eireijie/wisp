@@ -290,12 +290,12 @@ export function withMentions(text: string) {
 function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean; needs?: boolean }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = useLongPress((x, y) => chat.channel && setMenu({ x, y }));
-  const size = 56;
+  const size = 68;
   const unread = chat.unread > 0 && !chat.muted;
   const url = chat.channel ? href({ view: "chat", channelId: chat.channel.id, threadId: null }) : undefined;
   const inner = (
     <>
-      <span className="shrink-0 flex items-center" style={{ width: 60, height: size }}>
+      <span className="shrink-0 flex items-center" style={{ width: 76, height: size }}>
         <ChatAvatar chat={chat} size={size} />
       </span>
       <span className="flex-1 min-w-0 flex flex-col gap-1">
@@ -318,7 +318,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
       </span>
     </>
   );
-  const cls = cx("w-full flex items-center text-left transition-colors", page ? "gap-3.5 py-3 px-2 rounded-xl min-h-[80px]" : "gap-3 px-2.5 py-2.5 rounded-xl min-h-[76px]", active ? "bg-side-active" : "hover:bg-hover");
+  const cls = cx("w-full flex items-center text-left transition-colors", page ? "gap-3.5 py-3 px-2 rounded-xl min-h-[92px]" : "gap-3 px-2.5 py-2.5 rounded-xl min-h-[88px]", active ? "bg-side-active" : "hover:bg-hover");
   return (
     <div onContextMenu={(e) => chat.channel && (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))} {...press}>
       {url ? (
