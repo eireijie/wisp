@@ -171,7 +171,7 @@ export function Panel({ children, className }: { children: ReactNode; className?
 }
 
 /** One row in a Panel: a tile, a title with a line under it, and something on the right. */
-export function Item({ icon, title, sub, right, onClick, href, danger, disabled, children, label }: { icon?: ReactNode; title: ReactNode; sub?: ReactNode; right?: ReactNode; onClick?: () => void; href?: string; danger?: boolean; disabled?: boolean; children?: ReactNode; label?: string }) {
+export function Item({ icon, title, sub, right, onClick, href, danger, disabled, children, label, selected }: { icon?: ReactNode; title: ReactNode; sub?: ReactNode; right?: ReactNode; onClick?: () => void; href?: string; danger?: boolean; disabled?: boolean; children?: ReactNode; label?: string; selected?: boolean }) {
   const body = (
     <>
       {icon}
@@ -193,7 +193,7 @@ export function Item({ icon, title, sub, right, onClick, href, danger, disabled,
     );
   const Main = href ? "a" : "button";
   return (
-    <div className="flex min-w-0 items-center hover:bg-hover">
+    <div className={cx("flex min-w-0 items-center hover:bg-hover", selected && "bg-hover")}>
       <Main {...(href ? { href } : { type: "button" as const, onClick, disabled })} aria-label={label} className={cx(cls, "disabled:opacity-60", !!right && "flex-1")}>
         {body}
       </Main>

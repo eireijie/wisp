@@ -99,10 +99,12 @@ struct ComputerDetail: View {
             if let help = c.help, !helpLater, !inControl { helpCard(c, help) }
             if let teach { TeachBar(session: teach, cancel: { stopTeaching(c) }, done: { savingLesson = true }) }
 
+            // the tools sit in a row above the screen, never on top of it
+            if inControl, c.isOnline {
+              HStack(spacing: 0) { Spacer(minLength: 0); toolBar(c) }.transition(.opacity)
+            }
+
             screen(c)
-              .overlay(alignment: .topTrailing) {
-                if inControl, c.isOnline { toolBar(c).transition(.opacity) }
-              }
               .overlay(alignment: .bottom) {
                 if let note {
                   Text(note).font(.footnote.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 8).glassCapsule().padding(10).transition(.opacity)
@@ -258,7 +260,7 @@ struct ComputerDetail: View {
   @ViewBuilder private func toolBar(_ c: Computer) -> some View {
     if !toolsOpen {
       Button { withAnimation(Motion.pick(Motion.soft, reduceMotion)) { toolsOpen = true } } label: { toolIcon("ellipsis", Palette.text) }
-        .buttonStyle(.press).glassCapsule().padding(8)
+        .buttonStyle(.press).glassCapsule().padding(2)
         .transition(.opacity)
         .accessibilityLabel("Show tools").accessibilityIdentifier("computer-tools-show")
     } else {
@@ -293,7 +295,7 @@ struct ComputerDetail: View {
     }
     .padding(3)
     .glassCapsule()
-    .padding(8)
+    .padding(2)
     .transition(.opacity)
     }
   }

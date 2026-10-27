@@ -431,6 +431,43 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
 
       {/* on short phones the page scrolls, so Take control / Hand back stays reachable */}
       <div className="flex-1 min-h-0 p-2 flex flex-col gap-2 overflow-y-auto md:overflow-visible">
+        {/* desktop: one slim bar above the screen, so nothing ever covers the remote screen */}
+        <div className="hidden md:flex shrink-0 items-center gap-2 h-10 px-1" data-testid="screen-bar">
+          <div className="flex items-center gap-2 min-w-0" data-testid="name-chip">
+            {back("size-8")}
+            {lead ? <AgentAvatar agent={lead} size={24} live /> : <Icon size={18} className="text-accent-computers shrink-0" />}
+            <span className="font-semibold text-sm truncate min-w-0 max-w-[8rem] xl:max-w-[14rem]" title={c.name}>{c.name}</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0 whitespace-nowrap" role="status" title={mine ? pausedFull : undefined} style={{ color: mine || c.help ? statusColor : undefined }}>
+              {statusDot}
+              <span className={cx("max-lg:sr-only", !(mine || c.help) && "text-muted")}>{statusText}</span>
+              {pausedNote && <span className="hidden 2xl:inline font-normal text-muted">· {pausedNote}</span>}
+            </span>
+            {infoBtn("size-8")}
+            {moreMenu("size-8")}
+          </div>
+
+          {mine && !teacher && (
+            <div className="flex items-center gap-0.5 shrink-0 ml-auto" role="toolbar" aria-label="Computer tools" data-testid="control-toolbar">
+              {canControl && tool("Teach a task", <Video size={16} />, "text-tool-teach", () => setPickTeach(true), false, "Do a task once while an agent watches; it saves it as a routine")}
+              {canTransfer && tool("Clipboard", <ClipboardList size={16} />, "text-tool-clip", () => toggle("clipboard"), panel === "clipboard", "Clipboard: copy and paste between it and this device")}
+              {canTransfer && tool("Files", <FolderOpen size={16} />, "text-tool-files", () => toggle("files"), panel === "files", "Files: download from it, upload to it")}
+              {tool("Keys", <Keyboard size={16} />, "text-tool-keys", () => setKeys((k) => !k), keys)}
+              {c.online && !c.paused && tool("Screenshot", <Camera size={16} />, "text-tool-shot", () => void saveScreenshot(c).catch((e) => setError(e.message)))}
+              <span className="hidden md:block w-px h-5 bg-line mx-1" aria-hidden="true" />
+              <span className="hidden md:inline-flex">{handBtn}</span>
+            </div>
+          )}
+          {sync.note && <span className="min-w-0 truncate text-xs text-muted" role="status">{sync.note}</span>}
+          {!mine && !teacher && (
+            <div className="flex items-center gap-2.5 min-w-0 ml-auto text-sm font-medium" role="status" data-testid="watching-pill">
+              {watchText}
+              {takeBtn}
+            </div>
+          )}
+        </div>
+
+        {sync.note && <span className="md:hidden shrink-0 truncate text-xs text-muted" role="status">{sync.note}</span>}
+
         {/* the panels and Keys sit beside the screen (not inside its keyboard capture), so local copy and paste in them stays local */}
         <div className="relative flex-1 min-h-[220px] md:min-h-[280px] rounded-xl overflow-hidden bg-black border border-line">
         <div
@@ -475,89 +512,51 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
               </span>
             </div>
           )}
-          {sync.note && (
-            <div className={cx("absolute left-1/2 -translate-x-1/2 z-20 max-w-[90%] truncate rounded-full bg-black/75 text-white px-4 h-9 leading-9 text-sm shadow-panel pointer-events-none", mine && keys && !teacher ? "bottom-[8rem]" : "bottom-4 md:bottom-16")} role="status">
-              {sync.note}
-            </div>
-          )}
 
-          {/* floating name chip (desktop) */}
-          <div className="hidden md:flex absolute top-3 left-3 z-20 glass rounded-full items-center gap-2 h-[42px] pl-1.5 pr-1.5 max-w-[calc(100%-1.5rem)]" data-testid="name-chip">
-            {back("size-8")}
-            {lead ? <AgentAvatar agent={lead} size={24} live /> : <Icon size={18} className="text-accent-computers shrink-0" />}
-            <span className="font-semibold text-sm truncate min-w-0 max-w-[8rem] xl:max-w-[14rem]" title={c.name}>{c.name}</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0 whitespace-nowrap" role="status" title={mine ? pausedFull : undefined} style={{ color: mine || c.help ? statusColor : undefined }}>
-              {statusDot}
-              <span className={cx("max-lg:sr-only", !(mine || c.help) && "text-muted")}>{statusText}</span>
-              {pausedNote && <span className="hidden 2xl:inline font-normal text-muted">· {pausedNote}</span>}
-            </span>
-            {infoBtn("size-8")}
-            {moreMenu("size-8")}
-          </div>
-
-          {/* the tools while you're in control */}
-          {mine && !teacher && (
-            <div className="absolute top-3 right-3 z-20 glass rounded-full flex items-center gap-0.5 h-[42px] px-1.5 max-w-[calc(100%-1.5rem)] m-menu" role="toolbar" aria-label="Computer tools" data-testid="control-toolbar">
-              {canControl && tool("Teach a task", <Video size={16} />, "text-tool-teach", () => setPickTeach(true), false, "Do a task once while an agent watches; it saves it as a routine")}
-              {canTransfer && tool("Clipboard", <ClipboardList size={16} />, "text-tool-clip", () => toggle("clipboard"), panel === "clipboard", "Clipboard: copy and paste between it and this device")}
-              {canTransfer && tool("Files", <FolderOpen size={16} />, "text-tool-files", () => toggle("files"), panel === "files", "Files: download from it, upload to it")}
-              {tool("Keys", <Keyboard size={16} />, "text-tool-keys", () => setKeys((k) => !k), keys)}
-              {c.online && !c.paused && tool("Screenshot", <Camera size={16} />, "text-tool-shot", () => void saveScreenshot(c).catch((e) => setError(e.message)))}
-              <span className="hidden md:block w-px h-5 bg-line mx-1" aria-hidden="true" />
-              <span className="hidden md:inline-flex">{handBtn}</span>
-            </div>
-          )}
-
-          {/* watching: a floating pill (desktop; on phones it sits in the bottom row) */}
-          {!mine && !teacher && (
-            <div className="hidden md:flex absolute bottom-4 left-1/2 -translate-x-1/2 z-20 glass rounded-full items-center gap-2.5 h-[42px] pl-4 pr-1.5 max-w-[90%] text-sm font-medium m-menu" role="status" data-testid="watching-pill">
-              {watchText}
-              {takeBtn}
-            </div>
-          )}
 
         </div>
-
-          {mine && keys && !teacher && (
-            <FloatingPanel
-              label="Keys"
-              onClose={() => setKeys(false)}
-              as="form"
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 glass rounded-xl p-2 flex flex-col gap-2 w-[min(40rem,calc(100%-1.5rem))] m-menu"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!typed) return;
-                void act({ action: "type", text: typed });
-                setTyped("");
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type on computer" aria-label="Type on computer" className="flex-1 min-w-0" />
-                <Button type="submit" disabled={!typed}>
-                  Send
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 overflow-x-auto [&>button]:shrink-0">
-                {[["Return", "Enter"], ["Tab", "Tab"], ["Escape", "Escape"], ["Delete", "Backspace"]].map(([label, key]) => (
-                  <Button key={label} type="button" onClick={() => void act({ action: "key", keys: key })}>
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </FloatingPanel>
-          )}
 
           {panel && (
             <FloatingPanel
               label={panel === "files" ? "Files" : "Clipboard"}
               onClose={() => setPanel(null)}
-              className="m-panel fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 md:absolute md:inset-x-auto md:right-3 md:top-[62px] md:bottom-auto md:w-80 md:max-h-[calc(100%-5rem)] overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-[16px] md:rounded-xl p-4 shadow-panel"
+              className="m-panel fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 md:absolute md:inset-x-auto md:right-3 md:top-3 md:bottom-auto md:w-80 md:max-h-[calc(100%-5rem)] overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-[16px] md:rounded-xl p-4 shadow-panel"
               testId="float-panel"
             >
               {panel === "files" ? <FilesPanel computer={c} onClose={() => setPanel(null)} refresh={filesChanged} onSent={sync.flash} /> : <ClipboardPanel computer={c} mine={mine} platform={platform} onClose={() => setPanel(null)} />}
             </FloatingPanel>
           )}
         </div>
+
+        {mine && keys && !teacher && (
+          <FloatingPanel
+            label="Keys"
+            onClose={() => setKeys(false)}
+            as="form"
+            className="shrink-0 glass rounded-xl p-2 flex flex-col gap-2 w-full m-menu"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!typed) return;
+              void act({ action: "type", text: typed });
+              setTyped("");
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type on computer" aria-label="Type on computer" className="flex-1 min-w-0" />
+              <Button type="submit" disabled={!typed}>
+                Send
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto [&>button]:shrink-0">
+              {[["Return", "Enter"], ["Tab", "Tab"], ["Escape", "Escape"], ["Delete", "Backspace"]].map(([label, key]) => (
+                <Button key={label} type="button" onClick={() => void act({ action: "key", keys: key })}>
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </FloatingPanel>
+        )}
+
 
         {/* phone: status and the one big action under the screen */}
         {!teacher && (

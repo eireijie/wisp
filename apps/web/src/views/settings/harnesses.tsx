@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowUp, Bot, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, Download, LogIn, UserMinus, FileCog } from "lucide-react";
+import { ArrowUp, ChevronLeft, Copy, ExternalLink, Loader2, Plus, Share2, UserPen, Download, LogIn, UserMinus, FileCog } from "lucide-react";
 import { harnessLabel, type Connector, type HarnessCatalog, type HarnessLogin, type HarnessSettings, type HarnessSettingsChange, type HarnessSettingItem } from "@wisp/core";
 import { api } from "../../api.ts";
 import { useDevices } from "../../devices.ts";
@@ -79,8 +79,6 @@ export function HarnessesPage() {
     if (s) setData((d) => d && { ...d, agents: r.agents, harnesses: d.harnesses.map((h) => (h.harness === harness ? s : h)) });
   };
 
-  const intro = <p className="px-1 text-sm text-faint">A harness is the program an agent thinks with. Sign in once and every agent that uses it is ready.</p>;
-
   if (devices === null) return <p className="text-sm text-muted">Loading…</p>;
   if (!device)
     return (
@@ -96,29 +94,19 @@ export function HarnessesPage() {
   const list = (
     <div className="space-y-4">
       <Panel>
-        <Item
-          icon={
-            <Tile size={40}>
-              <Bot size={20} strokeWidth={1.7} />
-            </Tile>
-          }
-          title={device.name}
-          sub={<span>On</span>}
-          right={
-            mine.length > 1 ? (
-              <Pick label="Device" value={device.id} onChange={(v) => (setPick(v), setTab(null))}>
-                {mine.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                    {d.online ? "" : " (offline)"}
-                  </option>
-                ))}
-              </Pick>
-            ) : undefined
-          }
-        />
+        {mine.length > 1 ? (
+          <SelectRow title="Computer" label="Computer" value={device.id} onChange={(v) => (setPick(v), setTab(null))}>
+            {mine.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+                {d.online ? "" : " (offline)"}
+              </option>
+            ))}
+          </SelectRow>
+        ) : (
+          <Item title={device.name} sub="On" />
+        )}
       </Panel>
-      {intro}
       {!online ? (
         <p className="px-1 text-sm text-muted">{device.name} is offline. Its harness settings show up when it's back.</p>
       ) : error ? (
@@ -143,6 +131,7 @@ export function HarnessesPage() {
                     sub={st.text}
                     right={st.badge ? <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge> : undefined}
                     onClick={() => setTab(h.harness)}
+                    selected={shown?.harness === h.harness}
                     label={`${harnessLabel(h.harness)}, ${st.text}`}
                   />
                 );
@@ -150,7 +139,7 @@ export function HarnessesPage() {
             </Panel>
           )}
           <Panel>
-            <Item icon={<Tile size={40}><Download size={20} strokeWidth={1.7} /></Tile>} title="Install a harness" sub={`Add another one to ${device.name}`} onClick={() => setInstalling(true)} />
+            <Item icon={<Download size={18} strokeWidth={1.7} className="text-muted" />} title="Install a harness" onClick={() => setInstalling(true)} />
           </Panel>
         </>
       )}
@@ -177,12 +166,24 @@ export function HarnessesPage() {
           list
         )}
       </div>
-      <div className="hidden gap-8 md:grid md:grid-cols-[18rem_minmax(0,1fr)]">
-        <div className="min-w-0">{list}</div>
-        <div className="min-w-0">{detail}</div>
+      <div className="hidden min-w-0 space-y-6 md:block">
+        {list}
+        {detail}
       </div>
       {installing && <InstallHarness device={device} onClose={() => setInstalling(false)} />}
     </>
+  );
+}
+
+/** A row in a card: its title over a picker that fills the row, so long names never spill out. */
+function SelectRow({ title, label, value, onChange, disabled, children }: { title: string; label: string; value: string; onChange: (v: string) => void; disabled?: boolean; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-2 px-4 py-3">
+      <div className="truncate text-body font-medium">{title}</div>
+      <Pick label={label} value={value} onChange={onChange} disabled={disabled} className="w-full min-w-0 max-w-none" >
+        {children}
+      </Pick>
+    </div>
   );
 }
 
@@ -193,7 +194,6 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sharing, setSharing] = useState<HarnessSettingItem | null>(null);
-  const st = signState(settings);
 
   const change = async (key: string, changes: HarnessSettingsChange[], optimistic?: HarnessSettings) => {
     setBusy(key);
@@ -228,9 +228,6 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
     <div className="space-y-6">
       <header className="flex items-center gap-3">
         <h2 className="t-title min-w-0 flex-1 truncate">{label}</h2>
-        {st.badge && (
-          <Badge tone={st.badge === "Signed in" ? "green" : "grey"}>{st.badge}</Badge>
-        )}
       </header>
       {settings.fixed?.includes("file") && <p className="px-1 text-[13px] text-muted">{settings.configPath.split("/").pop()} has comments in it, so Wisp only shows it. Change it on {device.name}.</p>}
 
@@ -241,25 +238,21 @@ function HarnessPanel({ device, settings, agents, catalog, onChange, onLoad }: {
         <Panel>
           <ModelRow settings={settings} catalog={catalog} busy={busy === "model"} onPick={(model) => change("model", [{ op: "model", model }])} />
           {settings.providers && (
-            <Item
+            <SelectRow
               title="Provider"
-              right={
-                <Pick
-                  label="Provider"
-                  value={settings.provider ?? ""}
-                  disabled={busy === "provider" || !!settings.fixed?.some((f) => f === "provider" || f === "file")}
-                  onChange={(v) => change("provider", [{ op: "provider", provider: v }], { ...settings, provider: v })}
-                >
-                  {!settings.provider && <option value="">Default</option>}
-                  {settings.providers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.id}
-                      {p.signedIn ? "" : " (not signed in)"}
-                    </option>
-                  ))}
-                </Pick>
-              }
-            />
+              label="Provider"
+              value={settings.provider ?? ""}
+              disabled={busy === "provider" || !!settings.fixed?.some((f) => f === "provider" || f === "file")}
+              onChange={(v) => change("provider", [{ op: "provider", provider: v }], { ...settings, provider: v })}
+            >
+              {!settings.provider && <option value="">Default</option>}
+              {settings.providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id}
+                  {p.signedIn ? "" : " (not signed in)"}
+                </option>
+              ))}
+            </SelectRow>
           )}
           {settings.effort !== undefined && (
             <div className="space-y-2.5 px-4 py-3.5">
@@ -331,7 +324,6 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
     onPick(text.trim());
     setTyping(false);
   };
-  const shownName = models.find((m) => m.id === value)?.label ?? value ?? "Automatic";
   return typing ? (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2 px-4 py-3">
       <span className="text-body font-medium">Default model</span>
@@ -344,27 +336,22 @@ function ModelRow({ settings, catalog, busy, onPick }: { settings: HarnessSettin
       </Sec>
     </form>
   ) : (
-    <Item
+    <SelectRow
       title="Default model"
-      sub={settings.model ? shownName : "Automatic"}
-      right={
-        <Pick
-          label="Default model"
-          value={value ?? ""}
-          disabled={busy || fixed}
-          onChange={(v) => (v === OTHER ? (setText(settings.model ?? ""), setTyping(true)) : onPick(v))}
-        >
-          {!settings.model && <option value="">{catalog?.defaultModel ? `Default (${catalog.models.find((m) => m.id === catalog.defaultModel)?.label ?? catalog.defaultModel})` : "Default"}</option>}
-          {!known && <option value={value!}>{value}</option>}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-          {!settings.modelChoices && <option value={OTHER}>Other…</option>}
-        </Pick>
-      }
-    />
+      label="Default model"
+      value={value ?? ""}
+      disabled={busy || fixed}
+      onChange={(v) => (v === OTHER ? (setText(settings.model ?? ""), setTyping(true)) : onPick(v))}
+    >
+      {!settings.model && <option value="">{catalog?.defaultModel ? `Default (${catalog.models.find((m) => m.id === catalog.defaultModel)?.label ?? catalog.defaultModel})` : "Default"}</option>}
+      {!known && <option value={value!}>{value}</option>}
+      {models.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.label}
+        </option>
+      ))}
+      {!settings.modelChoices && <option value={OTHER}>Other…</option>}
+    </SelectRow>
   );
 }
 
@@ -414,7 +401,6 @@ function WispAndDeviceApps({ settings, users, busy, onToggle }: { settings: Harn
 function ItemRow({ item, note, busy, onToggle, onShare }: { item: HarnessSettingItem; note: string; busy?: boolean; onToggle: (on: boolean) => void; onShare?: () => void }) {
   return (
     <Item
-      icon={<Tile size={40}><Bot size={20} strokeWidth={1.7} /></Tile>}
       title={item.name}
       sub={<span title={item.detail ?? note}>{note}</span>}
       right={
@@ -563,7 +549,7 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
               key={a.id}
               icon={<HarnessTile harness={settings.harness} />}
               title={a.who ?? a.label}
-              sub={who.length ? `Used by ${sentence(who)}` : a.signedIn === false ? "Not signed in" : shownNow && settings.accounts.length > 1 ? "Showing now" : a.who && a.who !== a.label ? a.label : "Not used by an agent yet"}
+              sub={who.length ? `Used by ${sentence(who)}` : a.signedIn === false ? "Not signed in" : shownNow && settings.accounts.length > 1 ? "Showing now" : a.who && a.who !== a.label ? a.label : "Not used yet"}
               right={a.signedIn === true ? <Badge tone="green">Signed in</Badge> : a.signedIn === false ? <Badge>Sign in</Badge> : undefined}
               onClick={settings.accounts.length > 1 && !shownNow ? () => void run(() => onLoad(a.id)) : undefined}
               label={`${a.label}${shownNow ? ", showing" : ""}`}
@@ -589,19 +575,13 @@ function Accounts({ device, settings, users, onLoad }: { device: HarnessesRespon
             {settings.accounts.length > 1 && (
               <Panel>
                 {users.map((u) => (
-                  <Item
-                    key={u.id}
-                    title={`${u.name} uses`}
-                    right={
-                      <Pick label={`${u.name} uses`} value={using(u.id)} onChange={(v) => void run(async () => (await act({ op: "assign", agentId: u.id, account: v === "default" ? null : v }), await onLoad(settings.account)))}>
-                        {settings.accounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.label}
-                          </option>
-                        ))}
-                      </Pick>
-                    }
-                  />
+                  <SelectRow key={u.id} title={`${u.name} uses`} label={`${u.name} uses`} value={using(u.id)} onChange={(v) => void run(async () => (await act({ op: "assign", agentId: u.id, account: v === "default" ? null : v }), await onLoad(settings.account)))}>
+                    {settings.accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </SelectRow>
                 ))}
               </Panel>
             )}
