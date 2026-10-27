@@ -17,6 +17,9 @@ struct RoutineRun: Decodable { var channelId: String?; var messageId: String? }
 struct AgentBackground: Decodable {
   var background: BackgroundWork?
   var followups: [Followup]?
+  /** chats with it that wait on you, and whether it checks back when one goes quiet (on unless turned off) */
+  var loops: [ChatLoop]?
+  var checkback: Bool?
   var notAllowed: String?
   var sources: [BackgroundSource]?
   var usage: BackgroundUsage?
@@ -39,7 +42,19 @@ struct BackgroundWork: Decodable {
 }
 struct BackgroundSource: Decodable { var kind: String; var name: String; var detail: String? }
 struct BackgroundUsage: Decodable { var lastTokens: Int?; var todayTokens: Int?; var weekTokens: Int?; var checksToday: Int?; var capReached: Bool? }
-struct Followup: Decodable, Identifiable { var id: String; var agentId: String?; var userId: String?; var dueAt: String; var note: String; var status: String? }
+struct Followup: Decodable, Identifiable {
+  var id: String; var agentId: String?; var userId: String?; var dueAt: String; var note: String; var status: String?
+  /** what shows under the agent's reply ("Check the build"); nil on older hubs and for ones not shown */
+  var label: String?
+  /** "agent" (it said it would) or "person" (you said you would) */
+  var waitingOn: String?
+  /** "only if it hasn't gone out" */
+  var condition: String?
+  /** "followup", or "checkback" when Wisp set it for a chat that went quiet */
+  var kind: String?
+  var channelId: String?
+  var messageId: String?
+}
 
 /** How much background checks may use each day, across all of a person's agents. */
 struct Allowance: Decodable {

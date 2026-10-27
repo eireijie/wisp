@@ -441,6 +441,22 @@ struct ChatRow: View {
       }
     } else if let waiting = needsApproval {
       Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 15)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
+    } else if let line = channel.flatMap({ Loops.listLine($0) }) {
+      // where a chat with an agent stands: waiting on you, when it comes back, or done
+      switch line {
+      case .waiting(let text):
+        Text(text).font(.system(size: 15)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
+      case .back(let text):
+        HStack(spacing: 5) {
+          Image(systemName: "clock").font(.system(size: 12)).foregroundStyle(Palette.faint)
+          Text(text).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+        }
+      case .done:
+        HStack(spacing: 5) {
+          Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.statusOnline).accessibilityLabel("Done")
+          Text(Self.mentioned(preview)).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+        }
+      }
     } else {
       Text(Self.mentioned(preview)).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
     }
