@@ -41,6 +41,8 @@ xcrun simctl push booted ai.wisp.ios apps/ios/push-samples/thread.apns
 
 The `wisp` part of a payload says where it goes: `{"kind": "message", "channelId", "threadId"}`, `{"kind": "approval", "approvalId"}` or `{"kind": "computer", "computerId"}`.
 
+An agent checking back (`push-samples/checkback.apns`) comes with `aps.category` `CHECKBACK`: long-press it for **Reply**, and what you type is sent to that chat without opening the app.
+
 ## Change the project
 
 The Xcode project is generated from `project.yml` with [XcodeGen](https://github.com/yonaskolb/XcodeGen). After adding or renaming files:
