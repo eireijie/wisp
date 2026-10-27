@@ -33,6 +33,17 @@
   --warn: #cc7a00;
   --bad: oklch(0.577 0.245 27.325);
   --info: #0a84ff;
+  /* color pops: status dots and tinted icons (never fills) */
+  --accent-computers: #0a9fd6;
+  --st-online: #1fa84a;
+  --st-working: #0a84ff;
+  --st-needs: #d97a00;
+  --st-problem: #e5352b;
+  --tool-teach: #e5352b;
+  --tool-clip: #b89300;
+  --tool-files: #0a84ff;
+  --tool-keys: #0a9fd6;
+  --tool-shot: #a23ee0;
   /* unread counts and the "you" bubble: Wisp blue */
   --badge: #0a84ff;
   --badge-ink: #ffffff;
@@ -90,6 +101,16 @@
   --warn: #fbbf24;
   --bad: #ff6b6b;
   --info: #0a84ff;
+  --accent-computers: #64d2ff;
+  --st-online: #30d158;
+  --st-working: #0a84ff;
+  --st-needs: #ff9f0a;
+  --st-problem: #ff453a;
+  --tool-teach: #ff453a;
+  --tool-clip: #ffd60a;
+  --tool-files: #0a84ff;
+  --tool-keys: #64d2ff;
+  --tool-shot: #bf5af2;
   --glass-bg: #2a2a2e;
   --shadow: 0 2px 8px oklch(0 0 0 / 0.25);
   --ghost-shadow: oklch(0 0 0 / 0.42);
@@ -196,6 +217,16 @@
   --color-warn: var(--warn);
   --color-bad: var(--bad);
   --color-info: var(--info);
+  --color-accent-computers: var(--accent-computers);
+  --color-st-online: var(--st-online);
+  --color-st-working: var(--st-working);
+  --color-st-needs: var(--st-needs);
+  --color-st-problem: var(--st-problem);
+  --color-tool-teach: var(--tool-teach);
+  --color-tool-clip: var(--tool-clip);
+  --color-tool-files: var(--tool-files);
+  --color-tool-keys: var(--tool-keys);
+  --color-tool-shot: var(--tool-shot);
   --color-code: var(--code);
   --color-badge: var(--badge);
   --color-badge-ink: var(--badge-ink);

@@ -93,6 +93,8 @@ interface Props {
   computer: ComputerInfo;
   /** you have control: mouse and keyboard go to the computer */
   control: boolean;
+  /** the page draws its own frame while you're in control */
+  noRing?: boolean;
   /** called for each thing you do while in control (teaching a task) */
   onInput?: (i: ScreenInput) => void;
   /** a small preview (the chat side panel): no minimum height or rounded frame of its own */
@@ -107,7 +109,7 @@ interface Props {
  * The computer's screen, live. VMs and cloud computers stream over VNC (noVNC); a device's own
  * screen streams frames through the hub. Input only goes through while you have control.
  */
-export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput, compact, onTakeControl, onActivity }, ref) {
+export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, noRing, onInput, compact, onTakeControl, onActivity }, ref) {
   const [state, setState] = useState<"connecting" | "live" | "closed" | "error" | "code">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -342,7 +344,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 
   return (
     <div
-      className={cx("relative size-full overflow-hidden bg-black transition-shadow", !compact && "min-h-64 rounded-2xl", control && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
+      className={cx("relative size-full overflow-hidden bg-black transition-shadow", !compact && "min-h-64 rounded-2xl", control && !noRing && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
       onPointerDownCapture={(e) => {
         // clicking a live screen you don't control takes control; that click doesn't reach the computer
         if (control || !onTakeControl || state !== "live" || e.button !== 0) return;
