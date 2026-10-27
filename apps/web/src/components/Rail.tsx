@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { useStore, useInboxCount } from "../store.ts";
+import { useStore, useInboxCount, useChatsUnread } from "../store.ts";
 import { href, type Route } from "../router.ts";
 import { AgentsIcon, ChatsIcon, ComputersIcon, InboxIcon, WispGhost } from "./icons.tsx";
 import { OrgSwitcher, useOrgs } from "./OrgSwitcher.tsx";
@@ -42,15 +42,15 @@ export function UserAvatarButton({ size, desktop }: { size?: number; desktop?: b
   );
 }
 
-function NavItem({ to, label, icon, active, badge, dot }: { to: string; label: string; icon: ReactNode; active: boolean; badge?: number; dot?: boolean }) {
+function NavItem({ to, label, icon, active, badge, dot, accent }: { to: string; label: string; icon: ReactNode; active: boolean; badge?: number; dot?: boolean; accent: string }) {
   const iconRef = useRef<HTMLSpanElement>(null);
   useBounce(iconRef, active);
   return (
     <a href={to} aria-current={active ? "page" : undefined} className={cx("relative z-[1] w-14 h-[52px] rounded-[14px] flex flex-col items-center justify-center gap-[3px] text-[11px]", active ? "text-ink font-medium" : "text-muted font-normal hover:text-ink hover:bg-hover")}>
-      <span ref={iconRef} className="m-tab-icon">{icon}</span>
+      <span ref={iconRef} className="m-tab-icon" style={active ? { color: `var(--accent-${accent})` } : undefined}>{icon}</span>
       {label}
-      {badge !== undefined && <PopBadge count={badge} label={badge > 99 ? "99+" : String(badge)} className="absolute top-1 right-2.5 min-w-[17px] h-[17px] px-1 rounded-full bg-badge text-badge-ink text-[10px] font-medium grid place-items-center tabular-nums" />}
-      {dot && <span className="absolute top-2 right-4 size-2 rounded-full bg-ok" aria-label="An agent is working" />}
+      {badge !== undefined && <PopBadge count={badge} label={badge > 99 ? "99+" : String(badge)} className="absolute top-1 right-2.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-semibold text-black grid place-items-center tabular-nums" style={{ background: `var(--accent-${accent})` }} />}
+      {dot && <span className="absolute top-2 right-4 size-2 rounded-full bg-st-working animate-pulse" aria-label="An agent is working" />}
     </a>
   );
 }
@@ -63,6 +63,7 @@ export function Rail({ route }: { route: Route }) {
   const me = useStore((s) => s.me)!;
   const computers = useStore((s) => s.computers);
   const inbox = useInboxCount();
+  const unreadChats = useChatsUnread();
   const isGuest = me.role === "guest";
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const index = route.view === "dashboard" ? 0 : route.view === "chat" || route.view === "chats" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
@@ -77,11 +78,11 @@ export function Rail({ route }: { route: Route }) {
       />
       {/* the selection slides between items (56px apart); none selected, it fades out */}
       <div className="relative flex flex-col gap-1">
-        <span aria-hidden className="m-ind left-0 top-0 w-14 h-[52px] rounded-[14px] bg-side-active" style={{ transform: `translateY(${Math.max(index, 0) * 56}px)`, opacity: index < 0 ? 0 : 1 }} />
-        <NavItem to={href({ view: "dashboard" })} label="Inbox" icon={<InboxIcon />} active={route.view === "dashboard"} badge={inbox} />
-        <NavItem to={chatsTarget()} label="Chats" icon={<ChatsIcon />} active={route.view === "chat" || route.view === "chats"} />
-        <NavItem to={href({ view: "agents", agentId: null })} label="Agents" icon={<AgentsIcon />} active={route.view === "agents"} />
-        {!isGuest && <NavItem to={href({ view: "computers", computerId: null })} label="Computers" icon={<ComputersIcon />} active={route.view === "computers"} dot={working} />}
+        <span aria-hidden className="m-ind left-0 top-0 w-14 h-[52px] rounded-[14px]" style={{ background: `color-mix(in srgb, var(--accent-${["inbox", "chats", "agents", "computers"][Math.max(index, 0)]}) 16%, transparent)`, transform: `translateY(${Math.max(index, 0) * 56}px)`, opacity: index < 0 ? 0 : 1 }} />
+        <NavItem to={href({ view: "dashboard" })} label="Inbox" icon={<InboxIcon />} accent="inbox" active={route.view === "dashboard"} badge={inbox} />
+        <NavItem to={chatsTarget()} label="Chats" icon={<ChatsIcon />} accent="chats" active={route.view === "chat" || route.view === "chats"} badge={unreadChats} />
+        <NavItem to={href({ view: "agents", agentId: null })} label="Agents" icon={<AgentsIcon />} accent="agents" active={route.view === "agents"} />
+        {!isGuest && <NavItem to={href({ view: "computers", computerId: null })} label="Computers" icon={<ComputersIcon />} accent="computers" active={route.view === "computers"} dot={working} />}
       </div>
       <span className="flex-1" />
       <UserAvatarButton desktop />

@@ -95,7 +95,10 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
                     <span className="min-w-0 flex-1">
                       <span className="block text-body font-medium truncate">{a.name}</span>
                       <span className="block text-sm text-muted truncate">{line(a)}</span>
-                      <span className={cx("block text-sm truncate", st.working ? "text-ok" : "text-faint")}>{st.text}</span>
+                      <span className={cx("flex items-center gap-1.5 text-sm", st.working ? "text-st-working" : "text-faint")}>
+                        <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full", st.working && "animate-pulse")} style={{ background: st.working ? "var(--st-working)" : a.status === "offline" ? "var(--status-idle)" : "var(--st-online)" }} />
+                        <span className="truncate">{st.text}</span>
+                      </span>
                       {!readiness.ready && (
                         <span className="mt-1.5 block">
                           <SetupIncomplete problem={readiness.problem} />
@@ -151,7 +154,7 @@ export function AgentsView({ agentId, tab }: { agentId: string | null; tab: Agen
 function MoreLink({ to, icon, label }: { to: string; icon: ReactNode; label: string }) {
   return (
     <a href={to} className="h-10 px-4 rounded-full bg-card inline-flex items-center gap-2 text-sm text-muted hover:text-ink hover:bg-hover">
-      {icon}
+      <span className="text-accent-agents">{icon}</span>
       {label}
     </a>
   );

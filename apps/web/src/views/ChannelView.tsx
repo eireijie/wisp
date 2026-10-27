@@ -125,14 +125,14 @@ export function ChannelView({ route, onBack }: { route: Extract<Route, { view: "
             {dmAgent?.computerId && (
               <span className="max-md:hidden">
                 <button onClick={() => (dmPanel === "computer" ? setSide(null) : openAgent(dmAgent.id, "computer"))} className={cx("circle", dmPanel === "computer" && "bg-hover")} aria-label={`${dmAgent.name}'s computer`} title={`${dmAgent.name}'s computer`}>
-                  <Monitor size={18} />
+                  <Monitor size={18} className="text-accent-computers" />
                 </button>
               </span>
             )}
             {dmAgent && voice && !calling && (
               <span className="max-md:hidden">
                 <button onClick={() => setCalling(true)} className="circle" aria-label={`Call ${dmAgent.name}`} title={`Call ${dmAgent.name}`}>
-                  <Phone size={18} />
+                  <Phone size={18} className="text-st-online" />
                 </button>
               </span>
             )}
@@ -249,8 +249,8 @@ function DmMore({ agent, channelId, onDetails, onComputer, onCall }: { agent: Ag
         )}
         items={[
           { label: `About ${agent.name}`, icon: <Info size={17} />, onSelect: onDetails },
-          ...(agent.computerId ? [{ label: `${agent.name}'s computer`, icon: <Monitor size={17} />, onSelect: onComputer }] : []),
-          ...(onCall ? [{ label: `Call ${agent.name}`, icon: <Phone size={17} />, onSelect: onCall }] : []),
+          ...(agent.computerId ? [{ label: `${agent.name}'s computer`, icon: <Monitor size={17} className="text-accent-computers" />, onSelect: onComputer }] : []),
+          ...(onCall ? [{ label: `Call ${agent.name}`, icon: <Phone size={17} className="text-st-online" />, onSelect: onCall }] : []),
           ...(ctx ? [...(canEdit ? [{ label: "Model and effort", icon: <Zap size={17} />, onSelect: () => setDialog("model") }] : []), { label: "What it can do", icon: <Shield size={17} />, onSelect: () => setDialog("access") }, { label: "Context window", icon: <AudioLines size={17} />, onSelect: () => setDialog("context") }] : []),
         ]}
       />
@@ -941,7 +941,7 @@ function HandoffRow({ m, taskId, replies, working, onOpen }: { m: Message; taskI
         {!!replies && <span className="shrink-0 text-muted">· {replies} {replies === 1 ? "reply" : "replies"}</span>}
         {state && (
           <span className={cx("shrink-0 inline-flex items-center gap-1", st?.tone === "bad" ? "text-bad" : st?.tone === "ok" ? "text-ok" : "text-muted")}>
-            · {busy && <span className="size-1.5 rounded-full bg-ok animate-pulse" aria-hidden />}
+            · {busy && <span className="size-1.5 rounded-full bg-st-working animate-pulse" aria-hidden />}
             {state}
           </span>
         )}
@@ -1375,7 +1375,7 @@ function HandoffHeader({ taskId, runs, parent, onBack, onClose }: { taskId: stri
         {agent && <AgentAvatar agent={agent} size={32} live={mine.length > 0} />}
         <div className="min-w-0">
           <div className="truncate text-body font-medium leading-tight">Handed to {agent?.name ?? "an agent"}</div>
-          <div className={cx("text-[13px]", mine.length ? "text-ok" : st?.tone === "bad" ? "text-bad" : "text-muted")}>{mine.length ? "Working" : (st?.label ?? "")}</div>
+          <div className={cx("text-[13px]", mine.length ? "text-st-working" : st?.tone === "bad" ? "text-st-problem" : "text-muted")}>{mine.length ? "Working" : (st?.label ?? "")}</div>
         </div>
       </div>
       {canStop && (
@@ -1957,7 +1957,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             </button>
           )}
           {showCall && (
-            <button type="button" onClick={onCall} aria-label={`Call ${dmAgent?.name ?? "agent"}`} title="Call" className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent text-accent-ink grid place-items-center md:hidden", swapped && "m-swap")}>
+            <button type="button" onClick={onCall} aria-label={`Call ${dmAgent?.name ?? "agent"}`} title="Call" className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-st-online text-black grid place-items-center md:hidden", swapped && "m-swap")}>
               <AudioLines size={22} />
             </button>
           )}
@@ -1965,7 +1965,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             <button
               onClick={send}
               disabled={!!uploading || sending || (!text.trim() && !files.length)}
-              className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent text-accent-ink grid place-items-center disabled:bg-chip disabled:text-faint transition-colors", swapped && "m-swap")}
+              className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-accent-chats text-white grid place-items-center disabled:bg-chip disabled:text-faint transition-colors", swapped && "m-swap")}
               aria-label="Send"
             >
               <ArrowUp size={19} strokeWidth={2.5} />

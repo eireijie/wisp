@@ -394,7 +394,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 /** "Working" with a sparkle, like a teammate's status. */
 export function WorkingBadge({ text = "Working" }: { text?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warn/12 text-warn px-2 h-6 text-xs font-medium">
+    <span className="inline-flex items-center gap-1 rounded-full bg-st-working/16 text-st-working px-2 h-6 text-xs font-medium">
       <Sparkle size={12} className="animate-spin [animation-duration:3s]" /> {text}
     </span>
   );

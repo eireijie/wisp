@@ -79,8 +79,8 @@ export function AgentPanel({ agent, tab, onTab, onClose, onCall, inDm = false }:
           <div className="min-w-0 flex-1">
             <h2 className="t-title truncate">{agent.name}</h2>
             <RoleLabel agent={agent} />
-            <div className={cx("mt-0.5 flex items-center gap-1.5 text-[13px] font-medium", working ? "text-ok" : "text-muted")}>
-              <span className={cx("size-1.5 rounded-full", working ? "bg-ok" : "bg-faint")} style={working ? undefined : { background: status.dot ?? status.hue }} aria-hidden />
+            <div className={cx("mt-0.5 flex items-center gap-1.5 text-[13px] font-medium", working ? "text-st-working" : "text-muted")}>
+              <span className={cx("size-1.5 rounded-full", working ? "bg-st-working animate-pulse" : "bg-faint")} style={working ? undefined : { background: status.dot ?? status.hue }} aria-hidden />
               {working ? `Working${since ? ` · ${minutesSince(since)}` : ""}` : <span className="capitalize">{status.label}</span>}
             </div>
           </div>
@@ -235,8 +235,8 @@ function WhatItsDoing({ agent, runs }: { agent: Agent; runs: LiveRun[] }) {
           {hidden > 0 && <li className="text-xs text-faint pl-7">{hidden} earlier {hidden === 1 ? "step" : "steps"}</li>}
           {shown.map((st, i) => (
             <li key={i} className={cx("flex items-center gap-2.5 text-sm", st.now ? "text-ink font-medium" : "text-muted")}>
-              <span className={cx("size-5 shrink-0 rounded-full grid place-items-center", st.now ? "bg-ok/15" : "bg-ink text-panel")}>
-                {st.now ? <span className="size-2 rounded-full bg-ok animate-pulse" /> : <Check size={12} strokeWidth={3} />}
+              <span className={cx("size-5 shrink-0 rounded-full grid place-items-center", st.now ? "bg-st-working/16" : "bg-st-online/16 text-st-online")}>
+                {st.now ? <span className="size-2 rounded-full bg-st-working animate-pulse" /> : <Check size={12} strokeWidth={3} />}
               </span>
               <span className="min-w-0 truncate">{st.text}</span>
             </li>

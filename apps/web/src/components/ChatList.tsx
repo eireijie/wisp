@@ -6,7 +6,7 @@ import { api } from "../api.ts";
 import { useStore, useTeams, usePrefs, type ChannelInfo } from "../store.ts";
 import { go, href, type Route } from "../router.ts";
 import { openDm } from "../openDm.ts";
-import { AgentAvatar, Menu, PopBadge, cx, clockTime } from "./ui.tsx";
+import { AgentAvatar, Menu, cx, clockTime } from "./ui.tsx";
 import { useSheetBackdrop } from "../motion.ts";
 import { ChannelSettings, SectionDialog, leaveChannel, setChannelPrefs } from "./Channels.tsx";
 import { activityPhrase } from "./agentActivity.ts";
@@ -95,6 +95,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
   const sections = useStore((s) => s.sections);
   const agents = useStore((s) => s.agents);
   const live = useStore((s) => s.live);
+  const approvals = useStore((s) => s.approvals);
   const prefs = usePrefs();
   const [collapsed, setCollapsed] = useState(loadCollapsed);
   const [q, setQ] = useState("");
@@ -131,7 +132,7 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
   };
 
   /** the preview line: what an agent is doing right now, else the newest message */
-  const preview = (c: Chat): { text: string; working: boolean } => {
+  const preview = (c: Chat): { text: string; working: boolean; needs?: boolean } => {
     const run = c.channel ? Object.values(live).find((r) => r.channelId === c.channel!.id && (c.kind === "team" || r.agentId === c.agent?.id)) : undefined;
     if (run) {
       const who = c.kind === "team" ? `${agents.find((a) => a.id === run.agentId)?.name ?? "An agent"} · ` : "";
@@ -140,6 +141,8 @@ export function ChatList({ route, variant = "column" }: { route: Route; variant?
     if (!c.agent?.status || c.kind === "team") {
       /* fall through to the message */
     } else if (c.agent.status === "busy") return { text: "Working", working: true };
+    const ask = c.channel ? Object.values(approvals).find((a) => a.status === "pending" && a.channelId === c.channel!.id) : undefined;
+    if (ask) return { text: `Needs approval · ${cleanPreview(ask.summary, 70)}`, working: false, needs: true };
     const last = c.channel?.last;
     if (!last) return { text: c.kind === "dm" ? "No messages yet" : "No messages yet", working: false };
     const body = cleanPreview(last.body, 90) || "Sent something";
@@ -275,10 +278,25 @@ function SectionHeader({ section, count, collapsed, onToggle, onRename, page, ca
   );
 }
 
-function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
+/** Three small pulsing dots: the pop on a working line. */
+export function PulseDots() {
+  return (
+    <span aria-hidden className="shrink-0 inline-flex gap-[3px]">
+      {[0, 1, 2].map((i) => <span key={i} className="size-[4px] rounded-full bg-st-working animate-pulse" style={{ animationDelay: `${i * 160}ms` }} />)}
+    </span>
+  );
+}
+
+/** @mentions in a line of text take the agents' purple. */
+export function withMentions(text: string) {
+  return text.split(/(@\w+)/g).map((part, i) => (part.startsWith("@") && part.length > 1 ? <span key={i} className="text-accent-agents">{part}</span> : part));
+}
+
+function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean; needs?: boolean }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = useLongPress((x, y) => chat.channel && setMenu({ x, y }));
   const size = page ? 32 : 28;
+  const unread = chat.unread > 0 && !chat.muted;
   const url = chat.channel ? href({ view: "chat", channelId: chat.channel.id, threadId: null }) : undefined;
   const inner = (
     <>
@@ -288,16 +306,19 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
       <span className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="flex items-baseline justify-between gap-2">
           <span className={cx("truncate", page ? "text-body" : "text-body", chat.unread > 0 ? "font-semibold" : "font-medium", chat.muted && "opacity-60")}>{chat.name}</span>
-          <span className="shrink-0 flex items-center gap-1.5 text-faint" style={{ fontSize: 12 }}>
+          <span className={cx("shrink-0 flex items-center gap-1.5", unread ? "text-accent-chats" : "text-faint")} style={{ fontSize: 12 }}>
             {chat.pinned && <Pin size={11} strokeWidth={2} aria-label="Pinned" />}
             {chat.muted && <BellOff size={11} aria-label="Muted" />}
             {time}
           </span>
         </span>
         <span className="flex items-center justify-between gap-2">
-          <span className={cx("truncate", "text-[13px]", preview.working ? "text-ok" : "text-muted")}>{preview.text}</span>
+          <span className={cx("min-w-0 flex items-center gap-1.5", "text-[13px]", preview.working ? "text-st-working" : preview.needs ? "text-st-needs" : "text-muted")}>
+            {preview.working && <PulseDots />}
+            <span className="truncate">{preview.working || preview.needs ? preview.text : withMentions(preview.text)}</span>
+          </span>
           {chat.unread > 0 && chat.muted && <span aria-label="Unread" className="shrink-0 size-2 rounded-full bg-faint" />}
-          {chat.unread > 0 && !chat.muted && <PopBadge count={chat.unread} label={chat.unread > 99 ? "99+" : String(chat.unread)} className="shrink-0 min-w-[18px] h-[18px] px-1.5 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums" />}
+          {unread && <span role="img" aria-label={`${chat.unread} unread`} className="shrink-0 size-2.5 rounded-full bg-accent-chats" />}
         </span>
       </span>
     </>
