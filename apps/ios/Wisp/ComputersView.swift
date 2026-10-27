@@ -72,6 +72,7 @@ struct ComputerDetail: View {
   /** the menu's sheets and questions */
   @Environment(\.dismiss) private var dismiss
   @State private var showDetails = false
+  @State private var showInfo = false
   @State private var showFiles = false
   @State private var showClipboard = false
   @State private var renaming = false
@@ -85,43 +86,39 @@ struct ComputerDetail: View {
   @State private var teach: TeachSession?
   @State private var savingLesson = false
   @State private var lessonAgent: Agent?
+  /** the tool bar folds down to one small button so nothing sits on the screen */
+  @State private var toolsOpen = true
+  @ReduceMotion private var reduceMotion
 
   var body: some View {
     if store.canViewComputers, let c = computer {
       VStack(spacing: 0) {
-        TopBar {
-          CircleButton(symbol: "chevron.left", label: "Back", id: "computer-back") { dismiss() }
-        } center: {
-          NamePill(title: c.name) {
-            if let a = c.agentIds.first.flatMap({ store.agent($0) }) { AgentAvatar(agent: a, size: 24, showStatus: false) }
-          }
-        } trailing: {
-          moreMenu(c)
-        }
+        header(c)
         ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
+          VStack(alignment: .leading, spacing: 12) {
             if let help = c.help, !helpLater, !inControl { helpCard(c, help) }
             if let teach { TeachBar(session: teach, cancel: { stopTeaching(c) }, done: { savingLesson = true }) }
 
             screen(c)
+              .overlay(alignment: .topTrailing) {
+                if inControl, c.isOnline { toolBar(c).transition(.opacity) }
+              }
               .overlay(alignment: .bottom) {
                 if let note {
                   Text(note).font(.footnote.weight(.medium)).padding(.horizontal, 14).padding(.vertical, 8).glassCapsule().padding(10).transition(.opacity)
                 }
               }
+              .animation(Motion.pick(Motion.soft, reduceMotion), value: inControl)
 
-            statusLine(c)
             if inControl { controls(c) }
-            if c.status == "ready", teach == nil { controlButton(c) }
-            if c.isOnline { chips(c) }
-            rows(c)
-            Text(hint(c)).font(.footnote).foregroundStyle(Palette.faint).frame(maxWidth: .infinity)
+            statusLine(c)
             if let error { Text(error).font(.footnote).foregroundStyle(Palette.red) }
             if c.kind == "device" { OwnScreenNote() }
           }
-          .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 30)
+          .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 16)
         }
       }
+      .safeAreaInset(edge: .bottom, spacing: 0) { bottomRow(c) }
       .background(Palette.ground.ignoresSafeArea())
       .toolbar(.hidden, for: .navigationBar)
       .toolbar(.hidden, for: .tabBar)
@@ -184,18 +181,51 @@ struct ComputerDetail: View {
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).fill(Palette.card))
-    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.blue.opacity(0.5)))
+    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.statusNeeds.opacity(0.6)))
     .accessibilityIdentifier("computer-help")
   }
 
-  /** What's happening, in one line, with the state pill. */
+  /** The small header: back, the agent's ghost, the name, the info button and the menu. */
+  private func header(_ c: Computer) -> some View {
+    HStack(spacing: 10) {
+      CircleButton(symbol: "chevron.left", label: "Back", size: 40, id: "computer-back") { dismiss() }
+      if let a = c.agentIds.first.flatMap({ store.agent($0) }) { AgentAvatar(agent: a, size: 26, showStatus: false) }
+      Text(c.name).font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
+      Spacer(minLength: 8)
+      Button { showInfo.toggle() } label: {
+        Image(systemName: "info.circle").font(.system(size: 17, weight: .medium)).foregroundStyle(Palette.computer)
+          .frame(width: 40, height: 40).glassCircle().contentShape(Circle())
+      }
+      .buttonStyle(.press)
+      .accessibilityLabel("Details")
+      .accessibilityIdentifier("computer-details")
+      .popover(isPresented: $showInfo, attachmentAnchor: .point(.bottom), arrowEdge: .top) {
+        ComputerInfoBubble(computerId: c.id, openDevice: { id in
+          showInfo = false
+          store.route = .device(id: id)
+        }, openAll: {
+          showInfo = false
+          Task { try? await Task.sleep(for: .milliseconds(300)); showDetails = true }
+        })
+        .presentationCompactAdaptation(.popover)
+      }
+      moreMenu(c)
+    }
+    .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 6)
+  }
+
+  /** What's happening, in one line. */
   @ViewBuilder private func statusLine(_ c: Computer) -> some View {
     let s = store.state(of: c)
-    HStack(spacing: 10) {
-      if s.working { WorkingDots(color: Palette.faint) }
-      Text(statusText(c, s)).font(.system(size: 13)).foregroundStyle(Palette.muted).frame(maxWidth: .infinity, alignment: .leading).lineLimit(2)
-      ComputerPill(text: s.label, tone: s.tone)
+    VStack(spacing: 4) {
+      HStack(spacing: 8) {
+        if s.working { WorkingDots(color: Palette.statusWorking) }
+        Text(statusText(c, s)).font(.system(size: 13)).foregroundStyle(s.working ? Palette.statusWorkingText : Palette.muted).lineLimit(2)
+      }
+      Text(hint(c)).font(.footnote).foregroundStyle(Palette.faint)
     }
+    .frame(maxWidth: .infinity)
+    .multilineTextAlignment(.center)
     .padding(.horizontal, 4)
   }
 
@@ -207,50 +237,64 @@ struct ComputerDetail: View {
     return store.doing(c)
   }
 
-  /** Keys, Clipboard, Files, Screenshot. */
-  @ViewBuilder private func chips(_ c: Computer) -> some View {
-    HStack(spacing: 10) {
-      if inControl {
-        Menu {
-          Button("Return", systemImage: "return") { key(c, "Enter") }
-          Button("Tab", systemImage: "arrow.right.to.line") { key(c, "Tab") }
-          Button("Escape", systemImage: "escape") { key(c, "Escape") }
-          Button("Delete", systemImage: "delete.left") { key(c, "Backspace") }
-        } label: { ChipFace(symbol: "keyboard", title: "Keys") }
-          .accessibilityIdentifier("chip-keys")
-      } else {
-        ChipFace(symbol: "keyboard", title: "Keys").opacity(0.4).accessibilityHidden(true)
-      }
-      if c.canTransfer {
-        if inControl {
-          Menu {
-            Button("Paste from iPhone", systemImage: "doc.on.clipboard") { pasteFromPhone(c) }
-            Button("Copy to iPhone", systemImage: "iphone.and.arrow.forward") { copyToPhone(c) }
-            Button("Send text or open a link…", systemImage: "link") { showClipboard = true }
-          } label: { ChipFace(symbol: "doc.on.clipboard", title: "Clipboard") }
-            .accessibilityIdentifier("chip-clipboard")
-        } else {
-          Button { showClipboard = true } label: { ChipFace(symbol: "doc.on.clipboard", title: "Clipboard") }.buttonStyle(.plain).accessibilityIdentifier("chip-clipboard")
-        }
-        Button { showFiles = true } label: { ChipFace(symbol: "folder", title: "Files") }.buttonStyle(.plain).accessibilityIdentifier("chip-files")
-        if c.status == "ready" { Button { screenshot(c) } label: { ChipFace(symbol: "camera", title: "Screenshot") }.buttonStyle(.plain).accessibilityIdentifier("chip-screenshot") }
-      }
+  /** The bottom row: the status pill, and Take control or Hand back. */
+  private func bottomRow(_ c: Computer) -> some View {
+    let s = store.state(of: c)
+    return HStack(spacing: 10) {
+      ComputerPill(text: s.label, tone: s.tone, dot: true)
+      Spacer(minLength: 8)
+      if c.status == "ready", teach == nil { controlButton(c) }
     }
+    .padding(.horizontal, 16).padding(.vertical, 10)
+    .background(Palette.ground.opacity(0.92).ignoresSafeArea(edges: .bottom))
   }
 
-  /** Details, the agents on it, and Teach a task. */
-  @ViewBuilder private func rows(_ c: Computer) -> some View {
-    let agents = c.agentIds.compactMap { store.agent($0) }
-    CardGroup {
-      Button { showDetails = true } label: { RowLabel(title: "Details", value: store.state(of: c).label) }.buttonStyle(.plain).accessibilityIdentifier("computer-details")
-      Button { showDetails = true } label: {
-        RowLabel(title: "Agents on this computer", value: agents.isEmpty ? "None" : agents.map(\.name).joined(separator: ", "))
-      }.buttonStyle(.plain)
-      if store.features.teach, c.canTransfer, c.status == "ready", teach == nil, c.controller == nil || inControl {
-        Button { pickingTeacher = true } label: {
-          RowLabel(title: "Teach a task", subtitle: "Show \(agents.first?.name ?? "an agent") once, it learns")
-        }.buttonStyle(.plain).accessibilityIdentifier("computer-teach")
+  private func toolIcon(_ symbol: String, _ color: Color) -> some View {
+    Image(systemName: symbol).font(.system(size: 16, weight: .medium)).foregroundStyle(color)
+      .frame(width: 38, height: 38).contentShape(Circle())
+  }
+
+  /** While you are in control: the tools as colored icons in a glass bar at the screen's top right. */
+  @ViewBuilder private func toolBar(_ c: Computer) -> some View {
+    if !toolsOpen {
+      Button { withAnimation(Motion.pick(Motion.soft, reduceMotion)) { toolsOpen = true } } label: { toolIcon("ellipsis", Palette.text) }
+        .buttonStyle(.press).glassCapsule().padding(8)
+        .transition(.opacity)
+        .accessibilityLabel("Show tools").accessibilityIdentifier("computer-tools-show")
+    } else {
+    HStack(spacing: 2) {
+      Button { withAnimation(Motion.pick(Motion.soft, reduceMotion)) { toolsOpen = false } } label: { toolIcon("chevron.right", Palette.muted) }
+        .buttonStyle(.press).accessibilityLabel("Hide tools").accessibilityIdentifier("computer-tools-hide")
+      if store.features.teach, c.canTransfer, c.status == "ready", teach == nil {
+        Button { pickingTeacher = true } label: { toolIcon("record.circle", Palette.toolTeach) }
+          .buttonStyle(.press).accessibilityLabel("Teach a task").accessibilityIdentifier("computer-teach")
       }
+      if c.canTransfer {
+        Menu {
+          Button("Paste from iPhone", systemImage: "doc.on.clipboard") { pasteFromPhone(c) }
+          Button("Copy to iPhone", systemImage: "iphone.and.arrow.forward") { copyToPhone(c) }
+          Button("Send text or open a link…", systemImage: "link") { showClipboard = true }
+        } label: { toolIcon("doc.on.clipboard", Palette.toolClipboard) }
+          .accessibilityLabel("Clipboard").accessibilityIdentifier("chip-clipboard")
+        Button { showFiles = true } label: { toolIcon("folder", Palette.tabChats) }
+          .buttonStyle(.press).accessibilityLabel("Files").accessibilityIdentifier("chip-files")
+      }
+      Menu {
+        Button("Return", systemImage: "return") { key(c, "Enter") }
+        Button("Tab", systemImage: "arrow.right.to.line") { key(c, "Tab") }
+        Button("Escape", systemImage: "escape") { key(c, "Escape") }
+        Button("Delete", systemImage: "delete.left") { key(c, "Backspace") }
+      } label: { toolIcon("keyboard", Palette.toolKeys) }
+        .accessibilityLabel("Keys").accessibilityIdentifier("chip-keys")
+      if c.canTransfer, c.status == "ready" {
+        Button { screenshot(c) } label: { toolIcon("camera", Palette.toolScreenshot) }
+          .buttonStyle(.press).accessibilityLabel("Screenshot").accessibilityIdentifier("chip-screenshot")
+      }
+    }
+    .padding(3)
+    .glassCapsule()
+    .padding(8)
+    .transition(.opacity)
     }
   }
 
@@ -315,6 +359,13 @@ struct ComputerDetail: View {
   @ViewBuilder private func moreMenu(_ c: Computer) -> some View {
     Menu {
       Button("Rename", systemImage: "pencil") { newName = c.name; renaming = true }
+      if !inControl, c.canTransfer {
+        Button("Clipboard", systemImage: "doc.on.clipboard") { showClipboard = true }
+        Button("Files", systemImage: "folder") { showFiles = true }
+      }
+      if !inControl, store.features.teach, c.canTransfer, c.status == "ready", teach == nil, c.controller == nil {
+        Button("Teach a task", systemImage: "record.circle") { pickingTeacher = true }
+      }
       if c.canTransfer, c.status == "ready" {
         Button("Save a screenshot", systemImage: "camera") { screenshot(c) }
       }
@@ -468,8 +519,8 @@ struct ComputerDetail: View {
     }
     .aspectRatio(frame.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 16 / 10, contentMode: .fit)
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(inControl ? Palette.blue : Palette.hairline, lineWidth: inControl ? 3 : 1))
-    .shadow(color: inControl ? Palette.blue.opacity(0.35) : .clear, radius: 14)
+    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(inControl ? Palette.statusNeeds : c.isOnline ? Palette.computer.opacity(0.4) : Palette.hairline, lineWidth: inControl ? 2 : 1))
+    .shadow(color: inControl ? Palette.statusNeeds.opacity(0.25) : .clear, radius: 12)
   }
 
   /** Take control (white pill), or hand back to the agent. */
@@ -482,11 +533,12 @@ struct ComputerDetail: View {
       }
       takeControl(c)
     } label: {
-      Label(inControl ? "Hand back\(who.map { " to \($0)" } ?? "")" : "Take control", systemImage: inControl ? "hand.wave" : "hand.point.up.left")
+      Label(inControl ? "Hand back" : "Take control", systemImage: inControl ? "hand.wave" : "hand.point.up.left")
         .font(.system(size: 15, weight: .semibold))
-        .frame(maxWidth: .infinity, minHeight: 28)
+        .frame(minHeight: 28)
     }
     .primaryButton()
+    .accessibilityLabel(inControl ? "Hand back\(who.map { " to \($0)" } ?? "")" : "Take control")
     .disabled(busy || (c.controller != nil && !inControl))
     .accessibilityIdentifier("computer-control")
   }

@@ -218,7 +218,7 @@ export function TeamChart({
                 const c = edgePath(e);
                 const busy = !!working[e.from] && !!working[e.to];
                 return (
-                  <g key={`${e.from}>${e.to}`} className={cx(busy ? "text-ok" : hoverEdge === i ? "text-muted" : "text-faint")}>
+                  <g key={`${e.from}>${e.to}`} className={cx(busy ? "text-st-working" : hoverEdge === i ? "text-muted" : "text-faint")}>
                     <path d={c.d} fill="none" stroke="currentColor" strokeWidth={hoverEdge === i ? 2.5 : 2} markerEnd="url(#team-arrow)" strokeDasharray={busy ? "6 5" : undefined} className={busy ? "team-flow" : undefined} />
                     {!readOnly && <path d={c.d} fill="none" stroke="transparent" strokeWidth={16} className="pointer-events-auto cursor-pointer" onPointerEnter={() => setHoverEdge(i)} onPointerLeave={() => setHoverEdge((h) => (h === i ? null : h))} onClick={() => set({ ...team, edges: team.edges.filter((x) => !(x.from === e.from && x.to === e.to)) })} />}
                   </g>
@@ -260,7 +260,7 @@ export function TeamChart({
                   <AgentAvatar agent={a} size={34} live={!!busy} interactive={false} />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate agent-ink">{a.name}</div>
-                    <div className="text-[11px] text-muted truncate">{busy ? <span className="text-ok font-medium">{busy}</span> : n.role?.trim() || a.settings.role?.trim() || `@${a.handle}`}</div>
+                    <div className="text-[11px] text-muted truncate">{busy ? <span className="text-st-working font-medium">{busy}</span> : n.role?.trim() || a.settings.role?.trim() || `@${a.handle}`}</div>
                   </div>
                   {readOnly ? (
                     n.lead && (

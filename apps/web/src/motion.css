@@ -43,7 +43,7 @@ a.rounded-full,
 .m-ind {
   position: absolute;
   pointer-events: none;
-  transition: transform 300ms var(--pop), opacity 160ms ease-out;
+  transition: transform 300ms var(--pop), opacity 160ms ease-out, background-color 200ms ease-out;
 }
 .m-tab-icon {
   display: inline-flex;

@@ -204,7 +204,7 @@ export function UserAvatar({ name, size = 32 }: { name: string; size?: number })
  * accent; working is blue.
  */
 export const AGENT_STATUS: Record<Agent["status"], { label: string; hue: string; dot?: string }> = {
-  online: { label: "online", hue: "var(--status-idle)", dot: "var(--status-online)" },
+  online: { label: "online", hue: "var(--status-online)" },
   busy: { label: "working", hue: "var(--status-working)", dot: "var(--status-working)" },
   offline: { label: "offline", hue: "var(--status-idle)" },
 };
@@ -364,7 +364,7 @@ export function Menu({ trigger, items, align = "left", up = false }: { trigger: 
  * An unread count. It stays in place (scaled to nothing at zero) so a new count can pop in:
  * .4, 1.3, 1 whenever the number changes. `className` carries the size and color.
  */
-export function PopBadge({ count, label, className }: { count: number; label: string; className: string }) {
+export function PopBadge({ count, label, className, style }: { count: number; label: string; className: string; style?: CSSProperties }) {
   const ref = useRef<HTMLSpanElement>(null);
   const shown = useRef(label);
   if (count > 0) shown.current = label;
@@ -372,7 +372,7 @@ export function PopBadge({ count, label, className }: { count: number; label: st
     if (count > 0 && !motionReduced()) play(ref.current, [{ transform: "scale(.4)" }, { transform: "scale(1.3)", offset: 0.55 }, { transform: "scale(1)" }], { duration: 320, easing: EASE.pop });
   });
   return (
-    <span ref={ref} aria-hidden={count > 0 ? undefined : true} data-zero={count > 0 ? undefined : true} className={cx("m-badge", className)}>
+    <span ref={ref} aria-hidden={count > 0 ? undefined : true} data-zero={count > 0 ? undefined : true} className={cx("m-badge", className)} style={style}>
       {shown.current}
     </span>
   );

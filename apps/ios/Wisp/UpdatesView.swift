@@ -55,7 +55,7 @@ struct UpdatesView: View {
         HStack(spacing: 12) {
           VStack(alignment: .leading, spacing: 2) {
             Text(canUpdate ? "Update available" : check?.behind == 0 ? "Up to date" : check == nil ? (checking ? "Checking…" : "Not checked yet") : "Can't update here")
-              .font(.system(size: 15)).foregroundStyle(canUpdate ? Palette.blue : check?.behind == 0 ? Palette.green : Palette.text)
+              .font(.system(size: 15)).foregroundStyle(canUpdate ? Palette.blue : check?.behind == 0 ? Palette.statusOnline : Palette.text)
             if let reason = check?.reason { Text(reason).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
           }
           Spacer(minLength: 8)

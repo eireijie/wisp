@@ -131,6 +131,7 @@
 		A0CAE637F7513D1C59469626 /* AboutJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6C73D54209E9DBFDBB24C50 /* AboutJournal.swift */; };
 		A18CB8EF20F5E592E8C62603 /* CallScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94602321862EBD1511C8D11B /* CallScreen.swift */; };
 		A1F68A2D7C16CE4BA32ABE78 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B01D45586C56D6F566BADEF7 /* InboxView.swift */; };
+		A279A3365AC994BFB101C731 /* ComputerInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92F9AF6D8EE5D298F15C1113 /* ComputerInfo.swift */; };
 		A2D19661CFBDE8F08D6F816A /* ManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCE98DDCEC320C21961F3853 /* ManagementViews.swift */; };
 		A590FCE5FC9A8FD073E81AE2 /* TeamRuns.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3658022E405A8C925E5C55FC /* TeamRuns.swift */; };
 		A63C50ACFD9F3266FD90A55B /* TeachView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F4DD2429D560AEBE395752E /* TeachView.swift */; };
@@ -343,6 +344,7 @@
 		8E2BD0CAE804E6D52F180039 /* ChannelTeamTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelTeamTests.swift; sourceTree = "<group>"; };
 		900F5E317489613B43DD1CE8 /* ComputerDetails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerDetails.swift; sourceTree = "<group>"; };
 		90BD07D7DEF5B7CF9DC66500 /* ManagementModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementModels.swift; sourceTree = "<group>"; };
+		92F9AF6D8EE5D298F15C1113 /* ComputerInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerInfo.swift; sourceTree = "<group>"; };
 		932469D8CAB9F684943B59BC /* NavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTests.swift; sourceTree = "<group>"; };
 		93536BA19702CAAE5D09BE6F /* MemoryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryModels.swift; sourceTree = "<group>"; };
 		9419236D77396D53BBCDB867 /* Wisp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wisp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -561,6 +563,7 @@
 				672503AB0E1C7548B52CE7BE /* ComputerClipboard.swift */,
 				900F5E317489613B43DD1CE8 /* ComputerDetails.swift */,
 				461CA50681B82AD94C6D39B1 /* ComputerFiles.swift */,
+				92F9AF6D8EE5D298F15C1113 /* ComputerInfo.swift */,
 				5131367D83E5BC81A010C36E /* ComputerModels.swift */,
 				427014BD7056144AB66EB153 /* ComputerSheets.swift */,
 				0AACD0D0282A54528C27469B /* ComputersHome.swift */,
@@ -904,6 +907,7 @@
 				669AC7BCF74853B898854FCD /* ComputerClipboard.swift in Sources */,
 				34ED7453B3D3AE58399FC434 /* ComputerDetails.swift in Sources */,
 				CA50664C6137F0E6143F29DB /* ComputerFiles.swift in Sources */,
+				A279A3365AC994BFB101C731 /* ComputerInfo.swift in Sources */,
 				753938B1519013630F184EAA /* ComputerModels.swift in Sources */,
 				EEF288865DAEBA2FB9A51CF3 /* ComputerSheets.swift in Sources */,
 				33D215C361A12B328123FFEB /* ComputersHome.swift in Sources */,

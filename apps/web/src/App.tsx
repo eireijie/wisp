@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Brain, Building2, LifeBuoy, ListTodo, SquarePen, ChevronRight, LogOut, Moon, Settings, Sparkles, Store, Sun, SunMoon, Blocks, X } from "lucide-react";
 import { api, connectEvents, getToken, setToken } from "./api.ts";
-import { useInboxCount, useStore } from "./store.ts";
+import { useChatsUnread, useInboxCount, useStore } from "./store.ts";
 import { go, href, routeForRole, useRoute, type Route } from "./router.ts";
 import { useAppearance, type ModeChoice } from "./theme.ts";
 import { ChatList, NewChatPicker } from "./components/ChatList.tsx";
@@ -330,15 +330,15 @@ function EmptyChat() {
 }
 
 /** One place in the tab bar: its icon bounces when it becomes the selected one. */
-function Tab({ active, label, icon, target, badge, dot }: { active: boolean; label: string; icon: ReactNode; target: string; badge?: number; dot?: boolean }) {
+function Tab({ active, label, icon, target, badge, dot, accent }: { active: boolean; label: string; icon: ReactNode; target: string; badge?: number; dot?: boolean; accent: string }) {
   const iconRef = useRef<HTMLSpanElement>(null);
   useBounce(iconRef, active);
   return (
     <a href={target} aria-current={active ? "page" : undefined} className={cx("relative z-[1] flex-1 flex flex-col items-center justify-center gap-[2px] h-[48px] rounded-full text-xs", active ? "text-ink font-medium" : "text-muted font-normal")}>
-      <span ref={iconRef} className="m-tab-icon">{icon}</span>
+      <span ref={iconRef} className="m-tab-icon" style={active ? { color: `var(--accent-${accent})` } : undefined}>{icon}</span>
       {label}
-      {badge !== undefined && <PopBadge count={badge} label={badge > 99 ? "99+" : String(badge)} className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums" />}
-      {dot && <span className="absolute top-2 left-[calc(50%+10px)] size-2 rounded-full bg-ok" aria-label="An agent is working" />}
+      {badge !== undefined && <PopBadge count={badge} label={badge > 99 ? "99+" : String(badge)} className="absolute top-1 left-[calc(50%+8px)] min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-semibold text-black grid place-items-center tabular-nums" style={{ background: `var(--accent-${accent})` }} />}
+      {dot && <span className="absolute top-2 left-[calc(50%+10px)] size-2 rounded-full bg-st-working animate-pulse" aria-label="An agent is working" />}
     </a>
   );
 }
@@ -348,6 +348,7 @@ function TabBar({ route, away }: { route: Route; away: boolean }) {
   const isGuest = useStore((s) => s.me?.role === "guest");
   const computers = useStore((s) => s.computers);
   const inbox = useInboxCount();
+  const unreadChats = useChatsUnread();
   const working = computers.some((c) => c.activity && Date.now() - new Date(c.activity.at).getTime() < 30_000);
   const count = isGuest ? 3 : 4;
   const index = route.view === "dashboard" ? 0 : route.view === "chats" || route.view === "chat" ? 1 : route.view === "agents" ? 2 : route.view === "computers" && !isGuest ? 3 : -1;
@@ -355,11 +356,11 @@ function TabBar({ route, away }: { route: Route; away: boolean }) {
     <div data-away={away} inert={away} className="m-tabs absolute inset-x-0 bottom-0 z-30 px-6 pb-6 pointer-events-none safe-bottom">
       <nav className="glass pointer-events-auto relative mx-auto max-w-md h-[60px] flex items-center justify-between p-1.5 rounded-[30px]" aria-label="Main">
         {/* the selection slides from tab to tab with a little overshoot */}
-        <span aria-hidden className="m-ind left-1.5 top-[5px] h-12 rounded-full bg-ink/10" style={{ width: `calc((100% - 12px) / ${count})`, transform: `translateX(${Math.max(index, 0) * 100}%)`, opacity: index < 0 ? 0 : 1 }} />
-        <Tab active={index === 0} label="Inbox" icon={<InboxIcon size={22} />} target={href({ view: "dashboard" })} badge={inbox} />
-        <Tab active={index === 1} label="Chats" icon={<ChatsIcon size={22} />} target={href({ view: "chats" })} />
-        <Tab active={index === 2} label="Agents" icon={<AgentsIcon size={22} />} target={href({ view: "agents", agentId: null })} />
-        {!isGuest && <Tab active={index === 3} label="Computers" icon={<ComputersIcon size={22} />} target={href({ view: "computers", computerId: null })} dot={working} />}
+        <span aria-hidden className="m-ind left-1.5 top-[5px] h-12 rounded-full" style={{ background: `color-mix(in srgb, var(--accent-${["inbox", "chats", "agents", "computers"][Math.max(index, 0)]}) 16%, transparent)`, width: `calc((100% - 12px) / ${count})`, transform: `translateX(${Math.max(index, 0) * 100}%)`, opacity: index < 0 ? 0 : 1 }} />
+        <Tab active={index === 0} label="Inbox" icon={<InboxIcon size={22} />} accent="inbox" target={href({ view: "dashboard" })} badge={inbox} />
+        <Tab active={index === 1} label="Chats" icon={<ChatsIcon size={22} />} accent="chats" target={href({ view: "chats" })} badge={unreadChats} />
+        <Tab active={index === 2} label="Agents" icon={<AgentsIcon size={22} />} accent="agents" target={href({ view: "agents", agentId: null })} />
+        {!isGuest && <Tab active={index === 3} label="Computers" icon={<ComputersIcon size={22} />} accent="computers" target={href({ view: "computers", computerId: null })} dot={working} />}
       </nav>
     </div>
   );

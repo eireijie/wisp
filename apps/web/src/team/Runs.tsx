@@ -63,7 +63,7 @@ export function FlowStrip({ channelId, threadId }: { channelId: string; threadId
       <span
         key={s.id}
         title={`${s.action || `Step ${number(s.id)}`}, ${status}`}
-        className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium", now ? (waiting ? "bg-warn/15 text-warn" : "bg-ink text-panel") : done && !skipped ? "bg-ok/15 text-ok" : "bg-chip text-muted", skipped && "line-through opacity-60")}
+        className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium", now ? (waiting ? "bg-st-needs/16 text-st-needs" : "bg-st-working/16 text-st-working") : done && !skipped ? "bg-st-online/16 text-st-online" : "bg-chip text-muted", skipped && "line-through opacity-60")}
       >
         {s.action || `Step ${number(s.id)}`}
         {done && !now && !skipped && <Check size={11} strokeWidth={3} aria-label="done" />}

@@ -189,7 +189,7 @@ struct SkillShareSheet: View {
       case .paste: pastePage
       case .found: foundPage
       }
-      if let note { Text(note).font(.system(size: 13)).foregroundStyle(Palette.green).padding(.horizontal, 4) }
+      if let note { Text(note).font(.system(size: 13)).foregroundStyle(Palette.statusOnline).padding(.horizontal, 4) }
       InlineError(error: action.error)
     }
     .onAppear {

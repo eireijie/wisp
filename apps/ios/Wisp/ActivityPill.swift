@@ -149,7 +149,7 @@ struct AgentWorkSheet: View {
                 Text(agent.name).font(.title3.weight(.semibold))
                 if let d = agent.settings?.description, !d.isEmpty { Text(d).font(.subheadline).foregroundStyle(.secondary) }
                 HStack(spacing: 5) {
-                  GlowDot(color: agent.status == .busy ? .green : .gray)
+                  GlowDot(color: agent.status == .busy ? Palette.statusWorking : agent.status == .online ? Palette.statusOnline : Palette.statusOffline)
                   if agent.status == .busy, let since = store.activitySince[agent.id] {
                     Text("Working · ") + Text(since, style: .relative)
                   } else {

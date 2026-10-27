@@ -574,9 +574,14 @@ export function useWaitingOnYou(): { approvals: Approval[]; help: ComputerInfo[]
   }, [me, approvals, computers]);
 }
 
+/** The Chats badge: unread messages in your channels and DMs, counted the same way as the Inbox badge. */
+export function useChatsUnread(): number {
+  return useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
+}
+
 /** The Inbox badge: everything waiting on you plus unread messages in your channels and DMs. */
 export function useInboxCount(): number {
   const waiting = useWaitingOnYou();
-  const unread = useStore((s) => s.channels.reduce((n, c) => n + (c.joined || c.kind === "dm" ? c.unread || 0 : 0), 0));
+  const unread = useChatsUnread();
   return waiting.approvals.length + waiting.help.length + unread;
 }

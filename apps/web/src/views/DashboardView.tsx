@@ -9,7 +9,7 @@ import { go, href } from "../router.ts";
 import { AgentAvatar, StatusChip, cx, timeAgo } from "../components/ui.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { UserAvatarButton } from "../components/Rail.tsx";
-import { ChatAvatar, shortTime } from "../components/ChatList.tsx";
+import { ChatAvatar, PulseDots, shortTime } from "../components/ChatList.tsx";
 import { ApprovalNeedCard, CardButton, runSummary, GroupCard, HelpNeedCard, LoginNeedCard, Rule, SectionHead, useHelpSeen, helpKey } from "../components/InboxParts.tsx";
 import { NEXT_STEP, homeReadiness, setupProgress, useOnboarding } from "../onboarding.ts";
 import { useDevices } from "../devices.ts";
@@ -150,7 +150,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
         </span>
         <span className="flex items-center gap-2">
           <span className="truncate text-sm text-faint flex-1">{c.last ? cleanPreview(c.last.body, 90) : "No messages yet"}</span>
-          {c.unread > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-badge text-badge-ink text-[11px] font-medium grid place-items-center tabular-nums">{c.unread}</span>}
+          {c.unread > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent-chats text-white text-[11px] font-medium grid place-items-center tabular-nums">{c.unread}</span>}
         </span>
       </span>
     </a>
@@ -218,7 +218,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
 
               {needsCount > 0 ? (
                 <>
-                  <SectionHead title="Needs you" right={needsCount} />
+                  <SectionHead title="Needs you" right={needsCount} needs />
                   {helpNeeded.map((c) => (
                     <HelpNeedCard key={c.id} computer={c} />
                   ))}
@@ -242,14 +242,10 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                             <AgentAvatar agent={a} size={36} live />
                             <span className="min-w-0 flex-1 flex flex-col gap-0.5">
                               <span className="text-base font-medium">{a.name}</span>
-                              <span className="text-sm text-ok truncate">{now?.text ?? "Working"}</span>
+                              <span className="text-sm text-st-working truncate">{now?.text ?? "Working"}</span>
                               {now?.where && <span className="text-[13px] text-faint truncate">{now.where}</span>}
                             </span>
-                            <span className="flex gap-1" aria-hidden>
-                              {[0, 1, 2].map((n) => (
-                                <i key={n} className="size-1.5 rounded-full bg-ok animate-pulse" style={{ animationDelay: `${n * 200}ms` }} />
-                              ))}
-                            </span>
+                            <PulseDots />
                           </button>
                         </div>
                       );

@@ -186,7 +186,7 @@ struct HandoffRow: View {
         Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.muted)
         (Text("Handed to ") + Text(agent?.name ?? Self.handle(message.body) ?? "an agent").fontWeight(.semibold))
         if replies > 0 { Text("· \(replies == 1 ? "1 reply" : "\(replies) replies")").foregroundStyle(Palette.muted) }
-        if let state { Text("· \(state)").foregroundStyle(working.isEmpty ? Palette.muted : Palette.green) }
+        if let state { Text("· \(state)").foregroundStyle(working.isEmpty ? Palette.muted : Palette.statusWorkingText) }
       }
       .font(.system(size: 13))
       .foregroundStyle(Palette.text)

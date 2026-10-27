@@ -46,7 +46,7 @@ export function AgentPill({ agent, open, onClick }: { agent: Agent; open?: boole
       </span>
       <span className="flex flex-col items-start leading-tight">
         <span className={cx("font-medium text-base", mood === "asleep" && "text-muted")}>{agent.name}</span>
-        {note && <span className={cx("text-[11px]", mood === "waiting" || mood === "error" ? "text-accent-text" : "text-muted")}>{note}</span>}
+        {note && <span className={cx("text-[11px]", mood === "waiting" ? "text-st-needs" : mood === "error" ? "text-st-problem" : mood === "working" || mood === "thinking" ? "text-st-working" : mood === "done" ? "text-st-online" : "text-muted")}>{note}</span>}
       </span>
       <span className="agent-pill-arrow text-muted">
         <ChevronRight size={18} />

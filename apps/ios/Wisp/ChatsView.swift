@@ -372,7 +372,8 @@ struct ChatRow: View {
             Text(entry.name).font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).lineLimit(1)
             Spacer(minLength: 8)
             if entry.pinned { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).accessibilityLabel("Pinned") }
-            if let at = entry.lastAt { Text(ChatList.timeText(at)).font(.system(size: 13)).foregroundStyle(Palette.faint) }
+            if entry.badge > 0 { Circle().fill(Palette.tabChats).frame(width: 8, height: 8).accessibilityHidden(true) }
+            if let at = entry.lastAt { Text(ChatList.timeText(at)).font(.system(size: 13)).foregroundStyle(entry.badge > 0 ? Palette.tabChats : Palette.faint) }
           }
           HStack(spacing: 8) {
             subtitle
@@ -429,12 +430,40 @@ struct ChatRow: View {
   @ViewBuilder private var subtitle: some View {
     if case .agent(let a) = entry.kind, (store.agent(a.id) ?? a).status == .busy {
       let doing = store.activity[a.id].flatMap { $0 == "started" ? nil : $0 }
-      Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 15)).foregroundStyle(Palette.green).lineLimit(1)
+      HStack(spacing: 6) {
+        WorkingDots(color: Palette.statusWorking)
+        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 15)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
+      }
     } else if let agent = workingHere {
-      Text("\(agent.name) is working").font(.system(size: 15)).foregroundStyle(Palette.green).lineLimit(1)
+      HStack(spacing: 6) {
+        WorkingDots(color: Palette.statusWorking)
+        Text("\(agent.name) is working").font(.system(size: 15)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
+      }
+    } else if let waiting = needsApproval {
+      Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 15)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else {
-      Text(preview).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+      Text(Self.mentioned(preview)).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
     }
+  }
+
+  /** the agents whose pending approvals wait on you here: "" when there is nothing to name, nil when nothing waits */
+  private var needsApproval: String? {
+    guard store.role != "guest", let id = channel?.id,
+          let waiting = store.pendingApprovals.first(where: { $0.channelId == id }) else { return nil }
+    return store.agent(waiting.agentId).map { entry.isTeam ? $0.name : "" } ?? ""
+  }
+
+  /** a preview with its @mentions in purple */
+  static func mentioned(_ text: String) -> AttributedString {
+    var out = AttributedString(text)
+    var index = text.startIndex
+    while let at = text[index...].firstIndex(of: "@") {
+      var end = text.index(after: at)
+      while end < text.endIndex, text[end].isLetter || text[end].isNumber || text[end] == "_" || text[end] == "-" { end = text.index(after: end) }
+      if end > text.index(after: at), let r = Range(at ..< end, in: out) { out[r].foregroundColor = Palette.mention }
+      index = end
+    }
+    return out
   }
 
   private var preview: String {

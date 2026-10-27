@@ -8,7 +8,7 @@ import { osName, useDevices, type DeviceInfo } from "../devices.ts";
 import { AddDeviceDialog } from "../components/AddDevice.tsx";
 import { ScreenThumb, WorkingBadge } from "../components/Screen.tsx";
 import { AgentAvatar, Button, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
-import { useComputerState } from "./computerState.ts";
+import { toneColor, useComputerState, type Tone } from "./computerState.ts";
 import type { NodeInfo } from "./deviceBits.tsx";
 import { AddComputer } from "./ComputersView.tsx";
 
@@ -38,7 +38,7 @@ export function deviceStatus(n: Pick<DeviceInfo, "online" | "paused"> & { update
   if (n.update?.state === "updating" || n.update?.state === "restarting") return { label: "Updating", tone: "info" };
   if (n.update?.state === "failed") return { label: "Update failed", tone: "bad" };
   if (!n.online) return { label: "Offline", tone: "neutral" };
-  if (n.paused) return { label: "Paused", tone: "warn" };
+  if (n.paused) return { label: "Paused", tone: "neutral" };
   return { label: "Online", tone: "ok" };
 }
 
@@ -46,7 +46,7 @@ function agentsOn(c: ComputerInfo, agents: Agent[]) {
   return agents.filter((a) => c.agents.includes(a.id));
 }
 
-const dot = (tone: string) => (tone === "ok" ? "var(--status-online)" : tone === "info" || tone === "accent" ? "var(--status-working)" : tone === "warn" ? "var(--status-paused)" : tone === "bad" ? "var(--status-error)" : "var(--status-idle)");
+const dot = toneColor;
 
 // --- shared bits ----------------------------------------------------------------------------------
 
@@ -80,7 +80,7 @@ function AddComputerLazy({ devices, onClose }: { devices: DeviceInfo[]; onClose:
 function AddChooser({ onClose, onPick }: { onClose: () => void; onPick: (s: "device" | "computer") => void }) {
   const row = (icon: ReactNode, title: string, body: string, to: "device" | "computer") => (
     <button type="button" onClick={() => onPick(to)} className="w-full text-left rounded-2xl bg-card hover:bg-hover border border-line p-4 flex items-center gap-3">
-      <span className="size-10 shrink-0 rounded-xl bg-chip grid place-items-center text-ink">{icon}</span>
+      <span className="size-10 shrink-0 rounded-xl bg-accent-computers/16 text-accent-computers grid place-items-center">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-body font-medium">{title}</span>
         <span className="block text-sm text-muted">{body}</span>
@@ -122,15 +122,15 @@ export function ComputersShell({ children, hideTreeOnPhone = true }: { children:
   );
 }
 
-function treeRow(key: string, to: string, icon: ReactNode, title: string, sub: string, tone: string, active: boolean, nested: boolean) {
+function treeRow(key: string, to: string, icon: ReactNode, title: string, sub: string, tone: Tone, active: boolean, nested: boolean, needs?: boolean) {
   return (
     <a key={key} href={to} aria-current={active ? "page" : undefined} className={cx("flex items-center gap-3 rounded-2xl px-3 py-2.5 min-h-12 hover:bg-hover", nested && "ml-5", active && "bg-side-active")}>
-      <span className="w-[22px] grid place-items-center text-ink">{icon}</span>
+      <span className={cx("size-8 shrink-0", "grid place-items-center rounded-lg text-accent-computers bg-accent-computers/16", needs && "ring-2 ring-st-needs")}>{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium truncate">{title}</span>
         <span className="block text-xs text-faint truncate">{sub}</span>
       </span>
-      <span className="size-2 rounded-full shrink-0" style={{ background: dot(tone) }} />
+      <span className={cx("size-2 rounded-full shrink-0", tone === "info" && "animate-pulse")} style={{ background: dot(tone) }} />
     </a>
   );
 }
@@ -149,11 +149,12 @@ export function ComputerTree() {
   const activeDevice = route.view === "computers" ? route.deviceId : null;
   const state = (c: ComputerInfo) => {
     const busy = agents.some((a) => c.agents.includes(a.id) && a.status === "busy");
-    return !c.online ? { sub: "Offline", tone: "neutral" } : c.controller ? { sub: "In control", tone: "accent" } : busy ? { sub: "Working", tone: "info" } : { sub: "Ready", tone: "ok" };
+    const r: { sub: string; tone: Tone } = !c.online ? { sub: "Offline", tone: "neutral" } : c.paused ? { sub: "Paused", tone: "neutral" } : c.help ? { sub: "Needs you", tone: "warn" } : c.controller ? { sub: "In control", tone: "warn" } : busy ? { sub: "Working", tone: "info" } : { sub: "Ready", tone: "ok" };
+    return r;
   };
   const computerRow = (c: ComputerInfo, nested: boolean) => {
     const s = state(c);
-    return treeRow(c.id, href({ view: "computers", computerId: c.id }), c.kind === "orgo" ? <Cloud size={18} strokeWidth={1.8} /> : c.kind === "device" ? <Lock size={17} strokeWidth={1.8} /> : <Monitor size={18} strokeWidth={1.8} />, c.kind === "device" ? "Your screen" : c.name, s.sub, s.tone, activeComputer === c.id, nested);
+    return treeRow(c.id, href({ view: "computers", computerId: c.id }), c.kind === "orgo" ? <Cloud size={18} strokeWidth={1.8} /> : c.kind === "device" ? <Lock size={17} strokeWidth={1.8} /> : <Monitor size={18} strokeWidth={1.8} />, c.kind === "device" ? "Your screen" : c.name, s.sub, s.tone, activeComputer === c.id, nested, !!c.help);
   };
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pt-6 pb-4 space-y-1">
@@ -191,15 +192,15 @@ function ComputerCard({ computer: c, agents }: { computer: ComputerInfo; agents:
   const on = agentsOn(c, agents);
   const own = c.kind === "device";
   return (
-    <a href={href({ view: "computers", computerId: c.id })} className="rounded-2xl bg-panel border border-line overflow-hidden flex flex-col hover:shadow-panel transition-shadow">
+    <a href={href({ view: "computers", computerId: c.id })} className={cx("rounded-2xl bg-panel border overflow-hidden flex flex-col hover:shadow-panel transition-shadow", c.help ? "border-st-needs ring-1 ring-st-needs" : "border-line")}>
       <ScreenThumb computer={c} className="rounded-none aspect-[16/9]" />
       <div className="px-3.5 py-3 space-y-1">
         <div className="flex items-center gap-2">
-          {own ? <Lock size={16} className="text-muted shrink-0" /> : on[0] ? <AgentAvatar agent={on[0]} size={22} badge={false} /> : <Monitor size={16} className="text-muted shrink-0" />}
+          {own ? <Lock size={16} className="text-accent-computers shrink-0" /> : on[0] ? <AgentAvatar agent={on[0]} size={22} badge={false} /> : <Monitor size={16} className="text-accent-computers shrink-0" />}
           <span className="font-medium text-sm truncate flex-1">{own ? "Your screen" : c.name}</span>
           {state.working ? <WorkingBadge /> : <Pill tone={own && state.label === "Ready" ? "neutral" : state.tone}>{own && state.label === "Ready" ? "Shared" : state.label}</Pill>}
         </div>
-        <p className="text-[13px] text-muted truncate">{c.help ? <span className="text-accent-text font-medium">Needs you: {c.help.request}</span> : c.activity && state.working ? c.activity.text : own ? "Agents ask before using it" : on.length ? on.map((a) => a.name).join(", ") : "No agents yet"}</p>
+        <p className="text-[13px] text-muted truncate">{c.help ? <span className="text-st-needs font-medium">Needs you: {c.help.request}</span> : c.activity && state.working ? c.activity.text : own ? "Agents ask before using it" : on.length ? on.map((a) => a.name).join(", ") : "No agents yet"}</p>
       </div>
     </a>
   );
@@ -265,8 +266,8 @@ export function ComputersHome() {
             </p>
           )}
           {asking && (
-            <div className="rounded-3xl bg-card border border-line p-4 flex flex-wrap items-center gap-3" role="status">
-              {asker ? <AgentAvatar agent={asker} size={32} badge={false} /> : <Hand size={20} className="text-muted" />}
+            <div className="rounded-3xl bg-card border border-st-needs p-4 flex flex-wrap items-center gap-3" role="status">
+              {asker ? <AgentAvatar agent={asker} size={32} badge={false} /> : <Hand size={20} className="text-st-needs" />}
               <div className="min-w-0 flex-1 basis-44">
                 <div className="text-sm font-medium">{asker?.name ?? "An agent"} needs you on this computer</div>
                 <div className="text-sm text-muted">{asking.help!.request}</div>
@@ -297,7 +298,7 @@ export function ComputersHome() {
               {groups.cloud.length > 0 && (
                 <section className="rounded-3xl bg-card border border-line p-4 space-y-3">
                   <div className="flex items-center gap-3">
-                    <span className="size-10 rounded-xl bg-chip grid place-items-center">
+                    <span className="size-10 rounded-xl bg-accent-computers/16 text-accent-computers grid place-items-center">
                       <Cloud size={20} strokeWidth={1.8} />
                     </span>
                     <h2 className="flex-1 font-semibold text-base">Cloud computers</h2>
@@ -311,7 +312,7 @@ export function ComputersHome() {
               )}
               {phones > 0 && (
                 <section className="rounded-3xl bg-card border border-line p-4 flex items-center gap-3 self-start">
-                  <span className="size-10 rounded-xl bg-chip grid place-items-center">
+                  <span className="size-10 rounded-xl bg-accent-computers/16 text-accent-computers grid place-items-center">
                     <Smartphone size={20} strokeWidth={1.8} />
                   </span>
                   <span className="flex-1 min-w-0">
@@ -343,7 +344,7 @@ function DeviceGroupCard({ device: n, list, agents, isOwner, actions }: { device
     <section className="rounded-3xl bg-card border border-line p-4 space-y-3.5">
       <div className="flex items-center gap-3">
         <a href={href({ view: "computers", computerId: null, deviceId: n.id })} className="flex items-center gap-3 min-w-0 flex-1" aria-label={`Open ${n.name}`}>
-          <span className="size-10 shrink-0 rounded-xl bg-chip grid place-items-center">
+          <span className="size-10 shrink-0 rounded-xl bg-accent-computers/16 text-accent-computers grid place-items-center">
             <Laptop size={20} strokeWidth={1.8} />
           </span>
           <span className="min-w-0 flex-1">

@@ -3,23 +3,6 @@ import SwiftUI
 // Small pieces of the computer page: the chips under the screen, the screen-code prompt and the
 // hand-back note (comp-Detail, comp-ScreenCode, comp-HandBack).
 
-/** A square-ish chip with a line icon over a word: Keys, Clipboard, Files, Screenshot. */
-struct ChipFace: View {
-  var symbol: String
-  var title: String
-  var body: some View {
-    VStack(spacing: 4) {
-      Image(systemName: symbol).font(.system(size: 20, weight: .regular))
-      Text(title).font(.system(size: 12, weight: .medium))
-    }
-    .foregroundStyle(Palette.text)
-    .frame(maxWidth: .infinity, minHeight: 62)
-    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.control))
-    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.hairline))
-    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-  }
-}
-
 /** The screen's code: six dots and a number pad (or a password box). The device checks it, not Wisp. */
 struct ScreenCodeSheet: View {
   @Environment(\.dismiss) private var dismiss

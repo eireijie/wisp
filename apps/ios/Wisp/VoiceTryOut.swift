@@ -100,7 +100,7 @@ struct VoiceTryOutView: View {
             }
             Spacer(minLength: 8)
           }
-          if model.micTesting { ProgressView(value: model.micLevel).tint(Palette.green).accessibilityHidden(true) }
+          if model.micTesting { ProgressView(value: model.micLevel).tint(Palette.statusOnline).accessibilityHidden(true) }
           Button(model.micTesting ? "Listening…" : "Test microphone") { Task { await model.testMicrophone() } }
             .buttonStyle(.pill(.secondary)).disabled(model.micTesting).accessibilityIdentifier("voice-test-mic")
           outcome(model.micResult)
@@ -132,6 +132,6 @@ struct VoiceTryOutView: View {
   }
 
   @ViewBuilder private func outcome(_ result: VoiceTryOutModel.Outcome?) -> some View {
-    if let result { Text(result.text).font(.system(size: 13)).foregroundStyle(result.ok ? Palette.green : Palette.red).accessibilityAddTraits(.updatesFrequently) }
+    if let result { Text(result.text).font(.system(size: 13)).foregroundStyle(result.ok ? Palette.statusOnline : Palette.red).accessibilityAddTraits(.updatesFrequently) }
   }
 }

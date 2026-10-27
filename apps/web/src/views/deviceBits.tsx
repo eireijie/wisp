@@ -50,7 +50,7 @@ export function notConnectedLine(n: { online: boolean; lastSeen: string | null }
 /** The device's tile: a server that lights up and pulses while it's connected. */
 export function DeviceIcon({ online }: { online: boolean }) {
   return (
-    <div className={cx("relative size-11 shrink-0 rounded-xl grid place-items-center transition-colors", online ? "bg-accent-soft text-accent-text" : "bg-hover text-faint")}>
+    <div className={cx("relative size-11 shrink-0 rounded-xl grid place-items-center transition-colors", online ? "bg-accent-computers/16 text-accent-computers" : "bg-hover text-faint")}>
       <Server size={19} />
       <span className="absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-full bg-panel">
         {online && <span className="absolute size-2.5 rounded-full motion-safe:animate-ping" style={{ background: "var(--status-online)", opacity: 0.6 }} />}

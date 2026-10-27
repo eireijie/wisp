@@ -80,17 +80,29 @@ struct MainTabs: View {
     Image(systemName: symbol).symbolEffect(.bounce, options: .nonRepeating, value: picks[mine, default: 0])
   }
 
+  /** the tab you are on colors the bar's highlight */
+  private var accent: Color {
+    switch tab {
+    case .inbox: Palette.tabInbox
+    case .chats: Palette.tabChats
+    case .agents: Palette.tabAgents
+    case .computers: Palette.tabComputers
+    }
+  }
+
   var body: some View {
     TabView(selection: $tab) {
-      Tab(value: MainTab.inbox) { InboxTab().tabEntrance(.inbox, current: tab) } label: { Label { Text("Inbox") } icon: { icon("tray", .inbox) } }
+      Tab(value: MainTab.inbox) { InboxTab().tint(Palette.text).tabEntrance(.inbox, current: tab) } label: { Label { Text("Inbox") } icon: { icon("tray", .inbox) } }
         .badge(store.needsYouCount)
-      Tab(value: MainTab.chats) { ChatsView().tabEntrance(.chats, current: tab) } label: { Label { Text("Chats") } icon: { icon("bubble.left", .chats) } }
+      Tab(value: MainTab.chats) { ChatsView().tint(Palette.text).tabEntrance(.chats, current: tab) } label: { Label { Text("Chats") } icon: { icon("bubble.left", .chats) } }
         .badge(store.unreadTotal)
-      Tab(value: MainTab.agents) { AgentsView().tabEntrance(.agents, current: tab) } label: { Label { Text("Agents") } icon: { Image(uiImage: TabIcons.ghost) } }
+      Tab(value: MainTab.agents) { AgentsView().tint(Palette.text).tabEntrance(.agents, current: tab) } label: { Label { Text("Agents") } icon: { Image(uiImage: TabIcons.ghost) } }
       if store.canViewComputers {
-        Tab(value: MainTab.computers) { ComputersView().tabEntrance(.computers, current: tab) } label: { Label { Text("Computers") } icon: { icon("desktopcomputer", .computers) } }
+        Tab(value: MainTab.computers) { ComputersView().tint(Palette.text).tabEntrance(.computers, current: tab) } label: { Label { Text("Computers") } icon: { icon("desktopcomputer", .computers) } }
       }
     }
+    .tint(accent)
+    .animation(Motion.fade, value: tab)
     .onChange(of: tab) { _, new in picks[new, default: 0] += 1 }
     .environment(\.openSettings, SheetOpener(open: { settings = true }))
     .environment(\.openOrganizations, SheetOpener(open: { orgs = true }))

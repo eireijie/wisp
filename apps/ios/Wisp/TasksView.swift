@@ -238,7 +238,7 @@ struct TaskDetail: View {
           if let branch = source.branch {
             fieldRow("Branch") { Text(branch).font(.system(size: 14, design: .monospaced)).foregroundStyle(Palette.text).textSelection(.enabled) }
           }
-          if source.mergedAt != nil { fieldRow("Merged") { Text("Yes").foregroundStyle(Palette.green) } }
+          if source.mergedAt != nil { fieldRow("Merged") { Text("Yes").foregroundStyle(Palette.statusOnline) } }
         }
         if let waiting = store.taskWaiting(t) {
           InboxHead(title: "What \(agent?.name ?? "the agent") is doing")
@@ -249,7 +249,7 @@ struct TaskDetail: View {
             if state == "Working" {
               HStack(spacing: 10) {
                 WorkingDots()
-                Text(agent.flatMap { store.doing($0) }?.text ?? "Working on it").font(.system(size: 15)).foregroundStyle(Palette.green)
+                Text(agent.flatMap { store.doing($0) }?.text ?? "Working on it").font(.system(size: 15)).foregroundStyle(Palette.statusOnline)
               }
             }
             if !t.brief.isEmpty, t.brief != t.title { Text(t.brief).font(.system(size: 13)).foregroundStyle(Palette.text.opacity(0.85)) }
@@ -324,7 +324,7 @@ struct TaskDetail: View {
   private func subtaskRow(_ child: WorkTask) -> some View {
     let state = store.taskState(child)
     let icon = state == "Done" ? "checkmark.circle" : state == "Failed" || state == "Cancelled" ? "xmark.circle" : "circle"
-    let hue = state == "Done" ? Palette.green : state == "Failed" ? Palette.red : Palette.faint
+    let hue = state == "Done" ? Palette.statusOnline : state == "Failed" ? Palette.red : Palette.faint
     return HStack(spacing: 12) {
       Image(systemName: icon).font(.system(size: 22, weight: .regular)).foregroundStyle(hue)
       Text(child.title).font(.system(size: 15)).foregroundStyle(Palette.text).lineLimit(2).multilineTextAlignment(.leading)

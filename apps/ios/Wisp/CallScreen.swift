@@ -340,7 +340,7 @@ struct CallScreen: View {
       } else {
         timer.font(.system(size: 15).monospacedDigit()).foregroundStyle(Palette.faint)
         Text(facts.label).font(.system(size: 15))
-          .foregroundStyle(facts.micTrouble ? Color.orange : facts.failed ? Palette.red : facts.phase == .listening || facts.phase == .hearing ? Palette.green : Palette.muted)
+          .foregroundStyle(facts.micTrouble ? Color.orange : facts.failed ? Palette.red : facts.phase == .listening || facts.phase == .hearing ? Palette.statusOnline : Palette.muted)
           .padding(.top, 6).accessibilityAddTraits(.updatesFrequently)
         if !facts.activity.isEmpty {
           HStack(spacing: 8) {

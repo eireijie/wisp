@@ -6,11 +6,11 @@ import { go } from "../router.ts";
 import { AgentAvatar, cx, timeAgo } from "./ui.tsx";
 
 /** "Needs you", "New replies"…: the small grey heading over a group, with a count or a link on the right. */
-export function SectionHead({ title, right }: { title: string; right?: ReactNode }) {
+export function SectionHead({ title, right, needs }: { title: string; right?: ReactNode; needs?: boolean }) {
   return (
     <div className="flex items-center justify-between px-1.5 pt-1.5 text-[13px] font-medium text-faint">
       <h2>{title}</h2>
-      {right !== undefined && right !== null && <span className="font-medium">{right}</span>}
+      {right !== undefined && right !== null && <span className={cx("font-medium", needs && "text-st-needs")}>{right}</span>}
     </div>
   );
 }
@@ -97,6 +97,7 @@ function CardHead({ agent, title, sub }: { agent: Agent | undefined; title: Reac
         <div className="text-base font-medium leading-snug">{title}</div>
         <div className="text-[13px] text-faint truncate">{sub}</div>
       </div>
+      <span role="img" aria-label="Needs you" className="shrink-0 size-2.5 rounded-full bg-st-needs" />
     </div>
   );
 }

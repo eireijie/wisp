@@ -93,6 +93,10 @@ interface Props {
   computer: ComputerInfo;
   /** you have control: mouse and keyboard go to the computer */
   control: boolean;
+  /** the page draws its own frame while you're in control */
+  noRing?: boolean;
+  /** the page floats controls along the bottom edge, so the frame-error note sits above them */
+  raiseNote?: boolean;
   /** called for each thing you do while in control (teaching a task) */
   onInput?: (i: ScreenInput) => void;
   /** a small preview (the chat side panel): no minimum height or rounded frame of its own */
@@ -107,7 +111,7 @@ interface Props {
  * The computer's screen, live. VMs and cloud computers stream over VNC (noVNC); a device's own
  * screen streams frames through the hub. Input only goes through while you have control.
  */
-export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, onInput, compact, onTakeControl, onActivity }, ref) {
+export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, noRing, raiseNote, onInput, compact, onTakeControl, onActivity }, ref) {
   const [state, setState] = useState<"connecting" | "live" | "closed" | "error" | "code">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -342,7 +346,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 
   return (
     <div
-      className={cx("relative size-full overflow-hidden bg-black transition-shadow", !compact && "min-h-64 rounded-2xl", control && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
+      className={cx("relative size-full overflow-hidden bg-black transition-shadow", !compact && "min-h-64 rounded-2xl", control && !noRing && "ring-[3px] ring-info shadow-[0_0_28px_-4px_var(--info)]", !control && onTakeControl && state === "live" && "cursor-pointer")}
       onPointerDownCapture={(e) => {
         // clicking a live screen you don't control takes control; that click doesn't reach the computer
         if (control || !onTakeControl || state !== "live" || e.button !== 0) return;
@@ -386,7 +390,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
           )}
         </div>
       )}
-      {state === "live" && error && transport === "frames" && <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/70 text-white text-xs px-3 py-2">{error}</div>}
+      {state === "live" && error && transport === "frames" && <div className={cx("absolute left-3 right-3 rounded-lg bg-black/70 text-white text-xs px-3 py-2", raiseNote ? "bottom-3 md:bottom-[4.5rem]" : "bottom-3")}>{error}</div>}
     </div>
   );
 });
@@ -394,7 +398,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
 /** "Working" with a sparkle, like a teammate's status. */
 export function WorkingBadge({ text = "Working" }: { text?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warn/12 text-warn px-2 h-6 text-xs font-medium">
+    <span className="inline-flex items-center gap-1 rounded-full bg-st-working/16 text-st-working px-2 h-6 text-xs font-medium">
       <Sparkle size={12} className="animate-spin [animation-duration:3s]" /> {text}
     </span>
   );
