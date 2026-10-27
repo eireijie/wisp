@@ -207,9 +207,10 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
         at: z.string().max(40).optional(),
         inMinutes: z.number().positive().max(60 * 24 * 366).optional(),
         note: z.string().trim().min(1).max(1000),
-        label: z.string().trim().max(60).optional(),
+        // cosmetic: cut to fit rather than failing the call
+        label: z.string().trim().transform((s) => s.slice(0, 60)).optional(),
         waitingOn: z.enum(["agent", "person"]).default("agent"),
-        condition: z.string().trim().max(200).default(""),
+        condition: z.string().trim().transform((s) => s.slice(0, 200)).default(""),
       }),
       req.body,
       reply,
@@ -221,9 +222,11 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     if (!due) return reply.code(400).send({ error: `give "at" as "YYYY-MM-DD HH:MM" on ${tz} time (or ISO with an offset), or "in_minutes"` });
     if (due.getTime() < Date.now() - 60_000) return reply.code(400).send({ error: "that time has already passed" });
     // set while answering someone: it shows under that answer
-    const run = hub.currentRun(c.actor.id);
+    const run = hub.runFor(c.actor.id, req.headers["x-wisp-run"]);
     const f = store.createFollowup({ agentId: c.actor.id, userId, dueAt: due.toISOString(), note: body.note, label: body.label || null, waitingOn: body.waitingOn, condition: body.condition, channelId: run?.channelId ?? null, runId: run?.id ?? null });
     hub.broadcast(c.workspaceId, { type: "background_changed", agentId: c.actor.id });
+    // a chat's line in the list says when the agent will be back
+    if (userId) hub.broadcast(c.workspaceId, { type: "channels_changed" }, (u) => u === userId);
     return { ...f, timezone: tz };
   });
 
@@ -231,15 +234,16 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const c = need(req, reply);
     if (!c) return;
     if (c.actor.kind !== "agent") return reply.code(403).send({ error: "agents only" });
-    const body = parse(z.object({ text: z.string().trim().min(1).max(20_000), fileIds: z.array(z.string()).max(20).default([]), replies: z.array(z.string().trim().min(1).max(40)).max(4).default([]) }), req.body, reply);
+    const body = parse(z.object({ text: z.string().trim().min(1).max(20_000), fileIds: z.array(z.string()).max(20).default([]), replies: z.array(z.string()).default([]).transform((r) => r.map((x) => x.trim().slice(0, 40)).filter(Boolean).slice(0, 4)) }), req.body, reply);
     if (!body) return;
     const userId = personFor(c);
     if (!userId) return reply.code(409).send({ error: "nobody to message" });
     const channel = store.dmChannel(c.workspaceId, userId, c.actor.id);
     const files = body.fileIds.map((f) => store.file(f)).filter((f) => f?.workspaceId === c.workspaceId);
-    // written because something came due: the person sees the agent checking back, with its quick replies
-    const run = hub.currentRun(c.actor.id);
-    const checkingBack = run?.kind === "background" && hub.background.carriesFollowups(run.id);
+    // written because something came due: the person sees the agent checking back, with its quick replies;
+    // not the line where it lets a chat go (that one shows "Closed")
+    const run = hub.runFor(c.actor.id, req.headers["x-wisp-run"]);
+    const checkingBack = run?.kind === "background" && hub.background.carriesFollowups(run.id) && !hub.loops.closing(run.id);
     const parts: MessagePart[] = files.map((f) => ({ type: "file" as const, fileId: f!.id, name: f!.name }));
     if (checkingBack || body.replies.length) parts.push({ type: "checkback", replies: body.replies });
     const msg = hub.postMessage({ channelId: channel.id, author: c.actor, body: body.text, parts, route: false, onBehalfOf: userId });
@@ -254,18 +258,19 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     const body = parse(
       z.object({
         status: z.enum(["open", "waiting", "done", "closed"]),
-        summary: z.string().trim().max(200).optional(),
-        did: z.string().trim().max(200).optional(),
-        saved: z.string().trim().max(200).optional(),
-        next: z.string().trim().max(200).optional(),
-        checkBackInMinutes: z.number().int().min(10).max(7 * 24 * 60).optional(),
+        summary: z.string().optional(),
+        did: z.string().optional(),
+        saved: z.string().optional(),
+        next: z.string().optional(),
+        // Loops trims the text and keeps the time between 10 minutes and a week
+        checkBackInMinutes: z.number().positive().optional(),
       }),
       req.body,
       reply,
     );
     if (!body) return;
-    const run = hub.currentRun(c.actor.id);
-    if (!run) return reply.code(409).send({ error: "only while answering someone" });
+    const run = hub.runFor(c.actor.id, req.headers["x-wisp-run"]);
+    if (!run) return reply.code(409).send({ error: "only while answering someone (if you're answering several people at once, update Wisp on your device)" });
     const r = hub.loops.setStatus(run, { status: body.status, summary: body.summary, wrap: { did: body.did, saved: body.saved, next: body.next }, checkBackInMinutes: body.checkBackInMinutes });
     if ("error" in r) return reply.code(400).send(r);
     return r;

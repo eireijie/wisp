@@ -107,6 +107,9 @@ export class Background {
       if (!runId) continue;
       for (const f of list) store.setFollowupStatus(f.id, "done");
       this.hub.loops.fired(list, runId);
+      // its chat's "Back at 4:35" line is over
+      const ws = store.agent(agentId)?.workspaceId;
+      if (ws) this.hub.broadcast(ws, { type: "channels_changed" }, (u) => u === userId);
     }
     for (const b of store.activeBackground()) {
       if (b.checking || (b.nextAt && new Date(b.nextAt) > at)) continue;

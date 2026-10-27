@@ -9,6 +9,7 @@ import { createWispMcp } from "./server.ts";
  *   WISP_URL    hub URL (default http://localhost:4747)
  *   WISP_TOKEN  agent token, or node token together with WISP_AGENT
  *   WISP_AGENT  agent id when using a node token
+ *   WISP_RUN    the request this server works on (set by the device for each run)
  */
 const url = envVar("URL") ?? "http://localhost:4747";
 const token = envVar("TOKEN");
@@ -17,5 +18,5 @@ if (!token) {
   process.exit(1);
 }
 
-const server = await createWispMcp(new WispClient({ url, token, agentId: envVar("AGENT") }));
+const server = await createWispMcp(new WispClient({ url, token, agentId: envVar("AGENT"), runId: envVar("RUN") }));
 await server.connect(new StdioServerTransport());

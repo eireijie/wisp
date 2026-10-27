@@ -4,6 +4,8 @@ export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
   token: string; // agent token, or node token + agentId
   agentId?: string;
+  /** the request the agent is working on, so the hub knows which chat its calls are about */
+  runId?: string;
   /** used instead of the global fetch, e.g. by the hub calling its own API in-process */
   fetch?: typeof fetch;
 }
@@ -30,6 +32,7 @@ export class WispClient {
       headers: {
         authorization: `Bearer ${this.opts.token}`,
         ...(this.opts.agentId ? { "x-wisp-agent": this.opts.agentId } : {}),
+        ...(this.opts.runId ? { "x-wisp-run": this.opts.runId } : {}),
         ...(body !== undefined && !(body instanceof Uint8Array) ? { "content-type": "application/json" } : {}),
         ...headers,
       },

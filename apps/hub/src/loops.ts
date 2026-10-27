@@ -29,11 +29,14 @@ export class Loops {
     if (channel?.kind !== "dm" || !run.requestedBy) return { error: "chat_status is for your DM with the person you work for" };
     const was = store.chatLoop(channel.id);
     const summary = s.summary?.trim().slice(0, 200) || (s.status === "waiting" || s.status === "closed" ? was?.summary ?? "" : "");
-    // a new "waiting" after the person wrote again starts over; one the agent repeats after a check-back keeps counting
-    const loop = store.setChatLoop({ channelId: channel.id, agentId: run.agentId, userId: run.requestedBy, status: s.status, summary, nudges: s.status === "waiting" ? was?.nudges ?? 0 : 0 });
+    const stillWaiting = s.status === "waiting" && was?.status === "waiting";
+    // saying "waiting" again keeps counting check-backs and keeps the one already coming, unless what it waits on changed
+    if (stillWaiting && summary === was.summary && this.pendingCheckback(channel.id)) return was;
+    const loop = store.setChatLoop({ channelId: channel.id, agentId: run.agentId, userId: run.requestedBy, status: s.status, summary, nudges: stillWaiting ? was.nudges : 0 });
     this.cancelCheckbacks(channel.id);
     if (s.status === "waiting" && loop.nudges < MAX_CHECKBACKS) this.scheduleCheckback(loop, loop.nudges === 0 ? s.checkBackInMinutes ?? FIRST_CHECKBACK_MINUTES : LAST_CHECKBACK_MINUTES);
-    const wrap = { did: s.wrap?.did?.trim() ?? "", saved: s.wrap?.saved?.trim() ?? "", next: s.wrap?.next?.trim() ?? "" };
+    const line = (x?: string) => x?.trim().slice(0, 200) ?? "";
+    const wrap = { did: line(s.wrap?.did), saved: line(s.wrap?.saved), next: line(s.wrap?.next) };
     if (s.status === "done" && (wrap.did || wrap.saved || wrap.next)) this.queue(run.id, { type: "wrapup", ...wrap });
     if (s.status === "closed") this.queue(run.id, { type: "closed" });
     this.changed(loop);
@@ -100,6 +103,21 @@ ${open.map((f) => `- ${f.id}: ${f.label ?? f.note}${f.label ? ` (${f.note})` : "
     ]
       .filter(Boolean)
       .join("\n");
+  }
+
+  /** A check-back run that lets its chat go: what it writes is the goodbye, not another ask. */
+  closing(runId: string) {
+    return !!this.pending.get(runId)?.some((p) => p.type === "closed");
+  }
+
+  /** A run was stopped: what it said about its chat goes nowhere. */
+  forget(runId: string) {
+    this.pending.delete(runId);
+    this.written.delete(runId);
+  }
+
+  private pendingCheckback(channelId: string) {
+    return !!this.hub.store.db.prepare("SELECT 1 FROM followups WHERE channel_id = ? AND kind = 'checkback' AND status = 'pending'").get(channelId);
   }
 
   /** A message_person message from a background run: its pills and wrap-up go there when the run posts no reply. */

@@ -183,11 +183,56 @@ describe("open loops", () => {
     await waitFor(() => calls.length > n || undefined);
     await idle();
     const drop = hub.store.messages(dm().id).at(-1)!;
-    expect(drop.parts.map((p) => p.type)).toEqual(["checkback", "closed"]);
+    // the goodbye isn't another check-back: no label, no quick replies, no Reply on the phone
+    expect(drop.parts.map((p) => p.type)).toEqual(["closed"]);
     expect(hub.store.chatLoop(dm().id)!.status).toBe("closed");
     expect(pendingCheckbacks()).toHaveLength(0);
     chats = await owner.request("GET", "/api/channels");
     expect(chats.find((c) => c.id === dm().id)!.loop).toMatchObject({ status: "closed" });
+  });
+
+  it("keeps the check-back that's coming when the agent says it's still waiting, and starts over after a close", async () => {
+    onReply = async (agent) => {
+      await agent.chatStatus({ status: "waiting", summary: "choose a caterer" });
+      return "Which caterer?";
+    };
+    await replyTo("we need food for the offsite");
+    const [first] = pendingCheckbacks();
+    // woken again by something else, it says the same thing: the check-back stays put
+    const run = hub.store.createRun({ agentId, channelId: dm().id, threadId: null, triggerMessageId: "", hop: 0, requestedBy: me });
+    hub.store.setRunStatus(run, "running");
+    hub.loops.setStatus(hub.store.run(run)!, { status: "waiting", summary: "choose a caterer" });
+    expect(pendingCheckbacks().map((f) => f.id)).toEqual([first.id]);
+    // after it was dropped, a new "waiting" counts from zero and gets a check-back again
+    hub.store.setChatLoop({ channelId: dm().id, agentId, userId: me, status: "closed", nudges: 2 });
+    hub.loops.setStatus(hub.store.run(run)!, { status: "waiting", summary: "choose a caterer" });
+    expect(hub.store.chatLoop(dm().id)).toMatchObject({ status: "waiting", nudges: 0 });
+    expect(pendingCheckbacks()).toHaveLength(1);
+    hub.store.setRunStatus(run, "done");
+    hub.loops.forget(run);
+    onReply = async () => "ok";
+    await replyTo("pick the cheaper one");
+  });
+
+  it("knows which chat a call is about when the agent answers several at once", async () => {
+    const a = hub.store.createRun({ agentId, channelId: dm().id, threadId: null, triggerMessageId: "", hop: 0, requestedBy: me });
+    const b = hub.store.createRun({ agentId, channelId: dm().id, threadId: null, triggerMessageId: "", hop: 0, requestedBy: me });
+    hub.store.setRunStatus(a, "running");
+    expect(hub.runFor(agentId)?.id).toBe(a);
+    hub.store.setRunStatus(b, "running");
+    // two at once and no run named: don't guess
+    expect(hub.runFor(agentId)).toBeUndefined();
+    expect(hub.runFor(agentId, b)?.id).toBe(b);
+    expect(hub.runFor("agt_someone_else", b)).toBeUndefined();
+    const token = calls.at(-1)!.mcp!.env.WISP_TOKEN;
+    const agent = new WispClient({ url: owner.url, token });
+    await expect(agent.chatStatus({ status: "open" })).rejects.toThrow("answering several");
+    const named = new WispClient({ url: owner.url, token, runId: a });
+    // over-long quick replies are cut to fit, not refused
+    const sent = await named.messagePerson("Pick one?", [], ["a".repeat(60), " ", "Later"]);
+    const parts = hub.store.message(sent.messageId)!.parts;
+    expect(parts).toEqual([{ type: "checkback", replies: ["a".repeat(40), "Later"] }]);
+    for (const r of [a, b]) hub.store.setRunStatus(r, "done");
   });
 
   it("stops checking back once the person writes", async () => {

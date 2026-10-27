@@ -334,7 +334,7 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
       inputSchema: {
         text: z.string(),
         file_ids: z.array(z.string()).optional(),
-        replies: z.array(z.string()).max(4).optional().describe("2–4 quick answers they can tap, a few words each (\"Sent it\", \"Tomorrow\"), when they'd answer in a word"),
+        replies: z.array(z.string()).optional().describe("2–4 quick answers they can tap, a few words each, under 40 characters (\"Sent it\", \"Tomorrow\"), when they'd answer in a word"),
       },
     },
     safe(async ({ text: t, file_ids, replies }) => {

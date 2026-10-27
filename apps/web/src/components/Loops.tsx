@@ -207,7 +207,8 @@ export function ClosedLine({ animate }: { animate: boolean }) {
 /** A DM's line in the chat list, when it waits on you or its agent will come back to something. */
 export function loopLine(c: { loop?: { status: string; summary: string } | null; next?: { label: string; dueAt: string; waitingOn: string } | null }, clock?: "auto" | "12h" | "24h") {
   if (c.loop?.status === "waiting") return { tone: "warn" as const, icon: <MessageCircle size={12} aria-hidden />, text: `Waiting on you${c.loop.summary ? ` · ${c.loop.summary}` : ""}` };
-  if (c.next && c.next.waitingOn === "agent") {
+  // one that already came due waits for the list to catch up; don't show it as still coming
+  if (c.next && c.next.waitingOn === "agent" && Date.parse(c.next.dueAt) > Date.now()) {
     // "Back at 4:35", "Back tomorrow 9 AM", "Back on Sat"
     const when = whenText(c.next.dueAt, new Date(), clock);
     const back = /^\d/.test(when) ? `at ${when}` : when.startsWith("Tomorrow") ? when.replace("Tomorrow", "tomorrow") : `on ${when}`;

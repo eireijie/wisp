@@ -850,6 +850,19 @@ export class Hub {
   }
 
   /** The run an agent is working on right now, if any (its latest, when several are running). */
+  /**
+   * The run an agent's call belongs to: the one its device named (x-wisp-run), else its only
+   * running one. Undefined when it's answering several at once and didn't say which.
+   */
+  runFor(agentId: string, runId?: unknown) {
+    if (typeof runId === "string" && runId) {
+      const run = this.store.run(runId);
+      return run && run.agentId === agentId && run.status === "running" ? run : undefined;
+    }
+    const running = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' LIMIT 2").all(agentId) as { id: string }[];
+    return running.length === 1 ? this.store.run(running[0].id) : undefined;
+  }
+
   currentRun(agentId: string) {
     const r = this.store.db.prepare("SELECT id FROM runs WHERE agent_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 1").get(agentId) as { id: string } | undefined;
     return r ? this.store.run(r.id) : undefined;
@@ -871,6 +884,7 @@ export class Hub {
     this.store.setRunStatus(runId, "cancelled");
     this.live.delete(runId);
     this.taskReplies.delete(runId);
+    this.loops.forget(runId);
     // the device's late report is ignored, so clients hear from here that the agent is free again
     if (agent) this.broadcast(agent.workspaceId, { type: "agent_status", agentId: agent.id, status: this.agentStatus(agent) });
     // stopping one participant doesn't stop the discussion; it goes on without them
