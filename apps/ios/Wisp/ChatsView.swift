@@ -365,7 +365,7 @@ struct ChatRow: View {
 
   var body: some View {
     Button(action: open) {
-      HStack(spacing: 12) {
+      HStack(spacing: 14) {
         avatar
         VStack(alignment: .leading, spacing: 4) {
           HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -383,7 +383,7 @@ struct ChatRow: View {
           }
         }
       }
-      .padding(.vertical, 4).frame(minHeight: 56)
+      .padding(.vertical, 8).frame(minHeight: 72)
       .opacity(muted ? 0.6 : 1)
       .contentShape(Rectangle())
     }
@@ -411,8 +411,8 @@ struct ChatRow: View {
 
   @ViewBuilder private var avatar: some View {
     switch entry.kind {
-    case .agent(let a): SoloGhost(agent: store.agent(a.id) ?? a)
-    case .team(let c): TeamGhosts(agents: teamAgents(c), seed: c.name)
+    case .agent(let a): SoloGhost(agent: store.agent(a.id) ?? a, size: 52)
+    case .team(let c): TeamGhosts(agents: teamAgents(c), seed: c.name, size: 52)
     }
   }
 

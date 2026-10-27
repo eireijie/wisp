@@ -65,7 +65,7 @@ export function ChatAvatar({ chat, size }: { chat: Pick<Chat, "kind" | "agent" |
   const small = Math.round(size * 0.72);
   if (!members.length)
     return (
-      <span className="grid place-items-center rounded-full bg-chip text-muted" style={{ width: size * 0.9, height: size * 0.9 }} aria-hidden>
+      <span className="grid place-items-center rounded-full bg-chip text-muted" style={{ width: size, height: size }} aria-hidden>
         <Users size={size * 0.45} strokeWidth={1.8} />
       </span>
     );
@@ -295,15 +295,15 @@ export function withMentions(text: string) {
 function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSection }: { chat: Chat; page: boolean; active: boolean; preview: { text: string; working: boolean; needs?: boolean }; time: string; onOpen: () => void; sections: Section[]; onNewSection: () => void }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const press = useLongPress((x, y) => chat.channel && setMenu({ x, y }));
-  const size = page ? 32 : 28;
+  const size = 44;
   const unread = chat.unread > 0 && !chat.muted;
   const url = chat.channel ? href({ view: "chat", channelId: chat.channel.id, threadId: null }) : undefined;
   const inner = (
     <>
-      <span className="shrink-0 grid place-items-center" style={{ width: page ? 44 : 32, height: size }}>
+      <span className="shrink-0 flex items-center" style={{ width: 48, height: size }}>
         <ChatAvatar chat={chat} size={size} />
       </span>
-      <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+      <span className="flex-1 min-w-0 flex flex-col gap-1">
         <span className="flex items-baseline justify-between gap-2">
           <span className={cx("truncate", page ? "text-body" : "text-body", chat.unread > 0 ? "font-semibold" : "font-medium", chat.muted && "opacity-60")}>{chat.name}</span>
           <span className={cx("shrink-0 flex items-center gap-1.5", unread ? "text-accent-chats" : "text-faint")} style={{ fontSize: 12 }}>
@@ -323,7 +323,7 @@ function ChatRow({ chat, page, active, preview, time, onOpen, sections, onNewSec
       </span>
     </>
   );
-  const cls = cx("w-full flex items-center text-left transition-colors", page ? "gap-2.5 py-2 px-2 rounded-xl min-h-[56px]" : "gap-2 px-2 py-1.5 rounded-xl min-h-[44px]", active ? "bg-side-active" : "hover:bg-hover");
+  const cls = cx("w-full flex items-center text-left transition-colors", page ? "gap-3.5 py-3 px-2 rounded-xl min-h-[68px]" : "gap-3 px-2.5 py-2.5 rounded-xl min-h-[64px]", active ? "bg-side-active" : "hover:bg-hover");
   return (
     <div onContextMenu={(e) => chat.channel && (e.preventDefault(), setMenu({ x: e.clientX, y: e.clientY }))} {...press}>
       {url ? (

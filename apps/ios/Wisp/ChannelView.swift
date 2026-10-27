@@ -185,8 +185,8 @@ struct ChannelView: View {
     } center: {
       Button { showDetails = true } label: {
         NamePill(title: store.title(of: current)) {
-          if let agent = store.dmAgent(current) { AgentAvatar(agent: agent, size: 30, showStatus: false) }
-          else { TeamGhosts(agents: teamAgents, seed: current.name, size: 28) }
+          if let agent = store.dmAgent(current) { AgentAvatar(agent: agent, size: 36, showStatus: false) }
+          else { TeamGhosts(agents: teamAgents, seed: current.name, size: 34) }
         }
         .overlay(alignment: .bottom) {
           if current.archivedAt != nil { Text("Archived").font(.system(size: 11)).foregroundStyle(Palette.muted).offset(y: 14) }
