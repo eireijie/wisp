@@ -385,7 +385,7 @@ struct ThreadView: View {
           if let agent { AgentAvatar(agent: agent, size: 30, showStatus: false) }
           VStack(alignment: .leading, spacing: 0) {
             Text("Handed to \(agent?.name ?? "an agent")").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-            Text(store.taskState(t)).font(.system(size: 12)).foregroundStyle(store.taskState(t) == "Working" ? Palette.statusWorking : Palette.muted)
+            Text(store.taskState(t)).font(.system(size: 12)).foregroundStyle(store.taskState(t) == "Working" ? Palette.statusWorkingText : Palette.muted)
           }
         }
         .padding(.leading, 14).padding(.trailing, 20).frame(height: 44).glassPill()

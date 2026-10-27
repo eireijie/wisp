@@ -316,7 +316,7 @@ struct InboxSections: View {
         AgentAvatar(agent: a, size: 36, showStatus: false)
         VStack(alignment: .leading, spacing: 2) {
           Text(a.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
-          Text(now?.text ?? "Working").font(.system(size: 13)).foregroundStyle(Palette.statusWorking).lineLimit(1)
+          Text(now?.text ?? "Working").font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
           if let place = now?.where { Text(place).font(.system(size: 13)).foregroundStyle(Palette.faint).lineLimit(1) }
         }
         Spacer(minLength: 8)
@@ -359,7 +359,7 @@ struct InboxSections: View {
     let who = agent?.name ?? "an agent"
     let sub = t.status == "failed" ? "Failed · \(who)" : t.status == "done" ? "Done by \(who) · ready to review" : "Not started · \(who)"
     let icon = t.status == "done" ? "checkmark.circle" : t.status == "failed" ? "xmark.circle" : "circle"
-    let hue = t.status == "done" ? Palette.green : t.status == "failed" ? Palette.red : Palette.faint
+    let hue = t.status == "done" ? Palette.statusOnline : t.status == "failed" ? Palette.red : Palette.faint
     let label = HStack(spacing: 12) {
       Image(systemName: icon).font(.system(size: 24, weight: .regular)).foregroundStyle(hue).frame(width: 30)
       VStack(alignment: .leading, spacing: 3) {

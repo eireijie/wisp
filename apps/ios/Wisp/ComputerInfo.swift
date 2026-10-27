@@ -81,10 +81,13 @@ struct ComputerInfoBubble: View {
 
 /** Words and colors for one line of a computer's activity. */
 enum ComputerLogLine {
-  /** an agent at work is blue, you are green, and the computer speaking for itself needs a look */
-  @MainActor static func dot(_ e: ComputerLogEntry) -> Color {
-    if e.actor.id == "system" { return Palette.statusNeeds }
-    return e.actor.kind == .agent ? Palette.statusWorking : Palette.statusOnline
+  /** by what the line says, the same on every screen: took control amber, handed it back green, opened the live view sky, the rest gray */
+  static func dot(_ e: ComputerLogEntry) -> Color {
+    let t = e.text.lowercased()
+    if t.contains("took control") { return Palette.statusNeeds }
+    if t.contains("handed it back") { return Palette.statusOnline }
+    if t.contains("opened the live view") { return Palette.tabComputers }
+    return Palette.statusOffline
   }
 
   @MainActor static func sentence(_ e: ComputerLogEntry, store: Store) -> String {

@@ -86,6 +86,8 @@ struct ComputerDetail: View {
   @State private var teach: TeachSession?
   @State private var savingLesson = false
   @State private var lessonAgent: Agent?
+  /** the tool bar folds down to one small button so nothing sits on the screen */
+  @State private var toolsOpen = true
   @ReduceMotion private var reduceMotion
 
   var body: some View {
@@ -99,7 +101,7 @@ struct ComputerDetail: View {
 
             screen(c)
               .overlay(alignment: .topTrailing) {
-                if inControl, c.isOnline { toolBar(c).transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .topTrailing))) }
+                if inControl, c.isOnline { toolBar(c).transition(.opacity) }
               }
               .overlay(alignment: .bottom) {
                 if let note {
@@ -218,7 +220,7 @@ struct ComputerDetail: View {
     VStack(spacing: 4) {
       HStack(spacing: 8) {
         if s.working { WorkingDots(color: Palette.statusWorking) }
-        Text(statusText(c, s)).font(.system(size: 13)).foregroundStyle(s.working ? Palette.statusWorking : Palette.muted).lineLimit(2)
+        Text(statusText(c, s)).font(.system(size: 13)).foregroundStyle(s.working ? Palette.statusWorkingText : Palette.muted).lineLimit(2)
       }
       Text(hint(c)).font(.footnote).foregroundStyle(Palette.faint)
     }
@@ -254,7 +256,15 @@ struct ComputerDetail: View {
 
   /** While you are in control: the tools as colored icons in a glass bar at the screen's top right. */
   @ViewBuilder private func toolBar(_ c: Computer) -> some View {
+    if !toolsOpen {
+      Button { withAnimation(Motion.pick(Motion.soft, reduceMotion)) { toolsOpen = true } } label: { toolIcon("ellipsis", Palette.text) }
+        .buttonStyle(.press).glassCapsule().padding(8)
+        .transition(.opacity)
+        .accessibilityLabel("Show tools").accessibilityIdentifier("computer-tools-show")
+    } else {
     HStack(spacing: 2) {
+      Button { withAnimation(Motion.pick(Motion.soft, reduceMotion)) { toolsOpen = false } } label: { toolIcon("chevron.right", Palette.muted) }
+        .buttonStyle(.press).accessibilityLabel("Hide tools").accessibilityIdentifier("computer-tools-hide")
       if store.features.teach, c.canTransfer, c.status == "ready", teach == nil {
         Button { pickingTeacher = true } label: { toolIcon("record.circle", Palette.toolTeach) }
           .buttonStyle(.press).accessibilityLabel("Teach a task").accessibilityIdentifier("computer-teach")
@@ -266,7 +276,7 @@ struct ComputerDetail: View {
           Button("Send text or open a link…", systemImage: "link") { showClipboard = true }
         } label: { toolIcon("doc.on.clipboard", Palette.toolClipboard) }
           .accessibilityLabel("Clipboard").accessibilityIdentifier("chip-clipboard")
-        Button { showFiles = true } label: { toolIcon("folder", Palette.toolFiles) }
+        Button { showFiles = true } label: { toolIcon("folder", Palette.tabChats) }
           .buttonStyle(.press).accessibilityLabel("Files").accessibilityIdentifier("chip-files")
       }
       Menu {
@@ -284,6 +294,8 @@ struct ComputerDetail: View {
     .padding(3)
     .glassCapsule()
     .padding(8)
+    .transition(.opacity)
+    }
   }
 
   private func hint(_ c: Computer) -> String {

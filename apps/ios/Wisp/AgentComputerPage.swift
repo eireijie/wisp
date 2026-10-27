@@ -120,8 +120,8 @@ struct AgentComputerView: View {
           }
           Spacer(minLength: 8)
           Text(harness.signedIn == true ? "Signed in" : harness.signedIn == false ? "Not signed in" : "Unknown")
-            .font(.system(size: 12, weight: .semibold)).foregroundStyle(harness.signedIn == true ? Palette.green : Palette.muted)
-            .padding(.horizontal, 10).frame(height: 24).background(Capsule().fill((harness.signedIn == true ? Palette.green : Palette.muted).opacity(0.16)))
+            .font(.system(size: 12, weight: .semibold)).foregroundStyle(harness.signedIn == true ? Palette.statusOnline : Palette.muted)
+            .padding(.horizontal, 10).frame(height: 24).background(Capsule().fill((harness.signedIn == true ? Palette.statusOnline : Palette.muted).opacity(0.16)))
         }
         .padding(.horizontal, 18).frame(minHeight: 60)
         if store.canManage {

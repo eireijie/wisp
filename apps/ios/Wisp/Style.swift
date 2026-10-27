@@ -49,10 +49,6 @@ enum Palette {
   /** the 1px edge on cards and panels */
   static let cardBorder = Color(light: 0x000000, lightAlpha: 0.08, dark: 0xFFFFFF, darkAlpha: 0.08)
   static let blue = Color(hex: 0x0A84FF)
-  /** text that says an agent is working */
-  static let green = Color(light: 0x1E9E52, dark: 0x30D158)
-  /** online dots */
-  static let online = Color(light: 0x1E9E52, dark: 0x30D158)
   static let red = Color(light: 0xD92D3A, dark: 0xFF6B6B)
 
   // MARK: small pops of color (pop-Palette). A pop is a solid icon or dot, usually on a 16% tint of itself; never a fill behind text.
@@ -72,6 +68,12 @@ enum Palette {
   static let statusProblem = Color(light: 0xD92D3A, dark: 0xFF453A)
   /** offline and idle stay gray on purpose */
   static let statusOffline = Color(light: 0x7C7C86, dark: 0x8E8E96)
+  /** The same five colors as text (the pill words and status lines): 4.5:1 or better on white, the page ground and their own 16% tint in light; lighter in dark. */
+  static let statusOnlineText = Color(light: 0x0F6F34, dark: 0x6EE58F)
+  static let statusWorkingText = Color(light: 0x0A5CC4, dark: 0x7FB8FF)
+  static let statusNeedsText = Color(light: 0x8F5200, dark: 0xFFC15C)
+  static let statusProblemText = Color(light: 0xB3202C, dark: 0xFF8C85)
+  static let statusOfflineText = Color(light: 0x5F5F68, dark: 0xB4B4BC)
   /** @mentions */
   static let mention = tabAgents
   /** computer and device icons */
@@ -79,7 +81,6 @@ enum Palette {
   /** the tools while you are in control of a computer */
   static let toolTeach = statusProblem
   static let toolClipboard = Color(light: 0xB38F00, dark: 0xFFD60A)
-  static let toolFiles = Color(light: 0x0A6FE0, dark: 0x0A84FF)
   static let toolKeys = tabComputers
   static let toolScreenshot = tabAgents
   /** the call button's icon */
@@ -89,21 +90,6 @@ enum Palette {
 extension Color {
   /** The 16% tint that sits behind a solid pop. */
   var tint16: Color { opacity(0.16) }
-}
-
-/** A solid line icon on a 16% tint of its own color: the pop. */
-struct PopIcon: View {
-  var symbol: String
-  var color: Color
-  var size: CGFloat = 40
-  var body: some View {
-    Image(systemName: symbol)
-      .font(.system(size: size * 0.42, weight: .regular))
-      .foregroundStyle(color)
-      .frame(width: size, height: size)
-      .background(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(color.tint16))
-      .accessibilityHidden(true)
-  }
 }
 
 extension View {

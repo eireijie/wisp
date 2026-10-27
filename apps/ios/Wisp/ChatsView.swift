@@ -432,15 +432,15 @@ struct ChatRow: View {
       let doing = store.activity[a.id].flatMap { $0 == "started" ? nil : $0 }
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
-        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 15)).foregroundStyle(Palette.statusWorking).lineLimit(1)
+        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 15)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
     } else if let agent = workingHere {
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
-        Text("\(agent.name) is working").font(.system(size: 15)).foregroundStyle(Palette.statusWorking).lineLimit(1)
+        Text("\(agent.name) is working").font(.system(size: 15)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
     } else if let waiting = needsApproval {
-      Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 15)).foregroundStyle(Palette.statusNeeds).lineLimit(1)
+      Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 15)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else {
       Text(Self.mentioned(preview)).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
     }
@@ -448,12 +448,8 @@ struct ChatRow: View {
 
   /** the agents whose pending approvals wait on you here: "" when there is nothing to name, nil when nothing waits */
   private var needsApproval: String? {
-    let ids: [String]
-    switch entry.kind {
-    case .agent(let a): ids = [a.id]
-    case .team(let c): ids = teamAgents(c).map(\.id)
-    }
-    guard store.role != "guest", let waiting = store.pendingApprovals.first(where: { ids.contains($0.agentId) }) else { return nil }
+    guard store.role != "guest", let id = channel?.id,
+          let waiting = store.pendingApprovals.first(where: { $0.channelId == id }) else { return nil }
     return store.agent(waiting.agentId).map { entry.isTeam ? $0.name : "" } ?? ""
   }
 

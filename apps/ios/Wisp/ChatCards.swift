@@ -182,7 +182,7 @@ struct DiscussionCard: View {
               AgentAvatar(agent: store.agent(id), size: 18, showStatus: false)
               Text(store.agent(id)?.name ?? "Agent").lineLimit(1)
               switch state {
-              case "done": Image(systemName: "checkmark").foregroundStyle(Palette.green)
+              case "done": Image(systemName: "checkmark").foregroundStyle(Palette.statusOnline)
               case "running": ProgressView().controlSize(.mini)
               case "queued": Image(systemName: "clock").foregroundStyle(.orange)
               default: EmptyView()
@@ -230,7 +230,7 @@ struct ContextCard: View {
         if let model = usage?.model { Text(model).font(.caption).foregroundStyle(Palette.muted).lineLimit(1) }
       }
       if let fraction {
-        ProgressView(value: fraction).tint(fraction > 0.85 ? .red : fraction > 0.6 ? .orange : Palette.online)
+        ProgressView(value: fraction).tint(fraction > 0.85 ? .red : fraction > 0.6 ? .orange : Palette.statusOnline)
       }
       Text(used.map { "\(Self.tokens($0))\(window.map { " of \(Self.tokens($0))" } ?? "") used. Older messages are summarized when it fills up." } ?? "This shows up after its first reply here.")
         .font(.system(size: 13)).foregroundStyle(Palette.muted)

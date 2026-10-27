@@ -287,7 +287,7 @@ struct StatusPill: View {
   var run: AgentRun
   var body: some View {
     let text = RunLine.status(run)
-    let color: Color = RunLine.isGood(run) ? Palette.green : RunLine.isBad(run) ? Palette.red : run.status == "running" ? Palette.blue : Palette.muted
+    let color: Color = RunLine.isGood(run) ? Palette.statusOnline : RunLine.isBad(run) ? Palette.red : run.status == "running" ? Palette.blue : Palette.muted
     Text(text).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
       .padding(.horizontal, 10).frame(height: 24).background(Capsule().fill(color.opacity(0.16)))
   }
