@@ -136,6 +136,20 @@ describe("call lifecycle", () => {
     expect(speaker.speak).toHaveBeenCalledTimes(2);
     call.stop();
   });
+  it("speaks the first streamed sentence right after the filler instead of dropping it", async () => {
+    const { call, cb, speaker } = fixture();
+    await call.start(); cb.final("Work");
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(speaker.speak.mock.calls[0][0]).toBe("On it…");
+    call.event({ type: "run_event", agentId: "ghost", channelId: "dm", threadId: null, runId: "r1", event: { type: "text", text: "Found it in your calendar. Moving" } } as ClientEvent);
+    expect(speaker.speak).toHaveBeenCalledTimes(1);
+    // the filler finishes on its own
+    const finishFiller = speaker.cancel; finishFiller();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(speaker.speak).toHaveBeenCalledTimes(2);
+    expect(speaker.speak.mock.calls[1][0]).toBe("Found it in your calendar.");
+    call.stop();
+  });
   it("surfaces send and recognition failures and allows retry", async () => {
     const { call, cb, listener, send } = fixture();
     listener.start.mockImplementationOnce(async () => cb.error("Denied"));

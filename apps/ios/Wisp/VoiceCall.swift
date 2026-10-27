@@ -80,7 +80,12 @@ struct ListenCallbacks {
 @MainActor protocol CallSpeaker: AnyObject {
   func speak(_ text: String, level: @escaping @MainActor (Double) -> Void) async throws
   func cancel()
+  /** start fetching audio for something about to be said, so it plays without a wait */
+  func prepare(_ text: String)
 }
+extension CallSpeaker { func prepare(_ text: String) {} }
+
+private let fillerLine = "On it…"
 
 struct CallTiming {
   var filler: Duration = .milliseconds(2500)
@@ -120,6 +125,8 @@ final class VoiceCallSession {
   @ObservationIgnored private var earlyTask: Task<Void, Never>?
   @ObservationIgnored private var spokenAt = Date.distantPast
   @ObservationIgnored private var filler: Task<Void, Never>?
+  /** "On it…" is playing; the reply's first sentence waits for it instead of being dropped */
+  @ObservationIgnored private var fillerSpeaking = false
   @ObservationIgnored private var long: Task<Void, Never>?
   @ObservationIgnored private var micHint: Task<Void, Never>?
   @ObservationIgnored private var seen = Set<String>()
@@ -190,6 +197,7 @@ final class VoiceCallSession {
       if mine != capture || stopped { listener.stop(); return }
       if state.error.isEmpty {
         update { $0.ready = true; $0.needsMic = false; if $0.startedAt == nil { $0.startedAt = Date() } }
+        speaker.prepare(fillerLine)
         sync(catchUp: true)
       }
     } catch {
@@ -236,7 +244,9 @@ final class VoiceCallSession {
     filler = Task { [weak self, timing] in
       try? await Task.sleep(for: timing.filler)
       guard !Task.isCancelled, let self, self.pending > 0, self.early.isEmpty, !self.state.talking, !self.state.speaking else { return }
-      await self.say("On it…")
+      self.fillerSpeaking = true
+      await self.say(fillerLine)
+      self.fillerSpeaking = false
     }
     long = Task { [weak self, timing] in
       try? await Task.sleep(for: timing.longWork)
@@ -315,6 +325,7 @@ final class VoiceCallSession {
     let said = early; early = ""
     let rest = !said.isEmpty && text.hasPrefix(said) ? String(text.dropFirst(said.count)).trimmingCharacters(in: .whitespacesAndNewlines) : text
     let first = earlyTask; earlyTask = nil
+    if !rest.isEmpty && first != nil { speaker.prepare(rest) }
     if !rest.isEmpty { Task { await first?.value; await self.say(rest) } }
   }
 
@@ -328,9 +339,13 @@ final class VoiceCallSession {
       if streamRun != (e.runId ?? "") { streamed = ""; streamRun = e.runId ?? "" }
       streamed = String((streamed + (e.text ?? "")).prefix(40_000))
       let excerpt = VoiceText.spokenReply(streamed)
-      if early.isEmpty, !state.talking, !state.speaking, let first = VoiceText.firstSentence(excerpt) {
+      if early.isEmpty, !state.talking, !state.speaking || fillerSpeaking, let first = VoiceText.firstSentence(excerpt) {
         early = first
-        earlyTask = Task { await self.say(first) }
+        if fillerSpeaking, let playing = filler {
+          speaker.prepare(first)
+          let mine = speech
+          earlyTask = Task { await playing.value; if mine == self.speech { await self.say(first) } }
+        } else { earlyTask = Task { await self.say(first) } }
       } else if !state.speaking { update { $0.agentCaption = excerpt; $0.activity = "" } }
     default: break
     }

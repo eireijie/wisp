@@ -19,7 +19,11 @@ export interface ListenCallbacks {
   error(message: string): void;
 }
 export interface VoiceListener { start(): Promise<void>; stop(): void }
-export interface VoiceSpeaker { speak(text: string, level: (value: number) => void): Promise<void>; cancel(): void }
+export interface VoiceSpeaker {
+  speak(text: string, level: (value: number) => void): Promise<void>; cancel(): void;
+  /** start fetching audio for something about to be said, so it plays without a wait */
+  prepare?(text: string): void;
+}
 
 // Web Speech recognition isn't part of TypeScript's DOM library yet.
 interface Recognition extends EventTarget {
@@ -49,6 +53,9 @@ async function voiceRequest(body: unknown, signal: AbortSignal): Promise<Respons
   }
   return res;
 }
+
+/** How long a pause ends a turn. Shorter cuts people off mid-thought; longer feels laggy. */
+const SILENCE_MS = 550;
 
 /** Shared capture with echo cancellation, real mic levels, and short-silence detection. */
 class Microphone {
@@ -82,7 +89,7 @@ class Microphone {
           since ||= now;
           if (!talking && now - since > 100) { talking = true; activity(true); }
         } else since = 0;
-        if (talking && now - lastVoice > 700) { talking = false; activity(false); }
+        if (talking && now - lastVoice > SILENCE_MS) { talking = false; activity(false); }
         this.frame = requestAnimationFrame(tick);
       };
       tick();
@@ -209,10 +216,10 @@ export function createListener(chosen: VoiceSettings["listen"], callbacks: Liste
             // Restart after committing so cumulative result indices cannot replay a turn.
             const finish = () => {
               if (!active || current !== generation || rec !== recognition) return;
-              if (talking) { timer = setTimeout(finish, 200); return; }
+              if (talking) { timer = setTimeout(finish, 100); return; }
               flush(); rec.onresult = null; rec.abort();
             };
-            timer = setTimeout(finish, 650);
+            timer = setTimeout(finish, 400);
           };
           rec.onspeechend = () => { /* Results, including interim results, drive the silence timer. */ };
           rec.onerror = (e) => {
@@ -230,12 +237,43 @@ export function createListener(chosen: VoiceSettings["listen"], callbacks: Liste
   };
 }
 
+/** Split a reply into sentences so the first can play while the rest are still being made. */
+export function speechChunks(text: string): string[] {
+  const parts = text.match(/\S[\s\S]*?(?:[.!?…]+["')\]]*(?=\s|$)|$)/g)?.map((p) => p.trim()).filter(Boolean) ?? [];
+  const chunks: string[] = [];
+  // fold tiny pieces ("Sure.") into the next so playback doesn't stutter between requests
+  for (const p of parts) { if (chunks.length && chunks[chunks.length - 1].length < 24) chunks[chunks.length - 1] += ` ${p}`; else chunks.push(p); }
+  return chunks.length ? chunks : [text];
+}
+
+/** Audio already fetched or on its way, shared by every speaker so a prefetch survives a voice change. */
+const audioCache = new Map<string, Promise<ArrayBuffer>>();
+function fetchAudio(provider: "openai" | "elevenlabs", voice: string, text: string): Promise<ArrayBuffer> {
+  const key = `${provider}|${voice}|${text}`;
+  let audio = audioCache.get(key);
+  if (!audio) {
+    // not tied to one playback: a cancelled reply can still leave its audio for the next
+    audio = voiceRequest({ kind: "speak", provider, text, voice }, new AbortController().signal).then((r) => r.arrayBuffer());
+    audio.catch(() => audioCache.delete(key));
+    audioCache.set(key, audio);
+    while (audioCache.size > 12) audioCache.delete(audioCache.keys().next().value!);
+  }
+  return audio;
+}
+
 /** `speed` is read at every reply, so a change in the middle of a call is heard on the next one. */
 export function createSpeaker(engine: VoiceSettings["speak"], voices: AgentSettings["voice"], seed: string, speed: () => number = () => 1): VoiceSpeaker {
   if (engine === "device") deviceVoices(); // Trigger asynchronous OS voice discovery before the first reply.
   let cancelCurrent = () => {};
+  const cloudVoice = () => voices?.[engine as "openai" | "elevenlabs"] || (engine === "openai" ? OPENAI_VOICES[voiceIndex(seed, OPENAI_VOICES.length)] : ELEVEN_VOICES[voiceIndex(seed, ELEVEN_VOICES.length)].id);
   return {
     cancel() { cancelCurrent(); cancelCurrent = () => {}; },
+    prepare(text) {
+      if (engine === "device" || !text.trim()) return;
+      const voice = cloudVoice();
+      // the first two pieces are enough to start; later ones are fetched while those play
+      speechChunks(text).slice(0, 2).forEach((chunk) => void fetchAudio(engine, voice, chunk).catch(() => {}));
+    },
     async speak(text, level) {
       cancelCurrent();
       if (engine === "device") {
@@ -271,16 +309,25 @@ export function createSpeaker(engine: VoiceSettings["speak"], voices: AgentSetti
         context = new AudioContext();
         await context.resume();
         if (controller.signal.aborted) return;
-        const voice = voices?.[engine] || (engine === "openai" ? OPENAI_VOICES[voiceIndex(seed, OPENAI_VOICES.length)] : ELEVEN_VOICES[voiceIndex(seed, ELEVEN_VOICES.length)].id);
-        const res = await voiceRequest({ kind: "speak", provider: engine, text, voice }, controller.signal);
-        const buffer = await context.decodeAudioData(await res.arrayBuffer());
-        if (controller.signal.aborted) return;
-        source = context.createBufferSource(); source.buffer = buffer; source.playbackRate.value = speed();
+        const voice = cloudVoice();
+        const chunks = speechChunks(text);
         const analyser = context.createAnalyser(); analyser.fftSize = 512;
-        source.connect(analyser); analyser.connect(context.destination);
+        analyser.connect(context.destination);
         const data = new Float32Array(analyser.fftSize);
         const tick = () => { analyser.getFloatTimeDomainData(data); level(Math.min(1, Math.sqrt(data.reduce((sum, v) => sum + v * v, 0) / data.length) * 5)); frame = requestAnimationFrame(tick); };
-        await new Promise<void>((resolve) => { finish = resolve; source!.onended = () => resolve(); source!.start(); tick(); });
+        let next = fetchAudio(engine, voice, chunks[0]);
+        for (let i = 0; i < chunks.length; i++) {
+          const current = next;
+          // fetch the next sentence while this one plays, so there's no gap between them
+          if (i + 1 < chunks.length) { next = fetchAudio(engine, voice, chunks[i + 1]); next.catch(() => {}); }
+          // decodeAudioData detaches its input, and the cached copy may be played again
+          const buffer = await context.decodeAudioData((await current).slice(0));
+          if (controller.signal.aborted) return;
+          source = context.createBufferSource(); source.buffer = buffer; source.playbackRate.value = speed();
+          source.connect(analyser);
+          await new Promise<void>((resolve) => { finish = resolve; source!.onended = () => resolve(); source!.start(); if (!frame) tick(); });
+          if (controller.signal.aborted) return;
+        }
       } catch (e) { if (!controller.signal.aborted) throw e; }
       finally { cancelAnimationFrame(frame); level(0); if (context?.state !== "closed") await context?.close().catch(() => {}); }
     },

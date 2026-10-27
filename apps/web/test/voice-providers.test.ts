@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createListener, createSpeaker, type ListenCallbacks } from "../src/voice/providers.ts";
+import { createListener, createSpeaker, speechChunks, type ListenCallbacks } from "../src/voice/providers.ts";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const callbacks = (): ListenCallbacks => ({ partial: vi.fn(), final: vi.fn(), level: vi.fn(), activity: vi.fn(), error: vi.fn() });
@@ -76,9 +76,9 @@ describe("device listening", () => {
     await listener.start();
     const first = Recognition.instances[0];
     first.result("Hello");
-    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(200);
     first.result("Hello there");
-    await vi.advanceTimersByTimeAsync(649);
+    await vi.advanceTimersByTimeAsync(399);
     expect(cb.final).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(cb.final).toHaveBeenCalledExactlyOnceWith("Hello there");
@@ -86,7 +86,7 @@ describe("device listening", () => {
     await vi.advanceTimersByTimeAsync(150);
     expect(Recognition.instances).toHaveLength(2);
     Recognition.instances[1].result("Another turn");
-    await vi.advanceTimersByTimeAsync(650);
+    await vi.advanceTimersByTimeAsync(400);
     expect(cb.final).toHaveBeenCalledTimes(2);
     listener.stop();
     expect(vi.getTimerCount()).toBe(0);
@@ -172,4 +172,39 @@ it("records cloud turns with leading audio, discards silence, and aborts transcr
   expect(cb.error).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
   vi.restoreAllMocks();
+});
+
+describe("speech chunks", () => {
+  it("splits a reply into sentences and folds short ones into the next", () => {
+    expect(speechChunks("Sure. I moved the meeting to Friday at ten. Want me to tell Sam?")).toEqual(["Sure. I moved the meeting to Friday at ten.", "Want me to tell Sam?"]);
+    expect(speechChunks("No punctuation here")).toEqual(["No punctuation here"]);
+    expect(speechChunks("Version 2.5 shipped today, and it's faster.")).toEqual(["Version 2.5 shipped today, and it's faster."]);
+  });
+});
+
+it("plays an AI voice sentence by sentence, fetching the next while one plays", async () => {
+  const sources: { onended?: () => void }[] = [];
+  vi.stubGlobal("requestAnimationFrame", () => 1);
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+  vi.stubGlobal("AudioContext", class {
+    state = "running"; destination = {};
+    resume = async () => {};
+    close = async () => {};
+    decodeAudioData = async () => ({});
+    createAnalyser = () => ({ fftSize: 512, connect() {}, getFloatTimeDomainData: (d: Float32Array) => d.fill(0) });
+    createBufferSource = () => { const s = { buffer: null, playbackRate: { value: 1 }, connect() {}, stop() {}, start() {}, onended: undefined as (() => void) | undefined }; sources.push(s); return s; };
+  });
+  const fetcher = vi.fn(async (_url: string, _init: RequestInit) => new Response(new Uint8Array([1])));
+  vi.stubGlobal("fetch", fetcher);
+  const text = (n: number) => JSON.parse(fetcher.mock.calls[n][1].body as string).text;
+  const speaking = createSpeaker("openai", {}, "chunk-test").speak("The meeting moved to Friday at ten. I told Sam and updated the invite.", vi.fn());
+  await vi.waitFor(() => expect(sources).toHaveLength(1));
+  // the second sentence is already on its way while the first plays
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect([text(0), text(1)]).toEqual(["The meeting moved to Friday at ten.", "I told Sam and updated the invite."]);
+  sources[0].onended!();
+  await vi.waitFor(() => expect(sources).toHaveLength(2));
+  sources[1].onended!();
+  await speaking;
+  expect(fetcher).toHaveBeenCalledTimes(2);
 });

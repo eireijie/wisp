@@ -50,6 +50,17 @@ enum VoiceText {
     return String(excerpt[r])
   }
 
+  private static let chunkRe = regex("\\S[\\s\\S]*?(?:[.!?…]+[\"')\\]]*(?=\\s|$)|$)")
+  /** A reply split into sentences, so the first can play while the rest are still being made (speechChunks in providers.ts). */
+  static func speechChunks(_ text: String) -> [String] {
+    let parts = chunkRe.matches(in: text, range: NSRange(text.startIndex..., in: text))
+      .compactMap { Range($0.range, in: text).map { String(text[$0]).trimmingCharacters(in: .whitespacesAndNewlines) } }.filter { !$0.isEmpty }
+    var chunks: [String] = []
+    // fold tiny pieces ("Sure.") into the next so playback doesn't stutter between requests
+    for p in parts { if let last = chunks.last, last.count < 24 { chunks[chunks.count - 1] = "\(last) \(p)" } else { chunks.append(p) } }
+    return chunks.isEmpty ? [text] : chunks
+  }
+
   /** A stable pick from `count` choices for a seed, so an agent keeps one voice. */
   static func voiceIndex(_ seed: String, _ count: Int) -> Int {
     var hash: UInt32 = 0

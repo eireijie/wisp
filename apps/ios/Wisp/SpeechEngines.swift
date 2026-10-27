@@ -40,7 +40,7 @@ enum CallAudio {
 
 // MARK: microphone
 
-/** Watches input loudness and says when someone starts and stops talking (about 100 ms in, 700 ms of quiet out). */
+/** Watches input loudness and says when someone starts and stops talking (about 100 ms in, 550 ms of quiet out). */
 final class VoiceActivityDetector: @unchecked Sendable {
   private let level: @Sendable (Double) -> Void
   private let activity: @Sendable (Bool) -> Void
@@ -66,7 +66,7 @@ final class VoiceActivityDetector: @unchecked Sendable {
       if since == 0 { since = now }
       if !talking && now - since > 0.1 { talking = true; activity(true) }
     } else { since = 0 }
-    if talking && now - lastVoice > 0.7 { talking = false; activity(false) }
+    if talking && now - lastVoice > 0.55 { talking = false; activity(false) }
   }
 
   func reset() { talking = false; since = 0 }
@@ -209,10 +209,10 @@ final class DeviceListener: CallListener {
     }
   }
 
-  /** 800 ms with nothing new means the sentence is done (and not while the mic still hears speech). */
+  /** 450 ms with nothing new means the sentence is done (and not while the mic still hears speech). */
   private func settle() async {
-    try? await Task.sleep(for: .milliseconds(800))
-    while active, talking, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(200)) }
+    try? await Task.sleep(for: .milliseconds(450))
+    while active, talking, !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
     guard active, !Task.isCancelled else { return }
     commit()
   }
@@ -464,7 +464,8 @@ final class DeviceSpeaker: NSObject, CallSpeaker, AVSpeechSynthesizerDelegate {
   }
 }
 
-/** OpenAI / ElevenLabs speech from the hub: it sends an MP3, which plays here. */
+/** OpenAI / ElevenLabs speech from the hub: it sends an MP3, which plays here, a sentence at a time
+ * so the first plays while the next is still being made. */
 @MainActor
 final class CloudSpeaker: NSObject, CallSpeaker, AVAudioPlayerDelegate {
   private let provider: String
@@ -477,11 +478,42 @@ final class CloudSpeaker: NSObject, CallSpeaker, AVAudioPlayerDelegate {
 
   init(provider: String, voice: String, hub: VoiceHub) { self.provider = provider; self.voice = voice; self.hub = hub }
 
+  /** Audio fetched or on its way, shared by every speaker; a cancelled reply can leave its audio for the next. */
+  private static var cache: [String: Task<Data, Error>] = [:]
+  private static var cacheOrder: [String] = []
+  private func audio(_ text: String) -> Task<Data, Error> {
+    let key = "\(provider)|\(voice)|\(text)"
+    if let cached = Self.cache[key] { return cached }
+    let hub = hub, provider = provider, voice = voice
+    let fetch = Task { try await hub.speak(provider: provider, text: text, voice: voice) }
+    Self.cache[key] = fetch; Self.cacheOrder.append(key)
+    if Self.cacheOrder.count > 12 { Self.cache.removeValue(forKey: Self.cacheOrder.removeFirst()) }
+    Task { if (try? await fetch.value) == nil, Self.cache[key] == fetch { Self.cache.removeValue(forKey: key) } }
+    return fetch
+  }
+
+  func prepare(_ text: String) {
+    // the first two pieces are enough to start; later ones are fetched while those play
+    for chunk in VoiceText.speechChunks(text).prefix(2) { _ = audio(chunk) }
+  }
+
   func speak(_ text: String, level: @escaping @MainActor (Double) -> Void) async throws {
     cancel()
     let mine = token
-    let data = try await hub.speak(provider: provider, text: text, voice: voice)
-    guard mine == token else { return }
+    let chunks = VoiceText.speechChunks(text)
+    var next = audio(chunks[0])
+    for i in chunks.indices {
+      let current = next
+      // fetch the next sentence while this one plays, so there's no gap between them
+      if i + 1 < chunks.count { next = audio(chunks[i + 1]) }
+      let data = try await current.value
+      guard mine == token else { return }
+      try await play(data, level: level)
+      guard mine == token else { return }
+    }
+  }
+
+  private func play(_ data: Data, level: @escaping @MainActor (Double) -> Void) async throws {
     let player = try AVAudioPlayer(data: data)
     player.isMeteringEnabled = true
     player.enableRate = true

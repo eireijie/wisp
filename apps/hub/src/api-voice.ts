@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+import type { ReadableStream as WebStream } from "node:stream/web";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { isMasked, maskSecret } from "@wisp/core";
@@ -53,7 +55,7 @@ export function registerVoiceApi(app: FastifyInstance, hub: Hub, h: {
     const secret = provider === "openai" ? s.openaiKey : s.elevenlabsKey;
     if (!secret) return reply.code(400).send({ error: `Add your ${provider === "openai" ? "OpenAI" : "ElevenLabs"} key in Settings → Voice` });
     const id = `${c.workspaceId}:${c.actor.id}`;
-    if ((active.get(id) ?? 0) >= 3) return reply.code(429).send({ error: "Voice is busy. Try again in a moment." });
+    if ((active.get(id) ?? 0) >= 6) return reply.code(429).send({ error: "Voice is busy. Try again in a moment." });
     active.set(id, (active.get(id) ?? 0) + 1);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 45_000);
@@ -72,7 +74,7 @@ export function registerVoiceApi(app: FastifyInstance, hub: Hub, h: {
       } else {
         headers["content-type"] = "application/json";
         url = provider === "openai" ? "https://api.openai.com/v1/audio/speech" : `https://api.elevenlabs.io/v1/text-to-speech/${b.voice}`;
-        body = JSON.stringify(provider === "openai" ? { model: "gpt-4o-mini-tts", input: b.text, voice: b.voice, response_format: "mp3" } : { model_id: "eleven_multilingual_v2", text: b.text });
+        body = JSON.stringify(provider === "openai" ? { model: "gpt-4o-mini-tts", input: b.text, voice: b.voice, response_format: "mp3" } : { model_id: "eleven_flash_v2_5", text: b.text });
       }
       const res = await fetch(url, { method: "POST", headers, body, signal: controller.signal });
       if (!res.ok) {
@@ -84,7 +86,10 @@ export function registerVoiceApi(app: FastifyInstance, hub: Hub, h: {
         const data = await res.json() as { text?: string };
         return { text: typeof data.text === "string" ? data.text.slice(0, 40_000) : "" };
       }
-      return reply.type("audio/mpeg").send(Buffer.from(await res.arrayBuffer()));
+      // pass audio through as it arrives instead of waiting for the whole file
+      const audio = Readable.fromWeb(res.body as WebStream<Uint8Array>);
+      await new Promise<void>((resolve) => { audio.once("end", resolve); audio.once("error", () => resolve()); reply.raw.once("close", () => resolve()); void reply.type("audio/mpeg").send(audio); });
+      return reply;
     } catch {
       return reply.code(502).send({ error: "Voice provider couldn't be reached. Please try again." });
     } finally {

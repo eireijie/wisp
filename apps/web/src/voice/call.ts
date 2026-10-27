@@ -3,6 +3,8 @@ import type { ListenCallbacks, VoiceListener, VoiceSpeaker } from "./providers.t
 import { activityPhrase } from "../components/agentActivity.ts";
 import { isSpeechEcho, spokenReply } from "./text.ts";
 
+const FILLER = "On it…";
+
 /** What the call is doing right now, for the screen to show. One value, never a combination. */
 export type CallPhase = "connecting" | "muted" | "listening" | "hearing" | "thinking" | "working" | "speaking" | "error";
 export function callPhase(s: Pick<CallState, "ready" | "muted" | "speaking" | "talking" | "waiting" | "error" | "needsMic" | "activity">): CallPhase {
@@ -105,6 +107,7 @@ export class VoiceCall {
       await this.listener.start();
       if (capture === this.capture && !this.state.error) {
         this.update({ ready: true, needsMic: false, startedAt: this.state.startedAt ?? Date.now() });
+        this.options.speaker.prepare?.(FILLER);
         this.reconcile();
       }
     } catch (e) {
@@ -122,6 +125,8 @@ export class VoiceCall {
     this.update({ speaking: false, speechLevel: 0 });
   }
   private earlySpeech?: Promise<void>;
+  /** "On it…" while it plays; the reply's first sentence waits for it instead of being dropped */
+  private fillerSpeech?: Promise<void>;
   private async say(text: string) {
     if (this.stopped || !text || !this.state.ready) return;
     this.interrupt();
@@ -142,6 +147,7 @@ export class VoiceCall {
     // let the early sentence finish, unless the person talked over it or hung up meanwhile
     const earlySpeech = this.earlySpeech; this.earlySpeech = undefined;
     if (early && earlySpeech) {
+      this.options.speaker.prepare?.(rest);
       const speech = this.speech;
       await earlySpeech;
       if (speech !== this.speech) return;
@@ -150,7 +156,7 @@ export class VoiceCall {
   }
   private timers() {
     clearTimeout(this.filler); clearTimeout(this.long);
-    this.filler = setTimeout(() => { if (this.pending && !this.early && !this.state.talking && !this.state.speaking) void this.say("On it…"); }, 2500);
+    this.filler = setTimeout(() => { if (this.pending && !this.early && !this.state.talking && !this.state.speaking) this.fillerSpeech = this.say(FILLER).finally(() => { this.fillerSpeech = undefined; }); }, 2500);
     this.long = setTimeout(() => {
       if (!this.pending) return;
       this.update({ longWork: true });
@@ -215,7 +221,15 @@ export class VoiceCall {
         const excerpt = spokenReply(this.streamed);
         // Talk as soon as the first sentence is whole instead of waiting for the full reply.
         const first = this.early ? "" : excerpt.match(/^.{8,}?[.!?]+(?=\s)/)?.[0] ?? "";
-        if (first && !this.state.talking && !this.state.speaking) { this.early = first; this.earlySpeech = this.say(first); }
+        const filler = this.fillerSpeech;
+        if (first && !this.state.talking && (!this.state.speaking || filler)) {
+          this.early = first;
+          if (filler) {
+            this.options.speaker.prepare?.(first);
+            const speech = this.speech;
+            this.earlySpeech = filler.then(() => (speech === this.speech ? this.say(first) : undefined));
+          } else this.earlySpeech = this.say(first);
+        }
         else if (!this.state.speaking) this.update({ agentCaption: excerpt, activity: "" });
       }
     }

@@ -65,6 +65,10 @@ describe("personal voice credentials and proxy", () => {
     expect(message.body).toBe("Please help me");
     expect(message.parts).toContainEqual({ type: "status", text: "Voice message" });
     expect(built.hub.store.db.prepare("SELECT id FROM runs WHERE trigger_message_id = ?").get(message.id)).toBeTruthy();
+    // the agent is told to answer briefly, since the reply is read aloud; a typed message isn't
+    expect(await built.hub.buildPrompt(agent.id, dm.id, null, message.id)).toContain("You're on a voice call");
+    const typed = (await api("POST", `/api/channels/${dm.id}/messages`, { body: "Typed this" })).json();
+    expect(await built.hub.buildPrompt(agent.id, dm.id, null, typed.id)).not.toContain("You're on a voice call");
   });
   it("deletes a cleared key", async () => {
     expect((await api("PUT", "/api/voice/settings", { ...settings, openaiKey: "", elevenlabsKey: "" })).statusCode).toBe(200);

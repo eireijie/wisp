@@ -1155,12 +1155,26 @@ export class Hub {
       parentThread.length ? `\nThis is a sub-thread. Earlier, in the thread it branched off from:\n${parentThread.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       history.length ? `\nRecent conversation:\n${history.map((m) => `${this.displayName(m.author)}: ${this.historyLine(m)}`).join("\n")}` : "",
       background ? "" : trigger.replyTo ? `\nThis message replies to ${this.displayName(trigger.replyTo.author)}'s earlier message${trigger.replyTo.deleted ? " (since deleted)" : `: "${trigger.replyTo.snippet}"`}.` : "",
+      background || !isVoiceMessage(trigger) ? "" : `\n${VOICE_CALL_NOTE}`,
       background ? "" : `\nNew message from ${this.displayName(trigger.author)}:\n${command?.via === "prompt" ? skillRequest(command.name, command.args) : trigger.body}${taskInstructions(store, agent.id, trigger)}`,
     ]
       .filter(Boolean)
       .join("\n");
   }
 }
+
+/** A message spoken on a voice call; the hub marks it with a "Voice message" status. */
+export const isVoiceMessage = (m: { parts: Message["parts"] }) => m.parts.some((p) => p.type === "status" && p.text === "Voice message");
+
+/** Calls read only the start of a reply aloud, and every extra word is time the person waits. */
+export const VOICE_CALL_NOTE = [
+  "## You're on a voice call",
+  "This message was spoken to you, and your reply will be read aloud right away. Answer like you're talking on the phone:",
+  "- Say the answer first, in one or two short sentences. Only that part is spoken.",
+  "- Plain words only: no Markdown, lists, tables, code, links or emoji.",
+  "- If you did work or there's detail worth keeping, add it after a blank line; it stays in the chat.",
+  "- Use tools when the request needs them, but don't explore for a simple question.",
+].join("\n");
 
 /**
  * A reply that asks the person to do something on the screen ("Please sign in to Zendesk and

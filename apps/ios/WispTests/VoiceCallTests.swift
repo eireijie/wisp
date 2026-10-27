@@ -27,6 +27,8 @@ private final class FakeSpeaker: CallSpeaker {
     said.append(text)
     if hold { await withCheckedContinuation { finish = $0 } }
   }
+  var prepared: [String] = []
+  func prepare(_ text: String) { prepared.append(text) }
   func cancel() { cancels += 1; end() }
   func end() { let f = finish; finish = nil; f?.resume() }
 }
@@ -265,7 +267,36 @@ final class VoiceCallTests: XCTestCase {
     XCTAssertTrue(s.state.waiting)
   }
 
+  func testFirstSentenceWaitsForOnItInsteadOfBeingDropped() async {
+    let s = await makeSession(filler: .milliseconds(30))
+    callbacks.final("what is in main"); await settle()
+    try? await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(speaker.said, ["On it…"])
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "text", text: "It exports one function. And", tool: nil, file: nil))
+    await settle()
+    XCTAssertEqual(speaker.said, ["On it…"])
+    XCTAssertTrue(speaker.prepared.contains("It exports one function."))
+    speaker.end(); await settle()
+    XCTAssertEqual(speaker.said, ["On it…", "It exports one function."])
+  }
+
+  func testTheRestOfTheReplyIsFetchedWhileTheFirstSentencePlays() async {
+    let s = await makeSession()
+    callbacks.final("what is in main"); await settle()
+    s.event(CallRunEvent(runId: "r1", agentId: "a1", channelId: "c1", threadId: nil, type: "text", text: "It exports one function. And", tool: nil, file: nil))
+    await settle()
+    list = [msg("m2", body: "It exports one function. And it is small.\\n\\nMore.", at: 2)]
+    s.sync(); await settle()
+    XCTAssertTrue(speaker.prepared.contains("And it is small."))
+  }
+
   // MARK: text
+
+  func testSpeechChunks() {
+    XCTAssertEqual(VoiceText.speechChunks("Sure. I moved the meeting to Friday at ten. Want me to tell Sam?"), ["Sure. I moved the meeting to Friday at ten.", "Want me to tell Sam?"])
+    XCTAssertEqual(VoiceText.speechChunks("No punctuation here"), ["No punctuation here"])
+    XCTAssertEqual(VoiceText.speechChunks("Version 2.5 shipped today, and it's faster."), ["Version 2.5 shipped today, and it's faster."])
+  }
 
   func testSpokenReplyDropsCodeLinksAndMarkdown() {
     XCTAssertEqual(VoiceText.spokenReply("**Done.** See [the docs](https://x.y) now.\n\n```\ncode\n```\n\nMore."), "Done. See now.")

@@ -72,6 +72,8 @@ export function CallScreen({ agent, channelId, onClose, barSlot }: { agent: Agen
       const speaker: VoiceSpeaker = {
         speak(text, level) { current?.cancel(); current = createSpeaker(settings.speak, voiceRef.current, agent.handle, () => callPrefs().speed); return current.speak(text, level); },
         cancel() { current?.cancel(); },
+        // fetched audio is shared across speakers, so a fresh one can warm it up
+        prepare(text) { createSpeaker(settings.speak, voiceRef.current, agent.handle).prepare?.(text); },
       };
       const session = new VoiceCall({
         agentId: agent.id, channelId, cloudListening: effectiveListen(settings.listen) === "openai",
