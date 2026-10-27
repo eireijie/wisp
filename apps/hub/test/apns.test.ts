@@ -161,6 +161,17 @@ describe("push notifications", () => {
     }
   });
 
+  it("lets you answer a check-back from the notification", async () => {
+    const { user, workspace } = (await api("GET", "/api/me")).data;
+    const atlas = hub.store.agents(workspace.id).find((a) => a.handle === "atlas")!;
+    const dm = hub.store.dmChannel(workspace.id, user.id, atlas.id);
+    const back = hub.store.insertMessage({ channelId: dm.id, author: { kind: "agent", id: atlas.id }, body: "Did the deck go out?", parts: [{ type: "checkback", replies: ["Sent it", "Tomorrow"] }] });
+    const [[, push]] = hub.apns.decide(workspace.id, { type: "message", message: back });
+    expect(push).toMatchObject({ aps: { category: "CHECKBACK" }, wisp: { category: "dm", replies: ["Sent it", "Tomorrow"] } });
+    const plain = hub.store.insertMessage({ channelId: dm.id, author: { kind: "agent", id: atlas.id }, body: "Done." });
+    expect(hub.apns.decide(workspace.id, { type: "message", message: plain })[0][1].aps.category).toBeUndefined();
+  });
+
   it("sends events and test pushes only to phones in the caller's organization, using its config and badge", async () => {
     const { user } = (await api("GET", "/api/me")).data;
     const workspace = await createOrganization(hub, user, "Side project", "everything");
