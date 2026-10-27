@@ -58,6 +58,15 @@ a.rounded-full,
 @keyframes m-zoom-out { to { opacity: 0; transform: scale(0.96) translateY(-8px); } }
 @keyframes m-sheet-up { from { transform: translateY(110%); } }
 @keyframes m-slide-in { from { opacity: 0; transform: translateX(40px); } }
+
+/* ---------- open loops: a reminder pill pops in under its reply, quick replies rise, a wrap-up unfolds ---------- */
+@keyframes m-pill { from { opacity: 0; scale: 0.7; } }
+@keyframes m-chip { from { opacity: 0; transform: translateY(8px) scale(0.9); } }
+@keyframes m-unfold-in { from { opacity: 0; transform: scaleY(0.6) translateY(-6px); } }
+.m-pill-in { animation: m-pill 420ms var(--pop) 80ms backwards; transform-origin: 0 50%; }
+.m-chip-in { animation: m-chip 360ms var(--pop) backwards; }
+.m-unfold { animation: m-unfold-in 380ms var(--soft) 120ms backwards; transform-origin: 0 0; }
+.m-fade-in { animation: m-fade 320ms ease-out 150ms backwards; }
 @keyframes m-toast-in { from { opacity: 0; transform: translateY(24px) scale(0.96); } }
 @keyframes m-toast-top { from { opacity: 0; transform: translateY(-24px) scale(0.96); } }
 @keyframes m-push-in { from { transform: translateX(100%); } }
@@ -184,7 +193,7 @@ button[role="switch"]:active:not(:disabled) .m-knob { scale: 1.2 1; }
   .m-tabs[data-away="true"] { transform: none; }
   .m-badge[data-zero="true"] { transform: none; }
   .m-bubble-me, .m-bubble-them, .m-work, .m-swap, .m-menu, .m-dialog, .m-drawer, .m-palette-card,
-  .m-panel, .m-toast, .m-toast-top, .m-chat-layer { animation: m-fade 120ms ease-out backwards !important; }
+  .m-panel, .m-toast, .m-toast-top, .m-chat-layer, .m-pill-in, .m-chip-in, .m-unfold, .m-fade-in { animation: m-fade 120ms ease-out backwards !important; }
   .m-scrim, .m-palette-scrim { animation: m-scrim-in 120ms ease-out backwards !important; }
   .m-menu[data-closing="true"], [data-closing="true"] .m-palette-card { animation: m-fade 120ms ease-out reverse both !important; }
   [data-closing="true"].m-palette-scrim { animation: m-scrim-in 120ms ease-out reverse both !important; }
