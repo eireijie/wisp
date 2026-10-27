@@ -227,7 +227,6 @@ export function AddComputer({ devices, onClose, onCreated, nodeId: preferNode, d
             <Input value={existing} onChange={(e) => setExisting(e.target.value)} placeholder="Optional" />
           </Field>
         )}
-        {kind === "vm" && <p className="text-xs text-muted">The first VM on a device builds its image, which takes a few minutes. Its home folder keeps sign-ins and files between restarts.</p>}
         {error && <p className="text-sm text-bad">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
@@ -966,7 +965,7 @@ function TeachBar({ agent, computer, screen }: { agent: Agent; computer: Compute
       {saving && (
         <Modal title="Save what you showed" onClose={() => saving !== "uploading" && setSaving(null)}>
           <div className="space-y-3">
-            <Field label="What's the task called?" hint={`${agent.name} studies your ${steps.length} steps and writes them up as a routine you can run anytime or on a schedule.`}>
+            <Field label="What's the task called?">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Weekly reporting" autoFocus />
             </Field>
             <Field label="Anything else it should know? (optional)">

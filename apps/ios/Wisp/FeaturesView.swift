@@ -9,7 +9,7 @@ struct FeaturesView: View {
   private var off: [FeatureKey] { FeatureKey.allCases.filter { !store.features[$0] } }
 
   var body: some View {
-    SettingsPage("Mods", subtitle: "Feature switches for the whole organization. Only owners can change them.", id: "mods") {
+    SettingsPage("Mods", id: "mods") {
       SegmentedPicker(options: [("simple", "Simple"), ("everything", "Everything"), ("custom", "Custom")],
                       selection: Binding(get: { store.features.preset }, set: { value in
                         switch value {
@@ -19,7 +19,6 @@ struct FeaturesView: View {
                         }
                       }), label: "Quick start", id: "mods-preset")
         .disabled(!store.isOwner || action.busy)
-      CardHint("Turn on only what you use. Simple turns everything off. Everything turns it all on. You can change it any time.")
       if !on.isEmpty {
         CardLabel("On")
         CardGroup { ForEach(on) { row($0) } }
@@ -78,18 +77,17 @@ struct AgentDefaultsView: View {
   @State private var rules = 0
 
   var body: some View {
-    SettingsPage("Agent defaults", subtitle: "What a new agent starts with when you pick Use my defaults.", id: "agent-defaults") {
+    SettingsPage("Agent defaults", id: "agent-defaults") {
       if loaded && store.agentDefaults == nil {
         CardHint("This Wisp doesn't have agent defaults yet. Update Wisp on your computer to use them.")
       }
       if !store.isOwner { OwnersOnlyNote() }
       CardLabel("New agents start with")
       CardGroup {
-        PickerRow(title: "AI tool", subtitle: "The program that does the work", options: harnesses.map { ($0.id, $0.label) }, selection: $harness, id: "defaults-harness")
+        PickerRow(title: "AI tool", options: harnesses.map { ($0.id, $0.label) }, selection: $harness, id: "defaults-harness")
         FieldRow(title: "Model", text: $model, prompt: "Automatic", id: "defaults-model")
         NavigationLink { DefaultModelsView() } label: { RowLabel(title: "Default model per tool", value: "\(harnesses.count) tools") }.accessibilityIdentifier("defaults-models")
       }.disabled(!store.isOwner)
-      CardHint("Leave the model blank to let \(HarnessChoice.label(harness)) pick.")
       CardLabel("Computer")
       CardGroup {
         PickerRow(title: "New agents get", subtitle: computer == "own-vm" ? "Open apps and browse the web" : "Chat and their tools only", options: [("own-vm", "Their own computer"), ("none", "No computer")], selection: $computer, id: "defaults-computer")
@@ -99,7 +97,7 @@ struct AgentDefaultsView: View {
       }.disabled(!store.isOwner)
       CardLabel("Memory")
       CardGroup {
-        NavigationLink { MemoryRulesView() } label: { RowLabel(title: "Memory rules", subtitle: "Who can see and edit what", value: rules > 0 ? "\(rules) \(rules == 1 ? "rule" : "rules")" : nil) }.accessibilityIdentifier("defaults-memory-rules")
+        NavigationLink { MemoryRulesView() } label: { RowLabel(title: "Memory rules", value: rules > 0 ? "\(rules) \(rules == 1 ? "rule" : "rules")" : nil) }.accessibilityIdentifier("defaults-memory-rules")
       }
       StatusLine(error: action.error, saved: saved ? "Saved. New agents start with these." : nil)
       if store.isOwner {
@@ -140,14 +138,13 @@ struct DefaultModelsView: View {
   private var harnesses: [HarnessChoice] { HarnessChoice.all.filter { $0.protocolName != "mcp" } }
 
   var body: some View {
-    SettingsPage("Default model", subtitle: "One default per AI tool.", id: "default-models") {
+    SettingsPage("Default model", id: "default-models") {
       if !store.isOwner { OwnersOnlyNote() }
       CardGroup {
         ForEach(harnesses) { h in
           FieldRow(title: h.label, text: Binding(get: { models[h.id] ?? "" }, set: { models[h.id] = $0 }), prompt: "Automatic", id: "model-\(h.id)")
         }
       }
-      CardHint("Leave a tool on Automatic to use its own default. You can still pick a model per agent.")
       StatusLine(error: action.error)
       if store.isOwner {
         Button("Save") {

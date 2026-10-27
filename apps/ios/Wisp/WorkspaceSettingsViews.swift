@@ -25,12 +25,12 @@ struct AgentPolicyView: View {
   private var lead: String? { store.agent(store.taskLeadOverride ?? store.taskLead ?? "")?.name }
 
   var body: some View {
-    SettingsPage("Agents", subtitle: "Rules every agent here follows, whichever AI tool runs it.", id: "agent-policy") {
+    SettingsPage("Agents", id: "agent-policy") {
       if !store.isOwner { OwnersOnlyNote() }
       if let policy {
         CardGroup {
           if !store.agents.isEmpty {
-            NavigationLink { TeamLeadView() } label: { RowLabel(title: "Team lead", subtitle: "Takes tasks nobody assigned", value: lead) }.accessibilityIdentifier("policy-lead")
+            NavigationLink { TeamLeadView() } label: { RowLabel(title: "Team lead", value: lead) }.accessibilityIdentifier("policy-lead")
           }
           NavigationLink { AskBeforeView() } label: { RowLabel(title: "Ask before", value: "\(policy.askBefore.count) of \(askActions.count)") }.accessibilityIdentifier("policy-ask")
           NavigationLink { NewAgentAccessView() } label: { RowLabel(title: "New agents", value: accessChoices.first { $0.key == policy.defaultAccess }?.title) }.accessibilityIdentifier("policy-access")
@@ -38,20 +38,19 @@ struct AgentPolicyView: View {
         if canSpawn {
           CardLabel("Agents making agents")
           CardGroup {
-            ToggleRow(title: "Leads can create agents", subtitle: "A team's lead can add an agent its team is missing",
+            ToggleRow(title: "Leads can create agents",
                       isOn: change(\.leadsCreateAgents, false), id: "policy-leads-create").disabled(!store.isOwner)
             ToggleRow(title: "Those agents can make sub-agents", subtitle: policy.leadsCreateAgents == true ? "Up to 3 levels down" : "Needs “Leads can create agents” on first",
                       isOn: change(\.subAgents, false), id: "policy-sub-agents").disabled(!store.isOwner || policy.leadsCreateAgents != true)
             PickerRow(title: "Most agents made by agents", options: Array(Set([3, 5, 10, 20, 50, policy.maxAgentMade ?? 10])).sorted().map { ($0, "\($0)") }, selection: change(\.maxAgentMade, 10))
               .disabled(!store.isOwner || policy.leadsCreateAgents != true)
           }
-          CardHint("Let agents add helpers when the work needs more hands. Both are off until you turn them on.")
         }
         CardLabel("Loop protection")
         CardGroup {
-          PickerRow(title: "Hand-offs in a row", subtitle: "Before Wisp stops two agents waking each other", options: Array(Set([2, 3, 4, 5, 6, 8, 10, 15, 20, 30, policy.maxHops])).sorted().map { ($0, "\($0)") },
+          PickerRow(title: "Hand-offs in a row", options: Array(Set([2, 3, 4, 5, 6, 8, 10, 15, 20, 30, policy.maxHops])).sorted().map { ($0, "\($0)") },
                     selection: Binding(get: { policy.maxHops }, set: { v in update { $0.maxHops = v } }), id: "policy-hops").disabled(!store.isOwner)
-          PickerRow(title: "Agent runs per team per minute", subtitle: "A ceiling on how busy one chat gets", options: Array(Set([5, 6, 10, 20, 40, 60, 100, 200, policy.maxRunsPerMinute])).sorted().map { ($0, "\($0)") },
+          PickerRow(title: "Agent runs per team per minute", options: Array(Set([5, 6, 10, 20, 40, 60, 100, 200, policy.maxRunsPerMinute])).sorted().map { ($0, "\($0)") },
                     selection: Binding(get: { policy.maxRunsPerMinute }, set: { v in update { $0.maxRunsPerMinute = v } }), id: "policy-runs").disabled(!store.isOwner)
         }
       } else if action.error == nil {
@@ -107,7 +106,6 @@ struct AskBeforeView: View {
           }), id: "ask-\(item.key)")
         }
       }.disabled(!store.isOwner || store.agentPolicy == nil || action.busy)
-      CardHint("When an agent is about to do one of these on its own, it asks you first in Inbox and in the chat. You can approve or say not now. If you ask it to do one, it just does it.")
       StatusLine(error: action.error)
     }
     .task { try? await store.refreshAgentPolicy() }
@@ -120,7 +118,7 @@ struct NewAgentAccessView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("New agents", subtitle: "Access on their device.", id: "new-agent-access") {
+    SettingsPage("New agents", id: "new-agent-access") {
       if !store.isOwner { OwnersOnlyNote() }
       CardGroup {
         ForEach(accessChoices, id: \.key) { item in
@@ -132,7 +130,6 @@ struct NewAgentAccessView: View {
           }.disabled(!store.isOwner || action.busy)
         }
       }
-      CardHint("What a new agent may do where its AI tool runs directly on a device. Inside its own computer an agent always has full access; the computer is its sandbox.")
       StatusLine(error: action.error)
     }
     .task { try? await store.refreshAgentPolicy() }
@@ -154,7 +151,6 @@ struct TeamLeadView: View {
           OptionRow(title: agent.name, subtitle: "@\(agent.handle)", selected: store.taskLeadOverride == agent.id, id: "lead-\(agent.handle)") { save(agent.id) }
         }
       }.disabled(!store.isOwner || action.busy)
-      CardHint("The lead takes every task nobody assigned, splits it up and hands the pieces to agents by role.")
       StatusLine(error: action.error)
     }
     .task { try? await store.refreshTaskLead() }
@@ -175,7 +171,7 @@ struct ComputerSettingsView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("Agent computers", subtitle: "Defaults for the computers agents get.", id: "computers-settings") {
+    SettingsPage("Agent computers", id: "computers-settings") {
       if !store.isOwner { OwnersOnlyNote() }
       CardLabel("Defaults")
       CardGroup {
@@ -225,7 +221,7 @@ struct ConnectionsSettingsView: View {
   }
 
   var body: some View {
-    SettingsPage("Connections", subtitle: "Keys for agents running somewhere else. \(store.isOwner ? "You see everyone's." : "You see the ones you made.")", id: "connections") {
+    SettingsPage("Connections", id: "connections") {
       group("Connection tokens", kind: "connection", name: { _ in "wisp-mcp" }, none: "None.", hint: "Made on an agent's Connect tab, for an AI tool that runs elsewhere.")
       group("AI tools on devices", kind: "harness", name: { $0.device ?? "Device" }, none: "None.", hint: "Disconnecting one makes the device get a fresh one next run.")
       StatusLine(error: action.error)
@@ -267,7 +263,7 @@ struct DataExportView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("Data and export", subtitle: "Back up your organization, or take a copy of your notes and conversations.", id: "data") {
+    SettingsPage("Data and export", id: "data") {
       CardLabel("Back up everything")
       if let info {
         CardGroup {
@@ -282,14 +278,14 @@ struct DataExportView: View {
       CardGroup {
         NavigationLink { HowToBackUpView() } label: { RowLabel(title: "How to back up") }
         NavigationLink { HowToRestoreView() } label: { RowLabel(title: "How to restore") }
-        NavigationLink { WhatIsNotInBackupView(memoryNote: movedMemoryNote) } label: { RowLabel(title: "What is not in it", subtitle: "AI tool sign-ins, agent computers, browser-only settings") }
+        NavigationLink { WhatIsNotInBackupView(memoryNote: movedMemoryNote) } label: { RowLabel(title: "What is not in it") }
       }
       CardLabel("Download copies")
       CardGroup {
         if store.isOwner {
-          Button { export("/api/export/vault.zip", name: "wisp-memory.zip") } label: { RowLabel(title: "Download my notes", subtitle: "Markdown ZIP", chevron: false) }.buttonStyle(.plain).disabled(action.busy)
+          Button { export("/api/export/vault.zip", name: "wisp-memory.zip") } label: { RowLabel(title: "Download my notes", chevron: false) }.buttonStyle(.plain).disabled(action.busy)
         }
-        Button { export("/api/export/conversations.json", name: "wisp-conversations.json") } label: { RowLabel(title: "Download conversations", subtitle: "JSON", chevron: false) }.buttonStyle(.plain).disabled(action.busy)
+        Button { export("/api/export/conversations.json", name: "wisp-conversations.json") } label: { RowLabel(title: "Download conversations", chevron: false) }.buttonStyle(.plain).disabled(action.busy)
       }
       if action.busy { ProgressView() }
       if let exported { ShareLink("Save or share download", item: exported).buttonStyle(.pill(.secondary)) }
@@ -346,10 +342,10 @@ struct VoiceSettingsView: View {
   private var needsOpenAI: Bool { listen == "openai" || speak == "openai" }
 
   var body: some View {
-    SettingsPage("Voice", subtitle: "Talk with your agents out loud. Your microphone is only used when you start a call or a test.", id: "voice") {
+    SettingsPage("Voice", id: "voice") {
       CardGroup {
-        PickerRow(title: "Listening", subtitle: "How your speech becomes a chat message", options: [("device", "On this device"), ("openai", "OpenAI (online)")], selection: $listen, id: "voice-listen")
-        PickerRow(title: "Speaking", subtitle: "Agents read a short version. The full reply stays in chat", options: [("device", "On this device"), ("openai", "OpenAI (online)"), ("elevenlabs", "ElevenLabs (online)")], selection: $speak, id: "voice-speak")
+        PickerRow(title: "Listening", options: [("device", "On this device"), ("openai", "OpenAI (online)")], selection: $listen, id: "voice-listen")
+        PickerRow(title: "Speaking", options: [("device", "On this device"), ("openai", "OpenAI (online)"), ("elevenlabs", "ElevenLabs (online)")], selection: $speak, id: "voice-speak")
       }
       if needsOpenAI || speak == "elevenlabs" {
         CardLabel("One more thing")
@@ -360,7 +356,7 @@ struct VoiceSettingsView: View {
         CardHint("Keys stay on your hub and are hidden when shown again. Clear a key and save to remove it.")
       }
       CardGroup {
-        NavigationLink { VoiceTryOutView(speak: speak) } label: { RowLabel(title: "Try it out", subtitle: "Microphone and speaker") }.accessibilityIdentifier("voice-try")
+        NavigationLink { VoiceTryOutView(speak: speak) } label: { RowLabel(title: "Try it out") }.accessibilityIdentifier("voice-try")
         NavigationLink { AgentVoicesView() } label: { RowLabel(title: "Each agent's voice", subtitle: store.agents.prefix(3).map(\.name).joined(separator: ", ")) }.accessibilityIdentifier("voice-agents")
         if !needsOpenAI && speak != "elevenlabs" {
           MoreOptionsRow {
@@ -401,7 +397,6 @@ struct AgentVoicesView: View {
         }
         if store.agents.isEmpty { RowLabel(title: "No agents yet", chevron: false) }
       }
-      CardHint("Every agent can have its own voice. Tap one to pick it and hear a sample.")
     }
     .sheet(item: $editing) { AgentVoiceSheet(agent: $0).environment(store) }
   }

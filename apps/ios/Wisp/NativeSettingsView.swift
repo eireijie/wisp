@@ -25,7 +25,6 @@ struct NativeSettingsView: View {
             NavigationLink { PeopleSettingsView() } label: { RowLabel(title: "People") }.accessibilityIdentifier("settings-people")
           }
           NavigationLink { UsageView() } label: { RowLabel(title: "Usage") }.accessibilityIdentifier("settings-usage")
-          NavigationLink { FeaturesView() } label: { RowLabel(title: "Mods") }.accessibilityIdentifier("settings-mods")
         }
       }
       if store.canManage {
@@ -34,7 +33,6 @@ struct NativeSettingsView: View {
           NavigationLink { AgentPolicyView() } label: { RowLabel(title: "Agents policy") }.accessibilityIdentifier("settings-agents")
           NavigationLink { AgentDefaultsView() } label: { RowLabel(title: "Agent defaults") }.accessibilityIdentifier("settings-agent-defaults")
           NavigationLink { ConnectionsSettingsView() } label: { RowLabel(title: "Connections") }.accessibilityIdentifier("settings-connections")
-          NavigationLink { MemoryView() } label: { RowLabel(title: "Memory") }.accessibilityIdentifier("settings-memory")
           NavigationLink { MemoryStorageView() } label: { RowLabel(title: "Memory storage") }.accessibilityIdentifier("settings-memory-storage")
           NavigationLink { HarnessesView() } label: { RowLabel(title: "AI tool settings") }.accessibilityIdentifier("settings-harnesses")
           NavigationLink { LoginsView() } label: { RowLabel(title: "Logins") }.accessibilityIdentifier("settings-logins")
@@ -56,9 +54,7 @@ struct NativeSettingsView: View {
       CardGroup {
         if !guest { NavigationLink { DataExportView() } label: { RowLabel(title: "Data and export") }.accessibilityIdentifier("settings-data") }
         NavigationLink { UpdatesView() } label: { RowLabel(title: "About") }.accessibilityIdentifier("settings-about")
-        NavigationLink { HelpView() } label: { RowLabel(title: "Help") }.accessibilityIdentifier("settings-help")
       }
-      CardHint("Wisp is free and open source (Apache-2.0).")
     }
   }
 }
@@ -83,7 +79,7 @@ struct PreferencesView: View {
       SegmentedPicker(options: [("auto", "Automatic"), ("12h", "12-hour"), ("24h", "24-hour")], selection: clock, label: "Clock", id: "clock")
       CardLabel("Replies")
       CardGroup {
-        ToggleRow(title: "Show the tools agents used", subtitle: "Lines like “Searched the web, read 6 pages” under a reply",
+        ToggleRow(title: "Show the tools agents used",
                   isOn: Binding(get: { tools.wrappedValue != "hidden" }, set: { tools.wrappedValue = $0 ? "collapsed" : "hidden" }), id: "show-tools")
         MoreOptionsRow {
           VStack(alignment: .leading, spacing: 10) {
@@ -92,7 +88,6 @@ struct PreferencesView: View {
           }.padding(.horizontal, 18).padding(.vertical, 12)
         }
       }
-      CardHint("These preferences also apply when you use Wisp on the web. The iPhone uses its native keyboard.")
       StatusLine(error: action.error)
     }
   }
@@ -113,7 +108,7 @@ struct WorkspaceSettingsView: View {
   private var roleName: String { store.role == "owner" ? "Owner" : store.role == "guest" ? "Guest" : "Member" }
 
   var body: some View {
-    SettingsPage("Workspace", subtitle: "The organization everyone here shares.", id: "workspace") {
+    SettingsPage("Workspace", id: "workspace") {
       if !store.isOwner { OwnersOnlyNote() }
       CardGroup {
         FieldRow(title: "Organization name", text: $name, id: "workspace-name").disabled(!store.isOwner)
@@ -192,7 +187,7 @@ struct MobileSettingsView: View {
   private var phone: String { pairing?.deviceName ?? (pairing?.platform == "android" ? "your Android phone" : "your iPhone") }
 
   var body: some View {
-    SettingsPage("Mobile", subtitle: "Point your camera here to join your Wisp.", id: "mobile") {
+    SettingsPage("Mobile", id: "mobile") {
       VStack(spacing: 14) {
         switch pairing?.state {
         case "waiting":

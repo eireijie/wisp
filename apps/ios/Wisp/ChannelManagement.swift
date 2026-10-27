@@ -41,7 +41,7 @@ struct ChannelTeamScreen: View {
       if editable && !saved.nodes.isEmpty {
         Section {
           Button("Remove the team", role: .destructive) { removing = true }
-        } footer: { Text("Back to agents answering only when someone @mentions them.") }
+        }
       }
       Section { InlineError(error: action.error) }
     }
@@ -169,7 +169,7 @@ struct ChannelDetails: View {
         } label: {
           LabeledContent("Team", value: teamSummary)
         }
-      } footer: { Text("Who works here: the leads read every new message and hand out the work.") }
+      }
       Section("Agents") {
         if current.team(agents: store.agents) != nil {
           Text("The team's leads read every new message here (see Team), so they answer what nobody @mentions.").font(.footnote).foregroundStyle(.secondary)

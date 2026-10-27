@@ -118,8 +118,7 @@ export function ProfilePage() {
         )}
         {f.timezone && f.timezone !== HERE && (
           <p className="px-1 text-[13px] text-faint">
-            Agents see your local time, so "tomorrow morning" means yours.{" "}
-            <button type="button" className="text-accent-text hover:underline" onClick={() => setF({ ...f, timezone: HERE })}>
+                        <button type="button" className="text-accent-text hover:underline" onClick={() => setF({ ...f, timezone: HERE })}>
               Use this device's ({HERE})
             </button>
           </p>
@@ -155,7 +154,7 @@ export function PreferencesPage() {
   const now = new Date();
   return (
     <>
-      <PageHeader title="App behavior">How Wisp works for you, on every device you sign in on.</PageHeader>
+      <PageHeader title="App behavior" />
       <div className="mb-3 h-4">
         <SavedNote shown={saved} />
       </div>
@@ -188,7 +187,7 @@ export function PreferencesPage() {
       </Section>
       <Section title="Agents">
         <Card>
-          <Row label="Tools agents used" hint="Under each reply: which tools an agent called and what came back. Memory it saved about you always shows.">
+          <Row label="Tools agents used">
             <Segmented
               label="Tools agents used"
               value={prefs.toolCalls}
@@ -283,7 +282,7 @@ function AndroidNotificationsPage() {
   };
   return (
     <>
-      <PageHeader title="Notifications">Get a notification when an agent writes to you, wants your OK, or needs you on its computer, even with Wisp closed.</PageHeader>
+      <PageHeader title="Notifications" />
       <Section title="On this phone">
         <Card>
           <Row
@@ -354,7 +353,7 @@ function BrowserNotificationsPage() {
   const shownEvents = tasksOn ? events : events.filter(([k]) => k !== "tasks");
   return (
     <>
-      <PageHeader title="Notifications">Get a notification when something needs you, on this device.</PageHeader>
+      <PageHeader title="Notifications" />
       <Section title="Notify me when a task finishes or needs me">
         <Card>
           <Row
@@ -385,18 +384,18 @@ function BrowserNotificationsPage() {
           </p>
         )}
       </Section>
-      <Section title="While Wisp is open" description="Shows a notification while Wisp is open in a tab or window.">
+      <Section title="While Wisp is open">
         <Card>
-          <Row label="Notifications while Wisp is open" hint="Uses the main switch above.">
+          <Row label="Notifications while Wisp is open">
             <Pill tone={on ? "ok" : "neutral"}>{on ? "On" : "Off"}</Pill>
           </Row>
           {on && (
-            <Row label="Only when I'm away" hint="Stay quiet while Wisp is the window you're using.">
+            <Row label="Only when I'm away">
               <Toggle label="Only when I'm away" on={prefs.onlyAway} onChange={toggle("onlyAway")} />
             </Row>
           )}
           {on && (
-            <Row label="Play a sound" hint="A short chime with each notification.">
+            <Row label="Play a sound">
               <IconButton icon={<Volume2 size={15} />} label="Play the sound" onClick={chime} />
               <Toggle label="Play a sound" on={prefs.sound} onChange={toggle("sound")} />
             </Row>
@@ -406,7 +405,7 @@ function BrowserNotificationsPage() {
       {window.wispDesktop ? (
         <Section title="When Wisp is closed">
           <Card>
-            <Row label="Desktop app" hint="Notifications arrive while Wisp is running. Closing the window keeps it going in the menu bar." />
+            <Row label="Desktop app" />
           </Card>
         </Section>
       ) : (
@@ -433,7 +432,7 @@ function BrowserNotificationsPage() {
 function PushSection({ push }: { push: ReturnType<typeof usePush> }) {
   const { on, busy, note, change, test } = push;
   return (
-    <Section title="Even when Wisp is closed (push)" description="This device gets them like a text message, even with Wisp closed: when an agent writes to you, or wants your OK before it sends something.">
+    <Section title="Even when Wisp is closed (push)">
       <Card>
         <Row
           label={
@@ -467,11 +466,11 @@ export function AppearancePage() {
   ];
   return (
     <>
-      <PageHeader title="Appearance">How Wisp looks on this device.</PageHeader>
+      <PageHeader title="Appearance" />
       <Section title="Mode">
         <Segmented label="Mode" value={mode} options={modes} onChange={setMode} />
       </Section>
-      <Section title="Theme" description="Every theme works in light and dark. Agents keep their own colors in all of them.">
+      <Section title="Theme">
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
           {THEMES.map((t) => {
             const selected = theme === t.id;
@@ -499,7 +498,7 @@ export function AppearancePage() {
                   <span className="text-sm font-medium flex-1">{t.name}</span>
                   {selected && <Check size={15} className="text-accent-text" />}
                 </div>
-                <p className="text-xs text-muted mt-0.5">{t.blurb}</p>
+                
               </button>
             );
           })}
@@ -507,7 +506,7 @@ export function AppearancePage() {
       </Section>
       <Section title="Accessibility">
         <Card>
-          <Row label="Text size" hint="Makes text and spacing smaller or bigger.">
+          <Row label="Text size">
             <Segmented
               label="Text size"
               value={textSize}
@@ -519,7 +518,7 @@ export function AppearancePage() {
               ]}
             />
           </Row>
-          <Row label="Reduce motion" hint="Keeps ghosts and transitions still. Your system's reduce-motion setting does this too.">
+          <Row label="Reduce motion">
             <Toggle label="Reduce motion" on={reduceMotion} onChange={setReduceMotion} />
           </Row>
         </Card>
@@ -553,11 +552,10 @@ export function SecurityPage() {
   const icon = (label: string) => (/iPhone|Android|iPad/.test(label) ? <Smartphone size={16} /> : <Laptop size={16} />);
   return (
     <>
-      <PageHeader title="Security">Your password, and the browsers and apps you're signed in on.</PageHeader>
+      <PageHeader title="Security" />
       <PasswordForm onChanged={load} />
       <Section
         title="Where you're signed in"
-        description="Sign out of anything you don't recognize. Changing your password signs out everything else too."
         action={
           others.length > 0 && (
             <Button

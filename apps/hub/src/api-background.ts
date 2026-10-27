@@ -190,6 +190,14 @@ export function registerBackgroundApi(app: FastifyInstance, hub: Hub, h: Helpers
     return hub.background.allowance(c.workspaceId, c.actor.id);
   });
 
+  app.get("/api/usage", async (req, reply) => {
+    const c = need(req, reply, { user: true });
+    if (!c) return;
+    const q = parse(z.object({ range: z.enum(["today", "7d", "30d"]).default("7d") }), req.query, reply);
+    if (!q) return;
+    return hub.background.usageReport(c.workspaceId, c.actor.id, q.range);
+  });
+
   app.put("/api/background/allowance", async (req, reply) => {
     const c = need(req, reply, { user: true });
     if (!c) return;

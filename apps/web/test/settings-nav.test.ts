@@ -11,16 +11,17 @@ describe("settings navigation", () => {
   it("groups every page under You, Workspace, Agents, Devices and More", () => {
     expect(ids(settingsNav(false, FEATURE_PRESETS.everything))).toEqual([
       ["You", ["profile", "notifications", "appearance", "preferences", "voice", "security"]],
-      ["Workspace", ["general", "people", "usage", "features"]],
+      ["Workspace", ["general", "people", "usage"]],
       ["Agents", ["agents", "agent-defaults", "harnesses", "runtimes", "logins", "apps", "connections", "memory"]],
       ["Devices", ["devices", "computers", "access", "mobile"]],
       ["More", ["data", "updates"]],
     ]);
   });
 
-  it("links Memory, Marketplace and Tasks from Settings, with Memory for guests too", () => {
-    expect(settingsLinks("You", false, FEATURE_PRESETS.everything).map((l) => l.label)).toEqual(["Memory", "Marketplace", "Tasks"]);
-    expect(settingsLinks("You", true, FEATURE_PRESETS.everything).map((l) => l.label)).toEqual(["Memory"]);
+  it("keeps the places that do things (Memory, Tasks, Marketplace, Mods, Help) out of Settings", () => {
+    const labels = settingsNav(false, FEATURE_PRESETS.everything).flatMap((s) => [...s.pages.map((p) => p.label), ...settingsLinks(s.section, false, FEATURE_PRESETS.everything).map((l) => l.label)]);
+    for (const l of ["Tasks", "Marketplace", "Mods", "Help"]) expect(labels).not.toContain(l);
+    expect(settingsLinks("You", false, FEATURE_PRESETS.everything)).toEqual([]);
   });
 
   it("still opens every route (SETTINGS_PAGES) somewhere", () => {
@@ -39,7 +40,6 @@ describe("settings navigation", () => {
     const pages = nav.flatMap((s) => s.pages.map((p) => p.id));
     expect(pages).not.toContain("voice");
     expect(pages).not.toContain("people");
-    expect(pages).toContain("features");
     expect(pages).not.toContain("usage");
   });
 });

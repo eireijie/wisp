@@ -212,23 +212,23 @@ struct SkillShareSheet: View {
       }
       CardGroup {
         Button { UIPasteboard.general.string = SkillShare.link(SharedSkill(name: skill.name, description: skill.description ?? "", content: skill.content ?? "", tags: skill.tags ?? [])); note = "Link copied. Anyone with it can paste it into Bring one in." } label: {
-          MarketRow(symbol: "link", title: "Copy a link", subtitle: "Anyone with it can bring the skill in")
+          MarketRow(symbol: "link", title: "Copy a link")
         }.buttonStyle(.plain)
         if let fileURL {
-          ShareLink(item: fileURL) { MarketRow(symbol: "arrow.down.doc", title: "Save as a file", subtitle: "A .md file you can send") }.buttonStyle(.plain)
+          ShareLink(item: fileURL) { MarketRow(symbol: "arrow.down.doc", title: "Save as a file") }.buttonStyle(.plain)
         }
         if store.canManage && !store.agents.isEmpty {
-          Button { page = .agents } label: { MarketRow(symbol: "person.2", title: "Share with another agent", subtitle: "Pick who gets a copy") }.buttonStyle(.plain)
+          Button { page = .agents } label: { MarketRow(symbol: "person.2", title: "Share with another agent") }.buttonStyle(.plain)
         }
       }
     }
     if store.canManage {
       if skill != nil { MarketLabel("Bring one in") }
       CardGroup {
-        Button { page = .paste } label: { MarketRow(symbol: "link", title: "Paste a link", subtitle: "From a shared skill") }.buttonStyle(.plain)
-        Button { importing = true } label: { MarketRow(symbol: "doc.text", title: "Choose a file", subtitle: "A .md skill file") }.buttonStyle(.plain)
+        Button { page = .paste } label: { MarketRow(symbol: "link", title: "Paste a link") }.buttonStyle(.plain)
+        Button { importing = true } label: { MarketRow(symbol: "doc.text", title: "Choose a file") }.buttonStyle(.plain)
         if let onDevices {
-          Button { dismiss(); onDevices() } label: { MarketRow(symbol: "laptopcomputer", title: "From your devices", subtitle: "Skills found in your harnesses") }.buttonStyle(.plain)
+          Button { dismiss(); onDevices() } label: { MarketRow(symbol: "laptopcomputer", title: "From your devices") }.buttonStyle(.plain)
         }
       }
     }
@@ -270,7 +270,6 @@ struct SkillShareSheet: View {
   @ViewBuilder private var foundPage: some View {
     if let found {
       CardGroup { MarketRow(symbol: "wand.and.stars", tile: 50, title: found.name, subtitle: found.description.isEmpty ? "No description" : found.description) }
-      Text("It comes into your skills. Then pick which helpers have it.").font(.system(size: 13)).foregroundStyle(Palette.faint).padding(.horizontal, 4)
       HStack(spacing: 10) {
         Button { page = .home } label: { Text("Back").frame(maxWidth: .infinity) }.secondaryButton()
         Button {

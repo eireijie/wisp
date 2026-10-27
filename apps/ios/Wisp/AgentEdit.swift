@@ -139,7 +139,7 @@ struct AgentPersonalityPage: View {
       }
       CardCaption("Read at the start of every conversation. Keep it short; every line should change how the agent behaves.")
       CardGroup {
-        SwitchRow(title: "Let @\(current.handle) refine its own personality", subtitle: "It tweaks this as it learns how you work",
+        SwitchRow(title: "Let @\(current.handle) refine its own personality",
                   isOn: Binding(get: { current.settings?.soulLocked != true }, set: { value in
                     action.run { _ = try await store.updateAgent(current.id, ["settings": AnyEncodable(["soulLocked": !value])]) }
                   }), id: "personality-refine")

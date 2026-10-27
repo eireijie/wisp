@@ -124,7 +124,6 @@ struct VoiceTryOutView: View {
             }.buttonStyle(.plain)
           }
         }
-        CardHint("Every agent can have its own voice. Tap one to pick it and hear a sample. Save first if you changed the speaking voice.")
       }
     }
     .onDisappear { model.stop(); CallAudio.deactivate() }

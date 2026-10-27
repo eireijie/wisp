@@ -175,7 +175,7 @@ struct SkillInstallSheet: View {
   @State private var agents: Set<String> = []
   @State private var action = FormAction()
   var body: some View {
-    MarketSheet(title: title, subtitle: "Which helpers should know it?", busy: action.busy) {
+    MarketSheet(title: title, busy: action.busy) {
       CardGroup {
         ForEach(store.agents) { agent in
           MarketToggleRow(title: agent.name, subtitle: "@\(agent.handle)", isOn: Binding(get: { agents.contains(agent.id) }, set: { if $0 { agents.insert(agent.id) } else { agents.remove(agent.id) } })) { AgentAvatar(agent: agent, size: 30, showStatus: false) }

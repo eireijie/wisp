@@ -52,7 +52,7 @@ struct AccessView: View {
   @State private var action = FormAction()
 
   var body: some View {
-    SettingsPage("Access", subtitle: "Use Wisp away from home.", id: "access") {
+    SettingsPage("Access", id: "access") {
       if !store.isOwner { CardHint("Your Wisp's owner can turn this on.") }
       if let info {
         CardLabel("Away from home")
@@ -101,11 +101,10 @@ struct AccessView: View {
     CardLabel("Turn it on")
     SegmentedPicker(options: [("tailscale", "Tailscale (best)"), ("cloudflare", "Cloudflare")], selection: $choice, label: "How", id: "access-how")
     if choice == "tailscale" {
-      CardHint(signedIn ? "Already on this \(info.computerName). Nothing to set up." : "Free. Wisp helps you install it, then sign in.")
+      if signedIn { CardHint("Already on this \(info.computerName). Nothing to set up.") }
       tailscaleSteps(info)
       Button("Turn it on") { run { try await turnOnTailscale() } }.buttonStyle(.pill(.primary)).disabled(action.busy).accessibilityIdentifier("access-on")
     } else {
-      CardHint("Needs a domain you own. Paste the setup code Cloudflare gives you for a tunnel.")
       CardGroup { FieldRow(title: "Setup code", text: $token, prompt: "Cloudflare setup code", secure: true, id: "access-cloudflare") }
       if let problem = info.cloudflare?.error { StatusLine(error: problem) }
       Button("Turn it on") {
@@ -116,7 +115,6 @@ struct AccessView: View {
         }
       }.buttonStyle(.pill(.primary)).disabled(action.busy || token.trimmed.count < 20)
     }
-    CardHint("Then anyone on your Wisp can open it from any Wi-Fi or cell data. Only people signed in can see anything.")
   }
 
   /** the steps Tailscale still needs, in plain words */
@@ -154,7 +152,6 @@ struct AccessView: View {
         Button { UIPasteboard.general.string = "\(origin)/mcp" } label: { RowLabel(title: "Copy address", chevron: false) }.buttonStyle(.plain)
       }
     }
-    if origin != nil { CardHint("In Grok: Connectors, Add custom connector, paste.") }
     if let clients {
       CardLabel("Connected apps")
       CardGroup {

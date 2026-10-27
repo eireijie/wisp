@@ -66,11 +66,6 @@ struct MemoryAccessRulesView: View {
 
   var body: some View {
     MemoryScreen(title: "Who can see and edit what", id: "memory-access-rules") {
-      VStack(alignment: .leading, spacing: 6) {
-        Text("How these rules work").font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.text)
-        Text("Everyone shares the Shared folder. Each helper has a private folder. A rule on a folder or note changes who can read or write it.").font(.system(size: 15)).foregroundStyle(Palette.muted)
-      }.padding(18).frame(maxWidth: .infinity, alignment: .leading).background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
-    .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
       InlineError(error: action.error)
       if !loaded && action.error == nil { ProgressView().frame(maxWidth: .infinity).padding(30) }
       MemoryRuleCards(rules: rules, canEdit: store.isOwner) { editing = RuleDraft(rule: $0) }

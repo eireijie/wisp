@@ -52,7 +52,7 @@ struct LookEditor: View {
         options("Neckwear", values: GhostLook.accessories, key: \.accessory)
         CardGroup {
           Button { more.toggle() } label: {
-            RowLabel(title: "More options", subtitle: "Shape, eyes, mouth, motion", chevron: false)
+            RowLabel(title: "More options", chevron: false)
               .overlay(alignment: .trailing) { Image(systemName: more ? "chevron.up" : "chevron.down").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint).padding(.trailing, 18) }
           }.buttonStyle(.plain).accessibilityIdentifier("look-more")
         }
@@ -61,7 +61,7 @@ struct LookEditor: View {
           options("Eyes", values: GhostLook.eyeStyles, key: \.eyes)
           options("Mouth", values: GhostLook.mouths, key: \.mouth)
           options("Motion", values: GhostLook.motions, key: \.motion)
-          CardGroup { SwitchRow(title: "Rosy cheeks", subtitle: "A little blush under the eyes.", isOn: flag(\.cheeks)) }
+          CardGroup { SwitchRow(title: "Rosy cheeks", isOn: flag(\.cheeks)) }
           Segments(options: Self.previewMoods.map { ($0.0, $0.1) }, selection: $mood)
           CardCaption("Preview it awake, working or asleep.")
         }

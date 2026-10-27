@@ -57,7 +57,7 @@ struct AgentPermissions: View {
           ForEach(rules, id: \.rowId) { rule in ruleRow(rule) }
           RowLabel(title: "Its folder is shared with", subtitle: sharedWith(memory), chevron: false)
           RowLabel(title: "Personality", subtitle: current.settings?.soulLocked == true ? "Locked: only people can edit it" : "It can refine its own personality", chevron: false)
-          RowLabel(title: "Instructions", subtitle: "Only people can edit them", chevron: false)
+          RowLabel(title: "Instructions", chevron: false)
         }
         CardCaption("Which folders and notes @\(current.handle) can use, and why. Change them with the share button on a folder or note in Memory.")
       } else if let memoryError {

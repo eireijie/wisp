@@ -206,9 +206,9 @@ struct MarketplaceView: View {
     if store.canManage {
       MarketLabel("Make your own")
       CardGroup {
-        Button { creating = true } label: { MarketRow(symbol: "wand.and.stars", title: "Create a skill", subtitle: "Teach your helper a way of doing something") }.buttonStyle(.plain).accessibilityIdentifier("market-create-skill")
-        Button { editor = ConnectorEditorTarget() } label: { MarketRow(symbol: "powerplug", title: "Add your own app", subtitle: "Use any MCP server or URL") }.buttonStyle(.plain).accessibilityIdentifier("market-add-app")
-        Button { importing = true } label: { MarketRow(symbol: "square.and.arrow.down", title: "Bring a skill in", subtitle: "From a link or a file") }.buttonStyle(.plain)
+        Button { creating = true } label: { MarketRow(symbol: "wand.and.stars", title: "Create a skill") }.buttonStyle(.plain).accessibilityIdentifier("market-create-skill")
+        Button { editor = ConnectorEditorTarget() } label: { MarketRow(symbol: "powerplug", title: "Add your own app") }.buttonStyle(.plain).accessibilityIdentifier("market-add-app")
+        Button { importing = true } label: { MarketRow(symbol: "square.and.arrow.down", title: "Bring a skill in") }.buttonStyle(.plain)
       }
     }
   }
@@ -241,7 +241,7 @@ struct MarketplaceView: View {
       }
     }
     CardGroup {
-      Button { section = .apps } label: { MarketRow(symbol: "plus", title: "Get more", subtitle: "Browse the marketplace") }.buttonStyle(.plain)
+      Button { section = .apps } label: { MarketRow(symbol: "plus", title: "Get more") }.buttonStyle(.plain)
     }
   }
 

@@ -1,4 +1,4 @@
-import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { useId, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import {
   AppWindow,
   BadgeCheck,
@@ -26,12 +26,12 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { AppCategory, TrustLabel } from "@wisp/core";
+import { entryLogos, logoUrl, type AppCategory, type MarketplaceEntry, type TrustLabel } from "@wisp/core";
 import { Modal, cx } from "./ui.tsx";
 
 /*
  * The shapes the marketplace, harnesses and logins share, drawn from the approved market-*.dc.html
- * screens: neutral line-icon tiles (never brand logos), grouped rounded cards, little pills, iOS-style
+ * screens: logo tiles with a neutral line-icon fallback, grouped rounded cards, little pills, iOS-style
  * switches, segmented controls and dialogs with a round close button.
  */
 
@@ -76,9 +76,27 @@ export function Tile({ children, size = 40, className }: { children: ReactNode; 
   );
 }
 
-/** A tile for an app: a line icon picked from its name, never its logo. */
-export function AppTile({ name, category, icon, size = 40 }: { name: string; category?: AppCategory | null; icon?: ReactNode; size?: number }) {
+/**
+ * A tile for an app: its real logo (the registry's own icon, else the brand's from the hub's
+ * /api/logo), on a light square so any brand color reads; a plain line icon when none loads.
+ */
+export function AppTile({ name, category, icon, size = 40, entry }: { name: string; category?: AppCategory | null; icon?: ReactNode; size?: number; entry?: Pick<MarketplaceEntry, "icon" | "name" | "brand" | "id"> | null }) {
   const I = appIcon(name, category);
+  const sources = icon ? [] : entry ? entryLogos(entry) : [logoUrl([name])].filter((x): x is string => !!x);
+  const [failed, setFailed] = useState(0);
+  const key = sources.join("|");
+  const [forKey, setForKey] = useState(key);
+  if (forKey !== key) {
+    setForKey(key);
+    setFailed(0);
+  }
+  const src = sources[failed];
+  if (src)
+    return (
+      <Tile size={size} className="bg-white ring-1 ring-black/10">
+        <img key={src} src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed((n) => n + 1)} style={{ width: Math.round(size * 0.58), height: Math.round(size * 0.58) }} className="object-contain" />
+      </Tile>
+    );
   return <Tile size={size}>{icon ?? <I size={Math.round(size * 0.5)} strokeWidth={1.7} />}</Tile>;
 }
 

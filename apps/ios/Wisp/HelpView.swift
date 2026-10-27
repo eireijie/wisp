@@ -62,12 +62,11 @@ struct HelpView: View {
       CardGroup {
         ForEach(Readiness.checks(agents: store.agents, devices: devices)) { ReadinessCheckRow(check: $0, store: store, makeHelper: { addingAgent = true }) }
       }
-      CardHint("Go down this list. The first item marked “Needs fixing” is usually the reason. This updates by itself.")
       CardGroup {
         NavigationLink { HelpExamplesView() } label: { RowLabel(title: "What can Wisp do?") }.accessibilityIdentifier("help-examples")
         NavigationLink { HelpWordsView() } label: { RowLabel(title: "Words you'll see") }.accessibilityIdentifier("help-words")
         if let url = URL(string: "\(WispRepo.url)/issues") {
-          Link(destination: url) { RowLabel(title: "Report a problem", subtitle: "Open an issue on GitHub", chevron: false) }.accessibilityIdentifier("help-report")
+          Link(destination: url) { RowLabel(title: "Report a problem", chevron: false) }.accessibilityIdentifier("help-report")
         }
       }
       CardHint("Something broken or confusing? Tell us what you were trying to do, what you expected, and what happened instead. Leave out passwords and private details.")
@@ -90,7 +89,6 @@ struct HelpExamplesView: View {
   var body: some View {
     SettingsPage("What can Wisp do?", id: "help-examples-page") {
       BulletsCard(points: HelpView.examples)
-      CardHint("Each of these needs a helper set up first, and some need a connected app, like Gmail. Wisp can only do what you connect it to.")
     }
   }
 }

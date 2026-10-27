@@ -56,7 +56,7 @@ struct HarnessesView: View {
           if let device, device.mine == true, store.canManage {
             MarketLabel("Not on this device")
             CardGroup {
-              Button { installing = true } label: { MarketRow(symbol: "arrow.down.circle", title: "Install a harness", subtitle: "Add another one to \(device.name)") }.buttonStyle(.plain).accessibilityIdentifier("harness-install")
+              Button { installing = true } label: { MarketRow(symbol: "arrow.down.circle", title: "Install a harness") }.buttonStyle(.plain).accessibilityIdentifier("harness-install")
             }
           }
         } else if loading {
@@ -373,10 +373,10 @@ private struct HarnessAccountsBlock: View {
           }.buttonStyle(.plain)
         }
         if settings.multiAccount {
-          Button { name = ""; naming = .add } label: { MarketRow(symbol: "plus", title: "Add account", subtitle: "Use a second login") }.buttonStyle(.plain)
+          Button { name = ""; naming = .add } label: { MarketRow(symbol: "plus", title: "Add account") }.buttonStyle(.plain)
         }
         if let current {
-          Button { signingIn = current } label: { MarketRow(symbol: "arrow.right.to.line", title: current.signedIn == true ? "Sign in again" : "Sign in", subtitle: "Open the sign-in page") }.buttonStyle(.plain).accessibilityIdentifier("harness-sign-in")
+          Button { signingIn = current } label: { MarketRow(symbol: "arrow.right.to.line", title: current.signedIn == true ? "Sign in again" : "Sign in") }.buttonStyle(.plain).accessibilityIdentifier("harness-sign-in")
         }
       }
       if settings.accounts.count > 1 || current?.isDefault == false {
@@ -462,7 +462,7 @@ private struct HarnessSignInSheet: View {
   private func act(_ body: Fields) async throws -> Data { try await store.harnessAccount(device: device.id, harness: settings.harness, body) }
 
   var body: some View {
-    MarketSheet(title: "Sign in to \(label)\(account.isDefault ? "" : " · \(account.label)")", subtitle: "Takes about a minute", busy: login?.status == "running") {
+    MarketSheet(title: "Sign in to \(label)\(account.isDefault ? "" : " · \(account.label)")", busy: login?.status == "running") {
       if perProvider && !started {
         CardGroup {
           MarketRow(title: "Provider") {
@@ -580,7 +580,7 @@ private struct ShareHarnessSkill: View {
   @State private var action = FormAction()
 
   var body: some View {
-    MarketSheet(title: "Share \(skill.name)", subtitle: "Who gets a copy?", busy: action.busy) {
+    MarketSheet(title: "Share \(skill.name)", busy: action.busy) {
       CardGroup {
         ForEach(store.agents) { agent in
           MarketToggleRow(title: agent.name, subtitle: HarnessChoice.label(agent.harness), isOn: Binding(get: { picked.contains(agent.id) }, set: { if $0 { picked.insert(agent.id) } else { picked.remove(agent.id) } })) { AgentAvatar(agent: agent, size: 30, showStatus: false) }

@@ -143,3 +143,19 @@ final class SettingsParityTests: XCTestCase {
     XCTAssertEqual(ThemeSettings.shifted(.accessibility5, "large"), .accessibility5, "stops at the biggest size")
   }
 }
+
+@MainActor
+final class UsageReportTests: XCTestCase {
+  func testDecodesUsageReportAndFormats() throws {
+    let json = #"{"range":"7d","tz":"America/Los_Angeles","buckets":[{"start":"2026-10-21T07:00:00.000Z","chat":1200,"background":300}],"totals":{"tokens":1500,"runs":4,"failed":1,"estimated":true},"previousTokens":1000,"agents":[{"agentId":"a1","tokens":1500,"runs":4}],"models":[{"model":"gpt-6.1","tokens":1500}],"background":{"todayTokens":300,"dailyTokens":null,"resetsAt":"2026-10-28T07:00:00.000Z"}}"#
+    let r = try Wire.decoder.decode(UsageReport.self, from: Data(json.utf8))
+    XCTAssertEqual(r.totals.runs, 4)
+    XCTAssertNil(r.background.dailyTokens)
+    XCTAssertEqual(r.agents.first?.id, "a1")
+    XCTAssertEqual(UsageFormat.city(r.tz), "Los Angeles")
+    XCTAssertEqual(UsageFormat.delta(total: 1500, previous: 1000, range: "7d"), "+50% vs last week")
+    XCTAssertEqual(UsageFormat.until("2026-10-28T07:00:00.000Z", now: Wire.date("2026-10-27T21:48:00.000Z")!), "in 9h 12m")
+    XCTAssertEqual([340_000, 1_600_000, 999, 12_400, 2_000_000_000].map(UsageFormat.compact), ["340k", "1.6M", "999", "12k", "2B"])
+    XCTAssertEqual(["500000", "500k", "2M", "1.5m", "abc", ""].map(UsageFormat.parseTokens), [500_000, 500_000, 2_000_000, 1_500_000, nil, nil])
+  }
+}

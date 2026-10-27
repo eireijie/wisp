@@ -66,7 +66,6 @@ describe("Grok, ChatGPT and Claude settings", () => {
     const tree = render();
     expect(find(tree, (n) => n.props?.text === `${info.publicUrl}/mcp`)).toBeTruthy();
     expect(find(tree, (n) => n.props?.children === "In Grok: Connectors → Add custom connector → paste.")).toBeTruthy();
-    expect(find(tree, (n) => n.props?.hint === "Talk to your agents from their apps.")).toBeTruthy();
   });
   it("hides both the client list and errors for a 404", async () => {
     render();

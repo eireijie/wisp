@@ -23,7 +23,7 @@ struct MemoryRulesView: View {
   static func level(_ value: String) -> String { ["none": "No access", "read": "Can read", "edit": "Can edit", "manage": "Can manage"][value] ?? value }
 
   var body: some View {
-    SettingsPage("Memory rules", subtitle: "Who can see and edit what.", id: "memory-rules") {
+    SettingsPage("Memory rules", id: "memory-rules") {
       if rules.isEmpty && loaded {
         CardHint("No rules yet. Agents only see Shared, their own folders and their teams' folders.")
       }
@@ -40,7 +40,6 @@ struct MemoryRulesView: View {
           }
         }
       }
-      CardHint("Without a rule, agents only see Shared, their own folders and their teams' folders. By default every agent reads and writes Shared, its own folder, its teams' folders and what it learns about people.")
       StatusLine(error: action.error)
       if store.isOwner {
         NavigationLink { AddMemoryRuleView(onAdded: { Task { await load() } }) } label: { Text("Add a memory rule").frame(maxWidth: .infinity) }

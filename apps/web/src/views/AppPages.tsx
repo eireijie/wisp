@@ -28,7 +28,7 @@ export function AppDetail({ app, have, canEdit, onConnect, onManage }: { app: Ap
   return (
     <div className="space-y-6">
       <header className="flex items-start gap-4">
-        <AppTile name={app.name} category={app.category} size={56} />
+        <AppTile name={app.name} category={app.category} size={56} entry={registry} />
         <div className="min-w-0 flex-1 space-y-1.5">
           <h2 className="t-title">{app.name}</h2>
           <div className="flex flex-wrap items-center gap-2">
@@ -92,7 +92,6 @@ export function ConnectSignIn({ connector, onClose, onSignIn }: { connector: Con
       <Panel>
         <Item icon={<AppTile name={connector.name} size={50} />} title={`Sign in to ${connector.name}`} sub={<span className="whitespace-normal">A page opens in your browser. Choose the account and allow Wisp to use {connector.name} for your helpers.</span>} />
       </Panel>
-      <p className="px-1 text-sm text-faint">Wisp never sees or keeps your password.</p>
       <div className="flex flex-wrap justify-end gap-2">
         <Sec onClick={onClose}>Not now</Sec>
         <Prim onClick={onSignIn} className="max-sm:w-full">
