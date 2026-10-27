@@ -134,7 +134,7 @@ ${open.map((f) => `- ${f.id}: ${f.label ?? f.note}${f.label ? ` (${f.note})` : "
     const next = new Map<string, Followup>();
     if (channelIds.length) {
       const rows = store.db
-        .prepare(`SELECT id FROM followups WHERE status = 'pending' AND kind = 'followup' AND label IS NOT NULL AND (user_id = ? OR user_id IS NULL) AND channel_id IN (${channelIds.map(() => "?").join(",")}) ORDER BY due_at`)
+        .prepare(`SELECT id FROM followups WHERE status = 'pending' AND kind = 'followup' AND waiting_on = 'agent' AND label IS NOT NULL AND (user_id = ? OR user_id IS NULL) AND channel_id IN (${channelIds.map(() => "?").join(",")}) ORDER BY due_at`)
         .all(userId, ...channelIds) as { id: string }[];
       for (const r of rows) {
         const f = store.followup(r.id)!;

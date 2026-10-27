@@ -104,6 +104,9 @@ describe("promises under a reply", () => {
     const build = hub.store.followup(pills[0].followupId)!;
     expect(build.messageId).toBe(reply.id);
     expect(build.channelId).toBe(dm().id);
+    // the chat list shows what the agent will be back with, not the person's own promise
+    const chats = await owner.request<{ id: string; next: { label: string } | null }[]>("GET", "/api/channels");
+    expect(chats.find((c) => c.id === dm().id)!.next).toMatchObject({ label: "Check the build" });
 
     // the person moves it, then says it's done
     const later = new Date(Date.now() + 3 * 3600_000).toISOString();
@@ -114,12 +117,13 @@ describe("promises under a reply", () => {
     await expect(owner.request("PATCH", `/api/followups/${build.id}`, { status: "cancelled" })).rejects.toThrow("already happened");
   });
 
-  it("lists what's tracked for the person, and the next thing in the chat list", async () => {
+  it("lists what's tracked for the person", async () => {
     const bg = await owner.request<{ followups: { label: string | null }[]; checkback: boolean }>("GET", `/api/agents/${agentId}/background`);
     expect(bg.followups.map((f) => f.label)).toContain("Nudge you about the deck");
     expect(bg.checkback).toBe(true);
+    // once the build check is done, nothing of the agent's is left to show in the chat list
     const chats = await owner.request<{ id: string; next: { label: string } | null }[]>("GET", "/api/channels");
-    expect(chats.find((c) => c.id === dm().id)!.next).toMatchObject({ label: "Nudge you about the deck" });
+    expect(chats.find((c) => c.id === dm().id)!.next).toBeNull();
   });
 
   it("describes the person's own promise when it comes due", async () => {

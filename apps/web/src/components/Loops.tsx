@@ -34,7 +34,8 @@ export const changeFollowup = (id: string, body: { dueAt?: string; status?: "don
 /** What a follow-up can do from a menu: move it, say it already happened, or drop it. */
 export function useReminderItems(id: string, onPick: () => void) {
   const { clock } = usePrefs();
-  const items = reminderTimes().map((t) => ({ label: `${t.label} · ${whenText(t.at.toISOString(), new Date(), clock)}`, onSelect: () => void changeFollowup(id, { dueAt: t.at.toISOString() }) }));
+  // "Tomorrow morning · 9 AM", not "· Tomorrow 9 AM"
+  const items = reminderTimes().map((t) => ({ label: `${t.label} · ${whenText(t.at.toISOString(), new Date(), clock).replace(/^Tomorrow /, "")}`, onSelect: () => void changeFollowup(id, { dueAt: t.at.toISOString() }) }));
   return [
     ...items,
     { label: "Pick a time…", onSelect: onPick },
@@ -206,6 +207,11 @@ export function ClosedLine({ animate }: { animate: boolean }) {
 /** A DM's line in the chat list, when it waits on you or its agent will come back to something. */
 export function loopLine(c: { loop?: { status: string; summary: string } | null; next?: { label: string; dueAt: string; waitingOn: string } | null }, clock?: "auto" | "12h" | "24h") {
   if (c.loop?.status === "waiting") return { tone: "warn" as const, icon: <MessageCircle size={12} aria-hidden />, text: `Waiting on you${c.loop.summary ? ` · ${c.loop.summary}` : ""}` };
-  if (c.next && c.next.waitingOn === "agent") return { tone: "muted" as const, icon: <Clock size={12} aria-hidden />, text: `Back ${whenText(c.next.dueAt, new Date(), clock).replace(/^(\d)/, "at $1")} · ${c.next.label}` };
+  if (c.next && c.next.waitingOn === "agent") {
+    // "Back at 4:35", "Back tomorrow 9 AM", "Back on Sat"
+    const when = whenText(c.next.dueAt, new Date(), clock);
+    const back = /^\d/.test(when) ? `at ${when}` : when.startsWith("Tomorrow") ? when.replace("Tomorrow", "tomorrow") : `on ${when}`;
+    return { tone: "muted" as const, icon: <Clock size={12} aria-hidden />, text: `Back ${back} · ${c.next.label}` };
+  }
   return null;
 }

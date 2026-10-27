@@ -32,8 +32,8 @@ describe("a DM's line in the chat list", () => {
     expect(loopLine({ loop: { status: "waiting", summary: "send Sam the deck" } })).toMatchObject({ tone: "warn", text: "Waiting on you · send Sam the deck" });
     const soon = new Date(Date.now() + 20 * 60_000);
     const line = loopLine({ loop: null, next: { label: "Check the build", dueAt: soon.toISOString(), waitingOn: "agent" } }, "12h");
-    // later today reads "Back at 4:35"; past midnight, "Back Tomorrow 12:05 AM"
-    expect(line?.text).toMatch(/^Back (at \d|Tomorrow).* · Check the build$/);
+    // later today reads "Back at 4:35"; past midnight, "Back tomorrow 12:05 AM"
+    expect(line?.text).toMatch(/^Back (at \d|tomorrow \d).* · Check the build$/);
     // the person's own promises don't count as the agent coming back
     expect(loopLine({ loop: null, next: { label: "Nudge you about the deck", dueAt: soon.toISOString(), waitingOn: "person" } })).toBeNull();
     expect(loopLine({ loop: { status: "done", summary: "" } })).toBeNull();
