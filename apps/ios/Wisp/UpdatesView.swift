@@ -82,8 +82,7 @@ struct UpdatesView: View {
         if let url = URL(string: WispRepo.url) { Link(destination: url) { RowLabel(title: "Source code", chevron: false) { EmptyView() }.overlay(alignment: .trailing) { Image(systemName: "arrow.up.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint).padding(.trailing, 18) } } }
         ValueRow(title: "License", value: "Apache-2.0")
       }
-      if !store.isOwner { CardHint("Only owners can update the hub. Other devices update from Computers and devices.") }
-      else { CardHint("Other devices update from Computers and devices.") }
+      if !store.isOwner { CardHint("Only owners can update the hub.") }
       if let lines = info?.update?.log, !lines.isEmpty {
         CardGroup { MoreOptionsRow { Text(lines.joined(separator: "\n")).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(18) } }
       }
@@ -100,7 +99,7 @@ struct WhatsNewView: View {
     SettingsPage("What's new", subtitle: info?.version?.commit.map { "Wisp \($0)" }, id: "whats-new") {
       let changes = info?.check?.changes ?? []
       if changes.isEmpty {
-        CardGroup { RowLabel(title: "Nothing new right now", subtitle: "You have everything Wisp has published.", chevron: false) }
+        CardGroup { RowLabel(title: "Nothing new right now", chevron: false) }
       } else {
         CardGroup {
           ForEach(changes, id: \.self) { line in
@@ -161,7 +160,7 @@ struct AgentRuntimesView: View {
   @Environment(Store.self) private var store
   @State private var action = FormAction()
   var body: some View {
-    SettingsPage("Agent runtimes", subtitle: "The AI tools (like Claude Code or Codex) each of your devices can run for agents. Most people set this up once.", id: "runtimes") {
+    SettingsPage("Agent runtimes", id: "runtimes") {
       CardLabel("On this device")
       CardGroup {
         ForEach(store.nodes.filter(\.usable)) { node in NavigationLink { DeviceDetail(node: node) } label: { RowLabel(title: node.name) } }
@@ -169,10 +168,8 @@ struct AgentRuntimesView: View {
       }
       CardLabel("Inside your agents' VMs")
       CardGroup { ForEach(["claude-code", "codex", "hermes", "kimi"], id: \.self) { RowLabel(title: HarnessChoice.label($0), chevron: false) } }
-      CardHint("Every VM comes with these. Sign each in once per VM, on the agent's Computer tab.")
       CardLabel("Connect from anywhere")
       CardGroup { ForEach(HarnessChoice.all.filter { $0.protocolName == "mcp" }) { RowLabel(title: $0.label, chevron: false) } }
-      CardHint("Agents that run somewhere Wisp doesn't start them join through wisp-mcp. Add the agent, then make a connection token on its Connect tab on the computer.")
       StatusLine(error: action.error)
     }
     .task { do { try await store.refreshNodes() } catch { action.error = error.localizedDescription } }

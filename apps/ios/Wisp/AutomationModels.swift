@@ -63,6 +63,23 @@ struct Allowance: Decodable {
   }
 }
 
+/** GET /api/usage?range=: what agents used over a period, split into chats/tasks and work done on their own. */
+struct UsageReport: Decodable, Equatable {
+  struct Bucket: Decodable, Equatable { var start: String; var chat: Int; var background: Int }
+  struct Totals: Decodable, Equatable { var tokens: Int; var runs: Int; var failed: Int; var estimated: Bool }
+  struct AgentUse: Decodable, Equatable, Identifiable { var agentId: String; var tokens: Int; var runs: Int; var id: String { agentId } }
+  struct ModelUse: Decodable, Equatable, Identifiable { var model: String; var tokens: Int; var id: String { model } }
+  struct Background: Decodable, Equatable { var todayTokens: Int; var dailyTokens: Int?; var resetsAt: String }
+  var range: String
+  var tz: String
+  var buckets: [Bucket]
+  var totals: Totals
+  var previousTokens: Int
+  var agents: [AgentUse]
+  var models: [ModelUse]
+  var background: Background
+}
+
 /** A setting or mod an agent changed for someone, kept so they can see it and undo it. */
 struct Change: Decodable, Identifiable {
   var id: String

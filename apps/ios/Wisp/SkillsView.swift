@@ -59,7 +59,7 @@ struct SkillDetail: View {
           if store.agents.isEmpty { MarketRow(title: "No helpers yet", subtitle: "Add one from the Agents tab.") }
         }
         CardGroup {
-          Button { editing = true } label: { MarketRow(symbol: "pencil", title: "Edit", subtitle: "Name, instructions and tags") }.buttonStyle(.plain)
+          Button { editing = true } label: { MarketRow(symbol: "pencil", title: "Edit") }.buttonStyle(.plain)
           Button { deleting = true } label: { MarketRow(symbol: "trash", title: "Delete skill", subtitle: "Removed from every helper that has it", danger: true) }.buttonStyle(.plain)
         }
       }

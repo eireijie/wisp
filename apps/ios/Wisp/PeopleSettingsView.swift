@@ -16,7 +16,7 @@ struct PeopleSettingsView: View {
   private var guests: [Member] { store.members.filter { $0.role == "guest" } }
 
   var body: some View {
-    SettingsPage(title: "People", subtitle: "Who is in \(store.workspace?.name ?? "this organization"), and what they can do.", id: "people", trailing: {
+    SettingsPage(title: "People", id: "people", trailing: {
       if store.isOwner {
         NavigationLink { InvitePeopleView() } label: { CircleLabel(symbol: "person.badge.plus") }
           .accessibilityLabel("Invite people").accessibilityIdentifier("people-invite")
@@ -63,7 +63,6 @@ struct PeopleSettingsView: View {
         }
       }
       StatusLine(error: action.error)
-      CardHint("Owners: everything, including people, devices and settings. Members: chat, agents, tasks and memory. Guests: chat and the shared folder in memory.")
     }
     .task { do { try await store.refreshPeople(); try? await store.refreshJoinRequests() } catch { action.error = error.localizedDescription } }
     .confirmCard(Binding(get: { revoking != nil }, set: { if !$0 { revoking = nil } }), title: "Revoke this invite?", message: "The link stops working.", confirm: "Revoke") {
@@ -108,10 +107,9 @@ struct InvitePeopleView: View {
   private var reachable: Bool { store.api?.base.host()?.hasSuffix(".local") == false && store.api?.base.host()?.range(of: #"^(10\.|192\.168\.)"#, options: .regularExpression) == nil }
 
   var body: some View {
-    SettingsPage("Invite people", subtitle: "Make a link and send it to them privately.", id: "invite-people") {
+    SettingsPage("Invite people", id: "invite-people") {
       CardLabel("Role")
       SegmentedPicker(options: [("member", "Member"), ("guest", "Guest")], selection: $role, label: "Role", id: "invite-role")
-      CardHint("Member: chat, agents, tasks and memory. Guest: chat and the shared folder in memory.")
       CardGroup {
         HStack {
           Text("Link expires").font(.system(size: 15)).foregroundStyle(Palette.text)
@@ -149,7 +147,7 @@ struct InvitePeopleView: View {
         if !reachable { CardHint("This link only works on this Wi-Fi. To invite someone elsewhere, turn on an address that works from anywhere in Access.") }
       }
       CardGroup {
-        NavigationLink { AddPersonView() } label: { RowLabel(title: "Add someone directly", subtitle: "Make their account now, with a temporary password") }
+        NavigationLink { AddPersonView() } label: { RowLabel(title: "Add someone directly") }
           .accessibilityIdentifier("people-add-direct")
       }
     }
@@ -169,7 +167,7 @@ struct AddPersonView: View {
   private var valid: Bool { !name.trimmed.isEmpty && email.contains("@") && password.count >= 8 }
 
   var body: some View {
-    SettingsPage("Add someone directly", subtitle: "Makes their account now, with a temporary password you give them. An invite link lets them pick their own.", id: "add-person") {
+    SettingsPage("Add someone directly", id: "add-person") {
       CardGroup {
         FieldRow(title: "Name", text: $name, contentType: .name, id: "add-name")
         FieldRow(title: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress, id: "add-email")
@@ -223,9 +221,9 @@ struct ManagePersonView: View {
             catch { role = savedRole; throw error }
           }
         }
-      CardHint(lastOwner ? "An organization needs at least one owner; make someone else an owner first." : (roleHint[role] ?? ""))
+      if lastOwner { CardHint("An organization needs at least one owner; make someone else an owner first.") }
       CardGroup {
-        NavigationLink { TemporaryPasswordView(member: member) } label: { RowLabel(title: "Set a temporary password", subtitle: "Set a new password and end their sign-ins") }
+        NavigationLink { TemporaryPasswordView(member: member) } label: { RowLabel(title: "Set a temporary password") }
           .accessibilityIdentifier("manage-password")
       }
       StatusLine(error: action.error)

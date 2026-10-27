@@ -29,7 +29,7 @@ struct ProfileSettingsView: View {
       }
       CardGroup {
         FieldRow(title: "Full name", text: $name, contentType: .name, id: "profile-name")
-        FieldRow(title: "Preferred name", subtitle: "What agents call you", text: $preferred, contentType: .nickname, id: "profile-preferred")
+        FieldRow(title: "Preferred name", text: $preferred, contentType: .nickname, id: "profile-preferred")
       }
       CardGroup {
         FieldRow(title: "Email", text: $email, keyboard: .emailAddress, contentType: .emailAddress, id: "profile-email")
@@ -94,14 +94,13 @@ struct SecuritySettingsView: View {
       if store.sessions.contains(where: { $0.current != true }) {
         Button("Sign out everywhere else") { others = true }.buttonStyle(.pill(.destructive)).disabled(action.busy)
       }
-      CardHint("Sign out of anything you don't recognize. Changing your password signs out everything else too.")
       CardLabel("Password")
       CardGroup {
         FieldRow(title: "Current", text: $current, secure: true, contentType: .password, id: "password-current")
         FieldRow(title: "New", text: $next, secure: true, contentType: .newPassword, id: "password-new")
         FieldRow(title: "Again", text: $again, secure: true, contentType: .newPassword, id: "password-again")
       }
-      CardHint(!again.isEmpty && next != again ? "The new passwords don't match." : "At least 8 characters. Your other sign-ins will end.")
+      if !again.isEmpty && next != again { CardHint("The new passwords don't match.") }
       StatusLine(error: action.error, saved: saved ? "Password changed." : nil)
       Button("Change password") {
         action.run { try await store.changePassword(current: current, next: next); current = ""; next = ""; again = ""; saved = true }

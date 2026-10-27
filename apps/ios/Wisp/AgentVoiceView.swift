@@ -39,7 +39,7 @@ struct AgentVoicePicker: View {
       if engine == "elevenlabs" {
         CardGroup {
           Button { customOpen.toggle() } label: {
-            RowLabel(title: "More options", subtitle: "Custom ElevenLabs voice id", chevron: false) {
+            RowLabel(title: "More options", chevron: false) {
               EmptyView()
             }
             .overlay(alignment: .trailing) {

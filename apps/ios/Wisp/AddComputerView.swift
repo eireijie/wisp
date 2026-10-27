@@ -102,7 +102,6 @@ struct AddComputerView: View {
             } label: { Text("More options").font(.system(size: 15)).foregroundStyle(Palette.muted) }
               .tint(Palette.muted).padding(.horizontal, 4).accessibilityIdentifier("give-more")
 
-            if kind == .vm { Text("The first VM on a device builds its image, which takes a few minutes. Its home folder keeps sign-ins and files between restarts.").font(.footnote).foregroundStyle(Palette.faint).padding(.horizontal, 4) }
           }
           if let error { Text(error).foregroundStyle(Palette.red).font(.footnote) }
           if chatOnly {

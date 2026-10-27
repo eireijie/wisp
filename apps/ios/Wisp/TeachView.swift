@@ -53,8 +53,6 @@ struct TeachAgentPicker: View {
               }
             }
           }
-        } footer: {
-          Text("Do the task once on this computer while an agent watches. It saves the steps as a routine and can do it on its own next time, on a schedule if you like.")
         }
       }
       .groundBackground()
@@ -125,8 +123,6 @@ struct TeachSaveSheet: View {
           TextField("Weekly reporting", text: $name)
         } header: {
           Text("What's the task called?")
-        } footer: {
-          Text("\(session.agent.name) studies your \(session.recording.count) step\(session.recording.count == 1 ? "" : "s") and writes them up as a routine you can run anytime or on a schedule.")
         }
         Section("Anything else it should know? (optional)") {
           TextField("Which parts change each time, where to find inputs, what done looks like…", text: $session.narration, axis: .vertical).lineLimit(3...8)

@@ -403,12 +403,12 @@ struct AddChooserSheet: View {
       VStack(spacing: 14) {
         CardGroup {
           Button { onPick(.device) } label: {
-            RowLabel(title: "Add a device or phone", subtitle: "A device is a computer running Wisp, or your phone. Scan a QR code or type a join code.") {
+            RowLabel(title: "Add a device or phone") {
               Image(systemName: "qrcode").font(.system(size: 20)).foregroundStyle(Palette.text).frame(width: 30)
             }.padding(.vertical, 8)
           }.buttonStyle(.plain).accessibilityIdentifier("add-device")
           Button { onPick(.give) } label: {
-            RowLabel(title: "Give an agent a computer", subtitle: "A virtual computer on one of your devices, your own screen, or a cloud computer.") {
+            RowLabel(title: "Give an agent a computer") {
               Image(systemName: "desktopcomputer").font(.system(size: 20)).foregroundStyle(Palette.text).frame(width: 30)
             }.padding(.vertical, 8)
           }.buttonStyle(.plain).accessibilityIdentifier("add-give")

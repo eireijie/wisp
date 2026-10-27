@@ -20,7 +20,7 @@ final class SettingsShotsTests: XCTestCase {
     Thread.sleep(forTimeInterval: 1.5)
     shot("00-sheet")
     // pages the sheet opens
-    for (id, screen) in [("you-profile", "profile"), ("settings-appearance", "appearance"), ("you-help", "help"), ("settings-agent-defaults", "agent-defaults")] {
+    for (id, screen) in [("you-profile", "profile"), ("you-mods", "mods"), ("settings-appearance", "appearance"), ("you-help", "help"), ("settings-agent-defaults", "agent-defaults")] {
       visit(id, screen)
     }
     guard reveal("you-settings") else { return XCTFail("no all-settings row") }
@@ -29,9 +29,9 @@ final class SettingsShotsTests: XCTestCase {
     shot("01-all-settings")
     let pages: [(String, String)] = [
       ("settings-notifications", "notifications"), ("settings-behavior", "behavior"), ("settings-voice", "voice"), ("settings-security", "security"),
-      ("settings-workspace", "workspace"), ("settings-people", "people"), ("settings-usage", "usage"), ("settings-mods", "mods"),
+      ("settings-workspace", "workspace"), ("settings-people", "people"), ("settings-usage", "usage"),
       ("settings-agents", "agent-policy"), ("settings-connections", "connections"), ("settings-access", "access"), ("settings-mobile", "mobile"),
-      ("settings-data", "data"), ("settings-about", "about"), ("settings-help", "help"),
+      ("settings-data", "data"), ("settings-about", "about"),
     ]
     for (id, screen) in pages { visit(id, screen) }
   }

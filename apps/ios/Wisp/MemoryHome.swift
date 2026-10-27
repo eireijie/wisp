@@ -259,7 +259,6 @@ struct ViewAsSheet: View {
       SheetHeader(title: "View memory as") { dismiss() }
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          Text("See memory the way an agent does. Only the notes it can read are listed.").font(.system(size: 15)).foregroundStyle(Palette.muted).padding(.horizontal, 4)
           SectionCaption("Helper")
           CardGroup {
             Button { pick = "" } label: {

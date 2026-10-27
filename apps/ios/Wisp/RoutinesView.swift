@@ -140,7 +140,7 @@ struct RoutineEditor: View {
           }
           if routine == nil, store.features.teach, store.canViewComputers, let computer {
             Button { teachRoute = computer.id } label: {
-              RowLabel(title: "Teach it instead", subtitle: "Show it on a computer", leading: { rowIcon("hand.point.up.left") })
+              RowLabel(title: "Teach it instead", leading: { rowIcon("hand.point.up.left") })
             }.buttonStyle(.plain).accessibilityIdentifier("routine-teach")
           }
         }

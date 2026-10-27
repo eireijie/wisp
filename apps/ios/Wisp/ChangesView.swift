@@ -31,7 +31,7 @@ struct AskAgentSection: View {
             .labelStyle(.iconOnly).font(.title2).disabled(action.busy || text.trimmed.isEmpty)
         }
         InlineError(error: action.error)
-      } footer: { Text("Agents change settings and mods when you ask. What they change shows up below, with Undo.") }
+      }
     }
   }
 

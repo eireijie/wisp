@@ -88,7 +88,6 @@ struct AppearanceSettingsView: View {
       .padding(.vertical, 18).padding(.horizontal, 6)
       .background(Palette.card, in: RoundedRectangle(cornerRadius: Corner.card, style: .continuous))
     .overlay(RoundedRectangle(cornerRadius: Corner.card, style: .continuous).strokeBorder(Palette.cardBorder))
-      CardHint("\(AppTheme.named(theme).name): \(AppTheme.named(theme).blurb) Every theme works in light and dark. Agents keep their own colors in all of them.")
       CardLabel("Accessibility")
       CardGroup {
         HStack(spacing: 12) {
@@ -98,7 +97,6 @@ struct AppearanceSettingsView: View {
         }.padding(.horizontal, 18).frame(minHeight: 54)
         ToggleRow(title: "Reduce motion", isOn: $reduceMotion, id: "reduce-motion")
       }
-      CardHint("Text size goes one step either way from your iPhone's own setting. Reduce motion calms the ghosts and screen transitions; the iPhone's Reduce Motion setting does this too.")
     }
   }
 }

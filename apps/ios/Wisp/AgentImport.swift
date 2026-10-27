@@ -8,10 +8,10 @@ struct AgentBring: View {
     AgentFrame(title: "Bring an agent in") {
       CardGroup {
         NavigationLink { ImportAgent(onImported: onDone) } label: {
-          RowLabel(title: "Find on a connected device", subtitle: "Agents already on your computers", leading: { rowIcon("magnifyingglass") })
+          RowLabel(title: "Find on a connected device", leading: { rowIcon("magnifyingglass") })
         }.buttonStyle(.plain).accessibilityIdentifier("bring-find")
         NavigationLink { AgentInvite(onDone: onDone) } label: {
-          RowLabel(title: "Invite an outside agent", subtitle: "Any MCP-capable session", leading: { rowIcon("person.badge.plus") })
+          RowLabel(title: "Invite an outside agent", leading: { rowIcon("person.badge.plus") })
         }.buttonStyle(.plain).accessibilityIdentifier("bring-invite")
       }
       CardCaption("Neither option copies skills. Once connected, it can save selected notes to memory itself.")
@@ -47,8 +47,6 @@ struct ImportAgent: View {
       if usable.allSatisfy({ ($0.discovered ?? []).isEmpty }) {
         AgentCard {
           Text(scanning ? "Looking…" : "No saved setups found yet").font(.system(size: 15)).foregroundStyle(Palette.text)
-          Text("Wisp checks known configuration folders on your connected devices. Custom locations may not appear; it doesn't search for running processes.")
-            .font(.system(size: 13)).foregroundStyle(Palette.faint)
           if !anyOnline && !scanning { Text("Connect a device first to find its saved agent setups.").font(.system(size: 13)).foregroundStyle(Palette.faint) }
         }
       }
@@ -201,13 +199,9 @@ struct AgentInvite: View {
         }
         CardGroup {
           Button { existing.toggle() } label: {
-            RowLabel(title: "Add to an existing session", subtitle: "Already have an agent running?", chevron: false)
+            RowLabel(title: "Add to an existing session", chevron: false)
               .overlay(alignment: .trailing) { Image(systemName: existing ? "chevron.up" : "chevron.down").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint).padding(.trailing, 18) }
           }.buttonStyle(.plain)
-          if existing {
-            Text("After you create the invitation you get a setup to copy into that session's MCP settings. Restart the session and it joins as this agent.")
-              .font(.system(size: 13)).foregroundStyle(Palette.muted).padding(18).frame(maxWidth: .infinity, alignment: .leading)
-          }
         }
         AgentError(text: action.error)
         PillButton(title: "Create invitation", busy: action.busy, id: "invite-create") { create() }

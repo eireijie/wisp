@@ -171,7 +171,7 @@ struct AddAgent: View {
           RowLabel(title: "Runs on", value: computerText, leading: { rowIcon("desktopcomputer") })
         }.buttonStyle(.plain)
         Button { draft.computer = "later" } label: {
-          RowLabel(title: "Decide later", subtitle: "Pick a computer later", chevron: false, leading: { rowIcon("clock") })
+          RowLabel(title: "Decide later", chevron: false, leading: { rowIcon("clock") })
             .overlay(alignment: .trailing) { if draft.computer == "later" { Radio(on: true).padding(.trailing, 18) } }
         }.buttonStyle(.plain)
       }
@@ -195,7 +195,7 @@ struct AddAgent: View {
     }
     CardGroup {
       NavigationLink { NewAgentMore(draft: draft, askWho: askWho) } label: {
-        RowLabel(title: "More options", subtitle: "Handle, apps, skills, instructions")
+        RowLabel(title: "More options")
       }.buttonStyle(.plain).accessibilityIdentifier("new-more")
     }
   }
@@ -291,7 +291,7 @@ private struct NewAgentModel: View {
   @Bindable var draft: AgentDraft
   var body: some View {
     AgentFrame(title: "Model", subtitle: "New agent") {
-      CardGroup { ChoiceRow(title: "Automatic", subtitle: "\(HarnessChoice.label(draft.harness)) picks for you", selected: draft.model.isEmpty) { draft.model = "" } }
+      CardGroup { ChoiceRow(title: "Automatic", selected: draft.model.isEmpty) { draft.model = "" } }
       FieldCard(label: "Model id", text: $draft.model, prompt: "Leave empty for automatic", lowercase: true)
       CardCaption("Use the exact id your harness expects. Wisp passes it through unchanged. You can pick from its list once it's on a device.")
     }
@@ -313,7 +313,7 @@ private struct NewAgentComputer: View {
           ChoiceRow(title: "Share \(c.name)", subtitle: "It uses the same files, browser and sign-ins", selected: draft.computer == "share:\(c.id)") { draft.computer = "share:\(c.id)" }
         }
         ChoiceRow(title: "No computer", subtitle: "It can think and write, but can't use apps or a screen", selected: draft.computer == "none") { draft.computer = "none" }
-        ChoiceRow(title: "Decide later", subtitle: "Pick a computer later", selected: draft.computer == "later") { draft.computer = "later" }
+        ChoiceRow(title: "Decide later", selected: draft.computer == "later") { draft.computer = "later" }
       }
     }
   }

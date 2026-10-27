@@ -36,6 +36,8 @@ extension Store {
     try await fetch { try await $0.put("/api/agents/\(id)/background", fields) }
     try await refreshBackground(id)
   }
+  /** The usage report for "today", "7d" or "30d". Not cached: the Usage page owns it. */
+  func fetchUsage(range: String) async throws -> UsageReport { try await fetch { try await $0.get("/api/usage", ["range": range]) } }
   func refreshAllowance() async throws { allowance = try await fetch { try await $0.get("/api/background/allowance") } }
   func saveAllowance(_ dailyTokens: Int?) async throws {
     let data = try await fetch { try await $0.put("/api/background/allowance", ["dailyTokens": dailyTokens.map(AnyEncodable.init) ?? .null]) }

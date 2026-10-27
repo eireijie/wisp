@@ -142,16 +142,16 @@ struct ConnectorDetail: View {
       if store.canManage {
         MarketLabel("Account")
         CardGroup {
-          Button { action.run { try await store.refreshConnectors() } } label: { MarketRow(symbol: "arrow.clockwise", title: "Refresh", subtitle: "Check the connection") }.buttonStyle(.plain)
+          Button { action.run { try await store.refreshConnectors() } } label: { MarketRow(symbol: "arrow.clockwise", title: "Refresh") }.buttonStyle(.plain)
           if current.kind == "mcp-http" {
             Button { action.run { if let url = try await store.connectorSignIn(current.id) { openURL(url) } } } label: {
-              MarketRow(symbol: "arrow.right.to.line", title: current.auth?.signedIn == true ? "Sign in again" : "Sign in", subtitle: "Opens the app's sign-in page")
+              MarketRow(symbol: "arrow.right.to.line", title: current.auth?.signedIn == true ? "Sign in again" : "Sign in")
             }.buttonStyle(.plain)
           }
           if current.auth?.signedIn == true {
             Button { action.run { try await store.connectorSignOut(current.id) } } label: { MarketRow(symbol: "rectangle.portrait.and.arrow.right", title: "Sign out", subtitle: "Helpers stop using your account") }.buttonStyle(.plain)
           }
-          Button { editor = ConnectorEditorTarget(existing: current, entry: nil) } label: { MarketRow(symbol: "pencil", title: "Edit settings", subtitle: "Name, values and how it starts") }.buttonStyle(.plain)
+          Button { editor = ConnectorEditorTarget(existing: current, entry: nil) } label: { MarketRow(symbol: "pencil", title: "Edit settings") }.buttonStyle(.plain)
           Button { action.run { try await store.saveConnector(current.id, ["enabled": AnyEncodable(current.enabled == false)]) } } label: {
             MarketRow(symbol: "power", title: current.enabled == false ? "Turn on" : "Turn off", subtitle: current.enabled == false ? "On for the helpers above" : "Off for every helper")
           }.buttonStyle(.plain)

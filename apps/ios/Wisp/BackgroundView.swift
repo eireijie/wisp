@@ -41,7 +41,7 @@ struct BackgroundView: View {
         AgentCard { Text("\(reason).").font(.system(size: 15)).foregroundStyle(Palette.muted) }
       } else {
         CardGroup {
-          SwitchRow(title: "Work in the background for you", subtitle: "\(agent.name) checks your apps on its own and messages you first",
+          SwitchRow(title: "Work in the background for you",
                     isOn: Binding(get: { on }, set: { v in save(["enabled": AnyEncodable(v)]) }), id: "background-toggle")
             .disabled(!canEdit || action.busy)
         }
@@ -70,7 +70,7 @@ struct BackgroundView: View {
           }
         }
         CardGroup {
-          NavigationLink { morePage } label: { RowLabel(title: "More options", subtitle: "Model, effort, usage") }
+          NavigationLink { morePage } label: { RowLabel(title: "More options") }
             .buttonStyle(.plain).accessibilityIdentifier("background-more")
         }
         if let work, on || work.lastAt != nil {

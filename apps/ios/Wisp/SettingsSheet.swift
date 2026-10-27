@@ -65,7 +65,6 @@ struct SettingsSheet: View {
               ToggleRow(title: "Notifications", isOn: notifications, id: "you-notifications")
               NavigationLink { AppearanceSettingsView() } label: { RowLabel(title: "Appearance", value: themeName) }
                 .accessibilityIdentifier("settings-appearance")
-              NavigationLink { HelpView() } label: { RowLabel(title: "Help") }.accessibilityIdentifier("you-help")
               if store.role != "guest" {
                 NavigationLink { NativeSettingsView() } label: { RowLabel(title: "All settings") }.accessibilityIdentifier("you-settings")
               } else {
@@ -139,16 +138,17 @@ struct SettingsSheet: View {
         Button { dismiss(); store.route = .device(id: nil) } label: {
           RowLabel(title: "Computers", value: online > 0 ? "\(online) online" : nil)
         }.buttonStyle(.plain).accessibilityIdentifier("you-devices")
-        NavigationLink { MarketplaceView() } label: { RowLabel(title: "Connect apps", subtitle: "Tools and skills for your agents") }
+        NavigationLink { MarketplaceView() } label: { RowLabel(title: "Connect apps") }
           .accessibilityIdentifier("you-marketplace")
       }
-      NavigationLink { MemoryView() } label: { RowLabel(title: "Memory", subtitle: store.role == "guest" ? nil : "Notes you and your agents share", value: store.role == "guest" ? "Shared folder" : nil) }
+      NavigationLink { MemoryView() } label: { RowLabel(title: "Memory", value: store.role == "guest" ? "Shared folder" : nil) }
         .accessibilityIdentifier("you-memory")
       if store.role != "guest" {
-        NavigationLink { AboutYouView() } label: { RowLabel(title: "About you", subtitle: "What agents should know about you") }
+        NavigationLink { FeaturesView() } label: { RowLabel(title: "Mods") }.accessibilityIdentifier("you-mods")
+        NavigationLink { AboutYouView() } label: { RowLabel(title: "About you") }
           .accessibilityIdentifier("you-about")
         if store.features.tasks {
-          NavigationLink { TasksView() } label: { RowLabel(title: "Tasks", subtitle: "Work you handed to an agent") }
+          NavigationLink { TasksView() } label: { RowLabel(title: "Tasks") }
             .accessibilityIdentifier("you-tasks")
           if store.canManage {
             Button { newTask = true } label: { RowLabel(title: "New task", chevron: false) }
@@ -156,6 +156,7 @@ struct SettingsSheet: View {
           }
         }
       }
+      NavigationLink { HelpView() } label: { RowLabel(title: "Help") }.accessibilityIdentifier("you-help")
     }
   }
 

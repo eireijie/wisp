@@ -25,9 +25,9 @@ struct AgentWhoPage: View {
     AgentFrame(title: "Who can ask it", subtitle: current.name) {
       if canSet {
         CardGroup {
-          ChoiceRow(title: "Only me", subtitle: "Just you can message it", selected: mode == "me") { mode = "me" }
+          ChoiceRow(title: "Only me", selected: mode == "me") { mode = "me" }
           ChoiceRow(title: "Anyone", subtitle: "Everyone in \(store.workspace?.name ?? "this organization")", selected: mode == "anyone") { mode = "anyone" }
-          ChoiceRow(title: "Picked people", subtitle: "Choose who can ask", selected: mode == "people") { mode = "people" }
+          ChoiceRow(title: "Picked people", selected: mode == "people") { mode = "people" }
         }.disabled(action.busy)
         if mode == "people" {
           CardCaption("Picked people")
@@ -198,8 +198,8 @@ struct AgentMemoryPage: View {
       }
       CardCaption("Always remind it")
       CardGroup {
-        NavigationLink { AgentPersonalityPage(agent: current) } label: { RowLabel(title: "Personality", subtitle: "Loads when it starts") }.buttonStyle(.plain)
-        NavigationLink { AgentInstructionsPage(agent: current) } label: { RowLabel(title: "Instructions", subtitle: "Loads when it starts") }.buttonStyle(.plain)
+        NavigationLink { AgentPersonalityPage(agent: current) } label: { RowLabel(title: "Personality") }.buttonStyle(.plain)
+        NavigationLink { AgentInstructionsPage(agent: current) } label: { RowLabel(title: "Instructions") }.buttonStyle(.plain)
       }
       CardGroup {
         NavigationLink { AgentPermissions(agent: current) } label: {

@@ -89,7 +89,7 @@ struct ChatToolSheet: View {
             Button("Use") { setModel(other.trimmingCharacters(in: .whitespacesAndNewlines)); customizing = false }.disabled(other.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).padding(.trailing, 18)
           }
         } else {
-          Button { customizing = true } label: { RowLabel(title: "Other model…", subtitle: "Type a model name") }.buttonStyle(.plain)
+          Button { customizing = true } label: { RowLabel(title: "Other model…") }.buttonStyle(.plain)
         }
       }
       .disabled(!store.canManage || action.busy)

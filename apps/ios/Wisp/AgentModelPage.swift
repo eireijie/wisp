@@ -25,12 +25,12 @@ struct AgentModelPage: View {
       if let catalog {
         CardCaption("Model")
         CardGroup {
-          ChoiceRow(title: "Harness default", subtitle: "\(label) picks for you", selected: model.isEmpty) { pick("") }
+          ChoiceRow(title: "Harness default", selected: model.isEmpty) { pick("") }
           ForEach(catalog.models) { option in
             ChoiceRow(title: option.label, subtitle: option.description, selected: model == option.id) { pick(option.id) }
           }
           if !model.isEmpty, !catalog.models.contains(where: { $0.id == model }) {
-            ChoiceRow(title: model, subtitle: "Your own model id", selected: true) {}
+            ChoiceRow(title: model, selected: true) {}
           }
         }
         .disabled(!store.canManage || action.busy)
@@ -60,7 +60,7 @@ struct AgentModelPage: View {
       if store.canManage {
         CardGroup {
           NavigationLink { AgentModelMore(agent: current, models: models) } label: {
-            RowLabel(title: "More options", subtitle: "Other model, reset")
+            RowLabel(title: "More options")
           }.buttonStyle(.plain).accessibilityIdentifier("model-more")
         }
       }
@@ -112,11 +112,11 @@ struct AgentModelMore: View {
     AgentFrame(title: "Model", subtitle: "More options") {
       CardCaption("Model")
       CardGroup {
-        ChoiceRow(title: "Harness default", subtitle: "\(HarnessChoice.label(current.harness)) picks for you", selected: known && id.isEmpty) { id = ""; other = false }
+        ChoiceRow(title: "Harness default", selected: known && id.isEmpty) { id = ""; other = false }
         ForEach(catalog?.models ?? []) { option in
           ChoiceRow(title: option.label, subtitle: option.description, selected: known && id == option.id) { id = option.id; other = false }
         }
-        ChoiceRow(title: "Other model…", subtitle: "Type a model id yourself", selected: !known) { other = true }
+        ChoiceRow(title: "Other model…", selected: !known) { other = true }
       }
       if !known {
         FieldCard(label: "Model id", text: $id, prompt: "sol-6.1-preview", lowercase: true)

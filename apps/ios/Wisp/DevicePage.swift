@@ -200,7 +200,7 @@ struct DeviceDetail: View {
       Section {
         if canUpdate {
           Button { update(n) } label: {
-            RowLabel(title: n.isUpdating ? "Updating…" : "Update Wisp", subtitle: "Get the latest Wisp on this device and restart it", chevron: false) {
+            RowLabel(title: n.isUpdating ? "Updating…" : "Update Wisp", chevron: false) {
               Image(systemName: "arrow.down.circle").foregroundStyle(Palette.text)
             }.padding(.horizontal, -18)
           }.buttonStyle(.plain).disabled(n.isUpdating || action.busy).accessibilityIdentifier("device-update")
@@ -260,9 +260,7 @@ private struct AgentsHere: View {
         Button(action: onAdd) { Label("Add an agent here", systemImage: "plus").foregroundStyle(Palette.text) }.accessibilityIdentifier("device-add-agent")
       }
       InlineError(error: action.error)
-    } header: { Text("Agents on this computer") } footer: {
-      Text("Only agents that run here can use this computer\(node.mine == true ? ", and only for things you ask" : "").")
-    }
+    } header: { Text("Agents on this computer") }
     .listRowBackground(Palette.card)
     .confirmationDialog("Run \(headless?.name ?? "it") without a computer? It won't be able to use apps or websites.", isPresented: Binding(get: { headless != nil }, set: { if !$0 { headless = nil } }), titleVisibility: .visible, presenting: headless) { agent in
       Button("No computer") { set(.none, agent) }
@@ -389,9 +387,7 @@ private struct HarnessesSection: View {
       if let output { Text(output).font(.caption).foregroundStyle(Palette.muted).textSelection(.enabled) }
       if action.busy { ProgressView("Working on the device…") }
       InlineError(error: action.error)
-    } header: { Text("Agent harnesses") } footer: {
-      if store.canManage && node.mine == true { Text("Other harnesses use their own installer on the computer.") }
-    }
+    } header: { Text("Agent harnesses") }
     .listRowBackground(Palette.card)
     .confirmationDialog("Install this harness on \(node.name)?", isPresented: Binding(get: { installing != nil }, set: { if !$0 { installing = nil } }), titleVisibility: .visible) {
       Button("Install") { if let harness = installing { action.run { output = try await store.installHarness(harness, node: node.id) } } }
@@ -438,9 +434,7 @@ private struct RemoteDesktopSection: View {
         Button("Add another app you use") { editing = true }
       }
       InlineError(error: action.error)
-    } header: { Text("Remote desktop") } footer: {
-      if node.capabilities?.rustdesk == nil && node.remoteDesktop == nil && !editing && !showRustdesk { Text("Reach \(node.name) from anywhere.") }
-    }
+    } header: { Text("Remote desktop") }
     .listRowBackground(Palette.card)
     .confirmationDialog("Stop showing \(node.remoteDesktop?.label ?? "this app") here? The app itself isn't changed.", isPresented: $forgetting, titleVisibility: .visible) {
       Button("Remove", role: .destructive) { action.run { try await store.setRemoteDesktop(node.id, nil) } }
