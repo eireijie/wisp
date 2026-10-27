@@ -125,7 +125,6 @@ export function LookEditorScreen({ initial, name, onSave, onBack, saving = false
           <h1 tabIndex={-1} className="t-title truncate">
             {who}'s look
           </h1>
-          <p className="text-sm text-muted">Everything here shows up wherever {name.trim() || "it"} appears. Move your pointer over the preview and it watches.</p>
         </div>
         <Button type="button" onClick={() => setLook(randomAppearance())}>
           <Shuffle size={15} /> Shuffle

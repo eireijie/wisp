@@ -45,24 +45,6 @@ const SIDE: { id: AgentTab; label: string; icon: ReactNode }[] = [
 /** The sections on the left list; Personality, Instructions and Device are opened from Edit and Computer, Remove from its own row. */
 export const agentSections = () => SIDE.map((i) => i.id);
 
-const TAB_SUBTITLE: Partial<Record<AgentTab, string>> = {
-  overview: "How {name} is set up",
-  model: "What {name} thinks with",
-  computer: "Where {name} works",
-  access: "Who can message {name}",
-  routines: "Things {name} does on a schedule",
-  background: "{name} checks your apps on its own and messages you first",
-  memory: "What {name} remembers",
-  skills: "What {name} knows how to do",
-  apps: "Apps {name} can use",
-  permissions: "What {name} may do without asking",
-  connect: "Connect an agent that already runs somewhere else",
-  runs: "Everything {name} has done lately",
-  look: "How {name} looks and sounds",
-  soul: "How {name} talks and what it values",
-  instructions: "{name}'s job and how it should reply",
-};
-
 /**
  * One agent's page. Phones: the profile (big ghost, grouped rows) and each row's own page.
  * Desktops: a left list of sections with the selected one beside it. Editable sections stay
@@ -111,7 +93,6 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
   const next = setupNextStep(agent, devices);
   const device = active === "computer" || active === "device";
   const title = TAB_TITLES[active];
-  const sub = (TAB_SUBTITLE[active] ?? "").replace(/\{name\}/g, agent.name);
   const back = href({ view: "agents", agentId: agent.id, tab: "overview" });
   const status = working ? (
     <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full bg-ok/15 text-ok text-xs font-medium">
@@ -196,7 +177,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
                   </button>
                 </div>
               </div>
-              <PageHead title="Overview" sub={sub} />
+              <PageHead title="Overview" />
               {!readiness.ready && (
                 <div role="status" className="rounded-3xl border border-warn/40 bg-warn/10 p-4 text-sm">
                   <div className="flex items-center gap-2 font-medium">
@@ -219,7 +200,7 @@ export function AgentDetail({ agent, nodes, tab }: { agent: FullAgent; nodes: No
               <OverviewRows agent={agent} nodes={nodes} />
             </div>
           )}
-          {active !== "overview" && <PageHead title={device ? TAB_TITLES.computer : title} sub={sub} />}
+          {active !== "overview" && <PageHead title={device ? TAB_TITLES.computer : title} />}
           <Panel show={active === "look"}>
             <LookPanel agent={agent} onDirty={markDirty("look")} active={active === "look"} />
           </Panel>
@@ -507,10 +488,10 @@ function InstructionsPanel({ agent, onDirty, active }: { agent: FullAgent; onDir
         </p>
       </Intro>
       <div className="mb-6 grid gap-3 sm:grid-cols-[minmax(0,14rem)_1fr]">
-        <Field label="Role" hint="A short title, like Engineer or Researcher.">
+        <Field label="Role">
           <Input value={role} onChange={(e) => setRole(e.target.value)} maxLength={60} placeholder="Engineer" aria-label="Role" />
         </Field>
-        <Field label="What the role covers (optional)" hint="What it owns and what to send its way. The lead hands out work by it.">
+        <Field label="What the role covers (optional)">
           <Input value={roleNotes} onChange={(e) => setRoleNotes(e.target.value)} maxLength={2000} placeholder="Owns the backend and the build; send it bugs and API work." aria-label="What the role covers" />
         </Field>
       </div>
@@ -1155,7 +1136,6 @@ function ConnectPanel({ agent, nodes }: { agent: FullAgent; nodes: NodeInfo[] })
         <h3 className="font-semibold flex items-center gap-2">
           <FileText size={16} /> Connect an existing session (MCP)
         </h3>
-        <p className="text-sm text-muted">Give any MCP-capable harness this agent's identity, memory, chat and task tools. The token is shown once.</p>
         {token ? (
           <ConnectionInstructions token={token} harness={agent.harness} />
         ) : (
@@ -1180,7 +1160,6 @@ function RemoteMcp({ agent }: { agent: FullAgent }) {
       <h3 className="font-semibold flex items-center gap-2">
         <Plug size={16} /> Connect by URL
       </h3>
-      <p className="text-sm text-muted">Add as a custom connector in Grok, ChatGPT or Claude, then pick @{agent.handle} when you sign in.</p>
       <CopyBlock text={`${shareOrigin()}/mcp`} />
       {originReach(shareOrigin()) !== "anywhere" && (
         <p className="text-xs text-muted">

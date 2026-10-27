@@ -1241,6 +1241,29 @@ export class Store {
     });
   }
 
+  /**
+   * Token use by finished-or-running runs (anything past queued) in one workspace between `from` and `to`,
+   * grouped in the database by quarter hour (every time zone's offset is a multiple of 15 minutes), agent,
+   * model and kind. Runs that reported no token counts are counted as `guess` each. `includeUnattributed`
+   * adds runs nobody is recorded as having asked for (they belong to the workspace owner).
+   */
+  usageRows(workspaceId: string, userId: string, includeUnattributed: boolean, from: string, to: string, guess: number) {
+    const tokenSql = "(json_extract(r.usage_json, '$.inputTokens') IS NOT NULL OR json_extract(r.usage_json, '$.outputTokens') IS NOT NULL)";
+    return this.db
+      .prepare(
+        `SELECT substr(r.created_at, 1, 14) || printf('%02d', (CAST(substr(r.created_at, 15, 2) AS INTEGER) / 15) * 15) AS slot,
+                r.agent_id AS agentId, r.kind = 'background' AS background, json_extract(r.usage_json, '$.model') AS model,
+                COUNT(*) AS runs, SUM(r.status = 'failed') AS failed,
+                SUM(CASE WHEN ${tokenSql} THEN COALESCE(json_extract(r.usage_json, '$.inputTokens'), 0) + COALESCE(json_extract(r.usage_json, '$.outputTokens'), 0) ELSE ? END) AS tokens,
+                SUM(NOT ${tokenSql}) AS guessed
+         FROM runs r JOIN agents a ON a.id = r.agent_id
+         WHERE a.workspace_id = ? AND (r.requested_by = ? ${includeUnattributed ? "OR r.requested_by IS NULL" : ""})
+           AND r.status != 'queued' AND r.created_at >= ? AND r.created_at < ?
+         GROUP BY slot, r.agent_id, background, model`,
+      )
+      .all(guess, workspaceId, userId, from, to) as { slot: string; agentId: string; background: number; model: string | null; runs: number; failed: number; tokens: number; guessed: number }[];
+  }
+
   private changeSql = "SELECT id, user_id AS userId, agent_id AS agentId, lines_json AS lines, undo_json AS undo, created_at AS createdAt, undone_at AS undoneAt FROM changes";
   private toChange = (r: Record<string, unknown>): Change & { undo: unknown } => ({ ...(r as unknown as Change), lines: JSON.parse(r.lines as string), undo: JSON.parse(r.undo as string) });
 

@@ -314,7 +314,6 @@ function ViewAsDialog({ viewAs, total, visible, hiddenNames, onClose, onPick }: 
         </button>
       }
     >
-      <p className="text-[14px] text-muted">See memory the way a helper does. Only the notes it can read are listed.</p>
       <Overline>Helper</Overline>
       <Cards>
         <button onClick={() => setSel(null)} className="w-full min-h-12 px-4 flex items-center gap-3 text-left hover:bg-hover/60">

@@ -139,7 +139,6 @@ export function BackgroundPanel({ agent, active, onDirty }: { agent: Agent; acti
       <div className="flex items-start gap-4">
         <div className="flex-1 min-w-0">
           <h2 className="t-title">Background</h2>
-          <p className="mt-1 text-sm text-muted">{agent.name} checks in on its own while you're away and messages you when something needs you.</p>
         </div>
         {state && !state.notAllowed && (
           <span className="mt-1.5">

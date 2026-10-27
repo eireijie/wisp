@@ -2,6 +2,21 @@ import { CONNECTOR_CATALOG, zonedParts, type Allowance, type BackgroundSource, t
 import { featureOn } from "./features.ts";
 import type { Hub } from "./hub.ts";
 
+export type UsageRange = "today" | "7d" | "30d";
+export interface UsageReport {
+  range: UsageRange;
+  /** the time zone the buckets are cut in */
+  tz: string;
+  /** hourly for today, daily otherwise, oldest first, empty ones included; `start` is an ISO time */
+  buckets: { start: string; chat: number; background: number }[];
+  totals: { tokens: number; runs: number; failed: number; estimated: boolean };
+  /** tokens in the equal-length period just before this one */
+  previousTokens: number;
+  agents: { agentId: string; tokens: number; runs: number }[];
+  models: { model: string; tokens: number }[];
+  background: { todayTokens: number; dailyTokens: number | null; resetsAt: string };
+}
+
 /** The device sees background checks as their own conversation, so they don't mix into the DM's. */
 export const BACKGROUND_THREAD = "background";
 /** Regular checks a day, per agent and person, until they pick another number. */
@@ -155,6 +170,54 @@ export class Background {
     }
     const agents = [...per.values()].sort((a, b) => b.tokens - a.tokens);
     return { dailyTokens: this.dailyTokens(workspaceId, userId), todayTokens: agents.reduce((n, a) => n + a.tokens, 0), estimated: runs.some((r) => r.tokens === null), agents };
+  }
+
+  /** Everything this person's agents used over a range, for the Usage page. */
+  usageReport(workspaceId: string, userId: string, range: UsageRange, at = new Date()): UsageReport {
+    const { store } = this.hub;
+    const tz = this.timezone(userId);
+    const hourly = range === "today";
+    const days = range === "30d" ? 30 : range === "7d" ? 7 : 1;
+    const first = startOfDay(at, tz, 1 - days);
+    const end = startOfDay(at, tz, 1);
+    const prevStart = startOfDay(at, tz, 1 - 2 * days);
+    const starts: number[] = [];
+    if (hourly) for (let i = 0; i < 24; i++) starts.push(first.getTime() + i * 3_600_000);
+    else for (let i = 0; i < days; i++) starts.push(startOfDay(at, tz, 1 - days + i).getTime());
+    const buckets = starts.map((s) => ({ start: new Date(s).toISOString(), chat: 0, background: 0 }));
+    const owner = store.members(workspaceId).find((m) => m.role === "owner")?.id === userId;
+    const rows = store.usageRows(workspaceId, userId, owner, first.toISOString(), end.toISOString(), ESTIMATED_CHECK_TOKENS);
+    const totals = { tokens: 0, runs: 0, failed: 0, estimated: false };
+    const agents = new Map<string, { agentId: string; tokens: number; runs: number }>();
+    const models = new Map<string, number>();
+    for (const r of rows) {
+      const t = Date.parse(`${r.slot}:00Z`);
+      let i = starts.length - 1;
+      while (i > 0 && starts[i] > t) i--;
+      buckets[i][r.background ? "background" : "chat"] += r.tokens;
+      totals.tokens += r.tokens;
+      totals.runs += r.runs;
+      totals.failed += r.failed;
+      if (r.guessed) totals.estimated = true;
+      const a = agents.get(r.agentId) ?? { agentId: r.agentId, tokens: 0, runs: 0 };
+      a.tokens += r.tokens;
+      a.runs += r.runs;
+      agents.set(r.agentId, a);
+      const m = r.model || "Unknown";
+      models.set(m, (models.get(m) ?? 0) + r.tokens);
+    }
+    const previousTokens = store.usageRows(workspaceId, userId, owner, prevStart.toISOString(), first.toISOString(), ESTIMATED_CHECK_TOKENS).reduce((n, r) => n + r.tokens, 0);
+    const today = this.allowance(workspaceId, userId, at);
+    return {
+      range,
+      tz,
+      buckets,
+      totals,
+      previousTokens,
+      agents: [...agents.values()].sort((a, b) => b.tokens - a.tokens),
+      models: [...models].map(([model, tokens]) => ({ model, tokens })).sort((a, b) => b.tokens - a.tokens),
+      background: { todayTokens: today.todayTokens, dailyTokens: today.dailyTokens, resetsAt: end.toISOString() },
+    };
   }
 
   /** How much of today's allowance is used (1 = all of it); 0 when there's no limit. */

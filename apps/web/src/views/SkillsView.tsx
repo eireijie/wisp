@@ -378,7 +378,6 @@ export function InstallModal({ entry, body, agents, onClose, onDone }: { entry: 
   return (
     <Dlg title={`Add ${entry.name}`} sub="Which helpers should know it?" onClose={onClose}>
       <AgentPicker agents={agents} value={agentIds} onChange={setAgentIds} />
-      <p className="px-1 text-sm text-faint">You can change this any time from the skill.</p>
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="flex justify-end">
         <Prim disabled={busy} onClick={install} className="max-sm:w-full">
@@ -524,13 +523,13 @@ export function SkillEditor({ skill, agents, onClose, onSaved, onShare }: { skil
         {guided ? (
           <>
             <Labeled label="What should your helper do?">{(id) => <AreaBox id={id} rows={3} value={what} onChange={(e) => setWhat(e.target.value)} placeholder={GUIDE_HINTS.what} />}</Labeled>
-            <Labeled label="When should it use this?" hint="Your helper reads this to decide when the skill applies.">
+            <Labeled label="When should it use this?">
               {(id) => <AreaBox id={id} rows={2} value={when} onChange={(e) => setWhen(e.target.value)} maxLength={500} placeholder={GUIDE_HINTS.when} />}
             </Labeled>
             <Labeled label="What does a good result look like?">{(id) => <AreaBox id={id} rows={3} value={result} onChange={(e) => setResult(e.target.value)} placeholder={GUIDE_HINTS.result} />}</Labeled>
           </>
         ) : (
-          <Labeled label="When to use it" hint="Agents read this to decide when the skill applies. Start with “Use when…”.">
+          <Labeled label="When to use it">
             {(id) => <TextBox id={id} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} placeholder="Use when asked to deploy or roll back the web app." />}
           </Labeled>
         )}
@@ -696,7 +695,6 @@ export function SkillShare({ skill, agents, canEdit, onClose, onBrought, onDevic
           <Panel>
             <Item icon={<Tile size={50}><Wand2 size={22} strokeWidth={1.7} /></Tile>} title={found.name} sub={<span className="whitespace-normal">{found.description || "No description"}</span>} />
           </Panel>
-          <p className="px-1 text-sm text-faint">It comes into your skills. Then pick which helpers have it.</p>
           <div className="flex justify-end gap-2">
             <Sec onClick={() => setView("home")}>Back</Sec>
             <Prim className="h-11 text-body" disabled={busy} onClick={bringIn}>

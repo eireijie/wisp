@@ -71,11 +71,10 @@ export function ChoiceRows<T extends string>({ value, onChange, options }: { val
   );
 }
 
-export function PageHead({ title, sub }: { title: string; sub: string }) {
+export function PageHead({ title }: { title: string }) {
   return (
     <div className="mb-4 hidden md:block">
       <h2 className="t-title">{title}</h2>
-      <p className="text-sm text-muted">{sub}</p>
     </div>
   );
 }
@@ -128,7 +127,6 @@ export function OverviewRows({ agent, nodes }: { agent: Agent; nodes: DeviceInfo
           <Toggle label={`Notifications from ${agent.name}`} on={dm ? dm.notify !== "mute" : true} disabled={!dm} onChange={(v) => dm && void setChannelPrefs(dm, { notify: v ? "default" : "mute" })} />
         </div>
       </RowCard>
-      <p className="text-sm text-muted px-[18px]">Get told when {agent.name} finishes or needs you</p>
     </div>
   );
 }
@@ -184,7 +182,6 @@ export function AccessPanel({ agent, device }: { agent: Agent; device: ReactNode
           ) : (
             <p className="px-[18px] text-sm text-muted">Nobody else is here yet. Invite people first from Settings; until then it answers only you.</p>
           )}
-          <p className="px-[18px] text-sm text-muted">People you pick can message @{agent.handle} in chats and teams.</p>
         </section>
       )}
       {error && <p className="px-[18px] text-sm text-bad">{error}</p>}
@@ -297,7 +294,6 @@ export function AppsPanel({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-4">
       <SwitchList items={items} agent={agent} kind="connectors" body={(c) => c.name} empty="No apps connected yet." browse="Connect an app" browseTo={href({ view: "connectors" })} />
-      <p className="max-w-xl px-[18px] text-sm text-muted">Apps that are on for every agent show as on here. Turn one off to take it away from {agent.name} only.</p>
     </div>
   );
 }

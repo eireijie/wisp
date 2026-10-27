@@ -426,7 +426,7 @@ function WriteRoutine({ agent, onClose }: { agent: Agent; onClose: () => void })
         <Field label="What should happen?">
           <Textarea rows={3} value={result} onChange={(e) => setResult(e.target.value)} placeholder="Send me three dinner ideas with a shopping list" required />
         </Field>
-        <Field label="Name" hint="Leave it empty and we will name it for you.">
+        <Field label="Name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Dinner ideas" />
         </Field>
         <Field label="Steps (optional)" hint="Your helper works out the steps if you leave this empty. Name buttons and fields by their labels, say what changes each time, and what done looks like.">
