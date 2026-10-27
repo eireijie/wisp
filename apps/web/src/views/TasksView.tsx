@@ -7,7 +7,7 @@ import { go, href } from "../router.ts";
 import { agentReadiness, useDevices } from "../devices.ts";
 import { AgentAvatar, Menu, Modal, cx, timeAgo } from "../components/ui.tsx";
 import { CardButton, ConfirmDialog, GroupCard, Rule, SectionHead, StateChip, runSummary } from "../components/InboxParts.tsx";
-import { shortTime } from "../components/ChatList.tsx";
+import { PulseDots, shortTime } from "../components/ChatList.tsx";
 
 export interface TaskRow {
   id: string;
@@ -340,7 +340,7 @@ const iconFor = (s: State, size = 22) => {
   if (s === "done") return <CircleCheck {...p} className="shrink-0 text-ok" />;
   if (s === "failed") return <CircleX {...p} className="shrink-0 text-bad" />;
   if (s === "cancelled") return <CircleX {...p} className="shrink-0 text-faint" />;
-  if (s === "working") return <Loader2 {...p} className="shrink-0 animate-spin text-ok" />;
+  if (s === "working") return <Loader2 {...p} className="shrink-0 animate-spin text-st-working" />;
   if (s === "blocked") return <WifiOff {...p} className="shrink-0 text-faint" />;
   return <Circle {...p} className="shrink-0 text-faint" />;
 };
@@ -529,13 +529,9 @@ function TaskDetail({ task: t, ctx, onSelect, onClose, sheet }: { task: TaskRow;
             {doing && (
               <span className="flex items-start gap-2.5">
                 {state === "working" && (
-                  <span className="flex gap-1 mt-2" aria-hidden>
-                    {[0, 1, 2].map((n) => (
-                      <i key={n} className="size-1.5 rounded-full bg-ok animate-pulse" style={{ animationDelay: `${n * 200}ms` }} />
-                    ))}
-                  </span>
+                  <span className="mt-2"><PulseDots /></span>
                 )}
-                <span className={cx("text-body leading-snug", state === "working" ? "text-ok" : "text-warn")}>{doing}</span>
+                <span className={cx("text-body leading-snug", state === "working" ? "text-st-working" : "text-warn")}>{doing}</span>
               </span>
             )}
             {t.brief && t.brief !== t.title && <span className="text-sm leading-snug text-ink/80 whitespace-pre-wrap break-words">{t.brief}</span>}

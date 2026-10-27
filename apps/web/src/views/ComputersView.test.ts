@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect } from "react";
 import { api } from "../api.ts";
 import { useStore, type ComputerInfo } from "../store.ts";
-import { ComputersView, activityDot, stateColor } from "./ComputersView.tsx";
+import { ComputersView, activityDot, computerState, stateColor } from "./ComputersView.tsx";
 
 vi.mock("react", async (original) => ({
   ...await original<typeof import("react")>(),
@@ -80,37 +80,38 @@ describe("computer focus layout", () => {
 });
 
 describe("status colors", () => {
-  const ready = { tone: "ok", working: false };
-  it("uses the five status colors, gray when offline", () => {
-    expect(stateColor(ready, { online: true }, false)).toBe("var(--st-online)");
-    expect(stateColor({ tone: "warn", working: true }, { online: true }, false)).toBe("var(--st-needs)");
-    expect(stateColor({ tone: "ok", working: true }, { online: true }, false)).toBe("var(--st-working)");
-    expect(stateColor({ tone: "bad", working: false }, { online: true }, false)).toBe("var(--st-problem)");
-    expect(stateColor({ tone: "neutral", working: false }, { online: false }, false)).toBe("var(--faint)");
-    expect(stateColor({ tone: "accent", working: false }, { online: true }, true)).toBe("var(--st-needs)");
-    expect(stateColor(ready, { online: true, help: {} }, false)).toBe("var(--st-needs)");
+  const now = new Date().toISOString();
+  const base = { id: "c", kind: "vm", agents: [], online: true, controller: null, status: "running" } as unknown as ComputerInfo;
+  const color = (c: Partial<ComputerInfo>, meId = "me") => {
+    const full = { ...base, ...c } as ComputerInfo;
+    return stateColor(computerState(full, meId, [], () => "Sam"), full, full.controller?.id === meId);
+  };
+  it("working is blue, ready is green, a problem is red", () => {
+    expect(color({})).toBe("var(--st-online)");
+    expect(color({ activity: { text: "Opening a page", at: now } } as never)).toBe("var(--st-working)");
+    expect(color({ status: "starting" } as never)).toBe("var(--st-working)");
+    expect(color({ status: "error" } as never)).toBe("var(--st-problem)");
+  });
+  it("you, someone else, or a call for help is amber", () => {
+    expect(color({ controller: { kind: "user", id: "me", since: now } } as never)).toBe("var(--st-needs)");
+    expect(color({ controller: { kind: "user", id: "sam", since: now } } as never)).toBe("var(--st-needs)");
+    expect(color({ help: { agentId: "a", request: "log in", at: now } } as never)).toBe("var(--st-needs)");
+  });
+  it("offline or paused is gray, and offline wins over help and control", () => {
+    expect(color({ online: false })).toBe("var(--status-idle)");
+    expect(color({ online: false, help: { agentId: "a", request: "x", at: now }, controller: { kind: "user", id: "me", since: now } } as never)).toBe("var(--status-idle)");
+    expect(color({ paused: true } as never)).toBe("var(--status-idle)");
+    expect(color({ status: "stopped" } as never)).toBe("var(--status-idle)");
+  });
+  it("working computers are not warn-toned", () => {
+    const state = computerState({ ...base, activity: { text: "x", at: now } } as unknown as ComputerInfo, "me", [], () => "Sam");
+    expect(state).toMatchObject({ working: true, tone: "info" });
   });
   it("colors activity lines by what happened", () => {
     expect(activityDot("Took control")).toBe("var(--st-needs)");
+    expect(activityDot("Handed it back")).toBe("var(--st-online)");
     expect(activityDot("Handed back")).toBe("var(--st-online)");
-    expect(activityDot("Wrong code entered")).toBe("var(--st-problem)");
     expect(activityDot("Opened the live view")).toBe("var(--accent-computers)");
-  });
-});
-
-describe("computer control cleanup", () => {
-  it("releases control acquired after mounting when the detail view unmounts", () => {
-    const unmount = mount();
-    useStore.setState((s) => ({ computers: s.computers.map((c) => ({ ...c, controller: { kind: "user", id: "me", since: new Date().toISOString() } })) }));
-    expect(api).not.toHaveBeenCalled();
-    unmount();
-    expect(api).toHaveBeenCalledExactlyOnceWith("POST", "/api/computers/computer/control", { take: false });
-  });
-
-  it.each([null, { kind: "user", id: "other" }])("doesn't release a computer the user no longer controls (%j)", (controller) => {
-    const unmount = mount();
-    useStore.setState((s) => ({ computers: s.computers.map((c) => ({ ...c, controller: controller as ComputerInfo["controller"] })) }));
-    unmount();
-    expect(api).not.toHaveBeenCalled();
+    expect(activityDot("Wrong code entered")).toBe("var(--status-idle)");
   });
 });

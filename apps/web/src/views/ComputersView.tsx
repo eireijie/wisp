@@ -13,8 +13,9 @@ import { MoreOptions } from "../components/MoreOptions.tsx";
 import { ClipboardPanel, FilesPanel, remotePlatform, saveScreenshot, sendFiles, useClipboardSync } from "../components/ComputerSync.tsx";
 import { AgentAvatar, Button, Field, Input, Menu, Modal, Pill, Textarea, cx, timeAgo } from "../components/ui.tsx";
 
-export { computerState, useComputerState, KIND_ICON } from "./computerState.ts";
-import { useComputerState, KIND_ICON } from "./computerState.ts";
+export { computerState, useComputerState, KIND_ICON, stateColor, activityDot } from "./computerState.ts";
+import { useComputerState, KIND_ICON, stateColor, activityDot } from "./computerState.ts";
+import { PulseDots } from "../components/ChatList.tsx";
 
 export function ComputersView({ computerId, teach, deviceId }: { computerId: string | null; teach: string | null; deviceId?: string | null }) {
   const computers = useStore((s) => s.computers);
@@ -311,20 +312,22 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   const [typed, setTyped] = useState("");
   const [handing, setHanding] = useState(false);
   const act = (action: object) => api("POST", `/api/computers/${c.id}/act`, { action }).catch((e) => setError((e as Error).message));
-  const members = useStore((s) => s.members);
 
   const statusColor = stateColor(state, c, mine);
   const statusText = mine ? "You're in control" : state.label;
+  // while you drive, the lead agent waits: say so (kept short; the full line is the tooltip)
+  const pausedNote = mine && lead ? `${lead.name} is paused` : null;
+  const pausedFull = lead ? `You are in control. ${lead.name} is paused. Agents get it back when you hand it back or stop using it.` : "You are in control.";
   const infoBtn = (cls: string) => (
-    <button data-details-btn type="button" onClick={() => setDetails((d) => !d)} aria-label="Details" aria-expanded={details} aria-haspopup="dialog" className={cx("m-press size-8 shrink-0 rounded-full grid place-items-center text-accent-computers hover:bg-accent-computers/16", details && "bg-accent-computers/16", cls)}>
+    <button data-details-btn type="button" onClick={() => setDetails((d) => !d)} aria-label="Details" aria-expanded={details} aria-haspopup="dialog" className={cx("m-press shrink-0 rounded-full grid place-items-center text-accent-computers hover:bg-accent-computers/16", details && "bg-accent-computers/16", cls)}>
       <Info size={17} />
     </button>
   );
-  const moreMenu = canEdit && (
+  const moreMenu = (size: string) => canEdit && (
     <Menu
       align="right"
       trigger={(_o, t) => (
-        <button onClick={t} className="m-press size-8 shrink-0 rounded-full grid place-items-center hover:bg-hover text-ink" aria-label="More">
+        <button onClick={t} className={cx("m-press shrink-0 rounded-full grid place-items-center hover:bg-hover text-ink", size)} aria-label="More">
           <MoreHorizontal size={18} />
         </button>
       )}
@@ -350,8 +353,8 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
       ]}
     />
   );
-  const back = (
-    <a href={href({ view: "computers", computerId: null })} className="m-press size-8 shrink-0 rounded-full grid place-items-center hover:bg-hover" aria-label="Back to Computers">
+  const back = (size: string) => (
+    <a href={href({ view: "computers", computerId: null })} className={cx("m-press shrink-0 rounded-full grid place-items-center hover:bg-hover", size)} aria-label="Back to Computers">
       <ChevronLeft size={19} />
     </a>
   );
@@ -359,11 +362,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   // what the agents are doing, or just "Watching"
   const watchText = state.working ? (
     <>
-      <span className="flex gap-1" aria-hidden="true">
-        {[0, 1, 2].map((i) => (
-          <i key={i} className="size-1.5 rounded-full bg-st-working motion-safe:animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
-        ))}
-      </span>
+      <PulseDots />
       <span className="truncate">
         {lead?.name ?? "An agent"} is working · {c.activity?.text ?? "Working"}
       </span>
@@ -377,6 +376,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   ) : canControl ? (
     <>
       <Eye size={14} className="shrink-0 text-muted" /> <span>Watching</span>
+      <span className="hidden sm:inline truncate font-normal text-muted">· click the screen to take control</span>
     </>
   ) : (
     <span className="truncate">{state.label}</span>
@@ -392,9 +392,9 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
     </button>
   );
   const tool = (label: string, icon: ReactNode, color: string, onClick: () => void, active?: boolean, title?: string) => (
-    <button key={label} type="button" onClick={onClick} aria-label={label} aria-pressed={active} title={title ?? label} className={cx("m-press h-8 min-w-8 px-2 xl:px-2.5 rounded-full inline-flex items-center justify-center gap-1.5 text-sm font-medium hover:bg-hover", active && "bg-hover")}>
+    <button key={label} type="button" data-overlay-ignore onClick={onClick} aria-label={label} aria-pressed={active} title={title ?? label} className={cx("m-press h-8 min-w-8 px-2 2xl:px-2.5 rounded-full inline-flex items-center justify-center gap-1.5 text-sm font-medium hover:bg-hover", active && "bg-hover")}>
       <span className={color}>{icon}</span>
-      <span className="hidden xl:inline">{label}</span>
+      <span className="hidden 2xl:inline">{label}</span>
     </button>
   );
 
@@ -402,17 +402,17 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
     <div className="flex-1 min-h-0 flex flex-col safe-top safe-bottom">
       {/* phone: a small header; the desktop chip floats on the screen instead */}
       <header className="md:hidden shrink-0 flex items-center gap-2 px-3 pt-3 pb-2">
-        {back}
+        {back("size-11")}
         {lead ? <AgentAvatar agent={lead} size={26} live /> : <Icon size={20} className="text-accent-computers shrink-0" />}
         <h1 className="text-base font-semibold truncate min-w-0 flex-1">{c.name}</h1>
-        {infoBtn("size-10")}
-        {moreMenu}
+        {infoBtn("size-11")}
+        {moreMenu("size-11")}
       </header>
 
       {teacher && <TeachBar agent={teacher} computer={c} screen={screen} />}
 
       {!teacher && c.help && (
-        <div className="shrink-0 mx-2 mb-2 rounded-xl border border-st-needs/40 bg-st-needs/12 px-4 py-3 flex flex-wrap items-center gap-3" role="status">
+        <div className="shrink-0 mx-2 mb-2 rounded-xl border border-st-needs bg-card px-4 py-3 flex flex-wrap items-center gap-3" role="status">
           {agents.find((a) => a.id === c.help!.agentId) && <AgentAvatar agent={agents.find((a) => a.id === c.help!.agentId)} size={28} badge={false} />}
           <div className="min-w-0 flex-1 text-sm">
             <span className="font-medium">{agents.find((a) => a.id === c.help!.agentId)?.name ?? "An agent"} needs you on this computer: </span>
@@ -430,9 +430,12 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
       {error && <p className="shrink-0 mx-3 mb-2 text-sm text-bad">{error}</p>}
       {c.status === "error" && c.statusText && <p className="shrink-0 mx-3 mb-2 text-sm text-bad">{c.statusText}</p>}
 
-      <div className="flex-1 min-h-0 p-2 flex flex-col gap-2">
+      {/* on short phones the page scrolls, so Take control / Hand back stays reachable */}
+      <div className="flex-1 min-h-0 p-2 flex flex-col gap-2 overflow-y-auto md:overflow-visible">
+        {/* the panels and Keys sit beside the screen (not inside its keyboard capture), so local copy and paste in them stays local */}
+        <div className="relative flex-1 min-h-[220px] md:min-h-[280px] rounded-xl overflow-hidden bg-black border border-line">
         <div
-          className="relative flex-1 min-h-[280px] rounded-xl overflow-hidden bg-black border border-line"
+          className="absolute inset-0"
           onKeyDownCapture={sync.onKeyDownCapture}
           onDragOver={(e) => {
             if (!canTransfer || !e.dataTransfer.types.includes("Files")) return;
@@ -452,6 +455,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             computer={c}
             control={mine}
             noRing
+            raiseNote
             onInput={teacher ? (i) => screen.current && teachSink.current?.(i) : undefined}
             onTakeControl={canControl && !c.controller && !teacher ? () => void control(true) : undefined}
             onActivity={() => {
@@ -473,22 +477,23 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             </div>
           )}
           {sync.note && (
-            <div className="absolute bottom-4 md:bottom-16 left-1/2 -translate-x-1/2 z-20 max-w-[90%] truncate rounded-full bg-black/75 text-white px-4 h-9 leading-9 text-sm shadow-panel pointer-events-none" role="status">
+            <div className={cx("absolute left-1/2 -translate-x-1/2 z-20 max-w-[90%] truncate rounded-full bg-black/75 text-white px-4 h-9 leading-9 text-sm shadow-panel pointer-events-none", mine && keys && !teacher ? "bottom-[8rem]" : "bottom-4 md:bottom-16")} role="status">
               {sync.note}
             </div>
           )}
 
           {/* floating name chip (desktop) */}
           <div className="hidden md:flex absolute top-3 left-3 z-20 glass rounded-full items-center gap-2 h-[42px] pl-1.5 pr-1.5 max-w-[calc(100%-1.5rem)]" data-testid="name-chip">
-            {back}
+            {back("size-8")}
             {lead ? <AgentAvatar agent={lead} size={24} live /> : <Icon size={18} className="text-accent-computers shrink-0" />}
-            <span className="font-semibold text-sm truncate min-w-0">{c.name}</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0 whitespace-nowrap" role="status" style={{ color: mine || c.help ? statusColor : undefined }}>
+            <span className="font-semibold text-sm truncate min-w-0 max-w-[8rem] xl:max-w-[14rem]" title={c.name}>{c.name}</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0 whitespace-nowrap" role="status" title={mine ? pausedFull : undefined} style={{ color: mine || c.help ? statusColor : undefined }}>
               {statusDot}
-              <span className={cx(!(mine || c.help) && "text-muted")}>{statusText}</span>
+              <span className={cx("max-lg:sr-only", !(mine || c.help) && "text-muted")}>{statusText}</span>
+              {pausedNote && <span className="hidden 2xl:inline font-normal text-muted">· {pausedNote}</span>}
             </span>
-            {infoBtn("")}
-            {moreMenu}
+            {infoBtn("size-8")}
+            {moreMenu("size-8")}
           </div>
 
           {/* the tools while you're in control */}
@@ -512,9 +517,14 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             </div>
           )}
 
+        </div>
+
           {mine && keys && !teacher && (
-            <form
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 glass rounded-xl p-2 flex flex-wrap items-center gap-2 w-[min(40rem,calc(100%-1.5rem))] m-menu"
+            <FloatingPanel
+              label="Keys"
+              onClose={() => setKeys(false)}
+              as="form"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 glass rounded-xl p-2 flex flex-col gap-2 w-[min(40rem,calc(100%-1.5rem))] m-menu"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!typed) return;
@@ -522,22 +532,31 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
                 setTyped("");
               }}
             >
-              <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type on computer" aria-label="Type on computer" className="flex-1 min-w-40" />
-              <Button type="submit" disabled={!typed}>
-                Send
-              </Button>
-              {[["Return", "Enter"], ["Tab", "Tab"], ["Escape", "Escape"], ["Delete", "Backspace"]].map(([label, key]) => (
-                <Button key={label} type="button" onClick={() => void act({ action: "key", keys: key })}>
-                  {label}
+              <div className="flex items-center gap-2">
+                <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type on computer" aria-label="Type on computer" className="flex-1 min-w-0" />
+                <Button type="submit" disabled={!typed}>
+                  Send
                 </Button>
-              ))}
-            </form>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto [&>button]:shrink-0">
+                {[["Return", "Enter"], ["Tab", "Tab"], ["Escape", "Escape"], ["Delete", "Backspace"]].map(([label, key]) => (
+                  <Button key={label} type="button" onClick={() => void act({ action: "key", keys: key })}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </FloatingPanel>
           )}
 
           {panel && (
-            <aside className="m-panel fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 md:absolute md:inset-x-auto md:right-3 md:top-[62px] md:bottom-auto md:w-80 md:max-h-[calc(100%-5rem)] overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-[16px] md:rounded-xl p-4 shadow-panel" data-testid="float-panel">
+            <FloatingPanel
+              label={panel === "files" ? "Files" : "Clipboard"}
+              onClose={() => setPanel(null)}
+              className="m-panel fixed inset-x-0 bottom-0 top-auto max-h-[70vh] z-40 md:absolute md:inset-x-auto md:right-3 md:top-[62px] md:bottom-auto md:w-80 md:max-h-[calc(100%-5rem)] overflow-y-auto text-sm bg-panel text-ink border border-line rounded-t-[16px] md:rounded-xl p-4 shadow-panel"
+              testId="float-panel"
+            >
               {panel === "files" ? <FilesPanel computer={c} onClose={() => setPanel(null)} refresh={filesChanged} onSent={sync.flash} /> : <ClipboardPanel computer={c} mine={mine} platform={platform} onClose={() => setPanel(null)} />}
-            </aside>
+            </FloatingPanel>
           )}
         </div>
 
@@ -547,7 +566,7 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
             <span className="flex-1 min-w-0 inline-flex items-center gap-2 h-9 px-3 rounded-full bg-card text-sm font-medium">
               {mine ? (
                 <>
-                  {statusDot} <span className="truncate" style={{ color: statusColor }}>You're in control</span>
+                  {statusDot} <span className="truncate" title={pausedFull}><span style={{ color: statusColor }}>You're in control</span>{pausedNote && <span className="font-normal text-muted"> · {pausedNote}</span>}</span>
                 </>
               ) : (
                 watchText
@@ -594,22 +613,51 @@ function ComputerDetail({ computer: c, devices, teach }: { computer: ComputerInf
   );
 }
 
-/** The dot color for a computer's state: the five status colors, gray when it's offline. */
-export function stateColor(state: { tone: string; working: boolean }, c: { online: boolean; help?: unknown }, mine: boolean): string {
-  if (mine || c.help || state.tone === "warn") return "var(--st-needs)";
-  if (!c.online || state.tone === "neutral") return "var(--faint)";
-  if (state.tone === "bad") return "var(--st-problem)";
-  if (state.working || state.tone === "info") return "var(--st-working)";
-  if (state.tone === "accent") return "var(--accent-computers)";
-  return "var(--st-online)";
+/** Move focus into an overlay when it opens and back to where it came from (or the fallback) when it closes. */
+function useFocusScope(ref: React.RefObject<HTMLElement | null>, fallback?: () => HTMLElement | null) {
+  useEffect(() => {
+    const from = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const el = ref.current;
+    (el?.querySelector<HTMLElement>("input, textarea, select, button, a[href]") ?? el)?.focus({ preventScroll: true });
+    return () => {
+      const back = from && from !== document.body && from.isConnected ? from : (fallback?.() ?? null);
+      back?.focus({ preventScroll: true });
+    };
+  }, []);
 }
 
-/** The dot color for an activity line, by what it says. */
-export function activityDot(text: string): string {
-  if (/took control|needs|asked/i.test(text)) return "var(--st-needs)";
-  if (/hand(ed)? back|finished|done|sent/i.test(text)) return "var(--st-online)";
-  if (/wrong|fail|error|denied/i.test(text)) return "var(--st-problem)";
-  return "var(--accent-computers)";
+/**
+ * Clipboard, Files and Keys: floating panels over the screen. They sit on the overlay stack, so
+ * Escape and a click outside close the top one, and focus moves in and then back. Their buttons
+ * (data-overlay-ignore) and menus handle their own clicks.
+ */
+function FloatingPanel({ label, onClose, as: Tag = "aside", className, testId, children, onSubmit }: { label: string; onClose: () => void; as?: "aside" | "form"; className: string; testId?: string; children: ReactNode; onSubmit?: (e: React.FormEvent) => void }) {
+  const id = useMemo(() => Symbol(`computer-${label}`), [label]);
+  const ref = useRef<HTMLElement>(null);
+  useOverlay(id, "modal");
+  useFocusScope(ref);
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      if (!isTopOverlay(id)) return;
+      const t = e.target as HTMLElement;
+      if (ref.current?.contains(t) || t.closest?.("[data-overlay-ignore], [role=menu], [role=dialog]")) return;
+      onClose();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !isTopOverlay(id)) return;
+      e.stopPropagation();
+      e.preventDefault();
+      onClose();
+    };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("keydown", key, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("keydown", key, true);
+    };
+  }, [id]);
+  const props = { ref: ref as never, tabIndex: -1, "aria-label": label, className: cx(className, "outline-none"), "data-testid": testId, onSubmit };
+  return Tag === "form" ? <form {...props}>{children}</form> : <aside {...props}>{children}</aside>;
 }
 
 /** The visible Details button (the phone header's or the desktop chip's). */
@@ -626,6 +674,7 @@ function DetailsBubble({ anchor, onClose, computer: c, state, statusColor, devic
   const [pos, setPos] = useState<{ top: number; left: number; arrow: number } | null>(null);
   const [closing, setClosing] = useState(false);
   useOverlay(id, "modal");
+  useFocusScope(ref, anchor);
   const close = () => {
     setClosing(true);
     setTimeout(onClose, 160);
@@ -636,14 +685,22 @@ function DetailsBubble({ anchor, onClose, computer: c, state, statusColor, devic
       if (!r) return;
       const w = Math.min(300, window.innerWidth - 16);
       const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
-      setPos({ top: r.bottom + 10, left, arrow: r.left + r.width / 2 - left });
+      const next = { top: r.bottom + 10, left, arrow: r.left + r.width / 2 - left };
+      setPos((cur) => (cur && cur.top === next.top && cur.left === next.left && cur.arrow === next.arrow ? cur : next));
     };
     place();
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    // the button moves when the layout around it does (a help banner appears, the pane resizes)
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    for (let el: HTMLElement | null = anchor(); el; el = el.parentElement) ro?.observe(el);
+    return () => {
+      window.removeEventListener("resize", place);
+      ro?.disconnect();
+    };
   }, []);
+  // capture phase on the window: the screen swallows pointer and key events before they bubble
   useEffect(() => {
-    const down = (e: MouseEvent) => {
+    const down = (e: PointerEvent) => {
       if (!isTopOverlay(id)) return;
       const t = e.target as Node;
       if (ref.current?.contains(t) || anchor()?.contains(t)) return;
@@ -652,13 +709,14 @@ function DetailsBubble({ anchor, onClose, computer: c, state, statusColor, devic
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || !isTopOverlay(id)) return;
       e.stopPropagation();
+      e.preventDefault();
       close();
     };
-    window.addEventListener("mousedown", down);
-    window.addEventListener("keydown", key);
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("keydown", key, true);
     return () => {
-      window.removeEventListener("mousedown", down);
-      window.removeEventListener("keydown", key);
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("keydown", key, true);
     };
   }, [id]);
   const rows: [string, ReactNode][] = [
@@ -676,9 +734,10 @@ function DetailsBubble({ anchor, onClose, computer: c, state, statusColor, devic
       ref={ref}
       role="dialog"
       aria-label="Details"
+      tabIndex={-1}
       data-closing={closing || undefined}
       style={pos ? { position: "fixed", top: pos.top, left: pos.left, width: Math.min(300, window.innerWidth - 16), transformOrigin: `${pos.arrow}px 0` } : { position: "fixed", visibility: "hidden", top: 0, left: 0, width: 300 }}
-      className="m-menu glass z-[100] rounded-xl text-sm text-ink"
+      className="m-menu glass z-[100] rounded-xl text-sm text-ink outline-none"
     >
       {pos && <span aria-hidden="true" className="absolute -top-[6px] size-3 rotate-45 border-l border-t border-control-line" style={{ left: pos.arrow - 6, background: "var(--glass-bg)" }} />}
       <div className="p-3 space-y-3 max-h-[min(70vh,560px)] overflow-y-auto">
@@ -754,7 +813,7 @@ function OwnScreen({ computer: c }: { computer: ComputerInfo }) {
   const agents = useStore((s) => s.agents);
   const here = agents.filter((a) => a.computerId === c.id && a.nodeId === c.nodeId);
   return (
-    <section className="rounded-lg bg-accent-computers/10 p-2.5 space-y-1">
+    <section className="rounded-lg bg-card border border-line p-2.5 space-y-1">
       <h3 className="font-semibold text-sm flex items-center gap-1.5">
         <Lock size={13} className="text-accent-computers" /> Your own screen
       </h3>

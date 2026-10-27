@@ -8,7 +8,7 @@ import { osName, useDevices, type DeviceInfo } from "../devices.ts";
 import { AddDeviceDialog } from "../components/AddDevice.tsx";
 import { ScreenThumb, WorkingBadge } from "../components/Screen.tsx";
 import { AgentAvatar, Button, Menu, Modal, Pill, cx, timeAgo } from "../components/ui.tsx";
-import { useComputerState } from "./computerState.ts";
+import { toneColor, useComputerState, type Tone } from "./computerState.ts";
 import type { NodeInfo } from "./deviceBits.tsx";
 import { AddComputer } from "./ComputersView.tsx";
 
@@ -38,7 +38,7 @@ export function deviceStatus(n: Pick<DeviceInfo, "online" | "paused"> & { update
   if (n.update?.state === "updating" || n.update?.state === "restarting") return { label: "Updating", tone: "info" };
   if (n.update?.state === "failed") return { label: "Update failed", tone: "bad" };
   if (!n.online) return { label: "Offline", tone: "neutral" };
-  if (n.paused) return { label: "Paused", tone: "warn" };
+  if (n.paused) return { label: "Paused", tone: "neutral" };
   return { label: "Online", tone: "ok" };
 }
 
@@ -46,7 +46,7 @@ function agentsOn(c: ComputerInfo, agents: Agent[]) {
   return agents.filter((a) => c.agents.includes(a.id));
 }
 
-const dot = (tone: string) => (tone === "ok" ? "var(--status-online)" : tone === "info" ? "var(--status-working)" : tone === "accent" ? "var(--st-needs)" : tone === "warn" ? "var(--status-paused)" : tone === "bad" ? "var(--status-error)" : "var(--status-idle)");
+const dot = toneColor;
 
 // --- shared bits ----------------------------------------------------------------------------------
 
@@ -122,7 +122,7 @@ export function ComputersShell({ children, hideTreeOnPhone = true }: { children:
   );
 }
 
-function treeRow(key: string, to: string, icon: ReactNode, title: string, sub: string, tone: string, active: boolean, nested: boolean, needs?: boolean) {
+function treeRow(key: string, to: string, icon: ReactNode, title: string, sub: string, tone: Tone, active: boolean, nested: boolean, needs?: boolean) {
   return (
     <a key={key} href={to} aria-current={active ? "page" : undefined} className={cx("flex items-center gap-3 rounded-2xl px-3 py-2.5 min-h-12 hover:bg-hover", nested && "ml-5", active && "bg-side-active")}>
       <span className={cx("size-8 shrink-0", "grid place-items-center rounded-lg text-accent-computers bg-accent-computers/16", needs && "ring-2 ring-st-needs")}>{icon}</span>
@@ -149,7 +149,8 @@ export function ComputerTree() {
   const activeDevice = route.view === "computers" ? route.deviceId : null;
   const state = (c: ComputerInfo) => {
     const busy = agents.some((a) => c.agents.includes(a.id) && a.status === "busy");
-    return !c.online ? { sub: "Offline", tone: "neutral" } : c.controller ? { sub: "In control", tone: "accent" } : busy ? { sub: "Working", tone: "info" } : { sub: "Ready", tone: "ok" };
+    const r: { sub: string; tone: Tone } = !c.online ? { sub: "Offline", tone: "neutral" } : c.paused ? { sub: "Paused", tone: "neutral" } : c.help ? { sub: "Needs you", tone: "warn" } : c.controller ? { sub: "In control", tone: "warn" } : busy ? { sub: "Working", tone: "info" } : { sub: "Ready", tone: "ok" };
+    return r;
   };
   const computerRow = (c: ComputerInfo, nested: boolean) => {
     const s = state(c);

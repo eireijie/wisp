@@ -1957,7 +1957,7 @@ export function Composer({ channelId, threadId, agentId, placeholder, onDetails,
             </button>
           )}
           {showCall && (
-            <button type="button" onClick={onCall} aria-label={`Call ${dmAgent?.name ?? "agent"}`} title="Call" className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-st-online text-black grid place-items-center md:hidden", swapped && "m-swap")}>
+            <button type="button" onClick={onCall} aria-label={`Call ${dmAgent?.name ?? "agent"}`} title="Call" className={cx("h-11 md:h-9 w-14 md:w-12 shrink-0 self-center rounded-full bg-st-online/16 text-st-online grid place-items-center md:hidden", swapped && "m-swap")}>
               <AudioLines size={22} />
             </button>
           )}

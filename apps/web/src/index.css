@@ -49,6 +49,7 @@
   --status-working: var(--st-working);
   --status-paused: var(--st-needs);
   --status-error: var(--st-problem);
+  /* the --status-* aliases follow the st-* tokens in both modes; the dark block only sets st-* */
   /* organization tiles in the rail and switcher (orgs.ts orgTone): white initials on each */
   --org-1: oklch(0.5 0.1 180);
   --org-2: oklch(0.5 0.17 295);
@@ -66,20 +67,20 @@
   --kind-ghost: oklch(0.75 0 0);
   /* color pops: each tab owns an accent, status always uses the same five colors, tools in control
      have one each. Pops only (icons, dots, badges, 16% tints), never text or fills. Light values are
-     a step deeper so they hold on white. */
-  --accent-inbox: #e08600;
-  --accent-chats: #0a84ff;
-  --accent-agents: #a63fd6;
-  --accent-computers: #0a9fd0;
-  --st-online: #1fa84a;
-  --st-working: #0a84ff;
-  --st-needs: #e08600;
-  --st-problem: #e5342a;
-  --tool-teach: #e5342a;
-  --tool-clip: #d4a000;
-  --tool-files: #0a84ff;
-  --tool-keys: #0a9fd0;
-  --tool-shot: #a63fd6;
+     deeper (4.5:1 or better on white) because they also color small icons and text. */
+  --accent-inbox: #b25e00;
+  --accent-chats: #0062cc;
+  --accent-agents: #8e3fc2;
+  --accent-computers: #0072a3;
+  --st-online: #1a7f37;
+  --st-working: #0062cc;
+  --st-needs: #b25e00;
+  --st-problem: #c9271e;
+  --tool-teach: #c9271e;
+  --tool-clip: #8a6d00;
+  --tool-files: #0062cc;
+  --tool-keys: #0072a3;
+  --tool-shot: #8e3fc2;
   color-scheme: light;
 }
 
@@ -102,10 +103,6 @@
   --hover: rgb(255 255 255 / 0.05);
   --chip: #2a2a2e;
   --code: #131315;
-  --ok: var(--st-online);
-  --warn: var(--st-needs);
-  --bad: var(--st-problem);
-  --info: var(--st-working);
   --glass-bg: #2a2a2e;
   --shadow: 0 2px 8px oklch(0 0 0 / 0.25);
   --ghost-shadow: oklch(0 0 0 / 0.42);

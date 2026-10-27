@@ -9,7 +9,7 @@ import { go, href } from "../router.ts";
 import { AgentAvatar, StatusChip, cx, timeAgo } from "../components/ui.tsx";
 import { MoreOptions } from "../components/MoreOptions.tsx";
 import { UserAvatarButton } from "../components/Rail.tsx";
-import { ChatAvatar, shortTime } from "../components/ChatList.tsx";
+import { ChatAvatar, PulseDots, shortTime } from "../components/ChatList.tsx";
 import { ApprovalNeedCard, CardButton, runSummary, GroupCard, HelpNeedCard, LoginNeedCard, Rule, SectionHead, useHelpSeen, helpKey } from "../components/InboxParts.tsx";
 import { NEXT_STEP, homeReadiness, setupProgress, useOnboarding } from "../onboarding.ts";
 import { useDevices } from "../devices.ts";
@@ -245,11 +245,7 @@ export function DashboardView({ onBack }: { onBack?: () => void }) {
                               <span className="text-sm text-st-working truncate">{now?.text ?? "Working"}</span>
                               {now?.where && <span className="text-[13px] text-faint truncate">{now.where}</span>}
                             </span>
-                            <span className="flex gap-1" aria-hidden>
-                              {[0, 1, 2].map((n) => (
-                                <i key={n} className="size-1.5 rounded-full bg-st-working animate-pulse" style={{ animationDelay: `${n * 200}ms` }} />
-                              ))}
-                            </span>
+                            <PulseDots />
                           </button>
                         </div>
                       );

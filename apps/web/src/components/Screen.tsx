@@ -95,6 +95,8 @@ interface Props {
   control: boolean;
   /** the page draws its own frame while you're in control */
   noRing?: boolean;
+  /** the page floats controls along the bottom edge, so the frame-error note sits above them */
+  raiseNote?: boolean;
   /** called for each thing you do while in control (teaching a task) */
   onInput?: (i: ScreenInput) => void;
   /** a small preview (the chat side panel): no minimum height or rounded frame of its own */
@@ -109,7 +111,7 @@ interface Props {
  * The computer's screen, live. VMs and cloud computers stream over VNC (noVNC); a device's own
  * screen streams frames through the hub. Input only goes through while you have control.
  */
-export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, noRing, onInput, compact, onTakeControl, onActivity }, ref) {
+export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScreen({ computer, control, noRing, raiseNote, onInput, compact, onTakeControl, onActivity }, ref) {
   const [state, setState] = useState<"connecting" | "live" | "closed" | "error" | "code">("connecting");
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -388,7 +390,7 @@ export const LiveScreen = forwardRef<LiveScreenHandle, Props>(function LiveScree
           )}
         </div>
       )}
-      {state === "live" && error && transport === "frames" && <div className="absolute bottom-3 left-3 right-3 rounded-lg bg-black/70 text-white text-xs px-3 py-2">{error}</div>}
+      {state === "live" && error && transport === "frames" && <div className={cx("absolute left-3 right-3 rounded-lg bg-black/70 text-white text-xs px-3 py-2", raiseNote ? "bottom-3 md:bottom-[4.5rem]" : "bottom-3")}>{error}</div>}
     </div>
   );
 });
