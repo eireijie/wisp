@@ -206,7 +206,7 @@ struct MobileSettingsView: View {
             .accessibilityLabel((pairing?.code ?? "").map(String.init).joined(separator: " "))
           Text("Does \(phone) show the same six digits?").font(.system(size: 15)).foregroundStyle(Palette.text)
         case "approved":
-          Image(systemName: "checkmark.circle").font(.system(size: 44)).foregroundStyle(Palette.green)
+          Image(systemName: "checkmark.circle").font(.system(size: 44)).foregroundStyle(Palette.statusOnline)
           Text("Paired. \(phone) is signed in.").font(.system(size: 15)).foregroundStyle(Palette.text)
         case "expired", "rejected":
           Text(pairing?.state == "expired" ? "The code expired." : "Pairing was cancelled.").font(.system(size: 15)).foregroundStyle(Palette.muted)

@@ -273,7 +273,7 @@ struct StatusLine: View {
       Text(error).font(.system(size: 13)).foregroundStyle(Palette.red).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
         .accessibilityLabel("Error: \(error)")
     } else if let saved {
-      Text(saved).font(.system(size: 13)).foregroundStyle(Palette.green).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
+      Text(saved).font(.system(size: 13)).foregroundStyle(Palette.statusOnline).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6)
     }
   }
 }

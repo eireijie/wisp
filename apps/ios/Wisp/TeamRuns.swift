@@ -90,8 +90,8 @@ struct FlowStrip: View {
     let waiting = status == "waiting"
     let skipped = status == "skipped"
     let rounds = flow.rounds[s.id] ?? 0
-    let fg: Color = now ? (waiting ? .orange : Color(.systemBackground)) : done ? Palette.green : Palette.muted
-    let bg: Color = now ? (waiting ? Color.orange.opacity(0.15) : Palette.text) : done ? Palette.green.opacity(0.15) : Palette.badge
+    let fg: Color = now ? (waiting ? .orange : Color(.systemBackground)) : done ? Palette.statusOnline : Palette.muted
+    let bg: Color = now ? (waiting ? Color.orange.opacity(0.15) : Palette.text) : done ? Palette.statusOnline.opacity(0.15) : Palette.badge
     return HStack(spacing: 3) {
       Text(s.action.isEmpty ? "Step \(team.number(of: s.id))" : s.action).strikethrough(skipped)
       if done && !now { Image(systemName: "checkmark").font(.caption2.weight(.bold)) }

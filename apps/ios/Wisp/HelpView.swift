@@ -41,10 +41,10 @@ struct HelpView: View {
           Text(next == nil ? "Setup is done" : "\(done) of \(steps.count)").font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text)
           Spacer()
         }
-        ProgressView(value: Double(done), total: Double(steps.count)).tint(Palette.green)
+        ProgressView(value: Double(done), total: Double(steps.count)).tint(Palette.statusOnline)
         ForEach(steps, id: \.id) { step in
           HStack(spacing: 10) {
-            Image(systemName: step.done ? "checkmark.circle.fill" : "circle").foregroundStyle(step.done ? Palette.green : Palette.faint)
+            Image(systemName: step.done ? "checkmark.circle.fill" : "circle").foregroundStyle(step.done ? Palette.statusOnline : Palette.faint)
             Text(step.title).font(.system(size: 15)).foregroundStyle(step.done ? Palette.muted : Palette.text)
             Spacer(minLength: 0)
           }.accessibilityElement(children: .combine)
@@ -123,7 +123,7 @@ struct ReadinessCheckRow: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(check.label).font(.system(size: 15)).foregroundStyle(check.status == .unknown ? Palette.muted : Palette.text)
         Text(check.status == .ok ? "Fine" : check.status == .bad ? "Needs fixing" : "Can't tell yet")
-          .font(.system(size: 13)).foregroundStyle(check.status == .ok ? Palette.green : check.status == .bad ? Palette.red : Palette.faint)
+          .font(.system(size: 13)).foregroundStyle(check.status == .ok ? Palette.statusOnline : check.status == .bad ? Palette.red : Palette.faint)
         if check.status == .bad, let fix = check.fix { Text(fix).font(.system(size: 13)).foregroundStyle(Palette.faint).fixedSize(horizontal: false, vertical: true) }
       }
       Spacer(minLength: 8)

@@ -35,7 +35,7 @@ struct SoulHistory: View {
                   .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 if index == 0 {
-                  Text("Current").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.green)
+                  Text("Current").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.statusOnline)
                 } else if canRestore {
                   Button { restore(revision) } label: {
                     Text(restoring == revision.hash ? "…" : "Restore").font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.text)

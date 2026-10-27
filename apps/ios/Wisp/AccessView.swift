@@ -137,7 +137,7 @@ struct AccessView: View {
     case "error":
       StatusLine(error: info.tailscale.error ?? "Tailscale couldn't connect.")
     default:
-      CardGroup { RowLabel(title: "Tailscale is running", chevron: false) { Image(systemName: "checkmark.circle").foregroundStyle(Palette.green) } }
+      CardGroup { RowLabel(title: "Tailscale is running", chevron: false) { Image(systemName: "checkmark.circle").foregroundStyle(Palette.statusOnline) } }
     }
   }
 

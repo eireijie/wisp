@@ -478,7 +478,7 @@ private struct HarnessSignInSheet: View {
         Button("Copy command") { UIPasteboard.general.string = manual }.secondaryButton()
       }
       if login?.status == "running" { steps }
-      if login?.status == "done" { Label("Signed in.", systemImage: "checkmark.circle").foregroundStyle(Palette.green).padding(.horizontal, 4) }
+      if login?.status == "done" { Label("Signed in.", systemImage: "checkmark.circle").foregroundStyle(Palette.statusOnline).padding(.horizontal, 4) }
       if login?.status == "failed" {
         Text(login?.error ?? "The sign-in didn't finish.").font(.footnote).foregroundStyle(Palette.red).padding(.horizontal, 4)
         Button("Try again") { login = nil; if perProvider { started = false } else { Task { await start() } } }.secondaryButton()

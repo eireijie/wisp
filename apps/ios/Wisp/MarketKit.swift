@@ -52,7 +52,7 @@ struct MarketPill: View {
   private var ink: Color {
     switch tone {
     case .blue: MarketColor.blueText
-    case .green: Palette.green
+    case .green: Palette.statusOnline
     case .grey: Palette.muted
     case .warn: MarketColor.warn
     }
@@ -61,7 +61,7 @@ struct MarketPill: View {
   private var fill: Color {
     switch tone {
     case .blue: Palette.blue.opacity(0.16)
-    case .green: Palette.online.opacity(0.14)
+    case .green: Palette.statusOnline.opacity(0.14)
     case .grey: MarketColor.chip
     case .warn: MarketColor.warn.opacity(0.14)
     }

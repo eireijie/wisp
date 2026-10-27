@@ -20,13 +20,23 @@ struct ComputerPill: View {
   var tone: PillTone = .neutral
   var dot = false
 
-  private var fg: Color {
+  /** the dot keeps the pure status color; the word uses the deeper (light) or lighter (dark) text color */
+  private var dotColor: Color {
     switch tone {
     case .online: Palette.statusOnline
     case .working: Palette.statusWorking
     case .neutral: Palette.statusOffline
     case .warn: Palette.statusNeeds
     case .bad: Palette.statusProblem
+    }
+  }
+  private var fg: Color {
+    switch tone {
+    case .online: Palette.statusOnlineText
+    case .working: Palette.statusWorkingText
+    case .neutral: Palette.statusOfflineText
+    case .warn: Palette.statusNeedsText
+    case .bad: Palette.statusProblemText
     }
   }
   private var bg: Color {
@@ -41,7 +51,7 @@ struct ComputerPill: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      if dot { Circle().fill(fg).frame(width: 7, height: 7) }
+      if dot { Circle().fill(dotColor).frame(width: 7, height: 7) }
       Text(text).font(.system(size: 12, weight: .semibold)).lineLimit(1)
     }
     .foregroundStyle(fg)
@@ -61,13 +71,15 @@ struct ComputerState {
 extension Store {
   /** How a computer is doing, in a word or two (the web's computerState). */
   func state(of c: Computer) -> ComputerState {
+    // Connectivity first: offline or paused is gray, working is blue, needs help or anyone in control is amber, ready is green.
     if !c.isOnline || c.status == "offline" { return ComputerState(label: "Offline", tone: .neutral) }
-    if c.paused == true { return ComputerState(label: "Paused at the device", tone: .warn) }
-    if c.status == "starting" { return ComputerState(label: "Starting", tone: .working) }
+    if c.paused == true { return ComputerState(label: "Paused at the device", tone: .neutral) }
     if c.status == "error" { return ComputerState(label: "Problem", tone: .bad) }
-    if let who = c.controller { return ComputerState(label: who.id == me?.id ? "You're in control" : "In control", tone: .warn) }
+    if c.status == "starting" { return ComputerState(label: "Starting", tone: .working) }
     if isWorking(c) { return ComputerState(label: "Working", tone: .working, working: true) }
-    return ComputerState(label: c.status == "stopped" ? "Stopped" : "Ready", tone: .neutral)
+    if let who = c.controller { return ComputerState(label: who.id == me?.id ? "You're in control" : "In control", tone: .warn) }
+    if c.help != nil { return ComputerState(label: "Needs help", tone: .warn) }
+    return c.status == "stopped" ? ComputerState(label: "Stopped", tone: .neutral) : ComputerState(label: "Ready", tone: .online)
   }
 
   func isWorking(_ c: Computer) -> Bool {
@@ -362,7 +374,7 @@ struct ComputerRow: View {
           else { Image(systemName: computer.kind == "device" ? "lock" : "display").font(.system(size: 13)).foregroundStyle(Palette.computer) }
           Text(computer.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
         }
-        Text(store.doing(computer)).font(.system(size: 13)).foregroundStyle(computer.help != nil ? Palette.statusNeeds : Palette.muted).lineLimit(1)
+        Text(store.doing(computer)).font(.system(size: 13)).foregroundStyle(computer.help != nil ? Palette.statusNeedsText : Palette.muted).lineLimit(1)
       }
       Spacer(minLength: 6)
       ComputerPill(text: s.label, tone: s.tone)

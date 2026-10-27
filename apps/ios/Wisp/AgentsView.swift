@@ -122,12 +122,12 @@ struct AgentTile: View {
       HStack(spacing: 6) {
         WorkingDots()
         Text(["Working", doing.flatMap { $0 == "started" ? nil : $0 }].compactMap { $0 }.joined(separator: " · "))
-          .font(.system(size: 13)).foregroundStyle(Palette.statusWorking).lineLimit(2).multilineTextAlignment(.center)
+          .font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(2).multilineTextAlignment(.center)
       }
     } else {
       HStack(spacing: 6) {
         Circle().fill(agent.status == .online ? Palette.statusOnline : Palette.statusOffline).frame(width: 7, height: 7)
-        Text(agent.status == .online ? "Online" : "Offline").font(.system(size: 12, weight: .semibold)).foregroundStyle(agent.status == .online ? Palette.statusOnline : Palette.statusOffline)
+        Text(agent.status == .online ? "Online" : "Offline").font(.system(size: 12, weight: .semibold)).foregroundStyle(agent.status == .online ? Palette.statusOnlineText : Palette.statusOfflineText)
       }
       .padding(.horizontal, 10).frame(height: 24)
       .background(Capsule().fill((agent.status == .online ? Palette.statusOnline : Palette.statusOffline).tint16))

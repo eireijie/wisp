@@ -533,7 +533,7 @@ struct ApprovalBox: View {
           if let at = approval.decidedAt.flatMap(Wire.date) { Text(at, format: .dateTime.hour().minute()).foregroundStyle(Palette.faint) }
         }
         .font(.system(size: 13))
-        .foregroundStyle(approval.status == "approved" ? Palette.green : Palette.muted)
+        .foregroundStyle(approval.status == "approved" ? Palette.statusOnline : Palette.muted)
         if !approval.note.isEmpty { Text("“\(approval.note)”").font(.system(size: 13)).foregroundStyle(Palette.muted) }
       }
       if let error { Text(error).font(.caption).foregroundStyle(Palette.red) }
