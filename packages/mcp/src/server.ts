@@ -331,10 +331,14 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     {
       description:
         "Write to the person you work for, first, in your DM with them: it reaches their phone. Use it when something needs them (a deadline, an email they missed, a reply that arrived, a finished task), not to say you checked. Keep it short and specific; do the work first (a draft, the answer) and include it. For anything you'd send, buy or delete for them, use approval_request instead.",
-      inputSchema: { text: z.string(), file_ids: z.array(z.string()).optional() },
+      inputSchema: {
+        text: z.string(),
+        file_ids: z.array(z.string()).optional(),
+        replies: z.array(z.string()).max(4).optional().describe("2–4 quick answers they can tap, a few words each (\"Sent it\", \"Tomorrow\"), when they'd answer in a word"),
+      },
     },
-    safe(async ({ text: t, file_ids }) => {
-      await client.messagePerson(t, file_ids ?? []);
+    safe(async ({ text: t, file_ids, replies }) => {
+      await client.messagePerson(t, file_ids ?? [], replies ?? []);
       return text("Sent.");
     }),
   );
@@ -401,10 +405,17 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     {
       description:
         "Come back to something at a set time, even if background checks are off: you'll be woken then with this note (e.g. '8am tomorrow: remind them the essay is due at noon'). Give `at` as local time on the person's clock, 'YYYY-MM-DD HH:MM', or `in_minutes`.",
-      inputSchema: { at: z.string().optional(), in_minutes: z.number().optional(), note: z.string().describe("what to do then, written to your future self") },
+      inputSchema: {
+        at: z.string().optional(),
+        in_minutes: z.number().optional(),
+        note: z.string().describe("what to do then, written to your future self"),
+        label: z.string().optional().describe("2–5 words the person sees under your reply: \"Check the build\", \"Nudge you about the deck\", \"Ask how the interview went\""),
+        waiting_on: z.enum(["agent", "person"]).optional().describe("\"agent\" when you'll do it (default); \"person\" when it's their promise and you'll nudge them"),
+        condition: z.string().optional().describe("for their promises: when it still matters (\"only if it hasn't gone out\")"),
+      },
     },
-    safe(async ({ at, in_minutes, note }) => {
-      const f = await client.setFollowup({ at, inMinutes: in_minutes, note });
+    safe(async ({ at, in_minutes, note, label, waiting_on, condition }) => {
+      const f = await client.setFollowup({ at, inMinutes: in_minutes, note, label, waitingOn: waiting_on, condition });
       return text(`Set (${f.id}) for ${new Date(f.dueAt).toLocaleString("en-US", { timeZone: f.timezone, dateStyle: "medium", timeStyle: "short" })} ${f.timezone}.`);
     }),
   );
@@ -420,10 +431,30 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
 
   server.registerTool(
     "followup_cancel",
-    { description: "Cancel a follow-up that's no longer needed.", inputSchema: { followup_id: z.string() } },
-    safe(async ({ followup_id }) => {
-      await client.cancelFollowup(followup_id);
-      return text("Cancelled.");
+    { description: "Stop a follow-up: it happened (done: true), or it's no longer needed.", inputSchema: { followup_id: z.string(), done: z.boolean().optional() } },
+    safe(async ({ followup_id, done }) => {
+      await client.cancelFollowup(followup_id, done ?? false);
+      return text(done ? "Marked done." : "Cancelled.");
+    }),
+  );
+
+  server.registerTool(
+    "chat_status",
+    {
+      description:
+        "Say where your DM with the person you work for stands, when it changes. \"waiting\": the next step is theirs (an answer, something they said they'd do); Wisp checks back for you if they go quiet. \"done\": what they asked for is finished; add did/saved/next when real work got done and they'll see a short wrap-up. \"open\": anything else. \"closed\": you're dropping it after they didn't answer.",
+      inputSchema: {
+        status: z.enum(["open", "waiting", "done", "closed"]),
+        summary: z.string().optional().describe("what's open, in their words: \"send Sam the deck\""),
+        did: z.string().optional().describe("for done: what got done, one line"),
+        saved: z.string().optional().describe("for done: what you saved to memory, one line"),
+        next: z.string().optional().describe("for done: what comes next, one line"),
+        check_back_in_minutes: z.number().optional().describe("for waiting: when to check back if they go quiet (default 3 hours)"),
+      },
+    },
+    safe(async ({ status, summary, did, saved, next, check_back_in_minutes }) => {
+      const l = await client.chatStatus({ status, summary, did, saved, next, checkBackInMinutes: check_back_in_minutes });
+      return text(l.status === "waiting" ? `Noted: waiting on them (${l.summary}).` : `Noted: ${l.status}.`);
     }),
   );
 

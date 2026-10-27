@@ -103,7 +103,10 @@ export class Background {
     for (const [key, list] of due) {
       const [agentId, userId] = key.split(":");
       if (this.checking(agentId, userId)) continue;
-      if (this.wake(agentId, userId, list, at)) for (const f of list) store.setFollowupStatus(f.id, "done");
+      const runId = this.wake(agentId, userId, list, at);
+      if (!runId) continue;
+      for (const f of list) store.setFollowupStatus(f.id, "done");
+      this.hub.loops.fired(list, runId);
     }
     for (const b of store.activeBackground()) {
       if (b.checking || (b.nextAt && new Date(b.nextAt) > at)) continue;
@@ -294,6 +297,11 @@ export class Background {
 
   private pendingFollowups = new Map<string, Followup[]>();
 
+  /** A check that follow-ups woke: what it writes is the agent coming back to something. */
+  carriesFollowups(runId: string) {
+    return !!this.pendingFollowups.get(runId)?.length;
+  }
+
   /** The agent picked when to look again (from `next_check`). */
   setNext(agentId: string, userId: string, inMinutes: number, reason: string) {
     const ws = this.hub.store.agent(agentId)?.workspaceId;
@@ -365,7 +373,7 @@ export class Background {
     const stopped = (messageId: string | null) => !!messageId && (latestRun.get(messageId, messageId) as { status: string } | undefined)?.status === "cancelled";
     const dm = store.messages(run.channelId, { limit: 20 }).filter((m) => m.author.id !== "system" && !stopped(m.id) && !stopped(m.threadId));
     const tasks = store.tasks(agent.workspaceId, { agentId: agent.id }).filter((t) => (t.status === "open" || t.status === "in_progress") && !stopped(t.threadId)).slice(0, 15);
-    const later = store.pendingFollowups(agent.id).filter((f) => !f.userId || f.userId === user?.id);
+    const later = store.pendingFollowups(agent.id).filter((f) => f.kind === "followup" && (!f.userId || f.userId === user?.id));
     const sources = this.sources(agent.id);
     const notesPath = user ? this.watchNotesPath(agent.id, user.id) : null;
     const notes = notesPath ? await this.hub.vault(agent.workspaceId).read(notesPath).then((n) => n.content.trim(), () => "") : "";
@@ -377,7 +385,7 @@ export class Background {
       `Nobody messaged you. You're checking in on your own for ${name}, the way a good assistant keeps an eye on things for someone.`,
       `A request whose run the person stopped or cancelled is finished, even if it has no answer. Don't retry it, hand it to another agent, or do it yourself unless the person asks again.`,
       followups.length
-        ? `You set ${followups.length === 1 ? "a follow-up" : "follow-ups"} for now:\n${followups.map((f) => `- ${f.note} (set for ${fmt(f.dueAt)})`).join("\n")}\nDo what you said you'd do.`
+        ? `${followups.length === 1 ? "Something is" : "Some things are"} due now:\n${followups.map((f) => this.hub.loops.describe(f, name)).join("\n")}`
         : `This is a regular check.${b?.lastAt ? ` Your last one started ${fmt(b.lastAt)}.` : ""}`,
       b?.lastNote ? `Your note to yourself from last time: ${b.lastNote}` : "",
       `\nWhat you can look at:`,
@@ -391,7 +399,7 @@ export class Background {
       notesPath
         ? `\nYour watch notes (${notesPath.replace(`agents/${agent.id}/`, "me/")}) are your working memory for these checks: for each source, where you left off (the latest thing you've seen) and what you're keeping track of. Read them before you look, and update them with memory_write before you finish.${notes ? `\nThey say now:\n${notes.length > 6000 ? notes.slice(0, 6000) + "\n…(read the rest with memory_read)" : notes}` : " You haven't written any yet: start them this time."}`
         : "",
-      `- If something does, tell them with message_person: short, specific, and readable on a phone's lock screen. If you can do the work, do it first (write the draft, find the answer), then show it. Before sending, buying or deleting anything for them, ask with approval_request and include the draft.`,
+      `- If something does, tell them with message_person: short, specific, and readable on a phone's lock screen; when they'd answer in a few words, add 2–4 quick replies. If you can do the work, do it first (write the draft, find the answer), then show it. Before sending, buying or deleting anything for them, ask with approval_request and include the draft.`,
       `- If nothing does, don't message. Saying nothing is usually right. Never message just to say you checked, and don't repeat what you already told them unless it's become urgent.`,
       user && this.allowanceShare(agent.workspaceId, user.id) >= SLOW_DOWN_AT ? `- Most of ${name}'s daily allowance for background work is used. Keep this check short: look only at what matters most.` : "",
       quiet ? `- It's quiet hours for ${name} (${b!.quietStart}–${b!.quietEnd}). Only message for something that can't wait until morning.` : "",
@@ -399,7 +407,7 @@ export class Background {
       `Your final reply isn't posted anywhere. Make it a one-line note to yourself about what you looked at and decided; you'll see it next time.`,
       tasks.length ? `\nYour open tasks:\n${tasks.map((t) => `- ${t.title} (${t.status.replace("_", " ")})`).join("\n")}` : "",
       approvals.length ? `\nStill waiting for an OK on:\n${approvals.map((a) => `- ${a.summary} (asked ${fmt(a.createdAt)})`).join("\n")}` : "",
-      later.length ? `\nFollow-ups you've set:\n${later.map((f) => `- ${fmt(f.dueAt)}: ${f.note}`).join("\n")}` : "",
+      later.length ? `\nFollow-ups you've set:\n${later.map((f) => `- ${f.id} ${fmt(f.dueAt)}: ${f.label ? `${f.label} (${f.note})` : f.note}`).join("\n")}` : "",
       dm.length ? `\nYour recent conversation with ${name} (your DM):\n${dm.map((m) => `${this.hub.displayName(m.author)}: ${this.hub.historyLine(m)}`).join("\n")}` : `\nYou haven't talked with ${name} in your DM yet.`,
     ]
       .filter(Boolean)

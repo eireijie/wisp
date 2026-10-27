@@ -10,6 +10,7 @@ import { Reach } from "./reach.ts";
 import { Routines } from "./routines.ts";
 import { BACKGROUND_THREAD, Background } from "./background.ts";
 import { Push } from "./push.ts";
+import { Loops } from "./loops.ts";
 import { Marketplace } from "./marketplace.ts";
 import { Logos } from "./logos.ts";
 import { PublicSkills } from "./skill-store.ts";
@@ -72,6 +73,7 @@ export class Hub {
   readonly logins: Logins;
   readonly routines: Routines;
   readonly background: Background;
+  readonly loops: Loops;
   readonly push: Push;
   readonly marketplace: Marketplace;
   readonly logos: Logos;
@@ -106,6 +108,7 @@ export class Hub {
     this.logins = new Logins(this);
     this.routines = new Routines(this);
     this.background = new Background(this);
+    this.loops = new Loops(this);
     this.push = new Push(this);
     this.marketplace = new Marketplace(this);
     this.logos = new Logos(this);
@@ -457,6 +460,7 @@ export class Hub {
     if (run.kind === "background") {
       store.setRunStatus(run.id, "finalText" in result ? "done" : "failed", "error" in result ? result.error : undefined);
       this.background.finished(run, "finalText" in result ? result.finalText.trim() || live.text.trim() : `The check failed: ${result.error}`);
+      this.loops.runEnded(run, null);
     } else if ("finalText" in result) {
       store.setRunStatus(run.id, "done");
       this.routines.runFinished(run);
@@ -477,8 +481,11 @@ export class Hub {
       // it worked on its screen: the reply keeps the screen, so it doesn't vanish when the run ends
       const screen = agent?.computerId && !gone ? this.screenAfterRun(agent.computerId, live.parts, body, run) : null;
       const parts = screen ? [...live.parts, screen] : live.parts;
-      if (body && !gone && !repeated) this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy });
+      const reply = body && !gone && !repeated ? this.postMessage({ channelId: run.channelId, threadId: run.threadId, author, body, parts, hop: run.hop + 1, route, onBehalfOf: run.requestedBy }) : null;
+      // follow-ups it set and how it left the chat show under its answer
+      this.loops.runEnded(run, reply?.id ?? (repeated && posted ? posted.id : null));
     } else {
+      this.loops.runEnded(run, null);
       store.setRunStatus(run.id, "failed", result.error);
       const text = agent ? this.explainFailure(agent, result.error) : result.error;
       if (!gone) {
@@ -535,6 +542,7 @@ export class Hub {
     const channel = this.store.channel(m.channelId);
     if (!channel) throw new Error("channel not found");
     const msg = this.store.insertMessage(m);
+    if (channel.kind === "dm" && m.author.kind === "user" && m.author.id !== "system") this.loops.personWrote(channel.id);
     this.broadcast(channel.workspaceId, { type: "message", message: msg }, this.audience(channel.id));
     this.push.onMessage(msg, channel, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
     if (m.route !== false) this.route(msg, channel.workspaceId, m.replyInThread ?? false, m.onBehalfOf !== undefined ? m.onBehalfOf : this.requester(m.author));
@@ -1144,6 +1152,7 @@ export class Hub {
         ? `Before any of these that nobody asked for in so many words: ${asks.join("; ")}, ask first with approval_request and end your turn; you'll be woken with the answer. Ask about anything else that's hard to undo, too.`
         : `When something is hard to undo and nobody asked for it in so many words, ask first with approval_request and end your turn; you'll be woken with the answer.`,
       background ? "" : `To come back to something at a set time (a reminder they asked for, checking whether a reply came), use followup_set; you'll be woken then.`,
+      !background && channel.kind === "dm" && user ? `\n${this.loops.promptSection(agent.id, channel.id, user.id, user.preferredName || user.name)}` : "",
       background ? "" : `When someone asks you to change how Wisp works for them (how often you check in, quiet hours, what to watch, turning a mod on or off), do it with settings_read and settings_change instead of sending them to Settings.`,
       localTime,
       this.computerSection(agent.id),

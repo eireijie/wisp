@@ -330,7 +330,15 @@ export type MessagePart =
   /** an agent's answer to /context: how full its conversation is */
   | { type: "context"; usage: ContextUsage | null }
   /** an agent changed a setting or a mod for the person it works for; they see what changed and can undo it */
-  | { type: "change"; changeId: string };
+  | { type: "change"; changeId: string }
+  /** something the agent will come back to, shown under its reply ("Check the build · 4:35 PM"); kept up to date */
+  | { type: "followup"; followupId: string; label: string; dueAt: string; waitingOn: "agent" | "person"; status: "pending" | "done" | "cancelled" }
+  /** the agent came back to something on its own; `replies` are quick answers the person can tap */
+  | { type: "checkback"; replies: string[] }
+  /** the agent finished what this chat was about */
+  | { type: "wrapup"; did: string; saved: string; next: string }
+  /** the agent dropped what this chat was about after the person didn't answer */
+  | { type: "closed" };
 
 /** An agent asking a person's OK before it acts ("Send these 3 intros?"). */
 export interface Approval {
@@ -468,6 +476,41 @@ export interface Followup {
   note: string;
   status: "pending" | "done" | "cancelled";
   createdAt: string;
+  /** what the person sees under the agent's reply, 2–5 words ("Check the build"); null = not shown */
+  label: string | null;
+  /** who owes the next step: the agent ("I'll check the build") or the person ("I'll send it tonight") */
+  waitingOn: "agent" | "person";
+  /** when it only matters if something hasn't happened yet ("only if it hasn't gone out") */
+  condition: string;
+  /** "checkback" = Wisp set it because a chat stopped while waiting on the person; never shown as a pill */
+  kind: "followup" | "checkback";
+  /** the chat it came from, and the reply that shows it */
+  channelId: string | null;
+  messageId: string | null;
+}
+
+/**
+ * Where a DM with an agent stands, as the agent last said with chat_status. "waiting" = on the
+ * person (an answer, a next step); "working" = on the agent; "done" = finished; "closed" = dropped
+ * after the person didn't answer its check-backs.
+ */
+export interface ChatLoop {
+  channelId: string;
+  agentId: string;
+  userId: string;
+  status: "open" | "waiting" | "done" | "closed";
+  /** what's open, in the person's terms ("send Sam the deck") */
+  summary: string;
+  /** check-backs sent since the person last wrote */
+  nudges: number;
+  updatedAt: string;
+}
+
+/** A line of a chat's wrap-up card: what got done, what was saved, what's next. */
+export interface WrapUp {
+  did: string;
+  saved: string;
+  next: string;
 }
 
 /** A web page element, as a person would point at it: "the Export button on reports.example.com". */
