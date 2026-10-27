@@ -198,7 +198,7 @@ struct ChannelView: View {
     } trailing: {
       Menu {
         if let agent = store.dmAgent(current) {
-          if canCall, call == nil { Button("Call \(agent.name)", systemImage: "phone") { startCall() } }
+          if canCall, call == nil { Button("Call \(agent.name)", systemImage: "phone") { startCall() }.tint(Palette.call) }
           Button("About \(agent.name)", systemImage: "person.crop.circle") { showDetails = true }
           if store.role != "guest" { Button("Model and effort", systemImage: "bolt") { tool = .model(agent) } }
           Button("What it can do", systemImage: "shield") { tool = .access(agent) }
@@ -385,7 +385,7 @@ struct ThreadView: View {
           if let agent { AgentAvatar(agent: agent, size: 30, showStatus: false) }
           VStack(alignment: .leading, spacing: 0) {
             Text("Handed to \(agent?.name ?? "an agent")").font(.system(size: 15, weight: .semibold)).lineLimit(1)
-            Text(store.taskState(t)).font(.system(size: 12)).foregroundStyle(store.taskState(t) == "Working" ? Palette.green : Palette.muted)
+            Text(store.taskState(t)).font(.system(size: 12)).foregroundStyle(store.taskState(t) == "Working" ? Palette.statusWorking : Palette.muted)
           }
         }
         .padding(.leading, 14).padding(.trailing, 20).frame(height: 44).glassPill()
@@ -523,7 +523,7 @@ struct EmptyChannel: View {
         Text("This is the start of your conversation with @\(a.handle). Ask it anything, or hand it a task.")
           .font(.system(size: 15)).foregroundStyle(Palette.muted)
         HStack(spacing: 6) {
-          GlowDot(color: a.status == .offline ? .gray : Palette.online)
+          GlowDot(color: a.status == .offline ? Palette.statusOffline : Palette.statusOnline)
           Text(a.status == .offline ? "Offline" : "Ready\(store.nodes.first { $0.id == a.nodeId }.map { " on \($0.name)" } ?? "")")
         }
         .font(.system(size: 13)).foregroundStyle(Palette.muted)
@@ -689,9 +689,9 @@ struct Composer: View {
             Button { submit() } label: {
               Image(systemName: sending ? "ellipsis" : "arrow.up")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Palette.ground)
+                .foregroundStyle(.white)
                 .frame(width: 56, height: 44)
-                .background(Capsule().fill(Palette.text))
+                .background(Capsule().fill(Palette.tabChats))
             }
             .buttonStyle(.press)
             .disabled(blocked)
@@ -704,9 +704,9 @@ struct Composer: View {
             Button(action: onCall) {
               Image(systemName: "waveform")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Palette.ground)
+                .foregroundStyle(Palette.call)
                 .frame(width: 56, height: 44)
-                .background(Capsule().fill(Palette.text))
+                .background(Capsule().fill(Palette.call.tint16))
             }
             .buttonStyle(.press)
             .padding(.bottom, 6).padding(.trailing, 6)

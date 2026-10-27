@@ -226,7 +226,7 @@ private struct AgentLabel: View {
       AgentAvatar(agent: agent, size: 28, showStatus: false)
       VStack(alignment: .leading, spacing: 1) {
         Text(agent.name).font(.system(size: 15)).foregroundStyle(Palette.text)
-        if agent.status == .busy { Text("Working").font(.system(size: 12)).foregroundStyle(Palette.green) }
+        if agent.status == .busy { Text("Working").font(.system(size: 12)).foregroundStyle(Palette.statusWorking) }
       }
     }
   }

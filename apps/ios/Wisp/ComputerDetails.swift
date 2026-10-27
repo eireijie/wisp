@@ -46,6 +46,7 @@ struct ComputerDetailsView: View {
               if log.isEmpty { Text("Nothing yet.").foregroundStyle(.secondary) }
               ForEach(log.prefix(50)) { entry in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
+                  Circle().fill(ComputerLogLine.dot(entry)).frame(width: 7, height: 7).accessibilityHidden(true)
                   Text(Self.ago(entry.at)).font(.caption.monospacedDigit()).foregroundStyle(.tertiary).frame(width: 56, alignment: .leading)
                   who(entry).fixedSize(horizontal: false, vertical: true)
                 }
