@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { shortDescription, type AccessLevel, type AgentEvent, type CommandOption, type ConnectorSpec, type HarnessCatalog, type ModelOption } from "@wisp/core";
-import type { AdapterEvent, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
+import type { AdapterEvent, CatalogPlace, HarnessAdapter, McpServerSpec, RunInput, RunResult } from "./types.ts";
 import { commandVersion, launched, spawnCommand, stopProcess } from "./process.ts";
 
 /**
@@ -348,15 +348,18 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
 
     /**
      * Start the agent once to read the models it offers (from session/new). Agents that list
-     * none still get a catalog entry so people can see the harness is installed.
+     * none still get a catalog entry so people can see the harness is installed. With `place`, the
+     * copy installed there (a VM) is asked instead.
      */
-    async catalog(): Promise<HarnessCatalog> {
-      const version = await commandVersion(info.binary);
+    async catalog(place?: CatalogPlace): Promise<HarnessCatalog> {
+      if (place && !info.vm) return { harness: info.id, version: null, models: [], efforts: [] };
+      const cmd = place ? { command: info.vm!.binary, args: info.vm!.args } : command();
+      const version = place ? await place.exec(cmd.command, ["--version"], { timeout: 20_000 }).then((o) => o.trim().split("\n")[0] || null, () => null) : await commandVersion(info.binary);
       const base: HarnessCatalog = { harness: info.id, version, models: [], efforts: [] };
       if (version === null) return base;
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wisp-acp-"));
-      const cmd = command();
-      const child = spawnCommand(cmd.command, cmd.args, { cwd: dir, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
+      const dir = place ? null : fs.mkdtempSync(path.join(os.tmpdir(), "wisp-acp-"));
+      const l = place ? await place.launch({ command: cmd.command, args: cmd.args, cwd: "", env: {} }) : { command: cmd.command, args: cmd.args, cwd: dir!, env: {} };
+      const child = spawnCommand(l.command, l.args, { cwd: l.cwd, env: { ...process.env, ...l.env }, stdio: ["pipe", "pipe", "pipe"] });
       // agents announce their "/" commands in a session/update right after the session starts
       let announced: (c: Json) => void = () => {};
       const commands = new Promise<Json>((r) => (announced = r));
@@ -369,14 +372,14 @@ export function acpAdapter(info: { id: string; label: string; binary: string; ar
       );
       try {
         await conn.request("initialize", { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false } }, 20_000);
-        const session = await conn.request("session/new", { cwd: dir, mcpServers: [] }, 20_000);
+        const session = await conn.request("session/new", { cwd: dir ?? `${place!.home}/files`, mcpServers: [] }, place ? 60_000 : 20_000);
         const listed = await Promise.race([commands, new Promise((r) => setTimeout(() => r(null), 3000).unref())]);
         return { ...base, ...acpModels(session), commands: acpCommands(listed) };
       } catch {
         return base;
       } finally {
         conn.close();
-        fs.rmSync(dir, { recursive: true, force: true });
+        if (dir) fs.rmSync(dir, { recursive: true, force: true });
       }
     },
   };
