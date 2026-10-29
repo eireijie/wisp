@@ -23,6 +23,9 @@ struct ChannelView: View {
   @State private var flashed: String?
   @State private var attachTrigger = 0
   @State private var tool: ChatTool?
+  /** what the agent in a DM runs on: the line over the message box and the ring in the header */
+  @State private var run = RunInfo()
+  @State private var showRun = false
   /** the first batch of messages has settled: from here a new message animates in */
   @State private var settled = false
   @Environment(\.dismiss) private var dismiss
@@ -98,7 +101,14 @@ struct ChannelView: View {
       } else {
         VStack(spacing: 6) {
           ActivityPill(channel: current)
-          composer
+          VStack(alignment: .leading, spacing: 0) {
+            if let agent = store.dmAgent(current), run.context != nil {
+              RunSummaryLine(agent: agent, info: run) { showRun = true }
+                .padding(.leading, 82).padding(.trailing, 18)
+                .transition(.opacity)
+            }
+            composer
+          }
         }
         .animation(.snappy, value: store.agents.filter { $0.status == .busy }.map(\.id))
       }
@@ -122,6 +132,13 @@ struct ChannelView: View {
       if let call { CallScreen(call: call) }
     }
     .sheet(item: $tool) { ChatToolSheet(tool: $0, channelId: channel.id) }
+    .sheet(isPresented: $showRun) {
+      if let agent = store.dmAgent(current) { RunSheet(agentId: agent.id, channelId: channel.id, info: run) }
+    }
+    .task(id: runKey) {
+      guard let agent = store.dmAgent(current) else { return }
+      await run.load(store, agent: agent, channel: channel.id, thread: nil)
+    }
     .onChange(of: store.channels) { old, new in
       if old.contains(where: { $0.id == channel.id }) && !new.contains(where: { $0.id == channel.id }) { dismiss() }
       if old.first(where: { $0.id == channel.id })?.joined == true && new.first(where: { $0.id == channel.id })?.joined == false { dismiss() }
@@ -145,10 +162,16 @@ struct ChannelView: View {
     }
   }
 
+  /** reloads what the agent runs on when a reply lands or its settings change */
+  private var runKey: String {
+    guard let a = store.dmAgent(current) else { return "" }
+    return "\(a.id)/\(list.count)/\(a.harness)/\(a.model ?? "")/\(a.settings?.effort ?? "")/\(a.settings?.connectionId ?? "")/\(store.modelsVersion)"
+  }
+
   private var composer: some View {
     Composer(placeholder: placeholder, channelId: channel.id, refresh: list.count, draft: draft, attachTrigger: attachTrigger, send: { text, files, replyTo in
             try await store.send(text, in: channel.id, files: files, replyTo: replyTo)
-          }, onCall: canCall && call == nil ? { startCall() } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")", onModelCommand: store.dmAgent(current).map { agent in { tool = .model(agent) } }, callLive: call != nil)
+          }, onCall: canCall && call == nil ? { startCall() } : nil, callLabel: "Call \(store.dmAgent(current)?.name ?? "agent")", onModelCommand: store.dmAgent(current).map { _ in { showRun = true } }, callLive: call != nil)
   }
 
   /** only really leaving the chat hangs up; opening a thread, the profile or the full-screen call doesn't */
@@ -180,7 +203,7 @@ struct ChannelView: View {
 
   /** the top of a chat: a glass back circle, the name on a pill with the ghost, and a ... circle */
   private var chrome: some View {
-    TopBar {
+    TopBar(inset: store.dmAgent(current) != nil && run.context != nil ? 100 : 64) {
       CircleButton(symbol: "chevron.left", label: "Back", id: "chat-back") { dismiss() }
     } center: {
       Button { showDetails = true } label: {
@@ -196,11 +219,13 @@ struct ChannelView: View {
       .accessibilityLabel(store.dmAgent(current) != nil ? "\(store.title(of: current)), open profile" : "\(current.name), team info")
       .accessibilityIdentifier("chat-title")
     } trailing: {
+      HStack(spacing: 6) {
+      if store.dmAgent(current) != nil, let ctx = run.context { HeaderContextRing(fraction: ctx.fraction) { showRun = true } }
       Menu {
         if let agent = store.dmAgent(current) {
           if canCall, call == nil { Button("Call \(agent.name)", systemImage: "phone") { startCall() }.tint(Palette.call) }
           Button("About \(agent.name)", systemImage: "person.crop.circle") { showDetails = true }
-          if store.role != "guest" { Button("Model and effort", systemImage: "bolt") { tool = .model(agent) } }
+          if store.role != "guest" { Button("Harness, model and effort", systemImage: "cpu") { showRun = true } }
           Button("What it can do", systemImage: "shield") { tool = .access(agent) }
           Button("Context window", systemImage: "gauge.with.dots.needle.33percent") { tool = .context(agent) }
         } else {
@@ -219,6 +244,7 @@ struct ChannelView: View {
         }
       } label: { CircleLabel(symbol: "ellipsis") }
         .accessibilityLabel("More").accessibilityIdentifier("chat-more")
+      }
     }
     .background(alignment: .top) {
       LinearGradient(colors: [Palette.ground, Palette.ground.opacity(0)], startPoint: .top, endPoint: .bottom)
