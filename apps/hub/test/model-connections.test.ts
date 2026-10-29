@@ -542,3 +542,22 @@ describe("models across a harness switch", () => {
     expect(run.model).toBe("anthropic/claude-opus-5.5");
   });
 });
+
+describe("what /context shows after a switch", () => {
+  it("doesn't show the last reply's model when it ran in another harness", async () => {
+    const pia = await owner.request("POST", "/api/agents", { handle: "pia", name: "Pia", harness: "codex", nodeId: box.id });
+    const ch = await channelWith("context-switch", [pia.id]);
+    await message(ch.id, "@pia hi");
+    expect(await owner.request("GET", `/api/agents/${pia.id}/context?channel=${ch.id}`)).toMatchObject({ model: "gpt-6.1-sol", modelLabel: "GPT-6.1 Sol", contextUsed: 1000 });
+    await owner.request("PATCH", `/api/agents/${pia.id}`, { harness: "claude-code" });
+    const ctx = await owner.request("GET", `/api/agents/${pia.id}/context?channel=${ch.id}`);
+    expect(ctx).toMatchObject({ harness: "claude-code", model: null, contextUsed: null, contextWindow: null });
+  });
+
+  it("shows the model a connection's next run uses, by its name", async () => {
+    const router = hub.models.create({ workspaceId: ws, userId: me, provider: "openrouter", kind: "key", label: "Router 3", secret: { key: "sk-or-v1-ctx" } });
+    const quin = await owner.request("POST", "/api/agents", { handle: "quin", name: "Quin", harness: "claude-code", nodeId: box.id, settings: { connectionId: router } });
+    const ctx = await owner.request("GET", `/api/agents/${quin.id}/context`);
+    expect(ctx).toMatchObject({ model: "anthropic/claude-opus-5.5", modelLabel: "Claude Opus 5.5", modelIsDefault: true });
+  });
+});

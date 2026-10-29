@@ -561,9 +561,10 @@ export class Hub {
         if (!run) return;
         if (msg.event.type === "usage") {
           const { type: _t, ...usage } = msg.event;
-          store.setRunUsage(run.id, usage);
           // a subscription's limits belong to the connection the run used
           const cid = this.connectionRuns.get(run.id);
+          // what it ran in and on, so a later switch doesn't show this run's model as the new one's
+          store.setRunUsage(run.id, { ...usage, harness: store.agent(run.agentId)?.harness, connectionId: cid ?? null });
           if (cid && usage.plan) {
             this.models.setUsage(cid, usage.plan);
             this.connectionsChanged(cid);

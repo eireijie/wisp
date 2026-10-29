@@ -156,6 +156,9 @@ export interface ContextUsage {
   cachedInputTokens?: number;
   /** how much of the subscription's limit was used, where the harness reports it */
   plan?: import("./models.ts").PlanUsage;
+  /** the harness and model connection the run used (null: the device's own login); missing on older runs */
+  harness?: string;
+  connectionId?: string | null;
   at: string;
 }
 

@@ -1328,13 +1328,17 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
     if (!agent || agent.workspaceId !== c.workspaceId) return reply.code(404).send({ error: "agent not found" });
     const q = req.query as { channel?: string; thread?: string };
     const channel = q.channel ? channelVisible(c, q.channel) : undefined;
-    const usage = channel ? store.latestUsage(agent.id, channel.id, q.thread || null) : null;
     const catalog = hub.catalogFor(agent);
     const conn = agent.settings.connectionId ? hub.models.row(agent.settings.connectionId) : undefined;
     const usable = conn && credentialSupport(agent.harness, conn.provider, conn.kind) ? conn : undefined;
-    const connModels = usable ? await hub.models.models(usable.id, catalog).catch(() => []) : [];
+    const last = channel ? store.latestUsage(agent.id, channel.id, q.thread || null) : null;
+    // the last reply ran in another harness or on another connection (it switched since): its model,
+    // effort and context say nothing about the next one
+    const usage = last && (last.harness === undefined || (last.harness === agent.harness && (last.connectionId ?? null) === (usable?.id ?? null))) ? last : null;
+    const connModels = usable ? modelsForHarness(agent.harness, usable.provider, await hub.models.models(usable.id, catalog).catch(() => [])) : [];
     const entryOf = (m: string | null) => connModels.find((x) => x.id === m) ?? catalog?.models.find((x) => x.id === m);
-    const model = agent.model ?? usage?.model ?? catalog?.defaultModel ?? null;
+    // with none picked: what it last ran, else what the next run uses (the connection's default, or the harness's)
+    const model = agent.model ?? usage?.model ?? (usable ? await hub.connectionDefaultModel(agent, usable.id) : undefined) ?? catalog?.defaultModel ?? null;
     const sameModel = !agent.model || !usage?.model || usage.model === agent.model;
     // the harness's configured effort wins over the model's own default, as in Codex
     const effort = agent.settings.effort ?? (sameModel ? usage?.effort : undefined) ?? catalog?.defaultEffort ?? entryOf(model)?.defaultEffort ?? null;
@@ -1343,6 +1347,8 @@ export function registerApi(app: FastifyInstance, hub: Hub, opts: RegisterOption
       harness: agent.harness,
       harnessVersion: catalog?.version ?? null,
       model,
+      /** the model's name as its catalog or connection lists it ("Opus 5.5"), when known */
+      modelLabel: entryOf(model)?.label ?? null,
       modelIsDefault: !agent.model,
       effort,
       effortIsDefault: !agent.settings.effort,
