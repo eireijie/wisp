@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CREDENTIAL_SUPPORT, MODEL_PROVIDER_INFO, type ModelConnection } from "@wisp/core";
 // the helpers are pure; the store (which reads the browser) only backs the hooks
-vi.mock("../src/store.ts", () => ({ useStore: () => 0 }));
+vi.mock("../src/store.ts", () => ({ useStore: Object.assign(() => 0, { subscribe: () => () => {} }) }));
 import { agentComputer, canUse, connectWays, connectionName, connectionSub, connectionsFor, contextLine, effortShort, modelName, planLeft, runLine, siteName, windowName, type AgentContext, type AgentModels, type HarnessComputer } from "../src/models.ts";
 
 const ctx = (over: Partial<AgentContext> = {}): AgentContext => ({
