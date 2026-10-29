@@ -196,19 +196,54 @@ export function useHarnessComputers(): { computers: HarnessComputer[] | null; er
   return { computers, error, reload: () => setN((x) => x + 1) };
 }
 
-/** A connection's models as `harness` runs them (cached for the page's life). */
-const modelCache = new Map<string, Promise<ConnectionModel[]>>();
-export function connectionModels(connectionId: string, harness: string, agentId?: string): Promise<ConnectionModel[]> {
+/** A connection's models as `harness` runs them, and that harness's effort levels. */
+export interface ConnectionModelList {
+  models: ConnectionModel[];
+  efforts: string[];
+}
+
+/**
+ * Cached until connections or agents change. An empty list or a failure isn't kept: a sign-in
+ * that hasn't listed its models yet shouldn't read "No models" until the page reloads.
+ */
+const modelCache = new Map<string, Promise<ConnectionModelList>>();
+export function connectionModelList(connectionId: string, harness: string, agentId?: string): Promise<ConnectionModelList> {
   const key = `${connectionId}|${harness}|${agentId ?? ""}`;
   let p = modelCache.get(key);
   if (!p) {
-    p = api<{ models: ConnectionModel[] }>("GET", `/api/model-connections/${connectionId}/models?harness=${encodeURIComponent(harness)}${agentId ? `&agent=${agentId}` : ""}`).then((r) => r.models);
-    p.catch(() => modelCache.delete(key));
-    modelCache.set(key, p);
+    const mine: Promise<ConnectionModelList> = api<{ models: ConnectionModel[]; efforts?: string[] }>("GET", `/api/model-connections/${connectionId}/models?harness=${encodeURIComponent(harness)}${agentId ? `&agent=${agentId}` : ""}`).then((r) => {
+      if (!r.models.length && modelCache.get(key) === mine) modelCache.delete(key);
+      return { models: r.models, efforts: r.efforts ?? [] };
+    });
+    mine.catch(() => modelCache.get(key) === mine && modelCache.delete(key));
+    modelCache.set(key, mine);
+    p = mine;
   }
   return p;
 }
+export const connectionModels = (connectionId: string, harness: string, agentId?: string): Promise<ConnectionModel[]> => connectionModelList(connectionId, harness, agentId).then((r) => r.models);
 export const forgetConnectionModels = () => modelCache.clear();
+// a connection added, renewed or removed, or an agent moved, can change what a harness runs
+useStore.subscribe((s, prev) => {
+  if (s.modelsVersion !== prev.modelsVersion || s.agents !== prev.agents) modelCache.clear();
+});
+
+/**
+ * What a harness switch changes. The model and connection stay when the new harness can use the
+ * connection (`fits`) and lists the model for it (`list`); an effort stays when the model kept (or
+ * the new harness, for the default model) offers it. Off a connection, or onto one the new harness
+ * can't use, the model and effort go back to the default: they belonged to the old harness.
+ */
+export function harnessSwitch(harness: string, agent: { model: string | null; settings: { effort?: string | null; connectionId?: string | null } }, fits: boolean, list: ConnectionModelList | null): Record<string, unknown> {
+  if (!fits) return { harness, model: null, settings: { effort: null, ...(agent.settings.connectionId ? { connectionId: null } : {}) } };
+  if (!list) return { harness };
+  const m = agent.model ? list.models.find((x) => x.id === agent.model) : undefined;
+  const keepModel = !agent.model || !!m;
+  const offered = m?.efforts ?? list.efforts;
+  const effort = agent.settings.effort;
+  const keepEffort = !effort || offered.includes(effort);
+  return { harness, ...(keepModel ? {} : { model: null }), ...(keepEffort ? {} : { settings: { effort: null } }) };
+}
 
 /**
  * Everything the chat shows about an agent: settings, its computer's model catalog and its
