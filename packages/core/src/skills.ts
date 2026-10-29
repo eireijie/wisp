@@ -4,8 +4,8 @@
  * written into each agent's memory folder as `skills/<slug>/SKILL.md` and listed in its prompt.
  */
 
-/** Where a skill came from. "taught": made from a routine someone taught an agent (not built yet). */
-export type SkillSource = "catalog" | "custom" | "taught";
+/** Where a skill came from. "taught": made from a routine someone taught an agent (not built yet); "learned": an agent saved how it did something. */
+export type SkillSource = "catalog" | "custom" | "taught" | "learned";
 
 export interface Skill {
   id: string;
@@ -20,6 +20,13 @@ export interface Skill {
   /** the SKILL.md body (markdown, without front matter) */
   content: string;
   agentIds: string[];
+  /** on for every agent in the workspace, including ones made later; agentIds is then ignored for access */
+  allAgents: boolean;
+  /** the agent that wrote it (source "learned") */
+  learnedBy: string | null;
+  /** how many runs read it */
+  uses: number;
+  lastUsedAt: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;

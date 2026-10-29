@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { FlowStrip } from "../team/Runs.tsx";
-import { Archive, Bot, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
+import { Archive, Book, Bot, ChevronLeft, ChevronRight, Check, CircleDot, Eye, FileText, GitPullRequest, Brain, ArrowDown, ArrowUp, AtSign, Camera, Loader2, Mic, MessageSquare, MoreHorizontal, Monitor, Paperclip, Phone, Plus, Shield, ShieldAlert, SquareTerminal, UserPlus, Users, X, Zap, ChevronDown, Hash, Info, AudioLines, CornerUpLeft, Pin, ListChecks, Square, ArrowRightLeft } from "lucide-react";
 import { parseMentions, type AccessLevel, type Agent, type ContextUsage, type Message, type MessagePart } from "@wisp/core";
 import { api, fileUrl, uploadFile } from "../api.ts";
 import { conversationKey, useHandleColors, useHandleNames, useNames, usePrefs, useStore, type ChannelInfo, type LiveRun } from "../store.ts";
@@ -917,6 +917,7 @@ function Parts({ parts, body = "", agentName }: { parts: MessagePart[]; body?: s
       {parts.map((p, i) => p.type === "context" && <ContextCard key={`x${i}`} usage={p.usage} />)}
       {parts.map((p) => p.type === "change" && <ChangeCard key={p.changeId} id={p.changeId} fallback={body} />)}
       {parts.map((p, i) => p.type === "notice" && <div key={`n${i}`} className="mt-1 px-1 text-xs text-muted whitespace-pre-wrap">{p.text}</div>)}
+      <SkillLines parts={parts} />
       {files.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-2">
           {files.map((f) => f.type === "file" && <FileChip key={f.fileId} id={f.fileId} name={f.name} />)}
@@ -951,6 +952,26 @@ function Parts({ parts, body = "", agentName }: { parts: MessagePart[]; body?: s
           )}
         </div>
       )}
+    </>
+  );
+}
+
+/** What the agent learned or followed in this reply: one quiet line each ("Learned: order-pizza", "Using order-pizza") that opens the skill. */
+export function SkillLines({ parts }: { parts: MessagePart[] }) {
+  const lines = parts.flatMap((p) => (p.type === "skill" ? [p] : [])).sort((a, b) => Number(a.action !== "learned") - Number(b.action !== "learned"));
+  if (!lines.length) return null;
+  return (
+    <>
+      {lines.map((p) => (
+        <a
+          key={`${p.action}:${p.skillId}`}
+          href={href({ view: "settings", page: "skills", item: p.skillId })}
+          className={cx("m-work mt-1 flex w-fit max-w-full items-center gap-1.5 px-1 text-xs hover:underline", p.action === "learned" ? "font-medium text-ink" : "text-muted")}
+        >
+          <Book size={12} strokeWidth={2} aria-hidden className={cx("shrink-0", p.action === "learned" ? "text-badge" : "text-muted")} />
+          <span className="truncate">{p.action === "learned" ? `Learned: ${p.slug}` : `Using ${p.slug}`}</span>
+        </a>
+      ))}
     </>
   );
 }

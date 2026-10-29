@@ -495,6 +495,24 @@ export async function createWispMcp(client: WispClient, opts: { localFiles?: boo
     }),
   );
 
+  server.registerTool(
+    "skill_save",
+    {
+      description:
+        "Save how you did something as a skill, so you do it the same way next time: after a task you'd likely be asked to do again (several steps, a particular site or app, the person's preferences). Write short numbered steps with the specifics that mattered (names, labels, choices the person likes) and where to stop and ask a person. Save again under the same name to update it. Never put passwords, keys or card numbers in a skill.",
+      inputSchema: {
+        name: z.string().describe("short, like 'Order the usual pizza'"),
+        description: z.string().optional().describe("one line: when to use it"),
+        content: z.string().describe("markdown: numbered steps"),
+        slug: z.string().optional().describe("the /name of a skill you learned before, to update it"),
+      },
+    },
+    safe(async ({ name, description, content, slug }) => {
+      const { skill } = await client.saveSkill({ name, description, content, slug });
+      return text(`Saved as /${skill.slug}`);
+    }),
+  );
+
   // --- your harness's own settings ---------------------------------------------------------------
 
   const settingsLine = (s: Awaited<ReturnType<typeof client.harnessSettings>>) => {

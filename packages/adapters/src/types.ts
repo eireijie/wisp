@@ -1,4 +1,4 @@
-import type { AccessLevel, AgentEvent, ConnectionKind, ConnectorSpec, HarnessCatalog, ModelProvider } from "@wisp/core";
+import type { AccessLevel, AgentEvent, CommandOption, ConnectionKind, ConnectorSpec, HarnessCatalog, ModelProvider } from "@wisp/core";
 
 /** How a harness reaches the Wisp MCP server (memory, chat, tasks tools). */
 export interface McpServerSpec {
@@ -79,7 +79,12 @@ export interface CatalogPlace extends RunPlace {
   launch: NonNullable<RunInput["launch"]>;
 }
 
-export type AdapterEvent = AgentEvent | { type: "session"; id: string };
+/**
+ * What adapters report during a run besides Wisp's own events: the harness session to continue,
+ * and the harness's "/" list as the session itself sees it (Claude Code's start-up line), which
+ * the device merges into its catalog for where the run ran.
+ */
+export type AdapterEvent = AgentEvent | { type: "session"; id: string } | { type: "commands"; commands: CommandOption[] };
 
 export interface RunResult {
   finalText: string;

@@ -314,6 +314,8 @@ struct PartView: View {
       if !replies.isEmpty { QuickReplies(replies: replies, message: message) }
     case .wrapup(let wrap):
       if !wrap.rows.isEmpty { WrapUpCard(wrap: wrap, message: message) }
+    case .skill(let action, let id, let slug):
+      SkillPartLine(action: action, skillId: id, slug: slug)
     case .closed, .toolCall, .other:
       EmptyView()
     }

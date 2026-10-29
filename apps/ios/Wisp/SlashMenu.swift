@@ -10,7 +10,23 @@ struct AgentCommand: Decodable, Hashable, Identifiable {
   var kind: String
   /** "wisp", "raw" or "prompt" */
   var via: String
+  /** the menu's section: "learned", "harness", "wisp" or "skill"; older hubs don't send it */
+  var group: String?
+  /** learned in the last 7 days: the row shows "new" */
+  var isNew: Bool?
+  /** for "learned": who learned it ("Ghosty") */
+  var learnedBy: String?
   var id: String { name }
+
+  /** the section it goes in, worked out from its kind on hubs that don't say */
+  var section: String {
+    if let group, ["learned", "harness", "wisp", "skill"].contains(group) { return group }
+    switch kind {
+    case "wisp": return "wisp"
+    case "wisp-skill": return "skill"
+    default: return "harness"
+    }
+  }
 
   var kindLabel: String {
     switch kind {
@@ -19,6 +35,18 @@ struct AgentCommand: Decodable, Hashable, Identifiable {
     default: "Skill"
     }
   }
+}
+
+/** One headed section of the menu: "Learned by Ghosty", "Codex", "Wisp", "Skills". */
+struct SlashSection: Identifiable {
+  var title: String
+  var rows: [SlashRow]
+  var id: String { title }
+}
+
+struct SlashRow {
+  var agent: Agent
+  var command: AgentCommand
 }
 
 struct SlashGroup: Identifiable {
@@ -65,6 +93,36 @@ enum SlashMenu {
       }.map(\.element)
       return sorted.isEmpty ? nil : SlashGroup(agent: agent, items: sorted)
     }
+  }
+
+  /** the order sections come in: what agents learned, the harness's own, Wisp's, then other skills */
+  static let sectionOrder = ["learned", "harness", "wisp", "skill"]
+
+  static func harnessLabel(_ harness: String) -> String {
+    HarnessChoice.all.first { $0.id == harness }?.label ?? harness.replacingOccurrences(of: "-", with: " ").capitalized
+  }
+
+  /**
+   * The rows under their headers, in menu order; within a section rows keep the order they came in (prefix
+   * matches first). Learned skills are headed by who learned them, harness entries by the agent's harness.
+   */
+  static func sections(_ rows: [SlashRow]) -> [SlashSection] {
+    var order: [(rank: Int, title: String)] = []
+    var byTitle: [String: [SlashRow]] = [:]
+    for row in rows {
+      let section = row.command.section
+      let title: String
+      switch section {
+      case "learned": title = "Learned by \(row.command.learnedBy ?? row.agent.name)"
+      case "harness": title = harnessLabel(row.agent.harness)
+      case "wisp": title = "Wisp"
+      default: title = "Skills"
+      }
+      if byTitle[title] == nil { order.append((sectionOrder.firstIndex(of: section) ?? 9, title)) }
+      byTitle[title, default: []].append(row)
+    }
+    let sorted = order.enumerated().sorted { a, b in a.element.rank != b.element.rank ? a.element.rank < b.element.rank : a.offset < b.offset }
+    return sorted.map { SlashSection(title: $0.element.title, rows: byTitle[$0.element.title] ?? []) }
   }
 
   /** What the message says after picking: "/name " in a chat, "@handle /name " in a channel so it goes to that agent. */
@@ -131,8 +189,8 @@ struct SlashMenuView: View {
   var onPick: (AgentCommand, Agent) -> Void
 
   /** with everyone's commands showing, one every agent has (/context, /model) is listed once */
-  private var rows: [(agent: Agent, command: AgentCommand)] {
-    let all = groups.flatMap { g in g.items.map { (agent: g.agent, command: $0) } }
+  private var rows: [SlashRow] {
+    let all = groups.flatMap { g in g.items.map { SlashRow(agent: g.agent, command: $0) } }
     guard only == nil, here.count > 1 else { return all }
     var seen = Set<String>()
     return all.filter { seen.insert($0.command.name).inserted }
@@ -142,32 +200,42 @@ struct SlashMenuView: View {
     VStack(spacing: 0) {
       if here.count > 1 { agentRow }
       ScrollView {
-        VStack(alignment: .leading, spacing: 0) {
-          if groups.isEmpty && loading { Text("Loading…").font(.subheadline).foregroundStyle(Palette.muted).padding(12) }
-          ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-            Button { onPick(row.command, row.agent) } label: {
-              HStack(alignment: .firstTextBaseline, spacing: 10) {
-                VStack(alignment: .leading, spacing: 1) {
-                  (Text("/\(row.command.name)").fontWeight(.semibold) + Text(row.command.hint.map { " \($0)" } ?? "").foregroundStyle(Palette.muted))
-                    .font(.system(size: 15)).lineLimit(1)
-                  if let d = row.command.description, !d.isEmpty { Text(d).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1) }
-                }
-                Spacer(minLength: 0)
-                if only == nil && here.count > 1 && !(rows.count < groups.flatMap(\.items).count) { Text(row.agent.name).font(.caption2).foregroundStyle(Palette.faint) }
-              }
-              .padding(.horizontal, 16).padding(.vertical, 8)
-              .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("/\(row.command.name), \(row.agent.name)")
+        LazyVStack(alignment: .leading, spacing: 0) {
+          if groups.isEmpty && loading { Text("Loading…").font(.system(size: 13)).foregroundStyle(Palette.muted).padding(12) }
+          ForEach(SlashMenu.sections(rows)) { section in
+            Text(section.title.uppercased())
+              .font(.system(size: 12, weight: .medium)).tracking(0.5).foregroundStyle(Palette.faint)
+              .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 4)
+              .accessibilityAddTraits(.isHeader)
+            ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in rowView(row) }
           }
         }
         .padding(.vertical, 4)
       }
-      .frame(maxHeight: 260)
+      .frame(maxHeight: 300)
     }
     .glass(Corner.card)
     .accessibilityIdentifier("slash-menu")
+  }
+
+  private func rowView(_ row: SlashRow) -> some View {
+    Button { onPick(row.command, row.agent) } label: {
+      HStack(alignment: .firstTextBaseline, spacing: 10) {
+        (Text("/\(row.command.name)").fontWeight(.medium) + Text(row.command.hint.map { " \($0)" } ?? "").foregroundStyle(Palette.muted))
+          .font(.system(size: 14)).lineLimit(1).layoutPriority(1)
+        Text(row.command.description ?? "").font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        if row.command.isNew == true {
+          Text("new").font(.system(size: 11, weight: .medium)).foregroundStyle(Palette.muted)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Palette.hairline))
+        }
+      }
+      .padding(.horizontal, 16).frame(minHeight: 40)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("/\(row.command.name)\(row.command.description.map { ", \($0)" } ?? "")\(row.command.isNew == true ? ", new" : "")")
   }
 
   static func harnessName(_ harness: String) -> String {

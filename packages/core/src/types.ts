@@ -141,6 +141,8 @@ export interface CommandOption {
   hint?: string;
   kind: "command" | "skill";
   via: "raw" | "prompt";
+  /** the harness ships it (not a file the person added) */
+  builtIn?: boolean;
 }
 
 /** The latest usage report for an agent in one conversation. */
@@ -327,6 +329,8 @@ export type MessagePart =
   | { type: "status"; text: string }
   /** a quiet line from Wisp, e.g. "Round 2 of 3" */
   | { type: "notice"; text: string }
+  /** the agent saved a new skill during this reply, or followed one */
+  | { type: "skill"; action: "learned" | "used"; skillId: string; slug: string }
   /** this message starts a discussion; its thread is where it happens */
   | { type: "discussion"; discussionId: string }
   /** an agent's computer: a live view, and what it asked a person to do there ("Sign in to Zendesk") */

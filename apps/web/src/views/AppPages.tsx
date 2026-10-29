@@ -2,8 +2,8 @@ import { useState, type ReactNode } from "react";
 import { ExternalLink, LogIn, LogOut, MessageSquare, Pencil, Power, RefreshCw, Trash2, Users } from "lucide-react";
 import { trustLabel, type Agent, type AppCategory, type CatalogConnector, type Connector, type ConnectorKind, type MarketplaceInstall, type StoreApp } from "@wisp/core";
 import { api } from "../api.ts";
-import { AgentAvatar } from "../components/ui.tsx";
-import { AppTile, Badge, Chip, Dlg, Item, Label, Note, Panel, Prim, Sec, Switch, Tile, TrustPill } from "../components/MarketParts.tsx";
+import { AgentPicker } from "../components/ShopParts.tsx";
+import { AppTile, Badge, Chip, Dlg, Item, Label, Note, Panel, Prim, Sec, Tile, TrustPill } from "../components/MarketParts.tsx";
 import { BeforeYouConnect, connectSummary, connectorWhere, registryCatalog } from "./ConnectorsView.tsx";
 
 export type AppItem = { key: string; name: string; description: string; category: AppCategory | null; who: string } & ({ registry: StoreApp } | { builtIn: CatalogConnector });
@@ -104,11 +104,11 @@ export function ConnectSignIn({ connector, onClose, onSignIn }: { connector: Con
 
 /** The connected state: who can use it now, and a way to try it. */
 export function Connected({ connector, agents, onClose, onPick, onTry }: { connector: Connector; agents: Agent[]; onClose: () => void; onPick: () => void; onTry: () => void }) {
-  const names = connector.agentIds.map((id) => agents.find((a) => a.id === id)?.name).filter((n): n is string => !!n);
+  const names = (connector.allAgents ? agents.map((a) => a.id) : connector.agentIds).map((id) => agents.find((a) => a.id === id)?.name).filter((n): n is string => !!n);
   return (
-    <Dlg title={`${connector.name} is connected`} sub={names.length ? `${sentence(names)} can use it now.` : "No helper can use it yet."} onClose={onClose}>
+    <Dlg title={`${connector.name} is connected`} sub={connector.allAgents ? "All agents can use it now." : names.length ? `${sentence(names)} can use it now.` : "No helper can use it yet."} onClose={onClose}>
       <Panel>
-        <Item icon={<Tile size={40}><Users size={20} strokeWidth={1.7} /></Tile>} title="Pick who can use it" sub={names.length ? names.join(", ") : "No one yet"} onClick={onPick} />
+        <Item icon={<Tile size={40}><Users size={20} strokeWidth={1.7} /></Tile>} title="Pick who can use it" sub={connector.allAgents ? "All agents" : names.length ? names.join(", ") : "No one yet"} onClick={onPick} />
         {names.length > 0 && <Item icon={<Tile size={40}><MessageSquare size={20} strokeWidth={1.7} /></Tile>} title="Try it in a chat" sub={`Ask ${names[0]} to use ${connector.name}`} onClick={onTry} />}
       </Panel>
       <div className="flex justify-end">
@@ -128,11 +128,11 @@ export function ManageApp({ connector: c, agents, canEdit, onClose, onChanged, o
   const [error, setError] = useState<string | null>(null);
   const needsSignIn = !!c.auth?.required && !c.auth.signedIn;
   const status = !c.enabled ? "Off" : needsSignIn ? "Needs sign-in" : c.auth?.signedIn ? "Connected" : "Connected";
-  const toggle = async (a: Agent, on: boolean) => {
-    setBusy(a.id);
+  const change = async (p: () => Promise<unknown>) => {
+    setBusy("all");
     setError(null);
     try {
-      await api(on ? "PUT" : "DELETE", `/api/connectors/${c.id}/agents/${a.id}`);
+      await p();
       onChanged();
     } catch (e) {
       setError((e as Error).message);
@@ -140,6 +140,12 @@ export function ManageApp({ connector: c, agents, canEdit, onClose, onChanged, o
       setBusy(null);
     }
   };
+  // the picker hands back the whole list; send only what changed
+  const pick = (ids: string[]) =>
+    change(async () => {
+      for (const id of ids) if (!c.agentIds.includes(id)) await api("PUT", `/api/connectors/${c.id}/agents/${id}`);
+      for (const id of c.agentIds) if (!ids.includes(id)) await api("DELETE", `/api/connectors/${c.id}/agents/${id}`);
+    });
   const row = (icon: ReactNode, title: string, sub: string, onClick: () => void, danger?: boolean) => <Item icon={<Tile size={40}>{icon}</Tile>} title={title} sub={sub} onClick={onClick} danger={danger} />;
   return (
     <Dlg title={c.name} onClose={onClose} wide>
@@ -155,15 +161,7 @@ export function ManageApp({ connector: c, agents, canEdit, onClose, onChanged, o
 
       <section className="space-y-2">
         <Label>Helpers who can use it</Label>
-        {agents.length === 0 ? (
-          <p className="px-1 text-sm text-muted">No helpers yet.</p>
-        ) : (
-          <Panel>
-            {agents.map((a) => (
-              <Item key={a.id} icon={<AgentAvatar agent={a} size={30} />} title={a.name} sub={`@${a.handle}`} right={<Switch on={c.agentIds.includes(a.id)} label={a.name} disabled={!canEdit || busy === a.id} onChange={(v) => toggle(a, v)} />} />
-            ))}
-          </Panel>
-        )}
+        <AgentPicker agents={agents} value={c.agentIds} onChange={(ids) => void pick(ids)} disabled={!canEdit || busy !== null} allAgents={{ on: !!c.allAgents, onChange: (on) => void change(() => api("PATCH", `/api/connectors/${c.id}`, { allAgents: on })) }} />
       </section>
       {error && <p className="text-sm text-bad">{error}</p>}
 

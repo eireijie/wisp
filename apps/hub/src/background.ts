@@ -338,9 +338,7 @@ export class Background {
     if (!agent) return [];
     const vault = this.hub.vault(agent.workspaceId);
     const out: BackgroundSource[] = [];
-    const connectors = store.db
-      .prepare("SELECT c.name, c.catalog_id AS catalogId FROM connectors c JOIN agent_connectors ac ON ac.connector_id = c.id WHERE ac.agent_id = ? AND c.enabled = 1 ORDER BY c.created_at")
-      .all(agentId) as { name: string; catalogId: string | null }[];
+    const connectors = this.hub.connectors.forAgent(agentId);
     for (const c of connectors) out.push({ kind: "app", name: c.name, detail: CONNECTOR_CATALOG.find((x) => x.id === c.catalogId)?.description ?? "an app connected through MCP" });
     const computer = agent.computerId ? store.computer(agent.computerId) : undefined;
     if (computer) out.push({ kind: "computer", name: computer.name, detail: "its computer: websites signed in on its browser, and the files on it" });

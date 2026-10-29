@@ -171,7 +171,7 @@ struct SkillShareSheet: View {
   @State private var importing = false
   @State private var action = FormAction()
 
-  private var used: [String] { skill.map { s in store.agents.filter { s.agentIds?.contains($0.id) == true }.map(\.name) } ?? [] }
+  private var used: [String] { skill.map { s in store.agents.filter { s.has($0.id) }.map(\.name) } ?? [] }
   private var title: String {
     switch page {
     case .home: skill == nil ? "Bring one in" : "Share a skill"

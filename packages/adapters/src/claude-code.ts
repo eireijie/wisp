@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { planFromWindows, type AccessLevel, type AgentEvent, type HarnessCatalog, type PlanUsage, type PlanWindow } from "@wisp/core";
 import type { AdapterEvent, CatalogPlace, HarnessAdapter, RunInput, RunResult } from "./types.ts";
-import { CLAUDE_BUILTINS, claudeCommands } from "./commands.ts";
+import { CLAUDE_BUILTINS, claudeCommands, claudeInitCommands, commandsIn, skillsIn } from "./commands.ts";
 import { RunFiles, commandVersion, launched, runJsonl } from "./process.ts";
 
 const PERMISSION_MODE: Record<AccessLevel, string> = { "read-only": "plan", edit: "acceptEdits", full: "bypassPermissions" };
@@ -98,6 +98,7 @@ export const claudeCode: HarnessAdapter = {
     let lastAssistant: any = null;
     let result: any = null;
     let plan: PlanUsage | undefined;
+    let init: any = null;
 
     const files = new RunFiles("wisp-claude-");
     let proc;
@@ -110,6 +111,7 @@ export const claudeCode: HarnessAdapter = {
           if (e.type === "session") sessionId = e.id;
           onEvent(e);
         }
+        if (m.type === "system" && m.subtype === "init") init = m;
         if (m.type === "assistant" && m.message?.usage) lastAssistant = m;
         if (m.type === "rate_limit_event") plan = claudePlan(m.rate_limit_info) ?? plan;
         if (m.type === "result") {
@@ -123,6 +125,12 @@ export const claudeCode: HarnessAdapter = {
     }
 
     if (input.signal?.aborted) throw new Error("cancelled");
+    // the session's own "/" list: what the device's catalog shows from now on
+    if (init) {
+      const known = input.place ? CLAUDE_BUILTINS : [...(await claudeCommands().catch(() => [])), ...(await commandsIn(path.join(input.cwd, ".claude", "commands"))), ...(await skillsIn(path.join(input.cwd, ".claude", "skills"), { via: "raw" }))];
+      const commands = claudeInitCommands(init, known);
+      if (commands) onEvent({ type: "commands", commands });
+    }
     const usage = claudeUsage(lastAssistant, result);
     if (usage) onEvent({ ...usage, effort: input.effort ?? null, ...(plan ? { plan } : {}) });
     else if (plan) onEvent({ type: "usage", plan });

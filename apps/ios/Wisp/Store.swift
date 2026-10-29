@@ -804,6 +804,8 @@ final class Store {
       handleJoinEvent(env.type, data)
     case "changes_changed":
       Task { try? await refreshChanges() }
+    case "skills_changed":
+      Task { try? await refreshSkills(); try? await refreshConnectors() }
     case "model_connections_changed":
       modelsVersion += 1
     case "memory_changed":

@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal, Brain } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Cpu, Database, Gauge, Info, KeyRound, Link2, Mic, Monitor, Palette, Plug, Settings, ShieldCheck, SlidersHorizontal, Smartphone, Sparkles, Store, User, Users, Wifi, Wrench, Building2, Bot, SquareTerminal, Brain, Wand2 } from "lucide-react";
 import { resolveFeatures, type Features } from "@wisp/core";
 import { useStore } from "../store.ts";
 import { go, href, type SettingsPage } from "../router.ts";
@@ -12,6 +12,7 @@ import { HarnessesPage } from "./settings/harnesses.tsx";
 import { ModelsPage } from "./settings/models.tsx";
 import { VoicePage } from "./settings/voice.tsx";
 import { MemoryPage } from "./settings/memory.tsx";
+import { SkillsPage } from "./settings/skills.tsx";
 import { DevicesPage } from "./settings/devices.tsx";
 import { MobilePage } from "./settings/mobile.tsx";
 import { LoginsPage } from "./settings/logins.tsx";
@@ -62,6 +63,7 @@ const NAV: NavSection[] = [
       { id: "runtimes", label: "Agent runtimes", icon: ic(Cpu), noGuests: true },
       { id: "logins", label: "Agent logins", icon: ic(KeyRound), noGuests: true },
       { id: "apps", label: "Connected apps", icon: ic(Store), noGuests: true },
+      { id: "skills", label: "Skills", icon: ic(Wand2), noGuests: true },
       { id: "connections", label: "Connections", icon: ic(Plug), noGuests: true },
       { id: "memory", label: "Memory", icon: ic(BookOpen), noGuests: true },
     ],
@@ -121,6 +123,7 @@ const PAGES: Record<Exclude<SettingsPage, "apps">, () => ReactNode> = {
   computers: () => <ComputersPage />,
   logins: () => <LoginsPage />,
   connections: () => <ConnectionsPage />,
+  skills: () => <SkillsPage />,
   data: () => <DataPage />,
   updates: () => <AboutPage />,
 };

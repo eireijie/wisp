@@ -12,6 +12,38 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertNil(try decode(SkillStoreDetail.self, ##"{"skill":{"id":"a:b","name":"B","description":"","source":{"id":"a","label":"A"},"url":"https://x.test","license":{"label":"Proprietary","open":false}},"content":null}"##).content)
   }
 
+  func testLearnedSkillAndAllAgentsDecode() throws {
+    let learned = try decode(HelperSkill.self, ##"{"id":"s1","name":"order-pizza","slug":"order-pizza","source":"learned","agentIds":["a1"],"allAgents":true,"learnedBy":"a1","uses":3,"lastUsedAt":"2026-10-29T10:00:00.000Z","createdAt":"2026-10-29T09:00:00.000Z"}"##)
+    XCTAssertTrue(learned.isLearned)
+    XCTAssertTrue(learned.forAll)
+    XCTAssertTrue(learned.has("a9"))
+    XCTAssertEqual(learned.uses, 3)
+    let names = ["a1": "Ghosty", "a2": "Nova"]
+    XCTAssertEqual(SkillText.whoHas(learned, name: { names[$0] }), "All agents")
+    XCTAssertEqual(SkillText.meta(learned, name: { names[$0] }, device: { _ in nil }), "Learned by Ghosty · Oct 29 · used 3 times")
+    // an older hub: none of the new fields
+    let old = try decode(HelperSkill.self, ##"{"id":"s2","name":"PDF","source":"catalog","catalogId":"anthropic:pdf","agentIds":["a1","a2"]}"##)
+    XCTAssertFalse(old.forAll); XCTAssertFalse(old.isLearned); XCTAssertNil(old.uses)
+    XCTAssertFalse(old.has("a9")); XCTAssertTrue(old.has("a2"))
+    XCTAssertEqual(SkillText.whoHas(old, name: { names[$0] }), "2 agents")
+    XCTAssertEqual(SkillText.byline(old, name: { names[$0] }, device: { _ in nil }), "Anthropic")
+    let one = try decode(HelperSkill.self, ##"{"id":"s3","name":"x","source":"custom","catalogId":"device:n1:codex:x","agentIds":["a2"]}"##)
+    XCTAssertEqual(SkillText.whoHas(one, name: { names[$0] }), "Nova")
+    XCTAssertEqual(SkillText.byline(one, name: { names[$0] }, device: { $0 == "n1" ? "your Mac" : nil }), "Imported from your Mac")
+
+    let app = try decode(AppConnector.self, ##"{"id":"c1","name":"Linear","kind":"mcp-http","agentIds":[],"allAgents":true}"##)
+    XCTAssertTrue(app.has("a1"))
+    XCTAssertFalse(try decode(AppConnector.self, ##"{"id":"c2","name":"Old","kind":"secret"}"##).forAll)
+
+    let builtIn = try decode(BuiltInSkillList.self, ##"{"skills":[{"name":"imagegen","description":"Make or edit an image","harness":"codex","harnessLabel":"Codex","agentIds":["a2"]},{"name":"review","harness":"claude-code","harnessLabel":"Claude Code","agentIds":[]}]}"##)
+    XCTAssertEqual(builtIn.skills.map(\.id), ["codex:imagegen", "claude-code:review"])
+    XCTAssertNil(builtIn.skills[1].description)
+
+    let policy = try decode(AgentPolicy.self, ##"{"askBefore":[],"maxHops":5,"maxRunsPerMinute":20,"defaultAccess":"edit","learnSkills":false}"##)
+    XCTAssertEqual(policy.learnSkills, false)
+    XCTAssertNil(try decode(AgentPolicy.self, ##"{"askBefore":[],"maxHops":5,"maxRunsPerMinute":20,"defaultAccess":"edit"}"##).learnSkills)
+  }
+
   func testSkillLinkAndFileRoundTrip() throws {
     let skill = SharedSkill(name: "Weekly report — Fridays", description: "Use when asked for a Friday update.", content: "# Weekly report\n\n1. Read the chats.\n2. Write five lines. ✓\n", tags: ["reports", "weekly"])
     let link = SkillShare.link(skill)

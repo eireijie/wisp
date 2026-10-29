@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type CommandOption, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
 import { HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
@@ -110,6 +110,10 @@ export class NodeDaemon {
   private modelLogins = new ModelLogins((m) => this.send(m));
   /** VMs whose harnesses were listed for the hub since this process started (computer id → the listing) */
   private vmCatalogs = new Map<string, Promise<void>>();
+  /** each VM's harnesses as last listed (computer id → the listing), to send again with what runs learned */
+  private vmLists = new Map<string, HarnessCatalog[]>();
+  /** a harness's "/" list as its own sessions reported it (Claude Code), by where it ran: "<computer id or empty>\n<harness>" */
+  private runCommands = new Map<string, CommandOption[]>();
   /** which harness made each remembered session (a session id means nothing to another harness) */
   private sessionHarness: Record<string, string>;
   /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
@@ -365,7 +369,7 @@ export class NodeDaemon {
       // agents work on VMs: have the image here before the first one is needed
       if (!this.local.paused && !this.cfg.noPrepare) void this.computers.prepareImage(() => void this.sendCapabilities());
       this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
-      this.send({ type: "catalog", catalog: await this.harnessCatalog() });
+      await this.sendCatalog();
       void this.sendShelf();
     } else if (msg.type === "computer") {
       if (this.local.paused) return this.send({ type: "result", requestId: msg.requestId, ok: false, error: `${this.cfg.name} is paused; someone at the device has to run \`wisp node resume\`` });
@@ -632,6 +636,7 @@ export class NodeDaemon {
           options: this.cfg.harnessOptions?.[agent.harness],
         },
         (e) => {
+          if (e.type === "commands") return void this.learnCommands(agent.harness, inside ? run.computer!.id : null, e.commands);
           if (e.type === "session") {
             // a fresh run is never continued, so there's nothing to remember
             if (run.fresh) return;
@@ -695,7 +700,7 @@ export class NodeDaemon {
     this.catalog = null;
     await this.sendCapabilities();
     this.send({ type: "discovered", agents: discoverAgents(this.cfg.discoverHome) });
-    this.send({ type: "catalog", catalog: await this.harnessCatalog() });
+    await this.sendCatalog();
     await this.sendShelf();
   }
 
@@ -753,7 +758,7 @@ export class NodeDaemon {
     if (msg.type === "harness_settings") {
       if (this.catalogIncomplete) {
         this.catalog = null;
-        void this.harnessCatalog().then((catalog) => this.send({ type: "catalog", catalog }));
+        void this.sendCatalog();
       }
       const installed = new Set((await this.harnessCatalog()).map((c) => c.harness));
       const here = await Promise.all(SETTINGS_HARNESSES.map(async (id) => installed.has(id) || (await harnessConfigured(id, base))));
@@ -778,7 +783,7 @@ export class NodeDaemon {
     // a new default model shows up in the agent's model picker
     if (msg.changes.some((c) => c.op !== "toggle")) {
       this.catalog = null;
-      void this.harnessCatalog().then((catalog) => this.send({ type: "catalog", catalog }));
+      void this.sendCatalog();
     }
     return settings;
   }
@@ -829,10 +834,38 @@ export class NodeDaemon {
           }
         }),
       );
-      this.send({ type: "catalog", computerId: spec.id, catalog: list.filter((c): c is HarnessCatalog => !!c && c.version !== null) });
+      const found = list.filter((c): c is HarnessCatalog => !!c && c.version !== null);
+      this.vmLists.set(spec.id, found);
+      this.send({ type: "catalog", computerId: spec.id, catalog: this.withRunCommands(found, spec.id) });
     })().catch(() => void this.vmCatalogs.delete(spec.id));
     this.vmCatalogs.set(spec.id, job);
     return job;
+  }
+
+  /** This device's harnesses, with what runs here learned about their "/" lists. */
+  private async sendCatalog() {
+    this.send({ type: "catalog", catalog: this.withRunCommands(await this.harnessCatalog(), null) });
+  }
+
+  /** The catalogs with each harness's "/" list replaced by the one its sessions reported there, if any. */
+  private withRunCommands(list: HarnessCatalog[], computerId: string | null): HarnessCatalog[] {
+    return list.map((c) => {
+      const commands = this.runCommands.get(`${computerId ?? ""}\n${c.harness}`);
+      return commands ? { ...c, commands } : c;
+    });
+  }
+
+  /**
+   * A run's harness said what it can run (Claude Code does at the start of each session): keep it
+   * for where it ran (this device or a VM), and tell the hub when that changes what "/" shows.
+   */
+  async learnCommands(harness: string, computerId: string | null, commands: CommandOption[]) {
+    const key = `${computerId ?? ""}\n${harness}`;
+    const list = computerId ? this.vmLists.get(computerId) : await this.harnessCatalog();
+    const before = JSON.stringify(list ? this.withRunCommands(list, computerId).find((c) => c.harness === harness)?.commands : this.runCommands.get(key));
+    this.runCommands.set(key, commands);
+    if (!list || JSON.stringify(commands) === before) return;
+    this.send({ type: "catalog", ...(computerId ? { computerId } : {}), catalog: this.withRunCommands(list, computerId) });
   }
 
   /** Models each installed harness offers here; computed once per process. */

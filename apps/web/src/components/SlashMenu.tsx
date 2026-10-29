@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Agent, AgentCommand } from "@wisp/core";
+import { harnessLabel, type Agent, type AgentCommand } from "@wisp/core";
 import { api } from "../api.ts";
 import type { ChannelInfo } from "../store.ts";
 import type { ChannelMember } from "./Channels.tsx";
@@ -7,11 +7,50 @@ import { agentVar, cx } from "./ui.tsx";
 
 /**
  * The "/" menu, like Discord's: type "/" at the start of a message and every agent here shows
- * what it can do, its own commands and skills, grouped under it with a rail of ghosts to jump
- * between them. Picking one writes "/name " (and "@handle " in a channel, so it goes to that agent).
+ * what it can do, in sections: skills agents learned, the harness's own commands and skills, Wisp's
+ * commands, then other Wisp skills. Picking one writes "/name " (and "@handle " in a channel, so it
+ * goes to that agent).
  */
 
-const KIND_LABEL: Record<AgentCommand["kind"], string> = { wisp: "Wisp", command: "Command", skill: "Skill", "wisp-skill": "Skill" };
+const GROUP_ORDER: Record<AgentCommand["group"], number> = { learned: 0, harness: 1, wisp: 2, skill: 3 };
+
+/** The menu section a command belongs in (older hubs don't say, so it's worked out from its kind). */
+export function commandGroup(c: Pick<AgentCommand, "kind"> & { group?: AgentCommand["group"] }): AgentCommand["group"] {
+  return c.group ?? (c.kind === "wisp" ? "wisp" : c.kind === "wisp-skill" ? "skill" : "harness");
+}
+
+/** A section's key and its small header: "Learned by Ghosty", "Codex", "Wisp", "Skills". */
+export function slashSection(item: SlashItem): { key: string; label: string } {
+  const c = item.command;
+  switch (commandGroup(c)) {
+    case "learned":
+      return { key: `learned:${c.learnedBy ?? ""}`, label: c.learnedBy ? `Learned by ${c.learnedBy}` : "Learned" };
+    case "harness":
+      return { key: `harness:${item.agent.harness}`, label: harnessLabel(item.agent.harness) };
+    case "wisp":
+      return { key: "wisp", label: "Wisp" };
+    default:
+      return { key: "skill", label: "Skills" };
+  }
+}
+
+/**
+ * The rows in menu order: sections in group order (sections of one group, e.g. two harnesses, in the
+ * order they first appear), and within a section the names that start with what was typed first.
+ */
+export function orderSlashRows(rows: SlashItem[], query = ""): SlashItem[] {
+  const first = new Map<string, number>();
+  rows.forEach((r, i) => {
+    const k = slashSection(r).key;
+    if (!first.has(k)) first.set(k, i);
+  });
+  const q = query.toLowerCase();
+  const rank = (r: SlashItem) => Number(!r.command.name.toLowerCase().startsWith(q));
+  return rows
+    .map((r, i) => ({ r, i, g: GROUP_ORDER[commandGroup(r.command)], s: first.get(slashSection(r).key)!, k: rank(r) }))
+    .sort((a, b) => a.g - b.g || a.s - b.s || a.k - b.k || a.i - b.i)
+    .map((x) => x.r);
+}
 
 const cache = new Map<string, { at: number; list: Promise<AgentCommand[]> }>();
 function commandsOf(agentId: string): Promise<AgentCommand[]> {
@@ -80,16 +119,10 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
   useEffect(() => setPick(0), [query?.query, only]);
 
   const matches = (c: AgentCommand) => c.name.toLowerCase().includes(query?.query ?? "");
-  const rank = (c: AgentCommand) => Number(!c.name.toLowerCase().startsWith(query?.query ?? ""));
-  const groups = here
-    .filter((a) => !only || a.id === only)
-    .map((agent) => ({ agent, items: (lists[agent.id] ?? []).filter(matches).sort((x, y) => rank(x) - rank(y)) }))
-    .filter((g) => g.items.length);
+  const all = here.filter((a) => !only || a.id === only).flatMap((agent) => (lists[agent.id] ?? []).filter(matches).map((command) => ({ agent, command })));
   // with everyone's commands showing, a command they all share (/context, /model) is listed once
   const merged = !only && here.length > 1;
-  const rows: SlashItem[] = merged
-    ? [...new Map(groups.flatMap((g) => g.items.map((command) => [command.name, { agent: g.agent, command }] as const)).reverse()).values()].reverse().sort((x, y) => rank(x.command) - rank(y.command))
-    : groups.flatMap((g) => g.items.map((command) => ({ agent: g.agent, command })));
+  const rows: SlashItem[] = orderSlashRows(merged ? all.filter((r, i) => all.findIndex((x) => x.command.name === r.command.name) === i) : all, query?.query);
   const flat = rows;
   const current = flat.length ? flat[((pick % flat.length) + flat.length) % flat.length] : undefined;
 
@@ -103,9 +136,9 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
     move: (by: number) => setPick((p) => p + by),
     textFor,
     render: (onPick: (item: SlashItem) => void) => (
-      <div className="glass absolute bottom-full mb-2 left-0 right-0 max-w-xl rounded-3xl z-10 flex flex-col overflow-hidden" style={{ maxHeight: "min(24rem, 55vh)" }}>
+      <div className="glass m-menu absolute bottom-full mb-2 left-0 right-0 max-w-xl rounded-xl z-10 flex flex-col overflow-hidden" style={{ maxHeight: "min(26rem, 55vh)" }}>
         {here.length > 1 && (
-          <div className="shrink-0 flex items-center gap-1.5 overflow-x-auto px-3 pt-3 pb-1.5" role="group" aria-label="Whose commands">
+          <div className="shrink-0 flex items-center gap-1.5 overflow-x-auto px-2 pt-2 pb-1" role="group" aria-label="Whose commands">
             <Chip label="All agents" active={!only} onClick={() => setOnly(null)} />
             {here.map((a) => (
               <Chip key={a.id} label={a.name} active={only === a.id} onClick={() => setOnly(only === a.id ? null : a.id)} />
@@ -113,36 +146,42 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
           </div>
         )}
         <div role="listbox" aria-label="Commands" className="flex-1 min-h-0 overflow-y-auto p-1.5">
-          {!flat.length && <div className="px-3 py-2.5 text-sm text-muted">Loading…</div>}
-          {rows.map(({ agent, command: c }) => {
+          {!flat.length && <div className="px-2.5 py-2 text-[13px] text-muted">Loading…</div>}
+          {rows.map((item, i) => {
+            const { agent, command: c } = item;
             const selected = current?.agent.id === agent.id && current.command.name === c.name;
+            const section = slashSection(item);
+            const header = i === 0 || slashSection(rows[i - 1]).key !== section.key;
             return (
-              <button
-                key={`${agent.id}:${c.name}`}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                ref={(el) => {
-                  if (selected) el?.scrollIntoView({ block: "nearest" });
-                }}
-                onMouseDown={(e) => (e.preventDefault(), onPick({ agent, command: c }))}
-                className={cx("w-full px-3 py-2 min-h-12 rounded-2xl flex items-center gap-3 text-left", selected && "bg-hover")}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-body font-medium truncate">
+              <div key={`${agent.id}:${c.name}`} role="presentation">
+                {header && (
+                  <div role="presentation" className={cx("px-2.5 pb-1 text-xs font-medium uppercase tracking-[0.04em] text-faint", i === 0 ? "pt-1.5" : "pt-2.5")}>
+                    {section.label}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  ref={(el) => {
+                    if (selected) el?.scrollIntoView({ block: "nearest" });
+                  }}
+                  onMouseDown={(e) => (e.preventDefault(), onPick(item))}
+                  className={cx("w-full px-2.5 min-h-11 md:min-h-9 rounded-lg flex items-center gap-2.5 text-left", selected && "bg-hover")}
+                >
+                  <span className="shrink-0 whitespace-nowrap text-sm font-medium">
                     /{c.name}
                     {c.hint && <span className="ml-1.5 font-normal text-muted">{c.hint}</span>}
                   </span>
-                  {c.description && <span className="block text-[13px] text-muted truncate">{c.description}</span>}
-                </span>
-                {!merged && here.length > 1 ? (
-                  <span className="shrink-0 text-[11px] text-faint" style={agentVar(agent)}>
-                    {agent.name}
-                  </span>
-                ) : c.kind === "skill" || c.kind === "wisp-skill" ? (
-                  <span className="shrink-0 text-[11px] text-faint">{KIND_LABEL[c.kind]}</span>
-                ) : null}
-              </button>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-muted">{c.description}</span>
+                  {c.isNew && <span className="shrink-0 rounded-[5px] border border-line px-1.5 text-[11px] font-medium leading-4 text-muted">new</span>}
+                  {!merged && here.length > 1 && (
+                    <span className="shrink-0 text-[11px] text-faint" style={agentVar(agent)}>
+                      {agent.name}
+                    </span>
+                  )}
+                </button>
+              </div>
             );
           })}
         </div>
@@ -153,7 +192,7 @@ export function useSlashMenu({ query, channel, dmAgent, agents }: { query: { han
 
 function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <button type="button" aria-pressed={active} onMouseDown={(e) => (e.preventDefault(), onClick())} className={cx("h-8 shrink-0 rounded-full px-3.5 text-[13px] font-medium", active ? "bg-accent text-accent-ink" : "border border-control-line bg-control text-muted hover:text-ink")}>
+    <button type="button" aria-pressed={active} onMouseDown={(e) => (e.preventDefault(), onClick())} className={cx("h-7 shrink-0 rounded-md px-2.5 text-[13px] font-medium", active ? "bg-accent text-accent-ink" : "border border-control-line bg-control text-muted hover:text-ink")}>
       {label}
     </button>
   );

@@ -1,4 +1,4 @@
-import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop } from "@wisp/core";
+import type { Agent, Allowance, Approval, Channel, ComputerAction, ConnectionModel, HarnessSettings, HarnessSettingsChange, Message, ModelConnection, ModelLogin, ModelProvider, Routine, Followup, ChatLoop, Skill } from "@wisp/core";
 
 export interface WispClientOptions {
   url: string; // hub base URL, e.g. http://localhost:4747
@@ -228,6 +228,10 @@ export class WispClient {
   }
   saveRoutine(r: { routineId?: string; name?: string; steps: string; schedule?: string | null; timezone?: string }) {
     return this.request<Routine>("POST", "/api/routines/save", r);
+  }
+  /** Save how this agent did something as a skill (or update one it learned before, by name or slug). */
+  saveSkill(s: { name: string; description?: string; content: string; slug?: string }) {
+    return this.request<{ skill: Skill }>("POST", "/api/skills/learn", s);
   }
   runRoutine(routineId: string) {
     return this.request<{ ok: boolean }>("POST", `/api/routines/${routineId}/run`);

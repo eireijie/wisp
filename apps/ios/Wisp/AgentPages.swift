@@ -100,8 +100,12 @@ struct AgentAppsPage: View {
       } else {
         CardGroup {
           ForEach(store.connectors) { app in
-            SwitchRow(title: app.name, subtitle: app.needsSignIn ? "Needs sign-in" : app.description ?? app.category,
-                      isOn: Binding(get: { app.agentIds?.contains(agent.id) == true }, set: { on in set(app, on) }), id: "app-\(app.id)")
+            if app.forAll {
+              SwitchRow(title: app.name, subtitle: "All agents", isOn: .constant(true), id: "app-\(app.id)").disabled(true)
+            } else {
+              SwitchRow(title: app.name, subtitle: app.needsSignIn ? "Needs sign-in" : app.description ?? app.category,
+                        isOn: Binding(get: { app.agentIds?.contains(agent.id) == true }, set: { on in set(app, on) }), id: "app-\(app.id)")
+            }
           }
         }
         .disabled(!store.canManage || action.busy)
@@ -140,8 +144,12 @@ struct AgentSkillsPage: View {
       } else {
         CardGroup {
           ForEach(store.skills) { skill in
-            SwitchRow(title: skill.name, subtitle: skill.plain?.does ?? skill.description,
-                      isOn: Binding(get: { skill.agentIds?.contains(agent.id) == true }, set: { on in set(skill, on) }), id: "skill-\(skill.id)")
+            if skill.forAll {
+              SwitchRow(title: skill.name, subtitle: "All agents", isOn: .constant(true), id: "skill-\(skill.id)").disabled(true)
+            } else {
+              SwitchRow(title: skill.name, subtitle: skill.plain?.does ?? skill.description,
+                        isOn: Binding(get: { skill.agentIds?.contains(agent.id) == true }, set: { on in set(skill, on) }), id: "skill-\(skill.id)")
+            }
           }
         }
         .disabled(!store.canManage || action.busy)

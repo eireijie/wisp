@@ -256,7 +256,7 @@ private struct HarnessDetailView: View {
         CardGroup {
           if !ids.isEmpty {
             ForEach(wisp) { connector in
-              MarketToggleRow(title: connector.name, subtitle: connector.auth?.required == true ? (connector.auth?.signedIn == true ? "Logged in through Wisp" : "Needs logging in, in Wisp") : "Set up in Wisp", isOn: Binding(get: { ids.allSatisfy { connector.agentIds?.contains($0) == true } }, set: { on in attach(connector, ids, on) })) { MarketTile(symbol: "powerplug") }
+              MarketToggleRow(title: connector.name, subtitle: connector.forAll ? "All agents" : connector.auth?.required == true ? (connector.auth?.signedIn == true ? "Logged in through Wisp" : "Needs logging in, in Wisp") : "Set up in Wisp", isOn: Binding(get: { ids.allSatisfy { connector.has($0) } }, set: { on in attach(connector, ids, on) }), disabled: connector.forAll) { MarketTile(symbol: "powerplug") }
             }
           }
           ForEach(settings.apps) { app in itemRow(app, note: app.canToggle ? "Set up on this device" : "Set up on this device · changed there", kind: "app") }

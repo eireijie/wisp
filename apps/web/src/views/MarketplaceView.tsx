@@ -594,7 +594,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
                   key={s.id}
                   icon={<Tile size={40}>{catalogSkill(s.catalogId ?? "") ? <CatalogIcon name={catalogSkill(s.catalogId ?? "")!.icon} fallback={Wand2} size={20} /> : skillIcon(`${s.slug} ${s.name}`)}</Tile>}
                   title={s.name}
-                  sub={`${skillOrigin(s)} · ${s.agentIds.length ? `${s.agentIds.length} helper${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`}
+                  sub={`${skillOrigin(s)} · ${s.allAgents ? "all agents" : s.agentIds.length ? `${s.agentIds.length} helper${s.agentIds.length === 1 ? "" : "s"}` : "no one yet"}`}
                   onClick={() => setDetail({ kind: "skill", open: { skill: s } })}
                 />
               ))}
@@ -763,7 +763,7 @@ export function MarketplaceView({ section, onBack, embedded }: { section: Market
           onClose={() => setConnectedId(null)}
           onPick={() => (setConnectedId(null), setManageId(connectedC.id))}
           onTry={() => {
-            const first = connectedC.agentIds[0];
+            const first = connectedC.allAgents ? agents[0]?.id : connectedC.agentIds[0];
             setConnectedId(null);
             if (first) void openDm(first, `Use ${connectedC.name} to help me. What can you do with it?`).catch((e) => setError((e as Error).message));
           }}
