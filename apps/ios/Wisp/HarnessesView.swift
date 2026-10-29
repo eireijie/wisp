@@ -68,7 +68,7 @@ struct HarnessesView: View {
         Button("Settings") { open = HarnessOpen(nodeId: computer.nodeId, harness: h.id) }
           .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.text)
           .padding(.horizontal, 12).frame(height: 28).background(Capsule().fill(Palette.control))
-          .buttonStyle(.press).disabled(!computer.online)
+          .buttonStyle(.press).disabled(!computer.online).opacity(computer.online ? 1 : 0.4)
           .accessibilityIdentifier("harness-\(h.id)")
       }
     }

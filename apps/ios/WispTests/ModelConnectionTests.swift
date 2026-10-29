@@ -108,6 +108,11 @@ final class ModelConnectionTests: XCTestCase {
     XCTAssertEqual(info.providerLabel, "Claude")
   }
 
+  func testHubFieldPrefixIsDropped() {
+    XCTAssertEqual(ModelWords.fieldless("key: the key wasn't accepted (Claude said 401)"), "The key wasn't accepted (Claude said 401)")
+    XCTAssertEqual(ModelWords.fieldless("Something else"), "Something else")
+  }
+
   func testSignInProgress() throws {
     let l = try decode(ModelLogin.self, ##"{"id":"ml1","provider":"openai","harness":"codex","status":"running","url":"https://auth.openai.com/codex/device","code":"K7QF-2MXD","output":"","nodeId":"n1"}"##)
     XCTAssertTrue(l.running)

@@ -103,7 +103,7 @@ struct RunSheet: View {
   var channelId: String
   var info: RunInfo
   @State private var path: [RunRoute] = []
-  @State private var detent: PresentationDetent = .height(330)
+  @State private var detent: PresentationDetent = .height(300)
 
   var body: some View {
     NavigationStack(path: $path) {
@@ -119,11 +119,11 @@ struct RunSheet: View {
           }
         }
     }
-    .presentationDetents([.height(330), .large], selection: $detent)
+    .presentationDetents([.height(300), .large], selection: $detent)
     .presentationDragIndicator(.visible)
     .presentationCornerRadius(Corner.sheet)
     .presentationBackground(Palette.sheet)
-    .onChange(of: path) { _, new in detent = new.isEmpty ? .height(330) : .large }
+    .onChange(of: path) { _, new in detent = new.isEmpty ? .height(300) : .large }
   }
 }
 

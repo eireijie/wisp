@@ -237,6 +237,13 @@ enum ModelWords {
     return effort
   }
 
+  /** "key: that key wasn't accepted" → "That key wasn't accepted". */
+  static func fieldless(_ message: String) -> String {
+    guard let r = message.range(of: #"^[a-zA-Z.]+: "#, options: .regularExpression) else { return message }
+    let rest = message[r.upperBound...]
+    return rest.prefix(1).uppercased() + rest.dropFirst()
+  }
+
   /** A sign-in's site, shown as "claude.ai" on the Open button. */
   static func host(_ url: String?) -> String? {
     guard let url, let host = URL(string: url)?.host() else { return nil }

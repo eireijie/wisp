@@ -77,8 +77,9 @@ struct ConnectProviderView: View {
         mode = info?.canSignIn == true ? "signin" : "key"
       }
     }
-    .task(id: mode) { if mode == "signin", info?.canSignIn == true, login == nil { await start() } }
+    .task(id: "\(mode)/\(info != nil)") { if mode == "signin", info?.canSignIn == true, login == nil { await start() } }
     .task(id: login?.id) { await poll() }
+    .onChange(of: mode) { action.error = nil }
     .onDisappear { if let login, login.running { Task { await store.cancelModelLogin(login.id) } } }
   }
 
@@ -128,10 +129,13 @@ struct ConnectProviderView: View {
           }
         }
         LoginWaiting(text: "Waiting for you to finish…")
+      } else if login == nil, !starting, let problem = action.error {
+        Text(problem).font(.system(size: 15)).foregroundStyle(Palette.red).fixedSize(horizontal: false, vertical: true)
+        Button("Try again") { Task { await start() } }.font(.system(size: 13, weight: .semibold)).buttonStyle(.plain).foregroundStyle(Palette.blue)
       } else {
         HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Starting the sign-in on your computer…").font(.system(size: 13)).foregroundStyle(Palette.muted) }
       }
-      InlineError(error: action.error)
+      if login != nil { InlineError(error: action.error) }
     }
     .padding(16)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,9 +210,14 @@ struct ConnectProviderView: View {
   private func connectKey() {
     let value = key.trimmed
     action.run {
-      let c = try await store.connectKey(provider: provider, key: value, label: nil)
-      key = ""
-      done(c.id)
+      do {
+        let c = try await store.connectKey(provider: provider, key: value, label: nil)
+        key = ""
+        done(c.id)
+      } catch let failure as API.Failure {
+        // the hub names the field it's about ("key: …"); here there's only the one
+        throw API.Failure(status: failure.status, message: ModelWords.fieldless(failure.message))
+      }
     }
   }
 }
