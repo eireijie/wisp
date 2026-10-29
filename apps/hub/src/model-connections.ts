@@ -109,7 +109,7 @@ export class ModelConnections {
 
   remove(connectionId: string) {
     this.db.prepare("DELETE FROM model_connections WHERE id = ?").run(connectionId);
-    this.cache.delete(connectionId);
+    for (const k of [...this.cache.keys()]) if (k === connectionId || k.startsWith(`${connectionId}:`)) this.cache.delete(k);
   }
 
   secret(connectionId: string): ConnectionSecret | null {
@@ -166,14 +166,16 @@ export class ModelConnections {
   async models(connectionId: string, catalog?: HarnessCatalog | null, opts: { fresh?: boolean } = {}): Promise<ConnectionModel[]> {
     const r = this.row(connectionId);
     if (!r) return [];
-    const hit = this.cache.get(connectionId);
+    // a key's list is the provider's; a sign-in's may be the harness's, so it's kept per harness
+    const cacheKey = r.kind === "key" ? connectionId : `${connectionId}:${catalog?.harness ?? ""}`;
+    const hit = this.cache.get(cacheKey);
     if (hit && !opts.fresh && Date.now() - hit.at < MODELS_TTL_MS) return hit.models;
     const secret = JSON.parse(r.secret_json) as ConnectionSecret;
     let models: ConnectionModel[] | null = null;
     if (r.kind === "key" && secret.key) models = await this.providerModels(r.provider, { key: secret.key });
     else if (r.provider === "anthropic" && secret.token) models = await this.providerModels("anthropic", { oauthToken: secret.token }).catch(() => null);
     if (!models?.length) models = (catalog?.models ?? []).map((m) => ({ id: m.id, label: m.label, ...(m.description ? { description: m.description } : {}), ...(m.efforts ? { efforts: m.efforts } : {}), ...(m.defaultEffort ? { defaultEffort: m.defaultEffort } : {}), ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}) }));
-    if (models.length) this.cache.set(connectionId, { at: Date.now(), models });
+    if (models.length) this.cache.set(cacheKey, { at: Date.now(), models });
     return models;
   }
 

@@ -16,7 +16,7 @@ import { Logos } from "./logos.ts";
 import { PublicSkills } from "./skill-store.ts";
 import { Updates } from "./updates.ts";
 import { ConnectorStore, SkillStore } from "./connectors.ts";
-import { ModelConnections } from "./model-connections.ts";
+import { ModelConnections, modelsForHarness } from "./model-connections.ts";
 import type { Vault } from "@wisp/vault";
 import type { Vaults } from "./vaults.ts";
 import { MemoryAccess } from "./access.ts";
@@ -315,6 +315,20 @@ export class Hub {
     const r = cid ? this.models.row(cid) : undefined;
     if (!r || r.workspace_id !== agent.workspaceId || !credentialSupport(agent.harness, r.provider, r.kind)) return null;
     return this.models.credentialFor(r.id);
+  }
+
+  /**
+   * The model a run on the agent's connection uses when the agent has none picked: the harness's
+   * default when the connection offers it, else the connection's first model the harness can run.
+   * (Left to the harness, it would use whatever its own settings name, which may be another
+   * provider's model.)
+   */
+  async connectionDefaultModel(agent: Pick<Agent, "nodeId" | "computerId" | "harness" | "settings">, connectionId: string): Promise<string | undefined> {
+    const r = this.models.row(connectionId);
+    if (!r) return undefined;
+    const catalog = this.catalogFor(agent);
+    const offered = modelsForHarness(agent.harness, r.provider, await this.models.models(r.id, catalog).catch(() => []));
+    return offered.find((m) => m.id === catalog?.defaultModel)?.id ?? offered[0]?.id;
   }
 
   /** A run on a connection ended: free it, and start runs that waited their turn on it. */
@@ -923,7 +937,7 @@ export class Hub {
    * /harness: say which harness the agent runs in and which it could, or switch it. It keeps its
    * memory, skills and chats; its model too, when the new harness has it (or runs its connection).
    */
-  private answerHarness(agent: Agent, msg: Message, threadId: string | null, ask: string) {
+  private async answerHarness(agent: Agent, msg: Message, threadId: string | null, ask: string) {
     const near = { ...msg, threadId };
     const handle = this.handleOf(agent.id);
     const here = this.harnessesWhere(agent);
@@ -937,8 +951,9 @@ export class Hub {
     if (pick.harness === agent.harness) return void this.postSystem(near, `${handle} already runs in ${harnessLabel(pick.harness)}.`);
     const conn = agent.settings.connectionId ? this.models.row(agent.settings.connectionId) : undefined;
     if (conn && !credentialSupport(pick.harness, conn.provider, conn.kind)) return void this.postSystem(near, `${harnessLabel(pick.harness)} can't use ${handle}'s ${providerLabel(conn.provider)} ${conn.kind === "oauth" ? "sign-in" : "key"}. Pick another model for it first.`);
-    // a model the new harness doesn't have goes back to its default
-    const keepModel = !agent.model || !!conn || pick.models.some((m) => m.id === agent.model);
+    // a model the new harness can't run (from its connection, or its own list) goes back to its default
+    const offered = conn ? modelsForHarness(pick.harness, conn.provider, await this.models.models(conn.id, pick).catch(() => [])) : pick.models;
+    const keepModel = !agent.model || offered.some((m) => m.id === agent.model);
     this.store.updateAgent(agent.id, { harness: pick.harness, ...(keepModel ? {} : { model: null }) });
     this.broadcast(agent.workspaceId, { type: "agents_changed" });
     this.postSystem(near, `${handle} will run in ${harnessLabel(pick.harness)} from the next message${keepModel ? "" : `, on its default model (it doesn't have ${agent.model})`}. Its memory, skills and chats stay.`);
@@ -949,7 +964,7 @@ export class Hub {
     const parsed = parseCommand(msg.body, agent.handle);
     if (parsed?.name === "model") return void this.answerModel(agent, msg, threadId, parsed.args);
     if (parsed?.name === "effort") return void this.answerEffort(agent, msg, threadId, parsed.args);
-    if (parsed?.name === "harness") return this.answerHarness(agent, msg, threadId, parsed.args);
+    if (parsed?.name === "harness") return void this.answerHarness(agent, msg, threadId, parsed.args);
     const usage = this.store.latestUsage(agent.id, msg.channelId, threadId);
     this.postMessage({ channelId: msg.channelId, threadId, author: { kind: "agent", id: agent.id }, body: "", parts: [{ type: "context", usage }], hop: msg.hop + 1, route: false });
   }
@@ -1023,9 +1038,11 @@ export class Hub {
         const connectors = this.connectors.specsFor(agent.id);
         // every background check starts a new session (the watch notes carry what it needs), on the model the person picked for checks
         const bg = run.kind === "background" && run.requestedBy ? this.store.background(agent.id, run.requestedBy) : undefined;
+        const sent = credential ? (this.credentialFor(agent) ?? credential) : null;
+        const fallback = sent && !agent.model ? await this.connectionDefaultModel(agent, sent.connectionId) : undefined;
         this.send(conn, {
           type: "run",
-          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(bg?.effort ? { effort: bg.effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(credential ? { credential: this.credentialFor(agent) ?? credential } : {}) },
+          run: { runId: run.id, agentId: agent.id, channelId: run.channelId, threadId: run.kind === "background" ? BACKGROUND_THREAD : run.threadId, prompt, hop: run.hop, ...(run.kind === "background" ? { fresh: true } : {}), ...(bg?.model ? { model: bg.model } : {}), ...(bg?.effort ? { effort: bg.effort } : {}), ...(workspace ? { workspace } : {}), ...(computer ? { computer } : {}), ...(inComputer ? { inComputer } : {}), ...(connectors.length ? { connectors } : {}), ...(sent ? { credential: { ...sent, ...(fallback ? { model: fallback } : {}) } } : {}) },
         });
       },
       // the prompt couldn't be built (a vault read failed, say): say so like any other failure

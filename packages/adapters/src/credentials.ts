@@ -116,8 +116,10 @@ export async function prepareCredential(harness: string, cred: RunCredential, at
     let edited: string;
     try {
       edited = yamlSetScalar(config, ["model", "provider"], provider);
+      // and the model the run uses, so a default left from another provider isn't sent to this one
+      if (cred.model) edited = yamlSetScalar(edited, ["model", "default"], cred.model);
     } catch {
-      edited = `model:\n  provider: ${provider}\n`;
+      edited = `model:\n  provider: ${provider}\n${cred.model ? `  default: ${JSON.stringify(cred.model)}\n` : ""}`;
     }
     await at.fs.write(at.fs.join(home, "config.yaml"), edited, 0o600);
     // its .env, without any model key in it (Hermes prefers .env over the environment), plus the connection's

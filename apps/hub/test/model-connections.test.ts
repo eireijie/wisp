@@ -275,11 +275,15 @@ describe("running agents on a connection", () => {
 describe("/effort and /harness", () => {
   it("answers and changes them from chat", async () => {
     const general = (await owner.channels()).find((c) => c.name === "general")!;
+    const answered = new Set<string>();
     const atlas = await owner.request("POST", "/api/agents", { handle: "atlas", name: "Atlas", harness: "codex", nodeId: box.id, model: "gpt-6.1-sol" });
     const said = async (text: string) => {
       const sent = await owner.send(general.id, text);
       // the channel is long by now: look at what was posted after this message
-      return waitFor(() => hub.store.systemNotices(general.id, null, sent.createdAt).find((m) => m.id !== sent.id && m.parts.some((p) => p.type === "status" && p.text.startsWith("@atlas")))?.parts.find((p) => p.type === "status") as any);
+      // (one posted in the same millisecond as this message, answering the one before, isn't it)
+      const m = await waitFor(() => hub.store.systemNotices(general.id, null, sent.createdAt).find((m) => m.id !== sent.id && !answered.has(m.id) && m.parts.some((p) => p.type === "status" && p.text.startsWith("@atlas"))));
+      answered.add(m.id);
+      return m.parts.find((p) => p.type === "status") as any;
     };
     expect((await said("@atlas /effort")).text).toContain("It offers low, medium, high");
     expect((await said("@atlas /effort turbo")).text).toContain(`has no "turbo" effort`);
@@ -500,5 +504,41 @@ describe("renewed sign-ins come back only from the run they were handed to", () 
     await new Promise((r) => setTimeout(r, 100));
     expect(hub.models.secret(token)?.token).toBe("sk-ant-oat01-original");
     device.send({ type: "run_done", runId: run.run.runId, finalText: "ok" });
+  });
+});
+
+/** A channel of its own with these agents in it (general's wake-up limit is used up by now). */
+async function channelWith(name: string, agentIds: string[]) {
+  return owner.request("POST", "/api/channels", { name, members: agentIds.map((id) => ({ kind: "agent", id })) });
+}
+
+describe("models across a harness switch", () => {
+  it("keeps a model on /harness only when the new harness can run it from the connection", async () => {
+    const router = hub.models.create({ workspaceId: ws, userId: me, provider: "openrouter", kind: "key", label: "Router", secret: { key: "sk-or-v1-switch" } });
+    const answered = new Set<string>();
+    const said = async (handle: string, text: string) => {
+      const sent = await owner.send(general.id, text);
+      const m = await waitFor(() => hub.store.systemNotices(general.id, null, sent.createdAt).find((m) => m.id !== sent.id && !answered.has(m.id) && m.parts.some((p) => p.type === "status" && p.text.startsWith(`@${handle}`))));
+      answered.add(m.id);
+      return m.parts.find((p) => p.type === "status") as any;
+    };
+    // GPT on OpenRouter: Claude Code reaches OpenRouter for Claude models only
+    const gus = await owner.request("POST", "/api/agents", { handle: "gus", name: "Gus", harness: "codex", nodeId: box.id, model: "openai/gpt-6.1", settings: { connectionId: router } });
+    const hal = await owner.request("POST", "/api/agents", { handle: "hal", name: "Hal", harness: "codex", nodeId: box.id, model: "anthropic/claude-opus-5.5", settings: { connectionId: router } });
+    const general = await channelWith("switching", [gus.id, hal.id]);
+    expect((await said("gus", "@gus /harness claude code")).text).toContain("on its default model");
+    expect(hub.store.agent(gus.id)).toMatchObject({ harness: "claude-code", model: null });
+    // Claude on OpenRouter: Claude Code runs it, so it stays
+    expect((await said("hal", "@hal /harness claude code")).text).not.toContain("default model");
+    expect(hub.store.agent(hal.id)).toMatchObject({ harness: "claude-code", model: "anthropic/claude-opus-5.5" });
+  });
+
+  it("runs an agent with no model picked on one its connection offers, not the harness's own setting", async () => {
+    const router = hub.models.create({ workspaceId: ws, userId: me, provider: "openrouter", kind: "key", label: "Router 2", secret: { key: "sk-or-v1-default" } });
+    const ola = await owner.request("POST", "/api/agents", { handle: "ola", name: "Ola", harness: "codex", nodeId: box.id, settings: { connectionId: router } });
+    const general = await channelWith("defaults", [ola.id]);
+    // config.toml says gpt-6.1-sol, which OpenRouter doesn't have under that name
+    const run = await message(general.id, "@ola hi");
+    expect(run.model).toBe("anthropic/claude-opus-5.5");
   });
 });

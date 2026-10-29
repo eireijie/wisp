@@ -100,6 +100,16 @@ describe("handing a connection to Hermes", () => {
     expect(JSON.parse(await read(path.join(connectionHome, "auth.json"))).credential_pool).toEqual({});
   });
 
+  it("sets the model the hub picked from the connection, so another provider's default isn't sent to it", async () => {
+    const baseHome = await base("hermes-base-model", { "config.yaml": "model:\n  default: gpt-5.6-luna\n  provider: openai-codex\n" });
+    const connectionHome = path.join(dir, "conns", "mc_or", "hermes");
+    await prepareCredential("hermes", { ...cred("openrouter", "key", { key: "sk-or-v1-x" }), model: "anthropic/claude-opus-5.5" }, { fs: localCredentialFs, baseHome, connectionHome });
+    const config = await read(path.join(connectionHome, "config.yaml"));
+    expect(config).toContain("provider: openrouter");
+    expect(config).toContain("default: anthropic/claude-opus-5.5");
+    expect(config).not.toContain("gpt-5.6-luna");
+  });
+
   it("puts a ChatGPT sign-in in its credential pool and sends a renewal back as Codex's auth.json", async () => {
     const baseHome = await base("hermes-base-2", {});
     const connectionHome = path.join(dir, "conns", "mc_oauth", "hermes");

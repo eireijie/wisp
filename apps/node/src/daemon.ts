@@ -613,7 +613,8 @@ export class NodeDaemon {
           prompt: run.prompt,
           cwd,
           // a background check can run on its own (usually smaller) model; fast mode is the agent's, for its own model
-          model: run.model ?? agent.model,
+          // on a connection with no model picked: the one the hub chose from what the connection offers
+          model: run.model ?? agent.model ?? (credential ? run.credential?.model : undefined) ?? null,
           effort: run.effort ?? (run.model ? null : (agent.settings?.effort ?? null)),
           fast: run.model ? false : (agent.settings?.fast ?? false),
           access,

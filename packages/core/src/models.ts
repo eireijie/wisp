@@ -129,6 +129,8 @@ export const RunCredential = z.object({
   provider: ModelProviderId,
   kind: ConnectionKindId,
   secret: ConnectionSecret,
+  /** the model to run when the agent has none picked: one the connection offers (else the harness would use its own setting, maybe another provider's model) */
+  model: z.string().max(200).optional(),
 });
 export type RunCredential = z.infer<typeof RunCredential>;
 
