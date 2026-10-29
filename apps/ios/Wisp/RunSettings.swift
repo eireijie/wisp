@@ -378,6 +378,7 @@ struct HarnessPicker: View {
   var info: RunInfo
   @State private var computers: [HarnessComputer]?
   @State private var connections: [ModelConnection] = []
+  @State private var support: [CredentialSupport] = []
   @State private var installing = false
   @State private var action = FormAction()
 
@@ -413,17 +414,36 @@ struct HarnessPicker: View {
     .task {
       async let list = try? store.harnessComputers()
       async let mine = try? store.modelConnections()
+      async let table = try? store.modelProviders()
       computers = await list ?? []
       connections = await mine ?? []
+      support = (await table)?.support ?? []
     }
+  }
+
+  /** The connection it runs on: one of the person's, else someone else's as /models and /context report it. */
+  private var connection: ModelConnection? {
+    guard let id = current.settings?.connectionId, !id.isEmpty else { return nil }
+    if let mine = connections.first(where: { $0.id == id }) { return mine }
+    guard let theirs = [info.models?.connection, info.context?.connection].compactMap({ $0 }).first(where: { $0.id == id }) else {
+      // not loaded: still a connection, so it isn't mistaken for the computer's own sign-in
+      return ModelConnection(id: id, provider: "", kind: "", label: "", harnesses: [])
+    }
+    return ModelConnection(id: theirs.id, provider: theirs.provider, kind: theirs.kind, label: theirs.label ?? "", mine: false)
   }
 
   private func pick(_ harness: String) {
     guard harness != current.harness else { return }
-    let conn = connections.first { $0.id == current.settings?.connectionId }
-    let fields = HarnessPlace.switchFields(to: harness, from: current.harness, connection: conn)
+    let conn = connection
+    let agent = current
     action.run {
-      _ = try await store.updateAgent(current.id, fields)
+      // on a connection the new harness can use, ask which models it runs there (as the model picker does)
+      var list: ConnectionModels?
+      if let conn, ModelWords.supports(harness, conn, support: support) {
+        list = try? await store.connectionModels(conn.id, harness: harness, agent: agent.id)
+      }
+      let fields = HarnessPlace.switchFields(to: harness, from: agent.harness, model: agent.model, effort: agent.settings?.effort, connection: conn, support: support, models: list)
+      _ = try await store.updateAgent(agent.id, fields)
       await info.reload(store, agentId: current.id)
     }
   }
@@ -438,20 +458,32 @@ enum HarnessPlace {
   }
 
   /**
-   * Switching harness: the model and connection stay when the new harness can use the connection.
-   * Otherwise the connection is dropped (the hub would refuse it) and with it the model; off a
-   * connection, a model id belongs to the old harness, so it goes back to the default.
+   * Switching harness: the connection stays when the new harness can use it (someone else's too,
+   * by the support table), and the model with it when the new harness lists it there (`models`);
+   * an effort stays when that model (or the harness, for the default model) offers it. Otherwise
+   * the connection is dropped (the hub would refuse it) and with it the model and effort; off a
+   * connection, a model id and effort belong to the old harness, so they go back to the default.
    */
-  static func switchFields(to harness: String, from old: String, connection: ModelConnection?) -> Fields {
+  static func switchFields(to harness: String, from old: String, model: String?, effort: String?, connection: ModelConnection?, support: [CredentialSupport], models: ConnectionModels?) -> Fields {
     var fields: Fields = ["harness": AnyEncodable(harness)]
+    let effort = effort.flatMap { $0.isEmpty ? nil : $0 }
+    let model = model.flatMap { $0.isEmpty ? nil : $0 }
+    var settings: [String: AnyEncodable] = [:]
     if let connection {
-      if !(connection.harnesses ?? []).contains(harness) {
+      if !ModelWords.supports(harness, connection, support: support) {
         fields["model"] = .null
-        fields["settings"] = AnyEncodable(["connectionId": AnyEncodable.null])
+        settings["connectionId"] = .null
+        if effort != nil { settings["effort"] = .null }
+      } else if let models {
+        let m = model.flatMap { id in models.models.first { $0.id == id } }
+        if model != nil && m == nil { fields["model"] = .null }
+        if effort != nil && ModelWords.keptEffort(effort, offered: m?.efforts ?? models.efforts ?? []) == nil { settings["effort"] = .null }
       }
     } else if harness != old {
       fields["model"] = .null
+      if effort != nil { settings["effort"] = .null }
     }
+    if !settings.isEmpty { fields["settings"] = AnyEncodable(settings) }
     return fields
   }
 }

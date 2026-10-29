@@ -86,12 +86,26 @@ final class ModelConnectionTests: XCTestCase {
 
   func testSwitchingHarness() throws {
     let c = try decode(ModelConnection.self, claudeSignIn)
-    // Hermes can use the Claude sign-in: model and connection stay
-    XCTAssertEqual(try json(HarnessPlace.switchFields(to: "hermes", from: "claude-code", connection: c)), ##"{"harness":"hermes"}"##)
-    // Codex can't: both go, back to the computer's own sign-in
-    XCTAssertEqual(try json(HarnessPlace.switchFields(to: "codex", from: "claude-code", connection: c)), ##"{"harness":"codex","model":null,"settings":{"connectionId":null}}"##)
-    // off a connection, a model id belongs to the old harness
-    XCTAssertEqual(try json(HarnessPlace.switchFields(to: "codex", from: "claude-code", connection: nil)), ##"{"harness":"codex","model":null}"##)
+    let support = [CredentialSupport(harness: "hermes", provider: "anthropic", kind: "oauth"), CredentialSupport(harness: "claude-code", provider: "anthropic", kind: "oauth")]
+    let opus = try decode(ConnectionModels.self, ##"{"models":[{"id":"claude-opus-5-5","label":"Opus 5.5","efforts":["low","high","max"]}],"efforts":["low","high","max"]}"##)
+    func sw(_ to: String, from: String = "claude-code", model: String? = "claude-opus-5-5", effort: String? = "high", _ conn: ModelConnection?, _ list: ConnectionModels? = nil) throws -> String {
+      try json(HarnessPlace.switchFields(to: to, from: from, model: model, effort: effort, connection: conn, support: support, models: list))
+    }
+    // Hermes can use the Claude sign-in and lists Opus there: model, effort and connection stay
+    XCTAssertEqual(try sw("hermes", c, opus), ##"{"harness":"hermes"}"##)
+    // a model the new harness doesn't list there goes back to the default
+    XCTAssertEqual(try sw("hermes", model: "claude-haiku", c, opus), ##"{"harness":"hermes","model":null}"##)
+    // Codex's xhigh doesn't follow into Claude Code
+    XCTAssertEqual(try sw("claude-code", from: "codex", effort: "xhigh", c, opus), ##"{"harness":"claude-code","settings":{"effort":null}}"##)
+    // Codex can't use it: connection, model and effort go, back to the computer's own sign-in
+    XCTAssertEqual(try sw("codex", c), ##"{"harness":"codex","model":null,"settings":{"connectionId":null,"effort":null}}"##)
+    // off a connection, a model id and effort belong to the old harness
+    XCTAssertEqual(try sw("codex", nil), ##"{"harness":"codex","model":null,"settings":{"effort":null}}"##)
+    XCTAssertEqual(try sw("codex", effort: nil, nil), ##"{"harness":"codex","model":null}"##)
+    // someone else's connection isn't "no connection": it stays when the new harness supports its provider
+    let theirs = ModelConnection(id: "mc9", provider: "anthropic", kind: "oauth", label: "Claude", mine: false)
+    XCTAssertEqual(try sw("hermes", theirs, opus), ##"{"harness":"hermes"}"##)
+    XCTAssertEqual(try sw("codex", theirs), ##"{"harness":"codex","model":null,"settings":{"connectionId":null,"effort":null}}"##)
   }
 
   func testContextAndModelsCarryTheConnection() throws {
