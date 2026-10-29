@@ -369,7 +369,7 @@ struct ChatRow: View {
         avatar
         VStack(alignment: .leading, spacing: 4) {
           HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(entry.name).font(.system(size: 15, weight: .medium)).foregroundStyle(Palette.text).lineLimit(1)
+            Text(entry.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(Palette.text).lineLimit(1)
             Spacer(minLength: 8)
             if entry.pinned { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Palette.faint).accessibilityLabel("Pinned") }
             if entry.badge > 0 { Circle().fill(Palette.tabChats).frame(width: 8, height: 8).accessibilityHidden(true) }
@@ -432,33 +432,33 @@ struct ChatRow: View {
       let doing = store.activity[a.id].flatMap { $0 == "started" ? nil : $0 }
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
-        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 15)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
+        Text(["Working", doing].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
     } else if let agent = workingHere {
       HStack(spacing: 6) {
         WorkingDots(color: Palette.statusWorking)
-        Text("\(agent.name) is working").font(.system(size: 15)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
+        Text("\(agent.name) is working").font(.system(size: 13)).foregroundStyle(Palette.statusWorkingText).lineLimit(1)
       }
     } else if let waiting = needsApproval {
-      Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 15)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
+      Text("Needs approval" + (waiting.isEmpty ? "" : " · \(waiting)")).font(.system(size: 13)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
     } else if let line = channel.flatMap({ Loops.listLine($0) }) {
       // where a chat with an agent stands: waiting on you, when it comes back, or done
       switch line {
       case .waiting(let text):
-        Text(text).font(.system(size: 15)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
+        Text(text).font(.system(size: 13)).foregroundStyle(Palette.statusNeedsText).lineLimit(1)
       case .back(let text):
         HStack(spacing: 5) {
           Image(systemName: "clock").font(.system(size: 12)).foregroundStyle(Palette.faint)
-          Text(text).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+          Text(text).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
         }
       case .done:
         HStack(spacing: 5) {
           Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(Palette.statusOnline).accessibilityLabel("Done")
-          Text(Self.mentioned(preview)).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+          Text(Self.mentioned(preview)).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
         }
       }
     } else {
-      Text(Self.mentioned(preview)).font(.system(size: 15)).foregroundStyle(Palette.muted).lineLimit(1)
+      Text(Self.mentioned(preview)).font(.system(size: 13)).foregroundStyle(Palette.muted).lineLimit(1)
     }
   }
 
