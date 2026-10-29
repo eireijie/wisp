@@ -299,6 +299,9 @@ struct ThreadView: View {
   @State private var flashed: String?
   /** the first batch of replies has settled: from here a new one animates in */
   @State private var settled = false
+  /** in a DM's thread, what the agent runs on: the same quiet line over the message box */
+  @State private var run = RunInfo()
+  @State private var showRun = false
 
   private var root: Message? { store.message(ref.rootId, in: ref.channelId) }
   private var replies: [Message] { store.threads[ref.rootId] ?? [] }
@@ -377,8 +380,15 @@ struct ThreadView: View {
       } else {
         VStack(spacing: 6) {
           if let ch = channel { ActivityPill(channel: ch, thread: ref.rootId) }
-          Composer(placeholder: handoffAgent.map { "Reply to \($0.name)" } ?? "Reply…", channelId: ref.channelId, thread: ref.rootId, refresh: replies.count) { text, files, replyTo in
-            try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files, replyTo: replyTo)
+          VStack(alignment: .leading, spacing: 0) {
+            if let agent = dmAgent, run.context != nil {
+              RunSummaryLine(agent: agent, info: run) { showRun = true }
+                .padding(.leading, 82).padding(.trailing, 18)
+                .transition(.opacity)
+            }
+            Composer(placeholder: handoffAgent.map { "Reply to \($0.name)" } ?? "Reply…", channelId: ref.channelId, thread: ref.rootId, refresh: replies.count) { text, files, replyTo in
+              try await store.send(text, in: ref.channelId, thread: ref.rootId, files: files, replyTo: replyTo)
+            }
           }
         }
       }
@@ -393,8 +403,23 @@ struct ThreadView: View {
       try? await Task.sleep(for: .milliseconds(300))
       if !Task.isCancelled { settled = true }
     }
+    .sheet(isPresented: $showRun) {
+      if let agent = dmAgent { RunSheet(agentId: agent.id, channelId: ref.channelId, info: run) }
+    }
+    .task(id: runKey) {
+      guard let agent = dmAgent else { return }
+      await run.load(store, agent: agent, channel: ref.channelId, thread: ref.rootId)
+    }
     .onAppear { store.openThreads[ref.rootId] = ref.channelId }
     .onDisappear { store.openThreads[ref.rootId] = nil }
+  }
+
+  private var dmAgent: Agent? { channel.flatMap { store.dmAgent($0) } }
+
+  /** reloads what the agent runs on when a reply lands or its settings change */
+  private var runKey: String {
+    guard let a = dmAgent else { return "" }
+    return "\(a.id)/\(ref.rootId)/\(replies.count)/\(a.harness)/\(a.model ?? "")/\(a.settings?.effort ?? "")/\(a.settings?.connectionId ?? "")/\(store.modelsVersion)"
   }
 
   private var handoffAgent: Agent? {
