@@ -5,8 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, harnessInfo, harnessLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
-import { HarnessAccounts, changeHarnessSettings, deviceAdapters, harnessConfigured, loginCommand, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type DeviceHarness, type HarnessAdapter, type McpServerSpec } from "@wisp/adapters";
+import { CONNECTOR_CATALOG, HubToNode, SETTINGS_HARNESSES, VM_HARNESSES, credentialSupport, harnessInfo, harnessLabel, providerLabel, readTunnelFrame, tunnelFrame, type AccessLevel, type HarnessAccountOp, type HarnessSettings, type Agent, type ComputerSpec, type ConnectorSpec, type HarnessCatalog, type NodeToHub, type RunRequest } from "@wisp/core";
+import { HarnessAccounts, adapters as builtinAdapters, changeHarnessSettings, deviceAdapters, harnessConfigured, localCredentialFs, loginCommand, prepareCredential, scanShelf, harnessConfigPath, readHarnessSettings, readHarnessSkill, type CatalogPlace, type CredentialFs, type DeviceHarness, type HarnessAdapter, type McpServerSpec, type PreparedCredential, type RunPlace } from "@wisp/adapters";
 import { WispClient, WispError } from "@wisp/sdk";
 import { runUpdate, version } from "@wisp/update";
 import { ComputerHost, type Tunnel } from "./computers/index.ts";
@@ -15,6 +15,7 @@ import type { RustdeskConfig } from "./rustdesk.ts";
 import { detectRemoteApps } from "./remote-apps.ts";
 import { ScreenLock, type ScreenCode } from "./screen-lock.ts";
 import { HarnessLogins } from "./harness-login.ts";
+import { ModelLogins } from "./model-login.ts";
 import { type DockerVm } from "./computers/docker.ts";
 import { mcpBundle } from "./vm-tools.ts";
 import { discoverAgents, readDiscovered } from "./discover.ts";
@@ -105,6 +106,12 @@ export class NodeDaemon {
   private accounts: HarnessAccounts;
   /** sign-ins running for those accounts */
   private logins = new HarnessLogins();
+  /** sign-ins to model providers this device runs for the hub (Settings → Models) */
+  private modelLogins = new ModelLogins((m) => this.send(m));
+  /** VMs whose harnesses were listed for the hub since this process started (computer id → the listing) */
+  private vmCatalogs = new Map<string, Promise<void>>();
+  /** which harness made each remembered session (a session id means nothing to another harness) */
+  private sessionHarness: Record<string, string>;
   /** run results that couldn't be sent (the hub was away); sent as soon as it's back */
   private outbox: NodeToHub[] = [];
   /** when the hub replaced this connection with another one using the same token */
@@ -129,6 +136,7 @@ export class NodeDaemon {
     this.cfg = cfg = { ...cfg, hub: normalizeHubUrl(cfg.hub) };
     fs.mkdirSync(cfg.dir, { recursive: true });
     this.sessions = readJson(this.sessionsFile, {});
+    this.sessionHarness = readJson(path.join(cfg.dir, "session-harness.json"), {});
     this.agentTokens = readJson(this.tokensFile, {});
     this.local = this.readLocal();
     this.lock = new ScreenLock(cfg.dir, () => this.local.code);
@@ -251,6 +259,7 @@ export class NodeDaemon {
     for (const a of this.aborts.values()) a.abort();
     this.computers.stopAll();
     this.logins.stopAll();
+    this.modelLogins.stopAll();
     this.closeTunnels();
     this.remoteServer.stop();
     const end = Date.now() + wait;
@@ -323,11 +332,12 @@ export class NodeDaemon {
 
   private send(m: NodeToHub) {
     if (this.ws?.readyState === WebSocket.OPEN) return this.ws.send(JSON.stringify(m));
-    // a run's outcome must reach the hub, or the agent stays "busy" there; everything else is a snapshot the hub asks for again
-    if (m.type === "run_done" || m.type === "run_failed") {
+    // a run's outcome must reach the hub, or the agent stays "busy" there; so must a renewed sign-in (the old one
+    // is dead once a harness renews it) and a finished model sign-in; everything else is a snapshot the hub asks for again
+    if (m.type === "run_done" || m.type === "run_failed" || m.type === "credential_refreshed" || m.type === "model_login_done") {
       this.outbox.push(m);
       if (this.outbox.length > 200) this.outbox.shift();
-      this.log(`hub is away; will report ${m.runId} when it's back`);
+      if (m.type === "run_done" || m.type === "run_failed") this.log(`hub is away; will report ${m.runId} when it's back`);
     }
   }
 
@@ -367,6 +377,8 @@ export class NodeDaemon {
         (result) => {
           this.send({ type: "result", requestId: msg.requestId, ok: true, result });
           if (msg.action.action === "start") this.send({ type: "computer_status", computerId: msg.computer.id, status: "ready", text: "" });
+          // a VM that just came up: tell the hub which harnesses (and models) it has
+          if (msg.action.action === "start" && msg.computer.kind === "vm") void this.sendVmCatalog(msg.computer);
         },
         (err) => {
           this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message });
@@ -452,6 +464,23 @@ export class NodeDaemon {
         (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
         (err) => this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message }),
       );
+    } else if (msg.type === "model_login") {
+      try {
+        if (msg.op === "start") {
+          if (this.local.paused) throw new Error(`${this.cfg.name} is paused`);
+          if (!msg.provider || !msg.harness) throw new Error("which provider and harness to sign in with?");
+          this.log(`signing in to ${providerLabel(msg.provider)} with ${harnessLabel(msg.harness)} for the hub`);
+          this.send({ type: "result", requestId: msg.requestId, ok: true, result: this.modelLogins.start(msg.loginId, msg.provider, msg.harness, this.registry[msg.harness]?.binary) });
+        } else if (msg.op === "input") this.send({ type: "result", requestId: msg.requestId, ok: true, result: this.modelLogins.input(msg.loginId, msg.text ?? "") });
+        else {
+          this.modelLogins.cancel(msg.loginId);
+          this.send({ type: "result", requestId: msg.requestId, ok: true, result: { ok: true } });
+        }
+      } catch (err) {
+        this.send({ type: "result", requestId: msg.requestId, ok: false, error: (err as Error).message });
+      }
+    } else if (msg.type === "computer_catalog") {
+      void this.sendVmCatalog(msg.computer, true);
     } else if (msg.type === "harness_settings" || msg.type === "harness_settings_change" || msg.type === "harness_skill" || msg.type === "harness_open_config" || msg.type === "harness_account") {
       this.harnessSettings(msg).then(
         (result) => this.send({ type: "result", requestId: msg.requestId, ok: true, result }),
@@ -497,7 +526,11 @@ export class NodeDaemon {
     }
     const inside = !!run.inComputer && !!vm;
     if (run.inComputer && !vm) return this.send({ type: "run_failed", runId: run.runId, error: "its computer isn't a VM on this device" });
-    if (inside) {
+    // the model connection the hub sent, if the harness can use it (an older hub sends none)
+    const support = run.credential ? credentialSupport(agent.harness, run.credential.provider, run.credential.kind) : null;
+    if (run.credential && !support) this.send({ type: "run_event", runId: run.runId, event: { type: "notice", text: `${harnessLabel(agent.harness)} can't use the ${providerLabel(run.credential.provider)} connection, so it ran on its own sign-in here.` } });
+    // with a connection it needs no sign-in of its own in there
+    if (inside && !support) {
       const signed = await vm!.signedIn(agent.harness).catch(() => null);
       if (signed === false) {
         const label = harnessLabel(agent.harness);
@@ -526,6 +559,22 @@ export class NodeDaemon {
       }
     }
     const sessionKey = `${agent.id}:${run.channelId}:${run.threadId ?? "main"}`;
+    // a session another harness made can't be continued by this one: it switched, so the reply starts fresh
+    if (this.sessions[sessionKey] && (this.sessionHarness[sessionKey] ?? agent.harness) !== agent.harness) {
+      delete this.sessions[sessionKey];
+      writeJson(this.sessionsFile, this.sessions);
+    }
+    // the connection goes where the harness reads it: its environment, or a folder of its own (kept, for resuming)
+    let credential: PreparedCredential | null = null;
+    if (run.credential && support) {
+      try {
+        const baseHome = inside ? `${vm!.home}/${VM_HARNESS_DIR[agent.harness] ?? ".config"}` : this.accounts.dir(agent.harness, this.accounts.accountOf(agent.id, agent.harness));
+        const connectionHome = inside ? `${vm!.home}/.wisp/connections/${safeId(run.credential.connectionId)}/${agent.harness}` : path.join(this.cfg.dir, "connections", safeId(run.credential.connectionId), agent.harness);
+        credential = await prepareCredential(agent.harness, run.credential, { fs: inside ? vmCredentialFs(vm!) : localCredentialFs, baseHome, connectionHome });
+      } catch (err) {
+        return this.send({ type: "run_failed", runId: run.runId, error: `couldn't use the ${providerLabel(run.credential.provider)} connection: ${(err as Error).message}` });
+      }
+    }
     const abort = new AbortController();
     this.aborts.set(run.runId, abort);
     this.log(`@${agent.handle} (${adapter.label}) working on ${run.runId}${inside ? ` inside ${run.computer!.name}` : ""}`);
@@ -573,9 +622,11 @@ export class NodeDaemon {
           browser,
           // MCP connectors go to the harness's own config; secrets go in its environment
           connectors: connectors.filter((c: ConnectorSpec) => c.kind !== "secret"),
-          // the agent's own account of its harness here (its folder), unless it runs inside its VM
-          env: Object.assign(inside ? {} : this.accounts.env(agent.harness, this.accounts.accountOf(agent.id, agent.harness)), ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {})),
+          // the agent's own account of its harness here (its folder), unless it runs inside its VM; then its connection, which wins
+          env: Object.assign(inside ? {} : this.accounts.env(agent.harness, this.accounts.accountOf(agent.id, agent.harness)), ...connectors.filter((c) => c.kind === "secret").map((c) => c.env ?? {}), credential?.env ?? {}),
           launch: inside ? vm!.launcher(run.runId) : undefined,
+          place: inside ? vmPlace(vm!) : undefined,
+          connection: credential && run.credential ? { provider: run.credential.provider, kind: run.credential.kind } : undefined,
           signal: abort.signal,
           options: this.cfg.harnessOptions?.[agent.harness],
         },
@@ -585,6 +636,8 @@ export class NodeDaemon {
             if (run.fresh) return;
             this.sessions[sessionKey] = e.id;
             writeJson(this.sessionsFile, this.sessions);
+            this.sessionHarness[sessionKey] = agent.harness;
+            writeJson(path.join(this.cfg.dir, "session-harness.json"), this.sessionHarness);
           } else {
             if (e.type === "text" || e.type === "tool_call" || e.type === "tool_result") progressed = true;
             this.send({ type: "run_event", runId: run.runId, event: e });
@@ -617,6 +670,16 @@ export class NodeDaemon {
       this.log(`@${agent.handle} failed ${run.runId}: ${message}`);
     } finally {
       this.aborts.delete(run.runId);
+      // a sign-in the harness renewed during the run goes back to the hub, or the next run anywhere uses a dead one
+      if (credential && run.credential) {
+        const renewed = await credential.refreshed().catch(() => null);
+        if (renewed) {
+          this.send({ type: "credential_refreshed", connectionId: run.credential.connectionId, runId: run.runId, secret: renewed });
+          this.log(`@${agent.handle}: ${providerLabel(run.credential.provider)} sign-in renewed; sent to the hub`);
+        }
+      }
+      // the first run in a VM since this started: tell the hub what's installed in there
+      if (inside && run.computer) void this.sendVmCatalog(run.computer);
       if (!inside) {
         const left = (this.runningHere.get(agent.id) ?? 1) - 1;
         if (left > 0) this.runningHere.set(agent.id, left);
@@ -743,6 +806,34 @@ export class NodeDaemon {
   }
 
 
+  /**
+   * The harnesses that come with a VM, as installed in it, with their models: what agents that run
+   * inside it use (the device itself may have none of them). Once per VM per process unless `again`;
+   * only for a VM that's already up, so asking never starts one.
+   */
+  private sendVmCatalog(spec: ComputerSpec, again = false): Promise<void> {
+    if (spec.kind !== "vm" || this.fixedRegistry) return Promise.resolve();
+    const known = this.vmCatalogs.get(spec.id);
+    if (known && !again) return known;
+    const job = (async () => {
+      const vm = await this.computers.vm(spec).catch(() => null);
+      if (!vm || !(await vm.isRunning().catch(() => false))) return void this.vmCatalogs.delete(spec.id);
+      const place = vmCatalogPlace(vm);
+      const list = await Promise.all(
+        VM_HARNESSES.map(async (id) => {
+          try {
+            return (await builtinAdapters[id]?.catalog?.(place)) ?? null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      this.send({ type: "catalog", computerId: spec.id, catalog: list.filter((c): c is HarnessCatalog => !!c && c.version !== null) });
+    })().catch(() => void this.vmCatalogs.delete(spec.id));
+    this.vmCatalogs.set(spec.id, job);
+    return job;
+  }
+
   /** Models each installed harness offers here; computed once per process. */
   private harnessCatalog(): Promise<HarnessCatalog[]> {
     this.catalog ??= Promise.all(
@@ -835,6 +926,38 @@ export function commandExists(cmd: string): boolean {
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
   const exts = process.platform === "win32" ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").concat("") : [""];
   return dirs.some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, cmd + ext))));
+}
+
+/** Each VM harness's folder in the VM's home (where its settings are, for a connection's own folder to copy). */
+const VM_HARNESS_DIR: Record<string, string> = { "claude-code": ".claude", codex: ".codex", hermes: ".hermes", kimi: ".kimi-code" };
+
+function safeId(id: string): string {
+  return id.replace(/[^\w-]/g, "");
+}
+
+/** A VM's files, as the credential code writes them (as the VM's user, private to it). */
+function vmCredentialFs(vm: DockerVm): CredentialFs {
+  return {
+    join: (...p) => path.posix.join(...p),
+    read: (f) => vm.readFile(f),
+    write: (f, content, mode) => vm.writeFile(f, content, mode ? mode.toString(8) : "644"),
+    link: (target, link) => vm.symlink(target, link),
+  };
+}
+
+/** Reading what a harness left in a VM (Codex's session file). */
+function vmPlace(vm: DockerVm): RunPlace {
+  return { home: vm.home, readFile: (f) => vm.readFile(f), readDir: (d) => vm.readDir(d) };
+}
+
+/** Asking a VM's own harnesses what they offer. */
+function vmCatalogPlace(vm: DockerVm): CatalogPlace {
+  return {
+    ...vmPlace(vm),
+    exec: (command, args, opts) => vm.runCommand(command, args, opts?.timeout),
+    // a long-running agent (ACP) starts in the VM's shared folder
+    launch: (l) => vm.launcher(`catalog-${Date.now()}`)({ ...l, cwd: vm.filesDir }),
+  };
 }
 
 function readJson<T>(file: string, fallback: T): T {

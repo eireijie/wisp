@@ -480,6 +480,39 @@ export class DockerVm implements Driver {
     await must(this.bin, ["exec", "-i", "-u", this.user, this.name, "sh", "-c", `mkdir -p "$(dirname '${vmPath}')" && cat > '${vmPath}' && chmod ${mode} '${vmPath}'`], { input: content, timeoutMs: 60_000 });
   }
 
+  /** A file in the VM (as wisp), or null when it isn't there. */
+  async readFile(vmPath: string): Promise<string | null> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-u", this.user, this.name, "cat", vmPath], { timeoutMs: 30_000 });
+    return r.code === 0 ? r.stdout.toString() : null;
+  }
+
+  /** The names in a folder in the VM (none when it isn't there). */
+  async readDir(vmPath: string): Promise<string[]> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-u", this.user, this.name, "ls", "-1A", vmPath], { timeoutMs: 30_000 });
+    return r.code === 0 ? r.stdout.toString().split("\n").filter(Boolean) : [];
+  }
+
+  /** Run a command in the VM (as wisp, in its home) and get what it printed; throws when it fails. */
+  async runCommand(command: string, args: string[], timeoutMs = 30_000): Promise<string> {
+    await this.ready();
+    const r = await exec(this.bin, ["exec", "-i", "-u", this.user, "-w", this.home, "-e", `HOME=${this.home}`, this.name, command, ...args], { timeoutMs });
+    if (r.code !== 0) throw new ActionError(r.stderr.toString().trim().split("\n").pop() || `${command} failed in the VM`);
+    return r.stdout.toString();
+  }
+
+  /** Point `link` at `target` in the VM, when `target` exists and nothing is at `link` yet. */
+  async symlink(target: string, link: string) {
+    await this.ready();
+    await exec(this.bin, ["exec", "-u", this.user, this.name, "sh", "-c", 'if [ -e "$1" ] && [ ! -e "$2" ] && [ ! -L "$2" ]; then mkdir -p "$(dirname "$2")" && ln -s "$1" "$2"; fi', "sh", target, link], { timeoutMs: 15_000 });
+  }
+
+  /** Is it up right now? (Without starting it.) */
+  async isRunning(): Promise<boolean> {
+    return (await this.running()) === true;
+  }
+
   /** Is this harness signed in inside the VM? null when it isn't one that comes with the VM. */
   async signedIn(harness: string): Promise<boolean | null> {
     const test = SIGNED_IN[harness];

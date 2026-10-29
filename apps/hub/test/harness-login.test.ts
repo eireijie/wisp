@@ -43,4 +43,20 @@ describe("harness sign-ins", () => {
     expect(end).toMatchObject({ status: "failed", error: "Error: not allowed" });
     expect(() => logins.status("login_nope")).toThrow(/isn't running/);
   });
+
+  it("keeps a printed token out of what people see, but hands it to whoever asked", async () => {
+    let raw = "";
+    const changes: string[] = [];
+    const logins = new HarnessLogins();
+    // a terminal link (OSC 8, ended with ESC \\) around the address, then the token Claude's setup-token prints
+    const script = `process.stdout.write("\\u001b]8;;https://claude.com/x\\u001b\\\\https://claude.com/cai/oauth/authorize?code=true\\u001b]8;;\\u001b\\\\\\n"); setTimeout(() => { console.log("sk-ant-oat01-abcdefghijklmnopqrstuvwxyz0123"); process.exit(0); }, 50);`;
+    const l = logins.start("claude-code", "model-x", { command: process.execPath, args: ["-e", script], env: {} }, 60_000, { redact: /sk-ant-oat\d*-[A-Za-z0-9_-]+/, onRaw: (t) => (raw += t), onChange: (s) => changes.push(s.url ?? "") });
+    const end = await waitFor(() => (logins.status(l.id).status !== "running" ? logins.status(l.id) : undefined));
+    expect(end.status).toBe("done");
+    expect(end.url).toBe("https://claude.com/cai/oauth/authorize?code=true");
+    expect(end.output).not.toContain("sk-ant-oat01");
+    expect(end.output).toContain("[saved]");
+    expect(raw).toContain("sk-ant-oat01-abcdefghijklmnopqrstuvwxyz0123");
+    expect(changes).toEqual(["https://claude.com/cai/oauth/authorize?code=true"]);
+  });
 });

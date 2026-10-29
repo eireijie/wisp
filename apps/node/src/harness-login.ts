@@ -15,7 +15,12 @@ export class HarnessLogins {
 
   constructor(private onDone: (login: HarnessLogin) => void = () => {}) {}
 
-  start(harness: string, account: string, cmd: { command: string; args: string[]; env: Record<string, string> }, timeoutMs = 15 * 60_000): HarnessLogin {
+  /**
+   * `opts.redact`: what must never show in `output` (a token the sign-in prints), replaced there;
+   * `opts.onRaw` sees everything it prints, unredacted (to pick that token up); `opts.onChange`
+   * hears each time the link or code shows up.
+   */
+  start(harness: string, account: string, cmd: { command: string; args: string[]; env: Record<string, string> }, timeoutMs = 15 * 60_000, opts: { redact?: RegExp; onRaw?: (text: string) => void; onChange?: (login: HarnessLogin) => void } = {}): HarnessLogin {
     // one sign-in per account at a time
     for (const [id, l] of this.live) if (l.state.harness === harness && l.state.account === account) this.cancel(id);
     const id = `login_${crypto.randomBytes(6).toString("hex")}`;
@@ -24,10 +29,15 @@ export class HarnessLogins {
     const timer = setTimeout(() => this.finish(id, "failed", "The sign-in took too long, so it was stopped. Start it again."), timeoutMs);
     this.live.set(id, { state, child, timer });
     const take = (d: Buffer) => {
-      state.output = clean(state.output + d.toString()).slice(-4000);
+      opts.onRaw?.(d.toString());
+      let out = clean(state.output + d.toString());
+      if (opts.redact) out = out.replace(new RegExp(opts.redact.source, "g"), "[saved]");
+      state.output = out.slice(-4000);
       const found = findLink(state.output);
+      const changed = (found.url && found.url !== state.url) || (found.code && found.code !== state.code);
       if (found.url) state.url = found.url;
       if (found.code) state.code = found.code;
+      if (changed) opts.onChange?.({ ...state });
     };
     child.stdout!.on("data", take);
     child.stderr!.on("data", take);
@@ -73,8 +83,9 @@ export class HarnessLogins {
 
 /** Terminal colors and cursor moves out. */
 function clean(s: string): string {
+  // OSC sequences (a terminal link) end with BEL or ESC \
   // eslint-disable-next-line no-control-regex
-  return s.replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "").replace(/\u001b\][^\u0007]*\u0007/g, "").replace(/\r(?!\n)/g, "\n");
+  return s.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "").replace(/\u001b\[[0-9;?]*[A-Za-z]/g, "").replace(/\u001b[()][A-Za-z0-9]/g, "").replace(/\r(?!\n)/g, "\n");
 }
 
 function lastLine(s: string): string {
